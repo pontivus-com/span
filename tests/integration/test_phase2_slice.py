@@ -1,0 +1,246 @@
+"""Held-out slice with real provider interfaces after explicit
+initialization (plan Phase 2.9, as amended).
+
+Held-out repository: ``tests/fixtures/order-svc`` (distinct from the
+Phase-1 pay-svc synthetic repo). The structural provider is the real
+Graft adapter over a real ``graft build`` (skipped honestly when the
+graft CLI is unavailable); evidence comes from deterministic fixtures;
+interpretation is performed by the deterministic test agent through the
+§11.12 exchange (Span suspends, agent performs, agent submits); the
+store is a real SQLite file. Generated material lives under
+``.tmp-e2e/`` (git-ignored), never in fixtures.
+"""
+
+import pathlib
+import shutil
+import unittest
+
+from span.core import model as m
+from span.ports.interpretation import PendingInterpretation
+from span import service_operations as ops
+from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.shell.agent_exchange.continuations import ContinuationStore
+from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
+from span.shell.evidence import FixtureEvidenceSource
+from span.shell.sqlite_store import SqliteSemanticStore
+from span.shell.structural import structural_source_from_config
+
+try:
+    import shutil as _shutil
+
+    _HAS_GRAFT = _shutil.which("graft") is not None
+except Exception:
+    _HAS_GRAFT = False
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+FIXTURE_SRC = REPO_ROOT / "tests" / "fixtures" / "order-svc"
+WORK_DIR = REPO_ROOT / ".tmp-e2e" / "order-svc"
+DB_PATH = REPO_ROOT / ".tmp-e2e" / "span-order-svc.db"
+
+
+def _bounds():
+    return DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
+
+
+def _files(work):
+    return {
+        str(p.relative_to(work)): p.read_text(encoding="utf-8")
+        for p in sorted(work.rglob("*"))
+        if p.is_file() and "graft" not in p.parts and not p.name.startswith(".")
+    }
+
+
+def _ref(repo_id, path, files):
+    from span.shell.structural.memory import fingerprint_content
+
+    return m.EvidenceRef(
+        evidence_id=m.EvidenceId(f"ev-{path}"),
+        repository_id=repo_id,
+        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        locator=path,
+        revision_or_fingerprint=fingerprint_content(files[path]),
+    )
+
+
+@unittest.skipUnless(_HAS_GRAFT, "graft CLI unavailable")
+class Phase2SliceTest(unittest.TestCase):
+    def test_held_out_repo_real_graft_end_to_end(self):
+        if WORK_DIR.exists():
+            shutil.rmtree(WORK_DIR)
+        if DB_PATH.exists():
+            DB_PATH.unlink()
+        WORK_DIR.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(FIXTURE_SRC, WORK_DIR)
+        store = None
+        try:
+            structural, repo_id = structural_source_from_config(
+                f"graft:{WORK_DIR}"
+            )
+            self.assertEqual(repo_id, "order-svc")
+            files = _files(WORK_DIR)
+            evidence = FixtureEvidenceSource(repo_id, files)
+            store = SqliteSemanticStore(str(DB_PATH))
+            continuations = ContinuationStore()
+
+            init = ops.initialize_repository(
+                ops.SemanticInitializeRepositoryRequest(
+                    repository_locator=str(WORK_DIR),
+                    structural_provider_config=f"graft:{WORK_DIR}",
+                    authority_seeds=(
+                        _ref(repo_id, "README.md", files),
+                        _ref(repo_id, "OWNERSHIP.md", files),
+                    ),
+                ),
+                repository_id=repo_id,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+            )
+            self.assertIs(init.readiness, m.RepositoryReadiness.READY)
+            self.assertEqual(init.warnings, ())
+
+            sid = m.SubjectId(
+                repository_id=repo_id,
+                subject_kind=m.SubjectKind.CODE_SYMBOL,
+                canonical_locator="src/orders.js#place",
+            )
+            resolution = structural.resolve_subject(
+                repo_id,
+                m.SubjectSelector(None, "src/orders.js#place", (), None),
+                _bounds(),
+            )
+            self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
+            )
+            from span.ports.structural import StructuralDirection
+
+            edges = structural.edges(
+                repo_id, sid, (), StructuralDirection.DOWNSTREAM, _bounds()
+            )
+            self.assertTrue(
+                {e.kind for e in edges.items}
+                >= {m.StructuralEdgeKind.CALLS}
+            )
+            first = structural.repository_state(repo_id)
+            second = structural.repository_state(repo_id)
+            self.assertEqual(
+                first.state_fingerprint, second.state_fingerprint
+            )
+
+            orders = m.SubjectId(
+                repository_id=repo_id,
+                subject_kind=m.SubjectKind.COMPONENT,
+                canonical_locator="src/orders.js",
+            )
+            interp = m.DerivationKind.SEMANTIC_INTERPRETATION
+            agent = FixtureAgent(
+                {
+                    "src/orders.js": FixtureCandidates(
+                        claims=(
+                            m.CandidateSemanticClaim(
+                                subject=orders,
+                                kind=m.ClaimKind.PURPOSE,
+                                value=m.PurposeValue("takes orders", ()),
+                                evidence=(
+                                    _ref(repo_id, "README.md", files),
+                                ),
+                                candidate_authority=m.AuthorityBinding(
+                                    evidence_ref=_ref(
+                                        repo_id, "README.md", files
+                                    ),
+                                    authority_kind=(
+                                        m.AuthorityKind.REPOSITORY_RULE
+                                    ),
+                                    status=m.AuthorityStatus.ACCEPTED,
+                                ),
+                                basis=m.SemanticBasis(interp),
+                            ),
+                            m.CandidateSemanticClaim(
+                                subject=orders,
+                                kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                                value=m.OwnershipCustodyValue(
+                                    m.SubjectId(
+                                        repository_id=repo_id,
+                                        subject_kind=m.SubjectKind.COMPONENT,
+                                        canonical_locator="team/orders",
+                                    ),
+                                    m.OwnershipRole.OWNER,
+                                    m.OwnershipExclusivity.EXCLUSIVE,
+                                ),
+                                evidence=(
+                                    _ref(repo_id, "OWNERSHIP.md", files),
+                                ),
+                                candidate_authority=m.AuthorityBinding(
+                                    evidence_ref=_ref(
+                                        repo_id, "OWNERSHIP.md", files
+                                    ),
+                                    authority_kind=(
+                                        m.AuthorityKind.REPOSITORY_RULE
+                                    ),
+                                    status=m.AuthorityStatus.ACCEPTED,
+                                ),
+                                basis=m.SemanticBasis(interp),
+                            ),
+                        ),
+                        relationships=(),
+                    )
+                }
+            )
+            seeds = (
+                _ref(repo_id, "README.md", files),
+                _ref(repo_id, "OWNERSHIP.md", files),
+            )
+            suspended = ops.explain(
+                ops.SemanticExplainRequest(
+                    repository_id=repo_id,
+                    target=m.SubjectSelector(
+                        None, "src/orders.js", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations, authority_seeds=seeds,
+            )
+            # Span suspends (no stored semantics); the test agent performs.
+            self.assertIsInstance(suspended, PendingInterpretation)
+            self.assertTrue(suspended.request.evidence_units)
+            answer = ops.submit_interpretation(
+                suspended.continuation,
+                agent.perform(suspended.request),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
+            )
+            self.assertIsInstance(answer.content, m.ExplainContent)
+            self.assertEqual(len(answer.content.claims), 2)
+            self.assertTrue(
+                all(
+                    c.trust is m.TrustState.ESTABLISHED
+                    for c in answer.content.claims
+                )
+            )
+            auth_suspended = ops.authority(
+                ops.SemanticAuthorityRequest(
+                    repository_id=repo_id,
+                    target=m.SubjectSelector(
+                        None, "src/orders.js", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations, authority_seeds=seeds,
+            )
+            # Indexed state exists now: authority answers directly.
+            self.assertIsInstance(auth_suspended, m.SemanticAnswer)
+            self.assertIsInstance(
+                auth_suspended.content, m.AuthorityContent
+            )
+            self.assertEqual(
+                len(auth_suspended.content.governing_bindings), 2
+            )
+        finally:
+            if store is not None:
+                store.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

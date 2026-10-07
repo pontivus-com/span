@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "span"
+version = "0.0.0"
+description = "Span — semantic repository intelligence for coding agents."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "TBD — exact GPL variant pending product-owner/legal selection (plan Phase 0.1)" }
+dependencies = []
+
+[project.optional-dependencies]
+test = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.coverage.run]
+source = ["span"]

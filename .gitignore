@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.tmp-probe/
+.tmp-e2e/*/graft/
+.tmp-e2e/*/.ignore
+.tmp-e2e/*/.gitignore
+.tmp-e2e/*.db
