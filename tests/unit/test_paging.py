@@ -44,21 +44,21 @@ class PageTokenTest(unittest.TestCase):
 
 
 class ServiceTokenTest(unittest.TestCase):
-    def test_none_is_zero_zero(self):
-        self.assertEqual(paging.parse_service_token(None), (0, 0))
+    def test_none_is_zero_zero_zero(self):
+        self.assertEqual(paging.parse_service_token(None), (0, 0, 0))
 
     def test_composite_round_trip(self):
-        token = paging.format_service_token(3, 0)
+        token = paging.format_service_token(3, 0, 0)
         self.assertTrue(token.startswith("pg:"))
-        self.assertEqual(paging.parse_service_token(token), (3, 0))
+        self.assertEqual(paging.parse_service_token(token), (3, 0, 0))
 
     def test_both_exhausted_is_none(self):
-        self.assertIsNone(paging.format_service_token(None, None))
-        token = paging.format_service_token(5, 5)
-        self.assertEqual(paging.parse_service_token(token), (5, 5))
+        self.assertIsNone(paging.format_service_token(None, None, 0))
+        token = paging.format_service_token(5, 5, 2)
+        self.assertEqual(paging.parse_service_token(token), (5, 5, 2))
 
     def test_malformed_fails_closed(self):
-        for bad in ("bogus", "pg:", "pg:-1:0", "pg:1:2:3", "trunc:c:3"):
+        for bad in ("bogus", "pg:", "pg:-1:0:0", "pg:1:2", "pg:1", "trunc:c:3"):
             with self.assertRaises(ValueError, msg=bad):
                 paging.parse_service_token(bad)
 

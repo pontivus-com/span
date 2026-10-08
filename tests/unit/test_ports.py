@@ -58,7 +58,10 @@ class PortShapeTest(unittest.TestCase):
     def test_evidence_source_methods(self):
         self._assert_methods(
             EvidenceSource,
-            {"inventory_evidence", "select_evidence", "read_evidence"},
+            {
+                "inventory_evidence", "list_inventory_entries",
+                "select_evidence", "read_evidence",
+            },
         )
 
     def test_interpretation_exchange_contract(self):
@@ -94,7 +97,10 @@ class PortShapeTest(unittest.TestCase):
             {
                 "load_subjects", "load_by_refs", "load_claims",
                 "load_relationships", "load_evidence_dependencies",
-                "load_coverage_dependencies", "load_conflicts",
+                "load_evidence_records", "load_coverage_dependencies",
+                "load_question_coverages", "load_all_question_coverages",
+                "count_question_coverages", "load_premise_dependents",
+                "load_conflicts",
                 "write_index_batch", "mark_freshness", "schema_version",
                 "record_repository_state", "load_repository_state",
             },

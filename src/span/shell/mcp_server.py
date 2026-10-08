@@ -65,7 +65,7 @@ def provision_repository(
     config: ServerConfig,
     request: ops.SemanticInitializeRepositoryRequest,
 ) -> tuple[ServiceContext, ops.SemanticInitializeRepositoryResult]:
-    """Explicit provisioning for `span_initialize_repository` (§11.1).
+    """Explicit provisioning for `initialize_repository` (§11.1).
 
     Builds the structural source (explicit admin path: index builds
     allowed here, never in queries/hooks), filesystem evidence, and
@@ -158,15 +158,17 @@ def build_server(adapter: McpAdapter):
 
     server: Server = Server("span")
 
-    async def _list_tools(_request: object, _params: object) -> list:
-        return [
-            _types.Tool(
-                name=spec["name"],
-                description=spec["description"],
-                inputSchema=spec["inputSchema"],
-            )
-            for spec in handle_list_tools(adapter)
-        ]
+    async def _list_tools(_request: object, _params: object) -> object:
+        return _types.ListToolsResult(
+            tools=[
+                _types.Tool(
+                    name=spec["name"],
+                    description=spec["description"],
+                    inputSchema=spec["inputSchema"],
+                )
+                for spec in handle_list_tools(adapter)
+            ]
+        )
 
     async def _call_tool(_request: object, params: object) -> object:
         name = params.name  # type: ignore[union-attr]

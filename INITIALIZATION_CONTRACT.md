@@ -7,7 +7,7 @@ I-31 (readiness is operational state, not semantic trust), I-29/I-30
 ## Contract
 
 1. Repository initialization is an explicit administrative lifecycle
-   operation: `span_initialize_repository`. It runs in a dedicated
+   operation: `initialize_repository`. It runs in a dedicated
    initialization session, never inside a normal coding session.
 2. A fresh Span checkout is **uninitialized by definition**: no semantic
    store artifact exists, and readiness is `UNINITIALIZED` (§4.8).
@@ -16,9 +16,9 @@ I-31 (readiness is operational state, not semantic trust), I-29/I-30
    registration, and semantic-store/schema initialization — and performs
    **no agent semantic interpretation** (plan Phase 0 exit, Phase 2.8:
    interpretation is executed by the invoking agent, never by Span).
-3. Normal queries (`span_explain`, `span_impact`, `span_trace`,
-   `span_authority`) and all automatic hooks (`SESSION_START`,
-   `SOURCE_CHANGED`, `SESSION_STOP` → `span_status(..., mode=HOOK_FAST)`
+3. Normal queries (`explain`, `impact`, `trace`,
+   `authority`) and all automatic hooks (`SESSION_START`,
+   `SOURCE_CHANGED`, `SESSION_STOP` → `status(..., mode=HOOK_FAST)`
    only) **must never start initialization implicitly**. An uninitialized
    repository returns `UNINITIALIZED` plus a setup notice, not bootstrap.
 4. The full `RepositoryReadiness` enum and `HookStatusNotice` carrier are

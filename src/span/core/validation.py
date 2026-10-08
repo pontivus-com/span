@@ -41,6 +41,8 @@ __all__ = [
     "validate_candidate_relationship",
     "validate_candidate_subject",
     "validate_candidate_conflict",
+    "validate_question_coverage",
+    "validate_candidate_withdrawal",
     "materialize_claim",
     "materialize_relationship",
     "find_conflicts",
@@ -241,6 +243,8 @@ def validate_candidate_claim(
     if failure is None:
         failure = _check_basis(candidate.basis, owner)
     if failure is None:
+        failure = _check_premise_refs(candidate.basis, owner)
+    if failure is None:
         failure = _check_authority(
             candidate.candidate_authority,
             candidate.evidence,
@@ -290,6 +294,8 @@ def validate_candidate_relationship(
     failure = _check_evidence(candidate.evidence, ctx, owner)
     if failure is None:
         failure = _check_basis(candidate.basis, owner)
+    if failure is None:
+        failure = _check_premise_refs(candidate.basis, owner)
     if failure is None:
         failure = _check_authority(
             candidate.candidate_authority,
@@ -408,28 +414,155 @@ def _stable_id(prefix: str, payload: object) -> str:
     return f"{prefix}-{digest}"
 
 
+def _claim_content_payload(
+    candidate: m.CandidateSemanticClaim, trust: m.TrustState
+) -> object:
+    stripped = m.CandidateSemanticClaim(
+        candidate_key="",
+        subject=candidate.subject,
+        kind=candidate.kind,
+        value=candidate.value,
+        evidence=tuple(sorted(
+            candidate.evidence,
+            key=lambda r: (r.evidence_id.value, r.locator),
+        )),
+        candidate_authority=candidate.candidate_authority,
+        basis=m.SemanticBasis(
+            derivation=candidate.basis.derivation,
+            summary=candidate.basis.summary,
+            input_refs=tuple(sorted(
+                (
+                    r.id.value if isinstance(
+                        r, (m.ClaimRef, m.RelationshipRef)
+                    ) else r.evidence_id.value
+                    for r in candidate.basis.input_refs
+                )
+            )),
+        ),
+    )
+    return [m.to_canonical(stripped), trust.value]
+
+
+def _relationship_content_payload(
+    candidate: m.CandidateSemanticRelationship, trust: m.TrustState
+) -> object:
+    stripped = m.CandidateSemanticRelationship(
+        candidate_key="",
+        source=candidate.source,
+        kind=candidate.kind,
+        target=candidate.target,
+        evidence=tuple(sorted(
+            candidate.evidence,
+            key=lambda r: (r.evidence_id.value, r.locator),
+        )),
+        candidate_authority=candidate.candidate_authority,
+        basis=m.SemanticBasis(
+            derivation=candidate.basis.derivation,
+            summary=candidate.basis.summary,
+            input_refs=tuple(sorted(
+                (
+                    r.id.value if isinstance(
+                        r, (m.ClaimRef, m.RelationshipRef)
+                    ) else r.evidence_id.value
+                    for r in candidate.basis.input_refs
+                )
+            )),
+        ),
+    )
+    return [m.to_canonical(stripped), trust.value]
+
+
 def deterministic_claim_id(
     candidate: m.CandidateSemanticClaim, trust: m.TrustState
 ) -> m.ClaimId:
-    """Stable opaque id for identical semantic content (idempotent indexing)."""
-    return m.ClaimId(
-        _stable_id(
-            "clm",
-            [candidate.candidate_key, m.to_canonical(candidate), trust.value],
-        )
-    )
+    """Stable id excluding unit-local candidate_key (Addendum B B-03)."""
+    return m.ClaimId(_stable_id("clm", _claim_content_payload(candidate, trust)))
 
 
 def deterministic_relationship_id(
     candidate: m.CandidateSemanticRelationship, trust: m.TrustState
 ) -> m.RelationshipId:
-    """Stable opaque id for identical semantic content (idempotent indexing)."""
+    """Stable id excluding unit-local candidate_key (Addendum B B-03)."""
     return m.RelationshipId(
-        _stable_id(
-            "rel",
-            [candidate.candidate_key, m.to_canonical(candidate), trust.value],
-        )
+        _stable_id("rel", _relationship_content_payload(candidate, trust))
     )
+
+
+def _check_premise_refs(
+    basis: m.SemanticBasis, owner: str
+) -> str | None:
+    for ref in basis.input_refs:
+        if isinstance(ref, (m.ClaimRef, m.RelationshipRef)):
+            if not ref.id.value:
+                return f"{owner}: premise ref has empty id"
+        elif isinstance(ref, m.EvidenceRef):
+            if not ref.evidence_id.value:
+                return f"{owner}: premise evidence ref has empty id"
+        else:
+            return f"{owner}: premise ref has unknown shape"
+    return None
+
+
+def validate_question_coverage(
+    coverage: m.InterpretationCoverage,
+    ctx: ValidationContext,
+    owner: str,
+) -> str | None:
+    question = coverage.question
+    if question is None:
+        return f"{owner}: question scope is missing"
+    if not question.question_slice or not question.materiality_basis:
+        return f"{owner}: question slice/materiality is empty"
+    if question.subject not in ctx.known_subject_ids:
+        return f"{owner}: question subject is not run-bound"
+    if question.scope_root not in ctx.known_subject_ids:
+        return f"{owner}: question scope_root is not run-bound"
+    if coverage.disposition is m.SemanticQuestionDisposition.ANSWERED:
+        # Addendum C C-05: explicit ANSWERED is completion intent; result
+        # refs are derived by the service from validated candidates before
+        # persisting (empty refs here do not count as examined output).
+        if not coverage.declared_complete:
+            return f"{owner}: ANSWERED requires declared_complete"
+    if coverage.disposition is m.SemanticQuestionDisposition.OPEN:
+        if not coverage.resolution_requirements:
+            return f"{owner}: OPEN requires resolution requirements"
+    if coverage.disposition is m.SemanticQuestionDisposition.NOT_APPLICABLE:
+        if coverage.result_refs:
+            return f"{owner}: NOT_APPLICABLE requires empty result_refs"
+        if not coverage.disposition_basis:
+            return f"{owner}: NOT_APPLICABLE requires disposition_basis"
+    for ref in coverage.result_refs:
+        if not ref.id.value:
+            return f"{owner}: result ref has empty id"
+    for req in coverage.resolution_requirements:
+        if not req.description:
+            return f"{owner}: resolution requirement needs description"
+    for obs in coverage.question_evidence:
+        if obs.evidence_ref.evidence_id.value not in ctx.known_evidence_ids:
+            return (
+                f"{owner}: question evidence does not resolve: "
+                f"{obs.evidence_ref.evidence_id.value}"
+            )
+    return None
+
+
+def validate_candidate_withdrawal(
+    withdrawal: m.CandidateSemanticWithdrawal,
+    ctx: ValidationContext,
+    known_result_ids: frozenset[str],
+    owner: str,
+) -> str | None:
+    target_id = withdrawal.target.id.value
+    if not target_id:
+        return f"{owner}: withdrawal target has empty id"
+    if target_id not in known_result_ids:
+        return f"{owner}: withdrawal target is not in bound question scope"
+    if not withdrawal.basis.summary:
+        return f"{owner}: withdrawal basis summary is empty"
+    failure = _check_evidence(withdrawal.evidence, ctx, owner)
+    if failure is not None:
+        return failure
+    return _check_premise_refs(withdrawal.basis, owner)
 
 
 def materialize_claim(

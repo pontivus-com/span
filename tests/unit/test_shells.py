@@ -289,8 +289,8 @@ class SqliteStoreTest(unittest.TestCase):
     def test_schema_version(self):
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(2))
-            self.assertEqual(SCHEMA_VERSION, 2)
+            self.assertEqual(store.schema_version(), m.SchemaVersion(3))
+            self.assertEqual(SCHEMA_VERSION, 3)
         finally:
             store.close()
 
@@ -569,3 +569,67 @@ class SqliteStoreTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrefixExpansionTest(unittest.TestCase):
+    def test_filesystem_expands_directory_scope(self):
+        import tempfile
+
+        from span.shell.filesystem_evidence import FilesystemEvidenceSource
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "wf").mkdir()
+            (root / "wf" / "b.py").write_text("B = 1\n", encoding="utf-8")
+            (root / "wf" / "a.py").write_text("A = 1\n", encoding="utf-8")
+            (root / "top.py").write_text("T = 1\n", encoding="utf-8")
+            source = FilesystemEvidenceSource("repo-fs", root)
+            page = source.inventory_evidence(
+                "repo-fs", m.EvidenceScope(paths=("wf",), evidence_refs=()),
+                _bounds(),
+            )
+            self.assertEqual(
+                sorted(i.evidence_ref.locator for i in page.items),
+                ["wf/a.py", "wf/b.py"],
+            )
+
+    def test_fixture_expands_directory_scope(self):
+        src = FixtureEvidenceSource(
+            "repo-1",
+            {"wf/b.py": "B", "wf/a.py": "A", "top.py": "T"},
+        )
+        page = src.inventory_evidence(
+            "repo-1", m.EvidenceScope(paths=("wf",), evidence_refs=()),
+            _bounds(),
+        )
+        self.assertEqual(
+            sorted(i.evidence_ref.locator for i in page.items),
+            ["wf/a.py", "wf/b.py"],
+        )
+
+    def test_store_only_subject_gets_prefix_evidence(self):
+        from span import service_operations as ops
+        from span.shell.structural.memory import InMemoryStructuralSource
+
+        structural = InMemoryStructuralSource("repo-1", (), (), ())
+        src = FixtureEvidenceSource(
+            "repo-1", {"wf/b.py": "B = 1\n", "wf/a.py": "A = 1\n"}
+        )
+        sid = m.SubjectId(
+            repository_id="repo-1", subject_kind=m.SubjectKind.SUBSYSTEM,
+            canonical_locator="wf",
+        )
+        subject = m.Subject(sid, "W", None)
+        selection = ops.discover_evidence(
+            "repo-1", subject, structural=structural, evidence=src,
+            bounds=_bounds(), state=m.RepositoryState(
+                repository_id="repo-1", revision_id=None, dirty=False,
+                state_fingerprint="fp",
+                observed_at=__import__("datetime").datetime.now(
+                    __import__("datetime").timezone.utc),
+            ),
+        )
+        self.assertEqual(
+            sorted(r.locator for r in selection.selected_refs),
+            ["wf/a.py", "wf/b.py"],
+        )

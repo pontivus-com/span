@@ -42,6 +42,23 @@ class FixtureEvidenceSource:
             revision_or_fingerprint=fingerprint_content(self._files[path]),
         )
 
+    def _expand_paths(self, paths: tuple[str, ...]) -> list[str]:
+        """Scope paths naming files stay; paths naming a directory
+        prefix expand to the files beneath (sorted). Retrieval only."""
+        expanded: list[str] = []
+        for path in dict.fromkeys(paths):
+            if path in self._files:
+                expanded.append(path)
+                continue
+            prefix = path.rstrip("/") + "/"
+            expanded.extend(
+                sorted(
+                    p for p in self._files
+                    if p == path or p.startswith(prefix)
+                )
+            )
+        return expanded
+
     def inventory_evidence(
         self,
         repository_id: str,
@@ -51,7 +68,7 @@ class FixtureEvidenceSource:
     ) -> m.EvidenceInventoryPage:
         self._check_repository(repository_id)
         if scope.paths:
-            paths = [p for p in scope.paths if p in self._files]
+            paths = self._expand_paths(tuple(scope.paths))
         elif scope.evidence_refs:
             paths = [
                 r.locator for r in scope.evidence_refs if r.locator in self._files
@@ -81,6 +98,22 @@ class FixtureEvidenceSource:
                 observed_at=self._now(),
             ),
             bound_info=bound_info,
+        )
+
+    def list_inventory_entries(
+        self,
+        repository_id: str,
+        fingerprint_locators: tuple[str, ...] = (),
+    ) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
+        self._check_repository(repository_id)
+        paths = sorted(self._files)
+        return (
+            tuple((p, f"ev-{p}") for p in paths),
+            {
+                loc: fingerprint_content(self._files[loc])
+                for loc in dict.fromkeys(fingerprint_locators)
+                if loc in self._files
+            },
         )
 
     def select_evidence(

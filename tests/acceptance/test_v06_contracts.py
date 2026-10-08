@@ -122,7 +122,7 @@ def _billing_claims(with_ownership=True):
     return tuple(claims)
 
 
-def _harness(files=None, claims=None):
+def _harness(files=None, claims=None, complete_questions=True):
     files = FILES if files is None else files
     structural = InMemoryStructuralSource(
         REPO,
@@ -151,7 +151,10 @@ def _harness(files=None, claims=None):
                 ),
                 relationships=(),
             )
-        }
+        },
+        # Addendum C C-05 cutover: fixture completes the bound
+        # question explicitly; claims alone never complete.
+        complete_questions=complete_questions,
     )
     return structural, evidence, store, agent
 
@@ -224,7 +227,8 @@ class WithdrawalTest(unittest.TestCase):
                         claims=_billing_claims(with_ownership=False),
                         relationships=(),
                     )
-                }
+                },
+                complete_questions=True,
             )
             refreshed, _ = _exchange(
                 ops.SemanticRefreshRequest(
@@ -641,7 +645,8 @@ class RetiredOwnerTest(unittest.TestCase):
                         ) + (successor,),
                         relationships=(),
                     )
-                }
+                },
+                complete_questions=True,
             )
             _exchange(
                 ops.SemanticRefreshRequest(

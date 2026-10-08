@@ -23,6 +23,12 @@ workflows, or originates authority).
 - `skills.md` — Agent Skills integration guide
 - `lifecycle.md` — agent execution lifecycle, init/readiness, examples
 - `hooks.md` — lifecycle-hook integration, matrix, reference adapter
+- `semantic-governance-addendum.md` — adopted v0.6 addendum: query-time
+  store-subject resolution (F1), cross-unit established-evidence
+  citation (F2), validation tests, operational prerequisites
+- `semantic-governance-addendum-b.md` — bootstrap, review ceremony,
+  and quality baseline: lifecycle placement, manifest, review fields,
+  section-aware reads, payload helpers, drift notes, validation tests
 
 Governing authority: `.context/requirements/` and the v0.6
 implementation plan. If any guide below disagrees with those, they

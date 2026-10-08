@@ -1,7 +1,7 @@
 """Host-neutral hook contract (plan §11.11). Isolated-shell integration.
 
 Host adapters map native lifecycle events onto `HookIntent` values and
-build the one permitted automatic call: `span_status` with
+build the one permitted automatic call: `status` with
 `HOOK_FAST`. Automatic hooks perform only event-local deterministic
 work proportional to the triggering scope (I-28): readiness plus
 repository-state baseline comparison at session start, changed-evidence

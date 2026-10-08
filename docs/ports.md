@@ -14,7 +14,10 @@ in-memory source for tests.
 
 ## Evidence (§5.3)
 
-`inventory_evidence` (fingerprints, paged) · `select_evidence`
+`inventory_evidence` (fingerprints, paged) · `list_inventory_entries`
+(membership-only `(locator, evidence_id)` listing plus targeted
+fingerprints — one metadata walk, no per-page re-hash) ·
+`select_evidence`
 (relevance only: links, structural context, authority seeds,
 identity/term anchors, bounded) · `read_evidence` (bounded units).
 Selection never confers authority. Production: filesystem source

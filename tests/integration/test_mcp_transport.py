@@ -144,26 +144,26 @@ class SchemaSyncTest(unittest.TestCase):
         self.assertEqual(
             TOOL_NAMES,
             (
-                "span_initialize_repository",
-                "span_explain",
-                "span_impact",
-                "span_trace",
-                "span_authority",
-                "span_status",
-                "span_refresh",
-                "span_submit_interpretation",
+                "initialize_repository",
+                "explain",
+                "impact",
+                "trace",
+                "authority",
+                "status",
+                "refresh",
+                "submit_interpretation",
             ),
         )
         self.assertEqual(set(TOOL_SCHEMAS), set(TOOL_NAMES))
 
     def test_required_matches_contract(self):
         classes = {
-            "span_explain": ops.SemanticExplainRequest,
-            "span_impact": ops.SemanticImpactRequest,
-            "span_trace": ops.SemanticTraceRequest,
-            "span_authority": ops.SemanticAuthorityRequest,
-            "span_status": ops.SemanticStatusRequest,
-            "span_refresh": ops.SemanticRefreshRequest,
+            "explain": ops.SemanticExplainRequest,
+            "impact": ops.SemanticImpactRequest,
+            "trace": ops.SemanticTraceRequest,
+            "authority": ops.SemanticAuthorityRequest,
+            "status": ops.SemanticStatusRequest,
+            "refresh": ops.SemanticRefreshRequest,
         }
         for tool, cls in classes.items():
             with self.subTest(tool=tool):
@@ -185,12 +185,12 @@ class SchemaSyncTest(unittest.TestCase):
                 )
 
     def test_submit_and_init_shapes(self):
-        submit = TOOL_SCHEMAS["span_submit_interpretation"]
+        submit = TOOL_SCHEMAS["submit_interpretation"]
         self.assertEqual(
             set(submit["required"]),
             {"continuation", "result", "repository_id"},
         )
-        init = TOOL_SCHEMAS["span_initialize_repository"]
+        init = TOOL_SCHEMAS["initialize_repository"]
         self.assertEqual(
             set(init["required"]),
             {"repository_locator", "structural_provider_config"},
@@ -200,7 +200,7 @@ class SchemaSyncTest(unittest.TestCase):
 class IngressTest(unittest.TestCase):
     def test_decode_explain(self):
         request = decode_request(
-            "span_explain",
+            "explain",
             {
                 "repository_id": REPO,
                 "target": _selector_args(),
@@ -215,7 +215,7 @@ class IngressTest(unittest.TestCase):
     def test_unknown_field_rejected(self):
         with self.assertRaises(ValueError):
             decode_request(
-                "span_explain",
+                "explain",
                 {
                     "repository_id": REPO,
                     "target": _selector_args(),
@@ -232,11 +232,11 @@ class IngressTest(unittest.TestCase):
             "boundary_only": False,
         }
         with self.assertRaises(ValueError):
-            decode_request("span_trace", args)
+            decode_request("trace", args)
 
     def test_missing_required_rejected(self):
         with self.assertRaises(ValueError):
-            decode_request("span_explain", {"repository_id": REPO})
+            decode_request("explain", {"repository_id": REPO})
 
     def test_unknown_tool_rejected(self):
         with self.assertRaises(ValueError):
@@ -248,7 +248,7 @@ class DispatchTest(unittest.TestCase):
         adapter, agent = _harness()
         try:
             pending = adapter.dispatch(
-                "span_explain",
+                "explain",
                 {
                     "repository_id": REPO,
                     "target": _selector_args(),
@@ -263,7 +263,7 @@ class DispatchTest(unittest.TestCase):
             )
             result = agent.perform(task)
             answered = adapter.dispatch(
-                "span_submit_interpretation",
+                "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
                     "result": m.to_canonical(result),
@@ -292,7 +292,7 @@ class DispatchTest(unittest.TestCase):
         adapter, _ = _harness()
         try:
             notice = adapter.dispatch(
-                "span_status",
+                "status",
                 {
                     "repository_id": REPO,
                     "target": None,
@@ -319,7 +319,7 @@ class DispatchTest(unittest.TestCase):
         adapter, _ = _harness()
         try:
             result = adapter.dispatch(
-                "span_submit_interpretation",
+                "submit_interpretation",
                 {
                     "continuation": "cont-999",
                     "result": m.to_canonical(
@@ -344,7 +344,7 @@ class DispatchTest(unittest.TestCase):
         adapter, agent = _harness()
         try:
             pending = adapter.dispatch(
-                "span_explain",
+                "explain",
                 {
                     "repository_id": REPO,
                     "target": _selector_args(),
@@ -366,7 +366,7 @@ class DispatchTest(unittest.TestCase):
                 for claim in bad["claims"]
             ]
             rejected = adapter.dispatch(
-                "span_submit_interpretation",
+                "submit_interpretation",
                 {
                     "continuation": continuation,
                     "result": bad,
@@ -378,7 +378,7 @@ class DispatchTest(unittest.TestCase):
                 json.loads(rejected.content)["error"], "ingress"
             )
             recovered = adapter.dispatch(
-                "span_submit_interpretation",
+                "submit_interpretation",
                 {
                     "continuation": continuation,
                     "result": good,
@@ -395,7 +395,7 @@ class DispatchTest(unittest.TestCase):
         adapter, _ = _harness()
         try:
             result = adapter.dispatch(
-                "span_explain",
+                "explain",
                 {
                     "repository_id": "nope",
                     "target": _selector_args(),
@@ -404,6 +404,70 @@ class DispatchTest(unittest.TestCase):
             self.assertTrue(result.is_error)
             body = json.loads(result.content)
             self.assertEqual(body["error"], "unknown_repository")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_failed_submit_leaves_no_partial_state(self):
+        """Validation failure persists nothing (addendum A, F7).
+
+        A unit with one valid and one invalid candidate rejects as a
+        whole; the valid candidate must not leak into the store.
+        """
+        adapter, agent = _harness()
+        try:
+            pending = adapter.dispatch(
+                "explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                },
+            )
+            envelope = json.loads(pending.content)
+            task = m.from_canonical(
+                m.SemanticInterpretationRequest,
+                envelope["request"],
+            )
+            good = agent.perform(task)
+            bad_claim = dataclasses.replace(
+                good.claims[0],
+                candidate_key="bad",
+                evidence=(
+                    m.EvidenceRef(
+                        evidence_id=m.EvidenceId("ev-ghost"),
+                        repository_id=REPO,
+                        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                        locator="ghost.py",
+                    ),
+                ),
+                candidate_authority=None,
+            )
+            result = m.SemanticInterpretationResult(
+                claims=(good.claims[0], bad_claim),
+                relationships=(),
+                governing_source_refs=(),
+                diagnostics=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
+            )
+            rejected = adapter.dispatch(
+                "submit_interpretation",
+                {
+                    "continuation": envelope["continuation"],
+                    "result": m.to_canonical(result),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertTrue(rejected.is_error)
+            self.assertEqual(
+                json.loads(rejected.content)["error"], "validation"
+            )
+            store = adapter.contexts[REPO].store
+            page = store.load_claims(
+                REPO, (_sid(),), (),
+                DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
+            )
+            self.assertEqual(page.items, ())
+            self.assertEqual(store.load_subjects(REPO, (_sid(),)), ())
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -447,7 +511,7 @@ class DispatchTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             adapter = McpAdapter()
             result = adapter.dispatch(
-                "span_explain",
+                "explain",
                 {
                     "repository_id": "ghost",
                     "target": _selector_args(),
@@ -457,7 +521,7 @@ class DispatchTest(unittest.TestCase):
             body = json.loads(result.content)
             self.assertEqual(body["error"], "unknown_repository")
             init = adapter.dispatch(
-                "span_initialize_repository",
+                "initialize_repository",
                 {
                     "repository_locator": "x",
                     "structural_provider_config": "graft:/x",
@@ -492,6 +556,32 @@ class ServerWiringTest(unittest.TestCase):
         finally:
             adapter.contexts[REPO].store.close()
 
+    def test_list_tools_handler_returns_wire_serializable_result(self):
+        """tools/list must survive SDK runner serialization (wire bug).
+
+        The runner rejects raw lists; the handler must return a
+        BaseModel/dict result or every host fails tool discovery.
+        """
+        import asyncio
+
+        import mcp.types as _types
+
+        from span.shell import mcp_server
+
+        adapter, _ = _harness()
+        try:
+            server = mcp_server.build_server(adapter)
+            entry = server.get_request_handler("tools/list")
+            assert entry is not None
+            result = asyncio.run(
+                entry.handler(None, _types.PaginatedRequestParams())
+            )
+            self.assertIsInstance(result, _types.ListToolsResult)
+            self.assertEqual(len(result.tools), 8)
+            json.loads(result.model_dump_json(by_alias=True))
+        finally:
+            adapter.contexts[REPO].store.close()
+
     def test_call_tool_round_trip(self):
         import asyncio
 
@@ -500,7 +590,7 @@ class ServerWiringTest(unittest.TestCase):
         adapter, _ = _harness()
         try:
             content, is_error = mcp_server.handle_call_tool(
-                adapter, "span_status",
+                adapter, "status",
                 {
                     "repository_id": REPO,
                     "target": None,
@@ -520,7 +610,7 @@ class ServerWiringTest(unittest.TestCase):
                 return await entry.handler(
                     None,
                     _types.CallToolRequestParams(
-                        name="span_status",
+                        name="status",
                         arguments={
                             "repository_id": REPO,
                             "target": None,
@@ -604,7 +694,7 @@ class ProvisionPathTest(unittest.TestCase):
                 )
                 adapter.register(result.repository_id, context)
                 status = adapter.dispatch(
-                    "span_status",
+                    "status",
                     {
                         "repository_id": "order-svc",
                         "target": None,

@@ -228,7 +228,10 @@ def _harness(files=None):
         evidence=evidence,
         store=store,
     )
-    agent = FixtureAgent({"src/payments.py": _payments_candidates()})
+    agent = FixtureAgent(
+        {"src/payments.py": _payments_candidates()},
+        complete_questions=True,
+    )
     return structural, evidence, store, agent
 
 

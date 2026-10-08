@@ -50,3 +50,18 @@ class EvidenceSource(_typing.Protocol):
     ) -> tuple[EvidenceUnit, ...]:
         """Read bounded evidence units for the given references."""
         ...
+
+    def list_inventory_entries(
+        self,
+        repository_id: str,
+        fingerprint_locators: tuple[str, ...] = (),
+    ) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
+        """Membership-only inventory listing plus targeted fingerprints.
+
+        Returns ((locator, evidence_id value) pairs in deterministic
+        order, {locator: content fingerprint} for the requested
+        locators present). Same inclusion filter as inventory_evidence;
+        non-requested content is neither read nor hashed. Retrieval
+        mechanics only — never authority.
+        """
+        ...

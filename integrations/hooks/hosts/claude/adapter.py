@@ -11,7 +11,7 @@ contract (`integrations/hooks/contract.py`):
 The adapter keeps only ephemeral session-local bookkeeping (changed
 paths) required to build the scope. Such bookkeeping is not semantic
 state, is not authoritative, and is never persisted. The adapter calls
-canonical service operations only, and only `span_status` with
+canonical service operations only, and only `status` with
 `HOOK_FAST` on automatic paths.
 """
 
@@ -89,7 +89,7 @@ def run_automatic_hook(
 
     Returns the compact lifecycle notice, or `None` when the event
     maps to nothing (irrelevant tool, unknown hook: silence). Only
-    ever calls `span_status(..., mode=HOOK_FAST)`; anything else would
+    ever calls `status(..., mode=HOOK_FAST)`; anything else would
     be a second semantic authority and is structurally absent here.
     """
     mapped = adapt_event(event)

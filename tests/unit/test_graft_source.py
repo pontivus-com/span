@@ -107,6 +107,16 @@ class GraftMappingTest(unittest.TestCase):
         self.assertIs(
             g.NODE_SUBJECT_KIND["function"], m.SubjectKind.CODE_SYMBOL
         )
+        self.assertIs(
+            g.NODE_SUBJECT_KIND["enum"], m.SubjectKind.CODE_SYMBOL
+        )
+        self.assertIs(
+            g.RELATION_EDGE_KIND["extends"], m.StructuralEdgeKind.DEPENDS_ON
+        )
+        self.assertIs(
+            g.RELATION_EDGE_KIND["implements"],
+            m.StructuralEdgeKind.DEPENDS_ON,
+        )
 
     def test_unknown_node_kind_raises(self):
         wiring = _wiring()
@@ -127,6 +137,61 @@ class GraftMappingTest(unittest.TestCase):
         with self.assertRaises(g.GraftVocabularyError):
             g.GraftStructuralSource("repo-1", ".", wiring=wiring)
 
+    def test_enum_extends_implements_parse(self):
+        wiring = _wiring()
+        wiring["nodes"] = list(wiring["nodes"]) + [
+            {
+                "id": "src/types.ts#DataSource", "name": "DataSource",
+                "kind": "enum", "path": "src/types.ts",
+                "span": "L1-L4", "signature": None,
+                "body_hash": "ff06",
+            },
+            {
+                "id": "src/base.ts#Base", "name": "Base",
+                "kind": "class", "path": "src/base.ts",
+                "span": "L1-L2", "signature": None,
+                "body_hash": "gg07",
+            },
+        ]
+        wiring["edges"] = list(wiring["edges"]) + [
+            {
+                "source": "src/orders.js#place",
+                "target": "src/base.ts#Base",
+                "relation": "extends",
+            },
+            {
+                "source": "src/orders.js#place",
+                "target": "src/types.ts#DataSource",
+                "relation": "implements",
+            },
+        ]
+        src = g.GraftStructuralSource("repo-1", ".", wiring=wiring)
+        enum_resolution = src.resolve_subject(
+            "repo-1",
+            m.SubjectSelector(None, "DataSource", (), None),
+            _bounds(),
+        )
+        self.assertIs(
+            enum_resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
+        )
+        self.assertIs(
+            enum_resolution.candidates[0].subject.subject_id.subject_kind,
+            m.SubjectKind.CODE_SYMBOL,
+        )
+        sid = m.SubjectId(
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.CODE_SYMBOL,
+            canonical_locator="src/orders.js#place",
+        )
+        kinds = {
+            e.kind
+            for e in src.edges(
+                "repo-1", sid, (), StructuralDirection.DOWNSTREAM,
+                _bounds(),
+            ).items
+        }
+        self.assertIn(m.StructuralEdgeKind.DEPENDS_ON, kinds)
+
     def test_missing_index_raises(self):
         with self.assertRaises(g.GraftUnavailableError):
             g.GraftStructuralSource(
@@ -136,6 +201,33 @@ class GraftMappingTest(unittest.TestCase):
     def test_malformed_wiring_raises(self):
         with self.assertRaises(g.GraftShapeError):
             g.GraftStructuralSource("repo-1", ".", wiring={"nope": []})
+
+    def test_dangling_edges_skipped_not_crashed(self):
+        """Edges to unindexed modules (stdlib imports) parse cleanly.
+
+        Graft emits import edges to modules with no node entry
+        (`typing`); they carry no canonical identity (§4.2) and are
+        skipped while indexed edges keep serving.
+        """
+        wiring = _wiring()
+        wiring["edges"] = list(wiring["edges"]) + [
+            {
+                "source": "src/orders.js#place",
+                "target": "typing",
+                "relation": "imports",
+            },
+        ]
+        src = g.GraftStructuralSource("repo-1", ".", wiring=wiring)
+        sid = m.SubjectId(
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.CODE_SYMBOL,
+            canonical_locator="src/orders.js#place",
+        )
+        page = src.edges(
+            "repo-1", sid, (), StructuralDirection.DOWNSTREAM, _bounds()
+        )
+        self.assertEqual(len(page.items), 1)
+        self.assertIs(page.items[0].kind, m.StructuralEdgeKind.CALLS)
 
 
 class GraftPortBehaviorTest(unittest.TestCase):

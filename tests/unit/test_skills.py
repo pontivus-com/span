@@ -20,17 +20,18 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 SKILLS = (
     REPO_ROOT / "skills" / "span" / "SKILL.md",
     REPO_ROOT / "skills" / "span-change-context" / "SKILL.md",
+    REPO_ROOT / "skills" / "span-document" / "SKILL.md",
 )
 
 CANONICAL_OPS = {
-    "span_initialize_repository",
-    "span_explain",
-    "span_impact",
-    "span_trace",
-    "span_authority",
-    "span_status",
-    "span_refresh",
-    "span_submit_interpretation",
+    "initialize_repository",
+    "explain",
+    "impact",
+    "trace",
+    "authority",
+    "status",
+    "refresh",
+    "submit_interpretation",
 }
 
 FORBIDDEN_PHRASES = (
@@ -63,9 +64,13 @@ class SkillNonAuthorityTest(unittest.TestCase):
     def test_only_canonical_operations(self):
         for path in SKILLS:
             with self.subTest(skill=path.name):
-                mentioned = set(re.findall(r"span_[a-z_]+", _text(path)))
+                text = _text(path)
+                mentioned = set(
+                    re.findall(r"`([a-z_]+)`", text)
+                ) & CANONICAL_OPS
                 self.assertTrue(mentioned)
-                self.assertEqual(mentioned - CANONICAL_OPS, set())
+                stale = set(re.findall(r"span_[a-z_]+", text))
+                self.assertEqual(stale, set())
 
     def test_no_rule_flavored_vocabulary(self):
         for path in SKILLS:

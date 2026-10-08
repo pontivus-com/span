@@ -55,6 +55,7 @@ class SuspendedOperation:
     trace_filter: tuple[m.RelationshipKind, ...] = ()
     trace_filter_set: bool = False
     trace_boundary: bool = False
+    establish_baseline: bool = False
 
     def __post_init__(self) -> None:
         if self.op not in (

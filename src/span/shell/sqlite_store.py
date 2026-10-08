@@ -5,12 +5,10 @@ plus query columns; no second semantic model is introduced (§10.2/§10.3,
 I-15). Table decomposition is physical only and carries no semantic
 authority. Stdlib ``sqlite3``; no third-party binding (ledger).
 
-Schema version is 2 (``SCHEMA_VERSION``): coverage dependencies and
-retired-assertion history tables added for v0.6 reconciliation (I-37).
-v1 dependency rows (bare-id ``semantic_id``) do not decode under the
-tagged v0.6 carriers; development stores rebuild per §10.4.
-Rebuild/migration rules are plan §10.4 and belong to release
-engineering, not this module.
+Schema version is 3 (``SCHEMA_VERSION``): question coverage and premise
+reverse index added for Addendum B (B-01/B-05/B-08). v2 stores migrate
+non-destructively; legacy items remain unassessed without invented
+question ownership.
 """
 
 from __future__ import annotations
@@ -26,7 +24,7 @@ from span.shell import paging as _paging
 
 __all__ = ["SCHEMA_VERSION", "SqliteSemanticStore"]
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories(
@@ -79,6 +77,47 @@ CREATE TABLE IF NOT EXISTS coverage_dependencies(
   inventory_fingerprint TEXT NOT NULL,
   observed_at TEXT NOT NULL,
   canonical_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS question_coverages(
+  repository_id TEXT NOT NULL,
+  scope_root_locator TEXT NOT NULL,
+  scope_root_kind TEXT NOT NULL,
+  subject_locator TEXT NOT NULL,
+  subject_kind TEXT NOT NULL,
+  question_class TEXT NOT NULL,
+  question_slice TEXT NOT NULL,
+  disposition TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  canonical_json TEXT NOT NULL,
+  PRIMARY KEY(
+    repository_id, scope_root_locator, scope_root_kind,
+    subject_locator, subject_kind, question_class, question_slice
+  )
+);
+CREATE TABLE IF NOT EXISTS premise_dependents(
+  repository_id TEXT NOT NULL,
+  premise_id TEXT NOT NULL,
+  premise_kind TEXT NOT NULL,
+  dependent_id TEXT NOT NULL,
+  dependent_kind TEXT NOT NULL,
+  canonical_json TEXT NOT NULL,
+  PRIMARY KEY(repository_id, premise_id, dependent_id)
+);
+CREATE TABLE IF NOT EXISTS question_result_refs(
+  repository_id TEXT NOT NULL,
+  scope_root_locator TEXT NOT NULL,
+  scope_root_kind TEXT NOT NULL,
+  subject_locator TEXT NOT NULL,
+  subject_kind TEXT NOT NULL,
+  question_class TEXT NOT NULL,
+  question_slice TEXT NOT NULL,
+  result_id TEXT NOT NULL,
+  result_kind TEXT NOT NULL,
+  PRIMARY KEY(
+    repository_id, scope_root_locator, scope_root_kind,
+    subject_locator, subject_kind, question_class, question_slice,
+    result_id
+  )
 );
 CREATE TABLE IF NOT EXISTS retired_claims(
   claim_id TEXT PRIMARY KEY,
@@ -141,6 +180,12 @@ def _decode_coverage(payload: str) -> m.CoverageDependency:
     return value
 
 
+def _decode_question_coverage(payload: str) -> m.InterpretationCoverage:
+    value = m.from_canonical(m.InterpretationCoverage, _json.loads(payload))
+    assert isinstance(value, m.InterpretationCoverage)
+    return value
+
+
 def _decode_conflict(payload: str) -> m.RecordedConflict:
     value = m.from_canonical(m.RecordedConflict, _json.loads(payload))
     assert isinstance(value, m.RecordedConflict)
@@ -162,12 +207,113 @@ class SqliteSemanticStore:
     def __init__(self, path: str | _pathlib.Path) -> None:
         self._db = _sqlite3.connect(str(path))
         self._db.execute("PRAGMA foreign_keys=ON")
-        self._db.executescript(_SCHEMA)
-        self._db.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)",
-            (str(SCHEMA_VERSION),),
-        )
-        self._db.commit()
+        # Inspect on-disk version before mutating; fresh DB has no meta row.
+        try:
+            row = self._db.execute(
+                "SELECT value FROM meta WHERE key='schema_version'"
+            ).fetchone()
+        except _sqlite3.OperationalError:
+            row = None
+        on_disk = int(row[0]) if row is not None else 0
+        if on_disk not in (0, 2, 3):
+            raise ValueError(f"unsupported schema version: {on_disk}")
+        if on_disk == 0:
+            # Fresh database: create the full v3 schema at once.
+            self._db.executescript(_SCHEMA)
+            self._db.execute(
+                "INSERT OR REPLACE INTO meta(key, value) "
+                "VALUES('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            self._db.commit()
+            return
+        if on_disk == 3:
+            self._db.executescript(_SCHEMA)
+            self._db.execute(
+                "INSERT OR REPLACE INTO meta(key, value) "
+                "VALUES('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            self._db.commit()
+            return
+        # v2→v3: one explicit atomic migration transaction. New
+        # question-coverage/indexing tables are created and the version
+        # is published in the SAME transaction; an interruption rolls
+        # back without partial semantic state, leaving a valid v2
+        # database behind (Addendum B B.8). No invented question
+        # ownership: absence of coverage means unassessed.
+        try:
+            with self._db:
+                self._db.execute(
+                    "CREATE TABLE IF NOT EXISTS question_coverages("
+                    "  repository_id TEXT NOT NULL,"
+                    "  scope_root_locator TEXT NOT NULL,"
+                    "  scope_root_kind TEXT NOT NULL,"
+                    "  subject_locator TEXT NOT NULL,"
+                    "  subject_kind TEXT NOT NULL,"
+                    "  question_class TEXT NOT NULL,"
+                    "  question_slice TEXT NOT NULL,"
+                    "  disposition TEXT NOT NULL,"
+                    "  observed_at TEXT NOT NULL,"
+                    "  canonical_json TEXT NOT NULL,"
+                    "  PRIMARY KEY("
+                    "    repository_id, scope_root_locator, scope_root_kind,"
+                    "    subject_locator, subject_kind, question_class,"
+                    "    question_slice"
+                    "  ))"
+                )
+                self._db.execute(
+                    "CREATE TABLE IF NOT EXISTS premise_dependents("
+                    "  repository_id TEXT NOT NULL,"
+                    "  premise_id TEXT NOT NULL,"
+                    "  premise_kind TEXT NOT NULL,"
+                    "  dependent_id TEXT NOT NULL,"
+                    "  dependent_kind TEXT NOT NULL,"
+                    "  canonical_json TEXT NOT NULL,"
+                    "  PRIMARY KEY(repository_id, premise_id, dependent_id))"
+                )
+                self._db.execute(
+                    "CREATE TABLE IF NOT EXISTS question_result_refs("
+                    "  repository_id TEXT NOT NULL,"
+                    "  scope_root_locator TEXT NOT NULL,"
+                    "  scope_root_kind TEXT NOT NULL,"
+                    "  subject_locator TEXT NOT NULL,"
+                    "  subject_kind TEXT NOT NULL,"
+                    "  question_class TEXT NOT NULL,"
+                    "  question_slice TEXT NOT NULL,"
+                    "  result_id TEXT NOT NULL,"
+                    "  result_kind TEXT NOT NULL,"
+                    "  PRIMARY KEY("
+                    "    repository_id, scope_root_locator, scope_root_kind,"
+                    "    subject_locator, subject_kind, question_class,"
+                    "    question_slice, result_id"
+                    "  ))"
+                )
+                # Verify the new tables exist before publishing v3.
+                tables = {
+                    r[0]
+                    for r in self._db.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+                missing = {
+                    "question_coverages",
+                    "premise_dependents",
+                    "question_result_refs",
+                } - tables
+                if missing:
+                    raise RuntimeError(
+                        f"v2→v3 migration incomplete, missing: {sorted(missing)}"
+                    )
+                self._db.execute(
+                    "INSERT OR REPLACE INTO meta(key, value) "
+                    "VALUES('schema_version', ?)",
+                    (str(SCHEMA_VERSION),),
+                )
+        except Exception:
+            # Context manager rolled back: on-disk state is still v2.
+            # Re-check nothing was published before surfacing.
+            raise
 
     def close(self) -> None:
         """Release the database connection (shell lifecycle only)."""
@@ -308,6 +454,23 @@ class SqliteSemanticStore:
             if semantic_id in wanted
         )
 
+    def load_evidence_records(
+        self,
+        repository_id: str,
+        evidence_ids: tuple[str, ...],
+    ) -> tuple[m.EvidenceDependency, ...]:
+        wanted = set(evidence_ids)
+        rows = self._db.execute(
+            "SELECT canonical_json, evidence_id FROM evidence_dependencies "
+            "WHERE repository_id=? ORDER BY evidence_id, semantic_id",
+            (repository_id,),
+        ).fetchall()
+        return tuple(
+            _decode_dependency(payload)
+            for payload, evidence_id in rows
+            if evidence_id in wanted
+        )
+
     def load_conflicts(
         self,
         repository_id: str,
@@ -334,7 +497,7 @@ class SqliteSemanticStore:
         wanted = {s.canonical_locator for s in scope_subjects}
         rows = self._db.execute(
             "SELECT canonical_json, scope_locators FROM coverage_dependencies "
-            "WHERE repository_id=? ORDER BY observed_at",
+            "WHERE repository_id=? ORDER BY observed_at, rowid",
             (repository_id,),
         ).fetchall()
         found: list[m.CoverageDependency] = []
@@ -347,14 +510,130 @@ class SqliteSemanticStore:
                 found.append(_decode_coverage(payload))
         return tuple(found)
 
+    def load_question_coverages(
+        self,
+        repository_id: str,
+        scope_root: m.SubjectId | None,
+        subject_ids: tuple[m.SubjectId, ...],
+        bounds: m.QueryBounds,
+    ) -> tuple[m.InterpretationCoverage, ...]:
+        wanted = {s.canonical_locator for s in subject_ids}
+        rows = self._db.execute(
+            "SELECT canonical_json, scope_root_locator, subject_locator, "
+            "question_class, question_slice FROM question_coverages "
+            "WHERE repository_id=? ORDER BY question_class, subject_locator, "
+            "question_slice",
+            (repository_id,),
+        ).fetchall()
+        found: list[m.InterpretationCoverage] = []
+        for payload, root_loc, subj_loc, _qclass, _qslice in rows:
+            if scope_root is not None and root_loc != scope_root.canonical_locator:
+                continue
+            if wanted and subj_loc not in wanted:
+                continue
+            found.append(_decode_question_coverage(payload))
+        return tuple(found[: bounds.max_results])
+
+    def _filter_question_coverages(
+        self,
+        repository_id: str,
+        scope_root: m.SubjectId | None,
+        subject_ids: tuple[m.SubjectId, ...],
+    ) -> list[m.InterpretationCoverage]:
+        wanted = {s.canonical_locator for s in subject_ids}
+        rows = self._db.execute(
+            "SELECT canonical_json, scope_root_locator, subject_locator "
+            "FROM question_coverages "
+            "WHERE repository_id=? ORDER BY question_class, subject_locator, "
+            "question_slice",
+            (repository_id,),
+        ).fetchall()
+        found: list[m.InterpretationCoverage] = []
+        for payload, root_loc, subj_loc in rows:
+            if scope_root is not None and root_loc != scope_root.canonical_locator:
+                continue
+            if wanted and subj_loc not in wanted:
+                continue
+            found.append(_decode_question_coverage(payload))
+        return found
+
+    def load_all_question_coverages(
+        self,
+        repository_id: str,
+        scope_root: m.SubjectId | None,
+        subject_ids: tuple[m.SubjectId, ...],
+    ) -> tuple[m.InterpretationCoverage, ...]:
+        """Unbounded reads for reconciliation decisions (B-03)."""
+        return tuple(
+            self._filter_question_coverages(
+                repository_id, scope_root, subject_ids
+            )
+        )
+
+    def count_question_coverages(
+        self,
+        repository_id: str,
+        scope_root: m.SubjectId | None,
+        subject_ids: tuple[m.SubjectId, ...],
+    ) -> int:
+        wanted = {s.canonical_locator for s in subject_ids}
+        rows = self._db.execute(
+            "SELECT scope_root_locator, subject_locator FROM question_coverages "
+            "WHERE repository_id=?",
+            (repository_id,),
+        ).fetchall()
+        count = 0
+        for root_loc, subj_loc in rows:
+            if scope_root is not None and root_loc != scope_root.canonical_locator:
+                continue
+            if wanted and subj_loc not in wanted:
+                continue
+            count += 1
+        return count
+
+    def load_premise_dependents(
+        self,
+        repository_id: str,
+        premise_refs: tuple[m.ClaimRef | m.RelationshipRef, ...],
+    ) -> tuple[m.ClaimRef | m.RelationshipRef, ...]:
+        wanted = {r.id.value for r in premise_refs}
+        if not wanted:
+            return ()
+        rows = self._db.execute(
+            "SELECT dependent_id, dependent_kind FROM premise_dependents "
+            "WHERE repository_id=? ORDER BY dependent_id",
+            (repository_id,),
+        ).fetchall()
+        # Filter by premise membership via premise_id column.
+        premise_rows = self._db.execute(
+            "SELECT premise_id, dependent_id, dependent_kind "
+            "FROM premise_dependents WHERE repository_id=?",
+            (repository_id,),
+        ).fetchall()
+        out: list[m.ClaimRef | m.RelationshipRef] = []
+        seen: set[str] = set()
+        for premise_id, dep_id, dep_kind in premise_rows:
+            if premise_id not in wanted or dep_id in seen:
+                continue
+            seen.add(dep_id)
+            if dep_kind == "CLAIM":
+                out.append(m.ClaimRef(id=m.ClaimId(dep_id)))
+            else:
+                out.append(m.RelationshipRef(id=m.RelationshipId(dep_id)))
+        return tuple(out)
+
     # -- writes ---------------------------------------------------------
 
     def write_index_batch(self, batch: m.CanonicalIndexBatch) -> m.StoreWriteResult:
         written = 0
+        coverages = batch.coverage
+        if isinstance(coverages, m.InterpretationCoverage):
+            coverages = (coverages,)
         if not batch.subjects and (
             batch.claims
             or batch.relationships
             or batch.coverage_dependencies
+            or coverages
             or batch.retires_claims
             or batch.retires_relationships
             or batch.conflicts
@@ -450,6 +729,122 @@ class SqliteSemanticStore:
                     ),
                 )
                 written += 1
+            for qcov in coverages:
+                question = qcov.question
+                if question is None:
+                    continue
+                # Addendum C C-05: persistence boundary. An ANSWERED row
+                # with empty result refs is false completion regardless of
+                # what validation admitted; the service must derive refs
+                # before writing. Fail the batch, never persist it.
+                if (
+                    qcov.disposition
+                    is m.SemanticQuestionDisposition.ANSWERED
+                    and not qcov.result_refs
+                ):
+                    raise ValueError(
+                        "ANSWERED question coverage without result refs "
+                        "cannot persist"
+                    )
+                repo_id = question.scope_root.repository_id
+                self._db.execute(
+                    "DELETE FROM question_result_refs WHERE repository_id=? "
+                    "AND scope_root_locator=? AND scope_root_kind=? "
+                    "AND subject_locator=? AND subject_kind=? "
+                    "AND question_class=? AND question_slice=?",
+                    (
+                        repo_id,
+                        question.scope_root.canonical_locator,
+                        question.scope_root.subject_kind.value,
+                        question.subject.canonical_locator,
+                        question.subject.subject_kind.value,
+                        question.question_class.value,
+                        question.question_slice,
+                    ),
+                )
+                self._db.execute(
+                    "INSERT OR REPLACE INTO question_coverages"
+                    "(repository_id, scope_root_locator, scope_root_kind, "
+                    "subject_locator, subject_kind, question_class, "
+                    "question_slice, disposition, observed_at, canonical_json) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        repo_id,
+                        question.scope_root.canonical_locator,
+                        question.scope_root.subject_kind.value,
+                        question.subject.canonical_locator,
+                        question.subject.subject_kind.value,
+                        question.question_class.value,
+                        question.question_slice,
+                        qcov.disposition.value,
+                        _datetime.datetime.now(
+                            _datetime.timezone.utc
+                        ).isoformat(),
+                        _encode(m.to_canonical(qcov)),
+                    ),
+                )
+                written += 1
+                for ref in qcov.result_refs:
+                    rid = ref.id.value
+                    rkind = "CLAIM" if isinstance(ref, m.ClaimRef) else "RELATIONSHIP"
+                    self._db.execute(
+                        "INSERT OR REPLACE INTO question_result_refs"
+                        "(repository_id, scope_root_locator, scope_root_kind, "
+                        "subject_locator, subject_kind, question_class, "
+                        "question_slice, result_id, result_kind) "
+                        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            repo_id,
+                            question.scope_root.canonical_locator,
+                            question.scope_root.subject_kind.value,
+                            question.subject.canonical_locator,
+                            question.subject.subject_kind.value,
+                            question.question_class.value,
+                            question.question_slice,
+                            rid,
+                            rkind,
+                        ),
+                    )
+                    written += 1
+            for item in (*batch.claims, *batch.relationships):
+                dep_id = (
+                    item.claim_id.value
+                    if isinstance(item, m.SemanticClaim)
+                    else item.relationship_id.value
+                )
+                dep_kind = (
+                    "CLAIM"
+                    if isinstance(item, m.SemanticClaim)
+                    else "RELATIONSHIP"
+                )
+                repo_id = (
+                    item.subject.repository_id
+                    if isinstance(item, m.SemanticClaim)
+                    else item.source.repository_id
+                )
+                for pref in item.basis.input_refs:
+                    if not isinstance(pref, (m.ClaimRef, m.RelationshipRef)):
+                        continue
+                    self._db.execute(
+                        "INSERT OR REPLACE INTO premise_dependents"
+                        "(repository_id, premise_id, premise_kind, "
+                        "dependent_id, dependent_kind, canonical_json) "
+                        "VALUES(?, ?, ?, ?, ?, ?)",
+                        (
+                            repo_id,
+                            pref.id.value,
+                            "CLAIM"
+                            if isinstance(pref, m.ClaimRef)
+                            else "RELATIONSHIP",
+                            dep_id,
+                            dep_kind,
+                            _json.dumps(
+                                {"premise": pref.id.value, "dependent": dep_id},
+                                sort_keys=True,
+                            ),
+                        ),
+                    )
+                    written += 1
             retired_at = _datetime.datetime.now(
                 _datetime.timezone.utc
             ).isoformat()
@@ -476,6 +871,15 @@ class SqliteSemanticStore:
                     "DELETE FROM evidence_dependencies WHERE semantic_id=?",
                     (ref.id.value,),
                 )
+                self._db.execute(
+                    "DELETE FROM premise_dependents WHERE premise_id=? "
+                    "OR dependent_id=?",
+                    (ref.id.value, ref.id.value),
+                )
+                self._db.execute(
+                    "DELETE FROM question_result_refs WHERE result_id=?",
+                    (ref.id.value,),
+                )
                 written += 1
             for ref in batch.retires_relationships:
                 row = self._db.execute(
@@ -500,6 +904,15 @@ class SqliteSemanticStore:
                 )
                 self._db.execute(
                     "DELETE FROM evidence_dependencies WHERE semantic_id=?",
+                    (ref.id.value,),
+                )
+                self._db.execute(
+                    "DELETE FROM premise_dependents WHERE premise_id=? "
+                    "OR dependent_id=?",
+                    (ref.id.value, ref.id.value),
+                )
+                self._db.execute(
+                    "DELETE FROM question_result_refs WHERE result_id=?",
                     (ref.id.value,),
                 )
                 written += 1

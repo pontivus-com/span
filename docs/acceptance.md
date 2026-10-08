@@ -35,7 +35,7 @@ implicit init/interpret/rebuild/refresh, no whole-repo indexing.
 
 ## MI-11 execution mapping (G-02)
 
-Current suite: 217 tests green under `pytest` and `unittest`
+Current suite: 242 tests green under `pytest` and `unittest`
 (isolated venv install verified separately). Case → evidence:
 
 | Case | Tests |
@@ -55,10 +55,19 @@ Current suite: 217 tests green under `pytest` and `unittest`
 | M publication boundary | provenance ledger, no proprietary material, GPL-3.0-only `LICENSE` at root |
 | S-01 / S-02 | terminology authority; publication custody + violation |
 | v0.6 paths | multi-unit chains, second-page retrieval, supersession, withdrawal, doc-only subjects |
+| Addendum B A–L | `tests/acceptance/test_addendum_b_acceptance.py` (binding B.11: First-contact held-out baseline + restart, question-local vs baseline, negative/empty reopen, shared replace/withdraw + fanout + overflow-defer, premise cascade, cycle/truncation, reconcile/failure, authority conflict, paging/restart, benign change, legacy upgrade, isolation, cited-but-wrong + omitted-participant oracle must-fails, sibling-question isolation) plus `tests/unit/test_addendum_b.py` (seeding, stable IDs, shared storage, premise walk, paging grammar, effective disposition, migration) |
+| Addendum C (cutover + campaign mechanics) | `tests/acceptance/test_addendum_c_acceptance.py` (C-N explicit-disposition cutover: claims-only persists PENDING and never completes; explicit ANSWERED derives refs and reads back current; explicit ANSWERED with zero material rejects atomically with nothing written; the store refuses empty ANSWERED rows; incomplete resubmission retires nothing. C-O single-writer serialization with parallel analysis and stable IDs. C-M seeded scope restart-retrievable. C-P/C-06 mechanical limits: byte-valid-but-wrong passes validation, pinning oracle ownership. C-Q withdraw-plus-replace recovery without rollback machinery. C-S document subject registration. C-T explicit bound truncation) |
+
+Addendum B adopted 2026-10-08: v0.6 contracts synchronized (question identity,
+exchange, validation, store v3, query/change, transport, guides);
+`READY` is operational only; `ANSWERED` is recorded analysis, never
+reviewer truth; no `ACCEPTED` without source declaration. Full suite
+green including executable B.11 challenges (each B.12 challenge is a
+test, not documentation).
 
 Live-agent validation (2026-10-08, §21 #9): one end-to-end run with
 an external LLM-connected agent (Claude via relay, ~$0.002, no
-Span-owned provider code or credentials) — real `span_explain`
+Span-owned provider code or credentials) — real `explain`
 suspension → live judgments (purpose sentence, verbatim quote,
 audit note) → deterministic transcription to typed candidates →
 strict ingress + validation → materialized `EXPLAIN` answer. The

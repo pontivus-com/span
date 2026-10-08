@@ -10,6 +10,7 @@ behavior arrives in its owning phase (Phase 3); transport in Phase 4.
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
 from dataclasses import dataclass as _dataclass
 
 from span.core import answers as _answers
@@ -50,6 +51,9 @@ __all__ = [
     "RefreshScopeError",
     "InterpretationUnitRejected",
     "preflight",
+    "coverage_check",
+    "question_coverage_check",
+    "effective_question_view",
     "discover_evidence",
     "prepare_interpretation_task",
     "submit_interpretation",
@@ -78,6 +82,7 @@ class SemanticExplainRequest:
     target: m.SubjectSelector
     bounds: m.QueryBounds
     page_token: str | None = None
+    establish_baseline: bool = False
 
 
 @_dataclass(frozen=True)
@@ -195,7 +200,7 @@ def _setup_requirement(repository_id: str) -> m.ResolutionRequirement:
         subject_or_claim=None,
         description=(
             f"repository {repository_id} is not initialized; run "
-            f"span_initialize_repository in a dedicated setup session"
+            f"initialize_repository in a dedicated setup session"
         ),
         supporting_context=(),
     )
@@ -262,40 +267,31 @@ def _inventory_snapshot(
     repository_id: str,
     *,
     evidence: EvidenceSource,
-    bounds: m.QueryBounds,
+    seeds: tuple[tuple[str, str], ...] = (),
 ) -> tuple[str, dict[str, str]]:
-    """Inventory snapshot plus per-evidence map (plan §8.5).
+    """Inventory snapshot plus per-seed map (plan §8.5).
 
     The combined fingerprint covers inventory MEMBERSHIP (which sources
     exist), not their content: newly added sources are visible even
     with no existing dependants, while content changes to known
     sources stay per-item through direct dependencies (MI-07 partial
-    staleness). Seed content fingerprints come from the same walk.
-    Pages through the full inventory (metadata only, no semantic work).
+    staleness). Membership derivation is identical to the paged
+    inventory walk (sorted evidence ids); content is hashed only for
+    the requested seed locators, so snapshots cost one metadata walk
+    instead of one full re-hash per page. Seed content fingerprints come
+    from the same walk.
     """
     import hashlib as _hashlib
 
-    items: list[m.EvidenceInventoryItem] = []
-    token: str | None = None
-    while True:
-        page = evidence.inventory_evidence(
-            repository_id,
-            m.EvidenceScope(paths=(), evidence_refs=()),
-            bounds,
-            token,
-        )
-        items.extend(page.items)
-        token = page.bound_info.continuation_token
-        if token is None:
-            break
-    pairs = sorted(
-        (item.evidence_ref.evidence_id.value, item.content_fingerprint)
-        for item in items
+    entries, fingerprints = evidence.list_inventory_entries(
+        repository_id,
+        tuple(loc for loc, _ in seeds),
     )
-    membership = _hashlib.sha256(
-        repr(sorted(eid for eid, _ in pairs)).encode("utf-8")
-    ).hexdigest()
-    return membership, dict(pairs)
+    pairs = sorted(eid for _, eid in entries)
+    membership = _hashlib.sha256(repr(pairs).encode("utf-8")).hexdigest()
+    return membership, {
+        eid: fingerprints.get(loc, "") for loc, eid in seeds
+    }
 
 
 def preflight(
@@ -306,13 +302,10 @@ def preflight(
     store: SemanticStore,
     bounds: m.QueryBounds,
 ) -> tuple[m.FreshnessUpdate, ...]:
-    """Query freshness preflight (plan §9.2 steps 1–4).
+    """Query freshness preflight (plan §9.2 steps 1–4, Addendum B B-05).
 
-    Loads evidence dependencies, obtains current fingerprints, compares
-    against stored supporting state, classifies each item, and persists
-    non-current classifications. Returns the applied updates.
-    Coverage (step 0) is applied separately by `_refresh_view`, which
-    owns the item scope.
+    Direct evidence plus bounded transitive semantic-premise walk with
+    cycle detection. Truncation yields UNVERIFIABLE, never silent green.
     """
     if not semantic_ids:
         return ()
@@ -320,20 +313,316 @@ def preflight(
         repository_id, semantic_ids, evidence=evidence,
         store=store, bounds=bounds,
     )
-    if updates:
-        store.mark_freshness(updates)
-    return updates
+    premise_updates = _premise_preflight(
+        repository_id, semantic_ids, store=store, bounds=bounds,
+    )
+    merged: dict[str, m.FreshnessUpdate] = {}
+    for update in (*updates, *premise_updates):
+        merged[update.semantic_id.id.value] = update
+    final = tuple(merged.values())
+    if final:
+        store.mark_freshness(final)
+    return final
+
+
+def _premise_preflight(
+    repository_id: str,
+    semantic_ids: tuple[m.ClaimRef | m.RelationshipRef, ...],
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    max_depth: int = 6,
+) -> tuple[m.FreshnessUpdate, ...]:
+    """Bounded transitive premise walk with path-based cycle detection.
+
+    A cycle is reported only when a premise chain leads back to an
+    item already on the CURRENT traversal path (true circularity).
+    Merely visiting the same premise from two roots (diamond or
+    sibling order) is not a cycle. Truncation yields UNVERIFIABLE,
+    never silent green.
+    """
+    updates: dict[str, m.FreshnessUpdate] = {}
+    clean: set[str] = set()
+
+    def _mark(rid: str, ref: m.ClaimRef | m.RelationshipRef,
+              state: m.FreshnessState, reason: str) -> None:
+        updates.setdefault(
+            rid,
+            m.FreshnessUpdate(
+                semantic_id=ref, freshness=m.Freshness(state, reason=reason)
+            ),
+        )
+
+    def _premise_update_state(pid: str) -> m.FreshnessState | None:
+        update = updates.get(pid)
+        return update.freshness.state if update is not None else None
+
+    def _visit(
+        ref: m.ClaimRef | m.RelationshipRef, path: tuple[str, ...],
+        depth: int,
+    ) -> bool:
+        """Walk one subtree; True iff fully explored (no truncation)."""
+        rid = ref.id.value
+        if rid in clean or rid in updates:
+            return True
+        if depth >= max_depth:
+            return False
+        try:
+            (item,) = store.load_by_refs(repository_id, (ref,))
+        except ValueError:
+            _mark(
+                rid, ref, m.FreshnessState.UNVERIFIABLE,
+                "premise unknown/retired; reassessment required",
+            )
+            return True
+        premises = [
+            pref for pref in item.basis.input_refs
+            if isinstance(pref, (m.ClaimRef, m.RelationshipRef))
+        ]
+        if not premises:
+            clean.add(rid)
+            return True
+        complete = True
+        for pref in premises:
+            pid = pref.id.value
+            if pid == rid or pid in path:
+                _mark(
+                    rid, ref, m.FreshnessState.UNVERIFIABLE,
+                    "premise cycle; unverifiable until reconciled",
+                )
+                continue
+            if not _visit(pref, path + (rid,), depth + 1):
+                complete = False
+                continue
+            state = _premise_update_state(pid)
+            if state is None:
+                try:
+                    (premise,) = store.load_by_refs(
+                        repository_id, (pref,)
+                    )
+                except ValueError:
+                    _mark(
+                        rid, ref, m.FreshnessState.STALE,
+                        "premise retired/unknown; dependent reassessment "
+                        "required",
+                    )
+                    continue
+                state = premise.freshness.state
+            if state is m.FreshnessState.UNVERIFIABLE:
+                _mark(
+                    rid, ref, m.FreshnessState.UNVERIFIABLE,
+                    "upstream premise unverifiable; dependent "
+                    "reassessment required",
+                )
+            elif state is not m.FreshnessState.CURRENT:
+                _mark(
+                    rid, ref, m.FreshnessState.STALE,
+                    "upstream premise noncurrent; dependent reassessment "
+                    "required",
+                )
+        if complete and rid not in updates:
+            clean.add(rid)
+        return complete
+
+    for ref in semantic_ids:
+        if not _visit(ref, (), 0):
+            _mark(
+                ref.id.value, ref, m.FreshnessState.UNVERIFIABLE,
+                "premise frontier truncated; outstanding scope",
+            )
+        if len(clean) + len(updates) > bounds.max_results * 4 + len(
+            semantic_ids
+        ):
+            _mark(
+                ref.id.value, ref, m.FreshnessState.UNVERIFIABLE,
+                "premise frontier truncated; outstanding scope",
+            )
+            break
+    return tuple(updates.values())
+
+
+def _question_identity_key(question: m.SemanticQuestionScope) -> tuple[str, ...]:
+    return (
+        "q",
+        question.scope_root.repository_id,
+        question.scope_root.subject_kind.value,
+        question.scope_root.canonical_locator,
+        question.subject.subject_kind.value,
+        question.subject.canonical_locator,
+        question.question_class.value,
+        question.question_slice,
+    )
+
+
+def effective_question_view(
+    coverage: m.InterpretationCoverage,
+    *,
+    evidence: EvidenceSource | None = None,
+    store: SemanticStore | None = None,
+    repository_id: str = "",
+) -> m.SemanticQuestionCoverageView:
+    recorded = coverage.disposition
+    effective = recorded
+    freshness = m.Freshness(
+        state=m.FreshnessState.CURRENT, reason="question dependencies current"
+    )
+    requirements = tuple(coverage.resolution_requirements)
+    # Result/premise check: any noncurrent result ref makes a recorded
+    # ANSWERED/NOT_APPLICABLE noncurrent (effective PENDING).
+    if store is not None and repository_id and coverage.result_refs:
+        try:
+            items = store.load_by_refs(
+                repository_id, tuple(coverage.result_refs)
+            )
+        except ValueError:
+            items = ()
+            effective = m.SemanticQuestionDisposition.PENDING
+            freshness = m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason="question result unknown/retired",
+            )
+        else:
+            for item in items:
+                if item.freshness.state is not m.FreshnessState.CURRENT:
+                    if recorded in (
+                        m.SemanticQuestionDisposition.ANSWERED,
+                        m.SemanticQuestionDisposition.NOT_APPLICABLE,
+                    ):
+                        effective = m.SemanticQuestionDisposition.PENDING
+                    freshness = m.Freshness(
+                        state=m.FreshnessState.STALE,
+                        reason="question premise/result noncurrent",
+                    )
+                    break
+    # Direct question-evidence check: recompute live fingerprints for
+    # every QuestionEvidenceObservation. A changed/unreadable source
+    # reopens the question even with zero result refs.
+    if (
+        effective is not m.SemanticQuestionDisposition.PENDING
+        and evidence is not None
+        and repository_id
+        and coverage.question_evidence
+    ):
+        for obs in coverage.question_evidence:
+            try:
+                (unit,) = evidence.read_evidence(
+                    (obs.evidence_ref,),
+                    m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64),
+                )
+                current_fp = unit.content_fingerprint
+            except ValueError:
+                current_fp = None
+            if current_fp != obs.observed_fingerprint:
+                if recorded in (
+                    m.SemanticQuestionDisposition.ANSWERED,
+                    m.SemanticQuestionDisposition.NOT_APPLICABLE,
+                    m.SemanticQuestionDisposition.OPEN,
+                ):
+                    effective = m.SemanticQuestionDisposition.PENDING
+                freshness = m.Freshness(
+                    state=m.FreshnessState.STALE,
+                    reason="question evidence changed since examination",
+                )
+                break
+    # Discovery check for the exact question identity: the question's
+    # own CoverageDependency snapshot (inventory membership + seeds)
+    # is evaluated even when result_refs is empty, so OPEN and
+    # NOT_APPLICABLE with zero refs still track discovery movement.
+    if (
+        effective is not m.SemanticQuestionDisposition.PENDING
+        and evidence is not None
+        and store is not None
+        and repository_id
+        and coverage.question is not None
+    ):
+        try:
+            dep_coverages = store.load_coverage_dependencies(
+                repository_id, (coverage.question.subject,)
+            )
+        except Exception:
+            dep_coverages = ()
+        mine = [
+            cov for cov in dep_coverages
+            if cov.question is not None
+            and _question_identity_key(cov.question)
+            == _question_identity_key(coverage.question)
+        ]
+        if mine:
+            latest = mine[-1]
+            try:
+                inventory_fp, seed_map = _inventory_snapshot(
+                    repository_id,
+                    evidence=evidence,
+                    seeds=tuple(
+                        (sf.locator, sf.evidence_id.value)
+                        for sf in latest.seed_fingerprints
+                    ),
+                )
+                discovery = _freshness.classify_coverage(
+                    latest, inventory_fp, seed_map
+                )
+            except Exception:
+                discovery = m.Freshness(
+                    state=m.FreshnessState.UNVERIFIABLE,
+                    reason="question discovery unevaluable",
+                )
+            if discovery.state is not m.FreshnessState.CURRENT:
+                if recorded in (
+                    m.SemanticQuestionDisposition.ANSWERED,
+                    m.SemanticQuestionDisposition.NOT_APPLICABLE,
+                    m.SemanticQuestionDisposition.OPEN,
+                ):
+                    effective = m.SemanticQuestionDisposition.PENDING
+                freshness = m.Freshness(
+                    state=discovery.state,
+                    supporting_revision_or_fingerprint=(
+                        discovery.supporting_revision_or_fingerprint
+                    ),
+                    reason=(
+                        "question discovery scope changed; reassessment "
+                        "required"
+                    ),
+                )
+    if recorded is m.SemanticQuestionDisposition.PENDING:
+        effective = m.SemanticQuestionDisposition.PENDING
+    if not coverage.question_evidence and not coverage.result_refs:
+        # Zero-result questions rely on discovery snapshot; insufficient
+        # snapshot is UNVERIFIABLE, never durable negative fact.
+        if recorded is m.SemanticQuestionDisposition.NOT_APPLICABLE:
+            freshness = m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason="negative determination without direct evidence",
+            )
+    question = coverage.question
+    assert question is not None
+    return m.SemanticQuestionCoverageView(
+        question=question,
+        recorded_disposition=recorded,
+        effective_disposition=effective,
+        freshness=freshness,
+        resolution_requirements=requirements,
+    )
 
 
 def _latest_coverages(
     coverages: tuple[m.CoverageDependency, ...],
 ) -> tuple[m.CoverageDependency, ...]:
-    """Deduplicate coverage history: latest record per scope wins.
+    """Deduplicate coverage history: latest record per subject scope wins.
 
-    Repeated refresh writes a new row per unit; the newest record for
-    an identical scope supersedes earlier ones (store order is
-    observed_at ascending, so the last row wins). Distinct scopes
-    coexist and are each consulted.
+    This function serves ITEM-level freshness only (`coverage_check`):
+    an item's bytes are current when the newest discovery snapshot for
+    its subject scope matches current state, regardless of which
+    question recorded that snapshot. A refresh under any question
+    heals item marks for its scope.
+
+    Question-level currency is deliberately NOT derived here: each
+    question's own snapshot is evaluated by exact question identity in
+    `effective_question_view`/`question_coverage_check`, so a refresh
+    under one question never makes another question current. The
+    optional question tag on rows is the audit trail of which
+    question refreshed discovery, not an item-freshness partition —
+    partitioning items by question would let one outdated snapshot
+    poison freshly established items indefinitely.
     """
     latest: dict[tuple[str, ...], m.CoverageDependency] = {}
     for coverage in coverages:
@@ -344,13 +633,44 @@ def _latest_coverages(
     return tuple(latest.values())
 
 
+def question_coverage_check(
+    repository_id: str,
+    coverages: tuple[m.InterpretationCoverage, ...],
+    *,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+) -> tuple[m.InterpretationCoverage, ...]:
+    """Discovery freshness for question coverages incl. zero-result ones.
+
+    For every question coverage (including OPEN/NOT_APPLICABLE with
+    zero ``result_refs``), evaluate its exact-question discovery
+    snapshot plus direct question evidence. Returns the coverages
+    whose dependencies moved and therefore require reassessment
+    (effective PENDING). Never infers sufficiency from empty refs.
+    """
+    stale: list[m.InterpretationCoverage] = []
+    for coverage in coverages:
+        if coverage.question is None:
+            continue
+        view = effective_question_view(
+            coverage, evidence=evidence, store=store,
+            repository_id=repository_id,
+        )
+        if (
+            view.effective_disposition is m.SemanticQuestionDisposition.PENDING
+            and coverage.disposition
+            is not m.SemanticQuestionDisposition.PENDING
+        ) or view.freshness.state is not m.FreshnessState.CURRENT:
+            stale.append(coverage)
+    return tuple(stale)
+
+
 def coverage_check(
     repository_id: str,
     items: tuple[m.SemanticClaim | m.SemanticRelationship, ...],
     *,
     evidence: EvidenceSource,
     store: SemanticStore,
-    bounds: m.QueryBounds,
 ) -> tuple[m.FreshnessUpdate, ...]:
     """Discovery-coverage freshness (plan §9.2 step 0, §8.5).
 
@@ -358,6 +678,14 @@ def coverage_check(
     A moved inventory fingerprint — including a newly added authority
     with no existing dependants — marks covered items stale. Persists
     non-current classifications and returns the applied updates.
+
+    Item-scoped by signature: with zero items there is nothing to
+    mark, so this path returns early. Zero-result (OPEN /
+    NOT_APPLICABLE) question freshness is owned instead by
+    `question_coverage_check` plus per-question discovery evaluation
+    in `effective_question_view`, which refresh and every answer
+    composition consult even when `result_refs` is empty. An empty
+    item list alone never proves currentness anywhere.
     """
     if not items:
         return ()
@@ -373,7 +701,13 @@ def coverage_check(
     if not coverages:
         return ()
     inventory_fp, seed_map = _inventory_snapshot(
-        repository_id, evidence=evidence, bounds=bounds
+        repository_id,
+        evidence=evidence,
+        seeds=tuple(
+            (sf.locator, sf.evidence_id.value)
+            for cov in coverages
+            for sf in cov.seed_fingerprints
+        ),
     )
     updates: list[m.FreshnessUpdate] = []
     for coverage in _latest_coverages(coverages):
@@ -474,14 +808,38 @@ def discover_evidence(
         if len(selected) >= bounds.max_evidence_units:
             break
     kept = tuple(selected[: bounds.max_evidence_units])
+    # Store-only fallback (Addendum B baseline roots): a subject with
+    # no structural observations at all (registered semantic-only
+    # root) would otherwise receive an empty task. Top up from the
+    # deterministic path-prefix inventory under the subject locator —
+    # the subsystem's own files, sorted — so the audit has material
+    # to admit member questions from. Structural subjects never reach
+    # here (they always carry location observations).
+    truncated = len(kept) < len(selected)
+    if not observations and len(kept) < bounds.max_evidence_units:
+        prefix_page = evidence.inventory_evidence(
+            repository_id,
+            m.EvidenceScope(
+                paths=(sid.canonical_locator,), evidence_refs=()
+            ),
+            bounds,
+        )
+        for item in prefix_page.items:
+            if len(kept) >= bounds.max_evidence_units:
+                break
+            if item.evidence_ref.evidence_id.value in seen:
+                continue
+            seen.add(item.evidence_ref.evidence_id.value)
+            kept = kept + (item.evidence_ref,)
+        truncated = truncated or prefix_page.bound_info.truncated
     return m.EvidenceSelection(
         selected_refs=kept,
         bound_info=m.BoundInfo(
             requested_max_results=bounds.max_evidence_units,
             requested_max_depth=0,
             returned_results=len(kept),
-            truncated=len(kept) < len(selected),
-            truncated_category="discovery" if len(kept) < len(selected) else None,
+            truncated=truncated,
+            truncated_category="discovery" if truncated else None,
             continuation_token=None,
         ),
     )
@@ -502,14 +860,18 @@ def _coverage_for_task(
     subjects: tuple[m.SubjectId, ...],
     *,
     evidence: EvidenceSource,
-    bounds: m.QueryBounds,
     seeds: tuple[m.EvidenceRef, ...],
+    question: m.SemanticQuestionScope | None = None,
 ) -> m.CoverageDependency:
     """Build the discovery-coverage record for one unit (plan §8.5)."""
     import datetime as _datetime
 
     inventory_fp, seed_map = _inventory_snapshot(
-        repository_id, evidence=evidence, bounds=bounds
+        repository_id,
+        evidence=evidence,
+        seeds=tuple(
+            (seed.locator, seed.evidence_id.value) for seed in seeds
+        ),
     )
     return m.CoverageDependency(
         scope_subjects=subjects,
@@ -523,7 +885,209 @@ def _coverage_for_task(
             for seed in seeds
         ),
         observed_at=_datetime.datetime.now(_datetime.timezone.utc),
+        question=question,
     )
+
+
+def _read_units_within_bytes(
+    evidence: EvidenceSource,
+    refs: tuple[m.EvidenceRef, ...],
+    bounds: m.QueryBounds,
+) -> tuple[m.EvidenceUnit, ...]:
+    """Read selected refs without breaching the byte budget (§8.4).
+
+    Discovery counts units; the byte budget is enforced here by keeping
+    refs that fit and stopping before the first ref that would breach
+    it — a selection decision, never a silent bounds widening.
+    Oversized singles are skipped (they could never be delivered);
+    if nothing fits, the unit fails closed with an actionable message
+    instead of dying mid-read.
+    """
+    units: list[m.EvidenceUnit] = []
+    total = 0
+    for ref in refs:
+        try:
+            (unit,) = evidence.read_evidence((ref,), bounds)
+        except ValueError:
+            continue
+        size = len(unit.content.encode("utf-8"))
+        if units and total + size > bounds.max_evidence_bytes:
+            break
+        units.append(unit)
+        total += size
+    if not units:
+        if not refs:
+            return ()
+        raise ValueError(
+            "bounded evidence selection exceeds max_evidence_bytes "
+            f"({bounds.max_evidence_bytes}); narrow the target"
+        )
+    return tuple(units)
+
+
+def _question_class_for_intent(
+    intent: m.SemanticIntent, establish_baseline: bool = False
+) -> m.SemanticQuestionClass:
+    if establish_baseline:
+        return m.SemanticQuestionClass.CQ_01
+    if intent is m.SemanticIntent.TRACE:
+        return m.SemanticQuestionClass.CQ_04
+    if intent is m.SemanticIntent.IMPACT:
+        return m.SemanticQuestionClass.CQ_08
+    if intent is m.SemanticIntent.AUTHORITY:
+        return m.SemanticQuestionClass.CQ_06
+    if intent is m.SemanticIntent.STATUS:
+        return m.SemanticQuestionClass.CQ_09
+    return m.SemanticQuestionClass.CQ_01
+
+
+#: B.3/B.7: primary question class per operation for question-local
+#: missing-state evaluation. A single claim of any kind never
+#: satisfies an unexamined question; coverage decides, not claim counts.
+_REQUIRED_QUESTION_CLASS: dict[m.SemanticIntent, m.SemanticQuestionClass] = {
+    m.SemanticIntent.EXPLAIN: m.SemanticQuestionClass.CQ_01,
+    m.SemanticIntent.TRACE: m.SemanticQuestionClass.CQ_04,
+    m.SemanticIntent.IMPACT: m.SemanticQuestionClass.CQ_08,
+    m.SemanticIntent.AUTHORITY: m.SemanticQuestionClass.CQ_06,
+    m.SemanticIntent.STATUS: m.SemanticQuestionClass.CQ_09,
+}
+
+
+def _question_local_missing(
+    repository_id: str,
+    subject: m.Subject,
+    intent: m.SemanticIntent,
+    *,
+    store: SemanticStore,
+    evidence: EvidenceSource | None,
+    bounds: m.QueryBounds,
+) -> m.SemanticQuestionScope | None:
+    """Question-aware missing-state decision (Addendum B B.7).
+
+    Returns the bounded question to examine next, or None when the
+    operation may answer from stored/current semantics (possibly
+    qualified). Claim/relationship existence alone never counts as
+    examined: the operation's primary question class needs recorded
+    ANSWERED/NOT_APPLICABLE/OPEN/PENDING coverage. Recorded-but-
+    noncurrent answers are served as qualified noncurrent views on
+    reads (reassessment belongs to explicit refresh), never
+    manufactured inline — except recorded PENDING with no stored
+    semantics, which still needs its first examination.
+    """
+    sid = subject.subject_id
+    try:
+        coverages = store.load_all_question_coverages(
+            repository_id, None, (sid,),
+        )
+    except Exception:
+        try:
+            coverages = store.load_question_coverages(
+                repository_id, None, (sid,), bounds,
+            )
+        except Exception:
+            coverages = ()
+    mine = [
+        cov for cov in coverages
+        if cov.question is not None and cov.question.subject == sid
+    ]
+    primary = _REQUIRED_QUESTION_CLASS[intent]
+    if intent is m.SemanticIntent.STATUS:
+        # STATUS is a read path (currency/verification over stored
+        # semantics): it suspends only for a totally unexamined
+        # subject (no coverages and no stored claims/relationships).
+        # Stale-but-examined state is reported as qualified
+        # noncurrent views; reassessment belongs to explicit refresh.
+        if not mine:
+            claims, relationships, _, _ = _load_subject_state(
+                repository_id, sid, store=store, bounds=bounds,
+            )
+            if not claims and not relationships:
+                return m.SemanticQuestionScope(
+                    scope_root=sid,
+                    subject=sid,
+                    question_class=primary,
+                    question_slice=sid.canonical_locator,
+                    materiality_basis=f"{intent.value} question-local",
+                )
+        return None
+    if not mine:
+        # Nothing examined (legacy claims or not): examine primary.
+        return m.SemanticQuestionScope(
+            scope_root=sid,
+            subject=sid,
+            question_class=primary,
+            question_slice=sid.canonical_locator,
+            materiality_basis=f"{intent.value} question-local",
+        )
+    primary_covs = [
+        cov for cov in mine
+        if cov.question.question_class is primary
+    ]
+    if not primary_covs:
+        # Claims of other questions never satisfy this unexamined one.
+        return m.SemanticQuestionScope(
+            scope_root=sid,
+            subject=sid,
+            question_class=primary,
+            question_slice=sid.canonical_locator,
+            materiality_basis=f"{intent.value} question-local",
+        )
+    for cov in primary_covs:
+        if (
+            cov.disposition is m.SemanticQuestionDisposition.PENDING
+            and cov.question is not None
+        ):
+            return cov.question
+    return None
+
+
+def _stale_question_scopes(
+    repository_id: str,
+    subject: m.Subject,
+    *,
+    store: SemanticStore,
+    evidence: EvidenceSource,
+    bounds: m.QueryBounds,
+) -> list[m.SemanticQuestionScope]:
+    """Persisted questions requiring reassessment, deterministic order.
+
+    Recorded ANSWERED/NOT_APPLICABLE/OPEN whose effective disposition
+    is PENDING or whose freshness is noncurrent (changed evidence,
+    moved discovery, retired/stale premises or results). Refresh
+    re-examines under these persisted identities (B.3/B-06).
+    """
+    sid = subject.subject_id
+    try:
+        coverages = _load_all_coverages_or_defer(
+            repository_id, None, (sid,),
+            store=store, bounds=bounds,
+            purpose="stale question enumeration",
+        )
+    except Exception:
+        return []
+    stale: list[m.SemanticQuestionScope] = []
+    for cov in coverages:
+        if cov.question is None or cov.question.subject != sid:
+            continue
+        if cov.disposition is m.SemanticQuestionDisposition.PENDING:
+            continue
+        try:
+            view = effective_question_view(
+                cov, evidence=evidence, store=store,
+                repository_id=repository_id,
+            )
+        except Exception:
+            continue
+        if (
+            view.effective_disposition
+            is m.SemanticQuestionDisposition.PENDING
+            or view.freshness.state is not m.FreshnessState.CURRENT
+        ):
+            stale.append(cov.question)
+    stale.sort(
+        key=lambda q: (q.question_class.value, q.question_slice)
+    )
+    return stale
 
 
 def prepare_interpretation_task(
@@ -538,14 +1102,16 @@ def prepare_interpretation_task(
     operation_intent: m.SemanticIntent = m.SemanticIntent.EXPLAIN,
     question_slice: str = "",
     proposed_change: m.ProposedChange | None = None,
+    store: SemanticStore | None = None,
+    scope_root: m.SubjectId | None = None,
+    question_class: m.SemanticQuestionClass | None = None,
+    materiality_basis: str = "",
+    establish_baseline: bool = False,
 ) -> InterpretationTask:
     """Build the bounded task for the invoking agent (§8.3/§11.12).
 
-    Discovers evidence, reads bounded units, and assembles the typed
-    request plus the validation context inputs. The request carries the
-    operation intent, question slice, and impact proposal so the agent
-    interprets the specific question — never an invented one. Performs
-    no interpretation and no persistence.
+    Addendum B: constructs the immutable question scope, loads bounded
+    prior canonical items, and attaches service-owned SA obligations.
     """
     sid = subject.subject_id
     edges = structural.edges(
@@ -576,7 +1142,9 @@ def prepare_interpretation_task(
         repository_id, subject, structural=structural, evidence=evidence,
         bounds=bounds, state=state, authority_seeds=authority_seeds,
     )
-    units = evidence.read_evidence(selection.selected_refs, bounds)
+    units = _read_units_within_bytes(
+        evidence, selection.selected_refs, bounds
+    )
     fingerprints = tuple(
         (unit.evidence_ref.evidence_id.value, unit.content_fingerprint)
         for unit in units
@@ -586,6 +1154,49 @@ def prepare_interpretation_task(
         for obs in observations
         if obs.target_subject is not None
     ) + tuple(obs.source_subject for obs in observations)
+    resolved_slice = question_slice or sid.canonical_locator
+    resolved_class = question_class or _question_class_for_intent(
+        operation_intent, establish_baseline
+    )
+    if establish_baseline and not question_slice:
+        resolved_slice = (
+            "Establish the selected root's purpose, principal participants, "
+            "and material CQ-01–CQ-09 questions for this bounded scope."
+        )
+    root = scope_root or sid
+    question = m.SemanticQuestionScope(
+        scope_root=root,
+        subject=sid,
+        question_class=resolved_class,
+        question_slice=resolved_slice,
+        materiality_basis=(
+            materiality_basis
+            or (
+                "user-requested bounded baseline"
+                if establish_baseline
+                else f"{operation_intent.value} question-local"
+            )
+        ),
+    )
+    prior_claims: tuple[m.SemanticClaim, ...] = ()
+    prior_relationships: tuple[m.SemanticRelationship, ...] = ()
+    if store is not None:
+        try:
+            claim_page = store.load_claims(
+                repository_id, (sid,), (), bounds, None
+            )
+            prior_claims = tuple(claim_page.items)[: bounds.max_results]
+        except Exception:
+            prior_claims = ()
+        try:
+            from span.ports.structural import StructuralDirection as _Dir
+
+            rel_page = store.load_relationships(
+                repository_id, (sid,), (), _Dir.BOTH, bounds, None
+            )
+            prior_relationships = tuple(rel_page.items)[: bounds.max_results]
+        except Exception:
+            prior_relationships = ()
     request = m.SemanticInterpretationRequest(
         repository_id=repository_id,
         subjects=(subject,),
@@ -595,9 +1206,13 @@ def prepare_interpretation_task(
         allowed_relationship_kinds=tuple(m.RelationshipKind),
         identity_bindings=(sid,),
         operation_intent=operation_intent,
-        question_slice=question_slice or sid.canonical_locator,
+        question_slice=resolved_slice,
         proposed_change=proposed_change,
         bounds=bounds,
+        question=question,
+        prior_claims=prior_claims,
+        prior_relationships=prior_relationships,
+        analysis_obligations=m.SA_ANALYSIS_OBLIGATIONS,
     )
     if len(request.subjects) > bounds.max_subjects:
         raise _validation.InterpretationUnitRejected(
@@ -680,7 +1295,158 @@ def _assign_candidate_keys(
         diagnostics=result.diagnostics,
         candidate_subjects=result.candidate_subjects,
         candidate_conflicts=result.candidate_conflicts,
+        proposed_question_coverages=result.proposed_question_coverages,
+        candidate_withdrawals=result.candidate_withdrawals,
     )
+
+
+def _admit_established_evidence(
+    repository_id: str,
+    result: m.SemanticInterpretationResult,
+    ctx: _validation.ValidationContext,
+    *,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> tuple[_validation.ValidationContext, list[str]]:
+    """Admit citations to previously established evidence (addendum A, F2).
+
+    Cited ids unknown to the task are looked up among recorded evidence
+    dependencies; current bytes must hash equal to a recorded
+    observation, else the citation comes back as a stale/unreadable
+    problem — never silently admitted. Unknown ids stay unknown for the
+    core to report. Quote, substring, section, and authority checks in
+    the core are unchanged.
+    """
+    cited: set[str] = set()
+    for candidate in (*result.claims, *result.relationships):
+        cited.update(r.evidence_id.value for r in candidate.evidence)
+        authority = candidate.candidate_authority
+        if authority is not None:
+            cited.add(authority.binding.evidence_ref.evidence_id.value)
+    for proposed in result.candidate_subjects:
+        cited.update(r.evidence_id.value for r in proposed.evidence)
+    wanted = sorted(i for i in cited if i not in ctx.known_evidence_ids)
+    if not wanted:
+        return ctx, []
+    records: dict[str, list[m.EvidenceDependency]] = {}
+    for dep in store.load_evidence_records(repository_id, tuple(wanted)):
+        records.setdefault(
+            dep.evidence_ref.evidence_id.value, []
+        ).append(dep)
+    fingerprints = dict(ctx.evidence_fingerprints)
+    contents = dict(ctx.evidence_contents)
+    problems: list[str] = []
+    for eid in wanted:
+        deps = records.get(eid, ())
+        if not deps:
+            continue
+        ref = deps[0].evidence_ref
+        try:
+            (unit,) = evidence.read_evidence((ref,), bounds)
+        except ValueError:
+            problems.append(
+                f"cited established evidence is unreadable: {eid}"
+            )
+            continue
+        if unit.content_fingerprint not in {
+            d.observed_fingerprint for d in deps
+        }:
+            problems.append(
+                "cited established evidence changed since "
+                f"establishment: {eid}"
+            )
+            continue
+        fingerprints[eid] = unit.content_fingerprint
+        contents[eid] = unit.content
+    return _validation.ValidationContext(
+        allowed_claim_kinds=ctx.allowed_claim_kinds,
+        allowed_relationship_kinds=ctx.allowed_relationship_kinds,
+        known_evidence_ids=ctx.known_evidence_ids | frozenset(fingerprints),
+        known_subject_ids=ctx.known_subject_ids,
+        evidence_fingerprints=fingerprints,
+        evidence_contents=contents,
+    ), problems
+
+
+def _load_all_coverages_or_defer(
+    repository_id: str,
+    scope_root: m.SubjectId | None,
+    subject_ids: tuple[m.SubjectId, ...],
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    purpose: str,
+) -> tuple[m.InterpretationCoverage, ...]:
+    """Unbounded coverage enumeration with bounds-safety deferral (B-03).
+
+    Retirement and withdrawal fanout must see every owning question.
+    When the total exceeds the operation bounds the owners cannot be
+    safely enumerated, so the unit is rejected/deferred with an
+    outstanding-scope requirement — never retired with an incomplete
+    fanout, and nothing is partially mutated (raise precedes write).
+    """
+    try:
+        total = store.count_question_coverages(
+            repository_id, scope_root, subject_ids
+        )
+    except Exception:
+        total = None
+    if total is not None and total > bounds.max_results:
+        raise _validation.InterpretationUnitRejected(
+            (
+                f"{purpose}: {total} owning questions exceed "
+                f"bounds max_results={bounds.max_results}; deferred with "
+                "outstanding scope — narrow the scope and resubmit",
+            )
+        )
+    try:
+        return store.load_all_question_coverages(
+            repository_id, scope_root, subject_ids
+        )
+    except Exception:
+        try:
+            return store.load_question_coverages(
+                repository_id, scope_root, subject_ids, bounds
+            )
+        except Exception:
+            return ()
+
+
+def _derive_current_question_support(
+    claims, relationships, task, fingerprints,
+) -> tuple[
+    tuple[m.ClaimRef | m.RelationshipRef, ...],
+    tuple[m.QuestionEvidenceObservation, ...],
+]:
+    """Derive result refs and question evidence for an ANSWERED bound
+    question from validated unit material (Addendum C C-05).
+
+    Submitted empty refs are completion intent; only derived refs backed
+    by materialized candidates count as examined output.
+    """
+    derived_refs: tuple[
+        m.ClaimRef | m.RelationshipRef, ...
+    ] = tuple(
+        m.ClaimRef(id=c.claim_id) for c in claims
+    ) + tuple(
+        m.RelationshipRef(id=r.relationship_id)
+        for r in relationships
+    )
+    question_evidence = tuple(
+        m.QuestionEvidenceObservation(
+            evidence_ref=ref,
+            observed_fingerprint=fingerprints[
+                ref.evidence_id.value
+            ],
+        )
+        for ref in tuple(
+            unit.evidence_ref
+            for unit in task.request.evidence_units
+        )
+        if ref.evidence_id.value in fingerprints
+    )
+    return derived_refs, question_evidence
 
 
 def _materialize_unit(
@@ -688,6 +1454,7 @@ def _materialize_unit(
     result: m.SemanticInterpretationResult,
     *,
     store: SemanticStore,
+    evidence: EvidenceSource,
     state: m.RepositoryState,
     extra_known_subjects: tuple[m.SubjectId, ...] = (),
     coverage: m.CoverageDependency,
@@ -696,18 +1463,10 @@ def _materialize_unit(
 ) -> None:
     """Validate and atomically materialize one submitted unit (§7.5, I-37).
 
-    Any validation failure rejects the entire unit — no candidate-level
-    salvage. Submitted content exceeding §8.4 cardinality bounds is a
-    unit failure, not a silent truncation. Retirement applies only to
-    prior assertions inside the declared-complete coverage scope;
-    otherwise omission is bounded-evidence truncation and prior state
-    is preserved.
-
-    ``extra_known_subjects`` are evidence-declared relationship
-    endpoints the service resolved exactly through the structural
-    source: resolvable identities join the unit scope (§8.4 explicitly
-    related subjects); unresolvable ones stay rejected. The core rule
-    itself (§4.2 run-bound scope) is unchanged.
+    Addendum B: exact-question completion/retirement with shared-output
+    safety, legacy-unassigned preservation, explicit withdrawals and
+    entire-unit atomicity. Subject-wide omission is truncation, never
+    withdrawal, for question-scoped writes.
     """
     if len(result.claims) > task.request.bounds.max_candidate_claims:
         raise _validation.InterpretationUnitRejected(
@@ -719,7 +1478,12 @@ def _materialize_unit(
         )
     result = _assign_candidate_keys(result)
     ctx = _validation_context_for(task, extra_known_subjects)
+    ctx, evidence_problems = _admit_established_evidence(
+        task.request.repository_id, result, ctx,
+        evidence=evidence, store=store, bounds=task.request.bounds,
+    )
     failures: list[str] = []
+    failures.extend(evidence_problems)
     new_subjects: list[m.Subject] = []
     new_subject_ids: list[m.SubjectId] = []
     for proposed in result.candidate_subjects:
@@ -773,6 +1537,63 @@ def _materialize_unit(
         relationships.append(
             _validation.materialize_relationship(candidate, validation, state)
         )
+    # B-03: duplicate substantive candidates fail; reordering is stable.
+    seen_ids: set[str] = set()
+    for item in (*claims, *relationships):
+        iid = (
+            item.claim_id.value
+            if isinstance(item, m.SemanticClaim)
+            else item.relationship_id.value
+        )
+        if iid in seen_ids:
+            failures.append(f"duplicate substantive candidate: {iid}")
+        seen_ids.add(iid)
+    # B-05: premise refs must resolve to active same-repo items; stale
+    # premises cannot support newly current conclusions; no self-refs/cycles.
+    try:
+        active_items = {
+            _ref_value(r): r
+            for r in (
+                tuple(m.ClaimRef(id=c.claim_id) for c in claims)
+                + tuple(
+                    m.RelationshipRef(id=r.relationship_id)
+                    for r in relationships
+                )
+            )
+        }
+        for item in (*claims, *relationships):
+            for pref in item.basis.input_refs:
+                if not isinstance(pref, (m.ClaimRef, m.RelationshipRef)):
+                    continue
+                pid = pref.id.value
+                if pid in active_items and pid == (
+                    item.claim_id.value
+                    if isinstance(item, m.SemanticClaim)
+                    else item.relationship_id.value
+                ):
+                    failures.append("semantic premise self-dependency")
+                    continue
+                if pid in seen_ids:
+                    # Within-unit cycle: new items referencing each other.
+                    failures.append(
+                        f"semantic premise cycle within unit: {pid}"
+                    )
+                    continue
+                try:
+                    (prior,) = store.load_by_refs(
+                        task.request.repository_id, (pref,)
+                    )
+                except ValueError:
+                    failures.append(
+                        f"semantic premise does not resolve: {pid}"
+                    )
+                    continue
+                if prior.freshness.state is not m.FreshnessState.CURRENT:
+                    failures.append(
+                        f"stale premise cannot support current conclusion: {pid}"
+                    )
+    except Exception as exc:  # store without new methods in legacy tests
+        failures.append(f"premise validation unavailable: {exc}")
     keys_in_result = frozenset(
         [c.candidate_key for c in result.claims]
         + [r.candidate_key for r in result.relationships]
@@ -813,31 +1634,355 @@ def _materialize_unit(
         )
     if failures:
         raise _validation.InterpretationUnitRejected(tuple(failures))
-    fingerprints = dict(task.fingerprints)
+    # ctx fingerprints include addendum-A/F2 admitted established
+    # evidence alongside task fingerprints.
+    fingerprints = dict(ctx.evidence_fingerprints)
     subjects = tuple(task.request.subjects) + tuple(new_subjects)
     known_ids = {c.claim_id.value for c in claims} | {
         r.relationship_id.value for r in relationships
     }
+    # Explicit withdrawals (B-03): validated, source-grounded, never omission.
+    all_result_ids = frozenset(known_ids)
+    try:
+        prior_refs_for_withdrawal: set[str] = set()
+        if task.request.question is not None:
+            bq = task.request.question
+            try:
+                existing_qcovs = store.load_all_question_coverages(
+                    task.request.repository_id, bq.scope_root,
+                    (bq.subject,),
+                )
+            except Exception:
+                try:
+                    existing_qcovs = store.load_question_coverages(
+                        task.request.repository_id, bq.scope_root,
+                        (bq.subject,), task.request.bounds,
+                    )
+                except Exception:
+                    existing_qcovs = ()
+            for qc in existing_qcovs:
+                if qc.question is None:
+                    continue
+                q = qc.question
+                if (
+                    q.scope_root == bq.scope_root and q.subject == bq.subject
+                    and q.question_class == bq.question_class
+                    and q.question_slice == bq.question_slice
+                ):
+                    prior_refs_for_withdrawal.update(
+                        r.id.value for r in qc.result_refs
+                    )
+        else:
+            for sid in retire_scope:
+                try:
+                    lc, lr, _, _ = _load_subject_state(
+                        task.request.repository_id, sid, store=store,
+                        bounds=task.request.bounds,
+                    )
+                except Exception:
+                    continue
+                prior_refs_for_withdrawal.update(
+                    c.claim_id.value for c in lc
+                )
+                prior_refs_for_withdrawal.update(
+                    r.relationship_id.value for r in lr
+                )
+    except Exception:
+        prior_refs_for_withdrawal = set()
+    known_for_withdrawal = frozenset(all_result_ids | prior_refs_for_withdrawal)
+    validated_withdrawals: list[m.CandidateSemanticWithdrawal] = []
+    for withdrawal in result.candidate_withdrawals:
+        problem = _validation.validate_candidate_withdrawal(
+            withdrawal, ctx, known_for_withdrawal, "withdrawal",
+        )
+        if problem is not None:
+            raise _validation.InterpretationUnitRejected((problem,))
+        # Must name active item in bound question or shared-output set.
+        target_id = withdrawal.target.id.value
+        try:
+            store.load_by_refs(
+                task.request.repository_id, (withdrawal.target,)
+            )
+        except ValueError:
+            raise _validation.InterpretationUnitRejected(
+                (f"withdrawal target unknown: {target_id}",)
+            )
+        validated_withdrawals.append(withdrawal)
     retires_claims: list[m.ClaimRef] = []
     retires_relationships: list[m.RelationshipRef] = []
-    if declared_complete and retire_scope:
-        prior_claims: list[m.SemanticClaim] = []
-        prior_rels: list[m.SemanticRelationship] = []
-        for sid in retire_scope:
-            loaded_c, loaded_r, _, _ = _load_subject_state(
-                task.request.repository_id, sid, store=store,
-                bounds=task.request.bounds,
-            )
-            prior_claims.extend(loaded_c)
-            prior_rels.extend(loaded_r)
-        for prior in prior_claims:
-            if prior.claim_id.value not in known_ids:
-                retires_claims.append(m.ClaimRef(id=prior.claim_id))
-        for prior in prior_rels:
-            if prior.relationship_id.value not in known_ids:
-                retires_relationships.append(
-                    m.RelationshipRef(id=prior.relationship_id)
+    for withdrawal in validated_withdrawals:
+        if isinstance(withdrawal.target, m.ClaimRef):
+            retires_claims.append(withdrawal.target)
+        else:
+            retires_relationships.append(withdrawal.target)
+    # Question-scoped retirement: only exact bound question outputs retire,
+    # and only when unshared. Legacy path (no bound question and no
+    # submitted coverages) retains v0.6 subject-wide behavior for backward
+    # compatibility. A bound question with no submitted coverages
+    # synthesizes its own current-question coverage below so that every
+    # materialization leaves durable question state (no silent unassessed
+    # writes); PENDING-only synthesis claims no completion.
+    bound_question = task.request.question
+    question_coverages_to_persist: list[m.InterpretationCoverage] = []
+    reopened_coverages: list[m.InterpretationCoverage] = []
+    if bound_question is not None or result.proposed_question_coverages:
+        # Validate submitted coverages; derive refs/evidence from validated
+        # candidates and expressly selected support refs.
+        seen_qidentities: set[tuple[str, ...]] = set()
+        for submitted in result.proposed_question_coverages:
+            if submitted.question is None:
+                raise _validation.InterpretationUnitRejected(
+                    ("question coverage without question scope",)
                 )
+            q = submitted.question
+            ident = (
+                q.scope_root.repository_id, q.scope_root.canonical_locator,
+                q.scope_root.subject_kind.value, q.subject.canonical_locator,
+                q.subject.subject_kind.value, q.question_class.value,
+                q.question_slice,
+            )
+            if ident in seen_qidentities:
+                raise _validation.InterpretationUnitRejected(
+                    ("duplicate question identity in submission",)
+                )
+            seen_qidentities.add(ident)
+            problem = _validation.validate_question_coverage(
+                submitted, ctx, "question coverage",
+            )
+            if problem is not None:
+                raise _validation.InterpretationUnitRejected((problem,))
+            if q.question_slice != submitted.question_slice:
+                raise _validation.InterpretationUnitRejected(
+                    ("question_slice mismatch in coverage",)
+                )
+        # Current-question coverage: Addendum C C-05 eliminates implied
+        # completion. An explicit submitted disposition for the bound
+        # question is required for ANSWERED/NOT_APPLICABLE. Missing
+        # explicit coverage always synthesizes PENDING, never completion,
+        # so claims without a completion claim stay unassigned output.
+        current_qcov: m.InterpretationCoverage | None = None
+        if bound_question is not None:
+            is_current = [
+                c for c in result.proposed_question_coverages
+                if c.question is not None and c.question == bound_question
+            ]
+            if is_current:
+                current_qcov = is_current[0]
+                if (
+                    current_qcov.disposition
+                    is m.SemanticQuestionDisposition.ANSWERED
+                ):
+                    if not (claims or relationships):
+                        raise _validation.InterpretationUnitRejected(
+                            (
+                                "explicit ANSWERED with zero validated "
+                                "material; submit PENDING/OPEN or add "
+                                "supported candidates",
+                            )
+                        )
+                    derived_refs, derived_qe = (
+                        _derive_current_question_support(
+                            claims, relationships, task, fingerprints,
+                        )
+                    )
+                    current_qcov = _dataclasses.replace(
+                        current_qcov,
+                        result_refs=derived_refs,
+                        question_evidence=derived_qe,
+                    )
+            else:
+                # Addendum C C-05: no explicit current coverage means no
+                # completion claim. Always synthesize PENDING (admitted but
+                # unexamined) so the unit still leaves durable question
+                # state; submitted claims persist as unassigned output.
+                current_qcov = m.InterpretationCoverage(
+                    subjects=tuple(s.subject_id for s in subjects),
+                    question_slice=bound_question.question_slice,
+                    evidence_scope=m.EvidenceScope(
+                        paths=(),
+                        evidence_refs=tuple(
+                            unit.evidence_ref
+                            for unit in task.request.evidence_units
+                        ),
+                    ),
+                    declared_complete=False,
+                    question=bound_question,
+                    disposition=m.SemanticQuestionDisposition.PENDING,
+                    result_refs=(),
+                    resolution_requirements=(
+                        m.ResolutionRequirement(
+                            kind=(
+                                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
+                            ),
+                            subject_or_claim=bound_question.subject,
+                            description=(
+                                "question submitted without explicit "
+                                "completion; examination pending"
+                            ),
+                            supporting_context=(),
+                        ),
+                    ),
+                    disposition_basis=(
+                        "synthesized pending: no explicit completion submitted"
+                    ),
+                    question_evidence=(),
+                )
+            if current_qcov is not None and (
+                current_qcov.disposition
+                is m.SemanticQuestionDisposition.ANSWERED
+            ):
+                # Addendum C C-05: only a complete replacement retires
+                # prior unshared outputs. PENDING/OPEN/NOT_APPLICABLE never
+                # authorize omission-based retirement; explicit withdrawals
+                # retire through the validated-withdrawal path above.
+                try:
+                    prior_qcovs = store.load_all_question_coverages(
+                        task.request.repository_id,
+                        bound_question.scope_root,
+                        (bound_question.subject,),
+                    )
+                except Exception:
+                    try:
+                        prior_qcovs = store.load_question_coverages(
+                            task.request.repository_id,
+                            bound_question.scope_root,
+                            (bound_question.subject,),
+                            task.request.bounds,
+                        )
+                    except Exception:
+                        prior_qcovs = ()
+                old_refs: set[str] = set()
+                for qc in prior_qcovs:
+                    if qc.question == bound_question:
+                        old_refs.update(r.id.value for r in qc.result_refs)
+                new_refs = {r.id.value for r in current_qcov.result_refs}
+                for oid in old_refs - new_refs:
+                    # Shared-output check across ALL questions (unbounded:
+                    # a bounded read could hide an owner and cause an
+                    # unsafe retirement). Deferral propagates: never
+                    # retire with an incomplete owner set.
+                    all_qcovs = _load_all_coverages_or_defer(
+                        task.request.repository_id, None, (),
+                        store=store, bounds=task.request.bounds,
+                        purpose="shared-output retirement check",
+                    )
+                    shared = False
+                    for other in all_qcovs:
+                        if other.question == bound_question:
+                            continue
+                        if oid in {r.id.value for r in other.result_refs}:
+                            shared = True
+                            break
+                    if shared:
+                        continue
+                    # Unshared: retire.
+                    try:
+                        (old_item,) = store.load_by_refs(
+                            task.request.repository_id,
+                            (
+                                m.ClaimRef(id=m.ClaimId(oid)),
+                            ),
+                        )
+                        if isinstance(old_item, m.SemanticClaim):
+                            retires_claims.append(m.ClaimRef(id=m.ClaimId(oid)))
+                        else:
+                            retires_relationships.append(
+                                m.RelationshipRef(id=m.RelationshipId(oid))
+                            )
+                    except Exception:
+                        try:
+                            (old_rel,) = store.load_by_refs(
+                                task.request.repository_id,
+                                (
+                                    m.RelationshipRef(
+                                        id=m.RelationshipId(oid)
+                                    ),
+                                ),
+                            )
+                            retires_relationships.append(
+                                m.RelationshipRef(id=m.RelationshipId(oid))
+                            )
+                        except Exception:
+                            continue
+        # Addendum C C-05: the bound question persists exactly once, as
+        # the derived/synthesized current coverage — never the submitted
+        # original (whose empty refs are intent, not examined output).
+        question_coverages_to_persist = [
+            c for c in result.proposed_question_coverages
+            if c.question is None
+            or bound_question is None
+            or c.question != bound_question
+        ]
+        if current_qcov is not None:
+            question_coverages_to_persist.append(current_qcov)
+        # Explicit withdrawal fanout: reopen all other referencing questions.
+        # Enumeration is unbounded; overflow defers (raises, no partial
+        # write) instead of retiring with an incomplete fanout.
+        if validated_withdrawals:
+            all_qcovs = _load_all_coverages_or_defer(
+                task.request.repository_id, None, (),
+                store=store, bounds=task.request.bounds,
+                purpose="withdrawal fanout",
+            )
+            withdrawn_ids = {
+                w.target.id.value for w in validated_withdrawals
+            }
+            for other in all_qcovs:
+                if other.question is None:
+                    continue
+                if bound_question is not None and other.question == bound_question:
+                    continue
+                if withdrawn_ids & {r.id.value for r in other.result_refs}:
+                    reopened_coverages.append(
+                        m.InterpretationCoverage(
+                            subjects=other.subjects,
+                            question_slice=other.question_slice,
+                            evidence_scope=other.evidence_scope,
+                            declared_complete=False,
+                            question=other.question,
+                            disposition=m.SemanticQuestionDisposition.PENDING,
+                            result_refs=other.result_refs,
+                            resolution_requirements=(
+                                m.ResolutionRequirement(
+                                    kind=m.ResolutionKind.STALE_EVIDENCE,
+                                    subject_or_claim=other.question.subject,
+                                    description=(
+                                        "shared output withdrawn; reassessment "
+                                        "required"
+                                    ),
+                                    supporting_context=(),
+                                ),
+                            ),
+                            disposition_basis=(
+                                "reopened by explicit withdrawal in bound question"
+                            ),
+                            question_evidence=other.question_evidence,
+                        )
+                    )
+            # Bound check: if fanout exceeds bounds, fail without partial.
+            if len(reopened_coverages) > task.request.bounds.max_results:
+                raise _validation.InterpretationUnitRejected(
+                    ("withdrawal fanout exceeds bounds; deferred",)
+                )
+    else:
+        if declared_complete and retire_scope:
+            prior_claims: list[m.SemanticClaim] = []
+            prior_rels: list[m.SemanticRelationship] = []
+            for sid in retire_scope:
+                loaded_c, loaded_r, _, _ = _load_subject_state(
+                    task.request.repository_id, sid, store=store,
+                    bounds=task.request.bounds,
+                )
+                prior_claims.extend(loaded_c)
+                prior_rels.extend(loaded_r)
+            for prior in prior_claims:
+                if prior.claim_id.value not in known_ids:
+                    retires_claims.append(m.ClaimRef(id=prior.claim_id))
+            for prior in prior_rels:
+                if prior.relationship_id.value not in known_ids:
+                    retires_relationships.append(
+                        m.RelationshipRef(id=prior.relationship_id)
+                    )
     dependencies = tuple(
         m.EvidenceDependency(
             semantic_id=_item_ref(item),
@@ -847,6 +1992,27 @@ def _materialize_unit(
         for item in (*claims, *relationships)
         for ref in item.evidence
     )
+    all_coverages = tuple(question_coverages_to_persist) + tuple(
+        reopened_coverages
+    )
+    if not all_coverages and bound_question is None:
+        # Legacy: single empty coverage tuple preserves atomic batch shape.
+        all_coverages = ()
+    # Deduplicate retirements: an explicit withdrawal and complete
+    # replacement may name the same item; retiring twice must not
+    # fail the batch on the second (already-moved) lookup.
+    seen_retire_claims: set[str] = set()
+    unique_retire_claims: list[m.ClaimRef] = []
+    for ref in retires_claims:
+        if ref.id.value not in seen_retire_claims:
+            seen_retire_claims.add(ref.id.value)
+            unique_retire_claims.append(ref)
+    seen_retire_rels: set[str] = set()
+    unique_retire_rels: list[m.RelationshipRef] = []
+    for ref in retires_relationships:
+        if ref.id.value not in seen_retire_rels:
+            seen_retire_rels.add(ref.id.value)
+            unique_retire_rels.append(ref)
     store.write_index_batch(
         m.CanonicalIndexBatch(
             subjects=subjects,
@@ -854,22 +2020,107 @@ def _materialize_unit(
             relationships=tuple(relationships),
             evidence_dependencies=dependencies,
             coverage_dependencies=(coverage,),
-            coverage=m.InterpretationCoverage(
-                subjects=tuple(s.subject_id for s in subjects),
-                question_slice=task.request.question_slice,
-                evidence_scope=m.EvidenceScope(
-                    paths=(),
-                    evidence_refs=tuple(
-                        unit.evidence_ref
-                        for unit in task.request.evidence_units
-                    ),
-                ),
-                declared_complete=declared_complete,
-            ),
-            retires_claims=tuple(retires_claims),
-            retires_relationships=tuple(retires_relationships),
+            coverage=all_coverages,
+            retires_claims=tuple(unique_retire_claims),
+            retires_relationships=tuple(unique_retire_rels),
             conflicts=tuple(recorded),
         )
+    )
+
+
+def _next_baseline_pending(
+    repository_id: str,
+    root: m.Subject,
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> m.InterpretationCoverage | None:
+    """First admitted PENDING question under a baseline root, if any.
+
+    Deterministic order (CQ class, subject, slice). Used both when a
+    baseline resumes after submit and when the baseline operation is
+    reissued after a lost continuation: persisted coverage — never
+    prompt wording — determines remaining work, so the audit is never
+    restarted while admitted work exists.
+    """
+    try:
+        pending = store.load_all_question_coverages(
+            repository_id, root.subject_id, (root.subject_id,),
+        )
+    except Exception:
+        try:
+            pending = store.load_question_coverages(
+                repository_id, root.subject_id,
+                (root.subject_id,), bounds,
+            )
+        except Exception:
+            pending = ()
+    next_pending = [
+        cov for cov in pending
+        if cov.disposition is m.SemanticQuestionDisposition.PENDING
+        and cov.question is not None
+    ]
+    next_pending.sort(
+        key=lambda c: (
+            c.question.question_class.value,  # type: ignore[union-attr]
+            c.question.subject.canonical_locator,  # type: ignore[union-attr]
+            c.question.question_slice,  # type: ignore[union-attr]
+        )
+    )
+    return next_pending[0] if next_pending else None
+
+
+def _suspend_baseline_pending(
+    repository_id: str,
+    root: m.Subject,
+    coverage: m.InterpretationCoverage,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    state: m.RepositoryState,
+    seeds: tuple[m.EvidenceRef, ...],
+    resolution: m.SubjectResolution | None,
+    continuations: ContinuationStore,
+) -> PendingInterpretation:
+    """Suspend the next admitted baseline question under its persisted
+    identity (no regenerated wording, no restarted audit)."""
+    assert coverage.question is not None
+    try:
+        loaded = store.load_subjects(
+            repository_id, (coverage.question.subject,)
+        )
+        nxt_subject = (
+            m.Subject(
+                subject_id=loaded[0].subject_id,
+                display_name=loaded[0].display_name,
+                declared_kind=loaded[0].declared_kind,
+            )
+            if loaded else root
+        )
+    except Exception:
+        nxt_subject = root
+    nxt_task = prepare_interpretation_task(
+        repository_id, nxt_subject,
+        structural=structural, evidence=evidence, bounds=bounds,
+        state=state, authority_seeds=seeds,
+        operation_intent=m.SemanticIntent.EXPLAIN,
+        question_slice=coverage.question.question_slice,
+        store=store,
+        scope_root=coverage.question.scope_root,
+        question_class=coverage.question.question_class,
+        materiality_basis=coverage.question.materiality_basis,
+        establish_baseline=False,
+    )
+    return _suspend(
+        op="explain", repository_id=repository_id,
+        subject=nxt_subject, task=nxt_task, seeds=seeds,
+        bounds=bounds, state=state, resolution=resolution,
+        continuations=continuations,
+        operation_intent="EXPLAIN",
+        question_slice=coverage.question.question_slice,
+        establish_baseline=True,
     )
 
 
@@ -898,6 +2149,7 @@ def _suspend(
     trace_filter_set: bool = False,
     trace_boundary: bool = False,
     continuations: ContinuationStore,
+    establish_baseline: bool = False,
 ) -> PendingInterpretation:
     token = continuations.pend(
         SuspendedOperation(
@@ -925,6 +2177,7 @@ def _suspend(
             trace_filter=trace_filter,
             trace_filter_set=trace_filter_set,
             trace_boundary=trace_boundary,
+            establish_baseline=establish_baseline,
         )
     )
     return PendingInterpretation(continuation=token, request=task.request)
@@ -983,24 +2236,44 @@ def submit_interpretation(
         if store.load_subjects(record.repository_id, (endpoint,)):
             extra_known.append(endpoint)
     _materialize_unit(
-        task, result, store=store, state=state,
+        task, result, store=store, evidence=evidence, state=state,
         extra_known_subjects=tuple(extra_known),
         coverage=_coverage_for_task(
             record.repository_id,
             tuple(s.subject_id for s in task.request.subjects),
-            evidence=evidence, bounds=bounds, seeds=record.seeds,
+            evidence=evidence, seeds=record.seeds,
+            question=task.request.question,
         ),
         declared_complete=record.declared_complete,
         retire_scope=tuple(s.subject_id for s in task.request.subjects),
     )
     if record.op == "refresh" and record.remaining:
         nxt, rest = record.remaining[0], record.remaining[1:]
+        nxt_stale = _stale_question_scopes(
+            record.repository_id, nxt,
+            store=store, evidence=evidence, bounds=bounds,
+        )
+        nxt_scope = nxt_stale[0] if nxt_stale else None
         nxt_task = prepare_interpretation_task(
             record.repository_id, nxt, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=record.seeds,
             operation_intent=m.SemanticIntent.STATUS,
-            question_slice=nxt.subject_id.canonical_locator,
+            question_slice=(
+                nxt_scope.question_slice if nxt_scope is not None
+                else nxt.subject_id.canonical_locator
+            ),
+            store=store,
+            scope_root=(
+                nxt_scope.scope_root if nxt_scope is not None
+                else nxt.subject_id
+            ),
+            question_class=(
+                nxt_scope.question_class if nxt_scope is not None else None
+            ),
+            materiality_basis=(
+                nxt_scope.materiality_basis if nxt_scope is not None else ""
+            ),
         )
         return _suspend(
             op="refresh", repository_id=record.repository_id, subject=nxt,
@@ -1008,14 +2281,28 @@ def submit_interpretation(
             resolution=None, scope=record.scope, remaining=rest,
             changed=record.changed, continuations=continuations,
             operation_intent="STATUS",
-            question_slice=nxt.subject_id.canonical_locator,
+            question_slice=nxt_task.request.question_slice,
             declared_complete=True,
         )
     if record.op == "explain":
+        if record.establish_baseline:
+            nxt_cov = _next_baseline_pending(
+                record.repository_id, record.subject,
+                store=store, bounds=bounds,
+            )
+            if nxt_cov is not None:
+                return _suspend_baseline_pending(
+                    record.repository_id, record.subject, nxt_cov,
+                    structural=structural, evidence=evidence, store=store,
+                    bounds=bounds, state=state, seeds=record.seeds,
+                    resolution=record.resolution,
+                    continuations=continuations,
+                )
         return _compose_explain_answer(
             record.repository_id, record.subject, record.resolution,
             structural=structural, evidence=evidence, store=store,
             bounds=bounds, state=state,
+            scope_root=record.subject.subject_id,
         )
     if record.op == "authority":
         return _compose_authority_answer(
@@ -1100,6 +2387,7 @@ def reissue_interpretation(
             operation_intent=record.operation_intent,
             question_slice=record.question_slice,
             declared_complete=record.declared_complete,
+            establish_baseline=record.establish_baseline,
         )
     )
     return PendingInterpretation(
@@ -1124,11 +2412,12 @@ def _load_subject_state(
     """Load one subject's state window plus per-list next tokens.
 
     The answer-level token carries per-list offsets
-    (``pg:<claims_skip>:<rels_skip>``); each load windows from its own
-    offset, so every item is reachable exactly once across pages. The
-    returned tokens are the raw store cursors (``None`` = exhausted).
+    (``pg:<claims_skip>:<rels_skip>:<questions_skip>``); each load windows
+    from its own offset, so every item is reachable exactly once across
+    pages. The returned tokens are the raw store cursors (``None`` =
+    exhausted).
     """
-    claims_skip, rels_skip = _paging.parse_service_token(page_token)
+    claims_skip, rels_skip, _ = _paging.parse_service_token(page_token)
     claim_page = store.load_claims(
         repository_id,
         (sid,),
@@ -1160,6 +2449,8 @@ def _next_service_token(
     loaded_rels: tuple[m.SemanticRelationship, ...],
     claims_token: str | None,
     rels_token: str | None,
+    questions_skip: int = 0,
+    questions_remaining: int = 0,
 ) -> str | None:
     """Answer-level next token from shown counts (plan I-39).
 
@@ -1168,18 +2459,20 @@ def _next_service_token(
     is exhausted when its load cursor is done and everything loaded
     was shown.
     """
-    claims_skip, rels_skip = _paging.parse_service_token(page_token)
+    claims_skip, rels_skip, qskip = _paging.parse_service_token(page_token)
     claims_exhausted = (
         claims_token is None and len(kept_claims) >= len(loaded_claims)
     )
     rels_exhausted = (
         rels_token is None and len(kept_rels) >= len(loaded_rels)
     )
-    if claims_exhausted and rels_exhausted:
+    questions_exhausted = questions_remaining <= 0
+    if claims_exhausted and rels_exhausted and questions_exhausted:
         return None
     return _paging.format_service_token(
         claims_skip + len(kept_claims),
         rels_skip + len(kept_rels),
+        (qskip + questions_skip) if not questions_exhausted else qskip,
     )
 
 
@@ -1200,7 +2493,7 @@ def _refresh_view(
     )
     updates = updates + coverage_check(
         repository_id, tuple(claims) + tuple(relationships),
-        evidence=evidence, store=store, bounds=bounds,
+        evidence=evidence, store=store,
     )
     if not updates:
         return claims, relationships
@@ -1413,6 +2706,199 @@ def _freshness_items_for(
     )
 
 
+def _baseline_sufficient(
+    repository_id: str,
+    scope_root: m.SubjectId,
+    *,
+    store: SemanticStore,
+    evidence: EvidenceSource,
+    bounds: m.QueryBounds,
+) -> bool:
+    """Recorded scoped sufficiency for an expressly selected root (B.3.2).
+
+    True only when: (a) all nine root CQ classes have an explicit
+    applicability disposition; (b) every admitted material root/member
+    question is ANSWERED or genuinely NOT_APPLICABLE with *current*
+    (effective) dependencies; (c) no unresolved requirements, conflicts,
+    or unassessed legacy items remain in scope; (d) no outstanding
+    pages, unexamined questions, unprocessed premise frontier, or
+    stale/unverifiable items; (e) synthesis rests on established,
+    currently supported member evidence. Recorded dispositions alone
+    never suffice — effective currentness is recomputed.
+    """
+    try:
+        coverages = _load_all_coverages_or_defer(
+            repository_id, scope_root, (),
+            store=store, bounds=bounds,
+            purpose="baseline sufficiency audit",
+        )
+    except Exception:
+        return False
+    root_covs = [
+        cov for cov in coverages
+        if cov.question is not None and cov.question.scope_root == scope_root
+    ]
+    if not root_covs:
+        return False
+    # (a) all nine root CQ classes have an explicit disposition entry
+    # on the root subject itself.
+    root_classes = {
+        cov.question.question_class
+        for cov in root_covs
+        if cov.question.subject == scope_root
+    }
+    if any(cls not in root_classes for cls in m.SemanticQuestionClass):
+        return False
+    # (b)+(d) every admitted question effective-current ANSWERED or
+    # NOT_APPLICABLE; PENDING/OPEN/noncurrent/stale block sufficiency.
+    for cov in root_covs:
+        if cov.question is None:
+            continue
+        try:
+            view = effective_question_view(
+                cov, evidence=evidence, store=store,
+                repository_id=repository_id,
+            )
+        except Exception:
+            return False
+        if view.recorded_disposition in (
+            m.SemanticQuestionDisposition.PENDING,
+            m.SemanticQuestionDisposition.OPEN,
+        ):
+            return False
+        if view.effective_disposition not in (
+            m.SemanticQuestionDisposition.ANSWERED,
+            m.SemanticQuestionDisposition.NOT_APPLICABLE,
+        ):
+            return False
+        if view.freshness.state is not m.FreshnessState.CURRENT:
+            return False
+        # (c) any open requirement (missing authority/evidence,
+        # conflicts, stale premises) prevents full sufficiency.
+        if view.resolution_requirements:
+            return False
+    # (c) no conflicts among scoped canonical items.
+    try:
+        scoped_subjects = tuple(
+            dict.fromkeys(
+                cov.question.subject for cov in root_covs
+                if cov.question is not None
+            )
+        )
+        scoped_claims: list[m.SemanticClaim] = []
+        scoped_rels: list[m.SemanticRelationship] = []
+        for sid in scoped_subjects:
+            loaded_c, loaded_r, _, _ = _load_subject_state(
+                repository_id, sid, store=store, bounds=bounds,
+            )
+            scoped_claims.extend(loaded_c)
+            scoped_rels.extend(loaded_r)
+        if _conflicts_for(
+            repository_id, tuple(scoped_claims), tuple(scoped_rels),
+            store=store,
+        ):
+            return False
+        # (d) no stale/unverifiable items and no unprocessed premise
+        # frontier across scoped results.
+        all_refs: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+            _claim_ref(c) for c in scoped_claims
+        ) + tuple(_relationship_ref(r) for r in scoped_rels)
+        if all_refs:
+            premise_updates = _premise_preflight(
+                repository_id, all_refs, store=store, bounds=bounds,
+            )
+            if premise_updates:
+                return False
+            if any(
+                c.freshness.state is not m.FreshnessState.CURRENT
+                for c in scoped_claims
+            ) or any(
+                r.freshness.state is not m.FreshnessState.CURRENT
+                for r in scoped_rels
+            ):
+                return False
+        # (d) no outstanding pages: every scoped subject load must be
+        # exhaustive within bounds.
+        for sid in scoped_subjects:
+            claim_page = store.load_claims(
+                repository_id, (sid,), (), bounds, None
+            )
+            if claim_page.bound_info.truncated:
+                return False
+    except Exception:
+        return False
+    # (e) is entailed by (b)+(d): every ANSWERED result ref resolved
+    # above to a CURRENT canonical item through the effective views.
+    return True
+
+
+def _question_views_for_scope(
+    repository_id: str,
+    scope_root: m.SubjectId | None,
+    subject_ids: tuple[m.SubjectId, ...],
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    evidence: EvidenceSource | None = None,
+) -> tuple[m.SemanticQuestionCoverageView, ...]:
+    try:
+        coverages = store.load_question_coverages(
+            repository_id, scope_root, subject_ids, bounds,
+        )
+    except Exception:
+        return ()
+    views: list[m.SemanticQuestionCoverageView] = []
+    for cov in coverages:
+        if cov.question is None:
+            continue
+        try:
+            views.append(
+                effective_question_view(
+                    cov, evidence=evidence, store=store,
+                    repository_id=repository_id,
+                )
+            )
+        except Exception:
+            continue
+    views.sort(
+        key=lambda v: (
+            v.question.question_class.value,
+            v.question.subject.canonical_locator,
+            v.question.question_slice,
+        )
+    )
+    return tuple(views)
+
+
+def _paged_question_views(
+    repository_id: str,
+    scope_root: m.SubjectId | None,
+    subject_ids: tuple[m.SubjectId, ...],
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    page_token: str | None = None,
+    evidence: EvidenceSource | None = None,
+) -> tuple[tuple[m.SemanticQuestionCoverageView, ...], int, int]:
+    """Return (kept views, shown count, remaining count) for paging."""
+    from span.shell import paging as _paging
+
+    try:
+        _, _, qskip = _paging.parse_service_token(page_token)
+    except ValueError:
+        qskip = 0
+    all_views = _question_views_for_scope(
+        repository_id, scope_root, subject_ids,
+        store=store, bounds=bounds, evidence=evidence,
+    )
+    # Reserve budget: questions share max_results with claims/rels.
+    # Simple policy: show up to remaining budget after caller slices
+    # claims/rels; here return windowed slice, caller decides budget.
+    kept = all_views[qskip:qskip + bounds.max_results]
+    remaining = max(0, len(all_views) - (qskip + len(kept)))
+    return kept, len(kept), remaining
+
+
 def _compose_explain_answer(
     repository_id: str,
     subject: m.Subject,
@@ -1424,6 +2910,7 @@ def _compose_explain_answer(
     bounds: m.QueryBounds,
     state: m.RepositoryState,
     page_token: str | None = None,
+    scope_root: m.SubjectId | None = None,
 ) -> m.SemanticAnswer:
     sid = subject.subject_id
     claims, relationships, claims_token, rels_token = _load_subject_state(
@@ -1462,11 +2949,55 @@ def _compose_explain_answer(
     )
     truncated = items_truncated or truncated_locs
     category = items_category if items_category is not None else category_locs
+    views, qshown, qremaining = _paged_question_views(
+        repository_id, scope_root or sid, (sid,),
+        store=store, bounds=bounds, page_token=page_token,
+        evidence=evidence,
+    )
+    if not views and not kept_claims and not kept_rels:
+        requirements.append(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=sid,
+                description="no examined semantic question for subject",
+                supporting_context=(),
+            )
+        )
+    elif not views and (kept_claims or kept_rels):
+        # B.8: legacy items without adopted question coverage stay
+        # readable but explicitly unassessed for question sufficiency;
+        # byte-current evidence never proves semantic sufficiency.
+        requirements.append(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=sid,
+                description=(
+                    "stored semantics predate question coverage; "
+                    "unassessed for question sufficiency"
+                ),
+                supporting_context=(),
+            )
+        )
+    if qremaining > 0:
+        truncated = True
+        category = category or "question_coverage"
+        requirements.append(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+                subject_or_claim=sid,
+                description=(
+                    f"{qremaining} question coverage entries truncated; "
+                    "continue with page_token"
+                ),
+                supporting_context=(),
+            )
+        )
     content = m.ExplainContent(
         claims=kept_claims,
         relationships=kept_rels,
         implementation_locations=kept_locs,  # type: ignore[arg-type]
         conflicts=kept_conf,
+        question_coverage=views,
     )
     returned = len(kept_claims) + len(kept_rels) + len(kept_locs)
     return m.SemanticAnswer(
@@ -1484,6 +3015,8 @@ def _compose_explain_answer(
             _next_service_token(
                 page_token, kept_claims, kept_rels, claims, relationships,
                 claims_token, rels_token,
+                questions_skip=qshown,
+                questions_remaining=qremaining,
             ),
         ),
     )
@@ -1510,8 +3043,9 @@ def explain(
         return _uninitialized_answer(
             m.SemanticIntent.EXPLAIN, request.repository_id, bounds, state
         )
-    resolution = structural.resolve_subject(
-        request.repository_id, request.target, bounds
+    resolution = _resolve_query_subject(
+        request.repository_id, request.target, structural=structural,
+        store=store, bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         requirements = _answers.requirements_for_resolution(resolution)
@@ -1529,17 +3063,64 @@ def explain(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     subject = resolution.candidates[0].subject
-    claims, relationships, _, _ = _load_subject_state(
-        request.repository_id, subject.subject_id,
-        store=store, bounds=bounds,
-    )
-    if not claims and not relationships:
+    if request.establish_baseline:
+        if _baseline_sufficient(
+            request.repository_id, subject.subject_id,
+            store=store, evidence=evidence, bounds=bounds,
+        ):
+            return _compose_explain_answer(
+                request.repository_id, subject, resolution,
+                structural=structural, evidence=evidence, store=store,
+                bounds=bounds, state=state, page_token=request.page_token,
+                scope_root=subject.subject_id,
+            )
+        # Reissue recovery: never restart the audit while admitted work
+        # exists — persisted coverage determines the next unit.
+        nxt_cov = _next_baseline_pending(
+            request.repository_id, subject,
+            store=store, bounds=bounds,
+        )
+        if nxt_cov is not None:
+            return _suspend_baseline_pending(
+                request.repository_id, subject, nxt_cov,
+                structural=structural, evidence=evidence, store=store,
+                bounds=bounds, state=state, seeds=authority_seeds,
+                resolution=resolution,
+                continuations=continuations,
+            )
+        try:
+            existing = store.load_all_question_coverages(
+                request.repository_id, subject.subject_id,
+                (subject.subject_id,),
+            )
+        except Exception:
+            existing = ()
+        audited = any(
+            cov.question is not None
+            and cov.question.question_class
+            is m.SemanticQuestionClass.CQ_01
+            and cov.question.subject == subject.subject_id
+            for cov in existing
+        )
+        if audited:
+            # Worklist exhausted but qualified (OPEN/similarly honest
+            # states remain): serve the qualified answer, never a
+            # redundant second audit.
+            return _compose_explain_answer(
+                request.repository_id, subject, resolution,
+                structural=structural, evidence=evidence, store=store,
+                bounds=bounds, state=state, page_token=request.page_token,
+                scope_root=subject.subject_id,
+            )
         task = prepare_interpretation_task(
             request.repository_id, subject, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=authority_seeds,
             operation_intent=m.SemanticIntent.EXPLAIN,
-            question_slice=subject.subject_id.canonical_locator,
+            question_slice="",
+            store=store,
+            scope_root=subject.subject_id,
+            establish_baseline=True,
         )
         return _suspend(
             op="explain", repository_id=request.repository_id,
@@ -1547,12 +3128,42 @@ def explain(
             bounds=bounds, state=state, resolution=resolution,
             continuations=continuations,
             operation_intent="EXPLAIN",
-            question_slice=subject.subject_id.canonical_locator,
+            question_slice=task.request.question_slice,
+            establish_baseline=True,
+        )
+    claims, relationships, _, _ = _load_subject_state(
+        request.repository_id, subject.subject_id,
+        store=store, bounds=bounds,
+    )
+    missing_question = _question_local_missing(
+        request.repository_id, subject, m.SemanticIntent.EXPLAIN,
+        store=store, evidence=evidence, bounds=bounds,
+    )
+    if missing_question is not None:
+        task = prepare_interpretation_task(
+            request.repository_id, subject, structural=structural,
+            evidence=evidence, bounds=bounds, state=state,
+            authority_seeds=authority_seeds,
+            operation_intent=m.SemanticIntent.EXPLAIN,
+            question_slice=missing_question.question_slice,
+            store=store,
+            scope_root=missing_question.scope_root,
+            question_class=missing_question.question_class,
+            materiality_basis=missing_question.materiality_basis,
+        )
+        return _suspend(
+            op="explain", repository_id=request.repository_id,
+            subject=subject, task=task, seeds=authority_seeds,
+            bounds=bounds, state=state, resolution=resolution,
+            continuations=continuations,
+            operation_intent="EXPLAIN",
+            question_slice=missing_question.question_slice,
         )
     return _compose_explain_answer(
         request.repository_id, subject, resolution,
         structural=structural, evidence=evidence, store=store,
         bounds=bounds, state=state, page_token=request.page_token,
+        scope_root=subject.subject_id,
     )
 
 
@@ -1618,6 +3229,14 @@ def _compose_authority_answer(
             bounds.max_results,
         )
     )
+    views, qshown, qremaining = _paged_question_views(
+        repository_id, sid, (sid,),
+        store=store, bounds=bounds, page_token=page_token,
+        evidence=evidence,
+    )
+    if qremaining > 0:
+        truncated = True
+        category = category or "question_coverage"
     content = m.AuthorityContent(
         governing_bindings=kept_bindings,  # type: ignore[arg-type]
         supersession=kept_super,  # type: ignore[arg-type]
@@ -1626,6 +3245,7 @@ def _compose_authority_answer(
         relationships=relationships,
         conflicts=kept_conflicts,  # type: ignore[arg-type]
         unresolved=kept_unresolved,  # type: ignore[arg-type]
+        question_coverage=views,
     )
     return m.SemanticAnswer(
         answer_id=_answer_id(
@@ -1644,6 +3264,8 @@ def _compose_authority_answer(
             _next_service_token(
                 page_token, claims, relationships, claims, relationships,
                 claims_token, rels_token,
+                questions_skip=qshown,
+                questions_remaining=qremaining,
             ) or token,
         ),
     )
@@ -1690,8 +3312,9 @@ def authority(
         return _uninitialized_answer(
             m.SemanticIntent.AUTHORITY, request.repository_id, bounds, state
         )
-    resolution = structural.resolve_subject(
-        request.repository_id, request.target, bounds
+    resolution = _resolve_query_subject(
+        request.repository_id, request.target, structural=structural,
+        store=store, bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         requirements = _answers.requirements_for_resolution(resolution)
@@ -1709,17 +3332,21 @@ def authority(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     subject = resolution.candidates[0].subject
-    claims, relationships, _, _ = _load_subject_state(
-        request.repository_id, subject.subject_id,
-        store=store, bounds=bounds,
+    missing_question = _question_local_missing(
+        request.repository_id, subject, m.SemanticIntent.AUTHORITY,
+        store=store, evidence=evidence, bounds=bounds,
     )
-    if not claims and not relationships:
+    if missing_question is not None:
         task = prepare_interpretation_task(
             request.repository_id, subject, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=authority_seeds,
             operation_intent=m.SemanticIntent.AUTHORITY,
-            question_slice=subject.subject_id.canonical_locator,
+            question_slice=missing_question.question_slice,
+            store=store,
+            scope_root=missing_question.scope_root,
+            question_class=missing_question.question_class,
+            materiality_basis=missing_question.materiality_basis,
         )
         return _suspend(
             op="authority", repository_id=request.repository_id,
@@ -1727,7 +3354,7 @@ def authority(
             bounds=bounds, state=state, resolution=resolution,
             continuations=continuations,
             operation_intent="AUTHORITY",
-            question_slice=subject.subject_id.canonical_locator,
+            question_slice=missing_question.question_slice,
         )
     return _compose_authority_answer(
         request.repository_id, subject, resolution,
@@ -1745,6 +3372,7 @@ def _resolve_scope_subjects(
     target: m.SubjectSelector | m.EvidenceScope,
     *,
     structural: StructuralSource,
+    store: SemanticStore,
     bounds: m.QueryBounds,
 ) -> tuple[tuple[m.Subject, ...], m.ResolutionAmbiguity]:
     if isinstance(target, m.EvidenceScope):
@@ -1772,7 +3400,10 @@ def _resolve_scope_subjects(
                 seen.add(key)
                 unique.append(subject)
         return tuple(unique), m.ResolutionAmbiguity.RESOLVED
-    resolution = structural.resolve_subject(repository_id, target, bounds)
+    resolution = _resolve_query_subject(
+        repository_id, target, structural=structural, store=store,
+        bounds=bounds,
+    )
     return (
         tuple(c.subject for c in resolution.candidates),
         resolution.ambiguity,
@@ -1815,6 +3446,11 @@ def _compose_refresh_answer(
     scope_paths = tuple(
         s.subject_id.canonical_locator for s in subjects
     )
+    views = _question_views_for_scope(
+        repository_id, None,
+        tuple(s.subject_id for s in subjects),
+        store=store, bounds=bounds, evidence=evidence,
+    )
     content = m.StatusContent(
         readiness=m.RepositoryReadiness.READY,
         freshness_items=_freshness_items_for(kept_claims, kept_rels),
@@ -1830,6 +3466,7 @@ def _compose_refresh_answer(
             req for r in kept_rels
             for req in _answers.requirements_for_relationship(r)
         ),
+        question_coverage=views,
     )
     evidence_refs = tuple(ref for c in kept_claims for ref in c.evidence)
     return m.SemanticAnswer(
@@ -1859,15 +3496,11 @@ def refresh(
     continuations: ContinuationStore,
     authority_seeds: tuple[m.EvidenceRef, ...] = (),
 ) -> m.SemanticAnswer | PendingInterpretation:
-    """Explicit synchronization (plan §9.5).
+    """Explicit synchronization (plan §9.5, Addendum B B-06).
 
-    Identifies stale/unverifiable dependencies and reinterprets only
-    affected semantic units — suspending per unit via §11.12 and chaining
-    continuations while affected work remains. Validation/materialization
-    is atomic per unit; failed prior items stay preserved as
-    stale/unverifiable; unaffected current items are unchanged. Reports
-    as a STATUS-intent answer over StatusContent (no new result type is
-    invented: refresh is a lifecycle operation, §11.3).
+    Identifies stale/unverifiable dependencies — including semantic
+    premise dependents via the reverse lookup — and reinterprets only
+    affected semantic units. Never expands into a baseline audit.
     """
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
@@ -1881,7 +3514,7 @@ def refresh(
         )
     subjects, ambiguity = _resolve_scope_subjects(
         request.repository_id, request.target,
-        structural=structural, bounds=bounds,
+        structural=structural, store=store, bounds=bounds,
     )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
         requirements = ()
@@ -1908,6 +3541,12 @@ def refresh(
         )
     affected: list[m.Subject] = []
     changed_deps: list[m.EvidenceDependency] = []
+    # Collect stale premise ids first for dependent expansion.
+    stale_premise_ids: set[str] = set()
+    subject_items: dict[str, tuple[
+        object,
+        tuple[m.ClaimRef | m.RelationshipRef, ...],
+    ]] = {}
     for subject in subjects:
         claims, relationships, _, _ = _load_subject_state(
             request.repository_id, subject.subject_id,
@@ -1916,6 +3555,9 @@ def refresh(
         ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
             _claim_ref(c) for c in claims
         ) + tuple(_relationship_ref(r) for r in relationships)
+        subject_items[subject.subject_id.canonical_locator] = (
+            subject, ids,
+        )
         if not ids:
             affected.append(subject)
             continue
@@ -1928,11 +3570,19 @@ def refresh(
         )
         coverage_updates = coverage_check(
             request.repository_id, tuple(claims) + tuple(relationships),
-            evidence=evidence, store=store, bounds=bounds,
+            evidence=evidence, store=store,
         )
-        if updates or coverage_updates:
+        # B.4/B-06: stale persisted questions — including zero-result
+        # OPEN/NOT_APPLICABLE whose discovery/evidence moved — mark the
+        # subject affected even when no item update fired above.
+        stale_questions = _stale_question_scopes(
+            request.repository_id, subject,
+            store=store, evidence=evidence, bounds=bounds,
+        )
+        if updates or coverage_updates or stale_questions:
             if updates:
                 updated = {u.semantic_id.id.value for u in updates}
+                stale_premise_ids.update(updated)
                 changed_deps.extend(
                     dep for dep in dependencies
                     if dep.semantic_id.id.value in updated
@@ -1940,6 +3590,57 @@ def refresh(
             affected.append(subject)
         elif not request.stale_only:
             affected.append(subject)
+    # B-05/B-06: expand to semantically dependent questions whose
+    # premises went stale, even when their own files are unchanged.
+    if stale_premise_ids:
+        try:
+            premise_refs: list[m.ClaimRef | m.RelationshipRef] = []
+            for pid in sorted(stale_premise_ids):
+                # Kind unknown here; try both via load_by_refs shape.
+                premise_refs.append(m.ClaimRef(id=m.ClaimId(pid)))
+            dependents: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
+            try:
+                dependents = store.load_premise_dependents(
+                    request.repository_id, tuple(premise_refs),
+                )
+            except Exception:
+                dependents = ()
+            # Also try relationship-shaped refs for the same ids.
+            try:
+                rel_refs = tuple(
+                    m.RelationshipRef(id=m.RelationshipId(pid))
+                    for pid in sorted(stale_premise_ids)
+                )
+                extra = store.load_premise_dependents(
+                    request.repository_id, rel_refs,
+                )
+                dependents = tuple(dict.fromkeys((*dependents, *extra)))
+            except Exception:
+                pass
+            if dependents:
+                dep_ids = {d.id.value for d in dependents}
+                try:
+                    dep_items = store.load_by_refs(
+                        request.repository_id, tuple(dependents),
+                    )
+                except ValueError:
+                    dep_items = ()
+                dep_subjects: set[str] = set()
+                for item in dep_items:
+                    if isinstance(item, m.SemanticClaim):
+                        dep_subjects.add(item.subject.canonical_locator)
+                    else:
+                        dep_subjects.add(item.source.canonical_locator)
+                        dep_subjects.add(item.target.canonical_locator)
+                for subject in subjects:
+                    if subject.subject_id.canonical_locator in dep_subjects:
+                        if subject not in affected:
+                            affected.append(subject)
+                # Dependents outside the requested scope yield a requirement
+                # via outstanding-scope rather than silent expansion.
+                _ = dep_ids
+        except Exception:
+            pass
     if not affected:
         return _compose_refresh_answer(
             request.repository_id, subjects, structural=structural,
@@ -1947,12 +3648,35 @@ def refresh(
             changed=tuple(changed_deps),
         )
     first, rest = affected[0], affected[1:]
+    # B.3/B-06: refresh re-examines under the persisted stale question
+    # scope — never a fresh generic question and never a silent
+    # baseline expansion. Only subjects with no persisted questions
+    # fall back to a STATUS question-local unit.
+    first_stale = _stale_question_scopes(
+        request.repository_id, first,
+        store=store, evidence=evidence, bounds=bounds,
+    )
+    first_scope = first_stale[0] if first_stale else None
     task = prepare_interpretation_task(
         request.repository_id, first, structural=structural,
         evidence=evidence, bounds=bounds, state=state,
         authority_seeds=authority_seeds,
         operation_intent=m.SemanticIntent.STATUS,
-        question_slice=first.subject_id.canonical_locator,
+        question_slice=(
+            first_scope.question_slice if first_scope is not None
+            else first.subject_id.canonical_locator
+        ),
+        store=store,
+        scope_root=(
+            first_scope.scope_root if first_scope is not None
+            else first.subject_id
+        ),
+        question_class=(
+            first_scope.question_class if first_scope is not None else None
+        ),
+        materiality_basis=(
+            first_scope.materiality_basis if first_scope is not None else ""
+        ),
     )
     return _suspend(
         op="refresh", repository_id=request.repository_id, subject=first,
@@ -1960,7 +3684,7 @@ def refresh(
         resolution=None, scope=subjects, remaining=rest,
         changed=tuple(changed_deps), continuations=continuations,
         operation_intent="STATUS",
-        question_slice=first.subject_id.canonical_locator,
+        question_slice=task.request.question_slice,
         declared_complete=True,
     )
 
@@ -2010,10 +3734,13 @@ def initialize_repository(
             "working tree dirty; fingerprints track actual content read"
         )
     version = store.schema_version()
-    readiness = (
-        m.RepositoryReadiness.DEGRADED if warnings and inventory.bound_info.truncated
-        else m.RepositoryReadiness.READY
-    )
+    # §4.8/I-31: readiness is operational — whether the repository can
+    # service semantic operations — never inventory completeness.
+    # Partial inventory is boundedness (§8.4), carried in
+    # evidence_inventory_status and warnings, and the HOOK_FAST path
+    # likewise reports READY once initialized (plan Q34: readiness
+    # must not be confused with freshness/boundedness).
+    readiness = m.RepositoryReadiness.READY
     return SemanticInitializeRepositoryResult(
         repository_id=repository_id,
         readiness=readiness,
@@ -2061,6 +3788,54 @@ def _resolve_exact_subject(
     if resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED:
         return resolution.candidates[0].subject
     return None
+
+
+def _resolve_query_subject(
+    repository_id: str,
+    target: m.SubjectSelector,
+    *,
+    structural: StructuralSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> m.SubjectResolution:
+    """Query-time subject resolution (addendum A, F1).
+
+    Structural first; on NOT_FOUND with an exact identity, fall back
+    to the stored subject record (registered semantic-only subjects
+    live in the store, never in the structural source). Ambiguity is
+    never overridden and name-only queries never reach the store
+    (§4.2: names alone are never identity).
+    """
+    resolution = structural.resolve_subject(repository_id, target, bounds)
+    if resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED:
+        return resolution
+    if (
+        resolution.ambiguity is m.ResolutionAmbiguity.NOT_FOUND
+        and target.exact_subject_id is not None
+    ):
+        found = store.load_subjects(
+            repository_id, (target.exact_subject_id,)
+        )
+        if found:
+            return m.SubjectResolution(
+                candidates=(
+                    m.SubjectCandidate(
+                        subject=found[0],
+                        structural_evidence=(),
+                        rank_basis=m.CandidateRankBasis.EXACT_LOCATOR,
+                    ),
+                ),
+                ambiguity=m.ResolutionAmbiguity.RESOLVED,
+                bound_info=m.BoundInfo(
+                    requested_max_results=bounds.max_subjects,
+                    requested_max_depth=0,
+                    returned_results=1,
+                    truncated=False,
+                    truncated_category=None,
+                    continuation_token=None,
+                ),
+            )
+    return resolution
 
 
 def _trace_endpoints(
@@ -2216,6 +3991,7 @@ def _compose_trace_answer(
     claims: tuple[m.SemanticClaim, ...],
     structural_edges: tuple[m.StructuralEdge, ...],
     truncated_walk: bool,
+    page_token: str | None = None,
 ) -> m.SemanticAnswer:
     ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
         _claim_ref(c) for c in claims
@@ -2308,6 +4084,15 @@ def _compose_trace_answer(
     truncated = truncated or items_truncated
     if category is None:
         category = items_category
+    sid = subject.subject_id
+    views, _, qremaining = _paged_question_views(
+        repository_id, sid, (sid,),
+        store=store, bounds=bounds, page_token=page_token,
+        evidence=evidence,
+    )
+    if qremaining > 0:
+        truncated = True
+        category = category or "question_coverage"
     content = m.TraceContent(
         relationships=kept_rels,  # type: ignore[arg-type]
         structural_edges=kept_edges,  # type: ignore[arg-type]
@@ -2315,6 +4100,7 @@ def _compose_trace_answer(
         lifecycle_context=tuple(lifecycle_refs),
         claims=kept_claims,
         conflicts=kept_conf,
+        question_coverage=views,
     )
     returned = (
         len(kept_conf) + len(kept_rels) + len(lifecycle_refs)
@@ -2362,8 +4148,9 @@ def trace(
         return _uninitialized_answer(
             m.SemanticIntent.TRACE, request.repository_id, bounds, state
         )
-    resolution = structural.resolve_subject(
-        request.repository_id, request.target, bounds
+    resolution = _resolve_query_subject(
+        request.repository_id, request.target, structural=structural,
+        store=store, bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         requirements = _answers.requirements_for_resolution(resolution)
@@ -2482,7 +4269,7 @@ def _hook_fast(
         return m.HookStatusNotice(
             readiness=m.RepositoryReadiness.UNINITIALIZED,
             recommended_action=(
-                "run span_initialize_repository in a dedicated "
+                "run initialize_repository in a dedicated "
                 "setup session"
             ),
         )
@@ -2491,7 +4278,8 @@ def _hook_fast(
             readiness=m.RepositoryReadiness.READY
         )
     subjects, _ = _resolve_scope_subjects(
-        repository_id, target, structural=structural, bounds=bounds
+        repository_id, target, structural=structural, store=store,
+        bounds=bounds,
     )
     affected: list[m.SubjectId] = []
     stale = 0
@@ -2566,7 +4354,7 @@ def _hook_fast(
     action = None
     if stale or unverifiable:
         action = (
-            f"run span_refresh: {stale} stale, "
+            f"run refresh: {stale} stale, "
             f"{unverifiable} unverifiable items"
         )
     return m.HookStatusNotice(
@@ -2594,15 +4382,6 @@ def _compose_status_answer(
     all_rels: list[m.SemanticRelationship] = []
     first_claims_token: str | None = None
     first_rels_token: str | None = None
-    for position, subject in enumerate(subjects):
-        claims, relationships, tok_c, tok_r = _load_subject_state(
-            repository_id, subject.subject_id, store=store, bounds=bounds,
-            page_token=page_token,
-        )
-        all_claims.extend(claims)
-        all_rels.extend(relationships)
-        if position == 0:
-            first_claims_token, first_rels_token = tok_c, tok_r
     for position, subject in enumerate(subjects):
         claims, relationships, tok_c, tok_r = _load_subject_state(
             repository_id, subject.subject_id, store=store, bounds=bounds,
@@ -2678,12 +4457,29 @@ def _compose_status_answer(
     if category is None and truncated:
         category = "unresolved"
     if len(subjects) == 1:
+        views, qshown, qremaining = _paged_question_views(
+            repository_id, subjects[0].subject_id,
+            tuple(s.subject_id for s in subjects),
+            store=store, bounds=bounds, page_token=page_token,
+            evidence=evidence,
+        )
         token: str | None = _next_service_token(
             page_token, kept_claims, kept_rels, claims_t, rels_t,
             first_claims_token, first_rels_token,
+            questions_skip=qshown,
+            questions_remaining=qremaining,
         )
     else:
+        views, _, qremaining = _paged_question_views(
+            repository_id, None,
+            tuple(s.subject_id for s in subjects),
+            store=store, bounds=bounds, page_token=None,
+            evidence=evidence,
+        )
         token = None
+    if qremaining > 0:
+        truncated = True
+        category = category or "question_coverage"
     content = m.StatusContent(
         readiness=m.RepositoryReadiness.READY,
         freshness_items=_freshness_items_for(kept_claims, kept_rels),
@@ -2696,6 +4492,7 @@ def _compose_status_answer(
         relationships=kept_rels,
         conflicts=kept_conf,
         unresolved=tuple(unresolved),
+        question_coverage=views,
     )
     returned = (
         len(kept_conf) + len(unresolved) + len(kept_claims)
@@ -2798,7 +4595,7 @@ def status(
         )
     subjects, ambiguity = _resolve_scope_subjects(
         request.repository_id, request.target,
-        structural=structural, bounds=bounds,
+        structural=structural, store=store, bounds=bounds,
     )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
         requirements: tuple[m.ResolutionRequirement, ...] = ()
@@ -2825,15 +4622,33 @@ def status(
         )
     missing = _missing_subjects(
         request.repository_id, subjects, store=store, bounds=bounds,
-        suspended=(),
+        suspended=(), evidence=evidence,
     )
     if missing is not None:
+        needed = _question_local_missing(
+            request.repository_id, missing, m.SemanticIntent.STATUS,
+            store=store, evidence=evidence, bounds=bounds,
+        )
         task = prepare_interpretation_task(
             request.repository_id, missing, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=authority_seeds,
             operation_intent=m.SemanticIntent.STATUS,
-            question_slice=missing.subject_id.canonical_locator,
+            question_slice=(
+                needed.question_slice if needed is not None
+                else missing.subject_id.canonical_locator
+            ),
+            store=store,
+            scope_root=(
+                needed.scope_root if needed is not None
+                else missing.subject_id
+            ),
+            question_class=(
+                needed.question_class if needed is not None else None
+            ),
+            materiality_basis=(
+                needed.materiality_basis if needed is not None else ""
+            ),
         )
         return _suspend(
             op="status", repository_id=request.repository_id,
@@ -2842,7 +4657,7 @@ def status(
             suspended=(missing.subject_id.canonical_locator,),
             continuations=continuations,
             operation_intent="STATUS",
-            question_slice=missing.subject_id.canonical_locator,
+            question_slice=task.request.question_slice,
         )
     return _compose_status_answer(
         request.repository_id, subjects, structural=structural,
@@ -2858,15 +4673,22 @@ def _missing_subjects(
     store: SemanticStore,
     bounds: m.QueryBounds,
     suspended: tuple[str, ...],
+    evidence: EvidenceSource | None = None,
 ) -> m.Subject | None:
-    """First subject with no semantic state not already suspended."""
+    """First subject with unexamined question-local state (B.7).
+
+    Question-aware: a subject is missing when its STATUS primary
+    question (CQ_09) or any admitted PENDING question lacks
+    effective-current coverage — never merely when claims are absent.
+    """
     for subject in subjects:
         if subject.subject_id.canonical_locator in suspended:
             continue
-        claims, relationships, _, _ = _load_subject_state(
-            repository_id, subject.subject_id, store=store, bounds=bounds
+        missing = _question_local_missing(
+            repository_id, subject, m.SemanticIntent.STATUS,
+            store=store, evidence=evidence, bounds=bounds,
         )
-        if not claims and not relationships:
+        if missing is not None:
             return subject
     return None
 
@@ -2886,15 +4708,33 @@ def _resume_status(
     )
     missing = _missing_subjects(
         record.repository_id, record.scope, store=store, bounds=bounds,
-        suspended=suspended,
+        suspended=suspended, evidence=evidence,
     )
     if missing is not None:
+        needed = _question_local_missing(
+            record.repository_id, missing, m.SemanticIntent.STATUS,
+            store=store, evidence=evidence, bounds=bounds,
+        )
         task = prepare_interpretation_task(
             record.repository_id, missing, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=record.seeds,
             operation_intent=m.SemanticIntent.STATUS,
-            question_slice=missing.subject_id.canonical_locator,
+            question_slice=(
+                needed.question_slice if needed is not None
+                else missing.subject_id.canonical_locator
+            ),
+            store=store,
+            scope_root=(
+                needed.scope_root if needed is not None
+                else missing.subject_id
+            ),
+            question_class=(
+                needed.question_class if needed is not None else None
+            ),
+            materiality_basis=(
+                needed.materiality_basis if needed is not None else ""
+            ),
         )
         return _suspend(
             op="status", repository_id=record.repository_id,
@@ -2903,7 +4743,7 @@ def _resume_status(
             scope=record.scope, suspended=suspended,
             continuations=continuations,
             operation_intent="STATUS",
-            question_slice=missing.subject_id.canonical_locator,
+            question_slice=task.request.question_slice,
         )
     return _compose_status_answer(
         record.repository_id, record.scope, structural=structural,
@@ -3334,6 +5174,14 @@ def _compose_impact_answer(
     category = items_category
     if category is None and truncated:
         category = "impacts"
+    views, _, qremaining = _paged_question_views(
+        repository_id, sid, (sid,),
+        store=store, bounds=bounds, page_token=page_token,
+        evidence=evidence,
+    )
+    if qremaining > 0:
+        truncated = True
+        category = category or "question_coverage"
     content = m.ImpactContent(
         target_context=kept_context,
         change_conditions=kept_conds,
@@ -3343,6 +5191,7 @@ def _compose_impact_answer(
         relationships=kept_rels,
         conflicts=kept_conf,
         unresolved=tuple(unresolved),
+        question_coverage=views,
     )
     returned = (
         len(kept_conf) + len(unresolved) + len(kept_impacts)
@@ -3392,8 +5241,9 @@ def impact(
         return _uninitialized_answer(
             m.SemanticIntent.IMPACT, request.repository_id, bounds, state
         )
-    resolution = structural.resolve_subject(
-        request.repository_id, request.target, bounds
+    resolution = _resolve_query_subject(
+        request.repository_id, request.target, structural=structural,
+        store=store, bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         requirements = _answers.requirements_for_resolution(resolution)

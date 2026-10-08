@@ -182,7 +182,7 @@ class ClosedVocabularyTest(unittest.TestCase):
                 "PARTIAL_OR_UNRESOLVED",
             },
         )
-        self.assertEqual(len(m.ResolutionKind), 7)
+        self.assertEqual(len(m.ResolutionKind), 9)
         self.assertEqual(
             {e.value for e in m.DerivationKind},
             {

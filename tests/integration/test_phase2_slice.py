@@ -274,13 +274,26 @@ class Phase2SliceTest(unittest.TestCase):
                 structural=structural, evidence=evidence, store=store,
                 continuations=continuations, authority_seeds=seeds,
             )
-            # Indexed state exists now: authority answers directly.
-            self.assertIsInstance(auth_suspended, m.SemanticAnswer)
+            # B.7: the CQ_01 explain examination never satisfies the
+            # unexamined CQ_06 authority question — authority suspends
+            # its own bounded unit even though claims exist.
+            self.assertIsInstance(auth_suspended, PendingInterpretation)
+            self.assertIs(
+                auth_suspended.request.question.question_class,
+                m.SemanticQuestionClass.CQ_06,
+            )
+            auth_answer = ops.submit_interpretation(
+                auth_suspended.continuation,
+                agent.perform(auth_suspended.request),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
+            )
+            self.assertIsInstance(auth_answer, m.SemanticAnswer)
             self.assertIsInstance(
-                auth_suspended.content, m.AuthorityContent
+                auth_answer.content, m.AuthorityContent
             )
             self.assertEqual(
-                len(auth_suspended.content.governing_bindings), 2
+                len(auth_answer.content.governing_bindings), 2
             )
         finally:
             if store is not None:

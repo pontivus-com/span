@@ -83,6 +83,31 @@ class FilesystemEvidenceSource:
         except OSError as exc:
             raise ValueError(f"unknown evidence locator: {locator}") from exc
 
+    def list_inventory_entries(
+        self,
+        repository_id: str,
+        fingerprint_locators: tuple[str, ...] = (),
+    ) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
+        self._check_repository(repository_id)
+        paths = self._paths()
+        in_tree = set(paths)
+        return (
+            tuple((p, f"ev-{p}") for p in paths),
+            {
+                loc: _fingerprint_bytes(self._read_bytes(loc))
+                for loc in dict.fromkeys(fingerprint_locators)
+                if loc in in_tree
+            },
+        )
+
+    def _item_for(self, path: str) -> m.EvidenceInventoryItem:
+        """One inventory item; each file read and hashed exactly once."""
+        fingerprint = _fingerprint_bytes(self._read_bytes(path))
+        return m.EvidenceInventoryItem(
+            evidence_ref=self._ref_for(path, fingerprint),
+            content_fingerprint=fingerprint,
+        )
+
     def _ref_for(self, path: str, fingerprint: str) -> m.EvidenceRef:
         return m.EvidenceRef(
             evidence_id=m.EvidenceId(f"ev-{path}"),
@@ -91,6 +116,23 @@ class FilesystemEvidenceSource:
             locator=path,
             revision_or_fingerprint=fingerprint,
         )
+
+    def _expand_paths(self, paths: tuple[str, ...]) -> list[str]:
+        """Expand scope paths: files stay; directories expand to the
+        text files beneath them (sorted). Deterministic retrieval
+        only — expansion never assigns relevance or authority."""
+        expanded: list[str] = []
+        for path in dict.fromkeys(paths):
+            candidate = self._root / path
+            if candidate.is_file():
+                expanded.append(path)
+                continue
+            if candidate.is_dir():
+                prefix = path.rstrip("/") + "/"
+                for found in sorted(self._paths()):
+                    if found == path or found.startswith(prefix):
+                        expanded.append(found)
+        return expanded
 
     def inventory_evidence(
         self,
@@ -101,10 +143,7 @@ class FilesystemEvidenceSource:
     ) -> m.EvidenceInventoryPage:
         self._check_repository(repository_id)
         if scope.paths:
-            paths = [
-                p for p in dict.fromkeys(scope.paths)
-                if (self._root / p).is_file()
-            ]
+            paths = self._expand_paths(scope.paths)
         elif scope.evidence_refs:
             paths = [
                 r.locator for r in scope.evidence_refs
@@ -112,22 +151,17 @@ class FilesystemEvidenceSource:
             ]
         else:
             paths = self._paths()
-        items = tuple(
-            m.EvidenceInventoryItem(
-                evidence_ref=self._ref_for(
-                    p, _fingerprint_bytes(self._read_bytes(p))
-                ),
-                content_fingerprint=_fingerprint_bytes(
-                    self._read_bytes(p)
-                ),
-            )
-            for p in paths
+        # Slice before fingerprinting: pages after the first must not
+        # re-hash the whole tree (snapshot paging in §8.5 walks every
+        # page). Path order is deterministic, so kept items and
+        # BoundInfo are identical to fingerprint-then-slice.
+        kept_paths, bound_info = _paging.paginate(
+            tuple(paths), bounds.max_evidence_units,
+            "inventory", page_token,
         )
-        kept, bound_info = _paging.paginate(
-            items, bounds.max_evidence_units, "inventory", page_token
-        )
+        items = tuple(self._item_for(p) for p in kept_paths)
         return m.EvidenceInventoryPage(
-            items=tuple(kept),  # type: ignore[arg-type]
+            items=items,  # type: ignore[arg-type]
             repository_state=m.RepositoryState(
                 repository_id=self._repository_id,
                 revision_id=None,

@@ -13,6 +13,8 @@ dependencies = ["mcp==2.3.0"]
 
 [project.scripts]
 span-mcp = "span.shell.mcp_server:main"
+span-install = "span.shell.install:main"
+span-hooks = "span.shell.hooks:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

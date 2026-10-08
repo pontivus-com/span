@@ -69,9 +69,9 @@ ownership and boundaries; they are not advisory style guidance.
   server identity.
 - **semantic repository** is the architectural category and is used where the
   system class or internal architecture is meant.
-- Public MCP operations are exactly `span_initialize_repository`,
-  `span_explain`, `span_impact`, `span_trace`, `span_authority`,
-  `span_status`, `span_refresh`, `span_submit_interpretation`. No `semantic_*`
+- Public MCP operations are exactly `initialize_repository`,
+  `explain`, `impact`, `trace`, `authority`,
+  `status`, `refresh`, `submit_interpretation`. No `semantic_*`
   public aliases exist.
 - Semantic interpretation is executed by the invoking LLM-connected agent;
   Span owns the task contract, strict ingress, validation, authority, trust,

@@ -10,7 +10,7 @@ scope: fingerprint + dependency lookup + freshness classification) ·
 keep only ephemeral session-local bookkeeping (changed paths) — not
 semantic state, not authoritative, never persisted.
 
-Automatic hooks may call **only** `span_status(..., mode=HOOK_FAST)`
+Automatic hooks may call **only** `status(..., mode=HOOK_FAST)`
 and return its compact notice. They never initialize, explain,
 impact, trace, authority-check, refresh, interpret, rebuild, or do
 repository-size work. New files with no dependants stay silent

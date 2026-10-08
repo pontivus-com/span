@@ -1,10 +1,12 @@
-# MCP reference (plan Phase 4.2–4.4)
+# MCP reference (plan Phase 4.2–4.4; Addendum B)
 
 Thin transport over stdio (`span-mcp --data-dir DIR
 [--repo graft:/path ...]`). Exactly eight tools, one per canonical
-operation: `span_initialize_repository`, `span_explain`,
-`span_impact`, `span_trace`, `span_authority`, `span_status`,
-`span_refresh`, `span_submit_interpretation`.
+operation: `initialize_repository`, `explain`,
+`impact`, `trace`, `authority`, `status`,
+`refresh`, `submit_interpretation`. `explain` accepts one optional
+`establish_baseline` flag (default false) for a bounded root audit;
+no ninth operation exists.
 
 ## Ingress
 
@@ -12,7 +14,7 @@ Each tool takes its canonical service request as canonical JSON
 (without `$type`; complex fields carry their `$type`-tagged
 encoding). `bounds` may be omitted for service defaults. Unknown
 tools/fields/enums and missing required fields fail closed.
-`span_submit_interpretation` additionally takes the routing key
+`submit_interpretation` additionally takes the routing key
 `repository_id` (transport-level, never parsed as semantics).
 
 ## Egress

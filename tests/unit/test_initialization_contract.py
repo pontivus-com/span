@@ -26,7 +26,7 @@ class InitializationContractTest(unittest.TestCase):
     def test_contract_document_exists_and_states_explicit_only(self):
         self.assertTrue(CONTRACT.is_file(), "INITIALIZATION_CONTRACT.md missing")
         text = CONTRACT.read_text(encoding="utf-8")
-        self.assertIn("span_initialize_repository", text)
+        self.assertIn("initialize_repository", text)
         self.assertIn("UNINITIALIZED", text)
         self.assertIn("must never start initialization implicitly", text)
 
@@ -46,7 +46,7 @@ class InitializationContractTest(unittest.TestCase):
         # any auto-init — from query/hook paths. The server provisioning
         # function (``provision_repository`` in Phase 4.2) is likewise
         # an explicit admin path: it serves the explicit
-        # `span_initialize_repository` tool and dedicated startup
+        # `initialize_repository` tool and dedicated startup
         # registration, never queries or hooks. Structural scan: guards
         # Phases 1–4 against introducing auto-init call sites.
         offenders = []

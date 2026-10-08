@@ -40,48 +40,56 @@ def next_page_token(offset: int) -> str:
     return f"{_PREFIX}{offset}"
 
 
-def parse_service_token(page_token: str | None) -> tuple[int, int]:
+def parse_service_token(page_token: str | None) -> tuple[int, int, int]:
     """Decode an answer-level token to per-list offsets (fail closed).
 
-    Answer tokens are ``pg:<claims_skip>:<rels_skip>``. A bare
-    ``pg:<skip>`` applies uniformly to both lists. Either side may be
-    ``x`` only on output; input requires non-negative integers.
+    Answer tokens are ``pg:<claims_skip>:<rels_skip>:<questions_skip>``.
+    An absent token begins at zero. Pre-cutover two-offset tokens are
+    rejected with a typed invalid-token error; no dual-format fallback.
     """
     if page_token is None:
-        return (0, 0)
+        return (0, 0, 0)
     if not page_token.startswith(_PREFIX):
         raise ValueError(f"unknown page token: {page_token}")
     parts = page_token[len(_PREFIX):].split(":")
     try:
-        if len(parts) == 1:
-            skip = int(parts[0])
-            offsets = (skip, skip)
-        elif len(parts) == 2:
-            offsets = (int(parts[0]), int(parts[1]))
+        if len(parts) == 3:
+            offsets = (int(parts[0]), int(parts[1]), int(parts[2]))
         else:
             raise ValueError(f"unknown page token: {page_token}")
     except ValueError:
         raise ValueError(f"unknown page token: {page_token}") from None
-    if offsets[0] < 0 or offsets[1] < 0:
+    if offsets[0] < 0 or offsets[1] < 0 or offsets[2] < 0:
         raise ValueError(f"unknown page token: {page_token}")
     return offsets
 
 
 def format_service_token(
-    claims_next: int | None, rels_next: int | None
+    claims_next: int | None, rels_next: int | None,
+    questions_next: int | None = 0,
 ) -> str | None:
     """Encode per-list next offsets.
 
     Offsets always advance past shown items, including on exhausted
     sides: re-querying windows from the consumed position, so later
     arrivals on an exhausted side still surface. ``None`` only when
-    both sides are exhausted.
+    all sides are exhausted.
     """
-    if claims_next is None and rels_next is None:
-        return None
+    if (
+        claims_next is None and rels_next is None
+        and (questions_next is None or questions_next == 0)
+    ):
+        # Preserve v0.6 two-None fast path only when no question page.
+        if questions_next in (None, 0):
+            return None
     left = claims_next if claims_next is not None else 0
     right = rels_next if rels_next is not None else 0
-    return f"{_PREFIX}{left}:{right}"
+    qskip = questions_next if questions_next is not None else 0
+    if qskip == 0 and left == 0 and right == 0 and (
+        claims_next is None and rels_next is None
+    ):
+        return None
+    return f"{_PREFIX}{left}:{right}:{qskip}"
 
 
 def paginate(

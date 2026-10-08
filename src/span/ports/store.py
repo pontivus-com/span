@@ -15,6 +15,7 @@ from span.core.model import (
     CoverageDependency,
     EvidenceDependency,
     FreshnessUpdate,
+    InterpretationCoverage,
     QueryBounds,
     RecordedConflict,
     RelationshipKind,
@@ -23,6 +24,7 @@ from span.core.model import (
     RepositoryState,
     SchemaVersion,
     SemanticClaim,
+    SemanticQuestionScope,
     SemanticRelationship,
     StoreWriteResult,
     Subject,
@@ -74,11 +76,66 @@ class SemanticStore(_typing.Protocol):
     ) -> tuple[EvidenceDependency, ...]:
         ...
 
+    def load_evidence_records(
+        self,
+        repository_id: str,
+        evidence_ids: tuple[str, ...],
+    ) -> tuple[EvidenceDependency, ...]:
+        """Dependency rows by evidence id (cross-unit citation support).
+
+        Returns recorded rows for established evidence; unknown ids are
+        simply absent (the service rejects them as unknown). No semantic
+        judgment — rows carry previously validated observations.
+        """
+        ...
+
     def load_coverage_dependencies(
         self,
         repository_id: str,
         scope_subjects: tuple[SubjectId, ...],
     ) -> tuple[CoverageDependency, ...]:
+        ...
+
+    def load_question_coverages(
+        self,
+        repository_id: str,
+        scope_root: SubjectId | None,
+        subject_ids: tuple[SubjectId, ...],
+        bounds: QueryBounds,
+    ) -> tuple[InterpretationCoverage, ...]:
+        """Exact root/subject/question coverage reads (Addendum B B-01)."""
+        ...
+
+    def load_all_question_coverages(
+        self,
+        repository_id: str,
+        scope_root: SubjectId | None,
+        subject_ids: tuple[SubjectId, ...],
+    ) -> tuple[InterpretationCoverage, ...]:
+        """Unbounded coverage reads for reconciliation decisions only.
+
+        Query/paging paths must use the bounded variant. Retirement and
+        withdrawal fanout must use this variant so no owning question
+        is silently missed; callers defer when the total exceeds the
+        operation bounds (Addendum B B-03).
+        """
+        ...
+
+    def count_question_coverages(
+        self,
+        repository_id: str,
+        scope_root: SubjectId | None,
+        subject_ids: tuple[SubjectId, ...],
+    ) -> int:
+        """Count coverages matching the filter (bounds-safety check)."""
+        ...
+
+    def load_premise_dependents(
+        self,
+        repository_id: str,
+        premise_refs: tuple[ClaimRef | RelationshipRef, ...],
+    ) -> tuple[ClaimRef | RelationshipRef, ...]:
+        """Reverse premise lookup derived from SemanticBasis.input_refs."""
         ...
 
     def load_conflicts(

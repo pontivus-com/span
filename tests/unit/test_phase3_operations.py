@@ -505,7 +505,7 @@ class StatusTest(unittest.TestCase):
             )
             self.assertTrue(
                 any(
-                    "span_initialize_repository" in r.description
+                    "initialize_repository" in r.description
                     for r in answer.resolution_requirements
                 )
             )
@@ -525,7 +525,7 @@ class StatusTest(unittest.TestCase):
             self.assertIs(
                 notice.readiness, m.RepositoryReadiness.UNINITIALIZED
             )
-            self.assertIn("span_initialize_repository",
+            self.assertIn("initialize_repository",
                           notice.recommended_action)
             # Still uninitialized: nothing was bootstrapped.
             self.assertIsNone(store.load_repository_state(REPO))

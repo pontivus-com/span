@@ -88,34 +88,34 @@ def _canonical(description: str) -> dict:
 
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
-    "span_initialize_repository": (
+    "initialize_repository": (
         "Prepare a repository for semantic queries in a dedicated "
         "setup session. No semantic interpretation happens here."
     ),
-    "span_explain": (
+    "explain": (
         "Explain what a subject is, what it does, and what governs it, "
         "with evidence, authority, and freshness."
     ),
-    "span_impact": (
+    "impact": (
         "Pre-change semantic brief for a proposed material change: "
         "impacts, conditions, authority, verification, blockers."
     ),
-    "span_trace": (
+    "trace": (
         "Producers, carriers, consumers, boundaries, and lifecycle path "
         "for a target, upstream/downstream/both."
     ),
-    "span_authority": (
+    "authority": (
         "Governing sources with status, applicability, precedence, and "
         "conflicts shown side-by-side."
     ),
-    "span_status": (
+    "status": (
         "Per-claim freshness, changed evidence, verification currency, "
         "and refresh scope. HOOK_FAST returns a compact notice only."
     ),
-    "span_refresh": (
+    "refresh": (
         "Explicitly reinterpret stale scope. Never automatic."
     ),
-    "span_submit_interpretation": (
+    "submit_interpretation": (
         "Submit a typed interpretation result for a pending "
         "continuation. Returns the suspended operation's answer, or "
         "the next pending unit while frontiers remain."
@@ -123,9 +123,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
 }
 
 TOOL_SCHEMAS: dict[str, dict] = {
-    "span_initialize_repository": {
+    "initialize_repository": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_initialize_repository"],
+        "description": TOOL_DESCRIPTIONS["initialize_repository"],
         "properties": {
             "repository_locator": {"type": "string"},
             "structural_provider_config": {"type": "string"},
@@ -136,20 +136,21 @@ TOOL_SCHEMAS: dict[str, dict] = {
         },
         "required": ["repository_locator", "structural_provider_config"],
     },
-    "span_explain": {
+    "explain": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_explain"],
+        "description": TOOL_DESCRIPTIONS["explain"],
         "properties": {
             "repository_id": {"type": "string"},
             "target": _canonical("SubjectSelector."),
             "bounds": _canonical("QueryBounds. Omit for defaults."),
             "page_token": {"type": ["string", "null"]},
+            "establish_baseline": {"type": "boolean"},
         },
         "required": ["repository_id", "target"],
     },
-    "span_impact": {
+    "impact": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_impact"],
+        "description": TOOL_DESCRIPTIONS["impact"],
         "properties": {
             "repository_id": {"type": "string"},
             "target": _canonical("SubjectSelector."),
@@ -173,9 +174,9 @@ TOOL_SCHEMAS: dict[str, dict] = {
             "change_description",
         ],
     },
-    "span_trace": {
+    "trace": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_trace"],
+        "description": TOOL_DESCRIPTIONS["trace"],
         "properties": {
             "repository_id": {"type": "string"},
             "target": _canonical("SubjectSelector."),
@@ -196,9 +197,9 @@ TOOL_SCHEMAS: dict[str, dict] = {
             "boundary_only",
         ],
     },
-    "span_authority": {
+    "authority": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_authority"],
+        "description": TOOL_DESCRIPTIONS["authority"],
         "properties": {
             "repository_id": {"type": "string"},
             "target": _canonical("SubjectSelector or ClaimRef."),
@@ -207,9 +208,9 @@ TOOL_SCHEMAS: dict[str, dict] = {
         },
         "required": ["repository_id", "target"],
     },
-    "span_status": {
+    "status": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_status"],
+        "description": TOOL_DESCRIPTIONS["status"],
         "properties": {
             "repository_id": {"type": "string"},
             "target": _canonical(
@@ -223,9 +224,9 @@ TOOL_SCHEMAS: dict[str, dict] = {
         },
         "required": ["repository_id", "target"],
     },
-    "span_refresh": {
+    "refresh": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_refresh"],
+        "description": TOOL_DESCRIPTIONS["refresh"],
         "properties": {
             "repository_id": {"type": "string"},
             "target": _canonical(
@@ -238,9 +239,9 @@ TOOL_SCHEMAS: dict[str, dict] = {
         },
         "required": ["repository_id", "target"],
     },
-    "span_submit_interpretation": {
+    "submit_interpretation": {
         "type": "object",
-        "description": TOOL_DESCRIPTIONS["span_submit_interpretation"],
+        "description": TOOL_DESCRIPTIONS["submit_interpretation"],
         "properties": {
             "continuation": {"type": "string"},
             "result": _canonical("SemanticInterpretationResult."),
@@ -251,24 +252,24 @@ TOOL_SCHEMAS: dict[str, dict] = {
 }
 
 TOOL_NAMES: tuple[str, ...] = (
-    "span_initialize_repository",
-    "span_explain",
-    "span_impact",
-    "span_trace",
-    "span_authority",
-    "span_status",
-    "span_refresh",
-    "span_submit_interpretation",
+    "initialize_repository",
+    "explain",
+    "impact",
+    "trace",
+    "authority",
+    "status",
+    "refresh",
+    "submit_interpretation",
 )
 
 _REQUEST_CLASS: dict[str, type] = {
-    "span_explain": ops.SemanticExplainRequest,
-    "span_impact": ops.SemanticImpactRequest,
-    "span_trace": ops.SemanticTraceRequest,
-    "span_authority": ops.SemanticAuthorityRequest,
-    "span_status": ops.SemanticStatusRequest,
-    "span_refresh": ops.SemanticRefreshRequest,
-    "span_submit_interpretation": ops.SemanticSubmitInterpretationRequest,
+    "explain": ops.SemanticExplainRequest,
+    "impact": ops.SemanticImpactRequest,
+    "trace": ops.SemanticTraceRequest,
+    "authority": ops.SemanticAuthorityRequest,
+    "status": ops.SemanticStatusRequest,
+    "refresh": ops.SemanticRefreshRequest,
+    "submit_interpretation": ops.SemanticSubmitInterpretationRequest,
 }
 
 
@@ -280,7 +281,7 @@ def decode_request(tool_name: str, arguments: dict) -> object:
     Unknown tools, unknown fields, unknown enums, and missing required
     fields fail closed.
     """
-    if tool_name == "span_initialize_repository":
+    if tool_name == "initialize_repository":
         return _decode_init(arguments)
     cls = _REQUEST_CLASS.get(tool_name)
     if cls is None:
@@ -288,7 +289,7 @@ def decode_request(tool_name: str, arguments: dict) -> object:
     if not isinstance(arguments, dict):
         raise ValueError(f"arguments for {tool_name} must be an object")
     payload = dict(arguments)
-    if tool_name == "span_submit_interpretation":
+    if tool_name == "submit_interpretation":
         # Transport-level routing key, not part of the canonical
         # submit contract: consumed here, never parsed as semantics.
         payload.pop("repository_id", None)
@@ -308,7 +309,7 @@ def decode_request(tool_name: str, arguments: dict) -> object:
 
 def _decode_init(arguments: dict) -> ops.SemanticInitializeRepositoryRequest:
     if not isinstance(arguments, dict):
-        raise ValueError("span_initialize_repository needs an object")
+        raise ValueError("initialize_repository needs an object")
     try:
         return m.from_canonical(
             ops.SemanticInitializeRepositoryRequest,
@@ -319,7 +320,7 @@ def _decode_init(arguments: dict) -> ops.SemanticInitializeRepositoryRequest:
         )
     except m.CanonicalDecodeError as exc:
         raise ValueError(
-            f"invalid span_initialize_repository arguments: {exc}"
+            f"invalid initialize_repository arguments: {exc}"
         ) from None
 
 
@@ -377,7 +378,7 @@ class McpAdapter:
         self, tool_name: str, arguments: dict
     ) -> ToolResult:
         """Invoke one canonical operation; transport errors stay typed."""
-        if tool_name == "span_initialize_repository":
+        if tool_name == "initialize_repository":
             return self._dispatch_init(arguments)
         if tool_name not in _REQUEST_CLASS:
             return _error("unknown_tool", f"unknown tool: {tool_name}")
@@ -385,7 +386,7 @@ class McpAdapter:
             request = decode_request(tool_name, arguments)
         except ValueError as exc:
             return _error("ingress", str(exc))
-        if tool_name == "span_submit_interpretation":
+        if tool_name == "submit_interpretation":
             repository_id = arguments.get("repository_id")
         else:
             repository_id = request.repository_id  # type: ignore[union-attr]
@@ -396,49 +397,49 @@ class McpAdapter:
         except ValueError as exc:
             return _error("unknown_repository", str(exc))
         try:
-            if tool_name == "span_explain":
+            if tool_name == "explain":
                 result = ops.explain(
                     request, structural=context.structural,
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
-            elif tool_name == "span_impact":
+            elif tool_name == "impact":
                 result = ops.impact(
                     request, structural=context.structural,
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
-            elif tool_name == "span_trace":
+            elif tool_name == "trace":
                 result = ops.trace(
                     request, structural=context.structural,
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
-            elif tool_name == "span_authority":
+            elif tool_name == "authority":
                 result = ops.authority(
                     request, structural=context.structural,
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
-            elif tool_name == "span_status":
+            elif tool_name == "status":
                 result = ops.status(
                     request, structural=context.structural,
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
-            elif tool_name == "span_refresh":
+            elif tool_name == "refresh":
                 result = ops.refresh(
                     request, structural=context.structural,
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
-            elif tool_name == "span_submit_interpretation":
+            elif tool_name == "submit_interpretation":
                 result = ops.submit_interpretation(
                     request.continuation,  # type: ignore[union-attr]
                     request.result,  # type: ignore[union-attr]
@@ -470,7 +471,7 @@ class McpAdapter:
         if self.provisioner is None:
             return _error(
                 "unavailable",
-                "span_initialize_repository needs a provisioned "
+                "initialize_repository needs a provisioned "
                 "server data directory",
             )
         try:

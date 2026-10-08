@@ -64,6 +64,8 @@ class GraftVocabularyError(ValueError):
 
 #: Closed node-kind mapping (structural only). Files split by suffix
 #: rule (shared with the deterministic source); symbols are code.
+#: `enum` is a named type declaration like class/interface/type
+#: (plan §4.1 CODE_SYMBOL; no new SubjectKind).
 NODE_SUBJECT_KIND: dict[str, m.SubjectKind] = {
     "file": m.SubjectKind.COMPONENT,
     "function": m.SubjectKind.CODE_SYMBOL,
@@ -71,15 +73,20 @@ NODE_SUBJECT_KIND: dict[str, m.SubjectKind] = {
     "method": m.SubjectKind.CODE_SYMBOL,
     "interface": m.SubjectKind.CODE_SYMBOL,
     "type": m.SubjectKind.CODE_SYMBOL,
+    "enum": m.SubjectKind.CODE_SYMBOL,
 }
 
-#: Closed edge-relation mapping (structural only).
+#: Closed edge-relation mapping (structural only). `extends`/`implements`
+#: are compile-time dependencies (plan §5.2 DEPENDS_ON); structural
+#: possibility only, never a semantic IMPLEMENTS claim (§4.5).
 RELATION_EDGE_KIND: dict[str, m.StructuralEdgeKind] = {
     "contains": m.StructuralEdgeKind.DEFINES,
     "imports": m.StructuralEdgeKind.IMPORTS,
     "calls": m.StructuralEdgeKind.CALLS,
     "references": m.StructuralEdgeKind.REFERENCES,
     "depends_on": m.StructuralEdgeKind.DEPENDS_ON,
+    "extends": m.StructuralEdgeKind.DEPENDS_ON,
+    "implements": m.StructuralEdgeKind.DEPENDS_ON,
 }
 
 _DOCUMENT_SUFFIXES = (".md", ".rst", ".txt")
@@ -206,6 +213,13 @@ class GraftStructuralSource:
                 raise GraftVocabularyError(
                     f"unknown Graft edge relation: {relation}"
                 )
+            # Dangling edges reference modules outside the index
+            # (stdlib/third-party imports, unindexed supertypes).
+            # A StructuralEdge needs canonical SubjectIds for both
+            # ends (§4.2), so unresolvable endpoints are skipped,
+            # never guessed into identity.
+            if source not in self._nodes or target not in self._nodes:
+                continue
             edges.append((source, target, relation))
         return edges
 

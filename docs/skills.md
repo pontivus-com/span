@@ -1,6 +1,7 @@
 # Agent Skills integration guide
 
-Skills (`skills/span/SKILL.md`, `skills/span-change-context/SKILL.md`)
+Skills (`skills/span/SKILL.md`, `skills/span-change-context/SKILL.md`,
+`skills/span-document/SKILL.md`)
 are optional lifecycle/orchestration guidance over the eight canonical
 operations. They sit outside the semantic core and the service
 contract: semantic correctness never depends on them.
@@ -8,8 +9,8 @@ contract: semantic correctness never depends on them.
 Allowed: when/how to invoke operations, multi-call workflow
 composition, preserving `PARTIAL`/`AMBIGUOUS`/`CONFLICTED`/
 `UNRESOLVED`/`STALE`/`UNVERIFIABLE` states verbatim, directing
-`span_impact` before material changes and `span_status`/
-`span_refresh` around verification.
+`impact` before material changes and `status`/
+`refresh` around verification.
 
 Forbidden: defining claim/relationship kinds, authority, ownership,
 precedence, trust, freshness, or change semantics; reinterpreting

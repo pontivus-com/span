@@ -30,9 +30,15 @@ class FixtureAgent:
     """Deterministic test agent over a canned candidate map."""
 
     def __init__(
-        self, mapping: dict[str, FixtureCandidates]
+        self, mapping: dict[str, FixtureCandidates],
+        complete_questions: bool = False,
     ) -> None:
         self._mapping = dict(mapping)
+        # Addendum C C-05 cutover: claims alone never complete a
+        # question. When enabled, the fixture attaches explicit
+        # ANSWERED completion intent for the bound question, letting
+        # the service derive result refs from validated candidates.
+        self._complete_questions = complete_questions
 
     def perform(
         self, request: m.SemanticInterpretationRequest
@@ -102,9 +108,33 @@ class FixtureAgent:
                 if r.candidate_authority is not None
             }
         )
+        coverages: list[m.InterpretationCoverage] = []
+        if self._complete_questions and request.question is not None:
+            question = request.question
+            coverages.append(
+                m.InterpretationCoverage(
+                    subjects=(question.subject,),
+                    question_slice=question.question_slice,
+                    evidence_scope=m.EvidenceScope(
+                        paths=(), evidence_refs=()
+                    ),
+                    declared_complete=True,
+                    question=question,
+                    disposition=(
+                        m.SemanticQuestionDisposition.ANSWERED
+                    ),
+                    result_refs=(),
+                    resolution_requirements=(),
+                    disposition_basis=(
+                        "fixture explicit completion intent"
+                    ),
+                    question_evidence=(),
+                )
+            )
         return m.SemanticInterpretationResult(
             claims=tuple(claims),
             relationships=tuple(relationships),
+            proposed_question_coverages=tuple(coverages),
             governing_source_refs=tuple(
                 by_id[eid] for eid in governing if eid in by_id
             ),

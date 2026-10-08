@@ -156,7 +156,7 @@ class HookSafetyTest(unittest.TestCase):
             self.assertIs(
                 notice.readiness, m.RepositoryReadiness.UNINITIALIZED
             )
-            self.assertIn("span_initialize_repository",
+            self.assertIn("initialize_repository",
                           notice.recommended_action)
             # No implicit bootstrap happened.
             self.assertIsNone(store.load_repository_state(REPO))
@@ -209,18 +209,19 @@ class HookSafetyTest(unittest.TestCase):
             / "adapter.py"
         ).read_text(encoding="utf-8")
         self.assertIn("HOOK_FAST", source)
+        self.assertIn("ops.status(", source)
         for forbidden in (
-            "span_initialize_repository",
-            "span_explain",
-            "span_impact",
-            "span_trace",
-            "span_authority",
-            "span_refresh",
+            "initialize_repository",
+            "explain",
+            "impact",
+            "trace",
+            "authority",
+            "refresh",
             "submit_interpretation",
             "prepare_interpretation_task",
             "reissue_interpretation",
         ):
-            self.assertNotIn(forbidden, source)
+            self.assertNotIn(f"ops.{forbidden}(", source)
 
 
 if __name__ == "__main__":

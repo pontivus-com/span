@@ -114,6 +114,12 @@ __all__ = [
     # §4.9 basis / resolution / change
     "ResolutionKind",
     "ResolutionRequirement",
+    "SemanticQuestionClass",
+    "SemanticQuestionDisposition",
+    "SemanticQuestionScope",
+    "QuestionEvidenceObservation",
+    "CandidateSemanticWithdrawal",
+    "SemanticQuestionCoverageView",
     "ChangeKind",
     "ProposedChange",
     "ChangeCondition",
@@ -155,6 +161,7 @@ __all__ = [
     "CandidateSemanticConflict",
     "SemanticInterpretationRequest",
     "SemanticInterpretationResult",
+    "SA_ANALYSIS_OBLIGATIONS",
     "ClaimPage",
     "RelationshipPage",
     "EvidenceDependency",
@@ -789,6 +796,8 @@ class ResolutionKind(_enum.Enum):
     STALE_EVIDENCE = "STALE_EVIDENCE"
     UNVERIFIABLE_FRESHNESS = "UNVERIFIABLE_FRESHNESS"
     UNSUPPORTED_STRUCTURAL_CAPABILITY = "UNSUPPORTED_STRUCTURAL_CAPABILITY"
+    MISSING_SEMANTIC_COVERAGE = "MISSING_SEMANTIC_COVERAGE"
+    INCOMPLETE_SEMANTIC_SCOPE = "INCOMPLETE_SEMANTIC_SCOPE"
 
 
 @_dataclass(frozen=True)
@@ -797,6 +806,68 @@ class ResolutionRequirement:
     subject_or_claim: SubjectId | ClaimRef | RelationshipRef | None = None
     description: str = ""
     supporting_context: tuple[ClaimRef | RelationshipRef | EvidenceRef, ...] = ()
+
+
+class SemanticQuestionClass(_enum.Enum):
+    """Closed CQ identifiers for question-scoped coverage (Addendum B)."""
+
+    CQ_01 = "CQ_01"
+    CQ_02 = "CQ_02"
+    CQ_03 = "CQ_03"
+    CQ_04 = "CQ_04"
+    CQ_05 = "CQ_05"
+    CQ_06 = "CQ_06"
+    CQ_07 = "CQ_07"
+    CQ_08 = "CQ_08"
+    CQ_09 = "CQ_09"
+
+
+class SemanticQuestionDisposition(_enum.Enum):
+    PENDING = "PENDING"
+    ANSWERED = "ANSWERED"
+    OPEN = "OPEN"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+@_dataclass(frozen=True)
+class SemanticQuestionScope:
+    """Immutable question identity (Addendum B B-01)."""
+
+    scope_root: SubjectId
+    subject: SubjectId
+    question_class: SemanticQuestionClass
+    question_slice: str
+    materiality_basis: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("question_slice", self.question_slice)
+        _require_non_empty("materiality_basis", self.materiality_basis)
+
+
+@_dataclass(frozen=True)
+class QuestionEvidenceObservation:
+    evidence_ref: EvidenceRef
+    observed_fingerprint: str
+
+
+@_dataclass(frozen=True)
+class CandidateSemanticWithdrawal:
+    target: ClaimRef | RelationshipRef
+    basis: SemanticBasis
+    evidence: tuple[EvidenceRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.basis.summary:
+            raise ValueError("withdrawal basis summary is empty")
+
+
+@_dataclass(frozen=True)
+class SemanticQuestionCoverageView:
+    question: SemanticQuestionScope
+    recorded_disposition: SemanticQuestionDisposition
+    effective_disposition: SemanticQuestionDisposition
+    freshness: Freshness
+    resolution_requirements: tuple[ResolutionRequirement, ...] = ()
 
 
 class ChangeKind(_enum.Enum):
@@ -893,6 +964,7 @@ class ExplainContent:
     relationships: tuple[SemanticRelationship, ...] = ()
     implementation_locations: tuple[StructuralLocation, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
+    question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -903,6 +975,7 @@ class TraceContent:
     lifecycle_context: tuple[ClaimRef | RelationshipRef, ...] = ()
     claims: tuple[SemanticClaim, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
+    question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -915,6 +988,7 @@ class ImpactContent:
     relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
     unresolved: tuple[ResolutionRequirement, ...] = ()
+    question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -926,6 +1000,7 @@ class AuthorityContent:
     relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
     unresolved: tuple[ResolutionRequirement, ...] = ()
+    question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -939,6 +1014,7 @@ class StatusContent:
     relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
     unresolved: tuple[ResolutionRequirement, ...] = ()
+    question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
 
 
 SemanticContent = _typing.Union[
@@ -1217,9 +1293,27 @@ class SemanticInterpretationRequest:
     bounds: QueryBounds = _field(
         default_factory=lambda: QueryBounds(50, 2, 8, 24, 96_000, 64, 64)
     )
+    question: SemanticQuestionScope | None = None
+    prior_claims: tuple[SemanticClaim, ...] = ()
+    prior_relationships: tuple[SemanticRelationship, ...] = ()
+    analysis_obligations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty("repository_id", self.repository_id)
+
+
+SA_ANALYSIS_OBLIGATIONS: tuple[str, ...] = (
+    "SA-2: compare implementation with contracts, records, config, tests "
+    "and authority; distinguish observed behavior from governing intent.",
+    "SA-3: trace input, producer, transformations, state, consumer, "
+    "error/terminal paths and execution conditions; no route from adjacency.",
+    "SA-4: establish purpose, responsibility, ownership, representation, "
+    "boundary, lifecycle, invariant, verification and dependencies in "
+    "existing kinds only.",
+    "SA-5: adversarially test against contradictions, alternate owners, "
+    "missing participants, branch paths and stale premises; qualify "
+    "uncertainty.",
+)
 
 
 @_dataclass(frozen=True)
@@ -1230,6 +1324,8 @@ class SemanticInterpretationResult:
     diagnostics: tuple[str, ...] = ()
     candidate_subjects: tuple[CandidateSubject, ...] = ()
     candidate_conflicts: tuple[CandidateSemanticConflict, ...] = ()
+    proposed_question_coverages: tuple[InterpretationCoverage, ...] = ()
+    candidate_withdrawals: tuple[CandidateSemanticWithdrawal, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -1279,16 +1375,39 @@ class CoverageDependency:
     observed_at: _datetime.datetime = _field(
         default_factory=lambda: _datetime.datetime.now(_datetime.timezone.utc)
     )
+    question: SemanticQuestionScope | None = None
 
 
 @_dataclass(frozen=True)
 class InterpretationCoverage:
-    """Scope one batch claims to reconcile (plan §4.11, I-37)."""
+    """Single canonical persisted question record (Addendum B B-01)."""
 
     subjects: tuple[SubjectId, ...] = ()
     question_slice: str = ""
     evidence_scope: EvidenceScope = _field(default_factory=EvidenceScope)
     declared_complete: bool = False
+    question: SemanticQuestionScope | None = None
+    disposition: SemanticQuestionDisposition = SemanticQuestionDisposition.PENDING
+    result_refs: tuple[ClaimRef | RelationshipRef, ...] = ()
+    resolution_requirements: tuple[ResolutionRequirement, ...] = ()
+    disposition_basis: str = ""
+    question_evidence: tuple[QuestionEvidenceObservation, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.disposition is SemanticQuestionDisposition.ANSWERED:
+            # Addendum C C-05: an explicit ANSWERED submission may carry
+            # empty result_refs as completion intent; the service derives
+            # refs from validated candidates before persisting, and the
+            # store rejects ANSWERED rows with empty refs. Only persisted
+            # ANSWERED rows with derived refs count as examined.
+            if not self.declared_complete:
+                raise ValueError("ANSWERED coverage requires declared_complete")
+        if self.disposition is SemanticQuestionDisposition.OPEN:
+            if not self.resolution_requirements:
+                raise ValueError("OPEN coverage requires resolution_requirements")
+        if self.disposition is SemanticQuestionDisposition.NOT_APPLICABLE:
+            if self.result_refs:
+                raise ValueError("NOT_APPLICABLE coverage requires empty result_refs")
 
 
 @_dataclass(frozen=True)
@@ -1298,9 +1417,7 @@ class CanonicalIndexBatch:
     relationships: tuple[SemanticRelationship, ...] = ()
     evidence_dependencies: tuple[EvidenceDependency, ...] = ()
     coverage_dependencies: tuple[CoverageDependency, ...] = ()
-    coverage: InterpretationCoverage = _field(
-        default_factory=InterpretationCoverage
-    )
+    coverage: tuple[InterpretationCoverage, ...] = ()
     retires_claims: tuple[ClaimRef, ...] = ()
     retires_relationships: tuple[RelationshipRef, ...] = ()
     conflicts: tuple[RecordedConflict, ...] = ()
