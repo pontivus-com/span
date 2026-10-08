@@ -1,7 +1,9 @@
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
 .tmp-probe/
-.tmp-e2e/*/graft/
-.tmp-e2e/*/.ignore
-.tmp-e2e/*/.gitignore
-.tmp-e2e/*.db
+.tmp-e2e/
+.pytest_cache/
+.coverage
