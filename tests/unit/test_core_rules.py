@@ -38,6 +38,7 @@ def _ctx(**overrides):
         known_evidence_ids=frozenset({"ev-src/a.py"}),
         known_subject_ids=(_sid(),),
         evidence_fingerprints={"ev-src/a.py": "fp-1"},
+        evidence_contents={"ev-src/a.py": "owns orders module scope"},
     )
     base.update(overrides)
     return v.ValidationContext(**base)
@@ -50,7 +51,10 @@ def _claim(**overrides):
         value=m.PurposeValue("does X", ()),
         evidence=(_ref(),),
         candidate_authority=None,
-        basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION),
+        basis=m.SemanticBasis(
+            m.DerivationKind.SEMANTIC_INTERPRETATION,
+            "test candidate restating cited evidence",
+        ),
     )
     base.update(overrides)
     return m.CandidateSemanticClaim(**base)
@@ -61,6 +65,23 @@ def _accepted_binding():
         evidence_ref=_ref(),
         authority_kind=m.AuthorityKind.REPOSITORY_RULE,
         status=m.AuthorityStatus.ACCEPTED,
+    )
+
+
+def _support(**overrides):
+    base = dict(
+        quoted_span="owns orders",
+        status_section="src/a.py",
+        applicability_section=None,
+    )
+    base.update(overrides)
+    return m.AuthoritySupport(**base)
+
+
+def _candidate_authority(binding=None, support=None):
+    return m.CandidateAuthority(
+        binding=binding or _accepted_binding(),
+        support=support or _support(),
     )
 
 
@@ -108,15 +129,18 @@ class CandidateValidationTest(unittest.TestCase):
             status=m.AuthorityStatus.UNKNOWN,
         )
         result = v.validate_candidate_claim(
-            _claim(candidate_authority=binding), _ctx()
+            _claim(candidate_authority=_candidate_authority(binding)), _ctx()
         )
         self.assertFalse(result.ok)
 
     def test_structural_derivation_cannot_carry_authority(self):
         binding = _accepted_binding()
         candidate = _claim(
-            candidate_authority=binding,
-            basis=m.SemanticBasis(m.DerivationKind.STRUCTURAL_OBSERVATION),
+            candidate_authority=_candidate_authority(binding),
+            basis=m.SemanticBasis(
+                m.DerivationKind.STRUCTURAL_OBSERVATION,
+                "test candidate restating cited evidence",
+            ),
         )
         result = v.validate_candidate_claim(candidate, _ctx())
         self.assertFalse(result.ok)
@@ -134,7 +158,7 @@ class CandidateValidationTest(unittest.TestCase):
             status=m.AuthorityStatus.ACCEPTED,
         )
         result = v.validate_candidate_claim(
-            _claim(candidate_authority=binding),
+            _claim(candidate_authority=_candidate_authority(binding)),
             _ctx(
                 known_evidence_ids=frozenset({"ev-src/a.py", "ev-other"}),
                 evidence_fingerprints={
@@ -146,7 +170,7 @@ class CandidateValidationTest(unittest.TestCase):
 
     def test_accepted_authority_establishes(self):
         result = v.validate_candidate_claim(
-            _claim(candidate_authority=_accepted_binding()), _ctx()
+            _claim(candidate_authority=_candidate_authority()), _ctx()
         )
         self.assertTrue(result.ok)
         self.assertIs(result.trust, m.TrustState.ESTABLISHED)
@@ -159,10 +183,29 @@ class CandidateValidationTest(unittest.TestCase):
             status=m.AuthorityStatus.DRAFT,
         )
         result = v.validate_candidate_claim(
-            _claim(candidate_authority=binding), _ctx()
+            _claim(candidate_authority=_candidate_authority(binding)), _ctx()
         )
         self.assertTrue(result.ok)
         self.assertIs(result.trust, m.TrustState.PARTIAL)
+
+    def test_support_quote_must_be_verbatim(self):
+        candidate = _claim(
+            candidate_authority=_candidate_authority(
+                support=_support(quoted_span="not in evidence")
+            )
+        )
+        result = v.validate_candidate_claim(candidate, _ctx())
+        self.assertFalse(result.ok)
+        self.assertIn("verbatim", result.diagnostics[0])
+
+    def test_support_sections_must_resolve(self):
+        candidate = _claim(
+            candidate_authority=_candidate_authority(
+                support=_support(status_section="nowhere.md")
+            )
+        )
+        result = v.validate_candidate_claim(candidate, _ctx())
+        self.assertFalse(result.ok)
 
     def test_missing_authority_unresolved_with_requirement(self):
         result = v.validate_candidate_claim(_claim(), _ctx())
@@ -191,7 +234,7 @@ class CandidateValidationTest(unittest.TestCase):
 
 class MaterializeTest(unittest.TestCase):
     def test_ids_are_deterministic(self):
-        candidate = _claim(candidate_authority=_accepted_binding())
+        candidate = _claim(candidate_authority=_candidate_authority())
         result = v.validate_candidate_claim(candidate, _ctx())
         first = v.materialize_claim(candidate, result, _state())
         second = v.materialize_claim(candidate, result, _state())
@@ -208,12 +251,12 @@ class MaterializeTest(unittest.TestCase):
 
 
 class ConflictDetectionTest(unittest.TestCase):
-    def _established(self, cid, summary):
+    def _established(self, cid, kind, value):
         return m.SemanticClaim(
             claim_id=m.ClaimId(cid),
             subject=_sid(),
-            kind=m.ClaimKind.PURPOSE,
-            value=m.PurposeValue(summary, ()),
+            kind=kind,
+            value=value,
             evidence=(_ref(),),
             authority=_accepted_binding(),
             trust=m.TrustState.ESTABLISHED,
@@ -221,18 +264,50 @@ class ConflictDetectionTest(unittest.TestCase):
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
         )
 
+    def _purpose(self, cid, summary):
+        return self._established(
+            cid, m.ClaimKind.PURPOSE, m.PurposeValue(summary, ())
+        )
+
+    def _verification(self, cid, currency):
+        return self._established(
+            cid,
+            m.ClaimKind.VERIFICATION,
+            m.VerificationValue(
+                _sid(), m.VerificationKind.TEST, currency
+            ),
+        )
+
     def test_equal_values_no_conflict(self):
-        pair = (self._established("c-1", "same"), self._established("c-2", "same"))
+        pair = (
+            self._purpose("c-1", "same"), self._purpose("c-2", "same")
+        )
         self.assertEqual(v.find_conflicts(pair, ()), ())
 
-    def test_unequal_values_conflict(self):
-        pair = (self._established("c-1", "does X"), self._established("c-2", "does Y"))
+    def test_structured_difference_conflicts(self):
+        pair = (
+            self._verification("c-1", m.VerificationCurrency.CURRENT_PASS),
+            self._verification("c-2", m.VerificationCurrency.CURRENT_FAIL),
+        )
         conflicts = v.find_conflicts(pair, ())
         self.assertEqual(len(conflicts), 1)
         self.assertIsNone(conflicts[0].declared_precedence)
 
+    def test_free_text_difference_is_not_a_core_conflict(self):
+        # Different statements are not necessarily conflicting
+        # statements (§6.4): free-text differences need an agent
+        # proposal or explicit supersession.
+        pair = (
+            self._purpose("c-1", "does X"),
+            self._purpose("c-2", "does Y"),
+        )
+        self.assertEqual(v.find_conflicts(pair, ()), ())
+
     def test_accepted_supersedes_resolves(self):
-        pair = (self._established("c-1", "does X"), self._established("c-2", "does Y"))
+        pair = (
+            self._verification("c-1", m.VerificationCurrency.CURRENT_PASS),
+            self._verification("c-2", m.VerificationCurrency.CURRENT_FAIL),
+        )
         sup = m.SemanticRelationship(
             relationship_id=m.RelationshipId("r-sup"),
             source=_sid("src/b.py"),
@@ -246,6 +321,56 @@ class ConflictDetectionTest(unittest.TestCase):
         )
         # Different subject pair: no resolution effect here.
         self.assertEqual(len(v.find_conflicts(pair, (sup,))), 1)
+
+    def test_agent_proposed_conflict_validates(self):
+        candidate = m.CandidateSemanticConflict(
+            left_key="k1",
+            right_key="k2",
+            basis=m.SemanticBasis(
+                m.DerivationKind.SEMANTIC_INTERPRETATION,
+                summary="contradictory responsibilities",
+            ),
+        )
+        result = v.validate_candidate_conflict(
+            candidate, frozenset({"k1", "k2"}), _ctx()
+        )
+        self.assertTrue(result.ok)
+        dangling = m.CandidateSemanticConflict(
+            left_key="k1",
+            right_key="k9",
+            basis=m.SemanticBasis(
+                m.DerivationKind.SEMANTIC_INTERPRETATION,
+                summary="x",
+            ),
+        )
+        bad = v.validate_candidate_conflict(
+            dangling, frozenset({"k1", "k2"}), _ctx()
+        )
+        self.assertFalse(bad.ok)
+
+    def test_subject_proposal_validates(self):
+        good = m.CandidateSubject(
+            provisional_locator="docs/cap-billing.md",
+            kind=m.SubjectKind.CAPABILITY,
+            display_name="Billing",
+            evidence=(_ref(),),
+            basis=m.SemanticBasis(
+                m.DerivationKind.SEMANTIC_INTERPRETATION,
+                "test proposal restating cited evidence",
+            ),
+        )
+        self.assertTrue(
+            v.validate_candidate_subject(good, _ctx()).ok
+        )
+        bad = m.CandidateSubject(
+            provisional_locator="",
+            kind=m.SubjectKind.CAPABILITY,
+            display_name="Billing",
+            evidence=(_ref(),),
+        )
+        self.assertFalse(
+            v.validate_candidate_subject(bad, _ctx()).ok
+        )
 
 
 class FreshnessClassificationTest(unittest.TestCase):
@@ -263,22 +388,50 @@ class FreshnessClassificationTest(unittest.TestCase):
 
     def test_classify_all_only_updates_non_current(self):
         dep_current = m.EvidenceDependency(
-            m.ClaimId("c-1"), _ref("ev-a", "a.py"), "fp-a"
+            m.ClaimRef(id=m.ClaimId("c-1")), _ref("ev-a", "a.py"), "fp-a"
         )
         dep_stale = m.EvidenceDependency(
-            m.ClaimId("c-2"), _ref("ev-b", "b.py"), "fp-old"
+            m.ClaimRef(id=m.ClaimId("c-2")), _ref("ev-b", "b.py"), "fp-old"
         )
         dep_gone = m.EvidenceDependency(
-            m.RelationshipId("r-1"), _ref("ev-c", "c.py"), "fp-c"
+            m.RelationshipRef(id=m.RelationshipId("r-1")),
+            _ref("ev-c", "c.py"), "fp-c",
         )
         updates = fresh.classify_all(
             (dep_current, dep_stale, dep_gone),
             {"ev-a": "fp-a", "ev-b": "fp-new"},
         )
         self.assertEqual(len(updates), 2)
-        self.assertEqual(updates[0].semantic_id, m.ClaimId("c-2"))
+        self.assertEqual(
+            updates[0].semantic_id, m.ClaimRef(id=m.ClaimId("c-2"))
+        )
         self.assertIs(updates[0].freshness.state, m.FreshnessState.STALE)
         self.assertIs(updates[1].freshness.state, m.FreshnessState.UNVERIFIABLE)
+
+    def test_classify_coverage(self):
+        recorded = m.CoverageDependency(
+            scope_subjects=(_sid(),),
+            inventory_fingerprint="inv-1",
+            seed_fingerprints=(
+                m.SeedFingerprint(
+                    m.EvidenceId("ev-a"), "a.py", "fp-a"
+                ),
+            ),
+        )
+        current = fresh.classify_coverage(
+            recorded, "inv-1", {"ev-a": "fp-a"}
+        )
+        self.assertIs(current.state, m.FreshnessState.CURRENT)
+        stale = fresh.classify_coverage(
+            recorded, "inv-2", {"ev-a": "fp-a"}
+        )
+        self.assertIs(stale.state, m.FreshnessState.STALE)
+        unverifiable = fresh.classify_coverage(
+            recorded, "inv-1", {}
+        )
+        self.assertIs(
+            unverifiable.state, m.FreshnessState.UNVERIFIABLE
+        )
 
 
 class AnswerHelpersTest(unittest.TestCase):

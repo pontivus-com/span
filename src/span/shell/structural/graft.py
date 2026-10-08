@@ -30,6 +30,7 @@ import subprocess as _subprocess
 
 from span.core import model as m
 from span.ports.structural import StructuralDirection
+from span.shell import paging as _paging
 from span.shell.structural.memory import (
     evidence_kind_for_path,
     fingerprint_content,
@@ -389,6 +390,7 @@ class GraftStructuralSource:
         repository_id: str,
         subject: m.SubjectId,
         bounds: m.QueryBounds,
+        page_token: str | None = None,
     ) -> m.StructuralLocationPage:
         self._check_repository(repository_id)
         node = self._nodes.get(subject.canonical_locator)
@@ -400,18 +402,13 @@ class GraftStructuralSource:
                     location=self._evidence_ref(subject.canonical_locator),
                 ),
             )
-        kept = items[: bounds.max_results]
+        kept, bound_info = _paging.paginate(
+            items, bounds.max_results, "locations", page_token
+        )
         return m.StructuralLocationPage(
-            items=kept,
+            items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
-            bound_info=m.BoundInfo(
-                requested_max_results=bounds.max_results,
-                requested_max_depth=0,
-                returned_results=len(kept),
-                truncated=len(kept) < len(items),
-                truncated_category="locations" if len(kept) < len(items) else None,
-                continuation_token=None,
-            ),
+            bound_info=bound_info,
             unsupported=False,
         )
 
@@ -422,6 +419,7 @@ class GraftStructuralSource:
         edge_kinds: tuple[m.StructuralEdgeKind, ...],
         direction: StructuralDirection,
         bounds: m.QueryBounds,
+        page_token: str | None = None,
     ) -> m.StructuralEdgePage:
         self._check_repository(repository_id)
         locator = subject.canonical_locator
@@ -448,18 +446,13 @@ class GraftStructuralSource:
                 e.target.canonical_locator,
             )
         )
-        kept = tuple(found[: bounds.max_results])
+        kept, bound_info = _paging.paginate(
+            tuple(found), bounds.max_results, "edges", page_token
+        )
         return m.StructuralEdgePage(
-            items=kept,
+            items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
-            bound_info=m.BoundInfo(
-                requested_max_results=bounds.max_results,
-                requested_max_depth=0,
-                returned_results=len(kept),
-                truncated=len(kept) < len(found),
-                truncated_category="edges" if len(kept) < len(found) else None,
-                continuation_token=None,
-            ),
+            bound_info=bound_info,
             unsupported=False,
         )
 
@@ -471,6 +464,7 @@ class GraftStructuralSource:
         direction: StructuralDirection,
         max_depth: int,
         bounds: m.QueryBounds,
+        page_token: str | None = None,
     ) -> m.StructuralReachPage:
         self._check_repository(repository_id)
         limit = min(max_depth, bounds.max_depth)
@@ -517,18 +511,13 @@ class GraftStructuralSource:
             frontier = nxt
             if not frontier:
                 break
-        kept = tuple(nodes[: bounds.max_results])
-        truncated = len(kept) < len(nodes)
+        kept, bound_info = _paging.paginate(
+            tuple(nodes), bounds.max_results, "reach", page_token,
+            requested_max_depth=limit,
+        )
         return m.StructuralReachPage(
-            items=kept,
+            items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
-            bound_info=m.BoundInfo(
-                requested_max_results=bounds.max_results,
-                requested_max_depth=limit,
-                returned_results=len(kept),
-                truncated=truncated,
-                truncated_category="reach" if truncated else None,
-                continuation_token=None,
-            ),
+            bound_info=bound_info,
             unsupported=False,
         )

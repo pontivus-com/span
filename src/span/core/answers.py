@@ -36,7 +36,7 @@ def requirements_for_claim(claim: m.SemanticClaim) -> tuple[m.ResolutionRequirem
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.MISSING_AUTHORITY,
-                subject_or_claim=claim.claim_id,
+                subject_or_claim=m.ClaimRef(id=claim.claim_id),
                 description=(
                     f"no authority binding established for "
                     f"{claim.kind.value} claim {claim.claim_id.value}"
@@ -48,7 +48,7 @@ def requirements_for_claim(claim: m.SemanticClaim) -> tuple[m.ResolutionRequirem
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.STALE_EVIDENCE,
-                subject_or_claim=claim.claim_id,
+                subject_or_claim=m.ClaimRef(id=claim.claim_id),
                 description=(
                     f"evidence changed since claim {claim.claim_id.value} "
                     f"was established; explicit refresh required"
@@ -60,7 +60,7 @@ def requirements_for_claim(claim: m.SemanticClaim) -> tuple[m.ResolutionRequirem
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
-                subject_or_claim=claim.claim_id,
+                subject_or_claim=m.ClaimRef(id=claim.claim_id),
                 description=(
                     f"currency of claim {claim.claim_id.value} cannot be "
                     f"established from current evidence"
@@ -88,7 +88,7 @@ def requirements_for_relationship(
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.MISSING_AUTHORITY,
-                subject_or_claim=rel.relationship_id,
+                subject_or_claim=m.RelationshipRef(id=rel.relationship_id),
                 description=(
                     f"no authority binding established for "
                     f"{rel.kind.value} relationship "
@@ -101,7 +101,7 @@ def requirements_for_relationship(
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.STALE_EVIDENCE,
-                subject_or_claim=rel.relationship_id,
+                subject_or_claim=m.RelationshipRef(id=rel.relationship_id),
                 description=(
                     f"evidence changed since relationship "
                     f"{rel.relationship_id.value} was established; "
@@ -114,7 +114,7 @@ def requirements_for_relationship(
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
-                subject_or_claim=rel.relationship_id,
+                subject_or_claim=m.RelationshipRef(id=rel.relationship_id),
                 description=(
                     f"currency of relationship {rel.relationship_id.value} "
                     f"cannot be established from current evidence"

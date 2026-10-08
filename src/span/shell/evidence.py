@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime as _datetime
 
 from span.core import model as m
+from span.shell import paging as _paging
 from span.shell.structural.memory import fingerprint_content
 
 __all__ = ["FixtureEvidenceSource"]
@@ -46,6 +47,7 @@ class FixtureEvidenceSource:
         repository_id: str,
         scope: m.EvidenceScope,
         bounds: m.QueryBounds,
+        page_token: str | None = None,
     ) -> m.EvidenceInventoryPage:
         self._check_repository(repository_id)
         if scope.paths:
@@ -63,12 +65,14 @@ class FixtureEvidenceSource:
             )
             for p in paths
         )
-        kept = items[: bounds.max_evidence_units]
+        kept, bound_info = _paging.paginate(
+            items, bounds.max_evidence_units, "inventory", page_token
+        )
         # NOTE: the repository state for inventory pages is operational
         # metadata supplied by the caller context in Phase 1 flows; the
         # fixture source reports a stable fingerprint-only baseline here.
         return m.EvidenceInventoryPage(
-            items=kept,
+            items=tuple(kept),  # type: ignore[arg-type]
             repository_state=m.RepositoryState(
                 repository_id=self._repository_id,
                 revision_id="fixture",
@@ -76,14 +80,7 @@ class FixtureEvidenceSource:
                 state_fingerprint="fixture",
                 observed_at=self._now(),
             ),
-            bound_info=m.BoundInfo(
-                requested_max_results=bounds.max_evidence_units,
-                requested_max_depth=0,
-                returned_results=len(kept),
-                truncated=len(kept) < len(items),
-                truncated_category="inventory" if len(kept) < len(items) else None,
-                continuation_token=None,
-            ),
+            bound_info=bound_info,
         )
 
     def select_evidence(

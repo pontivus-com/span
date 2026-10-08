@@ -29,8 +29,10 @@ from span.ports.interpretation import (
 from span.service_operations import (
     SemanticAuthorityRequest,
     SemanticExplainRequest,
+    SemanticInitializeRepositoryRequest,
     authority,
     explain,
+    initialize_repository,
     submit_interpretation,
 )
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
@@ -99,11 +101,25 @@ def _ref(path):
     )
 
 
+_QUOTES = {
+    "README.md": "Processes payments",
+    "OWNERSHIP.md": "Team payments owns pay-svc",
+    "src/payments.py": "class Handler",
+}
+
+
 def _accepted(path, kind):
-    return m.AuthorityBinding(
-        evidence_ref=_ref(path),
-        authority_kind=kind,
-        status=m.AuthorityStatus.ACCEPTED,
+    return m.CandidateAuthority(
+        binding=m.AuthorityBinding(
+            evidence_ref=_ref(path),
+            authority_kind=kind,
+            status=m.AuthorityStatus.ACCEPTED,
+        ),
+        support=m.AuthoritySupport(
+            quoted_span=_QUOTES[path],
+            status_section=path,
+            applicability_section=None,
+        ),
     )
 
 
@@ -162,10 +178,17 @@ def _payments_candidates():
                     "refund path",
                 ),
                 evidence=(_ref("README.md"),),
-                candidate_authority=m.AuthorityBinding(
-                    evidence_ref=_ref("README.md"),
-                    authority_kind=m.AuthorityKind.REPOSITORY_RULE,
-                    status=m.AuthorityStatus.DRAFT,
+                candidate_authority=m.CandidateAuthority(
+                    binding=m.AuthorityBinding(
+                        evidence_ref=_ref("README.md"),
+                        authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+                        status=m.AuthorityStatus.DRAFT,
+                    ),
+                    support=m.AuthoritySupport(
+                        quoted_span="refunds never exceed",
+                        status_section="README.md",
+                        applicability_section=None,
+                    ),
                 ),
                 basis=m.SemanticBasis(interp, "README invariant section"),
             ),
@@ -194,6 +217,17 @@ def _harness(files=None):
     )
     evidence = FixtureEvidenceSource(REPO, dict(files))
     store = SqliteSemanticStore(":memory:")
+    initialize_repository(
+        SemanticInitializeRepositoryRequest(
+            repository_locator="fixture",
+            structural_provider_config="memory:test",
+            authority_seeds=(),
+        ),
+        repository_id=REPO,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+    )
     agent = FixtureAgent({"src/payments.py": _payments_candidates()})
     return structural, evidence, store, agent
 

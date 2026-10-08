@@ -52,6 +52,7 @@ class StructuralSource(_typing.Protocol):
         repository_id: str,
         subject: SubjectId,
         bounds: QueryBounds,
+        page_token: str | None = None,
     ) -> StructuralLocationPage:
         """Implementation locations for one subject."""
         ...
@@ -63,6 +64,7 @@ class StructuralSource(_typing.Protocol):
         edge_kinds: tuple[StructuralEdgeKind, ...],
         direction: StructuralDirection,
         bounds: QueryBounds,
+        page_token: str | None = None,
     ) -> StructuralEdgePage:
         """Structural edges for one subject in the given direction."""
         ...
@@ -75,6 +77,7 @@ class StructuralSource(_typing.Protocol):
         direction: StructuralDirection,
         max_depth: int,
         bounds: QueryBounds,
+        page_token: str | None = None,
     ) -> StructuralReachPage:
         """Bounded structural reach expansion (no semantic judgment)."""
         ...

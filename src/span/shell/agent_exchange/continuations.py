@@ -3,8 +3,8 @@
 Ephemeral, single-use, TTL-bounded exchange state. Continuations are
 never persisted semantic state, never authoritative, and abandoned on
 expiry or use. Lost continuations are recovered by re-issuing the
-original operation, which is idempotent (deterministic content-hash
-identities make re-indexing safe).
+original operation, which is idempotent (deterministic content-derived
+identifier values make re-indexing safe, plan §4.7).
 """
 
 from __future__ import annotations
@@ -47,6 +47,10 @@ class SuspendedOperation:
     suspended: tuple[str, ...] = ()
     change_kind: str | None = None
     change_description: str | None = None
+    affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
+    operation_intent: str = "EXPLAIN"
+    question_slice: str = ""
+    declared_complete: bool = False
     trace_direction: str | None = None
     trace_filter: tuple[m.RelationshipKind, ...] = ()
     trace_filter_set: bool = False

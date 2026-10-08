@@ -1,4 +1,4 @@
-"""Span pure core validation (plan Phase 1.3).
+"""Span pure core validation (plan Phase 1.3, §6.3/§6.4 as amended in v0.6).
 
 Validates agent-submitted candidates against stated plan rules only:
 
@@ -6,10 +6,17 @@ Validates agent-submitted candidates against stated plan rules only:
 - mandatory evidence citation (plan §7.1);
 - cited evidence resolves (§6.3);
 - candidate endpoints/identities are run-bound (§4.2, §8.4 unit scope);
-- authority bindings require explicit support (§6.3 — no UNKNOWN-status
-  authority, no structural-derivation authority);
+- candidate keys are unique within the result (§4.11);
+- authority bindings require an explicit, mechanically checkable support
+  account: verbatim quote substring plus resolvable status/applicability
+  sections (§6.3 — no UNKNOWN-status authority, no structural-derivation
+  authority). The core verifies the account of support, never the truth
+  of the prose;
+- subject proposals carry resolvable evidence and well-formed locators;
+- conflict proposals link in-result keys and cite evidence;
 - trust derivation (ESTABLISHED / PARTIAL / UNRESOLVED);
-- conflict detection with SUPERSEDES resolution (I-08).
+- structured-only core conflict detection with SUPERSEDES resolution
+  (I-08, §6.4): free-text differences are never core conflicts.
 
 Semantic behavior for later phases (conflict precedence ranking beyond
 SUPERSEDES, refresh, impact derivation) is not decided here. No effects:
@@ -21,6 +28,7 @@ from __future__ import annotations
 import hashlib as _hashlib
 import json as _json
 from dataclasses import dataclass as _dataclass
+from dataclasses import field as _field
 
 from span.core import model as m
 
@@ -28,14 +36,35 @@ __all__ = [
     "ValidationContext",
     "CandidateValidation",
     "InterpretationUnitRejected",
+    "FREE_TEXT_FIELDS",
     "validate_candidate_claim",
     "validate_candidate_relationship",
+    "validate_candidate_subject",
+    "validate_candidate_conflict",
     "materialize_claim",
     "materialize_relationship",
     "find_conflicts",
     "deterministic_claim_id",
     "deterministic_relationship_id",
 ]
+
+
+#: §6.4: value fields whose differences never produce a core conflict.
+#: Every other field of every carrier is structured-comparable.
+FREE_TEXT_FIELDS: dict[type, frozenset[str]] = {
+    m.PurposeValue: frozenset({"summary"}),
+    m.CapabilityMembershipValue: frozenset({"membership_role"}),
+    m.ResponsibilityValue: frozenset({"responsibility", "scope"}),
+    m.OwnershipCustodyValue: frozenset({"scope"}),
+    m.RepresentationContractValue: frozenset(
+        {"representation_name", "serialization_or_shape_rule"}
+    ),
+    m.TransformationOwnershipValue: frozenset({"responsibility"}),
+    m.InvariantConstraintValue: frozenset({"statement", "applicability"}),
+    m.ConfigurationEnvironmentValue: frozenset({"concern", "applicability"}),
+    m.LifecycleStateValue: frozenset({"description", "retention_or_expiry"}),
+    m.VerificationValue: frozenset(),
+}
 
 
 @_dataclass(frozen=True)
@@ -47,6 +76,7 @@ class ValidationContext:
     known_evidence_ids: frozenset[str]
     known_subject_ids: tuple[m.SubjectId, ...]
     evidence_fingerprints: dict[str, str]
+    evidence_contents: dict[str, str] = _field(default_factory=dict)
 
 
 @_dataclass(frozen=True)
@@ -67,6 +97,18 @@ class InterpretationUnitRejected(Exception):
         self.diagnostics = diagnostics
 
 
+def _check_basis(
+    basis: m.SemanticBasis, owner: str
+) -> str | None:
+    # Plan §4.9: every material claim/relationship carries a bounded
+    # SemanticBasis whose summary restates the evidence/derivation
+    # relationship. An empty summary states no account and is a unit
+    # failure — the service never invents it downstream.
+    if not basis.summary:
+        return f"{owner}: semantic basis summary is empty"
+    return None
+
+
 def _check_evidence(
     evidence: tuple[m.EvidenceRef, ...], ctx: ValidationContext, owner: str
 ) -> str | None:
@@ -84,28 +126,72 @@ def _check_evidence(
 
 
 def _check_authority(
-    authority: m.AuthorityBinding | None,
+    authority: m.CandidateAuthority | None,
     evidence: tuple[m.EvidenceRef, ...],
     derivation: m.DerivationKind,
+    ctx: ValidationContext,
     owner: str,
 ) -> str | None:
     if authority is None:
         return None
+    binding = authority.binding
+    support = authority.support
     # §6.3: UNKNOWN status means status cannot be established — such a
     # binding has no explicit support and may not be created.
-    if authority.status is m.AuthorityStatus.UNKNOWN:
+    if binding.status is m.AuthorityStatus.UNKNOWN:
         return f"{owner}: authority status UNKNOWN has no explicit support"
     # §6.3: no structural signal promoted to authority.
     if derivation is m.DerivationKind.STRUCTURAL_OBSERVATION:
         return f"{owner}: structural derivation cannot carry authority"
     cited = {ref.evidence_id.value for ref in evidence}
-    if authority.evidence_ref.evidence_id.value not in cited:
+    if binding.evidence_ref.evidence_id.value not in cited:
         return f"{owner}: authority evidence is not among cited evidence"
+    # §6.3 (v0.6): the verbatim quote must occur in the cited unit.
+    if not support.quoted_span:
+        return f"{owner}: authority support quote is empty"
+    unit_content = ctx.evidence_contents.get(
+        binding.evidence_ref.evidence_id.value
+    )
+    if unit_content is None:
+        return (
+            f"{owner}: authority evidence content unavailable for "
+            f"support check"
+        )
+    if support.quoted_span not in unit_content:
+        return (
+            f"{owner}: authority support quote is not a verbatim "
+            f"substring of cited evidence"
+        )
+    # Status/applicability sections must resolve to cited evidence
+    # sections whenever the binding asserts them.
+    if binding.status is not m.AuthorityStatus.UNKNOWN:
+        if not support.status_section:
+            return f"{owner}: authority status has no locating section"
+        sections = {
+            (ref.section_or_span or ref.locator) for ref in evidence
+        }
+        if support.status_section not in sections:
+            return (
+                f"{owner}: authority status section does not resolve "
+                f"to cited evidence"
+            )
+    scope = binding.applicability
+    if scope.subject_scope or scope.description:
+        if not support.applicability_section:
+            return f"{owner}: authority applicability has no locating section"
+        sections = {
+            (ref.section_or_span or ref.locator) for ref in evidence
+        }
+        if support.applicability_section not in sections:
+            return (
+                f"{owner}: authority applicability section does not "
+                f"resolve to cited evidence"
+            )
     return None
 
 
 def _derive_trust(
-    authority: m.AuthorityBinding | None,
+    authority: m.CandidateAuthority | None,
     subject: m.SubjectId,
     kind_label: str,
 ) -> tuple[m.TrustState, tuple[m.ResolutionRequirement, ...]]:
@@ -127,7 +213,7 @@ def _derive_trust(
                 ),
             ),
         )
-    if authority.status is m.AuthorityStatus.ACCEPTED:
+    if authority.binding.status is m.AuthorityStatus.ACCEPTED:
         return m.TrustState.ESTABLISHED, ()
     return m.TrustState.PARTIAL, ()
 
@@ -153,10 +239,13 @@ def validate_candidate_claim(
     owner = f"claim {candidate.kind.value}"
     failure = _check_evidence(candidate.evidence, ctx, owner)
     if failure is None:
+        failure = _check_basis(candidate.basis, owner)
+    if failure is None:
         failure = _check_authority(
             candidate.candidate_authority,
             candidate.evidence,
             candidate.basis.derivation,
+            ctx,
             owner,
         )
     if failure is not None:
@@ -200,10 +289,13 @@ def validate_candidate_relationship(
     owner = f"relationship {candidate.kind.value}"
     failure = _check_evidence(candidate.evidence, ctx, owner)
     if failure is None:
+        failure = _check_basis(candidate.basis, owner)
+    if failure is None:
         failure = _check_authority(
             candidate.candidate_authority,
             candidate.evidence,
             candidate.basis.derivation,
+            ctx,
             owner,
         )
     if failure is not None:
@@ -221,6 +313,94 @@ def validate_candidate_relationship(
     return CandidateValidation(True, trust, requirements, ())
 
 
+def validate_candidate_subject(
+    candidate: m.CandidateSubject, ctx: ValidationContext
+) -> CandidateValidation:
+    """Validate one proposed semantic-only subject (plan §4.11).
+
+    Evidence-backed proposal; the structural provider never creates
+    subjects. Locator collisions against distinct stored identities are
+    resolved by the service as ambiguity, never overwrite — validation
+    here checks only shape and evidence.
+    """
+    if not candidate.provisional_locator:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=("subject provisional locator is empty",),
+        )
+    if candidate.kind is m.SubjectKind.OTHER and not candidate.declared_kind:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=("OTHER subject kind requires declared_kind",),
+        )
+    failure = _check_evidence(candidate.evidence, ctx, "subject proposal")
+    if failure is None:
+        failure = _check_basis(candidate.basis, "subject proposal")
+    if failure is not None:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=(failure,),
+        )
+    return CandidateValidation(True, m.TrustState.PARTIAL, (), ())
+
+
+def validate_candidate_conflict(
+    candidate: m.CandidateSemanticConflict,
+    keys_in_result: frozenset[str],
+    ctx: ValidationContext,
+) -> CandidateValidation:
+    """Validate one proposed free-text contradiction (plan §6.4)."""
+    if not candidate.left_key or not candidate.right_key:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=("conflict keys must be non-empty",),
+        )
+    if candidate.left_key == candidate.right_key:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=("conflict keys must name two candidates",),
+        )
+    if (
+        candidate.left_key not in keys_in_result
+        or candidate.right_key not in keys_in_result
+    ):
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=("conflict key does not resolve within the result",),
+        )
+    if candidate.candidate_precedence is not None:
+        precedence = candidate.candidate_precedence
+        if precedence.kind is m.PrecedenceKind.PRIORITY_RANK and (
+            not precedence.precedence_scheme or precedence.overrides
+        ):
+            return CandidateValidation(
+                ok=False,
+                trust=m.TrustState.UNRESOLVED,
+                requirements=(),
+                diagnostics=("conflict precedence shape invalid",),
+            )
+    if not candidate.basis.summary:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=("conflict basis summary is empty",),
+        )
+    return CandidateValidation(True, m.TrustState.PARTIAL, (), ())
+
+
 def _stable_id(prefix: str, payload: object) -> str:
     digest = _hashlib.sha256(
         _json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -233,7 +413,10 @@ def deterministic_claim_id(
 ) -> m.ClaimId:
     """Stable opaque id for identical semantic content (idempotent indexing)."""
     return m.ClaimId(
-        _stable_id("clm", [m.to_canonical(candidate), trust.value])
+        _stable_id(
+            "clm",
+            [candidate.candidate_key, m.to_canonical(candidate), trust.value],
+        )
     )
 
 
@@ -242,7 +425,10 @@ def deterministic_relationship_id(
 ) -> m.RelationshipId:
     """Stable opaque id for identical semantic content (idempotent indexing)."""
     return m.RelationshipId(
-        _stable_id("rel", [m.to_canonical(candidate), trust.value])
+        _stable_id(
+            "rel",
+            [candidate.candidate_key, m.to_canonical(candidate), trust.value],
+        )
     )
 
 
@@ -259,13 +445,18 @@ def materialize_claim(
     """
     if not validation.ok:
         raise ValueError("cannot materialize a failed candidate")
+    authority = (
+        candidate.candidate_authority.binding
+        if candidate.candidate_authority is not None
+        else None
+    )
     return m.SemanticClaim(
         claim_id=deterministic_claim_id(candidate, validation.trust),
         subject=candidate.subject,
         kind=candidate.kind,
         value=candidate.value,
         evidence=candidate.evidence,
-        authority=candidate.candidate_authority,
+        authority=authority,
         trust=validation.trust,
         freshness=m.Freshness(
             state=m.FreshnessState.CURRENT,
@@ -289,6 +480,11 @@ def materialize_relationship(
     """Build the canonical relationship from a validated candidate."""
     if not validation.ok:
         raise ValueError("cannot materialize a failed candidate")
+    authority = (
+        candidate.candidate_authority.binding
+        if candidate.candidate_authority is not None
+        else None
+    )
     return m.SemanticRelationship(
         relationship_id=deterministic_relationship_id(
             candidate, validation.trust
@@ -297,7 +493,7 @@ def materialize_relationship(
         kind=candidate.kind,
         target=candidate.target,
         evidence=candidate.evidence,
-        authority=candidate.candidate_authority,
+        authority=authority,
         trust=validation.trust,
         freshness=m.Freshness(
             state=m.FreshnessState.CURRENT,
@@ -313,17 +509,37 @@ def materialize_relationship(
     )
 
 
+def _structured_projection(value: m.TypedClaimValue) -> object:
+    """Canonical value with free-text fields removed (§6.4).
+
+    Differences confined to structured fields are core conflicts;
+    differences involving free-text fields are never core conflicts.
+    """
+    canonical = m.to_canonical(value)
+    if not isinstance(canonical, dict):
+        return canonical
+    free = FREE_TEXT_FIELDS.get(type(value), frozenset())
+    return {
+        key: item
+        for key, item in canonical.items()
+        if key not in free and key != "$type"
+    }
+
+
 def find_conflicts(
     claims: tuple[m.SemanticClaim, ...],
     relationships: tuple[m.SemanticRelationship, ...],
 ) -> tuple[m.SemanticConflict, ...]:
     """Detect conflicting current claims (pure, deterministic).
 
-    A conflict is two claims over the same subject and kind with unequal
-    values. A pair is resolved (excluded) only when a SUPERSEDES
-    relationship with accepted authority runs between their subjects —
-    the superseded side loses (plan I-08). Precedence-rank resolution
-    beyond SUPERSEDES belongs to a later phase.
+    A conflict is two claims over the same subject and kind whose
+    structured projections differ (§6.4). Identical canonical values are
+    the same assertion (dedupe). Free-text differences are never core
+    conflicts — those arrive only as validated agent-proposed conflicts
+    or explicit SUPERSEDES. A pair is resolved (excluded) only when a
+    SUPERSEDES relationship with accepted authority runs between their
+    subjects — the superseded side loses (plan I-08). Precedence-rank
+    resolution beyond SUPERSEDES belongs to a later phase.
     """
     by_key: dict[tuple[m.SubjectId, m.ClaimKind], list[m.SemanticClaim]] = {}
     for claim in claims:
@@ -346,6 +562,10 @@ def find_conflicts(
             for j in range(i + 1, len(group)):
                 left, right = group[i], group[j]
                 if left.value == right.value:
+                    continue
+                if _structured_projection(
+                    left.value
+                ) == _structured_projection(right.value):
                     continue
                 if right.subject in supersedes.get(left.subject, set()):
                     continue

@@ -107,15 +107,21 @@ __all__ = [
     "SemanticClaim",
     "SemanticRelationship",
     "SemanticConflict",
+    "RecordedConflict",
     # §4.8 readiness / hooks
     "RepositoryReadiness",
     "HookStatusNotice",
     # §4.9 basis / resolution / change
     "ResolutionKind",
     "ResolutionRequirement",
+    "ChangeKind",
+    "ProposedChange",
     "ChangeCondition",
     "ImpactEstablishment",
     "ImpactItem",
+    "FreshnessItem",
+    "AuthoritySupport",
+    "CandidateAuthority",
     # §4.10 answer
     "SemanticIntent",
     "ExplainContent",
@@ -145,12 +151,17 @@ __all__ = [
     "EvidenceSelection",
     "CandidateSemanticClaim",
     "CandidateSemanticRelationship",
+    "CandidateSubject",
+    "CandidateSemanticConflict",
     "SemanticInterpretationRequest",
     "SemanticInterpretationResult",
     "ClaimPage",
     "RelationshipPage",
     "EvidenceDependency",
     "FreshnessUpdate",
+    "SeedFingerprint",
+    "CoverageDependency",
+    "InterpretationCoverage",
     "CanonicalIndexBatch",
     "StoreWriteResult",
     "SchemaVersion",
@@ -678,7 +689,7 @@ class DerivationKind(_enum.Enum):
 class SemanticBasis:
     derivation: DerivationKind
     summary: str = ""
-    input_refs: tuple[ClaimId | RelationshipId | EvidenceRef, ...] = ()
+    input_refs: tuple[ClaimRef | RelationshipRef | EvidenceRef, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -725,6 +736,25 @@ class SemanticConflict:
     declared_precedence: DeclaredPrecedence | None = None
 
 
+@_dataclass(frozen=True)
+class RecordedConflict:
+    """Validated agent-proposed conflict, persisted (plan §6.4).
+
+    Free-text contradictions the core cannot derive are proposed by the
+    interpreting agent, validated (keys resolve, basis cites evidence),
+    and recorded here so query-time answers show both sides. Never
+    authority; resolved only by declared precedence or supersession.
+    """
+
+    subject: SubjectId
+    left: ClaimRef | RelationshipRef
+    right: ClaimRef | RelationshipRef
+    declared_precedence: DeclaredPrecedence | None = None
+    basis: SemanticBasis = _field(
+        default_factory=lambda: SemanticBasis(DerivationKind.SEMANTIC_INTERPRETATION)
+    )
+
+
 # ---------------------------------------------------------------------------
 # §4.8 Repository readiness and hook-safe lifecycle notices
 # ---------------------------------------------------------------------------
@@ -764,9 +794,32 @@ class ResolutionKind(_enum.Enum):
 @_dataclass(frozen=True)
 class ResolutionRequirement:
     kind: ResolutionKind
-    subject_or_claim: SubjectId | ClaimId | RelationshipId | None = None
+    subject_or_claim: SubjectId | ClaimRef | RelationshipRef | None = None
     description: str = ""
-    supporting_context: tuple[ClaimId | RelationshipId | EvidenceRef, ...] = ()
+    supporting_context: tuple[ClaimRef | RelationshipRef | EvidenceRef, ...] = ()
+
+
+class ChangeKind(_enum.Enum):
+    """Proposed-change vocabulary (plan §11.10; hosted here as canonical
+    vocabulary so both service requests and interpretation context share
+    one carrier)."""
+
+    CONTRACT = "CONTRACT"
+    BEHAVIOR = "BEHAVIOR"
+    REPRESENTATION = "REPRESENTATION"
+    OWNERSHIP = "OWNERSHIP"
+    CONFIGURATION = "CONFIGURATION"
+    LIFECYCLE = "LIFECYCLE"
+    OTHER = "OTHER"
+
+
+@_dataclass(frozen=True)
+class ProposedChange:
+    """Typed proposal input (plan §4.11/§11.5.1, I-38)."""
+
+    change_kind: ChangeKind
+    change_description: str | None = None
+    affected_assertions: tuple[ClaimRef | RelationshipRef, ...] = ()
 
 
 class ChangeCondition(_enum.Enum):
@@ -793,8 +846,33 @@ class ImpactItem:
     establishment: ImpactEstablishment
     basis: SemanticBasis | None = None
     structural_evidence: tuple[EvidenceRef, ...] = ()
-    relevant_claims: tuple[ClaimId, ...] = ()
-    relevant_relationships: tuple[RelationshipId, ...] = ()
+    relevant_claims: tuple[ClaimRef, ...] = ()
+    relevant_relationships: tuple[RelationshipRef, ...] = ()
+
+
+@_dataclass(frozen=True)
+class FreshnessItem:
+    """One per-item freshness record (plan §4.10, I-36)."""
+
+    item: ClaimRef | RelationshipRef
+    subject: SubjectId
+    freshness: Freshness
+    trust: TrustState
+
+
+@_dataclass(frozen=True)
+class AuthoritySupport:
+    """Agent-supplied account of authority support (plan §4.11/§6.3)."""
+
+    quoted_span: str = ""
+    status_section: str | None = None
+    applicability_section: str | None = None
+
+
+@_dataclass(frozen=True)
+class CandidateAuthority:
+    binding: AuthorityBinding
+    support: AuthoritySupport = _field(default_factory=AuthoritySupport)
 
 
 # ---------------------------------------------------------------------------
@@ -822,16 +900,19 @@ class TraceContent:
     relationships: tuple[SemanticRelationship, ...] = ()
     structural_edges: tuple[StructuralEdge, ...] = ()
     boundary_context: tuple[SubjectId, ...] = ()
-    lifecycle_context: tuple[ClaimId | RelationshipId, ...] = ()
+    lifecycle_context: tuple[ClaimRef | RelationshipRef, ...] = ()
+    claims: tuple[SemanticClaim, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
 
 
 @_dataclass(frozen=True)
 class ImpactContent:
-    target_context: tuple[ClaimId | RelationshipId, ...] = ()
+    target_context: tuple[ClaimRef | RelationshipRef, ...] = ()
     change_conditions: tuple[ChangeCondition, ...] = ()
     impacts: tuple[ImpactItem, ...] = ()
-    verification: tuple[ClaimId | RelationshipId, ...] = ()
+    verification: tuple[ClaimRef | RelationshipRef, ...] = ()
+    claims: tuple[SemanticClaim, ...] = ()
+    relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
     unresolved: tuple[ResolutionRequirement, ...] = ()
 
@@ -841,16 +922,21 @@ class AuthorityContent:
     governing_bindings: tuple[AuthorityBinding, ...] = ()
     supersession: tuple[RelationshipRef, ...] = ()
     precedence: tuple[DeclaredPrecedence, ...] = ()
+    claims: tuple[SemanticClaim, ...] = ()
+    relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
     unresolved: tuple[ResolutionRequirement, ...] = ()
 
 
 @_dataclass(frozen=True)
 class StatusContent:
-    freshness_items: tuple[ClaimRef | RelationshipRef, ...] = ()
+    readiness: RepositoryReadiness = RepositoryReadiness.READY
+    freshness_items: tuple[FreshnessItem, ...] = ()
     changed_dependencies: tuple[EvidenceDependency, ...] = ()
     verification_currency: tuple[VerificationValue, ...] = ()
     refresh_scope: EvidenceScope | None = None
+    claims: tuple[SemanticClaim, ...] = ()
+    relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
     unresolved: tuple[ResolutionRequirement, ...] = ()
 
@@ -1042,12 +1128,35 @@ class EvidenceSelection:
 
 
 @_dataclass(frozen=True)
-class CandidateSemanticClaim:
-    subject: SubjectId
-    kind: ClaimKind
-    value: TypedClaimValue
+class CandidateSubject:
+    """Agent-proposed semantic-only subject (plan §4.11)."""
+
+    provisional_locator: str = ""
+    kind: SubjectKind = SubjectKind.OTHER
+    display_name: str = ""
+    declared_kind: str | None = None
     evidence: tuple[EvidenceRef, ...] = ()
-    candidate_authority: AuthorityBinding | None = None
+    basis: SemanticBasis = _field(
+        default_factory=lambda: SemanticBasis(DerivationKind.SEMANTIC_INTERPRETATION)
+    )
+
+
+@_dataclass(frozen=True)
+class CandidateSemanticClaim:
+    candidate_key: str = ""
+    subject: SubjectId = _field(
+        default_factory=lambda: SubjectId(
+            repository_id="unset",
+            subject_kind=SubjectKind.OTHER,
+            canonical_locator="unset",
+        )
+    )
+    kind: ClaimKind = ClaimKind.PURPOSE
+    value: TypedClaimValue = _field(
+        default_factory=lambda: PurposeValue(summary="")
+    )
+    evidence: tuple[EvidenceRef, ...] = ()
+    candidate_authority: CandidateAuthority | None = None
     basis: SemanticBasis = _field(
         default_factory=lambda: SemanticBasis(DerivationKind.SEMANTIC_INTERPRETATION)
     )
@@ -1058,11 +1167,36 @@ class CandidateSemanticClaim:
 
 @_dataclass(frozen=True)
 class CandidateSemanticRelationship:
-    source: SubjectId
-    kind: RelationshipKind
-    target: SubjectId
+    candidate_key: str = ""
+    source: SubjectId = _field(
+        default_factory=lambda: SubjectId(
+            repository_id="unset",
+            subject_kind=SubjectKind.OTHER,
+            canonical_locator="unset",
+        )
+    )
+    kind: RelationshipKind = RelationshipKind.DEPENDS_ON
+    target: SubjectId = _field(
+        default_factory=lambda: SubjectId(
+            repository_id="unset",
+            subject_kind=SubjectKind.OTHER,
+            canonical_locator="unset",
+        )
+    )
     evidence: tuple[EvidenceRef, ...] = ()
-    candidate_authority: AuthorityBinding | None = None
+    candidate_authority: CandidateAuthority | None = None
+    basis: SemanticBasis = _field(
+        default_factory=lambda: SemanticBasis(DerivationKind.SEMANTIC_INTERPRETATION)
+    )
+
+
+@_dataclass(frozen=True)
+class CandidateSemanticConflict:
+    """Agent-proposed free-text contradiction (plan §4.11/§6.4)."""
+
+    left_key: str = ""
+    right_key: str = ""
+    candidate_precedence: DeclaredPrecedence | None = None
     basis: SemanticBasis = _field(
         default_factory=lambda: SemanticBasis(DerivationKind.SEMANTIC_INTERPRETATION)
     )
@@ -1077,7 +1211,12 @@ class SemanticInterpretationRequest:
     allowed_claim_kinds: tuple[ClaimKind, ...]
     allowed_relationship_kinds: tuple[RelationshipKind, ...]
     identity_bindings: tuple[SubjectId, ...]
-    bounds: QueryBounds
+    operation_intent: SemanticIntent = SemanticIntent.EXPLAIN
+    question_slice: str = ""
+    proposed_change: ProposedChange | None = None
+    bounds: QueryBounds = _field(
+        default_factory=lambda: QueryBounds(50, 2, 8, 24, 96_000, 64, 64)
+    )
 
     def __post_init__(self) -> None:
         _require_non_empty("repository_id", self.repository_id)
@@ -1089,6 +1228,8 @@ class SemanticInterpretationResult:
     relationships: tuple[CandidateSemanticRelationship, ...] = ()
     governing_source_refs: tuple[EvidenceRef, ...] = ()
     diagnostics: tuple[str, ...] = ()
+    candidate_subjects: tuple[CandidateSubject, ...] = ()
+    candidate_conflicts: tuple[CandidateSemanticConflict, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -1105,15 +1246,49 @@ class RelationshipPage:
 
 @_dataclass(frozen=True)
 class EvidenceDependency:
-    semantic_id: ClaimId | RelationshipId
+    semantic_id: ClaimRef | RelationshipRef
     evidence_ref: EvidenceRef
     observed_fingerprint: str
 
 
 @_dataclass(frozen=True)
 class FreshnessUpdate:
-    semantic_id: ClaimId | RelationshipId
+    semantic_id: ClaimRef | RelationshipRef
     freshness: Freshness
+
+
+@_dataclass(frozen=True)
+class SeedFingerprint:
+    evidence_id: EvidenceId
+    locator: str = ""
+    fingerprint: str = ""
+
+
+@_dataclass(frozen=True)
+class CoverageDependency:
+    """Discovery-scope record behind one materialized unit (plan §4.11/§8.5).
+
+    `inventory_fingerprint` covers inventory MEMBERSHIP (which sources
+    exist), not content: gained/lost sources invalidate discovery,
+    while known-source content changes stay per-item (MI-07).
+    """
+
+    scope_subjects: tuple[SubjectId, ...] = ()
+    inventory_fingerprint: str = ""
+    seed_fingerprints: tuple[SeedFingerprint, ...] = ()
+    observed_at: _datetime.datetime = _field(
+        default_factory=lambda: _datetime.datetime.now(_datetime.timezone.utc)
+    )
+
+
+@_dataclass(frozen=True)
+class InterpretationCoverage:
+    """Scope one batch claims to reconcile (plan §4.11, I-37)."""
+
+    subjects: tuple[SubjectId, ...] = ()
+    question_slice: str = ""
+    evidence_scope: EvidenceScope = _field(default_factory=EvidenceScope)
+    declared_complete: bool = False
 
 
 @_dataclass(frozen=True)
@@ -1122,6 +1297,13 @@ class CanonicalIndexBatch:
     claims: tuple[SemanticClaim, ...] = ()
     relationships: tuple[SemanticRelationship, ...] = ()
     evidence_dependencies: tuple[EvidenceDependency, ...] = ()
+    coverage_dependencies: tuple[CoverageDependency, ...] = ()
+    coverage: InterpretationCoverage = _field(
+        default_factory=InterpretationCoverage
+    )
+    retires_claims: tuple[ClaimRef, ...] = ()
+    retires_relationships: tuple[RelationshipRef, ...] = ()
+    conflicts: tuple[RecordedConflict, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -1297,6 +1479,12 @@ def _decode_dataclass(cls: type, data: dict) -> object:
         hints = _typing.get_type_hints(cls)
     except Exception as exc:
         raise CanonicalDecodeError(f"cannot resolve {cls.__name__}: {exc}") from exc
+    names = {f.name for f in _fields(cls)}
+    unknown = sorted(key for key in data if key != "$type" and key not in names)
+    if unknown:
+        raise CanonicalDecodeError(
+            f"unknown fields for {cls.__name__}: {unknown}"
+        )
     kwargs: dict[str, object] = {}
     for f in _fields(cls):
         if f.name not in data:
@@ -1307,7 +1495,6 @@ def _decode_dataclass(cls: type, data: dict) -> object:
                     f"missing field {f.name!r} for {cls.__name__}"
                 )
             continue
-        kwargs[f.name] = _decode_value(hints[f.name], data[f.name])
         kwargs[f.name] = _decode_value(hints[f.name], data[f.name])
     try:
         return cls(**kwargs)  # type: ignore[arg-type]

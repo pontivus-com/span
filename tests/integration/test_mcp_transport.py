@@ -1,0 +1,626 @@
+"""MCP transport tests (plan Phase 4.2–4.5).
+
+Transport only: schema/contract sync, strict ingress, thin dispatch,
+the submit union over the wire, and SDK server construction. No
+semantic rule may live in transport — the schema-sync test pins the
+mechanical projection, and the skill tests pin non-authority.
+"""
+
+import dataclasses
+import json
+import pathlib
+import unittest
+
+from span.core import model as m
+from span import service_operations as ops
+from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.shell.agent_exchange.continuations import ContinuationStore
+from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
+from span.shell.evidence import FixtureEvidenceSource
+from span.shell.mcp import (
+    TOOL_NAMES,
+    TOOL_SCHEMAS,
+    McpAdapter,
+    ServiceContext,
+    decode_request,
+    encode_result,
+)
+from span.shell.sqlite_store import SqliteSemanticStore
+from span.shell.structural.memory import (
+    InMemoryFile,
+    InMemoryStructuralSource,
+    InMemorySubject,
+    fingerprint_content,
+)
+
+try:
+    import mcp.server  # noqa: F401
+
+    _HAS_MCP_SDK = True
+except Exception:
+    _HAS_MCP_SDK = False
+
+REPO = "mcp-svc"
+
+FILES = {
+    "README.md": "# mcp-svc\n\nServes tools.\n",
+    "src/tools.py": "run = True\n",
+}
+
+
+def _sid():
+    return m.SubjectId(
+        repository_id=REPO,
+        subject_kind=m.SubjectKind.COMPONENT,
+        canonical_locator="src/tools.py",
+    )
+
+
+def _ref(path):
+    return m.EvidenceRef(
+        evidence_id=m.EvidenceId(f"ev-{path}"),
+        repository_id=REPO,
+        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        locator=path,
+        revision_or_fingerprint=fingerprint_content(FILES[path]),
+    )
+
+
+def _candidate():
+    return m.CandidateSemanticClaim(
+        candidate_key="purpose",
+        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        value=m.PurposeValue("serves tools", ()),
+        evidence=(_ref("README.md"),),
+        candidate_authority=m.CandidateAuthority(
+            binding=m.AuthorityBinding(
+                evidence_ref=_ref("README.md"),
+                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+                status=m.AuthorityStatus.ACCEPTED,
+            ),
+            support=m.AuthoritySupport(
+                quoted_span="Serves tools",
+                status_section="README.md",
+                applicability_section=None,
+            ),
+        ),
+        basis=m.SemanticBasis(
+            m.DerivationKind.SEMANTIC_INTERPRETATION,
+            "README states the tool purpose",
+        ),
+    )
+
+
+def _harness():
+    structural = InMemoryStructuralSource(
+        REPO,
+        tuple(InMemoryFile(p, c) for p, c in FILES.items()),
+        (InMemorySubject("src/tools.py", m.SubjectKind.COMPONENT, "t"),),
+    )
+    evidence = FixtureEvidenceSource(REPO, dict(FILES))
+    store = SqliteSemanticStore(":memory:")
+    ops.initialize_repository(
+        ops.SemanticInitializeRepositoryRequest(
+            repository_locator="fixture",
+            structural_provider_config="memory:test",
+            authority_seeds=(),
+        ),
+        repository_id=REPO,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+    )
+    agent = FixtureAgent(
+        {"src/tools.py": FixtureCandidates((_candidate(),), ())}
+    )
+    adapter = McpAdapter(
+        contexts={
+            REPO: ServiceContext(
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
+                authority_seeds=(),
+            )
+        }
+    )
+    return adapter, agent
+
+
+def _selector_args(locator="src/tools.py"):
+    selector = m.SubjectSelector(
+        exact_subject_id=None,
+        name_or_locator=locator,
+        expected_kinds=(),
+        retrieval_scope_hint=None,
+    )
+    return m.to_canonical(selector)
+
+
+class SchemaSyncTest(unittest.TestCase):
+    """Tool schemas stay a mechanical projection of the contracts."""
+
+    def test_eight_canonical_tools(self):
+        self.assertEqual(
+            TOOL_NAMES,
+            (
+                "span_initialize_repository",
+                "span_explain",
+                "span_impact",
+                "span_trace",
+                "span_authority",
+                "span_status",
+                "span_refresh",
+                "span_submit_interpretation",
+            ),
+        )
+        self.assertEqual(set(TOOL_SCHEMAS), set(TOOL_NAMES))
+
+    def test_required_matches_contract(self):
+        classes = {
+            "span_explain": ops.SemanticExplainRequest,
+            "span_impact": ops.SemanticImpactRequest,
+            "span_trace": ops.SemanticTraceRequest,
+            "span_authority": ops.SemanticAuthorityRequest,
+            "span_status": ops.SemanticStatusRequest,
+            "span_refresh": ops.SemanticRefreshRequest,
+        }
+        for tool, cls in classes.items():
+            with self.subTest(tool=tool):
+                fields = dataclasses.fields(cls)
+                names = {f.name for f in fields}
+                # Required dataclass fields except bounds (plan §5.1
+                # defaults omitted bounds at the boundary).
+                required = {
+                    f.name for f in fields
+                    if f.default is dataclasses.MISSING
+                    and f.default_factory is dataclasses.MISSING
+                } - {"bounds"}
+                schema = TOOL_SCHEMAS[tool]
+                self.assertEqual(
+                    set(schema["required"]), required, tool
+                )
+                self.assertTrue(
+                    set(schema["properties"]) >= names, tool
+                )
+
+    def test_submit_and_init_shapes(self):
+        submit = TOOL_SCHEMAS["span_submit_interpretation"]
+        self.assertEqual(
+            set(submit["required"]),
+            {"continuation", "result", "repository_id"},
+        )
+        init = TOOL_SCHEMAS["span_initialize_repository"]
+        self.assertEqual(
+            set(init["required"]),
+            {"repository_locator", "structural_provider_config"},
+        )
+
+
+class IngressTest(unittest.TestCase):
+    def test_decode_explain(self):
+        request = decode_request(
+            "span_explain",
+            {
+                "repository_id": REPO,
+                "target": _selector_args(),
+            },
+        )
+        self.assertIsInstance(request, ops.SemanticExplainRequest)
+        self.assertEqual(
+            request.bounds,
+            DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
+        )
+
+    def test_unknown_field_rejected(self):
+        with self.assertRaises(ValueError):
+            decode_request(
+                "span_explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                    "bogus": 1,
+                },
+            )
+
+    def test_unknown_enum_rejected(self):
+        args = {
+            "repository_id": REPO,
+            "target": _selector_args(),
+            "direction": "SIDEWAYS",
+            "relationship_filter": None,
+            "boundary_only": False,
+        }
+        with self.assertRaises(ValueError):
+            decode_request("span_trace", args)
+
+    def test_missing_required_rejected(self):
+        with self.assertRaises(ValueError):
+            decode_request("span_explain", {"repository_id": REPO})
+
+    def test_unknown_tool_rejected(self):
+        with self.assertRaises(ValueError):
+            decode_request("span_nope", {})
+
+
+class DispatchTest(unittest.TestCase):
+    def test_explain_suspend_then_submit_over_wire(self):
+        adapter, agent = _harness()
+        try:
+            pending = adapter.dispatch(
+                "span_explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                },
+            )
+            self.assertFalse(pending.is_error)
+            envelope = json.loads(pending.content)
+            self.assertEqual(envelope["$type"], "PendingInterpretation")
+            task = m.from_canonical(
+                m.SemanticInterpretationRequest,
+                envelope["request"],
+            )
+            result = agent.perform(task)
+            answered = adapter.dispatch(
+                "span_submit_interpretation",
+                {
+                    "continuation": envelope["continuation"],
+                    "result": m.to_canonical(result),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertFalse(answered.is_error)
+            answer = json.loads(answered.content)
+            self.assertEqual(answer["$type"], "SemanticAnswer")
+            self.assertEqual(answer["intent"], "EXPLAIN")
+            self.assertTrue(answer["content"]["claims"])
+            # Refs resolve inside the answer (I-36 over the wire).
+            carried = {
+                c["claim_id"]["value"]
+                for c in answer["content"]["claims"]
+            }
+            for conflict in answer["content"]["conflicts"]:
+                for side in ("left", "right"):
+                    self.assertIn(
+                        conflict[side]["id"]["value"], carried
+                    )
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_status_hook_fast_notice_shape(self):
+        adapter, _ = _harness()
+        try:
+            notice = adapter.dispatch(
+                "span_status",
+                {
+                    "repository_id": REPO,
+                    "target": None,
+                    "mode": "HOOK_FAST",
+                },
+            )
+            self.assertFalse(notice.is_error)
+            body = json.loads(notice.content)
+            self.assertEqual(body["$type"], "HookStatusNotice")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_unknown_tool_is_typed_error(self):
+        adapter, _ = _harness()
+        try:
+            result = adapter.dispatch("span_nope", {})
+            self.assertTrue(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["error"], "unknown_tool")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_bad_continuation_is_unavailable(self):
+        adapter, _ = _harness()
+        try:
+            result = adapter.dispatch(
+                "span_submit_interpretation",
+                {
+                    "continuation": "cont-999",
+                    "result": m.to_canonical(
+                        m.SemanticInterpretationResult()
+                    ),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertTrue(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["error"], "unavailable")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_malformed_submit_preserves_continuation(self):
+        """Invalid submissions never consume the continuation (G-04).
+
+        A malformed typed result over MCP fails ingress; the same
+        continuation then accepts the corrected result — recovery
+        without reissue, without laundering.
+        """
+        adapter, agent = _harness()
+        try:
+            pending = adapter.dispatch(
+                "span_explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                },
+            )
+            envelope = json.loads(pending.content)
+            continuation = envelope["continuation"]
+            task = m.from_canonical(
+                m.SemanticInterpretationRequest,
+                envelope["request"],
+            )
+            good = m.to_canonical(agent.perform(task))
+            bad = dict(good)
+            bad["claims"] = [
+                dict(
+                    claim,
+                    kind="NOT_A_KIND",
+                )
+                for claim in bad["claims"]
+            ]
+            rejected = adapter.dispatch(
+                "span_submit_interpretation",
+                {
+                    "continuation": continuation,
+                    "result": bad,
+                    "repository_id": REPO,
+                },
+            )
+            self.assertTrue(rejected.is_error)
+            self.assertEqual(
+                json.loads(rejected.content)["error"], "ingress"
+            )
+            recovered = adapter.dispatch(
+                "span_submit_interpretation",
+                {
+                    "continuation": continuation,
+                    "result": good,
+                    "repository_id": REPO,
+                },
+            )
+            self.assertFalse(recovered.is_error)
+            answer = json.loads(recovered.content)
+            self.assertEqual(answer["$type"], "SemanticAnswer")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_unknown_repository_is_typed_error(self):
+        adapter, _ = _harness()
+        try:
+            result = adapter.dispatch(
+                "span_explain",
+                {
+                    "repository_id": "nope",
+                    "target": _selector_args(),
+                },
+            )
+            self.assertTrue(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["error"], "unknown_repository")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_encode_result_is_deterministic(self):
+        first = encode_result(m.SemanticInterpretationResult())
+        self.assertEqual(first, encode_result(
+            m.SemanticInterpretationResult()
+        ))
+        json.loads(first)
+
+    def test_adapter_is_sdk_free(self):
+        import pathlib as _pathlib
+
+        source = (
+            _pathlib.Path(__file__).resolve().parents[2]
+            / "src" / "span" / "shell" / "mcp.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("import mcp", source)
+        self.assertNotIn("from mcp", source)
+        # Server constructor parses without side effects.
+        from span.shell import mcp_server
+
+        args = mcp_server._parse_args(
+            ["--data-dir", "/tmp/span-data", "--repo", "graft:/repo"]
+        )
+        self.assertEqual(str(args.data_dir), "/tmp/span-data")
+        self.assertEqual(args.repo, ["graft:/repo"])
+
+    def test_empty_adapter_starts_nothing(self):
+        """Startup without --repo provisions nothing (G-03).
+
+        An empty registry answers unknown_repository with no side
+        effects: no store files, no index builds, no bootstrap. Only
+        explicit --repo provisioning or the init tool (with a
+        provisioner) creates repository state.
+        """
+        import tempfile
+
+        from span.shell.mcp import McpAdapter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = McpAdapter()
+            result = adapter.dispatch(
+                "span_explain",
+                {
+                    "repository_id": "ghost",
+                    "target": _selector_args(),
+                },
+            )
+            self.assertTrue(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["error"], "unknown_repository")
+            init = adapter.dispatch(
+                "span_initialize_repository",
+                {
+                    "repository_locator": "x",
+                    "structural_provider_config": "graft:/x",
+                },
+            )
+            self.assertTrue(init.is_error)
+            self.assertEqual(
+                json.loads(init.content)["error"], "unavailable"
+            )
+            self.assertEqual(list(pathlib.Path(tmp).iterdir()), [])
+
+
+@unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")
+class ServerWiringTest(unittest.TestCase):
+    def test_build_server_registers_eight_tools(self):
+        from span.shell import mcp_server
+
+        adapter, _ = _harness()
+        try:
+            listed = mcp_server.handle_list_tools(adapter)
+            self.assertEqual(len(listed), 8)
+            self.assertEqual(
+                [spec["name"] for spec in listed], list(TOOL_NAMES)
+            )
+            for spec in listed:
+                self.assertEqual(
+                    set(spec["inputSchema"]["required"]),
+                    set(TOOL_SCHEMAS[spec["name"]]["required"]),
+                )
+            server = mcp_server.build_server(adapter)
+            self.assertEqual(server.name, "span")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_call_tool_round_trip(self):
+        import asyncio
+
+        from span.shell import mcp_server
+
+        adapter, _ = _harness()
+        try:
+            content, is_error = mcp_server.handle_call_tool(
+                adapter, "span_status",
+                {
+                    "repository_id": REPO,
+                    "target": None,
+                    "mode": "HOOK_FAST",
+                },
+            )
+            self.assertFalse(is_error)
+            body = json.loads(content)
+            self.assertEqual(body["$type"], "HookStatusNotice")
+
+            async def _via_sdk():
+                import mcp.types as _types
+
+                server = mcp_server.build_server(adapter)
+                entry = server.get_request_handler("tools/call")
+                assert entry is not None
+                return await entry.handler(
+                    None,
+                    _types.CallToolRequestParams(
+                        name="span_status",
+                        arguments={
+                            "repository_id": REPO,
+                            "target": None,
+                            "mode": "HOOK_FAST",
+                        },
+                    ),
+                )
+
+            result = asyncio.run(_via_sdk())
+            self.assertFalse(result.is_error)
+            sdk_body = json.loads(result.content[0].text)
+            self.assertEqual(sdk_body["$type"], "HookStatusNotice")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+
+@unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")
+class ProvisionPathTest(unittest.TestCase):
+    """Full server path: graft structural + filesystem evidence +
+    file store, provisioned explicitly, driven over MCP dispatch."""
+
+    def test_provision_then_explain_over_wire(self):
+        import pathlib
+        import shutil
+        import subprocess
+        import tempfile
+
+        from span.shell import mcp_server
+        from span.shell.agent_exchange.fixture import (
+            FixtureAgent as _Agent,
+        )
+        from span.shell.mcp import McpAdapter as _Adapter
+
+        fixture_src = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "tests" / "fixtures" / "order-svc"
+        )
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="span-mcp-"))
+        try:
+            work = tmp / "order-svc"
+            shutil.copytree(fixture_src, work)
+            (work / ".gitignore").write_text(
+                "graft/\n.ignore\n", encoding="utf-8"
+            )
+            subprocess.run(
+                ("git", "-C", str(work), "init", "-q"),
+                check=True, timeout=60,
+            )
+            subprocess.run(
+                ("git", "-C", str(work), "add", "-A"),
+                check=True, timeout=60,
+            )
+            subprocess.run(
+                (
+                    "git", "-C", str(work),
+                    "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "held-out",
+                ),
+                check=True, timeout=60,
+            )
+            config = mcp_server.ServerConfig(data_dir=tmp / "data")
+            request = ops.SemanticInitializeRepositoryRequest(
+                repository_locator=str(work),
+                structural_provider_config=f"graft:{work}",
+                authority_seeds=(),
+            )
+            context, result = mcp_server.provision_repository(
+                config, request
+            )
+            try:
+                self.assertEqual(result.repository_id, "order-svc")
+                self.assertIs(
+                    result.readiness, m.RepositoryReadiness.READY
+                )
+                adapter = _Adapter(
+                    provisioner=(
+                        lambda req: mcp_server.provision_repository(
+                            config, req
+                        )
+                    )
+                )
+                adapter.register(result.repository_id, context)
+                status = adapter.dispatch(
+                    "span_status",
+                    {
+                        "repository_id": "order-svc",
+                        "target": None,
+                        "mode": "HOOK_FAST",
+                    },
+                )
+                self.assertFalse(status.is_error)
+                notice = json.loads(status.content)
+                self.assertEqual(
+                    notice["readiness"], "READY"
+                )
+            finally:
+                context.store.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

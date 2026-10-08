@@ -43,15 +43,28 @@ class InitializationContractTest(unittest.TestCase):
         # No query/hook code path may invoke initialization. The explicit
         # admin operation (``def initialize_repository``) is allowed and
         # required by Phase 2.8; what is forbidden is *calling* it — or
-        # any auto-init — from query/hook paths. Structural scan:
-        # guards Phases 1–4 against introducing auto-init call sites.
+        # any auto-init — from query/hook paths. The server provisioning
+        # function (``provision_repository`` in Phase 4.2) is likewise
+        # an explicit admin path: it serves the explicit
+        # `span_initialize_repository` tool and dedicated startup
+        # registration, never queries or hooks. Structural scan: guards
+        # Phases 1–4 against introducing auto-init call sites.
         offenders = []
         for path in sorted((REPO_ROOT / "src").rglob("*.py")):
+            relative = str(path.relative_to(REPO_ROOT))
+            in_provision = False
             for lineno, line in enumerate(
                 path.read_text(encoding="utf-8").splitlines(), 1
             ):
                 stripped = line.strip()
-                if stripped.startswith("def initialize_repository("):
+                if stripped.startswith("def "):
+                    in_provision = (
+                        relative == "src/span/shell/mcp_server.py"
+                        and stripped.startswith("def provision_repository(")
+                    )
+                    if stripped.startswith("def initialize_repository("):
+                        continue
+                if in_provision:
                     continue
                 if "initialize_repository(" in line or "auto_init" in line:
                     offenders.append(

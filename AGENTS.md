@@ -5,16 +5,17 @@ intelligence for coding agents.
 
 ## 1. Governing authority
 
-The finalized v0.5 implementation plan and its generalized FACT /
+The finalized v0.6 implementation plan and its generalized FACT /
 pre-implementation documents govern product semantics and scope:
 
 - `.context/requirements/`
-- `.context/plans/span-standalone-semantic-repository-implementation-plan-v0.5.md`
+- `.context/plans/span-standalone-semantic-repository-implementation-plan-v0.6.md`
+  (v0.5 retained byte-identical as the reviewed record; v0.6 governs)
 
 If this file conflicts with those documents on product semantics, the
 requirements package and plan win.
 
-The v0.5 plan remains subordinate to MI-01..MI-13 where the plan explicitly
+The v0.6 plan remains subordinate to MI-01..MI-13 where the plan explicitly
 establishes that precedence.
 
 ## 2. Standalone independence
@@ -56,7 +57,7 @@ ownership and boundaries; they are not advisory style guidance.
 ## 6. Semantic decisions
 
 - Implementation workers must not invent unresolved semantic or product
-  decisions. Physical-design questions resolved in the v0.5 plan are binding;
+  decisions. Physical-design questions resolved in the v0.6 plan are binding;
   anything the plan leaves open requires a contract amendment, not worker
   inference.
 - The v0.5 phase order (Phase 0 → 1 → 2 → 3 → 4 → 5) and acceptance gates

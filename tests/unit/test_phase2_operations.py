@@ -67,15 +67,26 @@ def _ref(path):
 
 def _candidate():
     return m.CandidateSemanticClaim(
+        candidate_key="purpose-main",
         subject=_sid(), kind=m.ClaimKind.PURPOSE,
         value=m.PurposeValue("does things", ()),
         evidence=(_ref("README.md"), _ref("src/main.py")),
-        candidate_authority=m.AuthorityBinding(
-            evidence_ref=_ref("README.md"),
-            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
-            status=m.AuthorityStatus.ACCEPTED,
+        candidate_authority=m.CandidateAuthority(
+            binding=m.AuthorityBinding(
+                evidence_ref=_ref("README.md"),
+                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+                status=m.AuthorityStatus.ACCEPTED,
+            ),
+            support=m.AuthoritySupport(
+                quoted_span="Does things",
+                status_section="README.md",
+                applicability_section=None,
+            ),
         ),
-        basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION),
+        basis=m.SemanticBasis(
+            m.DerivationKind.SEMANTIC_INTERPRETATION,
+            "README states the service purpose",
+        ),
     )
 
 
@@ -117,6 +128,17 @@ def _harness(files=None):
     )
     evidence = FixtureEvidenceSource("repo-1", dict(files))
     store = SqliteSemanticStore(":memory:")
+    ops.initialize_repository(
+        ops.SemanticInitializeRepositoryRequest(
+            repository_locator="fixture",
+            structural_provider_config="memory:test",
+            authority_seeds=(),
+        ),
+        repository_id="repo-1",
+        structural=structural,
+        evidence=evidence,
+        store=store,
+    )
     return structural, evidence, store
 
 
@@ -534,6 +556,17 @@ class RefreshExchangeTest(unittest.TestCase):
         )
         evidence = FixtureEvidenceSource("repo-1", files)
         store = SqliteSemanticStore(":memory:")
+        ops.initialize_repository(
+            ops.SemanticInitializeRepositoryRequest(
+                repository_locator="fixture",
+                structural_provider_config="memory:test",
+                authority_seeds=(),
+            ),
+            repository_id="repo-1",
+            structural=structural,
+            evidence=evidence,
+            store=store,
+        )
         try:
             continuations = ContinuationStore()
             answer = _run_exchange(

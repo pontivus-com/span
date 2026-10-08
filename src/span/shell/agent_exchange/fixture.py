@@ -22,6 +22,8 @@ __all__ = ["FixtureCandidates", "FixtureAgent"]
 class FixtureCandidates:
     claims: tuple[m.CandidateSemanticClaim, ...] = ()
     relationships: tuple[m.CandidateSemanticRelationship, ...] = ()
+    subjects: tuple[m.CandidateSubject, ...] = ()
+    conflicts: tuple[m.CandidateSemanticConflict, ...] = ()
 
 
 class FixtureAgent:
@@ -50,6 +52,22 @@ class FixtureAgent:
             relationships.extend(
                 r for r in canned.relationships if r.kind in allowed_rels
             )
+        subjects = list(
+            self._mapping.get(
+                subject.subject_id.canonical_locator,
+                FixtureCandidates(),
+            ).subjects
+            for subject in request.subjects
+        )
+        candidate_subjects = [s for group in subjects for s in group]
+        conflicts = [
+            c
+            for subject in request.subjects
+            for c in self._mapping.get(
+                subject.subject_id.canonical_locator,
+                FixtureCandidates(),
+            ).conflicts
+        ]
         if len(claims) > request.bounds.max_candidate_claims:
             raise ValueError(
                 "fixture claims exceed max_candidate_claims "
@@ -64,20 +82,22 @@ class FixtureAgent:
         for claim in claims:
             refs.extend(claim.evidence)
             if claim.candidate_authority is not None:
-                refs.append(claim.candidate_authority.evidence_ref)
+                refs.append(claim.candidate_authority.binding.evidence_ref)
         for rel in relationships:
             refs.extend(rel.evidence)
             if rel.candidate_authority is not None:
-                refs.append(rel.candidate_authority.evidence_ref)
+                refs.append(rel.candidate_authority.binding.evidence_ref)
+        for subject in candidate_subjects:
+            refs.extend(subject.evidence)
         by_id = {r.evidence_id.value: r for r in refs}
         governing = sorted(
             {
-                c.candidate_authority.evidence_ref.evidence_id.value
+                c.candidate_authority.binding.evidence_ref.evidence_id.value
                 for c in claims
                 if c.candidate_authority is not None
             }
             | {
-                r.candidate_authority.evidence_ref.evidence_id.value
+                r.candidate_authority.binding.evidence_ref.evidence_id.value
                 for r in relationships
                 if r.candidate_authority is not None
             }
@@ -92,4 +112,6 @@ class FixtureAgent:
                 f"fixture: {len(request.subjects)} subjects, "
                 f"{len(claims)} claims, {len(relationships)} relationships",
             ),
+            candidate_subjects=tuple(candidate_subjects),
+            candidate_conflicts=tuple(conflicts),
         )

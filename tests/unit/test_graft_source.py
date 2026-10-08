@@ -6,6 +6,7 @@ and fingerprint stability. No semantic interpretation anywhere in
 this module's tests.
 """
 
+import pathlib
 import unittest
 
 from span.core import model as m
@@ -239,6 +240,61 @@ class GraftPortBehaviorTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             structural_source_from_config("nope:xyz")
+
+    def test_dirty_tree_reported_from_git(self):
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "src").mkdir()
+            (root / "src" / "orders.js").write_text(
+                "place();\n", encoding="utf-8"
+            )
+            subprocess.run(
+                ("git", "-C", str(root), "init", "-q"),
+                check=True, timeout=60,
+            )
+            subprocess.run(
+                ("git", "-C", str(root), "add", "-A"),
+                check=True, timeout=60,
+            )
+            subprocess.run(
+                (
+                    "git", "-C", str(root),
+                    "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "x",
+                ),
+                check=True, timeout=60,
+            )
+            src = g.GraftStructuralSource(
+                "repo-1", root, wiring=_wiring()
+            )
+            clean = src.repository_state("repo-1")
+            self.assertFalse(clean.dirty)
+            self.assertTrue(clean.revision_id)
+            (root / "src" / "orders.js").write_text(
+                "place();\n// touched\n", encoding="utf-8"
+            )
+            dirty = src.repository_state("repo-1")
+            self.assertTrue(dirty.dirty)
+            # A commit alone does not move the wiring fingerprint;
+            # content-addressed body hashes do.
+            self.assertEqual(
+                clean.state_fingerprint, dirty.state_fingerprint
+            )
+
+    def test_wiring_fingerprint_follows_body_hashes(self):
+        src = _source()
+        first = src.repository_state("repo-1").state_fingerprint
+        altered = _wiring()
+        altered["nodes"][0]["body_hash"] = "zz99"
+        other = g.GraftStructuralSource(
+            "repo-1", pathlib.Path("."), wiring=altered
+        )
+        self.assertNotEqual(
+            first, other.repository_state("repo-1").state_fingerprint
+        )
 
 
 if __name__ == "__main__":

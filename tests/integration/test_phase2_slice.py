@@ -33,6 +33,19 @@ except Exception:
     _HAS_GRAFT = False
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def _git(args):
+    import subprocess
+
+    completed = subprocess.run(
+        ("git", "-C", str(WORK_DIR)) + tuple(args),
+        capture_output=True, text=True, timeout=60,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(
+            f"git {' '.join(args)} failed: {completed.stderr}"
+        )
 FIXTURE_SRC = REPO_ROOT / "tests" / "fixtures" / "order-svc"
 WORK_DIR = REPO_ROOT / ".tmp-e2e" / "order-svc"
 DB_PATH = REPO_ROOT / ".tmp-e2e" / "span-order-svc.db"
@@ -46,7 +59,10 @@ def _files(work):
     return {
         str(p.relative_to(work)): p.read_text(encoding="utf-8")
         for p in sorted(work.rglob("*"))
-        if p.is_file() and "graft" not in p.parts and not p.name.startswith(".")
+        if p.is_file()
+        and "graft" not in p.parts
+        and ".git" not in p.parts
+        and not p.name.startswith(".")
     }
 
 
@@ -67,10 +83,20 @@ class Phase2SliceTest(unittest.TestCase):
     def test_held_out_repo_real_graft_end_to_end(self):
         if WORK_DIR.exists():
             shutil.rmtree(WORK_DIR)
-        if DB_PATH.exists():
-            DB_PATH.unlink()
         WORK_DIR.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(FIXTURE_SRC, WORK_DIR)
+        (WORK_DIR / ".gitignore").write_text(
+            "graft/\n.ignore\n", encoding="utf-8"
+        )
+        _git(("init", "-q"))
+        _git(("add", "-A"))
+        _git((
+            "-c", "user.email=test@span.local",
+            "-c", "user.name=span-test",
+            "commit", "-qm", "held-out fixture",
+        ))
+        if DB_PATH.exists():
+            DB_PATH.unlink()
         store = None
         try:
             structural, repo_id = structural_source_from_config(
@@ -144,16 +170,25 @@ class Phase2SliceTest(unittest.TestCase):
                                 evidence=(
                                     _ref(repo_id, "README.md", files),
                                 ),
-                                candidate_authority=m.AuthorityBinding(
-                                    evidence_ref=_ref(
-                                        repo_id, "README.md", files
+                                candidate_authority=m.CandidateAuthority(
+                                    binding=m.AuthorityBinding(
+                                        evidence_ref=_ref(
+                                            repo_id, "README.md", files
+                                        ),
+                                        authority_kind=(
+                                            m.AuthorityKind.REPOSITORY_RULE
+                                        ),
+                                        status=m.AuthorityStatus.ACCEPTED,
                                     ),
-                                    authority_kind=(
-                                        m.AuthorityKind.REPOSITORY_RULE
+                                    support=m.AuthoritySupport(
+                                        quoted_span="Takes orders",
+                                        status_section="README.md",
+                                        applicability_section=None,
                                     ),
-                                    status=m.AuthorityStatus.ACCEPTED,
                                 ),
-                                basis=m.SemanticBasis(interp),
+                                basis=m.SemanticBasis(
+                                    interp, "README states the order purpose"
+                                ),
                             ),
                             m.CandidateSemanticClaim(
                                 subject=orders,
@@ -170,16 +205,26 @@ class Phase2SliceTest(unittest.TestCase):
                                 evidence=(
                                     _ref(repo_id, "OWNERSHIP.md", files),
                                 ),
-                                candidate_authority=m.AuthorityBinding(
-                                    evidence_ref=_ref(
-                                        repo_id, "OWNERSHIP.md", files
+                                candidate_authority=m.CandidateAuthority(
+                                    binding=m.AuthorityBinding(
+                                        evidence_ref=_ref(
+                                            repo_id, "OWNERSHIP.md", files
+                                        ),
+                                        authority_kind=(
+                                            m.AuthorityKind.REPOSITORY_RULE
+                                        ),
+                                        status=m.AuthorityStatus.ACCEPTED,
                                     ),
-                                    authority_kind=(
-                                        m.AuthorityKind.REPOSITORY_RULE
+                                    support=m.AuthoritySupport(
+                                        quoted_span="Team orders owns",
+                                        status_section="OWNERSHIP.md",
+                                        applicability_section=None,
                                     ),
-                                    status=m.AuthorityStatus.ACCEPTED,
                                 ),
-                                basis=m.SemanticBasis(interp),
+                                basis=m.SemanticBasis(
+                                    interp,
+                                    "ownership record names the order owner",
+                                ),
                             ),
                         ),
                         relationships=(),

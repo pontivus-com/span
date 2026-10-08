@@ -10,7 +10,6 @@ behavior arrives in its owning phase (Phase 3); transport in Phase 4.
 
 from __future__ import annotations
 
-import enum as _enum
 from dataclasses import dataclass as _dataclass
 
 from span.core import answers as _answers
@@ -29,6 +28,7 @@ from span.service import (
     DEFAULT_SERVICE_BOUNDS_POLICY,
     resolve_bounds as _resolve_bounds,
 )
+from span.shell import paging as _paging
 from span.shell.agent_exchange.continuations import (
     ContinuationStore,
     SuspendedOperation,
@@ -36,6 +36,7 @@ from span.shell.agent_exchange.continuations import (
 
 __all__ = [
     "ChangeKind",
+    "ProposedChange",
     "SemanticExplainRequest",
     "SemanticImpactRequest",
     "SemanticTraceRequest",
@@ -65,15 +66,10 @@ __all__ = [
 
 InterpretationUnitRejected = _validation.InterpretationUnitRejected
 
-
-class ChangeKind(_enum.Enum):
-    CONTRACT = "CONTRACT"
-    BEHAVIOR = "BEHAVIOR"
-    REPRESENTATION = "REPRESENTATION"
-    OWNERSHIP = "OWNERSHIP"
-    CONFIGURATION = "CONFIGURATION"
-    LIFECYCLE = "LIFECYCLE"
-    OTHER = "OTHER"
+#: Canonical change vocabulary lives in the core model (single carrier);
+#: re-exported here for service consumers (plan §11.10, I-04).
+ChangeKind = m.ChangeKind
+ProposedChange = m.ProposedChange
 
 
 @_dataclass(frozen=True)
@@ -81,6 +77,7 @@ class SemanticExplainRequest:
     repository_id: str
     target: m.SubjectSelector
     bounds: m.QueryBounds
+    page_token: str | None = None
 
 
 @_dataclass(frozen=True)
@@ -90,6 +87,8 @@ class SemanticImpactRequest:
     change_kind: ChangeKind
     change_description: str | None
     bounds: m.QueryBounds
+    affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
+    page_token: str | None = None
 
 
 @_dataclass(frozen=True)
@@ -100,6 +99,7 @@ class SemanticTraceRequest:
     relationship_filter: tuple[m.RelationshipKind, ...] | None
     boundary_only: bool
     bounds: m.QueryBounds
+    page_token: str | None = None
 
 
 @_dataclass(frozen=True)
@@ -107,6 +107,7 @@ class SemanticAuthorityRequest:
     repository_id: str
     target: m.SubjectSelector | m.ClaimRef
     bounds: m.QueryBounds
+    page_token: str | None = None
 
 
 @_dataclass(frozen=True)
@@ -116,12 +117,12 @@ class SemanticStatusRequest:
         m.SubjectSelector
         | m.ClaimRef
         | m.RelationshipRef
-        | m.AnswerRef
         | m.EvidenceScope
         | None
     )
     bounds: m.QueryBounds
     mode: m.StatusMode = m.StatusMode.NORMAL
+    page_token: str | None = None
 
 
 @_dataclass(frozen=True)
@@ -130,6 +131,7 @@ class SemanticRefreshRequest:
     target: m.SubjectSelector | m.EvidenceScope | None
     bounds: m.QueryBounds
     stale_only: bool = True
+    page_token: str | None = None
 
 
 @_dataclass(frozen=True)
@@ -166,6 +168,87 @@ class RefreshScopeError(ValueError):
     enumeration, which arrives with the Phase 3 query surface."""
 
 
+def _claim_ref(claim: m.SemanticClaim) -> m.ClaimRef:
+    return m.ClaimRef(id=claim.claim_id)
+
+
+def _relationship_ref(rel: m.SemanticRelationship) -> m.RelationshipRef:
+    return m.RelationshipRef(id=rel.relationship_id)
+
+
+def _item_ref(
+    item: m.SemanticClaim | m.SemanticRelationship,
+) -> m.ClaimRef | m.RelationshipRef:
+    if isinstance(item, m.SemanticClaim):
+        return _claim_ref(item)
+    return _relationship_ref(item)
+
+
+def _ref_value(ref: m.ClaimRef | m.RelationshipRef) -> str:
+    return ref.id.value
+
+
+def _setup_requirement(repository_id: str) -> m.ResolutionRequirement:
+    """Deterministic resolver for uninitialized repositories (I-27)."""
+    return m.ResolutionRequirement(
+        kind=m.ResolutionKind.MISSING_EVIDENCE,
+        subject_or_claim=None,
+        description=(
+            f"repository {repository_id} is not initialized; run "
+            f"span_initialize_repository in a dedicated setup session"
+        ),
+        supporting_context=(),
+    )
+
+
+def _is_initialized(
+    repository_id: str, *, store: SemanticStore
+) -> bool:
+    """Whether explicit initialization recorded this repository.
+
+    Read-only: checking never initializes (I-27).
+    """
+    return store.load_repository_state(repository_id) is not None
+
+
+def _uninitialized_answer(
+    intent: m.SemanticIntent,
+    repository_id: str,
+    bounds: m.QueryBounds,
+    state: m.RepositoryState,
+) -> m.SemanticAnswer:
+    """Setup notice for uninitialized repositories (plan §11.1, I-27).
+
+    Never initializes implicitly; directs to a dedicated
+    initialization session through a deterministic requirement.
+    """
+    content: m.SemanticContent
+    if intent is m.SemanticIntent.STATUS:
+        content = m.StatusContent(
+            readiness=m.RepositoryReadiness.UNINITIALIZED
+        )
+    elif intent is m.SemanticIntent.EXPLAIN:
+        content = m.ExplainContent()
+    elif intent is m.SemanticIntent.TRACE:
+        content = m.TraceContent()
+    elif intent is m.SemanticIntent.IMPACT:
+        content = m.ImpactContent()
+    else:
+        content = m.AuthorityContent()
+    return m.SemanticAnswer(
+        answer_id=_answer_id(
+            "uninit", repository_id, intent.value
+        ),
+        intent=intent,
+        repository_state=state,
+        subject_resolution=None,
+        content=content,
+        evidence=(),
+        resolution_requirements=(_setup_requirement(repository_id),),
+        bound_info=_bound_info(bounds, 0, False, None),
+    )
+
+
 def _answer_id(prefix: str, request_part: str, subject_part: str) -> m.AnswerId:
     import hashlib as _hashlib
 
@@ -175,9 +258,49 @@ def _answer_id(prefix: str, request_part: str, subject_part: str) -> m.AnswerId:
     return m.AnswerId(f"{prefix}-{digest}")
 
 
+def _inventory_snapshot(
+    repository_id: str,
+    *,
+    evidence: EvidenceSource,
+    bounds: m.QueryBounds,
+) -> tuple[str, dict[str, str]]:
+    """Inventory snapshot plus per-evidence map (plan §8.5).
+
+    The combined fingerprint covers inventory MEMBERSHIP (which sources
+    exist), not their content: newly added sources are visible even
+    with no existing dependants, while content changes to known
+    sources stay per-item through direct dependencies (MI-07 partial
+    staleness). Seed content fingerprints come from the same walk.
+    Pages through the full inventory (metadata only, no semantic work).
+    """
+    import hashlib as _hashlib
+
+    items: list[m.EvidenceInventoryItem] = []
+    token: str | None = None
+    while True:
+        page = evidence.inventory_evidence(
+            repository_id,
+            m.EvidenceScope(paths=(), evidence_refs=()),
+            bounds,
+            token,
+        )
+        items.extend(page.items)
+        token = page.bound_info.continuation_token
+        if token is None:
+            break
+    pairs = sorted(
+        (item.evidence_ref.evidence_id.value, item.content_fingerprint)
+        for item in items
+    )
+    membership = _hashlib.sha256(
+        repr(sorted(eid for eid, _ in pairs)).encode("utf-8")
+    ).hexdigest()
+    return membership, dict(pairs)
+
+
 def preflight(
     repository_id: str,
-    semantic_ids: tuple[m.ClaimId | m.RelationshipId, ...],
+    semantic_ids: tuple[m.ClaimRef | m.RelationshipRef, ...],
     *,
     evidence: EvidenceSource,
     store: SemanticStore,
@@ -188,6 +311,8 @@ def preflight(
     Loads evidence dependencies, obtains current fingerprints, compares
     against stored supporting state, classifies each item, and persists
     non-current classifications. Returns the applied updates.
+    Coverage (step 0) is applied separately by `_refresh_view`, which
+    owns the item scope.
     """
     if not semantic_ids:
         return ()
@@ -198,6 +323,85 @@ def preflight(
     if updates:
         store.mark_freshness(updates)
     return updates
+
+
+def _latest_coverages(
+    coverages: tuple[m.CoverageDependency, ...],
+) -> tuple[m.CoverageDependency, ...]:
+    """Deduplicate coverage history: latest record per scope wins.
+
+    Repeated refresh writes a new row per unit; the newest record for
+    an identical scope supersedes earlier ones (store order is
+    observed_at ascending, so the last row wins). Distinct scopes
+    coexist and are each consulted.
+    """
+    latest: dict[tuple[str, ...], m.CoverageDependency] = {}
+    for coverage in coverages:
+        key = tuple(
+            sorted(s.canonical_locator for s in coverage.scope_subjects)
+        )
+        latest[key] = coverage
+    return tuple(latest.values())
+
+
+def coverage_check(
+    repository_id: str,
+    items: tuple[m.SemanticClaim | m.SemanticRelationship, ...],
+    *,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> tuple[m.FreshnessUpdate, ...]:
+    """Discovery-coverage freshness (plan §9.2 step 0, §8.5).
+
+    Compares recorded inventory/seed fingerprints against current state.
+    A moved inventory fingerprint — including a newly added authority
+    with no existing dependants — marks covered items stale. Persists
+    non-current classifications and returns the applied updates.
+    """
+    if not items:
+        return ()
+    scope_subjects = tuple(
+        dict.fromkeys(
+            item.subject if isinstance(item, m.SemanticClaim) else item.source
+            for item in items
+        )
+    )
+    coverages = store.load_coverage_dependencies(
+        repository_id, scope_subjects
+    )
+    if not coverages:
+        return ()
+    inventory_fp, seed_map = _inventory_snapshot(
+        repository_id, evidence=evidence, bounds=bounds
+    )
+    updates: list[m.FreshnessUpdate] = []
+    for coverage in _latest_coverages(coverages):
+        freshness = _freshness.classify_coverage(
+            coverage, inventory_fp, seed_map
+        )
+        if freshness.state is m.FreshnessState.CURRENT:
+            continue
+        covered = {
+            s.canonical_locator for s in coverage.scope_subjects
+        }
+        for item in items:
+            locator = (
+                item.subject.canonical_locator
+                if isinstance(item, m.SemanticClaim)
+                else item.source.canonical_locator
+            )
+            if locator not in covered:
+                continue
+            ref = (
+                m.ClaimRef(id=item.claim_id)
+                if isinstance(item, m.SemanticClaim)
+                else m.RelationshipRef(id=item.relationship_id)
+            )
+            updates.append(m.FreshnessUpdate(semantic_id=ref, freshness=freshness))
+    if updates:
+        store.mark_freshness(tuple(updates))
+    return tuple(updates)
 
 
 def discover_evidence(
@@ -293,6 +497,35 @@ class InterpretationTask:
     observations: tuple[m.StructuralObservation, ...]
 
 
+def _coverage_for_task(
+    repository_id: str,
+    subjects: tuple[m.SubjectId, ...],
+    *,
+    evidence: EvidenceSource,
+    bounds: m.QueryBounds,
+    seeds: tuple[m.EvidenceRef, ...],
+) -> m.CoverageDependency:
+    """Build the discovery-coverage record for one unit (plan §8.5)."""
+    import datetime as _datetime
+
+    inventory_fp, seed_map = _inventory_snapshot(
+        repository_id, evidence=evidence, bounds=bounds
+    )
+    return m.CoverageDependency(
+        scope_subjects=subjects,
+        inventory_fingerprint=inventory_fp,
+        seed_fingerprints=tuple(
+            m.SeedFingerprint(
+                evidence_id=seed.evidence_id,
+                locator=seed.locator,
+                fingerprint=seed_map.get(seed.evidence_id.value, ""),
+            )
+            for seed in seeds
+        ),
+        observed_at=_datetime.datetime.now(_datetime.timezone.utc),
+    )
+
+
 def prepare_interpretation_task(
     repository_id: str,
     subject: m.Subject,
@@ -302,12 +535,17 @@ def prepare_interpretation_task(
     bounds: m.QueryBounds,
     state: m.RepositoryState,
     authority_seeds: tuple[m.EvidenceRef, ...] = (),
+    operation_intent: m.SemanticIntent = m.SemanticIntent.EXPLAIN,
+    question_slice: str = "",
+    proposed_change: m.ProposedChange | None = None,
 ) -> InterpretationTask:
     """Build the bounded task for the invoking agent (§8.3/§11.12).
 
     Discovers evidence, reads bounded units, and assembles the typed
-    request plus the validation context inputs. Performs no
-    interpretation and no persistence.
+    request plus the validation context inputs. The request carries the
+    operation intent, question slice, and impact proposal so the agent
+    interprets the specific question — never an invented one. Performs
+    no interpretation and no persistence.
     """
     sid = subject.subject_id
     edges = structural.edges(
@@ -356,6 +594,9 @@ def prepare_interpretation_task(
         allowed_claim_kinds=tuple(m.ClaimKind),
         allowed_relationship_kinds=tuple(m.RelationshipKind),
         identity_bindings=(sid,),
+        operation_intent=operation_intent,
+        question_slice=question_slice or sid.canonical_locator,
+        proposed_change=proposed_change,
         bounds=bounds,
     )
     if len(request.subjects) > bounds.max_subjects:
@@ -380,6 +621,65 @@ def _validation_context_for(
         known_evidence_ids=frozenset(eid for eid, _ in task.fingerprints),
         known_subject_ids=task.known_subject_ids + extra_known,
         evidence_fingerprints=dict(task.fingerprints),
+        evidence_contents={
+            unit.evidence_ref.evidence_id.value: unit.content
+            for unit in task.request.evidence_units
+        },
+    )
+
+
+def _assign_candidate_keys(
+    result: m.SemanticInterpretationResult,
+) -> m.SemanticInterpretationResult:
+    """Deterministic key assignment (plan §4.11 discipline).
+
+    Explicit keys link conflict proposals; empty keys receive
+    deterministic `auto:<index>` values so every result carries unique
+    non-empty keys. Explicit duplicates reject the unit.
+    """
+    keys = [
+        c.candidate_key for c in result.claims
+    ] + [
+        r.candidate_key for r in result.relationships
+    ]
+    explicit = [k for k in keys if k]
+    if len(set(explicit)) != len(explicit):
+        raise _validation.InterpretationUnitRejected(
+            ("duplicate candidate_key in interpretation result",)
+        )
+    if all(keys):
+        return result
+    claims = tuple(
+        c if c.candidate_key else m.CandidateSemanticClaim(
+            candidate_key=f"auto-{n}",
+            subject=c.subject,
+            kind=c.kind,
+            value=c.value,
+            evidence=c.evidence,
+            candidate_authority=c.candidate_authority,
+            basis=c.basis,
+        )
+        for n, c in enumerate(result.claims)
+    )
+    relationships = tuple(
+        r if r.candidate_key else m.CandidateSemanticRelationship(
+            candidate_key=f"auto-c{len(result.claims) + n}",
+            source=r.source,
+            kind=r.kind,
+            target=r.target,
+            evidence=r.evidence,
+            candidate_authority=r.candidate_authority,
+            basis=r.basis,
+        )
+        for n, r in enumerate(result.relationships)
+    )
+    return m.SemanticInterpretationResult(
+        claims=claims,
+        relationships=relationships,
+        governing_source_refs=result.governing_source_refs,
+        diagnostics=result.diagnostics,
+        candidate_subjects=result.candidate_subjects,
+        candidate_conflicts=result.candidate_conflicts,
     )
 
 
@@ -390,12 +690,18 @@ def _materialize_unit(
     store: SemanticStore,
     state: m.RepositoryState,
     extra_known_subjects: tuple[m.SubjectId, ...] = (),
+    coverage: m.CoverageDependency,
+    declared_complete: bool,
+    retire_scope: tuple[m.SubjectId, ...],
 ) -> None:
-    """Validate and atomically materialize one submitted unit (§7.5).
+    """Validate and atomically materialize one submitted unit (§7.5, I-37).
 
     Any validation failure rejects the entire unit — no candidate-level
     salvage. Submitted content exceeding §8.4 cardinality bounds is a
-    unit failure, not a silent truncation.
+    unit failure, not a silent truncation. Retirement applies only to
+    prior assertions inside the declared-complete coverage scope;
+    otherwise omission is bounded-evidence truncation and prior state
+    is preserved.
 
     ``extra_known_subjects`` are evidence-declared relationship
     endpoints the service resolved exactly through the structural
@@ -411,8 +717,44 @@ def _materialize_unit(
         raise _validation.InterpretationUnitRejected(
             ("interpretation unit exceeds max_candidate_relationships",)
         )
+    result = _assign_candidate_keys(result)
     ctx = _validation_context_for(task, extra_known_subjects)
     failures: list[str] = []
+    new_subjects: list[m.Subject] = []
+    new_subject_ids: list[m.SubjectId] = []
+    for proposed in result.candidate_subjects:
+        validation = _validation.validate_candidate_subject(proposed, ctx)
+        if not validation.ok:
+            failures.extend(validation.diagnostics)
+            continue
+        sid = m.SubjectId(
+            repository_id=task.request.repository_id,
+            subject_kind=proposed.kind,
+            canonical_locator=proposed.provisional_locator,
+        )
+        existing = store.load_subjects(task.request.repository_id, (sid,))
+        if existing:
+            new_subjects.append(existing[0])
+        else:
+            new_subjects.append(
+                m.Subject(
+                    subject_id=sid,
+                    display_name=proposed.display_name,
+                    declared_kind=proposed.declared_kind,
+                )
+            )
+        new_subject_ids.append(sid)
+    if new_subject_ids:
+        ctx = _validation.ValidationContext(
+            allowed_claim_kinds=ctx.allowed_claim_kinds,
+            allowed_relationship_kinds=ctx.allowed_relationship_kinds,
+            known_evidence_ids=ctx.known_evidence_ids,
+            known_subject_ids=(
+                ctx.known_subject_ids + tuple(new_subject_ids)
+            ),
+            evidence_fingerprints=ctx.evidence_fingerprints,
+            evidence_contents=ctx.evidence_contents,
+        )
     claims: list[m.SemanticClaim] = []
     for candidate in result.claims:
         validation = _validation.validate_candidate_claim(candidate, ctx)
@@ -431,13 +773,74 @@ def _materialize_unit(
         relationships.append(
             _validation.materialize_relationship(candidate, validation, state)
         )
+    keys_in_result = frozenset(
+        [c.candidate_key for c in result.claims]
+        + [r.candidate_key for r in result.relationships]
+    )
+    key_to_ref: dict[str, m.ClaimRef | m.RelationshipRef] = {}
+    for candidate, item in zip(result.claims, claims):
+        key_to_ref[candidate.candidate_key] = m.ClaimRef(id=item.claim_id)
+    for candidate, item in zip(result.relationships, relationships):
+        key_to_ref[candidate.candidate_key] = m.RelationshipRef(
+            id=item.relationship_id
+        )
+    recorded: list[m.RecordedConflict] = []
+    for proposed in result.candidate_conflicts:
+        validation = _validation.validate_candidate_conflict(
+            proposed, keys_in_result, ctx
+        )
+        if not validation.ok:
+            failures.extend(validation.diagnostics)
+            continue
+        left = key_to_ref[proposed.left_key]
+        right = key_to_ref[proposed.right_key]
+        left_item = next(
+            item for item in (*claims, *relationships)
+            if _item_ref(item) == left
+        )
+        recorded.append(
+            m.RecordedConflict(
+                subject=(
+                    left_item.subject
+                    if isinstance(left_item, m.SemanticClaim)
+                    else left_item.source
+                ),
+                left=left,
+                right=right,
+                declared_precedence=proposed.candidate_precedence,
+                basis=proposed.basis,
+            )
+        )
     if failures:
         raise _validation.InterpretationUnitRejected(tuple(failures))
     fingerprints = dict(task.fingerprints)
-    subject = task.request.subjects[0]
+    subjects = tuple(task.request.subjects) + tuple(new_subjects)
+    known_ids = {c.claim_id.value for c in claims} | {
+        r.relationship_id.value for r in relationships
+    }
+    retires_claims: list[m.ClaimRef] = []
+    retires_relationships: list[m.RelationshipRef] = []
+    if declared_complete and retire_scope:
+        prior_claims: list[m.SemanticClaim] = []
+        prior_rels: list[m.SemanticRelationship] = []
+        for sid in retire_scope:
+            loaded_c, loaded_r, _, _ = _load_subject_state(
+                task.request.repository_id, sid, store=store,
+                bounds=task.request.bounds,
+            )
+            prior_claims.extend(loaded_c)
+            prior_rels.extend(loaded_r)
+        for prior in prior_claims:
+            if prior.claim_id.value not in known_ids:
+                retires_claims.append(m.ClaimRef(id=prior.claim_id))
+        for prior in prior_rels:
+            if prior.relationship_id.value not in known_ids:
+                retires_relationships.append(
+                    m.RelationshipRef(id=prior.relationship_id)
+                )
     dependencies = tuple(
         m.EvidenceDependency(
-            semantic_id=item.claim_id if isinstance(item, m.SemanticClaim) else item.relationship_id,
+            semantic_id=_item_ref(item),
             evidence_ref=ref,
             observed_fingerprint=fingerprints[ref.evidence_id.value],
         )
@@ -446,10 +849,26 @@ def _materialize_unit(
     )
     store.write_index_batch(
         m.CanonicalIndexBatch(
-            subjects=(subject,),
+            subjects=subjects,
             claims=tuple(claims),
             relationships=tuple(relationships),
             evidence_dependencies=dependencies,
+            coverage_dependencies=(coverage,),
+            coverage=m.InterpretationCoverage(
+                subjects=tuple(s.subject_id for s in subjects),
+                question_slice=task.request.question_slice,
+                evidence_scope=m.EvidenceScope(
+                    paths=(),
+                    evidence_refs=tuple(
+                        unit.evidence_ref
+                        for unit in task.request.evidence_units
+                    ),
+                ),
+                declared_complete=declared_complete,
+            ),
+            retires_claims=tuple(retires_claims),
+            retires_relationships=tuple(retires_relationships),
+            conflicts=tuple(recorded),
         )
     )
 
@@ -470,6 +889,10 @@ def _suspend(
     suspended: tuple[str, ...] = (),
     change_kind: str | None = None,
     change_description: str | None = None,
+    affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = (),
+    operation_intent: str = "EXPLAIN",
+    question_slice: str = "",
+    declared_complete: bool = False,
     trace_direction: str | None = None,
     trace_filter: tuple[m.RelationshipKind, ...] = (),
     trace_filter_set: bool = False,
@@ -494,6 +917,10 @@ def _suspend(
             suspended=suspended,
             change_kind=change_kind,
             change_description=change_description,
+            affected_assertions=affected_assertions,
+            operation_intent=operation_intent,
+            question_slice=question_slice,
+            declared_complete=declared_complete,
             trace_direction=trace_direction,
             trace_filter=trace_filter,
             trace_filter_set=trace_filter_set,
@@ -534,21 +961,37 @@ def submit_interpretation(
     )
     state = structural.repository_state(record.repository_id)
     extra_known: list[m.SubjectId] = []
+    endpoints = []
     for candidate in result.relationships:
-        for endpoint in (candidate.source, candidate.target):
-            if endpoint in task.known_subject_ids or endpoint in extra_known:
-                continue
-            if (
-                _resolve_exact_subject(
-                    record.repository_id, endpoint,
-                    structural=structural, bounds=bounds,
-                )
-                is not None
-            ):
-                extra_known.append(endpoint)
+        endpoints.extend((candidate.source, candidate.target))
+    endpoints.extend(candidate.subject for candidate in result.claims)
+    for endpoint in endpoints:
+        if endpoint in task.known_subject_ids or endpoint in extra_known:
+            continue
+        if (
+            _resolve_exact_subject(
+                record.repository_id, endpoint,
+                structural=structural, bounds=bounds,
+            )
+            is not None
+        ):
+            extra_known.append(endpoint)
+            continue
+        # Registered semantic-only subjects live in the store, not the
+        # structural source: previously indexed identities join the unit
+        # scope exactly like structurally resolved ones (§4.11).
+        if store.load_subjects(record.repository_id, (endpoint,)):
+            extra_known.append(endpoint)
     _materialize_unit(
         task, result, store=store, state=state,
         extra_known_subjects=tuple(extra_known),
+        coverage=_coverage_for_task(
+            record.repository_id,
+            tuple(s.subject_id for s in task.request.subjects),
+            evidence=evidence, bounds=bounds, seeds=record.seeds,
+        ),
+        declared_complete=record.declared_complete,
+        retire_scope=tuple(s.subject_id for s in task.request.subjects),
     )
     if record.op == "refresh" and record.remaining:
         nxt, rest = record.remaining[0], record.remaining[1:]
@@ -556,12 +999,17 @@ def submit_interpretation(
             record.repository_id, nxt, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=record.seeds,
+            operation_intent=m.SemanticIntent.STATUS,
+            question_slice=nxt.subject_id.canonical_locator,
         )
         return _suspend(
             op="refresh", repository_id=record.repository_id, subject=nxt,
             task=nxt_task, seeds=record.seeds, bounds=bounds, state=state,
             resolution=None, scope=record.scope, remaining=rest,
             changed=record.changed, continuations=continuations,
+            operation_intent="STATUS",
+            question_slice=nxt.subject_id.canonical_locator,
+            declared_complete=True,
         )
     if record.op == "explain":
         return _compose_explain_answer(
@@ -597,6 +1045,7 @@ def submit_interpretation(
                 else ChangeKind.BEHAVIOR
             ),
             change_description=record.change_description,
+            affected_assertions=record.affected_assertions,
             seeds=record.seeds,
             suspended=record.suspended + (
                 record.subject.subject_id.canonical_locator,
@@ -647,6 +1096,10 @@ def reissue_interpretation(
             bounds=record.bounds,
             state=record.state,
             reissues=record.reissues + 1,
+            affected_assertions=record.affected_assertions,
+            operation_intent=record.operation_intent,
+            question_slice=record.question_slice,
+            declared_complete=record.declared_complete,
         )
     )
     return PendingInterpretation(
@@ -661,18 +1114,73 @@ def _load_subject_state(
     store: SemanticStore,
     bounds: m.QueryBounds,
     direction: StructuralDirection = StructuralDirection.BOTH,
-) -> tuple[tuple[m.SemanticClaim, ...], tuple[m.SemanticRelationship, ...]]:
-    claims = store.load_claims(
-        repository_id, (sid,), tuple(m.ClaimKind), bounds
-    ).items
-    relationships = store.load_relationships(
+    page_token: str | None = None,
+) -> tuple[
+    tuple[m.SemanticClaim, ...],
+    tuple[m.SemanticRelationship, ...],
+    str | None,
+    str | None,
+]:
+    """Load one subject's state window plus per-list next tokens.
+
+    The answer-level token carries per-list offsets
+    (``pg:<claims_skip>:<rels_skip>``); each load windows from its own
+    offset, so every item is reachable exactly once across pages. The
+    returned tokens are the raw store cursors (``None`` = exhausted).
+    """
+    claims_skip, rels_skip = _paging.parse_service_token(page_token)
+    claim_page = store.load_claims(
+        repository_id,
+        (sid,),
+        tuple(m.ClaimKind),
+        bounds,
+        _paging.next_page_token(claims_skip) if claims_skip else None,
+    )
+    rel_page = store.load_relationships(
         repository_id,
         (sid,),
         tuple(m.RelationshipKind),
         direction,
         bounds,
-    ).items
-    return claims, relationships
+        _paging.next_page_token(rels_skip) if rels_skip else None,
+    )
+    return (
+        claim_page.items,
+        rel_page.items,
+        claim_page.bound_info.continuation_token,
+        rel_page.bound_info.continuation_token,
+    )
+
+
+def _next_service_token(
+    page_token: str | None,
+    kept_claims: tuple[m.SemanticClaim, ...],
+    kept_rels: tuple[m.SemanticRelationship, ...],
+    loaded_claims: tuple[m.SemanticClaim, ...],
+    loaded_rels: tuple[m.SemanticRelationship, ...],
+    claims_token: str | None,
+    rels_token: str | None,
+) -> str | None:
+    """Answer-level next token from shown counts (plan I-39).
+
+    Each side advances past shown items only, so unshown-but-loaded
+    items reappear in the next window instead of being skipped. A side
+    is exhausted when its load cursor is done and everything loaded
+    was shown.
+    """
+    claims_skip, rels_skip = _paging.parse_service_token(page_token)
+    claims_exhausted = (
+        claims_token is None and len(kept_claims) >= len(loaded_claims)
+    )
+    rels_exhausted = (
+        rels_token is None and len(kept_rels) >= len(loaded_rels)
+    )
+    if claims_exhausted and rels_exhausted:
+        return None
+    return _paging.format_service_token(
+        claims_skip + len(kept_claims),
+        rels_skip + len(kept_rels),
+    )
 
 
 def _refresh_view(
@@ -684,15 +1192,19 @@ def _refresh_view(
     store: SemanticStore,
     bounds: m.QueryBounds,
 ) -> tuple[tuple[m.SemanticClaim, ...], tuple[m.SemanticRelationship, ...]]:
-    ids: tuple[m.ClaimId | m.RelationshipId, ...] = tuple(
-        c.claim_id for c in claims
-    ) + tuple(r.relationship_id for r in relationships)
+    ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+        _claim_ref(c) for c in claims
+    ) + tuple(_relationship_ref(r) for r in relationships)
     updates = preflight(
         repository_id, ids, evidence=evidence, store=store, bounds=bounds
     )
+    updates = updates + coverage_check(
+        repository_id, tuple(claims) + tuple(relationships),
+        evidence=evidence, store=store, bounds=bounds,
+    )
     if not updates:
         return claims, relationships
-    by_id = {u.semantic_id.value: u.freshness for u in updates}
+    by_id = {_ref_value(u.semantic_id): u.freshness for u in updates}
 
     def _with_freshness_claim(claim: m.SemanticClaim) -> m.SemanticClaim:
         freshness = by_id.get(claim.claim_id.value)
@@ -741,6 +1253,166 @@ def _bound_info(
     )
 
 
+def _recorded_conflicts(
+    repository_id: str,
+    claims: tuple[m.SemanticClaim, ...],
+    relationships: tuple[m.SemanticRelationship, ...],
+    *,
+    store: SemanticStore,
+) -> tuple[m.SemanticConflict, ...]:
+    """Merge validated agent-proposed conflicts (plan §6.4) with derived ones.
+
+    Only pairs whose both sides resolve among the loaded items are shown;
+    anything else is a store inconsistency, never guessed into place.
+    """
+    if not claims and not relationships:
+        return ()
+    scope = tuple(
+        dict.fromkeys(
+            [c.subject for c in claims]
+            + [r.source for r in relationships]
+            + [r.target for r in relationships]
+        )
+    )
+    known = {_claim_ref(c) for c in claims} | {
+        _relationship_ref(r) for r in relationships
+    }
+    merged: list[m.SemanticConflict] = []
+    for record in store.load_conflicts(repository_id, scope):
+        if record.left in known and record.right in known:
+            merged.append(
+                m.SemanticConflict(
+                    left=record.left,
+                    right=record.right,
+                    declared_precedence=record.declared_precedence,
+                )
+            )
+    merged.sort(
+        key=lambda c: (
+            _ref_value(c.left),
+            _ref_value(c.right),
+        )
+    )
+    return tuple(merged)
+
+
+def _conflicts_for(
+    repository_id: str,
+    claims: tuple[m.SemanticClaim, ...],
+    relationships: tuple[m.SemanticRelationship, ...],
+    *,
+    store: SemanticStore,
+) -> tuple[m.SemanticConflict, ...]:
+    """All visible conflicts: core-derived plus recorded proposals."""
+    derived = _validation.find_conflicts(claims, relationships)
+    recorded = _recorded_conflicts(
+        repository_id, claims, relationships, store=store
+    )
+    seen = {
+        (_ref_value(c.left), _ref_value(c.right)) for c in derived
+    }
+    extra = tuple(
+        c for c in recorded
+        if (_ref_value(c.left), _ref_value(c.right)) not in seen
+    )
+    return derived + extra
+
+
+def _select_answer_items(
+    claims: tuple[m.SemanticClaim, ...],
+    relationships: tuple[m.SemanticRelationship, ...],
+    conflicts: tuple[m.SemanticConflict, ...],
+    max_results: int,
+    extra_mandatory: tuple[str, ...] = (),
+) -> tuple[
+    tuple[m.SemanticClaim, ...],
+    tuple[m.SemanticRelationship, ...],
+    tuple[m.SemanticConflict, ...],
+    bool,
+    str | None,
+]:
+    """Bounded item selection preserving answer self-containment (I-36).
+
+    Conflict pairs are atomic and their endpoints mandatory: a known
+    conflict is never truncated to one visible side. All ref-lists in
+    the answer are derived from the kept set only, so no reference
+    dangles. Returns kept claims, kept relationships, kept conflicts,
+    truncated flag, and first-dropped category.
+    """
+    kept_conf = list(conflicts[:max_results])
+    truncated = len(conflicts) > len(kept_conf)
+    category: str | None = "conflicts" if truncated else None
+
+    def _mandatory(pairs: list[m.SemanticConflict]) -> list[str]:
+        ids: list[str] = []
+        for pair in pairs:
+            ids.append(_ref_value(pair.left))
+            ids.append(_ref_value(pair.right))
+        ids.extend(extra_mandatory)
+        return list(dict.fromkeys(ids))
+
+    while kept_conf and (
+        len(kept_conf)
+        + len(set(_mandatory(kept_conf)) & (
+            {c.claim_id.value for c in claims}
+            | {r.relationship_id.value for r in relationships}
+        )) > max_results
+    ):
+        kept_conf.pop()
+        truncated = True
+        if category is None:
+            category = "conflicts"
+    mandatory = set(_mandatory(kept_conf))
+    budget = max_results - len(kept_conf)
+    mand_claims = [c for c in claims if c.claim_id.value in mandatory]
+    mand_rels = [
+        r for r in relationships if r.relationship_id.value in mandatory
+    ]
+    rest_claims = [c for c in claims if c.claim_id.value not in mandatory]
+    rest_rels = [
+        r for r in relationships if r.relationship_id.value not in mandatory
+    ]
+    kept_claims = list(mand_claims)
+    kept_rels = list(mand_rels)
+    # Fair round-robin fill in stable order: each side advances only
+    # past shown items, so per-list page offsets stay exact (I-39).
+    while len(kept_claims) + len(kept_rels) < budget and (
+        rest_claims or rest_rels
+    ):
+        if rest_claims:
+            kept_claims.append(rest_claims.pop(0))
+            if len(kept_claims) + len(kept_rels) >= budget:
+                break
+        if rest_rels:
+            kept_rels.append(rest_rels.pop(0))
+    if len(kept_claims) + len(kept_rels) < len(claims) + len(relationships):
+        truncated = True
+        if category is None:
+            category = "claims"
+    kept_ids = {c.claim_id.value for c in kept_claims} | {
+        r.relationship_id.value for r in kept_rels
+    }
+    kept_conf = [
+        pair for pair in kept_conf
+        if _ref_value(pair.left) in kept_ids
+        and _ref_value(pair.right) in kept_ids
+    ]
+    return tuple(kept_claims), tuple(kept_rels), tuple(kept_conf), truncated, category
+
+
+def _freshness_items_for(
+    claims: tuple[m.SemanticClaim, ...],
+    relationships: tuple[m.SemanticRelationship, ...],
+) -> tuple[m.FreshnessItem, ...]:
+    """Per-item freshness records for exactly the carried items (I-36)."""
+    return tuple(
+        [m.FreshnessItem(_claim_ref(c), c.subject, c.freshness, c.trust)
+         for c in claims]
+        + [m.FreshnessItem(_relationship_ref(r), r.source, r.freshness, r.trust)
+           for r in relationships]
+    )
+
+
 def _compose_explain_answer(
     repository_id: str,
     subject: m.Subject,
@@ -751,36 +1423,50 @@ def _compose_explain_answer(
     store: SemanticStore,
     bounds: m.QueryBounds,
     state: m.RepositoryState,
+    page_token: str | None = None,
 ) -> m.SemanticAnswer:
     sid = subject.subject_id
-    claims, relationships = _load_subject_state(
-        repository_id, sid, store=store, bounds=bounds
+    claims, relationships, claims_token, rels_token = _load_subject_state(
+        repository_id, sid, store=store, bounds=bounds,
+        page_token=page_token,
     )
     claims, relationships = _refresh_view(
         repository_id, claims, relationships,
         evidence=evidence, store=store, bounds=bounds,
     )
-    conflicts = _validation.find_conflicts(claims, relationships)
+    conflicts_all = _conflicts_for(
+        repository_id, claims, relationships, store=store
+    )
+    kept_claims, kept_rels, kept_conf, items_truncated, items_category = (
+        _select_answer_items(
+            claims, relationships, conflicts_all, bounds.max_results
+        )
+    )
     locations = structural.locations(
         repository_id, sid, bounds
     ).items
     requirements: list[m.ResolutionRequirement] = []
     if resolution is not None:
         requirements.extend(_answers.requirements_for_resolution(resolution))
-    for claim in claims:
+    for claim in kept_claims:
         requirements.extend(_answers.requirements_for_claim(claim))
-    (kept_claims, kept_rels, kept_locs), truncated, category, token = (
+    (kept_locs,), truncated_locs, category_locs, _ = (
         _answers.truncate_fields(
-            ((claims, "claims"), (relationships, "relationships"),
-             (locations, "locations")),
-            bounds.max_results,
+            ((locations, "locations"),),
+            max(
+                0,
+                bounds.max_results
+                - len(kept_conf) - len(kept_claims) - len(kept_rels),
+            ),
         )
     )
+    truncated = items_truncated or truncated_locs
+    category = items_category if items_category is not None else category_locs
     content = m.ExplainContent(
-        claims=kept_claims,  # type: ignore[arg-type]
-        relationships=kept_rels,  # type: ignore[arg-type]
+        claims=kept_claims,
+        relationships=kept_rels,
         implementation_locations=kept_locs,  # type: ignore[arg-type]
-        conflicts=conflicts,
+        conflicts=kept_conf,
     )
     returned = len(kept_claims) + len(kept_rels) + len(kept_locs)
     return m.SemanticAnswer(
@@ -793,7 +1479,13 @@ def _compose_explain_answer(
         content=content,
         evidence=tuple(ref for c in kept_claims for ref in c.evidence),
         resolution_requirements=tuple(requirements),
-        bound_info=_bound_info(bounds, returned, truncated, category),
+        bound_info=_bound_info(
+            bounds, returned, truncated, category,
+            _next_service_token(
+                page_token, kept_claims, kept_rels, claims, relationships,
+                claims_token, rels_token,
+            ),
+        ),
     )
 
 
@@ -814,6 +1506,10 @@ def explain(
     """
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
+    if not _is_initialized(request.repository_id, store=store):
+        return _uninitialized_answer(
+            m.SemanticIntent.EXPLAIN, request.repository_id, bounds, state
+        )
     resolution = structural.resolve_subject(
         request.repository_id, request.target, bounds
     )
@@ -833,7 +1529,7 @@ def explain(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     subject = resolution.candidates[0].subject
-    claims, relationships = _load_subject_state(
+    claims, relationships, _, _ = _load_subject_state(
         request.repository_id, subject.subject_id,
         store=store, bounds=bounds,
     )
@@ -842,17 +1538,21 @@ def explain(
             request.repository_id, subject, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=authority_seeds,
+            operation_intent=m.SemanticIntent.EXPLAIN,
+            question_slice=subject.subject_id.canonical_locator,
         )
         return _suspend(
             op="explain", repository_id=request.repository_id,
             subject=subject, task=task, seeds=authority_seeds,
             bounds=bounds, state=state, resolution=resolution,
             continuations=continuations,
+            operation_intent="EXPLAIN",
+            question_slice=subject.subject_id.canonical_locator,
         )
     return _compose_explain_answer(
         request.repository_id, subject, resolution,
         structural=structural, evidence=evidence, store=store,
-        bounds=bounds, state=state,
+        bounds=bounds, state=state, page_token=request.page_token,
     )
 
 
@@ -866,10 +1566,12 @@ def _compose_authority_answer(
     store: SemanticStore,
     bounds: m.QueryBounds,
     state: m.RepositoryState,
+    page_token: str | None = None,
 ) -> m.SemanticAnswer:
     sid = subject.subject_id
-    claims, relationships = _load_subject_state(
-        repository_id, sid, store=store, bounds=bounds
+    claims, relationships, claims_token, rels_token = _load_subject_state(
+        repository_id, sid, store=store, bounds=bounds,
+        page_token=page_token,
     )
     claims, relationships = _refresh_view(
         repository_id, claims, relationships,
@@ -890,7 +1592,9 @@ def _compose_authority_answer(
         for binding in bindings
         if binding.declared_precedence is not None
     )
-    conflicts = _validation.find_conflicts(claims, relationships)
+    conflicts = _conflicts_for(
+        repository_id, claims, relationships, store=store
+    )
     requirements = (
         list(_answers.requirements_for_resolution(resolution))
         if resolution is not None
@@ -918,6 +1622,8 @@ def _compose_authority_answer(
         governing_bindings=kept_bindings,  # type: ignore[arg-type]
         supersession=kept_super,  # type: ignore[arg-type]
         precedence=kept_prec,  # type: ignore[arg-type]
+        claims=claims,
+        relationships=relationships,
         conflicts=kept_conflicts,  # type: ignore[arg-type]
         unresolved=kept_unresolved,  # type: ignore[arg-type]
     )
@@ -934,7 +1640,11 @@ def _compose_authority_answer(
         ),
         resolution_requirements=tuple(requirements),
         bound_info=_bound_info(
-            bounds, len(kept_bindings), truncated, category, token
+            bounds, len(kept_bindings), truncated, category,
+            _next_service_token(
+                page_token, claims, relationships, claims, relationships,
+                claims_token, rels_token,
+            ) or token,
         ),
     )
 
@@ -954,11 +1664,32 @@ def authority(
     inferred — only explicit bindings are returned. Suspends via §11.12
     when interpretation is missing; never interprets inline."""
     if isinstance(request.target, m.ClaimRef):
-        raise AuthorityTargetError(
-            "ClaimRef targets require the Phase 3 subject-scoped lookup"
+        bounds = _resolve_bounds(request.bounds, hook=False)
+        state = structural.repository_state(request.repository_id)
+        try:
+            (item,) = store.load_by_refs(
+                request.repository_id, (request.target,)
+            )
+        except ValueError as exc:
+            raise AuthorityTargetError(str(exc)) from None
+        if not isinstance(item, m.SemanticClaim):
+            raise AuthorityTargetError("claim ref did not resolve to a claim")
+        subjects = store.load_subjects(
+            request.repository_id, (item.subject,)
+        )
+        if not subjects:
+            raise AuthorityTargetError("claim subject is not indexed")
+        return _compose_authority_answer(
+            request.repository_id, subjects[0], None,
+            structural=structural, evidence=evidence, store=store,
+            bounds=bounds, state=state,
         )
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
+    if not _is_initialized(request.repository_id, store=store):
+        return _uninitialized_answer(
+            m.SemanticIntent.AUTHORITY, request.repository_id, bounds, state
+        )
     resolution = structural.resolve_subject(
         request.repository_id, request.target, bounds
     )
@@ -978,7 +1709,7 @@ def authority(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     subject = resolution.candidates[0].subject
-    claims, relationships = _load_subject_state(
+    claims, relationships, _, _ = _load_subject_state(
         request.repository_id, subject.subject_id,
         store=store, bounds=bounds,
     )
@@ -987,17 +1718,21 @@ def authority(
             request.repository_id, subject, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=authority_seeds,
+            operation_intent=m.SemanticIntent.AUTHORITY,
+            question_slice=subject.subject_id.canonical_locator,
         )
         return _suspend(
             op="authority", repository_id=request.repository_id,
             subject=subject, task=task, seeds=authority_seeds,
             bounds=bounds, state=state, resolution=resolution,
             continuations=continuations,
+            operation_intent="AUTHORITY",
+            question_slice=subject.subject_id.canonical_locator,
         )
     return _compose_authority_answer(
         request.repository_id, subject, resolution,
         structural=structural, evidence=evidence, store=store,
-        bounds=bounds, state=state,
+        bounds=bounds, state=state, page_token=request.page_token,
     )
 
 
@@ -1058,7 +1793,7 @@ def _compose_refresh_answer(
     reloaded_claims: list[m.SemanticClaim] = []
     reloaded_rels: list[m.SemanticRelationship] = []
     for subject in subjects:
-        claims, relationships = _load_subject_state(
+        claims, relationships, _, _ = _load_subject_state(
             repository_id, subject.subject_id,
             store=store, bounds=bounds,
         )
@@ -1069,24 +1804,34 @@ def _compose_refresh_answer(
         repository_id, claims_t, rels_t,
         evidence=evidence, store=store, bounds=bounds,
     )
-    freshness_items: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
-        [m.ClaimRef(id=c.claim_id) for c in claims_t]
-        + [m.RelationshipRef(id=r.relationship_id) for r in rels_t]
+    conflicts_all = _conflicts_for(
+        repository_id, claims_t, rels_t, store=store
+    )
+    kept_claims, kept_rels, kept_conf, truncated, category = (
+        _select_answer_items(
+            claims_t, rels_t, conflicts_all, bounds.max_results
+        )
     )
     scope_paths = tuple(
         s.subject_id.canonical_locator for s in subjects
     )
     content = m.StatusContent(
-        freshness_items=freshness_items,
+        readiness=m.RepositoryReadiness.READY,
+        freshness_items=_freshness_items_for(kept_claims, kept_rels),
         changed_dependencies=changed,
         verification_currency=(),
         refresh_scope=m.EvidenceScope(paths=scope_paths, evidence_refs=()),
-        conflicts=_validation.find_conflicts(claims_t, rels_t),
+        claims=kept_claims,
+        relationships=kept_rels,
+        conflicts=kept_conf,
         unresolved=tuple(
-            req for c in claims_t for req in _answers.requirements_for_claim(c)
+            req for c in kept_claims for req in _answers.requirements_for_claim(c)
+        ) + tuple(
+            req for r in kept_rels
+            for req in _answers.requirements_for_relationship(r)
         ),
     )
-    evidence_refs = tuple(ref for c in claims_t for ref in c.evidence)
+    evidence_refs = tuple(ref for c in kept_claims for ref in c.evidence)
     return m.SemanticAnswer(
         answer_id=_answer_id(
             "rfr", repository_id, ",".join(scope_paths)
@@ -1098,7 +1843,9 @@ def _compose_refresh_answer(
         evidence=evidence_refs,
         resolution_requirements=content.unresolved,
         bound_info=_bound_info(
-            bounds, len(freshness_items), False, None
+            bounds,
+            len(kept_claims) + len(kept_rels) + len(kept_conf),
+            truncated, category, None,
         ),
     )
 
@@ -1124,6 +1871,10 @@ def refresh(
     """
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
+    if not _is_initialized(request.repository_id, store=store):
+        return _uninitialized_answer(
+            m.SemanticIntent.STATUS, request.repository_id, bounds, state
+        )
     if request.target is None:
         raise RefreshScopeError(
             "repo-wide refresh requires Phase 3 subject enumeration"
@@ -1158,13 +1909,13 @@ def refresh(
     affected: list[m.Subject] = []
     changed_deps: list[m.EvidenceDependency] = []
     for subject in subjects:
-        claims, relationships = _load_subject_state(
+        claims, relationships, _, _ = _load_subject_state(
             request.repository_id, subject.subject_id,
             store=store, bounds=bounds,
         )
-        ids: tuple[m.ClaimId | m.RelationshipId, ...] = tuple(
-            c.claim_id for c in claims
-        ) + tuple(r.relationship_id for r in relationships)
+        ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+            _claim_ref(c) for c in claims
+        ) + tuple(_relationship_ref(r) for r in relationships)
         if not ids:
             affected.append(subject)
             continue
@@ -1175,12 +1926,17 @@ def refresh(
             request.repository_id, ids, evidence=evidence,
             store=store, bounds=bounds,
         )
-        if updates:
-            updated = {u.semantic_id.value for u in updates}
-            changed_deps.extend(
-                dep for dep in dependencies
-                if dep.semantic_id.value in updated
-            )
+        coverage_updates = coverage_check(
+            request.repository_id, tuple(claims) + tuple(relationships),
+            evidence=evidence, store=store, bounds=bounds,
+        )
+        if updates or coverage_updates:
+            if updates:
+                updated = {u.semantic_id.id.value for u in updates}
+                changed_deps.extend(
+                    dep for dep in dependencies
+                    if dep.semantic_id.id.value in updated
+                )
             affected.append(subject)
         elif not request.stale_only:
             affected.append(subject)
@@ -1195,12 +1951,17 @@ def refresh(
         request.repository_id, first, structural=structural,
         evidence=evidence, bounds=bounds, state=state,
         authority_seeds=authority_seeds,
+        operation_intent=m.SemanticIntent.STATUS,
+        question_slice=first.subject_id.canonical_locator,
     )
     return _suspend(
         op="refresh", repository_id=request.repository_id, subject=first,
         task=task, seeds=authority_seeds, bounds=bounds, state=state,
         resolution=None, scope=subjects, remaining=rest,
         changed=tuple(changed_deps), continuations=continuations,
+        operation_intent="STATUS",
+        question_slice=first.subject_id.canonical_locator,
+        declared_complete=True,
     )
 
 
@@ -1222,19 +1983,17 @@ def initialize_repository(
     Assigns identity (caller-held, derived at source construction),
     establishes current repository state, verifies the structural
     source, builds the evidence inventory/fingerprint index, records
-    authority seeds (caller-held session config in v0.5 — the §10.2
-    schema carries no config table), and initializes the semantic
-    store schema. Performs NO agent semantic interpretation: there is
-    no interpretation input by construction.
-
-    Repository-state metadata persistence (§10.2) arrives with the
-    status/baseline flow that consumes it (Phase 3+); every status and
-    preflight in v0.5 reads live state instead.
+    authority seeds (caller-held session config — the §10.2 schema
+    carries no config table), persists the repository state record,
+    and initializes the semantic store schema. Performs NO agent
+    semantic interpretation: there is no interpretation input by
+    construction.
     """
     if not request.repository_locator:
         raise ValueError("repository_locator must be non-empty")
     policy_bounds = bounds or DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds
     state = structural.repository_state(repository_id)
+    store.record_repository_state(state)
     inventory = evidence.inventory_evidence(
         repository_id,
         m.EvidenceScope(paths=(), evidence_refs=()),
@@ -1342,6 +2101,7 @@ def _trace_drive(
     boundary_only: bool,
     seeds: tuple[m.EvidenceRef, ...],
     suspended: tuple[str, ...],
+    page_token: str | None = None,
 ) -> m.SemanticAnswer | PendingInterpretation:
     """Bounded iterative frontier expansion (plan §8.6) with suspension.
 
@@ -1349,6 +2109,10 @@ def _trace_drive(
     no semantic state that was not already suspended suspends the
     operation (§11.12); resume restarts the deterministic walk, so each
     subject is requested at most once and the walk always terminates.
+
+    Paging (plan I-39): `page_token` windows the target subject's
+    initial state load only; frontier expansion loads proceed unpaged.
+    Page deep results through narrower targets.
     """
     kinds = (
         tuple(relationship_filter)
@@ -1365,15 +2129,18 @@ def _trace_drive(
     sedges: list[m.StructuralEdge] = []
     queue: list[tuple[m.SubjectId, int]] = [(target.subject_id, 0)]
     truncated_walk = False
+    target_windowed = False
     while queue and len(rels) + len(sedges) < bounds.max_results:
         sid, depth = queue.pop(0)
         locator = sid.canonical_locator
         if locator in visited:
             continue
         visited.append(locator)
-        loaded_claims, loaded_rels = _load_subject_state(
+        window = None if target_windowed else page_token
+        target_windowed = True
+        loaded_claims, loaded_rels, _, _ = _load_subject_state(
             repository_id, sid, store=store, bounds=bounds,
-            direction=direction,
+            direction=direction, page_token=window,
         )
         if not loaded_claims and not loaded_rels and locator not in suspended:
             full = _resolve_exact_subject(
@@ -1384,12 +2151,16 @@ def _trace_drive(
                     repository_id, full, structural=structural,
                     evidence=evidence, bounds=bounds, state=state,
                     authority_seeds=seeds,
+                    operation_intent=m.SemanticIntent.TRACE,
+                    question_slice=full.subject_id.canonical_locator,
                 )
                 return _suspend(
                     op="trace", repository_id=repository_id, subject=full,
                     task=task, seeds=seeds, bounds=bounds, state=state,
                     resolution=resolution, scope=(target,),
                     suspended=suspended + (locator,),
+                    operation_intent="TRACE",
+                    question_slice=full.subject_id.canonical_locator,
                     trace_direction=direction.value,
                     trace_filter=tuple(relationship_filter)
                     if relationship_filter is not None
@@ -1446,13 +2217,13 @@ def _compose_trace_answer(
     structural_edges: tuple[m.StructuralEdge, ...],
     truncated_walk: bool,
 ) -> m.SemanticAnswer:
-    ids: tuple[m.ClaimId | m.RelationshipId, ...] = tuple(
-        c.claim_id for c in claims
-    ) + tuple(r.relationship_id for r in relationships)
+    ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+        _claim_ref(c) for c in claims
+    ) + tuple(_relationship_ref(r) for r in relationships)
     updates = preflight(
         repository_id, ids, evidence=evidence, store=store, bounds=bounds
     )
-    fresh_by_id = {u.semantic_id.value: u.freshness for u in updates}
+    fresh_by_id = {u.semantic_id.id.value: u.freshness for u in updates}
 
     def _fresh_claim(claim: m.SemanticClaim) -> m.SemanticClaim:
         freshness = fresh_by_id.get(claim.claim_id.value)
@@ -1478,18 +2249,28 @@ def _compose_trace_answer(
 
     claims = tuple(_fresh_claim(c) for c in claims)
     relationships = tuple(_fresh_rel(r) for r in relationships)
-    conflicts = _validation.find_conflicts(claims, relationships)
+    conflicts_all = _conflicts_for(
+        repository_id, claims, relationships, store=store
+    )
+    kept_claims, kept_rels, kept_conf, items_truncated, items_category = (
+        _select_answer_items(
+            claims, relationships, conflicts_all, bounds.max_results
+        )
+    )
+    kept_ids = {c.claim_id.value for c in kept_claims} | {
+        r.relationship_id.value for r in kept_rels
+    }
     boundary_ids: list[m.SubjectId] = []
-    lifecycle_ids: list[m.ClaimId | m.RelationshipId] = []
-    for claim in claims:
+    lifecycle_refs: list[m.ClaimRef | m.RelationshipRef] = []
+    for claim in kept_claims:
         if claim.kind is m.ClaimKind.LIFECYCLE_STATE:
-            lifecycle_ids.append(claim.claim_id)
-    for rel in relationships:
+            lifecycle_refs.append(_claim_ref(claim))
+    for rel in kept_rels:
         if rel.kind in (
             m.RelationshipKind.TRANSITIONS_TO,
             m.RelationshipKind.PERSISTS_AT,
         ):
-            lifecycle_ids.append(rel.relationship_id)
+            lifecycle_refs.append(_relationship_ref(rel))
         if rel.kind is m.RelationshipKind.CROSSES_BOUNDARY:
             boundary_ids.extend((rel.source, rel.target))
     if boundary_ids:
@@ -1511,31 +2292,32 @@ def _compose_trace_answer(
     requirements: list[m.ResolutionRequirement] = []
     if resolution is not None:
         requirements.extend(_answers.requirements_for_resolution(resolution))
-    for rel in relationships:
+    for rel in kept_rels:
         requirements.extend(_answers.requirements_for_relationship(rel))
-    for claim in claims:
+    for claim in kept_claims:
         requirements.extend(_answers.requirements_for_claim(claim))
-    (kept_conflicts, kept_rels, kept_life, kept_boundary, kept_edges), truncated, category, token = (
+    (kept_boundary, kept_edges), truncated, category, token = (
         _answers.truncate_fields(
             (
-                (conflicts, "conflicts"),
-                (relationships, "relationships"),
-                (tuple(lifecycle_ids), "lifecycle_context"),
                 (tuple(boundary_ids), "boundary_context"),
                 (structural_edges, "structural_edges"),
             ),
-            bounds.max_results,
+            max(0, bounds.max_results - len(kept_conf) - len(kept_rels)),
         )
     )
+    truncated = truncated or items_truncated
+    if category is None:
+        category = items_category
     content = m.TraceContent(
         relationships=kept_rels,  # type: ignore[arg-type]
         structural_edges=kept_edges,  # type: ignore[arg-type]
         boundary_context=kept_boundary,  # type: ignore[arg-type]
-        lifecycle_context=kept_life,  # type: ignore[arg-type]
-        conflicts=kept_conflicts,  # type: ignore[arg-type]
+        lifecycle_context=tuple(lifecycle_refs),
+        claims=kept_claims,
+        conflicts=kept_conf,
     )
     returned = (
-        len(kept_conflicts) + len(kept_rels) + len(kept_life)
+        len(kept_conf) + len(kept_rels) + len(lifecycle_refs)
         + len(kept_boundary) + len(kept_edges)
     )
     return m.SemanticAnswer(
@@ -1569,9 +2351,17 @@ def trace(
     representations/contracts, transformation owners, lifecycle
     transitions and persistence points. Structural paths stay possible
     routes — never runtime facts or authority. Suspends via §11.12 when
-    frontier interpretation is missing; never interprets inline."""
+    frontier interpretation is missing; never interprets inline.
+
+    Paging (plan I-39): `page_token` windows the target subject's
+    initial state load only; frontier expansion loads proceed unpaged.
+    Page deep results through narrower targets."""
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
+    if not _is_initialized(request.repository_id, store=store):
+        return _uninitialized_answer(
+            m.SemanticIntent.TRACE, request.repository_id, bounds, state
+        )
     resolution = structural.resolve_subject(
         request.repository_id, request.target, bounds
     )
@@ -1598,6 +2388,7 @@ def trace(
         relationship_filter=request.relationship_filter,
         boundary_only=request.boundary_only,
         seeds=authority_seeds, suspended=(),
+        page_token=request.page_token,
     )
 
 
@@ -1634,7 +2425,7 @@ def _resume_trace(
 
 def _classify_current(
     repository_id: str,
-    semantic_ids: tuple[m.ClaimId | m.RelationshipId, ...],
+    semantic_ids: tuple[m.ClaimRef | m.RelationshipRef, ...],
     *,
     evidence: EvidenceSource,
     store: SemanticStore,
@@ -1687,6 +2478,14 @@ def _hook_fast(
             readiness=m.RepositoryReadiness.UNAVAILABLE,
             recommended_action="verify repository availability",
         )
+    if not _is_initialized(repository_id, store=store):
+        return m.HookStatusNotice(
+            readiness=m.RepositoryReadiness.UNINITIALIZED,
+            recommended_action=(
+                "run span_initialize_repository in a dedicated "
+                "setup session"
+            ),
+        )
     if target is None:
         return m.HookStatusNotice(
             readiness=m.RepositoryReadiness.READY
@@ -1698,12 +2497,12 @@ def _hook_fast(
     stale = 0
     unverifiable = 0
     for subject in subjects:
-        claims, relationships = _load_subject_state(
+        claims, relationships, _, _ = _load_subject_state(
             repository_id, subject.subject_id, store=store, bounds=bounds
         )
-        ids: tuple[m.ClaimId | m.RelationshipId, ...] = tuple(
-            c.claim_id for c in claims
-        ) + tuple(r.relationship_id for r in relationships)
+        ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+            _claim_ref(c) for c in claims
+        ) + tuple(_relationship_ref(r) for r in relationships)
         if not ids:
             continue
         updates, _ = _classify_current(
@@ -1716,6 +2515,54 @@ def _hook_fast(
                     stale += 1
                 else:
                     unverifiable += 1
+    # Seed reliance is explicit: a moved or missing authority seed
+    # marks its scope stale even with quiet direct dependencies.
+    # Inventory-membership changes alone stay silent here (I-32: a new
+    # file has no dependants); queries surface them via coverage.
+    coverages = store.load_coverage_dependencies(
+        repository_id,
+        tuple(s.subject_id for s in subjects),
+    )
+    coverages = _latest_coverages(coverages)
+    seed_refs = tuple(
+        dict.fromkeys(
+            m.EvidenceRef(
+                evidence_id=seed.evidence_id,
+                repository_id=repository_id,
+                source_kind=m.EvidenceSourceKind.USER_PROJECT_CONFIG,
+                locator=seed.locator or seed.evidence_id.value,
+            )
+            for coverage in coverages
+            for seed in coverage.seed_fingerprints
+        )
+    )
+    seed_current: dict[str, str | None] = {}
+    if seed_refs:
+        seed_page = evidence.inventory_evidence(
+            repository_id,
+            m.EvidenceScope(paths=(), evidence_refs=seed_refs),
+            bounds,
+        )
+        seed_current = {
+            item.evidence_ref.evidence_id.value: item.content_fingerprint
+            for item in seed_page.items
+        }
+    for coverage in coverages:
+        if not coverage.seed_fingerprints:
+            continue
+        seed_moved = any(
+            seed_current.get(seed.evidence_id.value) != seed.fingerprint
+            for seed in coverage.seed_fingerprints
+        )
+        if not seed_moved:
+            continue
+        for sid in coverage.scope_subjects:
+            if sid not in affected:
+                affected.append(sid)
+            claims, relationships, _, _ = _load_subject_state(
+                repository_id, sid, store=store, bounds=bounds
+            )
+            stale += len(claims) + len(relationships)
     action = None
     if stale or unverifiable:
         action = (
@@ -1741,77 +2588,117 @@ def _compose_status_answer(
     store: SemanticStore,
     bounds: m.QueryBounds,
     state: m.RepositoryState,
+    page_token: str | None = None,
 ) -> m.SemanticAnswer:
     all_claims: list[m.SemanticClaim] = []
     all_rels: list[m.SemanticRelationship] = []
-    for subject in subjects:
-        claims, relationships = _load_subject_state(
-            repository_id, subject.subject_id, store=store, bounds=bounds
+    first_claims_token: str | None = None
+    first_rels_token: str | None = None
+    for position, subject in enumerate(subjects):
+        claims, relationships, tok_c, tok_r = _load_subject_state(
+            repository_id, subject.subject_id, store=store, bounds=bounds,
+            page_token=page_token,
         )
         all_claims.extend(claims)
         all_rels.extend(relationships)
+        if position == 0:
+            first_claims_token, first_rels_token = tok_c, tok_r
+    for position, subject in enumerate(subjects):
+        claims, relationships, tok_c, tok_r = _load_subject_state(
+            repository_id, subject.subject_id, store=store, bounds=bounds,
+            page_token=page_token if len(subjects) == 1 else None,
+        )
+        all_claims.extend(claims)
+        all_rels.extend(relationships)
+        if position == 0:
+            first_claims_token, first_rels_token = tok_c, tok_r
     # Classify before the view persists anything: _refresh_view marks
     # state, after which a second classification would always report
     # clean and changed_dependencies would always be empty.
-    pre_ids: tuple[m.ClaimId | m.RelationshipId, ...] = tuple(
-        c.claim_id for c in all_claims
-    ) + tuple(r.relationship_id for r in all_rels)
+    pre_ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+        _claim_ref(c) for c in all_claims
+    ) + tuple(_relationship_ref(r) for r in all_rels)
     updates, dependencies = _classify_current(
         repository_id, pre_ids, evidence=evidence, store=store, bounds=bounds
     )
-    updated_ids = {u.semantic_id.value for u in updates}
+    updated_ids = {u.semantic_id.id.value for u in updates}
     changed = tuple(
-        dep for dep in dependencies if dep.semantic_id.value in updated_ids
+        dep for dep in dependencies if dep.semantic_id.id.value in updated_ids
     )
     stale_evidence = {
         dep.evidence_ref.locator
         for dep in dependencies
-        if dep.semantic_id.value in updated_ids
+        if dep.semantic_id.id.value in updated_ids
     }
     claims_t, rels_t = _refresh_view(
         repository_id, tuple(all_claims), tuple(all_rels),
         evidence=evidence, store=store, bounds=bounds,
     )
-    verification = tuple(
+    verification_all = tuple(
         claim.value
         for claim in claims_t
         if claim.kind is m.ClaimKind.VERIFICATION
         and isinstance(claim.value, m.VerificationValue)
     )
-    conflicts = _validation.find_conflicts(claims_t, rels_t)
-    unresolved: list[m.ResolutionRequirement] = []
-    for claim in claims_t:
-        unresolved.extend(_answers.requirements_for_claim(claim))
-    for rel in rels_t:
-        unresolved.extend(_answers.requirements_for_relationship(rel))
-    freshness_items: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
-        [m.ClaimRef(id=c.claim_id) for c in claims_t]
-        + [m.RelationshipRef(id=r.relationship_id) for r in rels_t]
+    conflicts_all = _conflicts_for(
+        repository_id, tuple(claims_t), tuple(rels_t), store=store
     )
-    (kept_conflicts, kept_unresolved, kept_items, kept_changed, kept_ver), truncated, category, token = (
-        _answers.truncate_fields(
-            (
-                (conflicts, "conflicts"),
-                (tuple(unresolved), "unresolved"),
-                (freshness_items, "freshness_items"),
-                (changed, "changed_dependencies"),
-                (verification, "verification_currency"),
-            ),
-            bounds.max_results,
+    kept_claims, kept_rels, kept_conf, items_truncated, items_category = (
+        _select_answer_items(
+            claims_t, rels_t, conflicts_all, bounds.max_results
         )
     )
+    kept_ids = {c.claim_id.value for c in kept_claims} | {
+        r.relationship_id.value for r in kept_rels
+    }
+    changed_kept = tuple(
+        dep for dep in changed
+        if dep.semantic_id.id.value in kept_ids
+    )
+    unresolved: list[m.ResolutionRequirement] = []
+    for claim in kept_claims:
+        unresolved.extend(_answers.requirements_for_claim(claim))
+    for rel in kept_rels:
+        unresolved.extend(_answers.requirements_for_relationship(rel))
+    # Non-ref lists (evidence pointers and values, never semantic refs)
+    # take the remaining budget deterministically.
+    rest_budget = max(
+        0, bounds.max_results - len(kept_conf) - len(kept_claims)
+    )
+    kept_unresolved = tuple(unresolved[:rest_budget])
+    kept_changed = changed_kept[: max(0, rest_budget - len(kept_unresolved))]
+    kept_ver = verification_all[
+        : max(0, rest_budget - len(kept_unresolved) - len(kept_changed))
+    ]
+    truncated = items_truncated or (
+        len(kept_unresolved) + len(kept_changed) + len(kept_ver)
+        < len(unresolved) + len(changed_kept) + len(verification_all)
+    )
+    category = items_category
+    if category is None and truncated:
+        category = "unresolved"
+    if len(subjects) == 1:
+        token: str | None = _next_service_token(
+            page_token, kept_claims, kept_rels, claims_t, rels_t,
+            first_claims_token, first_rels_token,
+        )
+    else:
+        token = None
     content = m.StatusContent(
-        freshness_items=kept_items,  # type: ignore[arg-type]
+        readiness=m.RepositoryReadiness.READY,
+        freshness_items=_freshness_items_for(kept_claims, kept_rels),
         changed_dependencies=kept_changed,  # type: ignore[arg-type]
         verification_currency=kept_ver,  # type: ignore[arg-type]
         refresh_scope=m.EvidenceScope(
             paths=tuple(sorted(stale_evidence)), evidence_refs=()
         ),
-        conflicts=kept_conflicts,  # type: ignore[arg-type]
-        unresolved=kept_unresolved,  # type: ignore[arg-type]
+        claims=kept_claims,
+        relationships=kept_rels,
+        conflicts=kept_conf,
+        unresolved=tuple(unresolved),
     )
     returned = (
-        len(kept_conflicts) + len(kept_unresolved) + len(kept_items)
+        len(kept_conf) + len(unresolved) + len(kept_claims)
         + len(kept_changed) + len(kept_ver)
     )
     return m.SemanticAnswer(
@@ -1825,7 +2712,7 @@ def _compose_status_answer(
         repository_state=state,
         subject_resolution=None,
         content=content,
-        evidence=tuple(ref for c in claims_t for ref in c.evidence),
+        evidence=tuple(ref for c in kept_claims for ref in c.evidence),
         resolution_requirements=tuple(unresolved),
         bound_info=_bound_info(bounds, returned, truncated, category, token),
     )
@@ -1845,15 +2732,18 @@ def status(
     NORMAL performs the full bounded status operation, suspending via
     §11.12 when subject interpretation is missing. HOOK_FAST is read-only
     lifecycle observation returning a compact notice — never suspension,
-    never writes. Claim/relationship/answer-ref targets require lookup
-    v0.5 does not provide (StatusTargetError).
+    never writes. Claim/relationship targets resolve through the §5.5
+    ref lookup; answer envelopes are never persisted (StatusTargetError).
+
+    Paging (plan I-39): `page_token` carries per-list offsets redeemed
+    for single-subject and ref targets (composite `pg:<claims>:<rels>`
+    cursors). Multi-subject scopes load unpaged; page them through
+    narrower single-subject targets.
     """
-    if isinstance(
-        request.target, (m.ClaimRef, m.RelationshipRef, m.AnswerRef)
-    ):
+    if isinstance(request.target, m.AnswerRef):
         raise StatusTargetError(
-            "claim/relationship/answer-ref targets require "
-            "indexed-identity lookup unavailable in v0.5"
+            "answer envelopes are not persisted; status serves "
+            "subject, claim, relationship, and evidence-scope targets"
         )
     bounds = _resolve_bounds(request.bounds, hook=False)
     if request.mode is m.StatusMode.HOOK_FAST:
@@ -1862,7 +2752,37 @@ def status(
             structural=structural, evidence=evidence, store=store,
             bounds=bounds,
         )
+    if isinstance(request.target, (m.ClaimRef, m.RelationshipRef)):
+        try:
+            (item,) = store.load_by_refs(
+                request.repository_id, (request.target,)
+            )
+        except ValueError as exc:
+            raise StatusTargetError(str(exc)) from None
+        state = structural.repository_state(request.repository_id)
+        if not _is_initialized(request.repository_id, store=store):
+            return _uninitialized_answer(
+                m.SemanticIntent.STATUS, request.repository_id,
+                bounds, state,
+            )
+        sid = (
+            item.subject
+            if isinstance(item, m.SemanticClaim)
+            else item.source
+        )
+        subjects = store.load_subjects(request.repository_id, (sid,))
+        if not subjects:
+            raise StatusTargetError("referenced subject is not indexed")
+        return _compose_status_answer(
+            request.repository_id, subjects, structural=structural,
+            evidence=evidence, store=store, bounds=bounds, state=state,
+            page_token=request.page_token,
+        )
     state = structural.repository_state(request.repository_id)
+    if not _is_initialized(request.repository_id, store=store):
+        return _uninitialized_answer(
+            m.SemanticIntent.STATUS, request.repository_id, bounds, state
+        )
     if request.target is None:
         return m.SemanticAnswer(
             answer_id=_answer_id(
@@ -1912,6 +2832,8 @@ def status(
             request.repository_id, missing, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=authority_seeds,
+            operation_intent=m.SemanticIntent.STATUS,
+            question_slice=missing.subject_id.canonical_locator,
         )
         return _suspend(
             op="status", repository_id=request.repository_id,
@@ -1919,10 +2841,13 @@ def status(
             bounds=bounds, state=state, resolution=None, scope=subjects,
             suspended=(missing.subject_id.canonical_locator,),
             continuations=continuations,
+            operation_intent="STATUS",
+            question_slice=missing.subject_id.canonical_locator,
         )
     return _compose_status_answer(
         request.repository_id, subjects, structural=structural,
         evidence=evidence, store=store, bounds=bounds, state=state,
+        page_token=request.page_token,
     )
 
 
@@ -1938,7 +2863,7 @@ def _missing_subjects(
     for subject in subjects:
         if subject.subject_id.canonical_locator in suspended:
             continue
-        claims, relationships = _load_subject_state(
+        claims, relationships, _, _ = _load_subject_state(
             repository_id, subject.subject_id, store=store, bounds=bounds
         )
         if not claims and not relationships:
@@ -1968,6 +2893,8 @@ def _resume_status(
             record.repository_id, missing, structural=structural,
             evidence=evidence, bounds=bounds, state=state,
             authority_seeds=record.seeds,
+            operation_intent=m.SemanticIntent.STATUS,
+            question_slice=missing.subject_id.canonical_locator,
         )
         return _suspend(
             op="status", repository_id=record.repository_id,
@@ -1975,6 +2902,8 @@ def _resume_status(
             bounds=bounds, state=state, resolution=None,
             scope=record.scope, suspended=suspended,
             continuations=continuations,
+            operation_intent="STATUS",
+            question_slice=missing.subject_id.canonical_locator,
         )
     return _compose_status_answer(
         record.repository_id, record.scope, structural=structural,
@@ -1991,43 +2920,85 @@ def _derive_change_conditions(
     target: m.Subject,
     claims: tuple[m.SemanticClaim, ...],
     relationships: tuple[m.SemanticRelationship, ...],
+    affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = (),
 ) -> tuple[m.ChangeCondition, ...]:
-    """Deterministic ChangeCondition derivation (plan §11.5.1).
+    """Deterministic ChangeCondition derivation (plan §11.5.1, I-38).
 
     Dimension flags, never severity/confidence/approval scores. Presence
     rows fire on established canonical state; kind-gated rows additionally
-    require the stated change_kind. `OTHER` suppresses kind-gated rows
+    require the stated change_kind. Proposal-sensitive rows fire only for
+    typed affected assertions resolved against current canonical state;
+    proposal prose is never mined. `OTHER` suppresses kind-gated rows
     only — independently established dimensions still apply.
     """
     sid = target.subject_id
-    established_claim_kinds = {
-        c.kind
+    established_claims = {
+        c.claim_id.value: c
         for c in claims
         if c.trust is m.TrustState.ESTABLISHED
     }
+    established_rels = {
+        r.relationship_id.value: r
+        for r in relationships
+        if r.trust is m.TrustState.ESTABLISHED
+    }
+    affected = {_ref_value(ref) for ref in affected_assertions}
     rel_kinds = {r.kind for r in relationships}
     has_kind = change_kind is not ChangeKind.OTHER
     conditions: list[m.ChangeCondition] = []
     if any(
-        c.authority is not None
-        and c.authority.status is m.AuthorityStatus.ACCEPTED
-        and c.freshness.state is m.FreshnessState.CURRENT
-        for c in claims
-    ) or m.RelationshipKind.GOVERNED_BY in rel_kinds:
+        value in established_claims
+        and established_claims[value].authority is not None
+        and established_claims[value].authority.status
+        is m.AuthorityStatus.ACCEPTED
+        and established_claims[value].freshness.state
+        is m.FreshnessState.CURRENT
+        for value in affected
+    ) or any(
+        value in established_rels
+        and established_rels[value].kind is m.RelationshipKind.GOVERNED_BY
+        for value in affected
+    ):
         conditions.append(m.ChangeCondition.AUTHORITY_CHANGE)
     if has_kind and change_kind is ChangeKind.OWNERSHIP:
+        conditions.append(m.ChangeCondition.OWNERSHIP_CHANGE)
+    elif any(
+        value in established_claims
+        and established_claims[value].kind
+        in (
+            m.ClaimKind.OWNERSHIP_CUSTODY,
+            m.ClaimKind.TRANSFORMATION_OWNERSHIP,
+        )
+        for value in affected
+    ):
         conditions.append(m.ChangeCondition.OWNERSHIP_CHANGE)
     if (
         has_kind
         and change_kind is ChangeKind.REPRESENTATION
         and (
-            m.ClaimKind.REPRESENTATION_CONTRACT in established_claim_kinds
+            any(
+                c.kind is m.ClaimKind.REPRESENTATION_CONTRACT
+                for c in established_claims.values()
+            )
             or m.RelationshipKind.REPRESENTS_AS in rel_kinds
         )
     ):
         conditions.append(m.ChangeCondition.CANONICAL_REPRESENTATION_CHANGE)
-    if m.RelationshipKind.CROSSES_BOUNDARY in rel_kinds or (
+    target_item_ids = {
+        c.claim_id.value for c in claims if c.subject == sid
+    } | {
+        r.relationship_id.value
+        for r in relationships
+        if r.source == sid or r.target == sid
+    }
+    if any(
+        value in established_rels
+        and established_rels[value].kind
+        is m.RelationshipKind.CROSSES_BOUNDARY
+        for value in affected
+    ) or (
         sid.subject_kind is m.SubjectKind.BOUNDARY
+        and bool(affected & target_item_ids)
     ):
         conditions.append(m.ChangeCondition.BOUNDARY_CHANGE)
     if sid.subject_kind is m.SubjectKind.CONTRACT and any(
@@ -2039,25 +3010,42 @@ def _derive_change_conditions(
         or c.kind is m.ClaimKind.PURPOSE
     ):
         conditions.append(m.ChangeCondition.PUBLIC_CONTRACT_CHANGE)
-    if m.ClaimKind.INVARIANT_CONSTRAINT in established_claim_kinds:
+    if any(
+        value in established_claims
+        and established_claims[value].kind
+        is m.ClaimKind.INVARIANT_CONSTRAINT
+        for value in affected
+    ):
         conditions.append(m.ChangeCondition.INVARIANT_CHANGE)
     if (
         has_kind
         and change_kind is ChangeKind.CONFIGURATION
-        or m.ClaimKind.CONFIGURATION_ENVIRONMENT in established_claim_kinds
+        or any(
+            c.kind is m.ClaimKind.CONFIGURATION_ENVIRONMENT
+            for c in established_claims.values()
+        )
         or m.RelationshipKind.CONFIGURED_BY in rel_kinds
     ):
         conditions.append(m.ChangeCondition.CONFIGURATION_CHANGE)
     if (
         has_kind
         and change_kind is ChangeKind.LIFECYCLE
-        or m.ClaimKind.LIFECYCLE_STATE in established_claim_kinds
+        or any(
+            c.kind is m.ClaimKind.LIFECYCLE_STATE
+            for c in established_claims.values()
+        )
         or m.RelationshipKind.TRANSITIONS_TO in rel_kinds
         or m.RelationshipKind.PERSISTS_AT in rel_kinds
     ):
         conditions.append(m.ChangeCondition.LIFECYCLE_CHANGE)
-    if m.ClaimKind.VERIFICATION in established_claim_kinds or (
-        m.RelationshipKind.VERIFIED_BY in rel_kinds
+    if any(
+        value in established_claims
+        and established_claims[value].kind is m.ClaimKind.VERIFICATION
+        for value in affected
+    ) or any(
+        value in established_rels
+        and established_rels[value].kind is m.RelationshipKind.VERIFIED_BY
+        for value in affected
     ):
         conditions.append(m.ChangeCondition.VERIFICATION_CHANGE)
     order = {condition: n for n, condition in enumerate(m.ChangeCondition)}
@@ -2077,14 +3065,22 @@ def _compose_impact_answer(
     state: m.RepositoryState,
     change_kind: ChangeKind,
     change_description: str | None,
-    seeds: tuple[m.EvidenceRef, ...],
-    suspended: tuple[str, ...],
+    affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = (),
+    seeds: tuple[m.EvidenceRef, ...] = (),
+    suspended: tuple[str, ...] = (),
+    page_token: str | None = None,
 ) -> m.SemanticAnswer | PendingInterpretation:
     # change_description is carried on suspend/resume for agent context but
     # never text-mined: proposal-content inference would violate AP-01.
+    proposal = m.ProposedChange(
+        change_kind=change_kind,
+        change_description=change_description,
+        affected_assertions=affected_assertions,
+    )
     sid = subject.subject_id
-    claims, relationships = _load_subject_state(
-        repository_id, sid, store=store, bounds=bounds
+    claims, relationships, _, _ = _load_subject_state(
+        repository_id, sid, store=store, bounds=bounds,
+        page_token=page_token if not suspended else None,
     )
     if not claims and not relationships:
         if sid.canonical_locator not in suspended:
@@ -2096,6 +3092,9 @@ def _compose_impact_answer(
                     repository_id, full, structural=structural,
                     evidence=evidence, bounds=bounds, state=state,
                     authority_seeds=seeds,
+                    operation_intent=m.SemanticIntent.IMPACT,
+                    question_slice=full.subject_id.canonical_locator,
+                    proposed_change=proposal,
                 )
                 return _suspend(
                     op="impact", repository_id=repository_id,
@@ -2105,6 +3104,9 @@ def _compose_impact_answer(
                     suspended=suspended + (sid.canonical_locator,),
                     change_kind=change_kind.value,
                     change_description=change_description,
+                    affected_assertions=affected_assertions,
+                    operation_intent="IMPACT",
+                    question_slice=full.subject_id.canonical_locator,
                     continuations=continuations,
                 )
         claims, relationships = (), ()
@@ -2139,7 +3141,7 @@ def _compose_impact_answer(
             node_claims[locator] = claims
             node_rels[locator] = relationships
             continue
-        loaded_c, loaded_r = _load_subject_state(
+        loaded_c, loaded_r, _, _ = _load_subject_state(
             repository_id, visited_id, store=store, bounds=bounds
         )
         if not loaded_c and not loaded_r and locator not in suspended:
@@ -2152,6 +3154,9 @@ def _compose_impact_answer(
                     repository_id, full, structural=structural,
                     evidence=evidence, bounds=bounds, state=state,
                     authority_seeds=seeds,
+                    operation_intent=m.SemanticIntent.IMPACT,
+                    question_slice=full.subject_id.canonical_locator,
+                    proposed_change=proposal,
                 )
                 return _suspend(
                     op="impact", repository_id=repository_id,
@@ -2161,6 +3166,9 @@ def _compose_impact_answer(
                     suspended=suspended + (locator,),
                     change_kind=change_kind.value,
                     change_description=change_description,
+                    affected_assertions=affected_assertions,
+                    operation_intent="IMPACT",
+                    question_slice=full.subject_id.canonical_locator,
                     continuations=continuations,
                 )
         node_claims[locator] = loaded_c
@@ -2170,7 +3178,8 @@ def _compose_impact_answer(
         if r.source == sid or r.target == sid
     ]
     conditions = _derive_change_conditions(
-        change_kind, subject, claims, tuple(target_rels)
+        change_kind, subject, claims, tuple(target_rels),
+        affected_assertions=affected_assertions,
     )
     items: list[m.ImpactItem] = []
     for visited_id in visited:
@@ -2206,9 +3215,7 @@ def _compose_impact_answer(
                     "or unresolved"
                 ),
                 input_refs=tuple(
-                    (i.claim_id if isinstance(i, m.SemanticClaim)
-                     else i.relationship_id)
-                    for i in questionable
+                    _item_ref(i) for i in questionable
                 ),
             )
         elif established:
@@ -2221,7 +3228,7 @@ def _compose_impact_answer(
                     f"this subject"
                 ),
                 input_refs=tuple(
-                    r.relationship_id for r in established
+                    _relationship_ref(r) for r in established
                 ),
             )
         else:
@@ -2241,22 +3248,22 @@ def _compose_impact_answer(
                 basis=basis,
                 structural_evidence=(edge,) if edge is not None else (),
                 relevant_claims=tuple(
-                    c.claim_id for c in claims_here
+                    _claim_ref(c) for c in claims_here
                 ),
                 relevant_relationships=tuple(
-                    r.relationship_id
+                    _relationship_ref(r)
                     for r in list(rels_here) + established
                 ),
             )
         )
-    target_context: tuple[m.ClaimId | m.RelationshipId, ...] = tuple(
-        [c.claim_id for c in claims]
-        + [r.relationship_id for r in relationships]
+    target_context: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+        [_claim_ref(c) for c in claims]
+        + [_relationship_ref(r) for r in relationships]
     )
-    verification: tuple[m.ClaimId | m.RelationshipId, ...] = tuple(
-        [c.claim_id for c in claims if c.kind is m.ClaimKind.VERIFICATION]
+    verification: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+        [_claim_ref(c) for c in claims if c.kind is m.ClaimKind.VERIFICATION]
         + [
-            r.relationship_id
+            _relationship_ref(r)
             for r in relationships
             if r.kind is m.RelationshipKind.VERIFIED_BY
         ]
@@ -2271,37 +3278,74 @@ def _compose_impact_answer(
         for r in rs
         if loc != sid.canonical_locator
     ]
-    conflicts = _validation.find_conflicts(tuple(all_claims), tuple(all_rels))
-    unresolved: list[m.ResolutionRequirement] = []
-    if resolution is not None:
-        unresolved.extend(_answers.requirements_for_resolution(resolution))
-    for claim in all_claims:
-        unresolved.extend(_answers.requirements_for_claim(claim))
-    for rel in all_rels:
-        unresolved.extend(_answers.requirements_for_relationship(rel))
-    (kept_conflicts, kept_unresolved, kept_items, kept_context, kept_ver, kept_conds), truncated, category, token = (
-        _answers.truncate_fields(
-            (
-                (conflicts, "conflicts"),
-                (tuple(unresolved), "unresolved"),
-                (tuple(items), "impacts"),
-                (target_context, "target_context"),
-                (verification, "verification"),
-                (conditions, "change_conditions"),
-            ),
+    conflicts_all = _conflicts_for(
+        repository_id, tuple(all_claims), tuple(all_rels), store=store
+    )
+    kept_claims, kept_rels, kept_conf, items_truncated, items_category = (
+        _select_answer_items(
+            tuple(all_claims), tuple(all_rels), conflicts_all,
             bounds.max_results,
         )
     )
+    kept_ids = {c.claim_id.value for c in kept_claims} | {
+        r.relationship_id.value for r in kept_rels
+    }
+    kept_context = tuple(
+        ref for ref in target_context if _ref_value(ref) in kept_ids
+    )
+    kept_ver = tuple(
+        ref for ref in verification if _ref_value(ref) in kept_ids
+    )
+    unresolved: list[m.ResolutionRequirement] = []
+    if resolution is not None:
+        unresolved.extend(_answers.requirements_for_resolution(resolution))
+    for claim in kept_claims:
+        unresolved.extend(_answers.requirements_for_claim(claim))
+    for rel in kept_rels:
+        unresolved.extend(_answers.requirements_for_relationship(rel))
+    kept_impacts = tuple(
+        m.ImpactItem(
+            subject=item.subject,
+            establishment=item.establishment,
+            basis=item.basis,
+            structural_evidence=item.structural_evidence,
+            relevant_claims=tuple(
+                ref for ref in item.relevant_claims
+                if _ref_value(ref) in kept_ids
+            ),
+            relevant_relationships=tuple(
+                ref for ref in item.relevant_relationships
+                if _ref_value(ref) in kept_ids
+            ),
+        )
+        for item in items
+    )
+    rest_budget = max(
+        0,
+        bounds.max_results
+        - len(kept_conf) - len(kept_context) - len(kept_ver)
+        - len(kept_claims) - len(kept_rels) - len(unresolved),
+    )
+    kept_impacts = kept_impacts[:rest_budget]
+    kept_conds = conditions[: max(0, rest_budget - len(kept_impacts))]
+    truncated = items_truncated or (
+        len(kept_impacts) < len(items) or len(kept_conds) < len(conditions)
+    )
+    category = items_category
+    if category is None and truncated:
+        category = "impacts"
     content = m.ImpactContent(
-        target_context=kept_context,  # type: ignore[arg-type]
-        change_conditions=kept_conds,  # type: ignore[arg-type]
-        impacts=kept_items,  # type: ignore[arg-type]
-        verification=kept_ver,  # type: ignore[arg-type]
-        conflicts=kept_conflicts,  # type: ignore[arg-type]
-        unresolved=kept_unresolved,  # type: ignore[arg-type]
+        target_context=kept_context,
+        change_conditions=kept_conds,
+        impacts=kept_impacts,
+        verification=kept_ver,
+        claims=kept_claims,
+        relationships=kept_rels,
+        conflicts=kept_conf,
+        unresolved=tuple(unresolved),
     )
     returned = (
-        len(kept_conflicts) + len(kept_unresolved) + len(kept_items)
+        len(kept_conf) + len(unresolved) + len(kept_impacts)
         + len(kept_context) + len(kept_ver) + len(kept_conds)
     )
     return m.SemanticAnswer(
@@ -2313,9 +3357,9 @@ def _compose_impact_answer(
         repository_state=state,
         subject_resolution=resolution,
         content=content,
-        evidence=tuple(ref for c in claims for ref in c.evidence),
+        evidence=tuple(ref for c in kept_claims for ref in c.evidence),
         resolution_requirements=tuple(unresolved),
-        bound_info=_bound_info(bounds, returned, truncated, category, token),
+        bound_info=_bound_info(bounds, returned, truncated, category, None),
     )
 
 
@@ -2337,9 +3381,17 @@ def impact(
     downstream impacts, verification currency, conflicts/staleness, and
     requirements. Suspends via §11.12 when interpretation is missing;
     never interprets inline, never invents authority or severity.
+
+    Paging (plan I-39): `page_token` windows the target subject's
+    initial state load only; downstream node loads proceed unpaged.
+    Page deep results through narrower targets.
     """
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
+    if not _is_initialized(request.repository_id, store=store):
+        return _uninitialized_answer(
+            m.SemanticIntent.IMPACT, request.repository_id, bounds, state
+        )
     resolution = structural.resolve_subject(
         request.repository_id, request.target, bounds
     )
@@ -2368,5 +3420,7 @@ def impact(
         continuations=continuations, bounds=bounds, state=state,
         change_kind=request.change_kind,
         change_description=request.change_description,
+        affected_assertions=request.affected_assertions,
         seeds=authority_seeds, suspended=(),
+        page_token=request.page_token,
     )

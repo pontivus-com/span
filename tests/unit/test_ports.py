@@ -92,9 +92,11 @@ class PortShapeTest(unittest.TestCase):
         self._assert_methods(
             SemanticStore,
             {
-                "load_subjects", "load_claims", "load_relationships",
-                "load_evidence_dependencies", "write_index_batch",
-                "mark_freshness", "schema_version",
+                "load_subjects", "load_by_refs", "load_claims",
+                "load_relationships", "load_evidence_dependencies",
+                "load_coverage_dependencies", "load_conflicts",
+                "write_index_batch", "mark_freshness", "schema_version",
+                "record_repository_state", "load_repository_state",
             },
         )
 
@@ -103,6 +105,13 @@ class PortShapeTest(unittest.TestCase):
         self.assertIs(hints["direction"], StructuralDirection)
         hints = typing.get_type_hints(SemanticStore.load_relationships)
         self.assertIs(hints["direction"], StructuralDirection)
+
+    def test_change_kind_single_home(self):
+        from span import service_operations as ops
+
+        self.assertIs(ops.ChangeKind, m.ChangeKind)
+        self.assertIs(ops.ProposedChange, m.ProposedChange)
+
     def test_store_batch_signature(self):
         hints = typing.get_type_hints(SemanticStore.write_index_batch)
         self.assertIs(hints["batch"], m.CanonicalIndexBatch)

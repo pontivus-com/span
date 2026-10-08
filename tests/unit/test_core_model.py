@@ -360,8 +360,8 @@ class ClaimValueMappingTest(unittest.TestCase):
             )
         with self.assertRaises(ValueError):
             m.CandidateSemanticClaim(
-                _subject_id(), m.ClaimKind.VERIFICATION,
-                m.PurposeValue("s", ()),
+                subject=_subject_id(), kind=m.ClaimKind.VERIFICATION,
+                value=m.PurposeValue("s", ()),
             )
 
 
@@ -449,15 +449,20 @@ class SerializationRoundTripTest(unittest.TestCase):
     def test_resolution_change_impact(self):
         req = m.ResolutionRequirement(
             m.ResolutionKind.MISSING_AUTHORITY, _subject_id(), "no binding",
-            (m.ClaimId("c-1"),),
+            (m.ClaimRef(id=m.ClaimId("c-1")),),
         )
         self._round_trip(m.ResolutionRequirement, req)
         item = m.ImpactItem(
             _subject_id(), m.ImpactEstablishment.SEMANTICALLY_ESTABLISHED,
             m.SemanticBasis(m.DerivationKind.DERIVED_JOIN),
-            (_evidence_ref(),), (m.ClaimId("c-1"),), (),
+            (_evidence_ref(),), (m.ClaimRef(id=m.ClaimId("c-1")),), (),
         )
         self._round_trip(m.ImpactItem, item)
+        kind = m.ChangeKind.OWNERSHIP
+        self._round_trip(
+            m.ProposedChange,
+            m.ProposedChange(kind, "handoff", (m.ClaimRef(id=m.ClaimId("c-1")),)),
+        )
 
     def test_answer_envelope(self):
         answer = m.SemanticAnswer(
@@ -504,21 +509,24 @@ class SerializationRoundTripTest(unittest.TestCase):
 
     def test_interpretation_contracts(self):
         req = m.SemanticInterpretationRequest(
-            "repo-1",
-            (m.Subject(_subject_id(), "E", None),),
-            (m.EvidenceUnit(_evidence_ref(), "c", "fp"),),
-            (),
-            (m.ClaimKind.PURPOSE,),
-            (m.RelationshipKind.MEMBER_OF,),
-            (_subject_id(),),
-            _query_bounds(),
+            repository_id="repo-1",
+            subjects=(m.Subject(_subject_id(), "E", None),),
+            evidence_units=(m.EvidenceUnit(_evidence_ref(), "c", "fp"),),
+            structural_observations=(),
+            allowed_claim_kinds=(m.ClaimKind.PURPOSE,),
+            allowed_relationship_kinds=(m.RelationshipKind.MEMBER_OF,),
+            identity_bindings=(_subject_id(),),
+            operation_intent=m.SemanticIntent.EXPLAIN,
+            question_slice="src/a.py",
+            proposed_change=None,
+            bounds=_query_bounds(),
         )
         self._round_trip(m.SemanticInterpretationRequest, req)
         res = m.SemanticInterpretationResult(
             (
                 m.CandidateSemanticClaim(
-                    _subject_id(), m.ClaimKind.PURPOSE,
-                    m.PurposeValue("s", ()),
+                    subject=_subject_id(), kind=m.ClaimKind.PURPOSE,
+                    value=m.PurposeValue("s", ()),
                 ),
             ),
             (),
@@ -526,6 +534,14 @@ class SerializationRoundTripTest(unittest.TestCase):
             ("diag",),
         )
         self._round_trip(m.SemanticInterpretationResult, res)
+        self._round_trip(
+            m.RecordedConflict,
+            m.RecordedConflict(
+                _subject_id(),
+                m.ClaimRef(id=m.ClaimId("c-1")),
+                m.ClaimRef(id=m.ClaimId("c-2")),
+            ),
+        )
 
     def test_store_and_index_contracts(self):
         batch = m.CanonicalIndexBatch(
@@ -534,15 +550,27 @@ class SerializationRoundTripTest(unittest.TestCase):
             (_semantic_relationship(),),
             (
                 m.EvidenceDependency(
-                    m.ClaimId("c-1"), _evidence_ref(), "fp-obs"
+                    m.ClaimRef(id=m.ClaimId("c-1")), _evidence_ref(), "fp-obs"
                 ),
             ),
         )
         self._round_trip(m.CanonicalIndexBatch, batch)
         self._round_trip(
+            m.CoverageDependency,
+            m.CoverageDependency(
+                scope_subjects=(_subject_id(),),
+                inventory_fingerprint="inv-9",
+                seed_fingerprints=(
+                    m.SeedFingerprint(
+                        m.EvidenceId("ev-x"), "x.md", "fp-x"
+                    ),
+                ),
+            ),
+        )
+        self._round_trip(
             m.FreshnessUpdate,
             m.FreshnessUpdate(
-                m.RelationshipId("r-1"),
+                m.RelationshipRef(id=m.RelationshipId("r-1")),
                 m.Freshness(m.FreshnessState.STALE, reason="dep changed"),
             ),
         )
@@ -567,6 +595,51 @@ class SerializationRoundTripTest(unittest.TestCase):
             m.from_canonical(
                 m.FreshnessState, {"$type": "FreshnessState"}
             )
+
+    def test_decode_rejects_unknown_fields(self):
+        data = m.to_canonical(_subject_id())
+        data["bogus"] = 1
+        with self.assertRaises(m.CanonicalDecodeError):
+            m.from_canonical(m.SubjectId, data)
+
+
+class CorePurityTest(unittest.TestCase):
+    def test_core_imports_values_only(self):
+        import ast
+        import pathlib
+        import sys
+
+        allowed_roots = set(sys.stdlib_module_names)
+        core = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "src" / "span" / "core"
+        )
+        offenders = []
+        for path in sorted(core.glob("*.py")):
+            tree = ast.parse(
+                path.read_text(encoding="utf-8"), str(path)
+            )
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        root = alias.name.split(".")[0]
+                        if root not in allowed_roots:
+                            offenders.append(f"{path.name}:{root}")
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level != 0:
+                        offenders.append(f"{path.name}:relative")
+                        continue
+                    root = (node.module or "").split(".")[0]
+                    if root == "span":
+                        if not (node.module or "").startswith(
+                            "span.core"
+                        ):
+                            offenders.append(
+                                f"{path.name}:{node.module}"
+                            )
+                    elif root not in allowed_roots:
+                        offenders.append(f"{path.name}:{root}")
+        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":

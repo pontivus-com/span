@@ -27,6 +27,7 @@ class EvidenceSource(_typing.Protocol):
         repository_id: str,
         scope: EvidenceScope,
         bounds: QueryBounds,
+        page_token: str | None = None,
     ) -> EvidenceInventoryPage:
         """Bounded evidence inventory (fingerprints, not judgments)."""
         ...

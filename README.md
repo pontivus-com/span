@@ -15,3 +15,7 @@ test, schema, fixture or documentation dependency.
 Implementation authority:
 - `.context/requirements/`
 - `.context/plans/`
+
+Documentation: `docs/` (architecture, contracts, lifecycle, MCP,
+hooks, skills, acceptance, contributing). Guides describe the
+governing plan; they never define semantics.

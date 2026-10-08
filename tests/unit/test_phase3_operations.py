@@ -84,13 +84,28 @@ def _ref(path):
     )
 
 
+_QUOTES = {
+    "README.md": "Moves records",
+    "OWNERSHIP.md": "Team flow owns flow-svc",
+    "config.yaml": "workers: 4",
+    "src/flow.py": "class Pipe",
+}
+
+
 def _accepted(path, kind, applicability=None):
-    return m.AuthorityBinding(
-        evidence_ref=_ref(path),
-        authority_kind=kind,
-        status=m.AuthorityStatus.ACCEPTED,
-        applicability=m.AuthorityApplicability(
-            subject_scope=(), description=applicability
+    return m.CandidateAuthority(
+        binding=m.AuthorityBinding(
+            evidence_ref=_ref(path),
+            authority_kind=kind,
+            status=m.AuthorityStatus.ACCEPTED,
+            applicability=m.AuthorityApplicability(
+                subject_scope=(), description=applicability
+            ),
+        ),
+        support=m.AuthoritySupport(
+            quoted_span=_QUOTES[path],
+            status_section=path,
+            applicability_section=path if applicability else None,
         ),
     )
 
@@ -111,7 +126,9 @@ def _candidates():
                     candidate_authority=_accepted(
                         "README.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "README states the flow purpose",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.CONFIGURATION_ENVIRONMENT,
@@ -124,7 +141,9 @@ def _candidates():
                         "config.yaml",
                         m.AuthorityKind.CONFIGURATION_RUNTIME,
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "config declares the worker count",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.LIFECYCLE_STATE,
@@ -133,7 +152,9 @@ def _candidates():
                     candidate_authority=_accepted(
                         "src/flow.py", m.AuthorityKind.REPOSITORY_RULE
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "flow source shows active use",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.VERIFICATION,
@@ -142,7 +163,9 @@ def _candidates():
                         m.VerificationCurrency.CANDIDATE,
                     ),
                     evidence=(_ref("src/flow.py"),),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "flow test is a verification candidate",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.VERIFICATION,
@@ -155,7 +178,9 @@ def _candidates():
                     candidate_authority=_accepted(
                         "src/flow.py", m.AuthorityKind.REPOSITORY_RULE
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "flow gate passed at the observed revision",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
@@ -167,7 +192,9 @@ def _candidates():
                     candidate_authority=_accepted(
                         "OWNERSHIP.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "ownership record names the flow owner",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
@@ -176,7 +203,9 @@ def _candidates():
                     candidate_authority=_accepted(
                         "README.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "README states the immutability invariant",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.REPRESENTATION_CONTRACT,
@@ -189,13 +218,17 @@ def _candidates():
                     candidate_authority=_accepted(
                         "README.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "README states the wire representation contract",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
                     value=m.CapabilityMembershipValue(cap),
                     evidence=(_ref("src/flow.py"),),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "flow source shows capability membership",
+                    ),
                 ),
             ),
             relationships=(
@@ -206,13 +239,17 @@ def _candidates():
                     candidate_authority=_accepted(
                         "src/flow.py", m.AuthorityKind.REPOSITORY_RULE
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "flow source crosses into the store",
+                    ),
                 ),
                 m.CandidateSemanticRelationship(
                     source=test, kind=m.RelationshipKind.VERIFIED_BY,
                     target=flow,
                     evidence=(_ref("src/flow.py"),),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "flow test verifies the flow",
+                    ),
                 ),
             ),
         ),
@@ -225,16 +262,14 @@ def _candidates():
                     kind=m.ClaimKind.PURPOSE,
                     value=m.PurposeValue("public record API", ()),
                     evidence=(_ref("README.md"),),
-                    candidate_authority=m.AuthorityBinding(
-                        evidence_ref=_ref("README.md"),
-                        authority_kind=m.AuthorityKind.CONTRACT_SPECIFICATION,
-                        status=m.AuthorityStatus.ACCEPTED,
-                        applicability=m.AuthorityApplicability(
-                            subject_scope=(),
-                            description="public external API surface",
-                        ),
+                    candidate_authority=_accepted(
+                        "README.md",
+                        m.AuthorityKind.CONTRACT_SPECIFICATION,
+                        "public external API surface",
                     ),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "README states the public API purpose",
+                    ),
                 ),
             ),
             relationships=(),
@@ -252,6 +287,17 @@ def _harness(files=None):
     )
     evidence = FixtureEvidenceSource(REPO, dict(files))
     store = SqliteSemanticStore(":memory:")
+    ops.initialize_repository(
+        ops.SemanticInitializeRepositoryRequest(
+            repository_locator="fixture",
+            structural_provider_config="memory:test",
+            authority_seeds=(),
+        ),
+        repository_id=REPO,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+    )
     return structural, evidence, store, FixtureAgent(_candidates())
 
 
@@ -305,13 +351,15 @@ def _trace_request(**overrides):
     return ops.SemanticTraceRequest(**base)
 
 
-def _impact_request(kind=ops.ChangeKind.BEHAVIOR, description=None):
+def _impact_request(kind=ops.ChangeKind.BEHAVIOR, description=None,
+                     affected=()):
     return ops.SemanticImpactRequest(
         repository_id=REPO,
         target=m.SubjectSelector(None, "src/flow.py", (), None),
         change_kind=kind,
         change_description=description,
         bounds=_bounds(),
+        affected_assertions=tuple(affected),
     )
 
 
@@ -437,7 +485,67 @@ class StatusTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_claim_ref_target_rejected(self):
+    def test_uninitialized_never_bootstraps(self):
+        from span.shell.sqlite_store import SqliteSemanticStore as _Store
+
+        structural, evidence, _, _ = _harness()
+        store = _Store(":memory:")
+        try:
+            # No initialize call: every query path reports setup state
+            # without starting initialization implicitly.
+            answer = ops.status(
+                _status_request(), structural=structural,
+                evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIs(
+                answer.content.readiness,
+                m.RepositoryReadiness.UNINITIALIZED,
+            )
+            self.assertTrue(
+                any(
+                    "span_initialize_repository" in r.description
+                    for r in answer.resolution_requirements
+                )
+            )
+            notice = ops.status(
+                ops.SemanticStatusRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "src/flow.py", (), None
+                    ),
+                    bounds=_bounds(),
+                    mode=m.StatusMode.HOOK_FAST,
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(notice, m.HookStatusNotice)
+            self.assertIs(
+                notice.readiness, m.RepositoryReadiness.UNINITIALIZED
+            )
+            self.assertIn("span_initialize_repository",
+                          notice.recommended_action)
+            # Still uninitialized: nothing was bootstrapped.
+            self.assertIsNone(store.load_repository_state(REPO))
+            explained = ops.explain(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "src/flow.py", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(explained, m.SemanticAnswer)
+            self.assertEqual(explained.content.claims, ())
+        finally:
+            store.close()
+
+    def test_unknown_claim_ref_target_rejected(self):
         structural, evidence, store, agent = _harness()
         try:
             with self.assertRaises(ops.StatusTargetError):
@@ -448,6 +556,29 @@ class StatusTest(unittest.TestCase):
                     structural=structural, evidence=evidence, store=store,
                     continuations=ContinuationStore(),
                 )
+        finally:
+            store.close()
+
+    def test_known_claim_ref_target_served(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            indexed = _exchange(
+                _status_request(), ops.status,
+                structural, evidence, store, agent,
+            )
+            self.assertTrue(indexed.content.claims)
+            target = m.ClaimRef(id=indexed.content.claims[0].claim_id)
+            answer = ops.status(
+                _status_request(target=target),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIsInstance(answer.content, m.StatusContent)
+            carried = {
+                c.claim_id.value for c in answer.content.claims
+            }
+            self.assertIn(target.id.value, carried)
         finally:
             store.close()
 
@@ -512,38 +643,160 @@ class StatusTest(unittest.TestCase):
             store.close()
 
 
+class SelectionAtomicityTest(unittest.TestCase):
+    def _claim(self, cid, owner):
+        return m.SemanticClaim(
+            claim_id=m.ClaimId(cid),
+            subject=_sid("src/flow.py"),
+            kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+            value=m.OwnershipCustodyValue(
+                _sid(owner), m.OwnershipRole.OWNER,
+                m.OwnershipExclusivity.EXCLUSIVE,
+            ),
+            evidence=(_ref("OWNERSHIP.md"),),
+            trust=m.TrustState.ESTABLISHED,
+            freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+            basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
+        )
+
+    def test_conflict_pairs_never_split(self):
+        a = self._claim("c-a", "team/a")
+        b = self._claim("c-b", "team/b")
+        filler = tuple(
+            m.SemanticClaim(
+                claim_id=m.ClaimId(f"c-{n}"),
+                subject=_sid("src/flow.py"),
+                kind=m.ClaimKind.PURPOSE,
+                value=m.PurposeValue(f"s{n}", ()),
+                evidence=(_ref("README.md"),),
+                trust=m.TrustState.UNRESOLVED,
+                freshness=m.Freshness(
+                    m.FreshnessState.CURRENT, reason="t"
+                ),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
+            )
+            for n in range(4)
+        )
+        claims = (a, b) + filler
+        conflicts = (m.SemanticConflict(
+            left=m.ClaimRef(id=a.claim_id),
+            right=m.ClaimRef(id=b.claim_id),
+        ),)
+        for budget in range(1, 8):
+            with self.subTest(budget=budget):
+                kept_c, kept_r, kept_conf, truncated, _ = (
+                    ops._select_answer_items(
+                        claims, (), conflicts, budget
+                    )
+                )
+                kept_ids = {c.claim_id.value for c in kept_c}
+                for pair in kept_conf:
+                    self.assertIn(pair.left.id.value, kept_ids)
+                    self.assertIn(pair.right.id.value, kept_ids)
+
+
 class ImpactTest(unittest.TestCase):
-    def test_brief_completeness(self):
+    def _indexed(self):
         structural, evidence, store, agent = _harness()
+        answer = _exchange(
+            _impact_request(), ops.impact,
+            structural, evidence, store, agent,
+        )
+        return structural, evidence, store, agent, answer
+
+    def _refs_for(self, answer, kinds):
+        refs = []
+        for claim in answer.content.claims:
+            if claim.kind in kinds:
+                refs.append(m.ClaimRef(id=claim.claim_id))
+        for rel in answer.content.relationships:
+            if rel.kind in kinds:
+                refs.append(m.RelationshipRef(id=rel.relationship_id))
+        return refs
+
+    def test_brief_completeness(self):
+        structural, evidence, store, agent, first = self._indexed()
         try:
+            content = first.content
+            self.assertIsInstance(content, m.ImpactContent)
+            # Identity/purpose context present (carried canonical items).
+            self.assertTrue(content.target_context)
+            self.assertTrue(content.claims)
+            # Proposal-sensitive rows need typed affected assertions:
+            # name the invariant, an accepted authority claim, and the
+            # boundary relationship explicitly (plan I-38).
+            affected = (
+                self._refs_for(
+                    first, {m.ClaimKind.INVARIANT_CONSTRAINT}
+                )
+                + [
+                    ref for ref in self._refs_for(
+                        first, {
+                            m.ClaimKind.PURPOSE,
+                            m.ClaimKind.OWNERSHIP_CUSTODY,
+                        }
+                    )[:1]
+                ]
+                + self._refs_for(
+                    first, {m.RelationshipKind.CROSSES_BOUNDARY}
+                )
+            )
+            self.assertTrue(affected)
             answer = _exchange(
-                _impact_request(), ops.impact,
+                _impact_request(affected=affected), ops.impact,
                 structural, evidence, store, agent,
             )
-            content = answer.content
-            self.assertIsInstance(content, m.ImpactContent)
-            # Identity/purpose context present.
-            self.assertTrue(content.target_context)
-            # Conditions derived (authority + boundary + invariant + ...).
-            conds = set(content.change_conditions)
+            conds = set(answer.content.change_conditions)
             self.assertIn(m.ChangeCondition.AUTHORITY_CHANGE, conds)
             self.assertIn(m.ChangeCondition.BOUNDARY_CHANGE, conds)
             self.assertIn(m.ChangeCondition.INVARIANT_CHANGE, conds)
             # Both establishment classes present.
-            establishments = {i.establishment for i in content.impacts}
+            establishments = {i.establishment for i in answer.content.impacts}
             self.assertIn(
                 m.ImpactEstablishment.SEMANTICALLY_ESTABLISHED, establishments
             )
             self.assertIn(
                 m.ImpactEstablishment.STRUCTURAL_POSSIBILITY, establishments
             )
-            # Verification + requirements present.
-            self.assertTrue(content.verification)
+            # Verification + requirements present; refs resolve in-answer.
+            self.assertTrue(answer.content.verification)
+            carried = {
+                c.claim_id.value for c in answer.content.claims
+            } | {
+                r.relationship_id.value for r in answer.content.relationships
+            }
+            for ref in (
+                list(answer.content.target_context)
+                + list(answer.content.verification)
+            ):
+                self.assertIn(ref.id.value, carried)
             self.assertTrue(
                 any(
                     r.kind is m.ResolutionKind.MISSING_AUTHORITY
                     for r in answer.resolution_requirements
                 )
+            )
+        finally:
+            store.close()
+
+    def test_proposal_rows_need_typed_assertions(self):
+        structural, evidence, store, agent, first = self._indexed()
+        try:
+            bare = set(first.content.change_conditions)
+            self.assertNotIn(m.ChangeCondition.INVARIANT_CHANGE, bare)
+            self.assertNotIn(m.ChangeCondition.AUTHORITY_CHANGE, bare)
+            self.assertNotIn(m.ChangeCondition.BOUNDARY_CHANGE, bare)
+            invariant = self._refs_for(
+                first, {m.ClaimKind.INVARIANT_CONSTRAINT}
+            )
+            self.assertTrue(invariant)
+            named = _exchange(
+                _impact_request(affected=invariant), ops.impact,
+                structural, evidence, store, agent,
+            )
+            self.assertIn(
+                m.ChangeCondition.INVARIANT_CHANGE,
+                set(named.content.change_conditions),
             )
         finally:
             store.close()
@@ -600,8 +853,10 @@ class ImpactTest(unittest.TestCase):
                 m.ChangeCondition.CANONICAL_REPRESENTATION_CHANGE,
                 other_conds,
             )
-            # ... but independently established dimensions still apply.
-            self.assertIn(m.ChangeCondition.AUTHORITY_CHANGE, other_conds)
+            # ... proposal-sensitive rows need typed assertions ...
+            self.assertNotIn(m.ChangeCondition.AUTHORITY_CHANGE, other_conds)
+            self.assertNotIn(m.ChangeCondition.INVARIANT_CHANGE, other_conds)
+            # ... but independently established presence dimensions apply.
             self.assertIn(
                 m.ChangeCondition.CONFIGURATION_CHANGE, other_conds
             )
@@ -651,23 +906,55 @@ class ImpactTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_truncation_token(self):
+    def test_second_page_retrieval(self):
+        """Pagination is explicit and redeemable (plan I-39).
+
+        A bounded status over many claims returns a `pg:` cursor;
+        resubmitting it yields the remaining items with no repeats and
+        no dangling references.
+        """
         structural, evidence, store, agent = _harness()
         try:
-            answer = _exchange(
-                ops.SemanticImpactRequest(
+            first = _exchange(
+                ops.SemanticStatusRequest(
                     repository_id=REPO,
                     target=m.SubjectSelector(None, "src/flow.py", (), None),
-                    change_kind=ops.ChangeKind.BEHAVIOR,
-                    change_description=None,
-                    bounds=_bounds(max_results=3),
+                    bounds=_bounds(max_results=4),
                 ),
-                ops.impact, structural, evidence, store, agent,
+                ops.status, structural, evidence, store, agent,
             )
-            self.assertTrue(answer.bound_info.truncated)
-            self.assertTrue(
-                answer.bound_info.continuation_token.startswith("trunc:")
+            token = first.bound_info.continuation_token
+            self.assertTrue(first.bound_info.truncated)
+            self.assertTrue(token.startswith("pg:"))
+            first_ids = {
+                item.item.id.value
+                for item in first.content.freshness_items
+            }
+            second = ops.status(
+                ops.SemanticStatusRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(max_results=50),
+                    page_token=token,
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
             )
+            self.assertIsInstance(second, m.SemanticAnswer)
+            second_ids = {
+                item.item.id.value
+                for item in second.content.freshness_items
+            }
+            self.assertFalse(first_ids & second_ids)
+            self.assertTrue(second_ids)
+            carried = {
+                c.claim_id.value for c in second.content.claims
+            } | {
+                r.relationship_id.value
+                for r in second.content.relationships
+            }
+            for item in second.content.freshness_items:
+                self.assertIn(item.item.id.value, carried)
         finally:
             store.close()
 

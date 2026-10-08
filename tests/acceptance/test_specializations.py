@@ -81,15 +81,37 @@ def _ref(path):
 
 def _term_binding(status):
     term_ref = _ref("docs/terminology.md")
-    return m.AuthorityBinding(
-        evidence_ref=term_ref,
-        authority_kind=m.AuthorityKind.TERMINOLOGY,
-        status=status,
-        applicability=m.AuthorityApplicability(
-            subject_scope=(), description="canonical units register"
+    return m.CandidateAuthority(
+        binding=m.AuthorityBinding(
+            evidence_ref=term_ref,
+            authority_kind=m.AuthorityKind.TERMINOLOGY,
+            status=status,
+            applicability=m.AuthorityApplicability(
+                subject_scope=(), description="canonical units register"
+            ),
+            declared_precedence=m.DeclaredPrecedence(
+                kind=m.PrecedenceKind.OVERRIDES, overrides=(term_ref,)
+            ),
         ),
-        declared_precedence=m.DeclaredPrecedence(
-            kind=m.PrecedenceKind.OVERRIDES, overrides=(term_ref,)
+        support=m.AuthoritySupport(
+            quoted_span="Canonical wire unit is cents",
+            status_section="docs/terminology.md",
+            applicability_section="docs/terminology.md",
+        ),
+    )
+
+
+def _release_authority():
+    return m.CandidateAuthority(
+        binding=m.AuthorityBinding(
+            evidence_ref=_ref("RELEASE.md"),
+            authority_kind=m.AuthorityKind.CONTRACT_SPECIFICATION,
+            status=m.AuthorityStatus.ACCEPTED,
+        ),
+        support=m.AuthoritySupport(
+            quoted_span="Terminal",
+            status_section="RELEASE.md",
+            applicability_section=None,
         ),
     )
 
@@ -111,7 +133,9 @@ def _candidates():
                     value=m.PurposeValue("canonical money concept", ()),
                     evidence=(term_ref,),
                     candidate_authority=accepted_term,
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "terminology governs the money concept",
+                    ),
                 ),
             ),
             relationships=(),
@@ -127,7 +151,9 @@ def _candidates():
                     ),
                     evidence=(term_ref,),
                     candidate_authority=accepted_term,
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "terminology governs the wire representation",
+                    ),
                 ),
             ),
             relationships=(
@@ -136,13 +162,16 @@ def _candidates():
                     kind=m.RelationshipKind.TRANSFORMS_TO,
                     target=display,
                     evidence=(term_ref,),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "terminology shows the wire-to-display transform",
+                    ),
                 ),
             ),
         ),
         "rep/display": FixtureCandidates(
             claims=(
                 m.CandidateSemanticClaim(
+                    candidate_key="display-governed",
                     subject=display,
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
                     value=m.RepresentationContractValue(
@@ -151,10 +180,13 @@ def _candidates():
                     ),
                     evidence=(term_ref,),
                     candidate_authority=accepted_term,
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "terminology governs the display representation",
+                    ),
                 ),
                 # Conflicting implementation representation: no authority.
                 m.CandidateSemanticClaim(
+                    candidate_key="display-observed",
                     subject=display,
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
                     value=m.RepresentationContractValue(
@@ -162,10 +194,22 @@ def _candidates():
                         m.RepresentationDirection.DESTINATION,
                     ),
                     evidence=(_ref("src/money.py"),),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "money source shows the observed representation",
+                    ),
                 ),
             ),
             relationships=(),
+            conflicts=(
+                m.CandidateSemanticConflict(
+                    left_key="display-governed",
+                    right_key="display-observed",
+                    basis=m.SemanticBasis(
+                        interp,
+                        "implementation contradicts the governed register",
+                    ),
+                ),
+            ),
         ),
         # S-02: closed publication contract + terminal lifecycle.
         "contract/release-1.0": FixtureCandidates(
@@ -174,14 +218,10 @@ def _candidates():
                     subject=release, kind=m.ClaimKind.PURPOSE,
                     value=m.PurposeValue("release 1.0 contract", ()),
                     evidence=(_ref("RELEASE.md"),),
-                    candidate_authority=m.AuthorityBinding(
-                        evidence_ref=_ref("RELEASE.md"),
-                        authority_kind=(
-                            m.AuthorityKind.CONTRACT_SPECIFICATION
-                        ),
-                        status=m.AuthorityStatus.ACCEPTED,
+                    candidate_authority=_release_authority(),
+                    basis=m.SemanticBasis(
+                        interp, "release record states the contract purpose",
                     ),
-                    basis=m.SemanticBasis(interp),
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.LIFECYCLE_STATE,
@@ -189,14 +229,10 @@ def _candidates():
                         m.LifecyclePhase.TERMINAL, "published"
                     ),
                     evidence=(_ref("RELEASE.md"),),
-                    candidate_authority=m.AuthorityBinding(
-                        evidence_ref=_ref("RELEASE.md"),
-                        authority_kind=(
-                            m.AuthorityKind.CONTRACT_SPECIFICATION
-                        ),
-                        status=m.AuthorityStatus.ACCEPTED,
+                    candidate_authority=_release_authority(),
+                    basis=m.SemanticBasis(
+                        interp, "release record shows terminal publication",
                     ),
-                    basis=m.SemanticBasis(interp),
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.VERIFICATION,
@@ -206,7 +242,9 @@ def _candidates():
                         m.VerificationCurrency.CANDIDATE,
                     ),
                     evidence=(_ref("src/publish.py"),),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "publisher is a verification candidate",
+                    ),
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.VERIFICATION,
@@ -217,14 +255,10 @@ def _candidates():
                         observed_revision="fp-1",
                     ),
                     evidence=(_ref("src/publish.py"), _ref("RELEASE.md")),
-                    candidate_authority=m.AuthorityBinding(
-                        evidence_ref=_ref("RELEASE.md"),
-                        authority_kind=(
-                            m.AuthorityKind.CONTRACT_SPECIFICATION
-                        ),
-                        status=m.AuthorityStatus.ACCEPTED,
+                    candidate_authority=_release_authority(),
+                    basis=m.SemanticBasis(
+                        interp, "release gate passed at the observed revision",
                     ),
-                    basis=m.SemanticBasis(interp),
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
@@ -237,39 +271,45 @@ def _candidates():
                         m.OwnershipExclusivity.NON_EXCLUSIVE,
                     ),
                     evidence=(_ref("RELEASE.md"),),
-                    candidate_authority=m.AuthorityBinding(
-                        evidence_ref=_ref("RELEASE.md"),
-                        authority_kind=(
-                            m.AuthorityKind.CONTRACT_SPECIFICATION
-                        ),
-                        status=m.AuthorityStatus.ACCEPTED,
+                    candidate_authority=_release_authority(),
+                    basis=m.SemanticBasis(
+                        interp, "release record names the downstream custodian",
                     ),
-                    basis=m.SemanticBasis(interp),
                 ),
                 m.CandidateSemanticClaim(
+                    candidate_key="invariant-copy-only",
                     subject=release, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
                     value=m.InvariantConstraintValue("copy-only downstream"),
                     evidence=(_ref("RELEASE.md"),),
-                    candidate_authority=m.AuthorityBinding(
-                        evidence_ref=_ref("RELEASE.md"),
-                        authority_kind=(
-                            m.AuthorityKind.CONTRACT_SPECIFICATION
-                        ),
-                        status=m.AuthorityStatus.ACCEPTED,
+                    candidate_authority=_release_authority(),
+                    basis=m.SemanticBasis(
+                        interp, "release record states copy-only custody",
                     ),
-                    basis=m.SemanticBasis(interp),
                 ),
                 # Attempted downstream recomputation: the negative case.
                 m.CandidateSemanticClaim(
+                    candidate_key="invariant-recompute",
                     subject=release, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
                     value=m.InvariantConstraintValue(
                         "downstream may recompute"
                     ),
                     evidence=(_ref("src/publish.py"),),
-                    basis=m.SemanticBasis(interp),
+                    basis=m.SemanticBasis(
+                        interp, "publisher shows the recomputation attempt",
+                    ),
                 ),
             ),
             relationships=(),
+            conflicts=(
+                m.CandidateSemanticConflict(
+                    left_key="invariant-copy-only",
+                    right_key="invariant-recompute",
+                    basis=m.SemanticBasis(
+                        interp,
+                        "downstream recomputation violates copy-only custody",
+                    ),
+                ),
+            ),
         ),
     }
 
@@ -283,6 +323,17 @@ def _harness():
     )
     evidence = FixtureEvidenceSource(REPO, dict(FILES))
     store = SqliteSemanticStore(":memory:")
+    ops.initialize_repository(
+        ops.SemanticInitializeRepositoryRequest(
+            repository_locator="fixture",
+            structural_provider_config="memory:test",
+            authority_seeds=(),
+        ),
+        repository_id=REPO,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+    )
     return structural, evidence, store, FixtureAgent(_candidates())
 
 

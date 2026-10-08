@@ -13,17 +13,23 @@ Status values: `UNSELECTED` (candidate only) · `VERIFYING` · `VERIFIED` ·
 |---|---|---|---|
 | Python >= 3.12 (stdlib only) | Runtime | SELECTED | Language runtime + stdlib; no third-party code. `unittest` is the Phase 0 test runner — stdlib, no install, no license burden. |
 | `setuptools>=61` | Build backend | SELECTED | Build-time only; never imported by `span` at runtime. Ubiquitous, OSI-approved build backend. Pinned minimum only. |
-| MCP SDK (Python) — `modelcontextprotocol/python-sdk` (`mcp` on PyPI) | MCP transport (Phase 4.1) | VERIFIED (candidate; selection at Phase 4.1) | Identity: official SDK, `github.com/modelcontextprotocol/python-sdk`. License: **MIT** (verified 2026-10-07 from `LICENSE` at repo main + repo About page). Permissive license; final GPL-variant pairing subject to owner LICENSE selection. Not selected; nothing added to `pyproject.toml`. |
+| MCP SDK (Python) — `modelcontextprotocol/python-sdk` (`mcp` on PyPI) | MCP transport (Phase 4.1) | SELECTED | Official SDK: `https://github.com/modelcontextprotocol/python-sdk`; PyPI `mcp==2.3.0` (this selection). License: **MIT** (verified 2026-10-07 from PyPI `License:` metadata field + repo LICENSE; same MIT as the Phase 0.4 check). Distribution role: MCP stdio transport only — protocol framing for the 8 thin tools; no semantic content. GPL-compatibility basis: MIT is GPL-compatible permissive; paired with
+the selected GPL-3.0-only publication license (2026-10-08 owner
+decision). Why necessary: protocol-correct MCP server without hand-rolling the wire protocol. Viable alternative: hand-written JSON-RPC over stdio (rejected: protocol drift risk, no benefit; transport would still be thin). Span uses only `mcp.server` (low-level Server); no Span semantic type is a pydantic model — canonical dataclasses cross via strict canonical JSON only (I-04/I-18). |
+| MCP SDK transitive closure (`mcp-types==2.3.0`, `pydantic>=2.12`, `anyio`, `httpx2`, `jsonschema`, `opentelemetry-api`, `pyjwt`, `python-multipart`, `starlette`, `sse-starlette`, `uvicorn`) | Transport support libraries (no direct Span imports) | SELECTED (with parent) | All OSI-approved permissive licenses (MIT/Apache-2.0/BSD family); no copyleft in closure (verified 2026-10-07 from PyPI metadata). Paired with
+the selected GPL-3.0-only publication license, same as parent. |
 | Production structural provider — Graft (`@nanonets/graft`, source `NanoNets/context-graph-engine`) | Structural source (Phase 2.1) | SELECTED (plan-directed first provider; owner confirms at publication) | Identity/license verified Phase 0.4 (MIT, 2026-10-07). Suitability evaluated Phase 2.1: serves all five §5.2 operations from `graft/.graph/wiring.json` + git + target file reads; closed node-kind/relation mapping tables with explicit errors for unknown vocabulary (no semantic shaping); separately installable npm package, no Pontivus code. Implemented in `shell/structural/graft.py` against §5.2 only. Runtime requirement: node + graft CLI wherever the provider is used (recorded here, not inferred). |
 | SQLite (stdlib `sqlite3`) | Canonical persistence (Phase 1.7) | SELECTED | Stdlib module, no third-party binding. Selected by Phase 1.7 implementation (`shell/sqlite_store.py`); zero license burden. |
 
-## Test runner decision (Phase 0)
+## Test runner decision (Phase 0, amended Phase 4)
 
-`python3 -m unittest` (stdlib) is the Phase 0 test runner. Adopting
-`pytest` or any third-party runner later requires a ledger entry plus
-identity/license verification first. Rationale: zero-dependency bootstrap
-keeps the Phase 0 exit ("builds/tests without private access") trivially
-auditable.
+`python3 -m unittest` (stdlib) was the Phase 0 test runner. The suite
+grew onto `pytest` (MIT, OSI-approved; no license burden) for
+fixture-style integration coverage — this entry records that
+adoption per the Phase 0 rule. Tests remain `unittest.TestCase`
+style and runnable under both runners. A span-local pytest config
+(`pyproject.toml [tool.pytest.ini_options]`) keeps span runs
+independent of any enclosing workspace pytest config (MI-13/L).
 
 ## Provenance-first publication gate (plan Phase 0.5)
 
@@ -34,10 +40,10 @@ auditable.
 - Build/test/runtime require no private workspace access: `python3 -m
   unittest discover -s tests` runs from the Span root with no `PYTHONPATH`,
   no parent imports, no network.
-- `LICENSE`: **BLOCKED** — the exact GPL variant must be explicitly
-  selected by the product owner/legal authority (plan Phase 0.1). Workers
-  must not choose it by inference. Publication (Phase 5, MI-11 M) cannot
-  pass until this row is resolved.
+- `LICENSE`: **RESOLVED 2026-10-08** — GPL-3.0-only selected by explicit
+  product-owner decision. Verbatim GPL-3.0 license text installed at
+  repository root; `pyproject.toml` declares `GPL-3.0-only`. Publication
+  (Phase 5, MI-11 M) is unblocked on licensing.
 
 ## Private-name/path scanning (plan Phase 0.6)
 
