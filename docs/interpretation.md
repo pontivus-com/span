@@ -16,7 +16,11 @@ operation intent, question slice, optional typed proposal, output
 cardinality limits. Addendum B adds the immutable
 `question: SemanticQuestionScope`, bounded `prior_claims` /
 `prior_relationships` context, and service-owned
-`analysis_obligations` (SA-2–SA-5). Nothing else crosses.
+`analysis_obligations` (SA-2–SA-5). Addendum D adds the service-built
+`brief` (`TaskBrief`: C-04 material aspects for the bound question
+class, scope boundaries, static OPEN-handling and submission rules) —
+guidance, never validated content and never submitted back (the
+result carrier has no brief field). Nothing else crosses.
 
 ## One analysis contract (SA-1–SA-7)
 

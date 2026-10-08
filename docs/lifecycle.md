@@ -19,15 +19,18 @@ suspends with a bounded task: interpret it with your own model,
 submit via `submit_interpretation`, and continue — a submit may
 return the answer or the next pending unit.
 
-## Refresh ownership (Addendum C C-06)
+## Refresh ownership (Addendum C C-11)
 
 The agent that changes implementation or governing semantic evidence
 owns the close-out sequence for the scope it affected (edit → scoped
 status → external verification → explicit scoped refresh → scoped
-status) in the same change. Hooks stay report-only and never refresh.
+status) in the same change — a `refresh` call without re-examination
+proves nothing; adequacy is in the resubmitted content. Hooks stay
+report-only and never refresh.
 Neglected stale scopes remain visibly noncurrent; Span never presents
 a stored `ANSWERED` as effectively current where required support is
-stale or unverifiable.
+stale or unverifiable. Full closeout duty: `skills/span/SKILL.md`
+(Semantic closeout duty); expansion: same file (Expansion).
 
 ## Initialization and readiness
 

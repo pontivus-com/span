@@ -13,12 +13,20 @@ from the receipt's verify record when present, else the root's base
 name. Only schema-3 stores are read; anything else is reported as
 needing attention, never migrated or touched.
 
-Commands:
-  session-start      readiness + coverage counts per repo (one line each)
+Commands (exception-oriented per addendum D §9: routine current
+state prints nothing — silence is the all-current statement; every
+printed line names its repository scope and states only what needs
+action):
+  session-start      one line per repo needing action (uninitialized,
+                     needs attention, no established coverage, or
+                     noncurrent/open work); silent when every repo has
+                     established, current coverage
   source-changed     read absolute paths from argv or stdin JSON;
-                     report which semantic items depend on each path
-                     and whether its bytes moved since observation
-  session-stop       per-repo currents/stale counts (closure note)
+                      report only paths whose dependents moved since
+                      observation; silence otherwise
+  session-stop       per-repo currents/stale counts only when stale,
+                     unverifiable, open, or pending work remains;
+                     silent on a clean close
 """
 
 from __future__ import annotations
@@ -99,6 +107,54 @@ def repo_for_path(path, mapping):
     return best
 
 
+def _scope_counts(connection):
+    """Current/stale/unverifiable claims + open/pending questions.
+
+    Returns None when the scope needs no action (established and
+    fully current); otherwise a concise mapping with nonzero
+    categories only. Silence-when-clean is the all-current statement.
+    """
+    try:
+        current = connection.execute(
+            "SELECT COUNT(*) FROM claims WHERE freshness_state='CURRENT'"
+        ).fetchone()[0]
+        stale = connection.execute(
+            "SELECT COUNT(*) FROM claims WHERE freshness_state='STALE'"
+        ).fetchone()[0]
+        unverifiable = connection.execute(
+            "SELECT COUNT(*) FROM claims "
+            "WHERE freshness_state='UNVERIFIABLE'"
+        ).fetchone()[0]
+        questions = connection.execute(
+            "SELECT COUNT(*) FROM question_coverages"
+        ).fetchone()[0]
+        pending = connection.execute(
+            "SELECT COUNT(*) FROM question_coverages "
+            "WHERE disposition='PENDING'"
+        ).fetchone()[0]
+        open_ = connection.execute(
+            "SELECT COUNT(*) FROM question_coverages "
+            "WHERE disposition='OPEN'"
+        ).fetchone()[0]
+    except sqlite3.Error:
+        return None
+    if questions == 0:
+        return {"established": False}
+    action = {}
+    if stale:
+        action["stale"] = stale
+    if unverifiable:
+        action["unverifiable"] = unverifiable
+    if open_:
+        action["open"] = open_
+    if pending:
+        action["pending"] = pending
+    if not action:
+        return None
+    action["current"] = current
+    return action
+
+
 def cmd_session_start(data_dir):
     mapping = repo_map(data_dir)
     if not mapping:
@@ -113,25 +169,18 @@ def cmd_session_start(data_dir):
         if problem is not None:
             print(f"span: {repo_id} needs attention ({problem}).")
             continue
-        try:
-            claims = connection.execute(
-                "SELECT COUNT(*) FROM claims"
-            ).fetchone()[0]
-            questions = connection.execute(
-                "SELECT COUNT(*) FROM question_coverages"
-            ).fetchone()[0]
-            stale = connection.execute(
-                "SELECT COUNT(*) FROM claims WHERE freshness_state='STALE'"
-            ).fetchone()[0]
-        except sqlite3.Error as exc:
-            print(f"span: {repo_id} needs attention ({exc}).")
-            connection.close()
-            continue
+        counts = _scope_counts(connection)
         connection.close()
-        print(
-            f"span: {repo_id} READY (schema-3, {claims} claims, "
-            f"{questions} questions, {stale} stale)."
-        )
+        if counts is None:
+            continue
+        if not counts.get("established", True):
+            print(
+                f"span: {repo_id} READY with no established coverage — "
+                f"orient with explain on a bounded scope."
+            )
+            continue
+        parts = ", ".join(f"{v} {k}" for k, v in counts.items())
+        print(f"span: {repo_id} needs attention ({parts}).")
 
 
 def _stdin_paths():
@@ -226,10 +275,9 @@ def cmd_source_changed(data_dir, paths):
                 f"{'…' if len(moved) > 5 else ''})."
             )
         else:
-            notices.append(
-                f"span: {repo_id}: {relative} touched; dependents "
-                f"unchanged ({len(rows)} item(s) current)."
-            )
+            # Unchanged dependents print nothing (exception-oriented):
+            # silence is the all-current statement.
+            pass
     for notice in notices:
         print(notice)
 
@@ -245,25 +293,14 @@ def cmd_session_stop(data_dir):
         connection, problem = open_db(db_path)
         if problem is not None:
             continue
-        try:
-            current = connection.execute(
-                "SELECT COUNT(*) FROM claims WHERE freshness_state='CURRENT'"
-            ).fetchone()[0]
-            stale = connection.execute(
-                "SELECT COUNT(*) FROM claims WHERE freshness_state='STALE'"
-            ).fetchone()[0]
-            pending = connection.execute(
-                "SELECT COUNT(*) FROM question_coverages "
-                "WHERE disposition='PENDING'"
-            ).fetchone()[0]
-        except sqlite3.Error:
-            connection.close()
-            continue
+        counts = _scope_counts(connection)
         connection.close()
-        print(
-            f"span: {repo_id} close: {current} current, {stale} stale, "
-            f"{pending} pending questions."
-        )
+        if counts is None or not counts.get("established", True):
+            # Clean close — or nothing established yet — prints nothing:
+            # session-start already prompts orientation where needed.
+            continue
+        parts = ", ".join(f"{v} {k}" for k, v in counts.items())
+        print(f"span: {repo_id} close: {parts}.")
 
 
 def parse_args(argv=None):

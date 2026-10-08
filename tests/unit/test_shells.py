@@ -209,6 +209,7 @@ class FixtureAgentTest(unittest.TestCase):
             allowed_claim_kinds=tuple(m.ClaimKind),
             allowed_relationship_kinds=tuple(m.RelationshipKind),
             identity_bindings=(sid,),
+            brief=m.TaskBrief(),
             bounds=_bounds(),
         )
 
@@ -259,6 +260,7 @@ class FixtureAgentTest(unittest.TestCase):
             allowed_claim_kinds=(m.ClaimKind.RESPONSIBILITY,),
             allowed_relationship_kinds=base.allowed_relationship_kinds,
             identity_bindings=base.identity_bindings,
+            brief=base.brief,
             bounds=base.bounds,
         )
         result = interp.perform(narrow)

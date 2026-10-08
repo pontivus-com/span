@@ -162,6 +162,10 @@ __all__ = [
     "SemanticInterpretationRequest",
     "SemanticInterpretationResult",
     "SA_ANALYSIS_OBLIGATIONS",
+    "TaskBrief",
+    "QUESTION_CLASS_ASPECTS",
+    "TASK_BRIEF_OPEN_HANDLING",
+    "TASK_BRIEF_SUBMISSION_RULES",
     "ClaimPage",
     "RelationshipPage",
     "EvidenceDependency",
@@ -1279,6 +1283,110 @@ class CandidateSemanticConflict:
 
 
 @_dataclass(frozen=True)
+class TaskBrief:
+    """Slice-derived investigation brief (addendum D §8, TASK-D-01).
+
+    Deterministic content only, drawn from two sources:
+
+    - contract: C-04 material aspects for the bound question class,
+      static OPEN-handling and submission rules;
+    - instance: the exact admitted slice's recorded OPEN/PENDING
+      requirements for this scope (quoted from store, never
+      inferred) and the scope boundaries.
+
+    Brief content guides the agent; it never classifies, scores, or
+    validates — validation ignores the brief entirely.
+    """
+
+    material_aspects: tuple[str, ...] = ()
+    scope_boundaries: tuple[str, ...] = ()
+    open_requirements: tuple[ResolutionRequirement, ...] = ()
+    open_handling: tuple[str, ...] = ()
+    submission_rules: tuple[str, ...] = ()
+
+
+#: C-04 material aspects per question class, quoted as brief content
+#: (addendum D TASK-D-01). Static contract lookup by the service —
+#: never runtime semantic judgment. CQ-10 has no enum member; its
+#: cross-cutting substance (evidence/scope/uncertainty/adversarial
+#: disciplines) rides in every brief via the SA obligations and the
+#: static rules below.
+QUESTION_CLASS_ASPECTS: dict[SemanticQuestionClass, tuple[str, ...]] = {
+    SemanticQuestionClass.CQ_01: (
+        "Purpose",
+        "actual role",
+        "principal participating subjects",
+    ),
+    SemanticQuestionClass.CQ_02: (
+        "implementing components and associated subsystem responsibility",
+    ),
+    SemanticQuestionClass.CQ_03: (
+        "actual producer/writer/judge/custodian",
+        "contradictory or absent authority",
+    ),
+    SemanticQuestionClass.CQ_04: (
+        "inputs/consumption",
+        "transformation/production",
+        "dependencies",
+        "downstream consumers",
+        "relevant branch/terminal paths",
+    ),
+    SemanticQuestionClass.CQ_05: (
+        "crossing representation",
+        "canonical governing contract",
+        "transformation owner",
+        "downstream receiver",
+    ),
+    SemanticQuestionClass.CQ_06: (
+        "governing source",
+        "declared status/precedence",
+        "conflicts",
+        "explicit absence when unestablished",
+    ),
+    SemanticQuestionClass.CQ_07: (
+        "creation",
+        "mutation",
+        "persistence",
+        "success",
+        "failure",
+        "abandonment/terminal behavior (as applicable)",
+    ),
+    SemanticQuestionClass.CQ_08: (
+        "supported affected capabilities",
+        "consumers/contracts",
+        "relevant verification",
+        "possible versus proven effects",
+    ),
+    SemanticQuestionClass.CQ_09: (
+        "identified verification artifact and its actual execution currency",
+        "or qualified missing proof",
+    ),
+}
+
+#: Static OPEN/PENDING handling rules attached to every brief (C-04,
+#: addendum B reconciliation rules). Contract prose, not per-unit
+#: invention.
+TASK_BRIEF_OPEN_HANDLING: tuple[str, ...] = (
+    "Preserve unexamined or unsupported aspects as OPEN/PENDING with "
+    "typed ResolutionRequirements; never narrow the slice silently.",
+    "A deliberately narrowed question is a new exact "
+    "SemanticQuestionScope; it must not silently replace or retire "
+    "the broader original.",
+)
+
+#: Static submission/disposition rules attached to every brief (C-04
+#: disposition decision, SA-6). Contract prose, not per-unit invention.
+TASK_BRIEF_SUBMISSION_RULES: tuple[str, ...] = (
+    "ANSWERED only when the admitted slice has been examined and its "
+    "material aspects are substantiated.",
+    "Do not declare a parent question ANSWERED merely because OPEN "
+    "follow-ups exist.",
+    "Submit one strict canonical result with an explicit question "
+    "disposition.",
+)
+
+
+@_dataclass(frozen=True)
 class SemanticInterpretationRequest:
     repository_id: str
     subjects: tuple[Subject, ...]
@@ -1287,6 +1395,9 @@ class SemanticInterpretationRequest:
     allowed_claim_kinds: tuple[ClaimKind, ...]
     allowed_relationship_kinds: tuple[RelationshipKind, ...]
     identity_bindings: tuple[SubjectId, ...]
+    # Required, never defaulted: every interpretation task carries its
+    # slice-derived brief (no brief-less legacy path, no dual semantics).
+    brief: TaskBrief
     operation_intent: SemanticIntent = SemanticIntent.EXPLAIN
     question_slice: str = ""
     proposed_change: ProposedChange | None = None

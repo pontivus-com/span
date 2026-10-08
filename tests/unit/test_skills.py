@@ -93,6 +93,19 @@ class SkillNonAuthorityTest(unittest.TestCase):
         for op in CANONICAL_OPS:
             self.assertIn(op, text)
 
+    def test_presubmit_review_guidance_present(self):
+        # §14 paraphrase-only negative is owned by host pre-submit
+        # review: the directing procedure must exist in prose and be
+        # pinned here (oracles backstop wrong content, never the
+        # no-knowledge-gained judgment itself).
+        text = _text(SKILLS[0])
+        for required in (
+            "paraphrase-only",
+            "leg-open",
+            "before submitting",
+        ):
+            self.assertIn(required, text)
+
     def test_implementation_ignores_skills(self):
         for path in (REPO_ROOT / "src").rglob("*.py"):
             content = path.read_text(encoding="utf-8")

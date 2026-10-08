@@ -165,6 +165,37 @@ def prepare_interpretation_task(
             prior_relationships = tuple(rel_page.items)[: bounds.max_results]
         except Exception:
             prior_relationships = ()
+    # Slice-instance brief content (F-02): recorded OPEN/PENDING
+    # requirements for this EXACT admitted question identity
+    # (scope root, subject, class, slice) — quoted from store, never
+    # inferred. Sibling slices stay out: narrow stays narrow.
+    # Deterministic order; absent without a store.
+    open_requirements: list[m.ResolutionRequirement] = []
+    if store is not None:
+        try:
+            scoped = store.load_question_coverages(
+                repository_id, root, (sid,), bounds,
+            )
+        except Exception:
+            scoped = ()
+        for cov in scoped:
+            if cov.question is None:
+                continue
+            if cov.question.scope_root != root:
+                continue
+            if cov.question.subject != sid:
+                continue
+            if cov.question.question_class != resolved_class:
+                continue
+            if cov.question.question_slice != resolved_slice:
+                continue
+            if cov.disposition not in (
+                m.SemanticQuestionDisposition.OPEN,
+                m.SemanticQuestionDisposition.PENDING,
+            ):
+                continue
+            open_requirements.extend(cov.resolution_requirements)
+    open_requirements.sort(key=lambda req: req.description)
     request = m.SemanticInterpretationRequest(
         repository_id=repository_id,
         subjects=(subject,),
@@ -181,6 +212,18 @@ def prepare_interpretation_task(
         prior_claims=prior_claims,
         prior_relationships=prior_relationships,
         analysis_obligations=m.SA_ANALYSIS_OBLIGATIONS,
+        brief=m.TaskBrief(
+            material_aspects=m.QUESTION_CLASS_ASPECTS.get(
+                resolved_class, ()
+            ),
+            scope_boundaries=(
+                f"scope root: {root.canonical_locator}",
+                f"subject: {sid.canonical_locator}",
+            ),
+            open_requirements=tuple(open_requirements),
+            open_handling=m.TASK_BRIEF_OPEN_HANDLING,
+            submission_rules=m.TASK_BRIEF_SUBMISSION_RULES,
+        ),
     )
     if len(request.subjects) > bounds.max_subjects:
         raise _validation.InterpretationUnitRejected(
@@ -514,7 +557,9 @@ def _materialize_unit(
                     failures.append(
                         f"stale premise cannot support current conclusion: {pid}"
                     )
-    except Exception as exc:  # store without new methods in legacy tests
+    except Exception as exc:
+        # Port-conformance failure fails the unit closed: validation
+        # never proceeds on unverified premises.
         failures.append(f"premise validation unavailable: {exc}")
     keys_in_result = frozenset(
         [c.candidate_key for c in result.claims]
@@ -917,9 +962,6 @@ def _materialize_unit(
     all_coverages = tuple(question_coverages_to_persist) + tuple(
         reopened_coverages
     )
-    if not all_coverages and bound_question is None:
-        # Legacy: single empty coverage tuple preserves atomic batch shape.
-        all_coverages = ()
     # Deduplicate retirements: an explicit withdrawal and complete
     # replacement may name the same item; retiring twice must not
     # fail the batch on the second (already-moved) lookup.

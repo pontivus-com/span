@@ -18,6 +18,12 @@ repository-size work. New files with no dependants stay silent
 because seeds are explicitly relied upon. Irrelevant changes produce
 no notice; uninitialized repositories produce a setup notice.
 
+The `span-hooks` CLI runner (`src/span/shell/hooks.py`) is
+exception-oriented on top of this contract: it prints only scopes
+needing action and stays silent when everything is current. Silence
+is the all-current statement. Per-host trigger support (opencode,
+codex, fallback): `integrations/hosts/triggers.md`.
+
 ## Responsibility matrix
 
 | Concern | Owner | Cannot |

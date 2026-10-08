@@ -119,6 +119,7 @@ def _bare_request():
         allowed_claim_kinds=tuple(m.ClaimKind),
         allowed_relationship_kinds=tuple(m.RelationshipKind),
         identity_bindings=(_sid(),),
+        brief=m.TaskBrief(),
         bounds=_bounds(),
     )
 
