@@ -78,3 +78,13 @@ items need `refresh`, not reinterpretation by hand.
 - Agree scope size with the user first: one subsystem per pass is
   plenty. Stop when key subjects are covered and gaps are ledgered;
   record what was deliberately left out.
+
+## Expansion identification
+
+Documenting a scope often surfaces materially new knowledge (an
+unnamed owner, an undocumented consumer, a shadow contract). When it
+does: establish the precise material question first, admit it under
+the existing identity/scope rules through the canonical submission
+path, and retrieve it later to confirm. See the Expansion section of
+`skills/span/SKILL.md`. Never broaden territory silently; never invent
+a second store, writer, or quality bar for expansions.

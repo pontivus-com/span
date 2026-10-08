@@ -516,6 +516,7 @@ class SerializationRoundTripTest(unittest.TestCase):
             allowed_claim_kinds=(m.ClaimKind.PURPOSE,),
             allowed_relationship_kinds=(m.RelationshipKind.MEMBER_OF,),
             identity_bindings=(_subject_id(),),
+            brief=m.TaskBrief(),
             operation_intent=m.SemanticIntent.EXPLAIN,
             question_slice="src/a.py",
             proposed_change=None,

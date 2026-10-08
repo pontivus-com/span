@@ -75,6 +75,7 @@ class PortShapeTest(unittest.TestCase):
                 allowed_claim_kinds=(),
                 allowed_relationship_kinds=(),
                 identity_bindings=(),
+                brief=m.TaskBrief(),
                 bounds=self._bounds(),
             ),
         )

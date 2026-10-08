@@ -71,6 +71,7 @@ class ServiceTokenTest(unittest.TestCase):
             allowed_claim_kinds=(),
             allowed_relationship_kinds=(),
             identity_bindings=(),
+            brief=m.TaskBrief(),
             bounds=m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64),
         )
         self.assertEqual(request.operation_intent, m.SemanticIntent.EXPLAIN)

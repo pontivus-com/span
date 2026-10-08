@@ -1,4 +1,110 @@
-# Span
+# Span — Establish. Maintain. Expand.
+
+Persistent, evidence-grounded semantic memory for AI coding agents.
+
+Coding agents reconstruct the same repository understanding from
+scratch in every session: what this system is for, who owns what,
+how data flows, which contracts govern, where failures go. Span
+retains that understanding across tasks and sessions as
+source-supported semantic claims — so later questions are answered
+from established knowledge instead of re-derived, and stale knowledge
+announces itself instead of misleading.
+
+Span is not source-code search, not a call graph, not documentation
+retrieval, not conversation history, and not unqualified AI-written
+summaries. The differentiator is retained meaning with provenance:
+every assertion carries what evidence supports it, what authority
+declares it, what depends on it, and whether it is still current.
+No claim of infallible interpretation, universal coverage, or
+autonomous maintenance: uncertainty, conflicts, and gaps stay
+explicit.
+
+Three functions, one mechanism:
+
+- **Establish** — investigate a bounded architectural scope once;
+  persist purpose, owners, contracts, flows, and failure paths as
+  evidence-backed claims.
+- **Maintain** — as code changes, affected knowledge goes noncurrent
+  visibly; the editing agent reassesses its exact scope in the same
+  change (closeout), never in a separate maintenance session.
+- **Expand** — ordinary investigations that surface new material
+  knowledge admit, examine, and persist it through the same canonical
+  submission — deliberately, never by silent broadening.
+
+The agent lifecycle runs eight operations only:
+`initialize_repository` (explicit setup), `explain`, `impact`,
+`trace`, `authority`, `status`, `refresh`, `submit_interpretation`
+(exchange). When stored knowledge is insufficient, an operation
+suspends with a bounded task; the agent investigates with its own
+model and submits the typed result. Span validates, materializes,
+and resumes — it never edits code, runs tests, selects models, or
+invokes providers.
+
+Hooks are report-only: they surface scopes needing action
+(uninitialized stores, missing coverage, moved dependents,
+stale/open/pending work) and stay silent when everything is current.
+Host trigger support per host: `integrations/hosts/triggers.md`.
+Agent duties per skill: `skills/`.
+
+Onboarding delivers two milestones: operational readiness (installed,
+initialized, one explain round-trip) and a useful semantic baseline
+(a bounded scope investigated, persisted, and demonstrably
+retrievable by fresh questions). Ordinary demand-driven queries work
+regardless, with no establishment campaign required.
+
+Start below: install, initialize one repository, verify readiness,
+and run one explain round-trip.
+
+## Agent lifecycle — what Span does at each stage
+
+```
+session begins
+  │
+  ▼
+1. ORIENT ......... agent calls status, explain
+  Span: reports readiness + coverage + prior answers, or suspends
+  with a bounded task. READY means operational, never known.
+  │
+  ▼
+2. PREPARE ........ agent calls impact (+ trace / authority)
+  Span: assesses the proposal against stored semantics and returns
+  a blast-radius brief with requirements. Never approval to act.
+  │
+  ▼
+3. INVESTIGATE .... agent calls explain / trace / authority, submits
+  Span: serves bounded evidence + priors; suspends while knowledge
+  is insufficient. Agent examines, submits typed results, repeats
+  until answers resolve. Span validates + materializes each unit.
+  │
+  ▼
+4. IMPLEMENT ...... agent edits with external tools
+  Span: nothing. Span never edits code, runs tests, or orchestrates.
+  │
+  ▼
+5. VERIFY ......... agent calls status + runs external tests
+  Span: reports currency of the change scope (CURRENT / STALE /
+  UNVERIFIABLE). Passing tests never count as semantic proof.
+  │
+  ▼
+6. CLOSEOUT ....... editing agent calls scoped refresh, then status
+  Span: re-examines the stale scope from persisted coverage and
+  materializes reassessed answers (or visible OPENs). A bare
+  refresh call proves nothing — adequacy is in resubmitted content.
+  │
+  ▼
+7. REUSE .......... any later agent calls explain / status
+  Span: answers from established knowledge; respects OPENs;
+  suspends only where material questions remain unexamined.
+```
+
+Around the edges, report-only hooks observe session boundaries
+(`session-start`, `source-changed`, `session-stop`): they surface
+scopes needing action and stay silent when everything is current.
+They never initialize, interpret, refresh, or decide anything.
+
+---
+
+# Span (technical reference)
 
 Span is a standalone semantic repository intelligence system for coding agents.
 
@@ -78,8 +184,11 @@ guess, coerce uncertainty, or auto-fix by inventing semantics.
    Expected: empty dir outside <TARGET_REPO>, writable.
 
 5. Initialize (explicit, dedicated setup session):
-   span-mcp --data-dir <DATA_DIR> --repo graft:<TARGET_REPO>
-   Then call initialize_repository with:
+   `span-mcp --data-dir <DATA_DIR> --repo graft:<TARGET_REPO>`
+   provisions each `--repo` at startup (runs initialization, prints
+   the init result per repository — no separate call needed for
+   these). For any repository NOT pre-registered with `--repo`,
+   call `initialize_repository` with:
      repository_locator = "graft:<TARGET_REPO>"
      structural_provider_config = "graft:<TARGET_REPO>"
      authority_seeds = () unless the user supplied explicit seeds
@@ -159,9 +268,10 @@ existing `graft` entry):
 ```
 
 Reload Opencode, then ask the agent: `status` (expect
-`HookStatusNotice`), then `explain` on a known symbol (expect
-`SemanticAnswer` or `PendingInterpretation`, submitted via
-`submit_interpretation` until an answer returns).
+`SemanticAnswer` — or `PendingInterpretation`, submitted via
+`submit_interpretation` until an answer returns; the compact
+`HookStatusNotice` is returned only in `HOOK_FAST` mode), then
+`explain` on a known symbol.
 
 ### Codex
 

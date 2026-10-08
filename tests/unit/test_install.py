@@ -117,6 +117,34 @@ class OpencodeMergeTest(unittest.TestCase):
             )
 
 
+class ReceiptScopeTest(unittest.TestCase):
+    def test_write_receipt_persists_scope_list(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = str(pathlib.Path(tmp) / "data")
+            payload = {
+                "install_version": 1,
+                "repos": ["/r/alpha", "/r/beta"],
+                "verify": {"repos": []},
+            }
+            install.write_receipt(data_dir, payload, dry_run=False)
+            stored = json.loads(
+                (pathlib.Path(data_dir) / "install.json").read_text()
+            )
+            # The receipt scope list is what hook commands resolve
+            # coverage against; it must persist verbatim.
+            self.assertEqual(stored["repos"], ["/r/alpha", "/r/beta"])
+
+    def test_write_receipt_dry_run_writes_nothing(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = str(pathlib.Path(tmp) / "data")
+            install.write_receipt(data_dir, {"repos": []}, dry_run=True)
+            self.assertFalse(pathlib.Path(data_dir).exists())
+
+
 class PlanningTest(unittest.TestCase):
     def test_data_dir_inside_target_refused(self):
         args = install.parse_args(

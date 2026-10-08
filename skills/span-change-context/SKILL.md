@@ -37,3 +37,13 @@ for resolving them.
   (`impact`, then `trace` / `authority` /
   `status` / `refresh` where required). It defines no
   semantic rules of its own.
+
+## Expansion identification
+
+Pre-change investigation that surfaces unknown participants,
+contracts, or dependencies material to the proposal: establish the
+precise material question, admit it under the existing identity/scope
+rules, and submit through the canonical path — before relying on it
+in change conditions. See the Expansion section of
+`skills/span/SKILL.md`. Structural reach is possibility, never
+admission; no silent broadening.

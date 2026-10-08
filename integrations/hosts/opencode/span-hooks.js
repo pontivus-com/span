@@ -1,13 +1,14 @@
 // Span lifecycle notices (read-only).
 //
-// Report-only hooks for the Span semantic repository: session start
-// reports readiness, file edits report dependent semantic items,
-// session idle reports closure counts. Never writes, interprets,
-// refreshes, or initializes. Silent no-op when Span is not installed.
+// Report-only hooks for the Span semantic repository: surfaces only
+// scopes needing action (uninitialized stores, missing coverage,
+// moved dependents, stale/open/pending work) and stays silent when
+// everything is current. Never writes, interprets, refreshes, or
+// initializes. Silent no-op when Span is not installed.
 
-const fs = require("node:fs");
-const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const CANDIDATES = [
   process.env.SPAN_HOOKS_BIN,
