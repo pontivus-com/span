@@ -12,7 +12,7 @@ import argparse
 import json
 import pathlib
 
-from span import service_operations as ops
+from span import service as ops
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.mcp_server import ServerConfig, provision_repository

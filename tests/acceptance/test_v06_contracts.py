@@ -17,7 +17,7 @@ import unittest
 
 from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
-from span import service_operations as ops
+from span import service as ops
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
 from span.shell.evidence import FixtureEvidenceSource

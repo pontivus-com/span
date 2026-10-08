@@ -26,7 +26,7 @@ from span.ports.interpretation import (
     InterpretationUnavailable,
     PendingInterpretation,
 )
-from span.service_operations import (
+from span.service import (
     SemanticAuthorityRequest,
     SemanticExplainRequest,
     SemanticInitializeRepositoryRequest,

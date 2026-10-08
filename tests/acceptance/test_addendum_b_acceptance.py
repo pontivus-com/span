@@ -21,7 +21,10 @@ import unittest
 from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span.ports.structural import StructuralDirection
-from span import service_operations as ops
+from span import service as ops
+from span.service.discovery import _coverage_for_task
+from span.service.operations.explain import _baseline_sufficient
+from span.service.resolution import _load_all_coverages_or_defer
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
@@ -435,7 +438,7 @@ class FirstContactTest(unittest.TestCase):
                 # current dependencies: recorded scoped sufficiency holds
                 # for the admitted scope (no open/pending/noncurrent).
                 self.assertTrue(
-                    ops._baseline_sufficient(
+                    _baseline_sufficient(
                         REPO, root, store=store, evidence=evidence,
                         bounds=_bounds(),
                     )
@@ -533,7 +536,7 @@ class NegativeEmptyResultsTest(unittest.TestCase):
                 m.CanonicalIndexBatch(
                     subjects=(m.Subject(root, "parcel", None),),
                     coverage_dependencies=tuple(
-                        ops._coverage_for_task(
+                        _coverage_for_task(
                             REPO, (root,), evidence=evidence, seeds=(),
                             question=scope,
                         )
@@ -943,7 +946,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
             )
             tiny = _bounds(max_results=1)
             with self.assertRaises(ops.InterpretationUnitRejected) as ctx:
-                ops._load_all_coverages_or_defer(
+                _load_all_coverages_or_defer(
                     REPO, None, (), store=store, bounds=tiny,
                     purpose="test overflow",
                 )
@@ -990,7 +993,7 @@ class QuestionIsolationTest(unittest.TestCase):
                 m.CanonicalIndexBatch(
                     subjects=(m.Subject(root, "parcel", None),),
                     coverage_dependencies=(
-                        ops._coverage_for_task(
+                        _coverage_for_task(
                             REPO, (root,), evidence=evidence, seeds=(),
                             question=q_cq06,
                         ),
@@ -1959,7 +1962,7 @@ class SubstantiveOracleMustFailTest(unittest.TestCase):
             # invents the missing participants, and sufficiency stays
             # False while the admitted scope is incomplete.
             self.assertFalse(
-                ops._baseline_sufficient(
+                _baseline_sufficient(
                     REPO, _sid("src/parcel.py"), store=store,
                     evidence=evidence, bounds=_bounds(),
                 )

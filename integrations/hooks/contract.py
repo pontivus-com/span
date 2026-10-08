@@ -17,7 +17,7 @@ import enum as _enum
 from dataclasses import dataclass as _dataclass
 
 from span.core import model as m
-from span import service_operations as ops
+from span import service as ops
 
 __all__ = [
     "HookIntent",

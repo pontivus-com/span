@@ -608,7 +608,7 @@ class PrefixExpansionTest(unittest.TestCase):
         )
 
     def test_store_only_subject_gets_prefix_evidence(self):
-        from span import service_operations as ops
+        from span import service as ops
         from span.shell.structural.memory import InMemoryStructuralSource
 
         structural = InMemoryStructuralSource("repo-1", (), (), ())

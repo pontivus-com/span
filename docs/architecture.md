@@ -17,8 +17,11 @@ ISOLATED SHELL (persist / retrieve / expose / invoke)
 The core (`src/span/core/`) imports stdlib value modules only — no
 filesystem, network, database, provider, or MCP imports. Effects live
 in `src/span/shell/`; `src/span/ports/` holds typed interfaces only;
-`src/span/service_operations.py` coordinates ports and core but owns
-no semantic rules.
+`src/span/service/` coordinates ports and core but owns
+no semantic rules (v0.6 §14 Amendment A-01: package with one module
+per responsibility — bounds, requests, refs, answers, repository,
+resolution, discovery, freshness, questions, interpretation,
+exchange, operations/*).
 
 ## Separation of concerns (exclusive ownership)
 

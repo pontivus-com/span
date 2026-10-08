@@ -113,7 +113,7 @@ class PortShapeTest(unittest.TestCase):
         self.assertIs(hints["direction"], StructuralDirection)
 
     def test_change_kind_single_home(self):
-        from span import service_operations as ops
+        from span import service as ops
 
         self.assertIs(ops.ChangeKind, m.ChangeKind)
         self.assertIs(ops.ProposedChange, m.ProposedChange)

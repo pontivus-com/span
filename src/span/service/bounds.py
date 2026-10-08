@@ -1,9 +1,8 @@
-"""Span canonical service coordination (plan §14).
+"""Span service bounds policy (plan §5.1, v0.6 §14 Amendment A-01).
 
-Coordinates ports/core. Owns no semantic rules. This module holds
-service-level operational configuration (§5.1 bounds policy) and strict
-typed ingress helpers. Query/answer behavior lives in
-``span.service_operations``; transport belongs to Phase 4.
+Service-level operational configuration and strict typed ingress
+helpers for operation bounds. Verbatim from the former
+``span.service`` module; only the module path changed.
 """
 
 from span.core.model import QueryBounds, ServiceBoundsPolicy

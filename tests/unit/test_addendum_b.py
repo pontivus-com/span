@@ -11,7 +11,8 @@ import unittest
 
 from span.core import model as m
 from span.core import validation as v
-from span import service_operations as ops
+from span import service as ops
+from span.service.operations.explain import _baseline_sufficient
 from span.shell import paging
 from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
 
@@ -91,7 +92,7 @@ class BaselineVsQuestionLocalTest(unittest.TestCase):
             )
             evidence = FixtureEvidenceSource("repo-b", {"src/a.py": "X = 1\n"})
             self.assertFalse(
-                ops._baseline_sufficient(
+                _baseline_sufficient(
                     "repo-b", sid, store=store, evidence=evidence,
                     bounds=_bounds(),
                 )

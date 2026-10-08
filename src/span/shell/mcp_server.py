@@ -33,7 +33,7 @@ from span.shell.mcp import (
 )
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural import structural_source_from_config
-from span import service_operations as ops
+from span import service as ops
 
 __all__ = [
     "ServerConfig",

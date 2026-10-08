@@ -35,7 +35,7 @@ from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span import service_operations as ops
+from span import service as ops
 
 __all__ = [
     "TOOL_NAMES",

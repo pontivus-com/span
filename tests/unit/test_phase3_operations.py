@@ -13,7 +13,8 @@ from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span.ports.structural import StructuralDirection
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
-from span import service_operations as ops
+from span import service as ops
+from span.service.answers import _select_answer_items
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
 from span.shell.evidence import FixtureEvidenceSource
@@ -685,7 +686,7 @@ class SelectionAtomicityTest(unittest.TestCase):
         for budget in range(1, 8):
             with self.subTest(budget=budget):
                 kept_c, kept_r, kept_conf, truncated, _ = (
-                    ops._select_answer_items(
+                    _select_answer_items(
                         claims, (), conflicts, budget
                     )
                 )

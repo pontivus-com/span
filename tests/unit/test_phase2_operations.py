@@ -15,7 +15,9 @@ from span.ports.interpretation import (
     PendingInterpretation,
 )
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
-from span import service_operations as ops
+from span import service as ops
+from span.service.discovery import _inventory_snapshot, _read_units_within_bytes
+from span.service.resolution import _resolve_query_subject
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
 from span.shell.evidence import FixtureEvidenceSource
@@ -711,7 +713,7 @@ class InventorySnapshotTest(unittest.TestCase):
         expected = hashlib.sha256(
             repr(sorted(self._paged_ids(evidence, bounds))).encode()
         ).hexdigest()
-        membership, seed_map = ops._inventory_snapshot(
+        membership, seed_map = _inventory_snapshot(
             "repo-1",
             evidence=evidence,
             seeds=(("README.md", "ev-README.md"),
@@ -742,7 +744,7 @@ class InventorySnapshotTest(unittest.TestCase):
             expected = hashlib.sha256(
                 repr(sorted(self._paged_ids(evidence, bounds))).encode()
             ).hexdigest()
-            membership, seed_map = ops._inventory_snapshot(
+            membership, seed_map = _inventory_snapshot(
                 "repo-1",
                 evidence=evidence,
                 seeds=(("a.py", "ev-a.py"),),
@@ -779,7 +781,7 @@ class BoundedEvidenceReadTest(unittest.TestCase):
                 "X = '" + "y" * 200 + "'\n", encoding="utf-8"
             )
             evidence = FilesystemEvidenceSource("repo-1", root)
-            units = ops._read_units_within_bytes(
+            units = _read_units_within_bytes(
                 evidence,
                 (self._ref("small.py"), self._ref("big.py")),
                 _bounds(max_evidence_units=24, max_evidence_bytes=100),
@@ -802,7 +804,7 @@ class BoundedEvidenceReadTest(unittest.TestCase):
             )
             evidence = FilesystemEvidenceSource("repo-1", root)
             with self.assertRaises(ValueError):
-                ops._read_units_within_bytes(
+                _read_units_within_bytes(
                     evidence, (self._ref("big.py"),),
                     _bounds(max_evidence_units=24, max_evidence_bytes=10),
                 )
@@ -839,7 +841,7 @@ class StoreResolutionTest(unittest.TestCase):
         structural = self._empty_structural()
         store, sid = self._store_with_workflow()
         try:
-            resolution = ops._resolve_query_subject(
+            resolution = _resolve_query_subject(
                 "repo-1",
                 m.SubjectSelector(sid, None, (), None),
                 structural=structural, store=store, bounds=_bounds(),
@@ -909,7 +911,7 @@ class StoreResolutionTest(unittest.TestCase):
         )
         store, _ = self._store_with_workflow()
         try:
-            resolution = ops._resolve_query_subject(
+            resolution = _resolve_query_subject(
                 "repo-1",
                 m.SubjectSelector(None, "dup", (), None),
                 structural=structural, store=store, bounds=_bounds(),
@@ -924,7 +926,7 @@ class StoreResolutionTest(unittest.TestCase):
         structural = self._empty_structural()
         store, _ = self._store_with_workflow()
         try:
-            resolution = ops._resolve_query_subject(
+            resolution = _resolve_query_subject(
                 "repo-1",
                 m.SubjectSelector(None, "workflows/tta", (), None),
                 structural=structural, store=store, bounds=_bounds(),

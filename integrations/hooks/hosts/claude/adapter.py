@@ -18,7 +18,7 @@ canonical service operations only, and only `status` with
 from __future__ import annotations
 
 from span.core import model as m
-from span import service_operations as ops
+from span import service as ops
 from span.ports.evidence import EvidenceSource
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource

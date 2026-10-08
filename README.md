@@ -132,8 +132,8 @@ target repo. One `--repo graft:<TARGET>` per target (repeatable).
 Large repos report init readiness `DEGRADED` with the warning
 `evidence inventory truncated by maximum bounds; remaining sources
 discovered on demand`. That is the designed bounded state for repos
-over the 96-unit inventory maximum (`service.py` maximum bounds,
-`service_operations.py` init): remaining evidence loads on demand.
+over the 96-unit inventory maximum (`service/bounds.py` maximum bounds,
+`service/repository.py` init): remaining evidence loads on demand.
 It is not a failure; `status` still reports operational
 readiness. Do not raise bounds to chase `READY`.
 
