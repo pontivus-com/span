@@ -1,3 +1,8 @@
+---
+name: span-document
+description: Build evidence-backed understanding of one scope level by level with Span, ending in an explicit gap ledger.
+---
+
 # Span — semantic documentation of a scope
 
 Produce governed understanding of one scope (directory, subsystem, or
