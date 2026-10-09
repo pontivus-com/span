@@ -1,6 +1,6 @@
 """MCP transport adapter (plan Phase 4.2–4.4). Transport only.
 
-Maps the eight canonical public operations (§11.3) to MCP tools
+Maps the canonical public operations (§11.3) to MCP tools
 one-for-one. Ingress parses once into the canonical service contracts
 through strict canonical decode (I-02; unknown fields, unknown enums,
 and missing required fields fail closed). Egress serializes the
@@ -92,6 +92,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Prepare a repository for semantic queries in a dedicated "
         "setup session. No semantic interpretation happens here."
     ),
+    "initialize_target": (
+        "Start semantic establishment for an exact directory or evidence "
+        "scope. Returns the next typed interpretation unit and advances "
+        "the target frontier through submit_interpretation."
+    ),
     "explain": (
         "Explain what a subject is, what it does, and what governs it, "
         "with evidence, authority, and freshness."
@@ -109,8 +114,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "conflicts shown side-by-side."
     ),
     "status": (
-        "Per-claim freshness, changed evidence, verification currency, "
-        "and refresh scope. HOOK_FAST returns a compact notice only."
+        "Normal no-target status reports bounded persisted semantic "
+        "coverage: current, incomplete, stale/unverifiable, and "
+        "unassessed subjects. Exact targets report detailed freshness; "
+        "HOOK_FAST returns a compact notice only."
     ),
     "refresh": (
         "Explicitly reinterpret stale scope. Never automatic."
@@ -119,6 +126,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Submit a typed interpretation result for a pending "
         "continuation. Returns the suspended operation's answer, or "
         "the next pending unit while frontiers remain."
+    ),
+    "reissue_interpretation": (
+        "Reissue an expired or lost interpretation continuation once. "
+        "The original typed task is returned unchanged."
     ),
 }
 
@@ -147,6 +158,20 @@ TOOL_SCHEMAS: dict[str, dict] = {
             "establish_baseline": {"type": "boolean"},
         },
         "required": ["repository_id", "target"],
+    },
+    "initialize_target": {
+        "type": "object",
+        "description": TOOL_DESCRIPTIONS["initialize_target"],
+        "properties": {
+            "repository_id": {"type": "string"},
+            "target": _canonical("EvidenceScope; exact target boundary."),
+            "objective": {
+                "type": "string",
+                "description": "User-directed engineering objective.",
+            },
+            "bounds": _canonical("QueryBounds. Omit for defaults."),
+        },
+        "required": ["repository_id", "target", "objective"],
     },
     "impact": {
         "type": "object",
@@ -249,10 +274,20 @@ TOOL_SCHEMAS: dict[str, dict] = {
         },
         "required": ["continuation", "result", "repository_id"],
     },
+    "reissue_interpretation": {
+        "type": "object",
+        "description": TOOL_DESCRIPTIONS["reissue_interpretation"],
+        "properties": {
+            "continuation": {"type": "string"},
+            "repository_id": {"type": "string"},
+        },
+        "required": ["continuation", "repository_id"],
+    },
 }
 
 TOOL_NAMES: tuple[str, ...] = (
     "initialize_repository",
+    "initialize_target",
     "explain",
     "impact",
     "trace",
@@ -260,9 +295,11 @@ TOOL_NAMES: tuple[str, ...] = (
     "status",
     "refresh",
     "submit_interpretation",
+    "reissue_interpretation",
 )
 
 _REQUEST_CLASS: dict[str, type] = {
+    "initialize_target": ops.SemanticInitializeTargetRequest,
     "explain": ops.SemanticExplainRequest,
     "impact": ops.SemanticImpactRequest,
     "trace": ops.SemanticTraceRequest,
@@ -270,6 +307,7 @@ _REQUEST_CLASS: dict[str, type] = {
     "status": ops.SemanticStatusRequest,
     "refresh": ops.SemanticRefreshRequest,
     "submit_interpretation": ops.SemanticSubmitInterpretationRequest,
+    "reissue_interpretation": ops.SemanticReissueInterpretationRequest,
 }
 
 
@@ -289,7 +327,7 @@ def decode_request(tool_name: str, arguments: dict) -> object:
     if not isinstance(arguments, dict):
         raise ValueError(f"arguments for {tool_name} must be an object")
     payload = dict(arguments)
-    if tool_name == "submit_interpretation":
+    if tool_name in ("submit_interpretation", "reissue_interpretation"):
         # Transport-level routing key, not part of the canonical
         # submit contract: consumed here, never parsed as semantics.
         payload.pop("repository_id", None)
@@ -386,7 +424,7 @@ class McpAdapter:
             request = decode_request(tool_name, arguments)
         except ValueError as exc:
             return _error("ingress", str(exc))
-        if tool_name == "submit_interpretation":
+        if tool_name in ("submit_interpretation", "reissue_interpretation"):
             repository_id = arguments.get("repository_id")
         else:
             repository_id = request.repository_id  # type: ignore[union-attr]
@@ -399,6 +437,13 @@ class McpAdapter:
         try:
             if tool_name == "explain":
                 result = ops.explain(
+                    request, structural=context.structural,
+                    evidence=context.evidence, store=context.store,
+                    continuations=context.continuations,
+                    authority_seeds=context.authority_seeds,
+                )
+            elif tool_name == "initialize_target":
+                result = ops.initialize_target(
                     request, structural=context.structural,
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
@@ -445,6 +490,11 @@ class McpAdapter:
                     request.result,  # type: ignore[union-attr]
                     structural=context.structural,
                     evidence=context.evidence, store=context.store,
+                    continuations=context.continuations,
+                )
+            elif tool_name == "reissue_interpretation":
+                result = ops.reissue_interpretation(
+                    request.continuation,  # type: ignore[union-attr]
                     continuations=context.continuations,
                 )
             else:  # Unreachable: guarded above.

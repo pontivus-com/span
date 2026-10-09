@@ -1,7 +1,7 @@
 """Agent Skill non-authority tests (plan Phase 4.7).
 
 Skills are optional lifecycle guidance only. They may orchestrate the
-eight canonical operations but cannot establish or reinterpret
+ten canonical operations but cannot establish or reinterpret
 semantic claims, ownership, authority, precedence, trust, or
 freshness. These tests pin that boundary mechanically:
 
@@ -25,6 +25,7 @@ SKILLS = (
 
 CANONICAL_OPS = {
     "initialize_repository",
+    "initialize_target",
     "explain",
     "impact",
     "trace",
@@ -32,6 +33,7 @@ CANONICAL_OPS = {
     "status",
     "refresh",
     "submit_interpretation",
+    "reissue_interpretation",
 }
 
 FORBIDDEN_PHRASES = (
@@ -103,6 +105,44 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "paraphrase-only",
             "leg-open",
             "before submitting",
+        ):
+            self.assertIn(required, text)
+
+    def test_explicit_target_is_complete_semantic_scope(self):
+        text = _text(SKILLS[0])
+        for required in (
+            "exact directory or repository path supplied by the user",
+            "complete target scope",
+            "Every contained material area",
+            "no unvisited material partition",
+            "fresh-session `status`/`explain` readback",
+        ):
+            self.assertIn(required, text)
+
+    def test_document_skill_preserves_target_scope_quality_bar(self):
+        text = _text(SKILLS[2])
+        for required in (
+            "exact directory",
+            "complete target boundary",
+            "every material area",
+            "same analysis card",
+        ):
+            self.assertIn(required, text)
+
+    def test_semantic_granularity_is_architectural_not_file_count_based(self):
+        text = _text(SKILLS[0])
+        for required in (
+            "Map level",
+            "Baseline level",
+            "Member-question level",
+            "semantic subject per file",
+            "ownership, authority, lifecycle",
+            "Span subject anchors",
+            "host-owned",
+            "boundary",
+            "Do not fabricate",
+            "directory/document",
+            "subject when the provider cannot resolve one",
         ):
             self.assertIn(required, text)
 

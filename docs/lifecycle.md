@@ -32,6 +32,43 @@ a stored `ANSWERED` as effectively current where required support is
 stale or unverifiable. Full closeout duty: `skills/span/SKILL.md`
 (Semantic closeout duty); expansion: same file (Expansion).
 
+Every semantic write uses the same compact pending-task card: objective; exact
+scope and exclusions; evidence and authority; material input-to-terminal path;
+typed result; adversarial check; explicit disposition with requirements; and
+fresh readback. The card is projected through the canonical `TaskBrief` and
+does not add a second semantic state or quality model.
+
+## Explicit target semantic establishment (Addendum E)
+
+After the repository root is initialized for operational readiness, an exact
+directory or repository path supplied by the user becomes a host-owned
+semantic campaign, not a stronger form of administrative readiness. That
+supplied path is the complete semantic boundary. The canonical entry point
+is `initialize_target` with the exact `EvidenceScope` and user objective.
+Each pending task exposes that boundary separately from its current
+structural anchor. The active agent uses structural and filesystem discovery
+to partition that boundary into material areas, then drives the returned
+typed units through investigation and `submit_interpretation` serially,
+using `reissue_interpretation` once only for an expired transport
+continuation. `explain(establish_baseline=True)` remains for an ordinary
+selected root without an exact target directory; it is not the exact-target
+path. Every material area must end with persisted coverage or an explicit
+`NOT_APPLICABLE`, `OPEN`, or `PENDING` disposition with its requirement; a
+representative root, populated store, or `READY` response is not completion.
+The agent preserves page tokens, resumes pending work, and performs
+fresh-session retrieval before reporting the target complete. A request
+without an exact target still requires an explicit bounded scope choice.
+
+Target accounting constraint: structural candidates make the exchange
+resumable; they are not semantic areas. Coherent grouping is host-owned and
+must be recorded through canonical question coverage with no second progress
+store, ledger, or writer. `target_scope` alone does not prove grouping or
+completeness. The exact accounting carrier remains open under E-13 and
+requires a contract amendment before implementation.
+
+Exact onboarding path: `docs/onboarding-runbook.md` (copied from Addendum E
+§§4A and 6).
+
 ## Initialization and readiness
 
 Initialization is explicit and administrative: identity, repository
@@ -39,7 +76,12 @@ state, structural source, evidence inventory, authority seeds, store
 schema — then a readiness report. Uninitialized repositories answer
 `UNINITIALIZED` plus a setup requirement on every path; hooks and
 queries never bootstrap implicitly. Readiness is operational state,
-never semantic truth.
+never semantic truth. After initialization, normal repository-level
+`status(target=None)` is required to expose the bounded persisted
+semantic-coverage inventory (covered/current, incomplete, stale or
+unverifiable, unassessed, and explicit bounds), without a structural crawl
+or interpretation. This inventory is distinct from readiness and remains
+an ACT-D-10 installed-runtime gate until verified.
 
 ## Workflow examples
 
@@ -48,6 +90,8 @@ never semantic truth.
 - Baseline a subsystem: `explain(establish_baseline=True)` on the
   exact root → work admitted PENDING questions in order → synthesize
   only on established member evidence → report qualified sufficiency.
+  Use this only for an ordinary selected root. For an exact user-supplied
+  directory target, use `initialize_target` per the section above.
 - Implement: `impact` with change kind + affected assertions →
   resolve blockers → edit → `status` → external tests →
   `refresh` → `status`. `refresh` reuses persisted question scope;
@@ -57,6 +101,9 @@ never semantic truth.
 - Change-context: see `skills/span-change-context/SKILL.md`.
 
 Root selection uses existing repository context plus bounded
-structural operations; the structural port has no repository-wide
-enumerate/map, and `status` never enumerates subjects. Skills are
-guidance only, never semantic authority.
+structural operations. For an explicit target, the host performs the needed
+partitioning outside the MCP structural port; the port has no unrequested
+repository-wide enumerate/map. Normal repository-level `status` reads only persisted
+semantic coverage and reports its bounded frontier; it never enumerates
+structural subjects or interprets them. Skills are guidance only, never
+semantic authority.

@@ -38,6 +38,9 @@ from span.service.operations.explain import (
 from span.service.operations.impact import (
     _compose_impact_answer,
 )
+from span.service.operations.initialize_target import (
+    _next_target_pending,
+)
 from span.service.operations.refresh import (
     _compose_refresh_answer,
 )
@@ -126,6 +129,28 @@ def submit_interpretation(
         declared_complete=record.declared_complete,
         retire_scope=tuple(s.subject_id for s in task.request.subjects),
     )
+    if record.op == "initialize_target":
+        next_cov = _next_baseline_pending(
+            record.repository_id, record.subject,
+            store=store, bounds=bounds,
+        )
+        if next_cov is not None:
+            return _suspend_baseline_pending(
+                record.repository_id, record.subject, next_cov,
+                structural=structural, evidence=evidence, store=store,
+                bounds=bounds, state=state, seeds=record.seeds,
+                resolution=record.resolution, continuations=continuations,
+                op="initialize_target", scope=record.scope,
+                remaining=record.remaining, objective=record.objective,
+                target_scope=record.target_scope,
+            )
+        return _next_target_pending(
+            record.repository_id, record.remaining, record.scope,
+            objective=record.objective, structural=structural,
+            evidence=evidence, store=store, bounds=bounds, state=state,
+            authority_seeds=record.seeds, continuations=continuations,
+            target_scope=record.target_scope,
+        )
     if record.op == "refresh" and record.remaining:
         nxt, rest = record.remaining[0], record.remaining[1:]
         nxt_stale = _stale_question_scopes(
@@ -263,9 +288,11 @@ def reissue_interpretation(
             reissues=record.reissues + 1,
             affected_assertions=record.affected_assertions,
             operation_intent=record.operation_intent,
+            objective=record.objective,
             question_slice=record.question_slice,
             declared_complete=record.declared_complete,
             establish_baseline=record.establish_baseline,
+            target_scope=record.target_scope,
         )
     )
     return PendingInterpretation(

@@ -49,6 +49,7 @@ class SuspendedOperation:
     change_description: str | None = None
     affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
     operation_intent: str = "EXPLAIN"
+    objective: str = ""
     question_slice: str = ""
     declared_complete: bool = False
     trace_direction: str | None = None
@@ -56,10 +57,12 @@ class SuspendedOperation:
     trace_filter_set: bool = False
     trace_boundary: bool = False
     establish_baseline: bool = False
+    target_scope: m.EvidenceScope = _field(default_factory=m.EvidenceScope)
 
     def __post_init__(self) -> None:
         if self.op not in (
-            "explain", "authority", "refresh", "trace", "status", "impact"
+            "explain", "authority", "refresh", "trace", "status", "impact",
+            "initialize_target",
         ):
             raise ValueError(f"unknown suspended op: {self.op}")
         if self.reissues < 0:

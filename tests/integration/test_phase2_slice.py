@@ -1,16 +1,18 @@
-"""Held-out slice with real provider interfaces after explicit
+"""Held-out slice with the read-only Graft provider after explicit
 initialization (plan Phase 2.9, as amended).
 
 Held-out repository: ``tests/fixtures/order-svc`` (distinct from the
 Phase-1 pay-svc synthetic repo). The structural provider is the real
-Graft adapter over a real ``graft build`` (skipped honestly when the
-graft CLI is unavailable); evidence comes from deterministic fixtures;
+Graft adapter over a machine-readable wiring fixture; Span does not run
+``graft build`` or generate target Markdown. Evidence comes from
+deterministic fixtures;
 interpretation is performed by the deterministic test agent through the
 §11.12 exchange (Span suspends, agent performs, agent submits); the
 store is a real SQLite file. Generated material lives under
 ``.tmp-e2e/`` (git-ignored), never in fixtures.
 """
 
+import json
 import pathlib
 import shutil
 import unittest
@@ -24,13 +26,6 @@ from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
 from span.shell.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural import structural_source_from_config
-
-try:
-    import shutil as _shutil
-
-    _HAS_GRAFT = _shutil.which("graft") is not None
-except Exception:
-    _HAS_GRAFT = False
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -78,7 +73,6 @@ def _ref(repo_id, path, files):
     )
 
 
-@unittest.skipUnless(_HAS_GRAFT, "graft CLI unavailable")
 class Phase2SliceTest(unittest.TestCase):
     def test_held_out_repo_real_graft_end_to_end(self):
         if WORK_DIR.exists():
@@ -95,6 +89,67 @@ class Phase2SliceTest(unittest.TestCase):
             "-c", "user.name=span-test",
             "commit", "-qm", "held-out fixture",
         ))
+        graph_dir = WORK_DIR / "graft" / ".graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "wiring.json").write_text(
+            json.dumps({
+                "nodes": [
+                    {
+                        "id": "src/inventory.js", "name": "inventory.js",
+                        "kind": "file", "path": "src/inventory.js",
+                        "span": "L1-L4", "signature": None,
+                        "body_hash": "aa01",
+                    },
+                    {
+                        "id": "src/inventory.js#reserve", "name": "reserve",
+                        "kind": "function", "path": "src/inventory.js",
+                        "span": "L1-L3", "signature": "function reserve(sku)",
+                        "body_hash": "bb02",
+                    },
+                    {
+                        "id": "src/orders.js", "name": "orders.js",
+                        "kind": "file", "path": "src/orders.js",
+                        "span": "L1-L6", "signature": None,
+                        "body_hash": "cc03",
+                    },
+                    {
+                        "id": "src/orders.js#place", "name": "place",
+                        "kind": "function", "path": "src/orders.js",
+                        "span": "L3-L5", "signature": "function place(order)",
+                        "body_hash": "dd04",
+                    },
+                    {
+                        "id": "README.md", "name": "README.md",
+                        "kind": "file", "path": "README.md",
+                        "span": None, "signature": None,
+                        "body_hash": "ee05",
+                    },
+                ],
+                "edges": [
+                    {
+                        "source": "src/inventory.js",
+                        "target": "src/inventory.js#reserve",
+                        "relation": "contains",
+                    },
+                    {
+                        "source": "src/orders.js",
+                        "target": "src/orders.js#place",
+                        "relation": "contains",
+                    },
+                    {
+                        "source": "src/orders.js",
+                        "target": "src/inventory.js",
+                        "relation": "imports",
+                    },
+                    {
+                        "source": "src/orders.js#place",
+                        "target": "src/inventory.js#reserve",
+                        "relation": "calls",
+                    },
+                ],
+            }),
+            encoding="utf-8",
+        )
         if DB_PATH.exists():
             DB_PATH.unlink()
         store = None

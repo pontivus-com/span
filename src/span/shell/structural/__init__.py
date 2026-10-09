@@ -10,14 +10,12 @@ import pathlib as _pathlib
 
 from span.shell.structural.graft import (
     GraftStructuralSource,
-    ensure_graft_built,
 )
 from span.shell.structural.memory import InMemoryStructuralSource
 
 __all__ = [
     "GraftStructuralSource",
     "InMemoryStructuralSource",
-    "ensure_graft_built",
     "structural_source_from_config",
 ]
 
@@ -25,19 +23,18 @@ __all__ = [
 def structural_source_from_config(
     config: str,
 ) -> tuple[GraftStructuralSource | InMemoryStructuralSource, str]:
-    """Build the configured structural source (explicit admin paths only:
-    initialization, tests, tooling — never queries or hooks).
+    """Load the configured structural source without mutating the target.
 
     Returns (source, repository_id): identity assignment (plan §8.2.1)
     lives here, derived deterministically from the locator. Supported
-    configs: ``graft:<repo-path>`` (builds the index when absent —
-    explicit session work, never implicit). Anything else raises; the
-    in-memory source is constructed directly by its owners.
+    configs: ``graft:<repo-path>`` (reads an existing machine-readable
+    index only). Anything else raises; the in-memory source is constructed
+    directly by its owners. Missing indexes fail closed; Span never runs
+    ``graft build`` and never creates target artifacts.
     """
     scheme, _, rest = config.partition(":")
     if scheme == "graft" and rest:
         repo_path = _pathlib.Path(rest)
-        ensure_graft_built(repo_path)
         return GraftStructuralSource(repo_path.name, repo_path), repo_path.name
     raise ValueError(
         f"unsupported structural provider config: {config!r} "

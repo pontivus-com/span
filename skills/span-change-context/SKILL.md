@@ -17,6 +17,14 @@ structural-only possibilities, verification currency, and blockers
 (conflicts, stale evidence, unresolved authority) with requirements
 for resolving them.
 
+Use the same pending-task quality card when investigating or updating the
+change context: objective; exact scope and exclusions; evidence and authority;
+input → producer → transformation/state → consumer/output → terminal/failure;
+typed result; adversarial check; explicit disposition with requirements; and
+fresh readback. The card applies equally to impact follow-ups, expansion,
+refresh, and closeout. It is compact guidance over the canonical submission
+path, not a second quality model or a substitute for evidence.
+
 ## Rules
 
 - `impact` prepares; it does not approve. Change conditions are

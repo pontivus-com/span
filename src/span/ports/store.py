@@ -28,6 +28,7 @@ from span.core.model import (
     SemanticRelationship,
     StoreWriteResult,
     Subject,
+    SubjectPage,
     SubjectId,
 )
 from span.ports.structural import StructuralDirection
@@ -38,6 +39,23 @@ class SemanticStore(_typing.Protocol):
     def load_subjects(
         self, repository_id: str, subject_ids: tuple[SubjectId, ...]
     ) -> tuple[Subject, ...]:
+        ...
+
+    def load_repository_subjects(
+        self,
+        repository_id: str,
+        bounds: QueryBounds,
+        offset: int = 0,
+    ) -> SubjectPage:
+        """Load a bounded page of persisted semantic subjects.
+
+        This reads the canonical semantic store only; it is not structural
+        repository enumeration.
+        """
+        ...
+
+    def count_repository_subjects(self, repository_id: str) -> int:
+        """Count persisted semantic subjects for report bounds."""
         ...
 
     def load_by_refs(

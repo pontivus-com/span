@@ -328,10 +328,17 @@ class GraftPortBehaviorTest(unittest.TestCase):
         self.assertEqual(first.state_fingerprint, second.state_fingerprint)
 
     def test_factory_rejects_unknown_config(self):
+        import tempfile
+
         from span.shell.structural import structural_source_from_config
 
         with self.assertRaises(ValueError):
             structural_source_from_config("nope:xyz")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(g.GraftUnavailableError):
+                structural_source_from_config(f"graft:{tmp}")
+            self.assertFalse((pathlib.Path(tmp) / "graft").exists())
 
     def test_dirty_tree_reported_from_git(self):
         import subprocess

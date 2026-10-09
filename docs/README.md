@@ -29,7 +29,11 @@ workflows, or originates authority).
 - `semantic-governance-addendum-b.md` — bootstrap, review ceremony,
   and quality baseline: lifecycle placement, manifest, review fields,
   section-aware reads, payload helpers, drift notes, validation tests
+- `semantic-governance-addendum-e.md` — binding corrective chapter for
+  target-boundary semantics, read-only structural consumption, MCP/runtime
+  alignment, generated-artifact prevention, and acceptance closure
 
-Governing authority: `.context/requirements/` and the v0.6
-implementation plan. If any guide below disagrees with those, they
-win. Guides describe; they never define semantics.
+Governing authority: `.context/requirements/`, the v0.6 implementation plan,
+and Addendum E for the corrective boundaries named there. If any historical
+guide or Addenda B–D passage disagrees with E on those boundaries, E wins.
+Guides describe; they never define semantics.

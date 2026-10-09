@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from span.core import model as m
 from span.core import validation as _validation
+from span.ports.evidence import EvidenceSource
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralDirection, StructuralSource
 from span.shell import paging as _paging
@@ -20,6 +21,7 @@ __all__ = [
     "_resolve_exact_subject",
     "_resolve_query_subject",
     "_resolve_scope_subjects",
+    "_resolve_target_subjects",
 ]
 
 
@@ -191,8 +193,17 @@ def _resolve_scope_subjects(
     structural: StructuralSource,
     store: SemanticStore,
     bounds: m.QueryBounds,
+    evidence: EvidenceSource | None = None,
 ) -> tuple[tuple[m.Subject, ...], m.ResolutionAmbiguity]:
     if isinstance(target, m.EvidenceScope):
+        if evidence is not None:
+            return (
+                _resolve_target_subjects(
+                    repository_id, target, structural=structural,
+                    evidence=evidence, store=store, bounds=bounds,
+                ),
+                m.ResolutionAmbiguity.RESOLVED,
+            )
         subjects: list[m.Subject] = []
         paths = list(target.paths) + [
             ref.locator for ref in target.evidence_refs
@@ -224,4 +235,101 @@ def _resolve_scope_subjects(
     return (
         tuple(c.subject for c in resolution.candidates),
         resolution.ambiguity,
+    )
+
+
+def _fallback_target_kind(ref: m.EvidenceRef) -> m.SubjectKind:
+    if ref.source_kind is m.EvidenceSourceKind.DOCUMENTATION:
+        return m.SubjectKind.DOCUMENT
+    if ref.source_kind is m.EvidenceSourceKind.TEST_VERIFICATION:
+        return m.SubjectKind.TEST_OR_GATE
+    if ref.source_kind is m.EvidenceSourceKind.CONFIGURATION:
+        return m.SubjectKind.CONFIGURATION
+    return m.SubjectKind.COMPONENT
+
+
+def _resolve_target_subjects(
+    repository_id: str,
+    target: m.EvidenceScope,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> tuple[m.Subject, ...]:
+    """Enumerate current structural/evidence candidates in the exact scope.
+
+    This is deterministic boundary discovery only. It must not be read as
+    one semantic subject per file or as proof of target understanding.
+    """
+    if not target.paths and not target.evidence_refs:
+        raise ValueError("exact target scope must not be empty")
+    items: list[m.EvidenceInventoryItem] = []
+    page_token: str | None = None
+    while True:
+        page = evidence.inventory_evidence(
+            repository_id, target, bounds, page_token
+        )
+        items.extend(page.items)
+        next_token = page.bound_info.continuation_token
+        if next_token is None:
+            break
+        if not page.items or next_token == page_token:
+            raise ValueError("target evidence inventory did not advance")
+        page_token = next_token
+    found: dict[tuple[m.SubjectKind, str], m.Subject] = {}
+    for item in items:
+        locator = item.evidence_ref.locator
+        resolution = structural.resolve_subject(
+            repository_id,
+            m.SubjectSelector(
+                exact_subject_id=None, name_or_locator=locator,
+                expected_kinds=(), retrieval_scope_hint=None,
+            ),
+            bounds,
+        )
+        subject = None
+        if (
+            resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED
+            and len(resolution.candidates) == 1
+            and resolution.candidates[0].subject.subject_id.canonical_locator
+            == locator
+        ):
+            subject = resolution.candidates[0].subject
+        if subject is None:
+            subject = m.Subject(
+                subject_id=m.SubjectId(
+                    repository_id=repository_id,
+                    subject_kind=_fallback_target_kind(item.evidence_ref),
+                    canonical_locator=locator,
+                ),
+                display_name=locator.rsplit("/", 1)[-1],
+                declared_kind=None,
+            )
+        found[(subject.subject_id.subject_kind, locator)] = subject
+    target_paths = tuple(
+        dict.fromkeys(
+            (*target.paths, *(ref.locator for ref in target.evidence_refs))
+        )
+    )
+    subject_token: str | None = None
+    while True:
+        page = store.load_repository_subjects(
+            repository_id, bounds, offset=(
+                int(subject_token[3:]) if subject_token else 0
+            ),
+        )
+        for subject in page.items:
+            locator = subject.subject_id.canonical_locator
+            if any(
+                locator == path or locator.startswith(path.rstrip("/") + "/")
+                or locator.startswith(path.rstrip("/") + "#")
+                for path in target_paths
+            ):
+                found[(subject.subject_id.subject_kind, locator)] = subject
+        subject_token = page.bound_info.continuation_token
+        if subject_token is None:
+            break
+    return tuple(
+        found[key] for key in sorted(found, key=lambda pair: pair[1])
     )

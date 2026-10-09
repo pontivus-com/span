@@ -472,7 +472,7 @@ class StatusTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_none_target_readiness_only(self):
+    def test_none_target_reports_empty_persisted_frontier(self):
         structural, evidence, store, agent = _harness()
         try:
             answer = ops.status(
@@ -483,6 +483,97 @@ class StatusTest(unittest.TestCase):
             self.assertIsInstance(answer, m.SemanticAnswer)
             self.assertIsInstance(answer.content, m.StatusContent)
             self.assertEqual(answer.content.freshness_items, ())
+            report = answer.content.coverage_report
+            self.assertIsNotNone(report)
+            self.assertEqual(report.persisted_subject_count, 0)
+            self.assertEqual(report.entries, ())
+        finally:
+            store.close()
+
+    def test_none_target_reports_persisted_frontier_states(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                _status_request(), ops.status,
+                structural, evidence, store, agent,
+            )
+            unassessed = _sid("persisted/unassessed")
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(m.Subject(unassessed, "Unassessed", None),)
+                )
+            )
+            answer = ops.status(
+                _status_request(target=None),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            report = answer.content.coverage_report
+            self.assertIsNotNone(report)
+            self.assertGreater(report.persisted_subject_count, 0)
+            self.assertGreater(report.returned_subject_count, 0)
+            flow = next(
+                entry for entry in report.entries
+                if entry.subject.canonical_locator == "src/flow.py"
+            )
+            self.assertGreater(flow.semantic_item_count, 0)
+            self.assertGreater(flow.question_count, 0)
+            self.assertIn(
+                flow.disposition,
+                {
+                    m.SemanticCoverageDisposition.CURRENT,
+                    m.SemanticCoverageDisposition.INCOMPLETE,
+                    m.SemanticCoverageDisposition.STALE,
+                    m.SemanticCoverageDisposition.UNVERIFIABLE,
+                },
+            )
+            self.assertTrue(
+                any(
+                    entry.disposition
+                    is m.SemanticCoverageDisposition.UNASSESSED
+                    for entry in report.entries
+                )
+            )
+        finally:
+            store.close()
+
+    def test_none_target_report_paginates_persisted_subjects(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                _status_request(), ops.status,
+                structural, evidence, store, agent,
+            )
+            _exchange(
+                _status_request(
+                    target=m.SubjectSelector(
+                        None, "contract/api", (), None
+                    )
+                ),
+                ops.status, structural, evidence, store, agent,
+            )
+            bounds = _bounds(max_subjects=1)
+            first = ops.status(
+                _status_request(target=None, bounds=bounds),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertTrue(first.bound_info.truncated)
+            self.assertIsNotNone(first.bound_info.continuation_token)
+            second = ops.status(
+                _status_request(
+                    target=None,
+                    bounds=bounds,
+                    page_token=first.bound_info.continuation_token,
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertNotEqual(
+                first.content.coverage_report.entries,
+                second.content.coverage_report.entries,
+            )
         finally:
             store.close()
 

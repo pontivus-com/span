@@ -140,11 +140,12 @@ def _selector_args(locator="src/tools.py"):
 class SchemaSyncTest(unittest.TestCase):
     """Tool schemas stay a mechanical projection of the contracts."""
 
-    def test_eight_canonical_tools(self):
+    def test_ten_canonical_tools(self):
         self.assertEqual(
             TOOL_NAMES,
             (
                 "initialize_repository",
+                "initialize_target",
                 "explain",
                 "impact",
                 "trace",
@@ -152,6 +153,7 @@ class SchemaSyncTest(unittest.TestCase):
                 "status",
                 "refresh",
                 "submit_interpretation",
+                "reissue_interpretation",
             ),
         )
         self.assertEqual(set(TOOL_SCHEMAS), set(TOOL_NAMES))
@@ -244,6 +246,52 @@ class IngressTest(unittest.TestCase):
 
 
 class DispatchTest(unittest.TestCase):
+    def test_initialize_target_advances_complete_boundary(self):
+        adapter, agent = _harness()
+        try:
+            pending = adapter.dispatch(
+                "initialize_target",
+                {
+                    "repository_id": REPO,
+                    "target": m.to_canonical(
+                        m.EvidenceScope(
+                            paths=("src/tools.py",), evidence_refs=()
+                        )
+                    ),
+                    "objective": "Understand the tool boundary and its use.",
+                },
+            )
+            self.assertFalse(pending.is_error)
+            envelope = json.loads(pending.content)
+            self.assertEqual(envelope["$type"], "PendingInterpretation")
+            task = m.from_canonical(
+                m.SemanticInterpretationRequest,
+                envelope["request"],
+            )
+            self.assertEqual(task.target_scope.paths, ("src/tools.py",))
+            self.assertIn(
+                "target path: src/tools.py",
+                task.brief.scope_boundaries,
+            )
+            self.assertIn(
+                "Understand the tool boundary",
+                task.brief.objective,
+            )
+            answered = adapter.dispatch(
+                "submit_interpretation",
+                {
+                    "continuation": envelope["continuation"],
+                    "result": m.to_canonical(agent.perform(task)),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertFalse(answered.is_error)
+            answer = json.loads(answered.content)
+            self.assertEqual(answer["$type"], "SemanticAnswer")
+            self.assertEqual(answer["intent"], "STATUS")
+        finally:
+            adapter.contexts[REPO].store.close()
+
     def test_explain_suspend_then_submit_over_wire(self):
         adapter, agent = _harness()
         try:
@@ -288,6 +336,43 @@ class DispatchTest(unittest.TestCase):
         finally:
             adapter.contexts[REPO].store.close()
 
+    def test_reissue_is_available_over_wire(self):
+        adapter, agent = _harness()
+        try:
+            pending = adapter.dispatch(
+                "explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                },
+            )
+            envelope = json.loads(pending.content)
+            reissued = adapter.dispatch(
+                "reissue_interpretation",
+                {
+                    "continuation": envelope["continuation"],
+                    "repository_id": REPO,
+                },
+            )
+            self.assertFalse(reissued.is_error)
+            replacement = json.loads(reissued.content)
+            self.assertEqual(replacement["$type"], "PendingInterpretation")
+            task = m.from_canonical(
+                m.SemanticInterpretationRequest,
+                replacement["request"],
+            )
+            answered = adapter.dispatch(
+                "submit_interpretation",
+                {
+                    "continuation": replacement["continuation"],
+                    "result": m.to_canonical(agent.perform(task)),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertFalse(answered.is_error)
+        finally:
+            adapter.contexts[REPO].store.close()
+
     def test_status_hook_fast_notice_shape(self):
         adapter, _ = _harness()
         try:
@@ -302,6 +387,28 @@ class DispatchTest(unittest.TestCase):
             self.assertFalse(notice.is_error)
             body = json.loads(notice.content)
             self.assertEqual(body["$type"], "HookStatusNotice")
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_status_normal_exposes_repository_coverage_report(self):
+        adapter, _ = _harness()
+        try:
+            result = adapter.dispatch(
+                "status",
+                {
+                    "repository_id": REPO,
+                    "target": None,
+                    "mode": "NORMAL",
+                },
+            )
+            self.assertFalse(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["$type"], "SemanticAnswer")
+            self.assertEqual(body["intent"], "STATUS")
+            report = body["content"]["coverage_report"]
+            self.assertEqual(report["persisted_subject_count"], 0)
+            self.assertEqual(report["returned_subject_count"], 0)
+            self.assertEqual(report["entries"], [])
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -536,13 +643,13 @@ class DispatchTest(unittest.TestCase):
 
 @unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")
 class ServerWiringTest(unittest.TestCase):
-    def test_build_server_registers_eight_tools(self):
+    def test_build_server_registers_ten_tools(self):
         from span.shell import mcp_server
 
         adapter, _ = _harness()
         try:
             listed = mcp_server.handle_list_tools(adapter)
-            self.assertEqual(len(listed), 8)
+            self.assertEqual(len(listed), 10)
             self.assertEqual(
                 [spec["name"] for spec in listed], list(TOOL_NAMES)
             )
@@ -577,7 +684,7 @@ class ServerWiringTest(unittest.TestCase):
                 entry.handler(None, _types.PaginatedRequestParams())
             )
             self.assertIsInstance(result, _types.ListToolsResult)
-            self.assertEqual(len(result.tools), 8)
+            self.assertEqual(len(result.tools), 10)
             json.loads(result.model_dump_json(by_alias=True))
         finally:
             adapter.contexts[REPO].store.close()

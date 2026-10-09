@@ -1,8 +1,14 @@
 # Demand-driven indexing (plan §8; Addendum B)
 
-No whole-repository semantic crawl, ever. Indexing is demand-driven,
-subject/evidence bounded, incremental, and reusable through persisted
-claims plus evidence fingerprints and question-scoped coverage.
+No unrequested whole-repository structural or semantic-interpretation crawl.
+When the user supplies an exact directory or repository target, the host may
+partition and process that complete boundary; the campaign remains
+demand-driven per material area. Indexing is subject/evidence bounded,
+incremental, and reusable
+through persisted claims plus evidence fingerprints and question-scoped
+coverage. Normal repository-level `status(target=None)` may report a
+bounded inventory derived from that persisted coverage; it is a read-only
+projection of the semantic frontier, not a new crawl or completeness claim.
 
 1. Register: identity, repository state, structural source,
    evidence-inventory index, explicit authority seeds. No
@@ -31,3 +37,9 @@ claims plus evidence fingerprints and question-scoped coverage.
 
 No watcher/daemon/queue. No benchmark harness (bounds + acceptance
 sufficiency only).
+
+The Point 4 report must distinguish covered/current, incomplete
+(`PENDING`/`OPEN`), stale/unverifiable, and unassessed persisted semantic
+items, and must disclose page/truncation/outstanding scope. Missing items
+outside the returned frontier remain unknown, not silently current or
+silently absent.

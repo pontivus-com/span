@@ -97,6 +97,7 @@ class PortShapeTest(unittest.TestCase):
             SemanticStore,
             {
                 "load_subjects", "load_by_refs", "load_claims",
+                "load_repository_subjects", "count_repository_subjects",
                 "load_relationships", "load_evidence_dependencies",
                 "load_evidence_records", "load_coverage_dependencies",
                 "load_question_coverages", "load_all_question_coverages",

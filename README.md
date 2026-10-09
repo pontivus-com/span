@@ -31,10 +31,11 @@ Three functions, one mechanism:
   knowledge admit, examine, and persist it through the same canonical
   submission — deliberately, never by silent broadening.
 
-The agent lifecycle runs eight operations only:
-`initialize_repository` (explicit setup), `explain`, `impact`,
-`trace`, `authority`, `status`, `refresh`, `submit_interpretation`
-(exchange). When stored knowledge is insufficient, an operation
+The agent lifecycle runs ten canonical operations:
+`initialize_repository` (explicit setup), `initialize_target` (exact target
+boundary and bounded structural candidates), `explain`, `impact`,
+`trace`, `authority`, `status`, `refresh`, `submit_interpretation`, and
+`reissue_interpretation` (exchange recovery). When stored knowledge is insufficient, an operation
 suspends with a bounded task; the agent investigates with its own
 model and submits the typed result. Span validates, materializes,
 and resumes — it never edits code, runs tests, selects models, or
@@ -56,8 +57,8 @@ Ordinary demand-driven queries work regardless, with no establishment
 campaign required.
 
 Start below: install and initialize one repository (A1, installer),
-verify readiness, then run one explain round-trip in your coding-host
-session (A2, host MCP `explain`).
+verify readiness, then use the host MCP `initialize_target` for the
+user-directed semantic boundary (A2/B).
 
 ## Agent lifecycle — what Span does at each stage
 
@@ -65,9 +66,11 @@ session (A2, host MCP `explain`).
 session begins
   │
   ▼
-1. ORIENT ......... agent calls status, explain
-  Span: reports readiness + coverage + prior answers, or suspends
-  with a bounded task. READY means operational, never known.
+1. ORIENT ......... agent calls normal status (no target), then explain
+  Span: reports readiness plus the bounded persisted semantic-coverage
+  frontier — covered/current, incomplete, stale/unverifiable, and
+  unassessed state — or suspends with a bounded task. READY means
+  operational, never known.
   │
   ▼
 2. PREPARE ........ agent calls impact (+ trace / authority)
@@ -105,6 +108,22 @@ Around the edges, report-only hooks observe session boundaries
 (`session-start`, `source-changed`, `session-stop`): they surface
 scopes needing action and stay silent when everything is current.
 They never initialize, interpret, refresh, or decide anything.
+
+Normal `status(target=None)` has a repository-level reporting promise: it
+must expose a bounded inventory derived from persisted canonical semantic
+coverage, including what is covered and current, what remains
+`PENDING`/`OPEN`, what is stale or unverifiable, what is unassessed in the
+returned frontier, and what was omitted by bounds or pagination. It does
+not enumerate structural subjects, interpret evidence, write coverage, or
+claim repository completeness. Exact-target `status` and `explain` provide
+the detailed scoped view; `HOOK_FAST` remains compact readiness/event
+reporting.
+
+**Activation status:** the repository-level inventory is the full Point 4
+promise and is tracked by ACT-D-10/D-ACCEPT-08. The current runtime must not
+be described as delivering it until that installed-runtime gate passes;
+readiness-only `status(target=None)` output is an activation gap, not proof
+that the repository has no semantic knowledge.
 
 ---
 
@@ -162,7 +181,9 @@ guess, coerce uncertainty, or auto-fix by inventing semantics.
 
 1. Prerequisites (fail closed if missing):
    - python3 >= 3.12 (`python3 --version`)
-   - node + graft CLI (`node --version`, `graft --version`);
+   - node for host integrations (`node --version`);
+   - an existing machine-readable Graft index when using `graft:<dir>`
+     (`<dir>/graft/.graph/wiring.json`);
      Graft is MIT, structural source only
    - sqlite3 via stdlib (no install); setuptools>=61 for build;
      MCP SDK mcp==2.3.0 (MIT) installed with Span
@@ -181,10 +202,10 @@ guess, coerce uncertainty, or auto-fix by inventing semantics.
 
 3. Structural index check (read-only):
    ls <TARGET_REPO>/graft/.graph/wiring.json
-   If missing: STOP. Ask the user whether to run `graft build`
-   inside <TARGET_REPO> (writes graft/.graph in target). Never
-   auto-build from queries/hooks; init may build only in this
-   explicit admin session with user consent.
+   If missing: STOP. The independent Graft workflow must create the
+   machine-readable index before Span is installed. Span never runs
+   `graft build`, writes `graft/`, or generates Markdown cards in the
+   target repository.
 
 4. Start data dir:
    mkdir -p <DATA_DIR>
@@ -210,6 +231,10 @@ guess, coerce uncertainty, or auto-fix by inventing semantics.
      session; normal queries/hooks must never bootstrap implicitly.
    - If READY: proceed. Record repository_id for all later calls.
 
+   The full Point 4 repository semantic-coverage inventory is an additional
+   ACT-D-10 gate. Until it passes, treat a readiness-only response as the
+   known implementation gap and continue only with exact-target inspection.
+
 7. Smoke (read-only):
    status then explain on one known symbol in
    <TARGET_REPO> (SubjectSelector name/locator).
@@ -221,9 +246,11 @@ guess, coerce uncertainty, or auto-fix by inventing semantics.
    STALE/UNVERIFIABLE verbatim; missing authority stays missing.
 
 8. Boundaries to respect for this setup:
-   - 8 ops only: initialize_repository, explain,
+   - 10 ops only: initialize_repository, initialize_target, explain,
      impact, trace, authority, status,
-     refresh, submit_interpretation. No semantic_* aliases.
+     refresh, submit_interpretation, reissue_interpretation.
+     No semantic_* aliases. See `docs/semantic-governance-addendum-e.md`
+     §4A lifecycle matrix for the onboarding path.
    - Span never edits code, runs tests, orchestrates workflows,
      selects models, or rebuilds implicitly. Hooks call only
      status HOOK_FAST. No whole-repo crawl. Repo-wide refresh
@@ -277,11 +304,13 @@ existing `graft` entry):
 }
 ```
 
-Reload Opencode, then ask the agent: `status` (expect
-`SemanticAnswer` — or `PendingInterpretation`, submitted via
+Reload Opencode, then ask the agent: normal `status` with no target (expect
+the repository semantic-coverage inventory once ACT-D-10 is installed;
+until then, a readiness-only response is an explicit activation gap), then
+`status`/`explain` on a known symbol. Exact-target calls may return a
+`SemanticAnswer` or `PendingInterpretation`, submitted via
 `submit_interpretation` until an answer returns; the compact
-`HookStatusNotice` is returned only in `HOOK_FAST` mode), then
-`explain` on a known symbol.
+`HookStatusNotice` is returned only in `HOOK_FAST` mode.
 
 ### Codex
 
@@ -293,8 +322,8 @@ codex mcp list
 ```
 
 Use the absolute `span-mcp` path if it is not on Codex's PATH.
-Then prompt: `status`, then `explain` on a known symbol;
-same expectations as Opencode. If `codex mcp list` fails on
+Then prompt: normal `status` with no target, then exact-target
+`status`/`explain` on a known symbol; use the same Point 4 gate and
+readiness-only limitation described for Opencode. If `codex mcp list` fails on
 `service_tier`, fix the local Codex config first — that error is
 outside Span.
-

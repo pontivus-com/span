@@ -22,7 +22,9 @@ __all__ = [
     "SemanticAuthorityRequest",
     "SemanticStatusRequest",
     "SemanticRefreshRequest",
+    "SemanticInitializeTargetRequest",
     "SemanticSubmitInterpretationRequest",
+    "SemanticReissueInterpretationRequest",
     "SemanticInitializeRepositoryRequest",
     "SemanticInitializeRepositoryResult",
     "AuthorityTargetError",
@@ -100,9 +102,24 @@ class SemanticRefreshRequest:
 
 
 @_dataclass(frozen=True)
+class SemanticInitializeTargetRequest:
+    """Start host-owned semantic establishment for an exact target."""
+
+    repository_id: str
+    target: m.EvidenceScope
+    objective: str
+    bounds: m.QueryBounds
+
+
+@_dataclass(frozen=True)
 class SemanticSubmitInterpretationRequest:
     continuation: str
     result: m.SemanticInterpretationResult
+
+
+@_dataclass(frozen=True)
+class SemanticReissueInterpretationRequest:
+    continuation: str
 
 
 @_dataclass(frozen=True)

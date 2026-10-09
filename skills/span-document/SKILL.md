@@ -10,23 +10,28 @@ evidence; it never edits code, runs tests, or decides for you.
 A fresh scope is a chicken-and-egg problem: interpretation needs
 targets, and targets come from the map. So map first, interpret
 second, synthesize last. Never top-down: no synthesis before member
-knowledge exists.
+knowledge exists. When the user supplies an exact directory, that
+directory is the complete target boundary; mapping partitions it for
+execution and must not silently narrow it.
 
 ```
-map         orient with existing repository context plus bounded trace
-            edges (the structural port has no repository-wide
-            enumerate/map; `status` never enumerates subjects)
+map         orient with existing repository context plus structural and
+            filesystem discovery inside the explicit target; partition
+            every material area for execution (normal `status` still
+            reports persisted coverage, never structural subject enumeration)
 symbols     explain each key symbol, submit, verify served
 modules     explain each key file, submit purpose plus responsibility
-subsystem   explain(establish_baseline=True) on the exact root for the
-            CQ-01–CQ-09 audit, then admitted member questions in
-            dependency order; register semantic-only scope subjects
+subsystem   for an explicit directory, call initialize_target once with the exact target and objective,
+            `explain(establish_baseline=True)` for every material
+            partition/root, then process every admitted member question
+            in dependency order; register semantic-only scope subjects
             through evidence-backed CandidateSubject on an existing
             structural entrypoint; synthesize only on established
             member evidence, verify served by exact locator
 govern      explain authority subjects as found; record ownership
             only where evidence names it
-verify      status scoped to the finished subjects; refresh if stale;
+verify      status the bounded persisted frontier and finished subjects;
+            refresh if stale;
             ledger every remaining requirement as the completeness record
 ```
 
@@ -41,25 +46,54 @@ Setup stays explicit: an `UNINITIALIZED` repository needs
 
 ## Granular levels (what to record where)
 
-- **Symbol** (function, class): what it is for, with a verbatim
-  quote; plus verification currency where a test pins it.
-- **Module** (file): what it is for plus what belongs in it and why.
-- **Subsystem** (workflow, directory): register it as a subject under
-  its scope path, then record one synthesis covering kickoff,
-  execution, validation, and conclusion, citing member evidence.
-  Membership is stated alongside, never assumed.
+- **Map:** enumerate directories, modules, files, symbols, contracts, tests,
+  configuration, and material entry/exit paths inside the exact target. This
+  establishes the structural frontier but is not semantic completion.
+- **Baseline unit:** use a coherent subsystem, workflow/composition slice,
+  service boundary, or governed document area with one purpose, participant
+  set, material path, authority/ownership boundary, and lifecycle. Establish
+  one bounded root and record its member areas and exclusions.
+- **Member question:** descend to a symbol, module, relationship, or
+  cross-boundary path when it carries a material claim, contract, failure path,
+  authority dependency, or unresolved requirement. Use the exact question-local
+  exchange and cite the member evidence.
+- Do not create one semantic subject per file merely because it exists, and do
+  not merge unrelated units merely to reduce work. Split when ownership,
+  authority, lifecycle, or material input-to-terminal paths diverge; merge only
+  when one bounded analysis can substantiate the units together.
 - **Governance** (methodology, envelopes, rules): governing bindings
   as found, with their standing exactly as evidenced. Ownership only
   where evidence names it; otherwise it stays explicitly unresolved.
 
 ## Completeness-correctness (the bar)
 
-Complete means every key subject in scope has a stored answer or an
-explicit unresolved requirement naming what would resolve it.
+Complete means every material area in the explicit target has a stored
+answer, an explicit `NOT_APPLICABLE` disposition, or an unresolved
+requirement naming what would resolve it. A representative root is not
+the target. No area may be silently omitted because the directory is
+large.
 Correct means every stored item is quote-backed, trust-calibrated,
 and freshness-tracked. All-green is not the bar: an honest
 `UNRESOLVED` with a requirement beats an invented answer, and stale
 items need `refresh`, not reinterpretation by hand.
+
+## The same analysis card for every submitted unit
+
+For symbols, modules, subsystems, governance, expansion, refresh, and
+closeout, use the pending request's brief in this order: objective; exact
+scope and exclusions; evidence and governing authority; input-to-terminal
+material path; typed semantic result; adversarial check; explicit disposition
+with requirements; and fresh readback. This is one compact working projection
+of SA-1–SA-7, not a second schema or a claim-count test. Keep the scope
+bounded, preserve OPEN/PENDING and stale or unverifiable state, and do not
+declare useful coverage until a fresh query can retrieve it.
+
+The supplied directory is the host boundary, not automatically a Span subject.
+Use an exact resolved file or symbol as the semantic anchor when the structural
+provider exposes only those subjects; include the rest of the coherent unit in
+the evidence scope. Never invent a directory or unresolvable document identity.
+If a material area has no structural anchor, preserve it as an explicit
+`OPEN`/`PENDING` provider-boundary requirement rather than silently omitting it.
 
 ## Rules
 
@@ -75,9 +109,12 @@ items need `refresh`, not reinterpretation by hand.
   may be omitted for service defaults. A listing token pages one
   truncated listing; a continuation resumes one suspended
   interpretation — never substitute one for the other.
-- Agree scope size with the user first: one subsystem per pass is
-  plenty. Stop when key subjects are covered and gaps are ledgered;
-  record what was deliberately left out.
+- If the user supplied an exact directory, do not ask them to reduce it
+  to one subsystem and do not stop after one representative root. Work
+  through all material partitions, preserving page tokens and pending
+  continuations. Record every deliberate exclusion with its evidence and
+  disposition. If no exact target was supplied, agree a bounded scope
+  with the user first.
 
 ## Expansion identification
 

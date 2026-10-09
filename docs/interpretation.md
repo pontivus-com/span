@@ -16,10 +16,14 @@ operation intent, question slice, optional typed proposal, output
 cardinality limits. Addendum B adds the immutable
 `question: SemanticQuestionScope`, bounded `prior_claims` /
 `prior_relationships` context, and service-owned
-`analysis_obligations` (SA-2–SA-5). Addendum D adds the service-built
-`brief` (`TaskBrief`: C-04 material aspects for the bound question
-class, scope boundaries, static OPEN-handling and submission rules) —
-guidance, never validated content and never submitted back (the
+`analysis_obligations` (SA-1–SA-7). Addendum D adds the service-built
+`brief` (`TaskBrief`): the compact objective, exact scope, evidence/authority,
+material-path, typed-result, adversarial-check, disposition, and fresh-readback
+guidance, plus C-04 material aspects and recorded OPEN/PENDING requirements.
+Addendum E carries the exact user-directed `target_scope` separately from the
+current structural anchor, so a bounded candidate is never mistaken for the
+whole semantic target.
+The brief is guidance, never validated content and never submitted back (the
 result carrier has no brief field). Nothing else crosses.
 
 ## One analysis contract (SA-1–SA-7)
@@ -27,10 +31,16 @@ result carrier has no brief field). Nothing else crosses.
 SA-1 scope the exact subject/question; SA-2 establish evidence
 (observed vs governing intent); SA-3 trace behavior and terminal
 paths; SA-4 establish meaning in existing kinds only; SA-5
-adversarial check; SA-6 submit one canonical result; SA-7 close with
-question-scoped coverage. `ANSWERED` means recorded analysis, never
-reviewer truth. CQ-01–CQ-09 are question classes with CQ-10
-cross-cutting, not claim kinds.
+adversarial check; SA-6 submit one canonical result with explicit
+disposition; SA-7 close with fresh question-scoped readback. `ANSWERED`
+means recorded analysis, never reviewer truth. CQ-01–CQ-09 are question
+classes with CQ-10 cross-cutting, not claim kinds.
+
+The same contract applies at target initialization and during ordinary
+question-local work. When a user supplies an exact directory, the active
+host partitions that directory for execution but analyzes every material
+partition. It does not substitute one representative root, silently exclude
+areas, or treat structural readiness as semantic completion.
 
 ## Entry modes
 
@@ -39,6 +49,8 @@ questions. Baseline (`explain(establish_baseline=True)`) audits
 CQ-01–CQ-09 for an explicitly selected root, admits bounded
 `PENDING`/`OPEN`/`NOT_APPLICABLE` follow-ups, and resumes them in
 deterministic order. `refresh` never silently expands scope.
+Exact user-supplied directory targets use `initialize_target` per
+`docs/onboarding-runbook.md`, not the baseline path.
 
 ## Result (`SemanticInterpretationResult`)
 
