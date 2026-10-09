@@ -14,10 +14,9 @@ Suitability record (plan Phase 2.1, license MIT verified Phase 0.4):
   plus git (revision/dirty) plus target-repo file reads (fallback
   fingerprints);
 - independence: separately installable npm package, no Pontivus code;
-- build policy: this module never builds. ``ensure_graft_built`` runs
-  ``graft build`` and is called only from explicit admin paths
-  (structural-source factory used by initialization). Queries and hooks
-  never trigger builds (I-27).
+- build policy: this module is read-only. It never runs ``graft build``;
+  missing indexes fail closed. Index creation belongs to an independently
+  authorized Graft workflow, outside Span installation and MCP operation.
 """
 
 from __future__ import annotations
@@ -25,7 +24,6 @@ from __future__ import annotations
 import hashlib as _hashlib
 import json as _json
 import pathlib as _pathlib
-import shutil as _shutil
 import subprocess as _subprocess
 
 from span.core import model as m
@@ -41,7 +39,7 @@ __all__ = [
     "GraftShapeError",
     "GraftVocabularyError",
     "GraftStructuralSource",
-    "ensure_graft_built",
+    "artifact_snapshot",
     "wiring_path_for",
     "NODE_SUBJECT_KIND",
     "RELATION_EDGE_KIND",
@@ -97,30 +95,45 @@ def wiring_path_for(repo_path: _pathlib.Path) -> _pathlib.Path:
     return repo_path / "graft" / ".graph" / "wiring.json"
 
 
-def ensure_graft_built(repo_path: _pathlib.Path) -> None:
-    """Run ``graft build`` in the target repo when no index exists.
+def artifact_snapshot(repo_path: str | _pathlib.Path) -> dict[str, object]:
+    """Read-only census of the structural-index tree (isolation evidence).
 
-    Explicit-admin-paths only (initialization factory). Never called
-    from queries or hooks.
+    Counts generated Markdown cards beside the machine-readable index and
+    records the index identity. Creates nothing, builds nothing, writes
+    nothing: Span runs must leave this census unchanged (Addendum E E-02).
+    Card ownership is the host's business; this census never deletes.
     """
-    if wiring_path_for(repo_path).is_file():
-        return
-    if _shutil.which("graft") is None:
-        raise GraftUnavailableError(
-            f"graft CLI not found and no index at {wiring_path_for(repo_path)}"
-        )
-    completed = _subprocess.run(
-        ["graft", "build"],
-        cwd=str(repo_path),
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    if completed.returncode != 0 or not wiring_path_for(repo_path).is_file():
-        raise GraftUnavailableError(
-            f"graft build failed in {repo_path}: "
-            f"{completed.stderr.strip()[-500:]}"
-        )
+    root = _pathlib.Path(repo_path)
+    graph_dir = root / "graft"
+    wiring = wiring_path_for(root)
+    try:
+        stat = wiring.stat()
+        wiring_info: dict[str, object] = {
+            "present": True,
+            "mtime_ns": stat.st_mtime_ns,
+            "size_bytes": stat.st_size,
+        }
+    except OSError:
+        wiring_info = {"present": False, "mtime_ns": None, "size_bytes": None}
+    cards = 0
+    index_md = False
+    if graph_dir.is_dir():
+        for path in sorted(graph_dir.rglob("*")):
+            try:
+                if not path.is_file():
+                    continue
+            except OSError:
+                continue
+            if path.suffix != ".md":
+                continue
+            if path.name == "INDEX.md" and path.parent == graph_dir:
+                index_md = True
+            cards += 1
+    return {
+        "wiring": wiring_info,
+        "markdown_cards": cards,
+        "index_md": index_md,
+    }
 
 
 def _git_revision(repo_path: _pathlib.Path) -> tuple[str | None, bool]:

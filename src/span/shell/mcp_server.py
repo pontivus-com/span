@@ -67,8 +67,8 @@ def provision_repository(
 ) -> tuple[ServiceContext, ops.SemanticInitializeRepositoryResult]:
     """Explicit provisioning for `initialize_repository` (§11.1).
 
-    Builds the structural source (explicit admin path: index builds
-    allowed here, never in queries/hooks), filesystem evidence, and
+    Loads the structural source (read-only: an existing machine-readable
+    index is required; Span never builds it), filesystem evidence, and
     file-backed store; resolves authority seeds against the fresh
     inventory (unknown seed locators fail closed; inventory-canonical
     refs replace client-supplied ones); runs initialization; returns

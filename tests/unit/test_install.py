@@ -201,7 +201,7 @@ class PlanningTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(SystemExit):
-                install.check_graft_index(tmp, build=False, dry_run=True)
+                install.check_graft_index(tmp)
 
 
 class HookWiringTest(unittest.TestCase):

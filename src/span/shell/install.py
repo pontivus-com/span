@@ -79,7 +79,10 @@ def check_prereqs():
         errors.append(
             f"python >= 3.12 required, found {sys.version.split()[0]}"
         )
-    for tool in ("node", "graft"):
+    # Span's runtime consumes an existing machine-readable structural index;
+    # it never invokes the independent Graft CLI. Node is needed only for
+    # host-side integrations that are installed by this CLI.
+    for tool in ("node",):
         if shutil.which(tool) is None:
             errors.append(f"required tool missing from PATH: {tool}")
     if errors:
@@ -99,8 +102,8 @@ def parse_args(argv=None):
         "--repo", action="append", default=[], metavar="TARGET_DIR",
         help=(
             "Target repository root (repeatable). Registered as "
-            "graft:<dir>. Requires graft/.graph/wiring.json unless "
-            "--build-index is given with explicit consent."
+            "graft:<dir>. Requires an existing "
+            "graft/.graph/wiring.json; Span never builds it."
         ),
     )
     parser.add_argument(
@@ -120,11 +123,6 @@ def parse_args(argv=None):
     parser.add_argument(
         "--span-repo", default=".",
         help="Span source checkout to install (default: cwd).",
-    )
-    parser.add_argument(
-        "--build-index", action="store_true",
-        help="Run `graft build` inside targets missing an index. "
-        "Writes into the target; requires this explicit flag.",
     )
     parser.add_argument(
         "--opencode-config", default=None,
@@ -261,18 +259,16 @@ def expose_binary(venv_dir, bin_dir, dry_run=False):
     return Path(bin_dir) / "span-mcp"
 
 
-def check_graft_index(target, build=False, dry_run=False):
+def check_graft_index(target):
     wiring = Path(target) / "graft" / ".graph" / "wiring.json"
     if wiring.exists():
         print(f"structural index present: {wiring}")
         return
-    if not build:
-        raise SystemExit(
-            f"missing structural index: {wiring}. "
-            "Re-run with --build-index to consent to `graft build` "
-            "inside the target (writes graft/.graph there)."
-        )
-    _run(["graft", "build"], cwd=str(target), dry_run=dry_run)
+    raise SystemExit(
+        f"missing structural index: {wiring}. "
+        "Build the index through an independent Graft workflow, then "
+        "rerun Span installation. Span never writes into target repos."
+    )
 
 
 def load_seeds(path, dry_run=False):
@@ -595,7 +591,7 @@ def main(argv=None):
 
     check_prereqs()
     for target in targets:
-        check_graft_index(target, build=args.build_index, dry_run=dry)
+        check_graft_index(target)
     venv_python = ensure_venv(venv_dir, dry_run=dry)
     pip_install(venv_python, span_repo, dry_run=dry)
     expose_binary(venv_dir, bin_dir, dry_run=dry)

@@ -35,6 +35,7 @@ from span.service.interpretation import prepare_interpretation_task
 from span.service.operations.authority import authority
 from span.service.operations.explain import explain
 from span.service.operations.impact import impact
+from span.service.operations.initialize_target import initialize_target
 from span.service.operations.refresh import refresh
 from span.service.operations.status import status
 from span.service.operations.trace import trace
@@ -53,7 +54,9 @@ from span.service.requests import (
     SemanticImpactRequest,
     SemanticInitializeRepositoryRequest,
     SemanticInitializeRepositoryResult,
+    SemanticInitializeTargetRequest,
     SemanticRefreshRequest,
+    SemanticReissueInterpretationRequest,
     SemanticStatusRequest,
     SemanticSubmitInterpretationRequest,
     SemanticTraceRequest,
@@ -72,9 +75,11 @@ __all__ = [
     "SemanticAuthorityRequest",
     "SemanticStatusRequest",
     "SemanticRefreshRequest",
+    "SemanticReissueInterpretationRequest",
     "SemanticSubmitInterpretationRequest",
     "SemanticInitializeRepositoryRequest",
     "SemanticInitializeRepositoryResult",
+    "SemanticInitializeTargetRequest",
     "AuthorityTargetError",
     "RefreshScopeError",
     "StatusTargetError",
@@ -94,4 +99,5 @@ __all__ = [
     "status",
     "impact",
     "initialize_repository",
+    "initialize_target",
 ]

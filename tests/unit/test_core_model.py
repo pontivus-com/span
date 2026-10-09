@@ -506,6 +506,30 @@ class SerializationRoundTripTest(unittest.TestCase):
         self._round_trip(m.EvidenceInventoryPage, inv)
         sel = m.EvidenceSelection((_evidence_ref(),), _bound_info())
         self._round_trip(m.EvidenceSelection, sel)
+        entry = m.SemanticCoverageEntry(
+            subject=_subject_id(),
+            disposition=m.SemanticCoverageDisposition.CURRENT,
+            semantic_item_count=1,
+            current_item_count=1,
+            question_count=1,
+            answered_question_count=1,
+        )
+        report = m.SemanticCoverageReport(
+            entries=(entry,),
+            persisted_subject_count=1,
+            returned_subject_count=1,
+            current_subject_count=1,
+        )
+        self._round_trip(m.SemanticCoverageEntry, entry)
+        self._round_trip(m.SemanticCoverageReport, report)
+        self._round_trip(m.StatusContent, m.StatusContent(coverage_report=report))
+        self._round_trip(
+            m.SubjectPage,
+            m.SubjectPage(
+                (m.Subject(_subject_id(), "Example", None),),
+                _bound_info(),
+            ),
+        )
 
     def test_interpretation_contracts(self):
         req = m.SemanticInterpretationRequest(

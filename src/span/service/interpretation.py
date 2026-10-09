@@ -58,6 +58,74 @@ class InterpretationTask:
     known_subject_ids: tuple[m.SubjectId, ...]
     observations: tuple[m.StructuralObservation, ...]
 
+
+def _build_task_brief(
+    *,
+    resolved_slice: str,
+    resolved_class: m.SemanticQuestionClass,
+    root: m.SubjectId,
+    subject: m.Subject,
+    selected_refs: tuple[m.EvidenceRef, ...],
+    authority_seeds: tuple[m.EvidenceRef, ...],
+    open_requirements: tuple[m.ResolutionRequirement, ...],
+    target_scope: m.EvidenceScope,
+    objective: str = "",
+) -> m.TaskBrief:
+    """Project one admitted task into the uniform quality card."""
+    evidence_authority = (
+        (
+            "Evidence examined: "
+            + ", ".join(ref.locator for ref in selected_refs)
+        )
+        if selected_refs
+        else "Evidence examined: none recorded; do not assert unsupported facts."
+    )
+    authority_guidance = (
+        (
+            "Governing authority references: "
+            + ", ".join(ref.locator for ref in authority_seeds)
+        )
+        if authority_seeds
+        else "Governing authority: none recorded; missing authority stays unresolved."
+    )
+    target_boundaries = tuple(
+        [f"target path: {path}" for path in target_scope.paths]
+        + [
+            f"target evidence: {ref.locator}"
+            for ref in target_scope.evidence_refs
+        ]
+    )
+    return m.TaskBrief(
+        objective=(
+            (
+                objective.strip() + " — "
+                if objective.strip()
+                else "Support the admitted engineering question: "
+            ) + resolved_slice
+        ),
+        material_aspects=m.QUESTION_CLASS_ASPECTS.get(
+            resolved_class, ()
+        ),
+        scope_boundaries=target_boundaries + (
+            f"scope root: {root.canonical_locator}",
+            f"structural anchor: {subject.subject_id.canonical_locator}",
+        ),
+        evidence_authority=(
+            evidence_authority,
+            authority_guidance,
+            "Distinguish observed behavior from governing intent; "
+            "preserve absent or conflicting authority explicitly.",
+        ),
+        material_path=m.TASK_BRIEF_MATERIAL_PATH,
+        semantic_result=m.TASK_BRIEF_SEMANTIC_RESULT,
+        adversarial_checks=m.TASK_BRIEF_ADVERSARIAL_CHECKS,
+        readback=m.TASK_BRIEF_READBACK,
+        open_requirements=open_requirements,
+        open_handling=m.TASK_BRIEF_OPEN_HANDLING,
+        submission_rules=m.TASK_BRIEF_SUBMISSION_RULES,
+    )
+
+
 def prepare_interpretation_task(
     repository_id: str,
     subject: m.Subject,
@@ -75,6 +143,8 @@ def prepare_interpretation_task(
     question_class: m.SemanticQuestionClass | None = None,
     materiality_basis: str = "",
     establish_baseline: bool = False,
+    objective: str = "",
+    target_scope: m.EvidenceScope = m.EvidenceScope(),
 ) -> InterpretationTask:
     """Build the bounded task for the invoking agent (§8.3/§11.12).
 
@@ -212,18 +282,18 @@ def prepare_interpretation_task(
         prior_claims=prior_claims,
         prior_relationships=prior_relationships,
         analysis_obligations=m.SA_ANALYSIS_OBLIGATIONS,
-        brief=m.TaskBrief(
-            material_aspects=m.QUESTION_CLASS_ASPECTS.get(
-                resolved_class, ()
-            ),
-            scope_boundaries=(
-                f"scope root: {root.canonical_locator}",
-                f"subject: {sid.canonical_locator}",
-            ),
+        brief=_build_task_brief(
+            resolved_slice=resolved_slice,
+            resolved_class=resolved_class,
+            root=root,
+            subject=subject,
+            selected_refs=selection.selected_refs,
+            authority_seeds=authority_seeds,
             open_requirements=tuple(open_requirements),
-            open_handling=m.TASK_BRIEF_OPEN_HANDLING,
-            submission_rules=m.TASK_BRIEF_SUBMISSION_RULES,
+            target_scope=target_scope,
+            objective=objective,
         ),
+        target_scope=target_scope,
     )
     if len(request.subjects) > bounds.max_subjects:
         raise _validation.InterpretationUnitRejected(
@@ -1045,6 +1115,11 @@ def _suspend_baseline_pending(
     seeds: tuple[m.EvidenceRef, ...],
     resolution: m.SubjectResolution | None,
     continuations: ContinuationStore,
+    op: str = "explain",
+    scope: tuple[m.Subject, ...] = (),
+    remaining: tuple[m.Subject, ...] = (),
+    objective: str = "",
+    target_scope: m.EvidenceScope = m.EvidenceScope(),
 ) -> PendingInterpretation:
     """Suspend the next admitted baseline question under its persisted
     identity (no regenerated wording, no restarted audit)."""
@@ -1074,15 +1149,20 @@ def _suspend_baseline_pending(
         question_class=coverage.question.question_class,
         materiality_basis=coverage.question.materiality_basis,
         establish_baseline=False,
+        objective=objective,
+        target_scope=target_scope,
     )
     return _suspend(
-        op="explain", repository_id=repository_id,
+        op=op, repository_id=repository_id,
         subject=nxt_subject, task=nxt_task, seeds=seeds,
         bounds=bounds, state=state, resolution=resolution,
+        scope=scope, remaining=remaining,
         continuations=continuations,
         operation_intent="EXPLAIN",
         question_slice=coverage.question.question_slice,
         establish_baseline=True,
+        objective=objective,
+        target_scope=target_scope,
     )
 
 def _suspend(
@@ -1111,6 +1191,8 @@ def _suspend(
     trace_boundary: bool = False,
     continuations: ContinuationStore,
     establish_baseline: bool = False,
+    objective: str = "",
+    target_scope: m.EvidenceScope = m.EvidenceScope(),
 ) -> PendingInterpretation:
     token = continuations.pend(
         SuspendedOperation(
@@ -1132,6 +1214,7 @@ def _suspend(
             change_description=change_description,
             affected_assertions=affected_assertions,
             operation_intent=operation_intent,
+            objective=objective,
             question_slice=question_slice,
             declared_complete=declared_complete,
             trace_direction=trace_direction,
@@ -1139,6 +1222,7 @@ def _suspend(
             trace_filter_set=trace_filter_set,
             trace_boundary=trace_boundary,
             establish_baseline=establish_baseline,
+            target_scope=target_scope,
         )
     )
     return PendingInterpretation(continuation=token, request=task.request)

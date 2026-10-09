@@ -163,6 +163,7 @@ def refresh(
     subjects, ambiguity = _resolve_scope_subjects(
         request.repository_id, request.target,
         structural=structural, store=store, bounds=bounds,
+        evidence=evidence,
     )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
         requirements = ()

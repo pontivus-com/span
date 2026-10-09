@@ -335,6 +335,46 @@ class SqliteSemanticStore:
                 found.append(_decode_subject(row[0]))
         return tuple(found)
 
+    def load_repository_subjects(
+        self,
+        repository_id: str,
+        bounds: m.QueryBounds,
+        offset: int = 0,
+    ) -> m.SubjectPage:
+        """Load a bounded page from persisted semantic subjects only."""
+        if offset < 0:
+            raise ValueError("subject offset must be non-negative")
+        rows = self._db.execute(
+            "SELECT canonical_json FROM subjects "
+            "WHERE repository_id=? ORDER BY locator, kind "
+            "LIMIT ? OFFSET ?",
+            (repository_id, bounds.max_subjects, offset),
+        ).fetchall()
+        items = tuple(_decode_subject(payload) for (payload,) in rows)
+        total = self.count_repository_subjects(repository_id)
+        truncated = offset + len(items) < total
+        return m.SubjectPage(
+            items=items,
+            bound_info=m.BoundInfo(
+                requested_max_results=bounds.max_subjects,
+                requested_max_depth=0,
+                returned_results=len(items),
+                truncated=truncated,
+                truncated_category="semantic_subjects" if truncated else None,
+                continuation_token=(
+                    _paging.next_page_token(offset + len(items))
+                    if truncated else None
+                ),
+            ),
+        )
+
+    def count_repository_subjects(self, repository_id: str) -> int:
+        row = self._db.execute(
+            "SELECT COUNT(*) FROM subjects WHERE repository_id=?",
+            (repository_id,),
+        ).fetchone()
+        return int(row[0]) if row is not None else 0
+
     def load_by_refs(
         self,
         repository_id: str,

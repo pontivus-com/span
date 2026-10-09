@@ -120,6 +120,9 @@ __all__ = [
     "QuestionEvidenceObservation",
     "CandidateSemanticWithdrawal",
     "SemanticQuestionCoverageView",
+    "SemanticCoverageDisposition",
+    "SemanticCoverageEntry",
+    "SemanticCoverageReport",
     "ChangeKind",
     "ProposedChange",
     "ChangeCondition",
@@ -149,6 +152,7 @@ __all__ = [
     "BoundInfo",
     "EvidenceScope",
     "StatusMode",
+    "SubjectPage",
     "StructuralLocationPage",
     "StructuralEdgePage",
     "StructuralReachPage",
@@ -164,6 +168,10 @@ __all__ = [
     "SA_ANALYSIS_OBLIGATIONS",
     "TaskBrief",
     "QUESTION_CLASS_ASPECTS",
+    "TASK_BRIEF_MATERIAL_PATH",
+    "TASK_BRIEF_SEMANTIC_RESULT",
+    "TASK_BRIEF_ADVERSARIAL_CHECKS",
+    "TASK_BRIEF_READBACK",
     "TASK_BRIEF_OPEN_HANDLING",
     "TASK_BRIEF_SUBMISSION_RULES",
     "ClaimPage",
@@ -874,6 +882,79 @@ class SemanticQuestionCoverageView:
     resolution_requirements: tuple[ResolutionRequirement, ...] = ()
 
 
+class SemanticCoverageDisposition(_enum.Enum):
+    """Repository-report state for one persisted semantic subject."""
+
+    CURRENT = "CURRENT"
+    INCOMPLETE = "INCOMPLETE"
+    STALE = "STALE"
+    UNVERIFIABLE = "UNVERIFIABLE"
+    UNASSESSED = "UNASSESSED"
+
+
+@_dataclass(frozen=True)
+class SemanticCoverageEntry:
+    """Bounded read projection for one persisted semantic subject."""
+
+    subject: SubjectId
+    disposition: SemanticCoverageDisposition
+    semantic_item_count: int = 0
+    current_item_count: int = 0
+    stale_item_count: int = 0
+    unverifiable_item_count: int = 0
+    question_count: int = 0
+    answered_question_count: int = 0
+    pending_question_count: int = 0
+    open_question_count: int = 0
+    not_applicable_question_count: int = 0
+    resolution_requirements: tuple[ResolutionRequirement, ...] = ()
+    truncated: bool = False
+
+    def __post_init__(self) -> None:
+        for name in (
+            "semantic_item_count",
+            "current_item_count",
+            "stale_item_count",
+            "unverifiable_item_count",
+            "question_count",
+            "answered_question_count",
+            "pending_question_count",
+            "open_question_count",
+            "not_applicable_question_count",
+        ):
+            _require_non_negative_int(name, getattr(self, name))
+
+
+@_dataclass(frozen=True)
+class SemanticCoverageReport:
+    """Bounded repository-level semantic coverage inventory.
+
+    The report describes persisted semantic subjects only. It never implies
+    that structural subjects outside the persisted frontier were enumerated.
+    """
+
+    entries: tuple[SemanticCoverageEntry, ...] = ()
+    persisted_subject_count: int = 0
+    returned_subject_count: int = 0
+    current_subject_count: int = 0
+    incomplete_subject_count: int = 0
+    stale_subject_count: int = 0
+    unverifiable_subject_count: int = 0
+    unassessed_subject_count: int = 0
+
+    def __post_init__(self) -> None:
+        for name in (
+            "persisted_subject_count",
+            "returned_subject_count",
+            "current_subject_count",
+            "incomplete_subject_count",
+            "stale_subject_count",
+            "unverifiable_subject_count",
+            "unassessed_subject_count",
+        ):
+            _require_non_negative_int(name, getattr(self, name))
+
+
 class ChangeKind(_enum.Enum):
     """Proposed-change vocabulary (plan §11.10; hosted here as canonical
     vocabulary so both service requests and interpretation context share
@@ -1019,6 +1100,7 @@ class StatusContent:
     conflicts: tuple[SemanticConflict, ...] = ()
     unresolved: tuple[ResolutionRequirement, ...] = ()
     question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
+    coverage_report: SemanticCoverageReport | None = None
 
 
 SemanticContent = _typing.Union[
@@ -1284,12 +1366,12 @@ class CandidateSemanticConflict:
 
 @_dataclass(frozen=True)
 class TaskBrief:
-    """Slice-derived investigation brief (addendum D §8, TASK-D-01).
+    """Slice-derived investigation brief (addendum D §8.1, ACT-D-13).
 
     Deterministic content only, drawn from two sources:
 
-    - contract: C-04 material aspects for the bound question class,
-      static OPEN-handling and submission rules;
+    - contract: C-04 material aspects for the bound question class and the
+      compact SA-1–SA-7 analysis card;
     - instance: the exact admitted slice's recorded OPEN/PENDING
       requirements for this scope (quoted from store, never
       inferred) and the scope boundaries.
@@ -1298,15 +1380,21 @@ class TaskBrief:
     validates — validation ignores the brief entirely.
     """
 
-    material_aspects: tuple[str, ...] = ()
+    objective: str = ""
     scope_boundaries: tuple[str, ...] = ()
+    evidence_authority: tuple[str, ...] = ()
+    material_path: tuple[str, ...] = ()
+    semantic_result: tuple[str, ...] = ()
+    adversarial_checks: tuple[str, ...] = ()
+    readback: tuple[str, ...] = ()
+    material_aspects: tuple[str, ...] = ()
     open_requirements: tuple[ResolutionRequirement, ...] = ()
     open_handling: tuple[str, ...] = ()
     submission_rules: tuple[str, ...] = ()
 
 
 #: C-04 material aspects per question class, quoted as brief content
-#: (addendum D TASK-D-01). Static contract lookup by the service —
+#: (addendum D §8.1, ACT-D-13). Static contract lookup by the service —
 #: never runtime semantic judgment. CQ-10 has no enum member; its
 #: cross-cutting substance (evidence/scope/uncertainty/adversarial
 #: disciplines) rides in every brief via the SA obligations and the
@@ -1385,6 +1473,36 @@ TASK_BRIEF_SUBMISSION_RULES: tuple[str, ...] = (
     "disposition.",
 )
 
+# The following are the stable, compact projections of SA-3–SA-7. They are
+# task guidance, not a second semantic schema or a deterministic correctness
+# classifier. Instance-specific evidence and requirements are added by the
+# service when it constructs the brief.
+TASK_BRIEF_MATERIAL_PATH: tuple[str, ...] = (
+    "Trace input → producer → transformation/state → consumer/output → "
+    "terminal/failure.",
+    "Account only for legs material to this exact question slice.",
+)
+
+TASK_BRIEF_SEMANTIC_RESULT: tuple[str, ...] = (
+    "Use existing typed claims and relationships only.",
+    "Give each asserted result admissible evidence and distinguish observed "
+    "behavior from governing intent.",
+)
+
+TASK_BRIEF_ADVERSARIAL_CHECKS: tuple[str, ...] = (
+    "Check alternate owner or authority, contradiction, and omitted "
+    "participants.",
+    "Check terminal/failure paths, stale premises, unsupported routes, and "
+    "missing verification.",
+)
+
+TASK_BRIEF_READBACK: tuple[str, ...] = (
+    "State what a fresh query can retrieve and what still requires "
+    "interpretation.",
+    "Do not claim useful completion unless the canonical result is readable "
+    "from a fresh interaction.",
+)
+
 
 @_dataclass(frozen=True)
 class SemanticInterpretationRequest:
@@ -1398,6 +1516,10 @@ class SemanticInterpretationRequest:
     # Required, never defaulted: every interpretation task carries its
     # slice-derived brief (no brief-less legacy path, no dual semantics).
     brief: TaskBrief
+    # The exact user-directed boundary, when this task belongs to target
+    # establishment. This is separate from ``subjects``: a structural
+    # anchor is a bounded exchange input, not the semantic target.
+    target_scope: EvidenceScope = _field(default_factory=EvidenceScope)
     operation_intent: SemanticIntent = SemanticIntent.EXPLAIN
     question_slice: str = ""
     proposed_change: ProposedChange | None = None
@@ -1414,6 +1536,8 @@ class SemanticInterpretationRequest:
 
 
 SA_ANALYSIS_OBLIGATIONS: tuple[str, ...] = (
+    "SA-1: bind the exact SubjectId and SemanticQuestionScope; do not "
+    "broaden or replace the admitted slice silently.",
     "SA-2: compare implementation with contracts, records, config, tests "
     "and authority; distinguish observed behavior from governing intent.",
     "SA-3: trace input, producer, transformations, state, consumer, "
@@ -1424,6 +1548,10 @@ SA_ANALYSIS_OBLIGATIONS: tuple[str, ...] = (
     "SA-5: adversarially test against contradictions, alternate owners, "
     "missing participants, branch paths and stale premises; qualify "
     "uncertainty.",
+    "SA-6: submit an explicit ANSWERED, OPEN, PENDING, or NOT_APPLICABLE "
+    "disposition with typed requirements for gaps.",
+    "SA-7: perform fresh readback and distinguish persisted answers from "
+    "new interpretation.",
 )
 
 
@@ -1448,6 +1576,12 @@ class ClaimPage:
 @_dataclass(frozen=True)
 class RelationshipPage:
     items: tuple[SemanticRelationship, ...]
+    bound_info: BoundInfo
+
+
+@_dataclass(frozen=True)
+class SubjectPage:
+    items: tuple[Subject, ...]
     bound_info: BoundInfo
 
 

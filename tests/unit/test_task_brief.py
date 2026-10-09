@@ -148,6 +148,52 @@ class TaskBriefTest(unittest.TestCase):
         )
         self.assertTrue(brief.open_handling and brief.submission_rules)
 
+    def test_brief_exposes_the_complete_compact_quality_card(self):
+        task = self._task()
+        brief = task.request.brief
+
+        self.assertIn("src/main.py", brief.objective)
+        self.assertEqual(brief.material_path, m.TASK_BRIEF_MATERIAL_PATH)
+        self.assertEqual(
+            brief.semantic_result, m.TASK_BRIEF_SEMANTIC_RESULT
+        )
+        self.assertEqual(
+            brief.adversarial_checks, m.TASK_BRIEF_ADVERSARIAL_CHECKS
+        )
+        self.assertEqual(brief.readback, m.TASK_BRIEF_READBACK)
+        self.assertTrue(any("Evidence examined:" in item
+                            for item in brief.evidence_authority))
+        self.assertTrue(any("Governing authority:" in item
+                            for item in brief.evidence_authority))
+        self.assertEqual(
+            task.request.analysis_obligations,
+            m.SA_ANALYSIS_OBLIGATIONS,
+        )
+
+    def test_quality_card_is_uniform_across_operation_intents(self):
+        explain = self._task(m.SemanticIntent.EXPLAIN).request
+        trace = self._task(m.SemanticIntent.TRACE).request
+
+        self.assertEqual(explain.brief.objective, trace.brief.objective)
+        self.assertEqual(
+            explain.brief.evidence_authority,
+            trace.brief.evidence_authority,
+        )
+        self.assertEqual(explain.brief.material_path, trace.brief.material_path)
+        self.assertEqual(
+            explain.brief.adversarial_checks,
+            trace.brief.adversarial_checks,
+        )
+        self.assertEqual(explain.brief.readback, trace.brief.readback)
+        self.assertEqual(
+            explain.analysis_obligations,
+            trace.analysis_obligations,
+        )
+        self.assertNotEqual(
+            explain.brief.material_aspects,
+            trace.brief.material_aspects,
+        )
+
     def test_tampered_brief_changes_nothing(self):
         # Validation ignores the brief: swapping in another class's
         # aspects (the "wrong brief") neither confers validity nor
