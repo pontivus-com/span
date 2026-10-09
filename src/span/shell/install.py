@@ -223,7 +223,10 @@ def _has_venv_pip(venv_python, dry_run=False):
 def pip_install(venv_python, span_repo, dry_run=False):
     if _has_venv_pip(venv_python, dry_run):
         _run(
-            [str(venv_python), "-m", "pip", "install", str(span_repo)],
+            [
+                str(venv_python), "-m", "pip", "install",
+                "--force-reinstall", str(span_repo),
+            ],
             dry_run=dry_run,
         )
         return
@@ -234,8 +237,10 @@ def pip_install(venv_python, span_repo, dry_run=False):
             "then re-run."
         )
     _run(
-        [uv, "pip", "install", "--python", str(venv_python),
-         str(span_repo)],
+        [
+            uv, "pip", "install", "--reinstall",
+            "--python", str(venv_python), str(span_repo),
+        ],
         dry_run=dry_run,
     )
 
@@ -288,7 +293,7 @@ def load_seeds(path, dry_run=False):
 def merge_opencode_config(config_path, span_cmd, dry_run=False):
     print(f"+ merge opencode config: {config_path}")
     if dry_run:
-        return
+        return {"status": "skipped", "reason": "dry-run"}
     path = Path(config_path)
     try:
         config = json.loads(path.read_text())
@@ -314,12 +319,16 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
             slot["command"] = span_cmd
     path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"opencode config updated: {config_path}")
+    return {"status": "merged", "config": str(config_path)}
 
 
 def register_codex(span_cmd, dry_run=False):
     if shutil.which("codex") is None:
         print("codex CLI absent; skipping codex registration.")
-        return
+        return {"status": "skipped", "reason": "codex CLI absent"}
+    if dry_run:
+        print("+ register codex (dry-run, skipped)")
+        return {"status": "skipped", "reason": "dry-run"}
     try:
         _run(["codex", "mcp", "add", "span", "--"] + span_cmd,
              dry_run=dry_run)
@@ -328,6 +337,8 @@ def register_codex(span_cmd, dry_run=False):
         # invalid service_tier); that error is outside Span. Warn
         # and continue instead of aborting the install.
         print(f"codex registration failed, continuing: {exc}")
+        return {"status": "failed", "error": str(exc)}
+    return {"status": "registered"}
 
 
 def _hook_bin(venv_dir, bin_dir):
@@ -343,10 +354,10 @@ def wire_codex_hooks(hook_bin, dry_run=False):
     hooks_path = Path(os.path.expanduser("~")) / ".codex" / "hooks.json"
     print(f"+ wire codex hooks: {hooks_path}")
     if dry_run:
-        return
+        return {"status": "skipped", "reason": "dry-run"}
     if not hooks_path.exists():
         print("no codex hooks.json; skipping codex hook wiring.")
-        return
+        return {"status": "skipped", "reason": "no codex hooks.json"}
     try:
         config = json.loads(hooks_path.read_text())
     except ValueError as exc:
@@ -389,6 +400,7 @@ def wire_codex_hooks(hook_bin, dry_run=False):
         added += 1
     hooks_path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"codex hooks updated ({added} entries).")
+    return {"status": "wired", "added": added}
 
 
 def wire_opencode_plugin(span_repo, project_dir, dry_run=False):
@@ -398,13 +410,14 @@ def wire_opencode_plugin(span_repo, project_dir, dry_run=False):
     dst_dir = Path(project_dir) / ".opencode" / "plugins"
     print(f"+ deploy opencode plugin: {dst_dir / 'span-hooks.js'}")
     if dry_run:
-        return
+        return {"status": "skipped", "reason": "dry-run"}
     if not src.exists():
         raise SystemExit(f"plugin source missing: {src}")
     dst_dir.mkdir(parents=True, exist_ok=True)
     dst = dst_dir / "span-hooks.js"
     dst.write_text(src.read_text())
     print(f"opencode plugin deployed: {dst}")
+    return {"status": "wired", "dst": str(dst)}
 
 
 def write_receipt(data_dir, payload, dry_run=False):
@@ -427,8 +440,12 @@ def git_rev(span_repo):
 
 
 def verify_installation(venv_python, data_dir, repos, dry_run=False):
-    """Provision + readiness + one explain round-trip via a helper
-    module executed under the installed interpreter."""
+    """Provision + readiness via a helper module executed under the installed interpreter.
+
+    Operational readiness only (A1): sequential per-target provisioning
+    with the settled READY predicate. Never invokes ``explain`` and never
+    establishes semantic knowledge.
+    """
     cmd = [
         str(venv_python), "-m", "span.shell.install_verify",
         "--data-dir", str(data_dir),
@@ -570,10 +587,11 @@ def main(argv=None):
 
     if args.verify_only:
         venv_python = venv_dir / "bin" / "python"
-        return doctor(
+        doctor(
             venv_python, data_dir, targets,
             args.opencode_config, dry,
         )
+        return
 
     check_prereqs()
     for target in targets:
@@ -583,7 +601,15 @@ def main(argv=None):
     expose_binary(venv_dir, bin_dir, dry_run=dry)
     seeds = load_seeds(args.authority_seeds_file, dry_run=dry)
     if seeds:
-        print(f"loaded {len(seeds)} authority seeds (validated at init)")
+        # Verification provisions without seeds (no new flags per
+        # Addendum D ACT-D-02); seeds enter through a setup-session
+        # initialize_repository call with authority_seeds.
+        print(
+            f"loaded {len(seeds)} authority seeds "
+            "(provision them via a setup-session "
+            "initialize_repository call; verification "
+            "provisions without seeds)"
+        )
 
     data_cmd = ["--data-dir", str(data_dir)]
     resolved_mcp = shutil.which("span-mcp")
@@ -597,11 +623,24 @@ def main(argv=None):
     opencode_config = args.opencode_config
     if opencode_config is None and Path("opencode.json").exists():
         opencode_config = "opencode.json"
+    host_registration: dict = {}
     if opencode_config is not None:
-        merge_opencode_config(opencode_config, span_cmd, dry_run=dry)
+        try:
+            host_registration["opencode"] = merge_opencode_config(
+                opencode_config, span_cmd, dry_run=dry
+            )
+        except SystemExit as exc:
+            host_registration["opencode"] = {
+                "status": "failed", "error": str(exc),
+            }
+            raise
     else:
         print("no opencode.json found; skipping host registration "
               "(pass --opencode-config PATH).")
+        host_registration["opencode"] = {
+            "status": "skipped",
+            "reason": "no opencode.json found (pass --opencode-config PATH)",
+        }
     if args.with_codex is None:
         args.with_codex = detect_hosts()["codex"] and not args.no_codex
     elif args.no_codex:
@@ -609,14 +648,53 @@ def main(argv=None):
     if args.with_hooks is None:
         args.with_hooks = not args.no_hooks
     if args.with_codex:
-        register_codex(span_cmd, dry_run=dry)
+        host_registration["codex"] = register_codex(span_cmd, dry_run=dry)
+    else:
+        if args.no_codex:
+            _codex_reason = "codex disabled (--no-codex)"
+        else:
+            _codex_reason = "codex CLI not detected"
+        print(f"skipping codex registration ({_codex_reason}).")
+        host_registration["codex"] = {
+            "status": "skipped", "reason": _codex_reason,
+        }
     if args.with_hooks:
         hook_bin = _hook_bin(venv_dir, bin_dir)
-        wire_codex_hooks(hook_bin, dry_run=dry)
-        for target in targets:
-            wire_opencode_plugin(span_repo, target, dry_run=dry)
+        try:
+            _codex_hooks = wire_codex_hooks(hook_bin, dry_run=dry)
+        except SystemExit as exc:
+            _codex_hooks = {"status": "failed", "error": str(exc)}
+            host_registration["hooks"] = {
+                "codex": _codex_hooks, "opencode_plugin": {},
+            }
+            raise
+        _plugin: dict = {}
+        try:
+            for target in targets:
+                _plugin[str(target)] = wire_opencode_plugin(
+                    span_repo, target, dry_run=dry
+                )
+        except SystemExit as exc:
+            host_registration["hooks"] = {
+                "codex": _codex_hooks, "opencode_plugin": _plugin,
+            }
+            raise
+        host_registration["hooks"] = {
+            "codex": _codex_hooks, "opencode_plugin": _plugin,
+        }
+    else:
+        print("skipping hook wiring (--no-hooks).")
+        host_registration["hooks"] = {
+            "codex": {
+                "status": "skipped", "reason": "hooks disabled (--no-hooks)",
+            },
+            "opencode_plugin": {},
+        }
     if not args.no_skills:
-        deploy_skills(span_repo, dry_run=dry)
+        host_registration["skills"] = deploy_skills(span_repo, dry_run=dry)
+    else:
+        print("skipping skill deployment (--no-skills).")
+        host_registration["skills"] = []
 
     report = verify_installation(venv_python, data_dir, targets, dry)
     receipt = {
@@ -627,13 +705,15 @@ def main(argv=None):
         "data_dir": str(data_dir),
         "repos": [str(t) for t in targets],
         "verify": report,
+        "host_registration": host_registration,
+        # Deterministic installer performs no host exchange (A1 only).
+        "a2": "not_run",
         "installed_at": datetime.datetime.now(
             datetime.timezone.utc
         ).isoformat(),
     }
     write_receipt(data_dir, receipt, dry_run=dry)
     print("install complete.")
-    return receipt
 
 
 if __name__ == "__main__":

@@ -2,8 +2,11 @@
 
 Runs under the installed interpreter (imports Span freely): provisions
 each ``--repo``, asserts readiness plus schema version, performs one
-explain round-trip per repository, and prints a JSON receipt. Used by
+status readiness check per repository, and prints a JSON receipt. Used by
 both fresh installs and ``--verify`` doctor runs.
+
+This verification is operational readiness only (A1). It never invokes
+``explain`` and never establishes semantic knowledge.
 """
 
 from __future__ import annotations

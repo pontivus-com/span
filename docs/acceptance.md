@@ -57,7 +57,7 @@ Current suite: 339 tests green under `pytest` and `unittest`
 | v0.6 paths | multi-unit chains, second-page retrieval, supersession, withdrawal, doc-only subjects |
 | Addendum B A–L | `tests/acceptance/test_addendum_b_acceptance.py` (binding B.11: First-contact held-out baseline + restart, question-local vs baseline, negative/empty reopen, shared replace/withdraw + fanout + overflow-defer, premise cascade, cycle/truncation, reconcile/failure, authority conflict, paging/restart, benign change, legacy upgrade, isolation, cited-but-wrong + omitted-participant oracle must-fails, sibling-question isolation) plus `tests/unit/test_addendum_b.py` (seeding, stable IDs, shared storage, premise walk, paging grammar, effective disposition, migration) |
 | Addendum C (cutover + campaign mechanics) | `tests/acceptance/test_addendum_c_acceptance.py` (C-N explicit-disposition cutover: claims-only persists PENDING and never completes; explicit ANSWERED derives refs and reads back current; explicit ANSWERED with zero material rejects atomically with nothing written; the store refuses empty ANSWERED rows; incomplete resubmission retires nothing. C-O single-writer serialization with parallel analysis and stable IDs. C-M seeded scope restart-retrievable. C-P/C-06 mechanical limits: byte-valid-but-wrong passes validation, pinning oracle ownership. C-Q withdraw-plus-replace recovery without rollback machinery. C-S document subject registration. C-T explicit bound truncation) |
-| Addendum D establishment + expansion (proposed) | `tests/acceptance/test_addendum_d_acceptance.py` on held-out `ledger-svc`: baseline audit with readback + reuse (D-ACCEPT-01); closeout expansion to an unknown consumer with no silent broadening (D-ACCEPT-04). Full D-ACCEPT-01–07 bindings in ACCEPT-D-01. |
+| Addendum D establishment + expansion (adopted by owner waiver 2026-10-09; independent reviewer items waived — see adoption ledger) | `tests/acceptance/test_addendum_d_acceptance.py` on held-out `ledger-svc`: baseline audit with readback + reuse (D-ACCEPT-01); closeout expansion to an unknown consumer with no silent broadening (D-ACCEPT-04). Full D-ACCEPT-01–07 bindings in ACCEPT-D-01. |
 
 Addendum B adopted 2026-10-08: v0.6 contracts synchronized (question identity,
 exchange, validation, store v3, query/change, transport, guides);
@@ -107,11 +107,15 @@ Observed mechanics worth recording: continuations are per-server-
 process (a second process correctly rejects the old token as
 unavailable — resume by re-issuing the idempotent operation);
 per-process servers are a harness artifact, deployment holds one
-server per host session. Effort: ~16 MCP tool calls across two
+server per host session. The host-side `drive()` expansion round
+exercised the Python-helper path only, not OpenCode/Codex host
+integration. Effort: ~16 MCP tool calls across two
 sessions. Independence caveat: implementer and agent coincide in
 this run — the transcript and store above are presented for
 independent reviewer judgment against the field-svc files, which
-still gates adoption.
+was waived by owner decision 2026-10-09 (adoption ledger; explicitly
+unverified, not claimed as passed — material retained for future
+reviewer use).
 
 ## Independent reviewer runs (Addendum D §13 R-01, D-ACCEPT-01–07)
 

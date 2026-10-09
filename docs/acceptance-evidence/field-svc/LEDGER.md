@@ -5,7 +5,8 @@ stdio server (one process per host session), a real graft-indexed
 repository, and a file SQLite store reused across two server
 sessions. The session agent formed its own judgments from evidence
 read over the wire; implementer and agent coincide — independent
-reviewer judgment against `repo/` still gates adoption.
+reviewer judgment against `repo/` was waived by owner decision
+2026-10-09 (adoption ledger; explicitly unverified).
 
 ## Corpus
 

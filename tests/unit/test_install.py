@@ -146,6 +146,39 @@ class ReceiptScopeTest(unittest.TestCase):
 
 
 class PlanningTest(unittest.TestCase):
+    def test_pip_install_reinstalls_same_version_checkout(self):
+        from unittest.mock import patch
+
+        with patch.object(install, "_has_venv_pip", return_value=False), \
+                patch.object(install.shutil, "which", return_value="/uv"), \
+                patch.object(install, "_run") as run:
+            install.pip_install("/venv/bin/python", "/span")
+        run.assert_called_once_with(
+            [
+                "/uv", "pip", "install", "--reinstall", "--python",
+                "/venv/bin/python", "/span",
+            ],
+            dry_run=False,
+        )
+
+    def test_main_returns_success_for_console_entrypoint(self):
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(install, "check_prereqs"):
+                result = install.main([
+                    "--dry-run",
+                    "--span-repo", tmp,
+                    "--data-dir", str(pathlib.Path(tmp) / "data"),
+                    "--venv-dir", str(pathlib.Path(tmp) / "venv"),
+                    "--bin-dir", str(pathlib.Path(tmp) / "bin"),
+                    "--no-codex",
+                    "--no-hooks",
+                    "--no-skills",
+                ])
+            self.assertIsNone(result)
+
     def test_data_dir_inside_target_refused(self):
         args = install.parse_args(
             ["--repo", "/r", "--data-dir", "/r/data", "--dry-run"]
