@@ -48,6 +48,9 @@ PLATFORM_PATHS = {
 
 SCHEMA_SENTINEL = "SCHEMA_VERSION"
 
+AGENTS_START = "<!-- span:start -->"
+AGENTS_END = "<!-- span:end -->"
+
 
 def platform_paths(platform=None):
     """Resolve install locations for one platform key.
@@ -152,6 +155,10 @@ def parse_args(argv=None):
     parser.add_argument(
         "--no-skills", action="store_true",
         help="Skip skill deployment even when hosts are detected.",
+    )
+    parser.add_argument(
+        "--no-agents", action="store_true",
+        help="Skip AGENTS.md lifecycle-block deployment into target repos.",
     )
     parser.add_argument(
         "--authority-seeds-file", default=None,
@@ -414,6 +421,63 @@ def wire_opencode_plugin(span_repo, project_dir, dry_run=False):
     dst.write_text(src.read_text())
     print(f"opencode plugin deployed: {dst}")
     return {"status": "wired", "dst": str(dst)}
+
+
+def ensure_agents_rule(span_repo, target, dry_run=False):
+    """Deploy the canonical lifecycle block into a target AGENTS.md.
+
+    The block is copied verbatim from docs/agents-snippet.md (the
+    single canonical source) between span markers. The installer
+    never parses it for decisions. Idempotent: reruns converge on
+    the same content. The existing file is backed up once to
+    AGENTS.md.bak-span. Host wiring only: semantic stores,
+    continuations, receipts, and Graft artifacts are never placed
+    in the target.
+    """
+    dst = Path(target) / "AGENTS.md"
+    print(f"+ ensure agents rule: {dst}")
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run",
+                "path": str(dst)}
+    src = Path(span_repo) / "docs" / "agents-snippet.md"
+    if not src.is_file():
+        raise SystemExit(f"agents snippet source missing: {src}")
+    snippet = src.read_text().rstrip("\n") + "\n"
+    if "## Span lifecycle" not in snippet:
+        raise SystemExit(f"agents snippet source malformed: {src}")
+    block = f"{AGENTS_START}\n{snippet}{AGENTS_END}\n"
+    if not dst.is_file():
+        dst.write_text(block)
+        print(f"agents rule created: {dst}")
+        return {"status": "wired", "path": str(dst)}
+    existing = dst.read_text()
+    backup = dst.with_name("AGENTS.md.bak-span")
+    if not backup.exists():
+        shutil.copy2(dst, backup)
+        print(f"agents rule backed up: {backup}")
+    start = existing.find(AGENTS_START)
+    end = existing.find(AGENTS_END)
+    if (start != -1) != (end != -1) or (
+        start != -1 and end != -1 and end < start
+    ):
+        raise SystemExit(
+            f"agents block markers malformed in {dst}; "
+            "inspect the file before rerunning."
+        )
+    if start != -1:
+        tail = existing[end + len(AGENTS_END):].strip("\n")
+        new_text = existing[:start] + block
+        if tail:
+            new_text += "\n" + tail + "\n"
+    elif existing.strip():
+        new_text = existing.rstrip("\n") + "\n\n" + block
+    else:
+        new_text = block
+    if new_text == existing:
+        return {"status": "converged", "path": str(dst)}
+    dst.write_text(new_text)
+    print(f"agents rule deployed: {dst}")
+    return {"status": "wired", "path": str(dst)}
 
 
 def write_receipt(data_dir, payload, dry_run=False):
@@ -691,6 +755,23 @@ def main(argv=None):
     else:
         print("skipping skill deployment (--no-skills).")
         host_registration["skills"] = []
+    if not args.no_agents:
+        _agents: dict = {}
+        try:
+            for target in targets:
+                _agents[str(target)] = ensure_agents_rule(
+                    span_repo, target, dry_run=dry
+                )
+        except SystemExit as exc:
+            host_registration["agents"] = _agents
+            raise
+        host_registration["agents"] = _agents
+    else:
+        print("skipping AGENTS.md rule deployment (--no-agents).")
+        host_registration["agents"] = {
+            "status": "skipped",
+            "reason": "agents disabled (--no-agents)",
+        }
 
     report = verify_installation(venv_python, data_dir, targets, dry)
     receipt = {
