@@ -23,6 +23,7 @@ workflows, or originates authority).
 - `skills.md` — Agent Skills integration guide
 - `lifecycle.md` — agent execution lifecycle, init/readiness, examples
 - `hooks.md` — lifecycle-hook integration, matrix, reference adapter
+- `agents-snippet.md` — canonical AGENTS.md lifecycle block (installer source; guidance only, never semantics)
 - `semantic-governance-addendum.md` — adopted v0.6 addendum: query-time
   store-subject resolution (F1), cross-unit established-evidence
   citation (F2), validation tests, operational prerequisites
