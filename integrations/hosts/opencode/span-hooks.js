@@ -85,37 +85,90 @@ function filePathsFromArgs(args) {
   return [...new Set(found)];
 }
 
-export const SpanHooksPlugin = async () => {
-  const bin = resolveBin();
-  if (!bin) return {};
-  return {
-    event: async ({ event }) => {
-      if (!event || typeof event.type !== "string") return;
-      if (event.type === "session.created") {
-        const notice = run(bin, [
-          "--repo-root",
-          process.cwd(),
-          "session-start",
-        ]);
-        if (notice) console.log(notice);
-      } else if (event.type === "session.idle") {
-        const notice = run(bin, [
-          "--repo-root",
-          process.cwd(),
-          "session-stop",
-        ]);
-        if (notice) console.log(notice);
-      }
-    },
-    "tool.execute.after": async (input, output) => {
-      const tool = (input && input.tool) || "";
-      if (!["edit", "write"].includes(tool)) return;
-      const paths = filePathsFromArgs(
-        (output && output.args) || {}
-      );
-      if (paths.length === 0) return;
-      const notice = run(bin, ["source-changed", ...paths]);
-      if (notice) console.log(notice);
-    },
-  };
+// OpenCode v2 server plugin definition.
+// See https://opencode.ai/v2/docs/build/plugins and
+// https://opencode.ai/v2/docs/build/plugins/migrate-v1.
+// The v2 runtime loads the default export, which must carry a stable id
+// plus setup (or effect). V1 implementations do not run in V2, so the
+// session/tool hooks below are registered through the V2 context API:
+// session boundary notices via ctx.event.subscribe(), post-edit notices
+// via ctx.tool.hook("execute.after", ...), which receives one mutable
+// event (not v1 input/output pairs).
+//
+// Report-only safety is preserved: the plugin only shells out to the
+// installed span-hooks binary, stays silent when Span is absent or the
+// store is clean, and every failure path is a silent no-op that never
+// breaks the session. Repo root comes from ctx.location.directory.
+export default {
+  id: "span-hooks",
+  async setup(ctx) {
+    const controller = new AbortController();
+    const locationRoot =
+      (ctx && ctx.location && ctx.location.directory) || process.cwd();
+
+    if (
+      ctx &&
+      ctx.event &&
+      typeof ctx.event.subscribe === "function"
+    ) {
+      void (async () => {
+        try {
+          for await (const event of ctx.event.subscribe({
+            signal: controller.signal,
+          })) {
+            if (!event || typeof event.type !== "string") continue;
+            if (event.type === "session.created") {
+              const notice = run(resolveBin(), [
+                "--repo-root",
+                locationRoot,
+                "session-start",
+              ]);
+              if (notice) console.log(notice);
+            } else if (event.type === "session.idle") {
+              const notice = run(resolveBin(), [
+                "--repo-root",
+                locationRoot,
+                "session-stop",
+              ]);
+              if (notice) console.log(notice);
+            }
+          }
+        } catch {
+          // Subscription ended (abort or server shutdown); silent.
+        }
+      })();
+    }
+
+    if (ctx && ctx.tool && typeof ctx.tool.hook === "function") {
+      await ctx.tool.hook("execute.after", (event) => {
+        try {
+          // V2 passes one mutable event; accept the documented shape but
+          // also tolerate adjacent shapes. Run only on a positively
+          // identified edit/write tool with at least one path; otherwise
+          // skip silently rather than guessing.
+          const toolName =
+            (event &&
+              (event.tool ||
+                event.toolName ||
+                event.name ||
+                (event.input &&
+                  (event.input.tool || event.input.name)) ||
+                "")) ||
+            "";
+          if (!["edit", "write"].includes(toolName)) return;
+          const paths = filePathsFromArgs(event || {});
+          if (paths.length === 0) return;
+          const notice = run(resolveBin(), [
+            "source-changed",
+            ...paths,
+          ]);
+          if (notice) console.log(notice);
+        } catch {
+          // Never break the session on hook failure.
+        }
+      });
+    }
+
+    return () => controller.abort();
+  },
 };

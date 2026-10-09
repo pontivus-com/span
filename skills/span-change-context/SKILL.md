@@ -1,3 +1,8 @@
+---
+name: span-change-context
+description: Assess a planned material code change with Span impact analysis before editing: blast radius, conditions, authority, verification, and blockers.
+---
+
 # Span — pre-change context for material edits
 
 Before a material code change (cross-boundary, ownership,

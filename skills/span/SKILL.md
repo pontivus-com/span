@@ -1,3 +1,8 @@
+---
+name: span
+description: Understand a repository with Span before changing it: orient, establish, prepare, investigate, verify, and close through the canonical operations, keeping unresolved knowledge explicit.
+---
+
 # Span — semantic repository lifecycle
 
 Use Span's canonical operations to understand a repository before you
