@@ -54,19 +54,48 @@ changes should run `impact` before implementation.
 
 ## Establishing a scope (first value)
 
-To establish a bounded architectural scope (entry points, contracts,
-tests, explicit exclusions — never the whole repository): select one
-root with structural discovery plus your own judgment (candidates
-propose, you dispose — propose territories with the roster at
-`integrations/hosts/roster.py`, which lists structural neighborhoods
-without ranking them); run `explain(establish_baseline=True)` on that
-root for a worklist, or question-local `explain` otherwise; work the
-admitted questions in dependency order, preserving unexamined aspects
-as OPEN/PENDING; close with an independent readback (fresh
-`explain`/`status` on the scope) plus a reuse check (representative
-questions answered from persisted coverage). A populated store alone
-is not success — demonstrate retrieval. READY means operational, never
-known.
+Bind the user's explicit onboarding intent first — exactly these four,
+no second onboarding skill exists:
+
+- **Installation only:** complete A1 and report the host-exchange and
+  establishment steps not performed.
+- **Installation plus first-value:** complete A1, execute A2 through
+  actual host MCP calls, and proceed into B.
+- **Existing installation with first-value request:** check readiness
+  and existing coverage, then begin at A2/B as appropriate without
+  reinstalling.
+- **Existing partial baseline:** reuse persisted coverage and continue
+  the unresolved material work; never re-establish what is already
+  durably answered.
+
+Then establish one bounded architectural scope (entry points,
+contracts, tests, explicit exclusions — never the whole repository):
+
+Root selection: use the user's stated engineering objective when
+provided, existing structural candidates, authoritative contracts and
+evidence, and `roster.py::propose_territories()` only as structural
+territory proposal support (no ranking, no importance judgment). Choose
+one defensible root and record its objective, material participants,
+boundaries, and exclusions in the session report and, where
+evidence-bound and material, the root CQ-01 coverage
+`disposition_basis`. Structural centrality never determines semantic
+importance. Where no defensible architectural scope can be selected,
+fabricate none — report the evidence or decision required and stop
+establishment.
+
+Execution (existing mechanisms only): scoped discovery →
+`explain(establish_baseline=True)` on that root for a worklist, or
+question-local `explain` otherwise → admitted questions in dependency
+order → investigation → agent semantic review → `submit_interpretation`
+→ canonical materialization → coverage/readback. Preserve exact
+questions and unresolved aspects; explicitly report material `OPEN`
+and `PENDING` obligations with their resolution requirements. A
+completed worklist execution never implies full semantic sufficiency.
+Close with an independent readback (fresh `explain`/`status` on the
+scope) plus a reuse check (representative questions answered from
+persisted coverage). A `PendingInterpretation` is exchange evidence,
+never completed establishment. A populated store alone is not success
+— demonstrate retrieval. READY means operational, never known.
 
 ## The eight operations (only these exist)
 
@@ -102,7 +131,12 @@ known.
   (`integrations/hosts/exchange_driver.py`: `drive()`): it runs
   serial submit-until-answer with measured cost, reports validation
   rejections without retrying them, and reissues only expired
-  continuations through the idempotent original operation.
+  continuations through the idempotent original operation. The driver
+  is a helper for Python host integrations only — OpenCode and Codex
+  agents call the registered `span` MCP tools directly (Addendum D
+  §6). Neither installing a skill nor running the driver proves a
+  real host connection; only an observed host MCP request/response
+  does.
 - Review every unit as a skeptic before submitting (host review,
   pre-submit): reject paraphrase-only results that reword without
   advancing knowledge — return them unsubmitted, or submit the

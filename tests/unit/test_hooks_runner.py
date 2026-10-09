@@ -12,6 +12,7 @@ import pathlib
 import sys
 import unittest
 from contextlib import redirect_stdout
+from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
 
@@ -138,7 +139,7 @@ class HookNoticeTest(unittest.TestCase):
             root, data_dir, _ = self._seeded(tmp)
             out = io.StringIO()
             with redirect_stdout(out):
-                hooks.cmd_session_start(data_dir)
+                hooks.cmd_session_start(data_dir, root)
             text = out.getvalue()
             self.assertIn("repo", text)
             self.assertIn("no established coverage", text)
@@ -152,7 +153,7 @@ class HookNoticeTest(unittest.TestCase):
             self._seed_coverage(data_dir)
             out = io.StringIO()
             with redirect_stdout(out):
-                hooks.cmd_session_start(data_dir)
+                hooks.cmd_session_start(data_dir, root)
             self.assertEqual(out.getvalue(), "")
 
     def test_session_start_reports_noncurrent_scope(self):
@@ -167,7 +168,7 @@ class HookNoticeTest(unittest.TestCase):
             )
             out = io.StringIO()
             with redirect_stdout(out):
-                hooks.cmd_session_start(data_dir)
+                hooks.cmd_session_start(data_dir, root)
             text = out.getvalue()
             self.assertIn("repo", text)
             self.assertIn("needs attention", text)
@@ -214,28 +215,67 @@ class HookNoticeTest(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            _, data_dir, _ = self._seeded(tmp)
+            root, data_dir, _ = self._seeded(tmp)
             self._seed_coverage(data_dir)
             out = io.StringIO()
             with redirect_stdout(out):
-                hooks.cmd_session_stop(data_dir)
+                hooks.cmd_session_stop(data_dir, root)
             self.assertEqual(out.getvalue(), "")
 
     def test_session_stop_reports_actionable_scope(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            _, data_dir, _ = self._seeded(
+            root, data_dir, _ = self._seeded(
                 tmp, freshness_state="STALE"
             )
             self._seed_coverage(data_dir, disposition="PENDING")
             out = io.StringIO()
             with redirect_stdout(out):
-                hooks.cmd_session_stop(data_dir)
+                hooks.cmd_session_stop(data_dir, root)
             text = out.getvalue()
             self.assertIn("close:", text)
             self.assertIn("1 stale", text)
             self.assertIn("1 pending", text)
+
+    def test_session_hooks_scope_to_active_repository(self):
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data_dir, _ = self._seeded(
+                tmp, freshness_state="STALE"
+            )
+            self._seed_coverage(data_dir, disposition="PENDING")
+            other_root = pathlib.Path(tmp) / "other"
+            other_root.mkdir()
+            shutil.copyfile(
+                pathlib.Path(data_dir) / "repo.db",
+                pathlib.Path(data_dir) / "other.db",
+            )
+            _receipt(data_dir, [root, str(other_root)])
+
+            start_out = io.StringIO()
+            with redirect_stdout(start_out):
+                with patch.object(
+                    hooks, "default_data_dir", return_value=data_dir
+                ):
+                    hooks.main([
+                        "--repo-root", str(other_root), "session-start"
+                    ])
+            self.assertIn("other", start_out.getvalue())
+            self.assertNotIn("repo", start_out.getvalue())
+
+            stop_out = io.StringIO()
+            with redirect_stdout(stop_out):
+                with patch.object(
+                    hooks, "default_data_dir", return_value=data_dir
+                ), patch.object(
+                    hooks.os, "getcwd", return_value=str(other_root)
+                ):
+                    hooks.main(["session-stop"])
+            self.assertIn("other close:", stop_out.getvalue())
+            self.assertNotIn("repo close:", stop_out.getvalue())
 
     def test_missing_receipt_is_silent_success(self):
         import tempfile

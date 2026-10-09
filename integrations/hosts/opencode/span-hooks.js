@@ -92,10 +92,18 @@ export const SpanHooksPlugin = async () => {
     event: async ({ event }) => {
       if (!event || typeof event.type !== "string") return;
       if (event.type === "session.created") {
-        const notice = run(bin, ["session-start"]);
+        const notice = run(bin, [
+          "--repo-root",
+          process.cwd(),
+          "session-start",
+        ]);
         if (notice) console.log(notice);
       } else if (event.type === "session.idle") {
-        const notice = run(bin, ["session-stop"]);
+        const notice = run(bin, [
+          "--repo-root",
+          process.cwd(),
+          "session-stop",
+        ]);
         if (notice) console.log(notice);
       }
     },

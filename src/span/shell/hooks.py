@@ -17,14 +17,14 @@ Commands (exception-oriented per addendum D §9: routine current
 state prints nothing — silence is the all-current statement; every
 printed line names its repository scope and states only what needs
 action):
-  session-start      one line per repo needing action (uninitialized,
-                     needs attention, no established coverage, or
-                     noncurrent/open work); silent when every repo has
-                     established, current coverage
+  session-start      one line for the active repo when it needs action
+                     (uninitialized, needs attention, no established
+                     coverage, or noncurrent/open work); silent when
+                     the active repo has established, current coverage
   source-changed     read absolute paths from argv or stdin JSON;
                       report only paths whose dependents moved since
                       observation; silence otherwise
-  session-stop       per-repo currents/stale counts only when stale,
+  session-stop       active-repo currents/stale counts only when stale,
                      unverifiable, open, or pending work remains;
                      silent on a clean close
 """
@@ -107,6 +107,20 @@ def repo_for_path(path, mapping):
     return best
 
 
+def scoped_repo_map(mapping, repo_root):
+    """Select the registered repository containing ``repo_root``.
+
+    Lifecycle hooks run in a host's active project directory.  Selecting
+    the longest registered root keeps nested repositories deterministic and
+    prevents a session in one repository from reporting every installation
+    in the shared Span data directory.
+    """
+    active_root = repo_for_path(repo_root or os.getcwd(), mapping)
+    if active_root is None:
+        return {}
+    return {active_root: mapping[active_root]}
+
+
 def _scope_counts(connection):
     """Current/stale/unverifiable claims + open/pending questions.
 
@@ -155,10 +169,13 @@ def _scope_counts(connection):
     return action
 
 
-def cmd_session_start(data_dir):
+def cmd_session_start(data_dir, repo_root=None):
     mapping = repo_map(data_dir)
     if not mapping:
         print("span: no repositories registered (run span-install).")
+        return
+    mapping = scoped_repo_map(mapping, repo_root)
+    if not mapping:
         return
     for root in sorted(mapping):
         repo_id, db_path = mapping[root]
@@ -282,8 +299,11 @@ def cmd_source_changed(data_dir, paths):
         print(notice)
 
 
-def cmd_session_stop(data_dir):
+def cmd_session_stop(data_dir, repo_root=None):
     mapping = repo_map(data_dir)
+    if not mapping:
+        return
+    mapping = scoped_repo_map(mapping, repo_root)
     if not mapping:
         return
     for root in sorted(mapping):
@@ -309,6 +329,13 @@ def parse_args(argv=None):
         "--data-dir", default=None,
         help="Store directory (default: platform data dir).",
     )
+    parser.add_argument(
+        "--repo-root", default=None,
+        help=(
+            "Active repository root for session lifecycle commands "
+            "(default: current working directory)."
+        ),
+    )
     parser.add_argument("command", choices=(
         "session-start", "source-changed", "session-stop",
     ))
@@ -330,13 +357,14 @@ def default_data_dir():
 def main(argv=None):
     args = parse_args(argv)
     data_dir = args.data_dir or default_data_dir()
+    repo_root = args.repo_root or os.getcwd()
     try:
         if args.command == "session-start":
-            cmd_session_start(data_dir)
+            cmd_session_start(data_dir, repo_root)
         elif args.command == "source-changed":
             cmd_source_changed(data_dir, args.paths)
         elif args.command == "session-stop":
-            cmd_session_stop(data_dir)
+            cmd_session_stop(data_dir, repo_root)
     except BrokenPipeError:
         raise SystemExit(0)
     except Exception as exc:  # noqa: BLE001 - hooks never break sessions

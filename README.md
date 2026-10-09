@@ -46,14 +46,18 @@ stale/open/pending work) and stay silent when everything is current.
 Host trigger support per host: `integrations/hosts/triggers.md`.
 Agent duties per skill: `skills/`.
 
-Onboarding delivers two milestones: operational readiness (installed,
-initialized, one explain round-trip) and a useful semantic baseline
-(a bounded scope investigated, persisted, and demonstrably
-retrievable by fresh questions). Ordinary demand-driven queries work
-regardless, with no establishment campaign required.
+Onboarding delivers three milestones: A1 operational readiness (installed,
+initialized, readiness-verified by the installer), A2 host-connected
+exchange (an actual host MCP `explain` round-trip in the selected coding
+host session), and B a useful semantic baseline (a bounded scope
+investigated, persisted, and demonstrably retrievable by fresh
+questions). The installer alone delivers A1 only — never A2 or B.
+Ordinary demand-driven queries work regardless, with no establishment
+campaign required.
 
-Start below: install, initialize one repository, verify readiness,
-and run one explain round-trip.
+Start below: install and initialize one repository (A1, installer),
+verify readiness, then run one explain round-trip in your coding-host
+session (A2, host MCP `explain`).
 
 ## Agent lifecycle — what Span does at each stage
 
@@ -132,7 +136,10 @@ governing plan; they never define semantics.
 > <TARGET_REPO> [--repo ...] [--opencode-config PATH] [--with-codex]`
 > installs into `~/.local/share/span`, links `span-mcp` on PATH,
 > merges host MCP entries, provisions each repo, and verifies
-> readiness plus one explain round-trip with a printed receipt.
+> operational readiness (A1) with a printed receipt. The installer
+> performs `status(target=None)` readiness checks only — it never
+> executes `explain`, never creates semantic knowledge, and never
+> implies host connection (A2) or establishment (B).
 > `span-install --verify` re-checks an existing install (doctor).
 > OS specifics live in `src/span/shell/install.py::PLATFORM_PATHS`
 > (Linux verified; macOS/Windows reserved). The installer is
@@ -238,13 +245,16 @@ Prerequisite: `span-mcp` on PATH (`pip install <SPAN_REPO>`;
 verify with `span-mcp --help`). `<DATA_DIR>` stays outside every
 target repo. One `--repo graft:<TARGET>` per target (repeatable).
 
-Large repos report init readiness `DEGRADED` with the warning
+Large repos keep init readiness `READY` with the warning
 `evidence inventory truncated by maximum bounds; remaining sources
 discovered on demand`. That is the designed bounded state for repos
 over the 96-unit inventory maximum (`service/bounds.py` maximum bounds,
-`service/repository.py` init): remaining evidence loads on demand.
+`service/repository.py` init, which always returns `READY`): the
+truncation is reported in the existing `evidence_inventory_status`
+(`degraded:truncated-at-<n>`) plus warnings, never in `readiness`,
+and remaining evidence loads on demand.
 It is not a failure; `status` still reports operational
-readiness. Do not raise bounds to chase `READY`.
+readiness. Do not raise bounds to chase inventory completeness.
 
 ### Opencode
 
