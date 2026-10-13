@@ -10,6 +10,7 @@ import typing as _typing
 
 from span.core.model import (
     BoundInfo,  # noqa: F401  (re-exported for port consumers)
+    Freshness,
     QueryBounds,
     RepositoryState,
     ScopeCoverage,  # noqa: F401
@@ -135,5 +136,33 @@ class StructuralSource(_typing.Protocol):
         Whole-file live fingerprints against recorded file hashes;
         symbol hashes are never compared against file bytes. Coverage
         follows the §4.0 two-tier rule for the given file set.
+        """
+        ...
+
+    def describe_current(
+        self,
+        repository_id: str,
+    ) -> Freshness:
+        """Provider index currency verdict (Addendum G §4.8d).
+
+        Whether this provider's structural view is current for the
+        repository, with a provider-local reason string. Read-only:
+        never builds, fetches, or mutates. Core treats the reason as
+        opaque diagnostics.
+        """
+        ...
+
+    def ensure_current(
+        self,
+        repository_id: str,
+    ) -> Freshness:
+        """Refresh the provider's structural view, then report currency.
+
+        Provider-owned execution against provider-owned artifacts only
+        (a graft provider rebuilds its index; a memory provider
+        no-ops). Bounded: one attempt, then report. Failures return
+        UNVERIFIABLE with a reason; never raise for build failure.
+        Invoked only from explicit maintenance paths, never from
+        ordinary reads.
         """
         ...

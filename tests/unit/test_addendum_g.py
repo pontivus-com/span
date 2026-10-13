@@ -802,3 +802,158 @@ class InventoryWalkTest(unittest.TestCase):
                     "sub/nested/deep.md",
                 ],
             )
+
+
+class StructuralCurrentTest(unittest.TestCase):
+    """G-18: provider-generic structural currency stays hidden.
+
+    `refresh` calls `ensure_current` exactly once per call; provider
+    failure degrades to an UNVERIFIABLE note, never raises; the graft
+    adapter answers currency from its own wiring-vs-HEAD computation
+    and never builds during describe. No MCP surface change (twelve
+    operations; TOOL_NAMES freeze covered in test_mcp_transport)."""
+
+    def _refresh_harness(self, structural):
+        from span.shell.agent_exchange.continuations import ContinuationStore  # noqa: F401
+        evidence = FixtureEvidenceSource("repo-1", dict(FILES))
+        store = SqliteSemanticStore(":memory:")
+        ops.initialize_repository(
+            ops.SemanticInitializeRepositoryRequest(
+                repository_locator="fixture",
+                structural_provider_config="memory:test",
+                authority_seeds=(),
+            ),
+            repository_id="repo-1",
+            structural=structural, evidence=evidence, store=store,
+        )
+        return evidence, store
+
+    def _refresh_answer(self, structural, evidence, store):
+        from span.shell.agent_exchange.continuations import ContinuationStore
+        return ops.refresh(
+            ops.SemanticRefreshRequest(
+                repository_id="repo-1",
+                target=m.SubjectSelector(None, "src/main.py", (), None),
+                bounds=_bounds(),
+            ),
+            structural=structural, evidence=evidence, store=store,
+            continuations=ContinuationStore(),
+        )
+
+    def test_refresh_calls_ensure_current_once(self):
+        calls = []
+
+        class _Counting(InMemoryStructuralSource):
+            def ensure_current(self, repository_id):
+                calls.append(repository_id)
+                return super().ensure_current(repository_id)
+
+        structural = _Counting(
+            "repo-1",
+            tuple(InMemoryFile(p, c) for p, c in FILES.items()),
+            SUBJECTS,
+        )
+        evidence, store = self._refresh_harness(structural)
+        try:
+            self._refresh_answer(structural, evidence, store)
+            self.assertEqual(calls, ["repo-1"])
+        finally:
+            store.close()
+
+    def test_currency_note_maps_states(self):
+        from span.service.operations.refresh import _currency_note
+
+        self.assertIsNone(_currency_note(m.Freshness(
+            state=m.FreshnessState.CURRENT, reason="t-ok",
+        )))
+        note = _currency_note(m.Freshness(
+            state=m.FreshnessState.UNVERIFIABLE, reason="t-down",
+        ))
+        self.assertIsNotNone(note)
+        assert note is not None
+        self.assertIs(
+            note.kind, m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+        )
+        self.assertIn("t-down", note.description)
+
+    def test_ensure_failure_never_raises(self):
+        class _Failing(InMemoryStructuralSource):
+            def ensure_current(self, repository_id):
+                return m.Freshness(
+                    state=m.FreshnessState.UNVERIFIABLE,
+                    reason="t-provider-down",
+                )
+
+        structural = _Failing(
+            "repo-1",
+            tuple(InMemoryFile(p, c) for p, c in FILES.items()),
+            SUBJECTS,
+        )
+        evidence, store = self._refresh_harness(structural)
+        try:
+            # Suspend path also performs the single ensure call first;
+            # the provider reason is covered by test_currency_note_maps_states.
+            self._refresh_answer(structural, evidence, store)
+        finally:
+            store.close()
+
+    def test_graft_describe_unverifiable_off_tree(self):
+        import pathlib
+        import tempfile
+
+        from span.shell.structural import graft as g
+
+        wiring = {
+            "nodes": [
+                {
+                    "id": "a.py", "name": "a.py", "kind": "file",
+                    "path": "a.py", "span": "L1-L2", "signature": None,
+                    "body_hash": "aa01",
+                },
+            ],
+            "edges": [],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            src = g.GraftStructuralSource(
+                "repo-1", pathlib.Path(tmp), wiring=wiring,
+            )
+            out = src.describe_current("repo-1")
+            self.assertIs(out.state, m.FreshnessState.UNVERIFIABLE)
+
+    def test_graft_ensure_never_raises_without_builder(self):
+        import pathlib
+        import tempfile
+        from unittest import mock
+
+        from span.shell.structural import graft as g
+
+        wiring = {
+            "nodes": [
+                {
+                    "id": "a.py", "name": "a.py", "kind": "file",
+                    "path": "a.py", "span": "L1-L2", "signature": None,
+                    "body_hash": "aa01",
+                },
+            ],
+            "edges": [],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            src = g.GraftStructuralSource(
+                "repo-1", root, wiring=wiring,
+            )
+            calls = []
+            real = g._run_index_build
+
+            def _fake(path):
+                calls.append(str(path))
+                return False, "t-no-builder"
+
+            try:
+                g._run_index_build = _fake
+                out = src.ensure_current("repo-1")
+            finally:
+                g._run_index_build = real
+            self.assertIs(out.state, m.FreshnessState.UNVERIFIABLE)
+            self.assertIn("t-no-builder", out.reason)
+            self.assertEqual(calls, [str(root)])

@@ -59,6 +59,28 @@ __all__ = [
     'refresh',
 ]
 
+def _currency_note(
+    currency: m.Freshness,
+) -> m.ResolutionRequirement | None:
+    """Unresolved note for a non-current provider refresh (G §4.8d).
+
+    Pure projection: CURRENT yields no note; anything else yields one
+    UNVERIFIABLE_FRESHNESS requirement carrying the provider's reason.
+    """
+    if currency.state is m.FreshnessState.CURRENT:
+        return None
+    return m.ResolutionRequirement(
+        kind=m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+        subject_or_claim=None,
+        description=(
+            f"structural index not refreshed: {currency.reason}; "
+            f"scope reads stay UNVERIFIABLE where index "
+            f"currency matters"
+        ),
+        supporting_context=(),
+    )
+
+
 def _compose_refresh_answer(
     repository_id: str,
     subjects: tuple[m.Subject, ...],
@@ -69,6 +91,7 @@ def _compose_refresh_answer(
     bounds: m.QueryBounds,
     state: m.RepositoryState,
     changed: tuple[m.EvidenceDependency, ...] = (),
+    extra_unresolved: tuple[m.ResolutionRequirement, ...] = (),
 ) -> m.SemanticAnswer:
     reloaded_claims: list[m.SemanticClaim] = []
     reloaded_rels: list[m.SemanticRelationship] = []
@@ -114,7 +137,7 @@ def _compose_refresh_answer(
         ) + tuple(
             req for r in kept_rels
             for req in _answers.requirements_for_relationship(r)
-        ),
+        ) + tuple(extra_unresolved),
         question_coverage=views,
     )
     evidence_refs = tuple(ref for c in kept_claims for ref in c.evidence)
@@ -193,6 +216,20 @@ def refresh(
         )
     affected: list[m.Subject] = []
     changed_deps: list[m.EvidenceDependency] = []
+    # G §4.8d: exactly one provider currency refresh per refresh call,
+    # before stale collection. Ordinary reads never reach here with a
+    # build; failures degrade to an unresolved note, never raise.
+    currency_notes: list[m.ResolutionRequirement] = []
+    try:
+        currency = structural.ensure_current(request.repository_id)
+    except Exception:
+        currency = m.Freshness(
+            state=m.FreshnessState.UNVERIFIABLE,
+            reason="structural provider currency check unavailable",
+        )
+    note = _currency_note(currency)
+    if note is not None:
+        currency_notes.append(note)
     # Collect stale premise ids first for dependent expansion.
     stale_premise_ids: set[str] = set()
     subject_items: dict[str, tuple[
@@ -299,6 +336,7 @@ def refresh(
             request.repository_id, subjects, structural=structural,
             evidence=evidence, store=store, bounds=bounds, state=state,
             changed=tuple(changed_deps),
+            extra_unresolved=tuple(currency_notes),
         )
     first, rest = affected[0], affected[1:]
     # B.3/B-06: refresh re-examines under the persisted stale question

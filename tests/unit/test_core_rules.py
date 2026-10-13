@@ -482,6 +482,40 @@ class AnswerHelpersTest(unittest.TestCase):
         reqs = ans.requirements_for_resolution(resolution)
         self.assertIs(reqs[0].kind, m.ResolutionKind.AMBIGUOUS_IDENTITY)
 
+    def test_not_found_resolution_requirement_names_root(self):
+        resolution = m.SubjectResolution(
+            candidates=(),
+            ambiguity=m.ResolutionAmbiguity.NOT_FOUND,
+            bound_info=m.BoundInfo(8, 0, 0, False),
+        )
+        reqs = ans.requirements_for_resolution(
+            resolution, repository_id="repo-1",
+            name_or_locator="other-root/workflows/x.py",
+        )
+        self.assertEqual(len(reqs), 1)
+        self.assertIs(reqs[0].kind, m.ResolutionKind.MISSING_EVIDENCE)
+        self.assertIn("repo-1", reqs[0].description)
+        self.assertIn("repository's root", reqs[0].description)
+        self.assertIn("locate", reqs[0].description)
+
+    def test_not_found_resolution_requirement_without_locator(self):
+        resolution = m.SubjectResolution(
+            candidates=(),
+            ambiguity=m.ResolutionAmbiguity.NOT_FOUND,
+            bound_info=m.BoundInfo(8, 0, 0, False),
+        )
+        reqs = ans.requirements_for_resolution(resolution)
+        self.assertEqual(len(reqs), 1)
+        self.assertIs(reqs[0].kind, m.ResolutionKind.MISSING_EVIDENCE)
+
+    def test_resolved_resolution_requirement_empty(self):
+        resolution = m.SubjectResolution(
+            candidates=(),
+            ambiguity=m.ResolutionAmbiguity.RESOLVED,
+            bound_info=m.BoundInfo(8, 0, 0, False),
+        )
+        self.assertEqual(ans.requirements_for_resolution(resolution), ())
+
     def test_truncate_fields_priority_order(self):
         kept, truncated, category, token = ans.truncate_fields(
             ((("q1",), "conflicts"), (("a", "b", "c"), "claims")), 2

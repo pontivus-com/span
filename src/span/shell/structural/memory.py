@@ -140,6 +140,24 @@ class InMemoryStructuralSource:
             observed_at=_datetime.datetime.now(_datetime.timezone.utc),
         )
 
+    def describe_current(
+        self,
+        repository_id: str,
+    ) -> m.Freshness:
+        """In-memory source has no separate index: always current."""
+        self._check_repository(repository_id)
+        return m.Freshness(
+            state=m.FreshnessState.CURRENT,
+            reason="in-memory source has no separate index",
+        )
+
+    def ensure_current(
+        self,
+        repository_id: str,
+    ) -> m.Freshness:
+        """No-op: nothing to rebuild for an in-memory source."""
+        return self.describe_current(repository_id)
+
     def resolve_subject(
         self,
         repository_id: str,

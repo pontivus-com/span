@@ -335,7 +335,10 @@ def explain(
         store=store, bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
-        requirements = _answers.requirements_for_resolution(resolution)
+        requirements = _answers.requirements_for_resolution(
+            resolution, repository_id=request.repository_id,
+            name_or_locator=request.target.name_or_locator,
+        )
         return m.SemanticAnswer(
             answer_id=_answer_id(
                 "ans", request.repository_id,
