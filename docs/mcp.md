@@ -29,7 +29,19 @@ answer returns), `HookStatusNotice`, or the init result. Failures are
 typed error envelopes (`unknown_tool`, `ingress`, `unknown_repository`,
 `unavailable`, `validation`, `rejected`, `transport`) — never invented
 semantics. A JSON ingress failure never consumes the continuation:
-resubmit the corrected result under the same continuation.
+resubmit the corrected result under the same continuation. A semantic
+validation rejection (`validation`) likewise retains the live
+continuation: correct and resubmit under the same continuation. Only a
+successful commit consumes it; repeating a successful submission is
+rejected without duplicates (Addendum H §4).
+
+## Repository discovery
+
+`tools/list` appends the sorted registered canonical repository IDs to
+repository-scoped tool descriptions at list time, so agents discover
+identity before the first repository-scoped call. `initialize_repository`
+also returns the canonical ID. Unknown IDs fail closed with the
+registered list. Filesystem paths are never accepted as IDs.
 
 ## Status reporting modes
 
@@ -71,11 +83,27 @@ One complete target campaign over the twelve tools (exact carriers in
    submits `ANSWERED`/`OPEN`/`NOT_APPLICABLE`/`PENDING` coverage until an
    answer returns.
 5. `status` with `target=TargetId` → `StatusContent` with
-   `target_association` and `target_disposition` (`INCOMPLETE` while work
-   remains; `CURRENT` only when every member is accounted, every area has
-   terminal coverage, and all dependencies are current and verifiable).
+   `target_association`, `target_disposition`, and read-only
+   `target_total/accounted/unaccounted_count` from the same snapshot
+   (`INCOMPLETE` while work remains; `CURRENT` only when every member
+   is accounted, every area has terminal coverage, and all dependencies
+   are current and verifiable; `None` counts exactly on
+   `UNVERIFIABLE`/`UNASSESSED`).
 6. Fresh session, no host memory: `status` with `target=TargetId`, then
    exact-area `explain`/`trace`/`authority` on the returned `SubjectId`s.
+
+## Correction (Addendum H §6)
+
+A challenged but `CURRENT` explanation is reassessed through `refresh`
+with an exact `SubjectSelector` and explicit `stale_only=False` (the
+default `True` only re-examines stale scope). The suspension carries
+the persisted question identities; the agent nominates exactly one
+already-persisted original question via one
+`proposed_question_coverages` entry with that exact scope, plus
+evidence-grounded withdrawals and replacements in the same canonical
+submission. A second distinct non-bound correction question, or a
+withdrawal without the nominated coverage, rejects the unit. `explain`
+is not a correction entry; `status` is read-only.
 
 ## Structural-provider boundary
 
@@ -127,8 +155,10 @@ agent intent; setup is separate from ordinary queries:
   `SubjectSelector` or `EvidenceScope`; never repo-wide without
   enumeration).
 - Interpretation exchange: `submit_interpretation`
-  (`continuation` plus typed result) versus `reissue_interpretation`
-  (`continuation` only, expired or lost, once).
+  (`continuation` plus typed result; retained on validation failure,
+  consumed only on successful commit) versus `reissue_interpretation`
+  (`continuation` only, ingress failure exactly once; expired tokens
+  recover via idempotent re-issue of the original operation).
 
 Selection rules: need a file, symbol, or member list → `locate`; need
 structural adjacency → `neighbors`; need established semantics →

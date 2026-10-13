@@ -754,6 +754,42 @@ class DispatchTest(unittest.TestCase):
             self.assertEqual(list(pathlib.Path(tmp).iterdir()), [])
 
 
+class ListTimeDiscoveryTest(unittest.TestCase):
+    """Addendum H §7/R5: `tools/list` exposes registered canonical IDs
+    pre-call; static descriptions stay untouched (SDK-independent)."""
+
+    def test_list_tools_carries_registered_ids(self):
+        from span.shell import mcp_server
+        from span.shell.mcp import TOOL_DESCRIPTIONS
+
+        adapter, _ = _harness()
+        try:
+            listed = mcp_server.handle_list_tools(adapter)
+            by_name = {
+                spec["name"]: spec["description"] for spec in listed
+            }
+            for name in (
+                "initialize_target", "explain", "impact", "trace",
+                "authority", "status", "refresh",
+                "submit_interpretation", "reissue_interpretation",
+                "locate", "neighbors",
+            ):
+                self.assertIn(REPO, by_name[name])
+            self.assertNotIn(REPO, by_name["initialize_repository"])
+            self.assertNotIn(REPO, TOOL_DESCRIPTIONS["explain"])
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_list_tools_empty_registry(self):
+        from span.shell import mcp_server
+
+        listed = mcp_server.handle_list_tools(McpAdapter())
+        by_name = {spec["name"]: spec["description"] for spec in listed}
+        self.assertIn(
+            "No repositories registered yet", by_name["explain"]
+        )
+
+
 @unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")
 class ServerWiringTest(unittest.TestCase):
     def test_build_server_registers_twelve_tools(self):

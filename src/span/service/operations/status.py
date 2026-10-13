@@ -674,6 +674,9 @@ def _target_status_answer(
         content = m.StatusContent(
             target_association=None,
             target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
+            target_total_count=None,
+            target_accounted_count=None,
+            target_unaccounted_count=None,
         )
         return m.SemanticAnswer(
             answer_id=_answer_id("stt", repository_id, "target"),
@@ -689,6 +692,9 @@ def _target_status_answer(
         content = m.StatusContent(
             target_association=None,
             target_disposition=m.SemanticCoverageDisposition.UNASSESSED,
+            target_total_count=None,
+            target_accounted_count=None,
+            target_unaccounted_count=None,
         )
         return m.SemanticAnswer(
             answer_id=_answer_id("stt", repository_id, "target"),
@@ -711,6 +717,9 @@ def _target_status_answer(
         content = m.StatusContent(
             target_association=assoc,
             target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
+            target_total_count=None,
+            target_accounted_count=None,
+            target_unaccounted_count=None,
         )
         return m.SemanticAnswer(
             answer_id=_answer_id("stt", repository_id, "target"),
@@ -723,10 +732,41 @@ def _target_status_answer(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     current_fp = m.target_inventory_fingerprint(inv_items)
+    if len(assoc.inventory_accounting) > bounds.max_results:
+        # Bounded projection first (governing precedence UNVERIFIABLE
+        # → STALE → INCOMPLETE → CURRENT): completeness cannot be
+        # proven within bounds, even when membership also drifted.
+        content = m.StatusContent(
+            target_association=assoc,
+            target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
+            target_total_count=None,
+            target_accounted_count=None,
+            target_unaccounted_count=None,
+        )
+        return m.SemanticAnswer(
+            answer_id=_answer_id("stt", repository_id, "target"),
+            intent=m.SemanticIntent.STATUS,
+            repository_state=state,
+            subject_resolution=None,
+            content=content,
+            evidence=(),
+            resolution_requirements=(),
+            bound_info=_bound_info(bounds, 0, False, None),
+        )
     if current_fp != assoc.inventory_fingerprint:
+        current_ids = {
+            item.evidence_ref.evidence_id.value for item in inv_items
+        }
+        accounted_now = sum(
+            1 for acc in assoc.inventory_accounting
+            if acc.evidence_ref.evidence_id.value in current_ids
+        )
         content = m.StatusContent(
             target_association=assoc,
             target_disposition=m.SemanticCoverageDisposition.STALE,
+            target_total_count=len(inv_items),
+            target_accounted_count=accounted_now,
+            target_unaccounted_count=len(inv_items) - accounted_now,
         )
         return m.SemanticAnswer(
             answer_id=_answer_id("stt", repository_id, "target"),
@@ -742,22 +782,6 @@ def _target_status_answer(
         acc.evidence_ref.evidence_id.value: acc
         for acc in assoc.inventory_accounting
     }
-    if len(accounted) > bounds.max_results:
-        # Bounded projection: completeness cannot be proven within bounds.
-        content = m.StatusContent(
-            target_association=assoc,
-            target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
-        )
-        return m.SemanticAnswer(
-            answer_id=_answer_id("stt", repository_id, "target"),
-            intent=m.SemanticIntent.STATUS,
-            repository_state=state,
-            subject_resolution=None,
-            content=content,
-            evidence=(),
-            resolution_requirements=(),
-            bound_info=_bound_info(bounds, 0, False, None),
-        )
     # Global precedence: evaluate the whole campaign, then apply
     # UNVERIFIABLE -> STALE -> INCOMPLETE -> CURRENT. Everything below
     # accumulates flags across all members, areas, and questions.
@@ -862,10 +886,24 @@ def _target_status_answer(
         disposition = m.SemanticCoverageDisposition.INCOMPLETE
     else:
         disposition = m.SemanticCoverageDisposition.CURRENT
+    if disposition is m.SemanticCoverageDisposition.UNVERIFIABLE:
+        total_count = accounted_count = unaccounted_count = None
+    else:
+        current_ids = {
+            item.evidence_ref.evidence_id.value for item in inv_items
+        }
+        total_count = len(inv_items)
+        accounted_count = sum(
+            1 for eid in accounted if eid in current_ids
+        )
+        unaccounted_count = total_count - accounted_count
     content = m.StatusContent(
         target_association=assoc,
         target_disposition=disposition,
         unresolved=tuple(residual) if saw_incomplete else (),
+        target_total_count=total_count,
+        target_accounted_count=accounted_count,
+        target_unaccounted_count=unaccounted_count,
     )
     return m.SemanticAnswer(
         answer_id=_answer_id("stt", repository_id, "target"),

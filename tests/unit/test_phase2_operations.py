@@ -302,6 +302,9 @@ class ExchangeTest(unittest.TestCase):
         self.assertIsNone(naive.claim(token))
 
     def test_validation_failure_rejects_without_reissue(self):
+        """Addendum H §4: validation rejection retains the live
+        continuation (no reissue); a corrected resubmission under the
+        same continuation then persists exactly once."""
         structural, evidence, store = _harness()
         try:
             continuations = ContinuationStore()
@@ -334,10 +337,24 @@ class ExchangeTest(unittest.TestCase):
                     structural=structural, evidence=evidence, store=store,
                     continuations=continuations,
                 )
-            # Continuation consumed; nothing persisted.
-            self.assertEqual(len(continuations), 0)
+            # Continuation retained; nothing persisted.
+            self.assertEqual(len(continuations), 1)
             page = store.load_claims("repo-1", (_sid(),), (), _bounds())
             self.assertEqual(page.items, ())
+            # Corrected resubmission under the same continuation persists.
+            answer = ops.submit_interpretation(
+                pending.continuation, _agent().perform(pending.request),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertEqual(len(continuations), 0)
+            with self.assertRaises(InterpretationUnavailable):
+                ops.submit_interpretation(
+                    pending.continuation, _agent().perform(pending.request),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                )
         finally:
             store.close()
 
@@ -1003,11 +1020,12 @@ class StoreResolutionTest(unittest.TestCase):
 
 
 class CrossUnitCitationTest(unittest.TestCase):
-    """Addendum A, F2: citations to established evidence validate.
+    """Addendum H §5: citations resolve against the canonical provider.
 
-    A later unit may cite evidence established by an earlier unit when
-    current bytes hash equal to the recorded observation; changed bytes
-    reject as stale and unknown ids stay unknown.
+    A later unit may cite evidence established by an earlier unit;
+    changed bytes admit the current observation (old rows keep old
+    fingerprints and go stale through existing freshness) and unknown
+    ids stay unknown.
     """
 
     FILES2 = {"a.py": "ALPHA = 1\n", "b.py": "BETA = 2\n"}
@@ -1136,7 +1154,10 @@ class CrossUnitCitationTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_cross_unit_citation_rejected_when_bytes_changed(self):
+    def test_cross_unit_citation_admitted_when_bytes_changed(self):
+        """Addendum H §5: changed source bytes admit a new current
+        interpretation; the new dependency row carries the current
+        fingerprint while the old row keeps its original observation."""
         from span.shell.structural.memory import fingerprint_content
 
         structural, evidence, store = self._harness2()
@@ -1159,25 +1180,38 @@ class CrossUnitCitationTest(unittest.TestCase):
                 structural, evidence, store,
             )
             evidence._files["a.py"] = "ALPHA = 99\n"
-            with self.assertRaises(ops.InterpretationUnitRejected) as cm:
-                self._submit_for(
-                    "b.py",
-                    m.SemanticInterpretationResult(
-                        claims=(
-                            self._claim_for(
-                                "b.py",
-                                self._ref("a.py", fingerprint_content("ALPHA = 1\n")),
-                            ),
+            current_fp = fingerprint_content("ALPHA = 99\n")
+            second, _ = self._submit_for(
+                "b.py",
+                m.SemanticInterpretationResult(
+                    claims=(
+                        self._claim_for(
+                            "b.py",
+                            self._ref("a.py", fingerprint_content("ALPHA = 1\n")),
                         ),
-                        relationships=(),
-                        governing_source_refs=(),
-                        diagnostics=(),
-                        candidate_subjects=(),
-                        candidate_conflicts=(),
                     ),
-                    structural, evidence, store,
-                )
-            self.assertIn("ev-a.py", str(cm.exception))
+                    relationships=(),
+                    governing_source_refs=(),
+                    diagnostics=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
+                ),
+                structural, evidence, store,
+            )
+            self.assertIsInstance(second, m.SemanticAnswer)
+            self.assertEqual(len(second.content.claims), 1)
+            persisted_ref = second.content.claims[0].evidence[0]
+            self.assertEqual(persisted_ref.evidence_id.value, "ev-a.py")
+            self.assertEqual(persisted_ref.locator, "a.py")
+            self.assertEqual(
+                persisted_ref.revision_or_fingerprint, current_fp
+            )
+            deps = store.load_evidence_dependencies(
+                "repo-1",
+                (m.ClaimRef(id=second.content.claims[0].claim_id),),
+            )
+            self.assertEqual(len(deps), 1)
+            self.assertEqual(deps[0].observed_fingerprint, current_fp)
         finally:
             store.close()
 

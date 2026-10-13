@@ -74,18 +74,24 @@ def submit_interpretation(
     store: SemanticStore,
     continuations: ContinuationStore,
 ) -> m.SemanticAnswer | PendingInterpretation:
-    """Accept an agent's typed result and resume the operation (§11.12).
+    """Accept an agent's typed result and resume the operation (§11.12;
+    Addendum H §4).
 
     Unknown or expired continuations yield InterpretationUnavailable
-    (the agent re-issues the original operation, idempotently).
-    Validation failure rejects the unit with no reissue (§7.5); the
-    continuation is already consumed. Refresh resumes across remaining
-    subjects, suspending again while affected work remains.
+    at peek (the agent re-issues the original operation,
+    idempotently); a token taken by a concurrent submitter or reissuer
+    yields it at acquire. Preparation runs on peeked state without
+    holding ownership; single-commit ownership is acquired only for
+    the commit-critical section (materialize + claim). Validation
+    failure retains the live continuation with no reissue; only a
+    successful ``write_index_batch`` consumes it. Refresh resumes
+    across remaining subjects, suspending again while affected work
+    remains.
     """
-    record = continuations.claim(continuation)
+    record = continuations.peek(continuation)
     if record is None:
         raise InterpretationUnavailable(
-            f"unknown or expired continuation: {continuation}"
+            f"unknown, expired, or in-flight continuation: {continuation}"
         )
     bounds = record.bounds
     task = InterpretationTask(
@@ -135,6 +141,78 @@ def submit_interpretation(
         if root not in task.known_subject_ids and root not in extra_known:
             if store.load_subjects(record.repository_id, (root,)):
                 extra_known.append(root)
+    # Addendum H §6: a fallback refresh correction unit nominates exactly
+    # one already-persisted original question through its submitted
+    # coverage. The nominated subject/root join unit scope exactly like
+    # the bound root above. A second distinct non-bound correction
+    # question, or a nomination with no persisted row, rejects the unit.
+    correction_question: m.SemanticQuestionScope | None = None
+    if record.op == "refresh":
+        from span.core.validation import (
+            InterpretationUnitRejected as _CorrectionRejected,
+        )
+
+        def _question_identity(
+            question: m.SemanticQuestionScope,
+        ) -> tuple[str, ...]:
+            return (
+                question.scope_root.repository_id,
+                question.scope_root.subject_kind.value,
+                question.scope_root.canonical_locator,
+                question.subject.subject_kind.value,
+                question.subject.canonical_locator,
+                question.question_class.value,
+                question.question_slice,
+            )
+
+        nominated_by_identity: dict[tuple[str, ...], m.SemanticQuestionScope] = {}
+        for submitted in result.proposed_question_coverages:
+            if submitted.question is None:
+                continue
+            if (
+                request_question is not None
+                and submitted.question == request_question
+            ):
+                continue
+            nominated_by_identity.setdefault(
+                _question_identity(submitted.question), submitted.question
+            )
+        if len(nominated_by_identity) > 1:
+            raise _CorrectionRejected(
+                (
+                    "refresh correction admits exactly one original "
+                    "question per unit; submit each additional correction "
+                    "in its own refresh cycle",
+                )
+            )
+        if nominated_by_identity:
+            correction_question = next(iter(nominated_by_identity.values()))
+            try:
+                persisted_rows = store.load_all_question_coverages(
+                    record.repository_id, correction_question.scope_root,
+                    (correction_question.subject,),
+                )
+            except Exception:
+                persisted_rows = ()
+            if not any(
+                cov.question is not None
+                and cov.question == correction_question
+                for cov in persisted_rows
+            ):
+                raise _CorrectionRejected(
+                    (
+                        "correction question is not a persisted question "
+                        "for this subject; resolve the exact persisted "
+                        "scope via status/explain question coverage: "
+                        f"{correction_question.question_slice}",
+                    )
+                )
+            for sid in (
+                correction_question.scope_root, correction_question.subject
+            ):
+                if sid not in task.known_subject_ids and sid not in extra_known:
+                    if store.load_subjects(record.repository_id, (sid,)):
+                        extra_known.append(sid)
     effective_target_id = (
         record.target_id
         if record.target_id is not None
@@ -201,24 +279,44 @@ def submit_interpretation(
                     and area not in extra_known
                 ):
                     extra_known.append(area)
-    _materialize_unit(
-        task, result, store=store, evidence=evidence, state=state,
-        extra_known_subjects=tuple(extra_known),
-        coverage=_coverage_for_task(
-            record.repository_id,
-            tuple(s.subject_id for s in task.request.subjects),
-            evidence=evidence, seeds=record.seeds,
-            question=task.request.question,
-        ),
-        declared_complete=record.declared_complete,
-        retire_scope=tuple(s.subject_id for s in task.request.subjects),
-        target_id=effective_target_id,
-        target_inventory_item=target_item,
-        target_association=target_assoc,
-        current_inventory_ids=inventory_ids,
-        current_inventory_snapshot=inventory_snapshot,
-        current_inventory_fingerprints=inventory_fingerprints,
-    )
+    # Commit-critical section: acquire single-commit ownership only
+    # here, after all fallible preparation. Preparation above ran on
+    # peeked state and holds nothing, so any exception there leaves the
+    # token live with no in-flight mark to leak. From here to the claim
+    # below is release-on-failure; only the claim path leaves non-live.
+    record = continuations.acquire(continuation)
+    if record is None:
+        raise InterpretationUnavailable(
+            f"unknown, expired, or in-flight continuation: {continuation}"
+        )
+    try:
+        _materialize_unit(
+            task, result, store=store, evidence=evidence, state=state,
+            extra_known_subjects=tuple(extra_known),
+            coverage=_coverage_for_task(
+                record.repository_id,
+                tuple(s.subject_id for s in task.request.subjects),
+                evidence=evidence, seeds=record.seeds,
+                question=task.request.question,
+            ),
+            declared_complete=record.declared_complete,
+            retire_scope=tuple(s.subject_id for s in task.request.subjects),
+            target_id=effective_target_id,
+            target_inventory_item=target_item,
+            target_association=target_assoc,
+            current_inventory_ids=inventory_ids,
+            current_inventory_snapshot=inventory_snapshot,
+            current_inventory_fingerprints=inventory_fingerprints,
+            correction_question=correction_question,
+        )
+    except BaseException:
+        continuations.release(continuation)
+        raise
+    # Successful commit consumes the token exactly once, before the
+    # answer/next pending is exposed. Post-commit composition failure
+    # therefore recovers via idempotent original-operation re-issue,
+    # never via this continuation.
+    continuations.claim(continuation)
     if record.op == "initialize_target":
         if effective_target_id is not None:
             return _next_target_pending(
@@ -357,47 +455,59 @@ def reissue_interpretation(
     *,
     continuations: ContinuationStore,
 ) -> PendingInterpretation:
-    """Reissue the identical bounded task once on ingress failure (§7.4).
+    """Reissue the identical bounded task once on ingress failure (§7.4;
+    Addendum H §4).
 
-    Consumes the continuation; a second failure abandons the exchange
-    (InterpretationIngressFailure). Semantic validation failure never
-    reaches here — it rejects the unit via submit (§7.5).
+    Participates in the same single-commit ownership protocol as
+    submit: if a submission currently owns the token (in-flight),
+    reissue fails unavailable, and vice versa. Consumes the
+    continuation (abandoning it on the second failure via
+    InterpretationIngressFailure). Semantic validation failure never
+    reaches here — it rejects the unit via submit, retaining the token.
+    Expired or lost continuations never reissue: the agent re-runs the
+    idempotent original operation instead.
     """
-    record = continuations.claim(continuation)
+    record = continuations.acquire(continuation)
     if record is None:
         raise InterpretationUnavailable(
-            f"unknown or expired continuation: {continuation}"
+            f"unknown, expired, or in-flight continuation: {continuation}"
         )
     if record.reissues >= 1:
+        continuations.claim(continuation)
         raise InterpretationIngressFailure(
             "interpretation task reissue exhausted; continuation abandoned"
         )
-    token = continuations.pend(
-        SuspendedOperation(
-            op=record.op,
-            repository_id=record.repository_id,
-            subject=record.subject,
-            scope=record.scope,
-            remaining=record.remaining,
-            changed=record.changed,
-            resolution=record.resolution,
-            request=record.request,
-            fingerprints=record.fingerprints,
-            known_subject_ids=record.known_subject_ids,
-            seeds=record.seeds,
-            bounds=record.bounds,
-            state=record.state,
-            reissues=record.reissues + 1,
-            affected_assertions=record.affected_assertions,
-            operation_intent=record.operation_intent,
-            objective=record.objective,
-            question_slice=record.question_slice,
-            declared_complete=record.declared_complete,
-            establish_baseline=record.establish_baseline,
-            target_scope=record.target_scope,
-            target_id=record.target_id,
+    try:
+        token = continuations.pend(
+            SuspendedOperation(
+                op=record.op,
+                repository_id=record.repository_id,
+                subject=record.subject,
+                scope=record.scope,
+                remaining=record.remaining,
+                changed=record.changed,
+                resolution=record.resolution,
+                request=record.request,
+                fingerprints=record.fingerprints,
+                known_subject_ids=record.known_subject_ids,
+                seeds=record.seeds,
+                bounds=record.bounds,
+                state=record.state,
+                reissues=record.reissues + 1,
+                affected_assertions=record.affected_assertions,
+                operation_intent=record.operation_intent,
+                objective=record.objective,
+                question_slice=record.question_slice,
+                declared_complete=record.declared_complete,
+                establish_baseline=record.establish_baseline,
+                target_scope=record.target_scope,
+                target_id=record.target_id,
+            )
         )
-    )
+    except BaseException:
+        continuations.release(continuation)
+        raise
+    continuations.claim(continuation)
     return PendingInterpretation(
         continuation=token, request=record.request
     )

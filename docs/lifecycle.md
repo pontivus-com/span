@@ -49,8 +49,9 @@ Each pending task exposes that boundary separately from its current
 structural anchor. The active agent uses structural and filesystem discovery
 to partition that boundary into material areas, then drives the returned
 typed units through investigation and `submit_interpretation` serially,
-using `reissue_interpretation` once only for an expired transport
-continuation. `explain(establish_baseline=True)` remains for an ordinary
+using `reissue_interpretation` once only for an ingress-failed
+continuation (expired or lost continuations never reissue: re-run the
+idempotent original operation instead). `explain(establish_baseline=True)` remains for an ordinary
 selected root without an exact target directory; it is not the exact-target
 path. Every material area must end with persisted coverage or an explicit
 `NOT_APPLICABLE`, `OPEN`, or `PENDING` disposition with its requirement; a

@@ -41,7 +41,7 @@ __all__ = [
     'prepare_interpretation_task',
     '_validation_context_for',
     '_assign_candidate_keys',
-    '_admit_established_evidence',
+    '_admit_cited_evidence',
     '_derive_current_question_support',
     '_materialize_unit',
     '_next_baseline_pending',
@@ -379,6 +379,19 @@ def prepare_interpretation_task(
                 "store at admission; mapping tasks cannot co-admit "
                 "non-area subjects under the orphan rule, so establish "
                 "the anchor first through question-local examination.",
+            ) + (
+                (
+                    "The anchor subject is a synthetic structural fallback "
+                    "(OTHER kind): it is discovery input only, not an "
+                    "admitted semantic area and not an ownership assertion. "
+                    "Propose the coherent area via CandidateSubject.",
+                )
+                if subject.subject_id.subject_kind is m.SubjectKind.OTHER
+                else (
+                    "The anchor subject is structural input only: assign "
+                    "the item to an admitted or newly proposed coherent area, "
+                    "never to the anchor itself unless the anchor is that area.",
+                )
             ),
         )
     request = m.SemanticInterpretationRequest(
@@ -435,6 +448,10 @@ def _validation_context_for(
         evidence_fingerprints=dict(task.fingerprints),
         evidence_contents={
             unit.evidence_ref.evidence_id.value: unit.content
+            for unit in task.request.evidence_units
+        },
+        evidence_refs={
+            unit.evidence_ref.evidence_id.value: unit.evidence_ref
             for unit in task.request.evidence_units
         },
     )
@@ -515,79 +532,375 @@ def _assign_candidate_keys(
         proposed_target_questions=result.proposed_target_questions,
     )
 
-def _admit_established_evidence(
+def _normalize_cited_ref(
+    cited: m.EvidenceRef,
+    canonical: m.EvidenceRef,
+    observed_fingerprint: str,
+) -> m.EvidenceRef:
+    """Project one agent-supplied ref onto its canonical observation.
+
+    Base identity is already verified equal by the caller. The
+    observation fingerprint always comes from the provider; the span
+    survives only when it equals the canonical span, else it strips to
+    None (file-level citation, location unasserted).
+    """
+    return m.EvidenceRef(
+        evidence_id=cited.evidence_id,
+        repository_id=canonical.repository_id,
+        source_kind=canonical.source_kind,
+        locator=canonical.locator,
+        revision_or_fingerprint=observed_fingerprint,
+        section_or_span=(
+            cited.section_or_span
+            if cited.section_or_span == canonical.section_or_span
+            else None
+        ),
+    )
+
+
+def _admit_cited_evidence(
     repository_id: str,
     result: m.SemanticInterpretationResult,
     ctx: _validation.ValidationContext,
     *,
     evidence: EvidenceSource,
-    store: SemanticStore,
     bounds: m.QueryBounds,
-) -> tuple[_validation.ValidationContext, list[str]]:
-    """Admit citations to previously established evidence (addendum A, F2).
+) -> tuple[
+    _validation.ValidationContext,
+    m.SemanticInterpretationResult,
+    list[str],
+]:
+    """Admit cited evidence against the canonical provider (Addendum H §5).
 
-    Cited ids unknown to the task are looked up among recorded evidence
-    dependencies; current bytes must hash equal to a recorded
-    observation, else the citation comes back as a stale/unreadable
-    problem — never silently admitted. Unknown ids stay unknown for the
-    core to report. Quote, substring, section, and authority checks in
-    the core are unchanged.
+    Every agent-supplied ``EvidenceRef`` unknown to the task is resolved
+    to the provider-canonical identity; base-identity mismatch,
+    unknown identity, or unreadable bytes come back as problems — never
+    silently admitted. Recorded history never gates admission: a
+    fingerprint that differs from recorded observations admits the
+    current bytes (old rows keep old fingerprints and go stale through
+    existing freshness). Returns the extended context, the normalized
+    submission (same carrier; normalized before validation so
+    deterministic ids derive from persisted refs), and problems.
     """
-    cited: set[str] = set()
+    cited_by_id: dict[str, list[m.EvidenceRef]] = {}
+
+    def _note(ref: m.EvidenceRef) -> None:
+        cited_by_id.setdefault(ref.evidence_id.value, []).append(ref)
+
+    def _note_nested_basis(basis: m.SemanticBasis) -> None:
+        # Basis input refs persist inside claims, relationships, and
+        # recorded conflicts: unverifiable nested provenance must not
+        # reach canonical state, so nested evidence goes through the
+        # same provider admission as primary citations.
+        for input_ref in basis.input_refs:
+            if isinstance(input_ref, m.EvidenceRef):
+                _note(input_ref)
+
+    def _note_nested_requirements(
+        requirements: tuple[m.ResolutionRequirement, ...],
+    ) -> None:
+        # Requirement supporting context persists inside coverages and
+        # target accounts: same admission rule as basis input refs.
+        for requirement in requirements:
+            for context_ref in requirement.supporting_context:
+                if isinstance(context_ref, m.EvidenceRef):
+                    _note(context_ref)
+
     for candidate in (*result.claims, *result.relationships):
-        cited.update(r.evidence_id.value for r in candidate.evidence)
+        for ref in candidate.evidence:
+            _note(ref)
         authority = candidate.candidate_authority
         if authority is not None:
-            cited.add(authority.binding.evidence_ref.evidence_id.value)
+            _note(authority.binding.evidence_ref)
+        _note_nested_basis(candidate.basis)
     for proposed in result.candidate_subjects:
-        cited.update(r.evidence_id.value for r in proposed.evidence)
-    wanted = sorted(i for i in cited if i not in ctx.known_evidence_ids)
-    if not wanted:
-        return ctx, []
-    records: dict[str, list[m.EvidenceDependency]] = {}
-    for dep in store.load_evidence_records(repository_id, tuple(wanted)):
-        records.setdefault(
-            dep.evidence_ref.evidence_id.value, []
-        ).append(dep)
+        for ref in proposed.evidence:
+            _note(ref)
+        _note_nested_basis(proposed.basis)
+    for withdrawal in result.candidate_withdrawals:
+        for ref in withdrawal.evidence:
+            _note(ref)
+        _note_nested_basis(withdrawal.basis)
+    for conflict in result.candidate_conflicts:
+        _note_nested_basis(conflict.basis)
+        if conflict.candidate_precedence is not None:
+            for ref in conflict.candidate_precedence.overrides:
+                _note(ref)
+    for coverage in result.proposed_question_coverages:
+        for obs in coverage.question_evidence:
+            _note(obs.evidence_ref)
+        _note_nested_requirements(coverage.resolution_requirements)
+    for account in result.proposed_target_inventory_accounting:
+        _note(account.evidence_ref)
+        if account.exclusion_basis is not None:
+            _note_nested_basis(account.exclusion_basis)
+        _note_nested_requirements(account.resolution_requirements)
+    wanted = sorted(i for i in cited_by_id if i not in ctx.known_evidence_ids)
     fingerprints = dict(ctx.evidence_fingerprints)
     contents = dict(ctx.evidence_contents)
+    canonical_refs = dict(ctx.evidence_refs)
     problems: list[str] = []
-    for eid in wanted:
-        deps = records.get(eid, ())
-        if not deps:
-            continue
-        ref = deps[0].evidence_ref
+    if wanted:
         try:
-            (unit,) = evidence.read_evidence((ref,), bounds)
-        except ValueError:
-            problems.append(
-                f"cited established evidence is unreadable: {eid}"
+            page = evidence.inventory_evidence(
+                repository_id,
+                m.EvidenceScope(
+                    paths=(),
+                    evidence_refs=tuple(
+                        ref
+                        for eid in wanted
+                        for ref in cited_by_id[eid]
+                    ),
+                ),
+                bounds,
             )
-            continue
-        if unit.content_fingerprint not in {
-            d.observed_fingerprint for d in deps
-        }:
-            problems.append(
-                "cited established evidence changed since "
-                f"establishment: {eid}"
+        except ValueError as exc:
+            return ctx, result, [
+                f"cited evidence inventory unavailable: {exc}"
+            ]
+        try:
+            from span.service.discovery import check_inventory_identity
+
+            items = check_inventory_identity(tuple(page.items))
+        except ValueError as exc:
+            return ctx, result, [f"cited evidence {exc}"]
+        by_id = {
+            item.evidence_ref.evidence_id.value: item
+            for item in items
+        }
+        for eid in wanted:
+            item = by_id.get(eid)
+            if item is None:
+                problems.append(f"unknown evidence identity: {eid}")
+                continue
+            canonical = item.evidence_ref
+            occurrences = cited_by_id[eid]
+            if any(
+                ref.repository_id != repository_id
+                or ref.locator != canonical.locator
+                or ref.source_kind != canonical.source_kind
+                for ref in occurrences
+            ):
+                problems.append(
+                    "cited evidence identity does not match "
+                    f"provider snapshot: {eid}"
+                )
+                continue
+            try:
+                units = evidence.read_evidence((canonical,), bounds)
+            except ValueError:
+                problems.append(
+                    f"cited evidence is unreadable: {eid}"
+                )
+                continue
+            if len(units) != 1:
+                problems.append(
+                    f"cited evidence is unreadable: {eid}"
+                )
+                continue
+            (unit,) = units
+            fingerprints[eid] = unit.content_fingerprint
+            contents[eid] = unit.content
+            canonical_refs[eid] = m.EvidenceRef(
+                evidence_id=canonical.evidence_id,
+                repository_id=canonical.repository_id,
+                source_kind=canonical.source_kind,
+                locator=canonical.locator,
+                revision_or_fingerprint=unit.content_fingerprint,
+                section_or_span=canonical.section_or_span,
             )
-            continue
-        fingerprints[eid] = unit.content_fingerprint
-        contents[eid] = unit.content
+    known = ctx.known_evidence_ids | frozenset(fingerprints)
+
+    def _normalize(ref: m.EvidenceRef) -> m.EvidenceRef:
+        canonical = canonical_refs.get(ref.evidence_id.value)
+        if canonical is None:
+            return ref
+        return _normalize_cited_ref(
+            ref, canonical, fingerprints[ref.evidence_id.value]
+        )
+
+    def _normalize_basis(basis: m.SemanticBasis) -> m.SemanticBasis:
+        return _dataclasses.replace(
+            basis,
+            input_refs=tuple(
+                _normalize(input_ref)
+                if isinstance(input_ref, m.EvidenceRef)
+                else input_ref
+                for input_ref in basis.input_refs
+            ),
+        )
+
+    def _normalize_requirement(
+        requirement: m.ResolutionRequirement,
+    ) -> m.ResolutionRequirement:
+        return _dataclasses.replace(
+            requirement,
+            supporting_context=tuple(
+                _normalize(context_ref)
+                if isinstance(context_ref, m.EvidenceRef)
+                else context_ref
+                for context_ref in requirement.supporting_context
+            ),
+        )
+
+    def _normalize_precedence(
+        precedence: m.DeclaredPrecedence | None,
+    ) -> m.DeclaredPrecedence | None:
+        if precedence is None:
+            return None
+        return _dataclasses.replace(
+            precedence,
+            overrides=tuple(
+                _normalize(ref) for ref in precedence.overrides
+            ),
+        )
+
+    def _normalize_authority(
+        authority: m.CandidateAuthority | None,
+    ) -> m.CandidateAuthority | None:
+        if authority is None:
+            return None
+        return _dataclasses.replace(
+            authority,
+            binding=_dataclasses.replace(
+                authority.binding,
+                evidence_ref=_normalize(authority.binding.evidence_ref),
+            ),
+        )
+
+    claims = tuple(
+        _dataclasses.replace(
+            candidate,
+            evidence=tuple(_normalize(ref) for ref in candidate.evidence),
+            candidate_authority=_normalize_authority(
+                candidate.candidate_authority
+            ),
+            basis=_normalize_basis(candidate.basis),
+        )
+        for candidate in result.claims
+    )
+    relationships = tuple(
+        _dataclasses.replace(
+            candidate,
+            evidence=tuple(_normalize(ref) for ref in candidate.evidence),
+            candidate_authority=_normalize_authority(
+                candidate.candidate_authority
+            ),
+            basis=_normalize_basis(candidate.basis),
+        )
+        for candidate in result.relationships
+    )
+    subjects = tuple(
+        _dataclasses.replace(
+            proposed,
+            evidence=tuple(_normalize(ref) for ref in proposed.evidence),
+            basis=_normalize_basis(proposed.basis),
+        )
+        for proposed in result.candidate_subjects
+    )
+    conflicts = tuple(
+        _dataclasses.replace(
+            conflict,
+            candidate_precedence=_normalize_precedence(
+                conflict.candidate_precedence
+            ),
+            basis=_normalize_basis(conflict.basis),
+        )
+        for conflict in result.candidate_conflicts
+    )
+    withdrawals = tuple(
+        _dataclasses.replace(
+            withdrawal,
+            evidence=tuple(_normalize(ref) for ref in withdrawal.evidence),
+            basis=_normalize_basis(withdrawal.basis),
+        )
+        for withdrawal in result.candidate_withdrawals
+    )
+    coverages = tuple(
+        _dataclasses.replace(
+            coverage,
+            evidence_scope=_dataclasses.replace(
+                coverage.evidence_scope,
+                evidence_refs=tuple(
+                    _normalize(ref)
+                    if ref.evidence_id.value in canonical_refs
+                    else ref
+                    for ref in coverage.evidence_scope.evidence_refs
+                ),
+            ),
+            resolution_requirements=tuple(
+                _normalize_requirement(requirement)
+                for requirement in coverage.resolution_requirements
+            ),
+            question_evidence=tuple(
+                _dataclasses.replace(
+                    obs,
+                    evidence_ref=_normalize(obs.evidence_ref),
+                    observed_fingerprint=fingerprints.get(
+                        obs.evidence_ref.evidence_id.value,
+                        obs.observed_fingerprint,
+                    ),
+                )
+                for obs in coverage.question_evidence
+            ),
+        )
+        for coverage in result.proposed_question_coverages
+    )
+    accounts = tuple(
+        _dataclasses.replace(
+            account,
+            evidence_ref=_normalize(account.evidence_ref),
+            exclusion_basis=(
+                None
+                if account.exclusion_basis is None
+                else _dataclasses.replace(
+                    account.exclusion_basis,
+                    input_refs=tuple(
+                        _normalize(input_ref)
+                        if isinstance(input_ref, m.EvidenceRef)
+                        else input_ref
+                        for input_ref in account.exclusion_basis.input_refs
+                    ),
+                )
+            ),
+            resolution_requirements=tuple(
+                _normalize_requirement(requirement)
+                for requirement in account.resolution_requirements
+            ),
+        )
+        for account in result.proposed_target_inventory_accounting
+    )
+    normalized = m.SemanticInterpretationResult(
+        claims=claims,
+        relationships=relationships,
+        governing_source_refs=tuple(
+            _normalize(ref) if ref.evidence_id.value in canonical_refs else ref
+            for ref in result.governing_source_refs
+        ),
+        diagnostics=result.diagnostics,
+        candidate_subjects=subjects,
+        candidate_conflicts=conflicts,
+        proposed_question_coverages=coverages,
+        candidate_withdrawals=withdrawals,
+        proposed_target_inventory_accounting=accounts,
+        proposed_target_questions=result.proposed_target_questions,
+    )
     return _validation.ValidationContext(
         allowed_claim_kinds=ctx.allowed_claim_kinds,
         allowed_relationship_kinds=ctx.allowed_relationship_kinds,
-        known_evidence_ids=ctx.known_evidence_ids | frozenset(fingerprints),
+        known_evidence_ids=known,
         known_subject_ids=ctx.known_subject_ids,
         evidence_fingerprints=fingerprints,
         evidence_contents=contents,
-    ), problems
+        evidence_refs=canonical_refs,
+    ), normalized, problems
 
 def _derive_current_question_support(
     claims: tuple[m.SemanticClaim, ...],
     relationships: tuple[m.SemanticRelationship, ...],
     task: InterpretationTask,
     fingerprints: dict[str, str],
+    extra_refs: tuple[m.EvidenceRef, ...] = (),
 ) -> tuple[
     tuple[m.ClaimRef | m.RelationshipRef, ...],
     tuple[m.QuestionEvidenceObservation, ...],
@@ -596,7 +909,11 @@ def _derive_current_question_support(
     question from validated unit material (Addendum C C-05).
 
     Submitted empty refs are completion intent; only derived refs backed
-    by materialized candidates count as examined output.
+    by materialized candidates count as examined output. Question
+    evidence covers the union of task units and provider-admitted
+    canonical refs present in ``fingerprints`` (Addendum H §5), so
+    accepted out-of-task citations persist in both dependency rows and
+    question evidence with identical fingerprints.
     """
     derived_refs: tuple[
         m.ClaimRef | m.RelationshipRef, ...
@@ -606,6 +923,16 @@ def _derive_current_question_support(
         m.RelationshipRef(id=r.relationship_id)
         for r in relationships
     )
+    seen: set[str] = set()
+    ordered_refs: list[m.EvidenceRef] = []
+    for ref in tuple(
+        unit.evidence_ref
+        for unit in task.request.evidence_units
+    ) + tuple(extra_refs):
+        if ref.evidence_id.value in seen:
+            continue
+        seen.add(ref.evidence_id.value)
+        ordered_refs.append(ref)
     question_evidence = tuple(
         m.QuestionEvidenceObservation(
             evidence_ref=ref,
@@ -613,13 +940,94 @@ def _derive_current_question_support(
                 ref.evidence_id.value
             ],
         )
-        for ref in tuple(
-            unit.evidence_ref
-            for unit in task.request.evidence_units
-        )
+        for ref in ordered_refs
         if ref.evidence_id.value in fingerprints
     )
     return derived_refs, question_evidence
+
+def _retire_replaced_outputs(
+    repository_id: str,
+    question: m.SemanticQuestionScope,
+    new_refs: set[str],
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    retires_claims: list[m.ClaimRef],
+    retires_relationships: list[m.RelationshipRef],
+) -> None:
+    """Retire prior unshared outputs replaced by a complete ANSWERED
+    rewrite (Addendum C C-05).
+
+    PENDING/OPEN/NOT_APPLICABLE never authorize omission-based
+    retirement; explicit withdrawals retire through the validated
+    path. Shared outputs are preserved (their other owners reopen via
+    withdrawal fanout); enumeration overflow defers via
+    ``_load_all_coverages_or_defer`` instead of retiring blind.
+    """
+    try:
+        prior_qcovs = store.load_all_question_coverages(
+            repository_id, question.scope_root, (question.subject,),
+        )
+    except Exception:
+        try:
+            prior_qcovs = store.load_question_coverages(
+                repository_id, question.scope_root,
+                (question.subject,), bounds,
+            )
+        except Exception:
+            prior_qcovs = ()
+    old_refs: set[str] = set()
+    for qc in prior_qcovs:
+        if qc.question == question:
+            old_refs.update(r.id.value for r in qc.result_refs)
+    for oid in old_refs - new_refs:
+        # Shared-output check across ALL questions (unbounded: a
+        # bounded read could hide an owner and cause an unsafe
+        # retirement). Deferral propagates: never retire with an
+        # incomplete owner set.
+        all_qcovs = _load_all_coverages_or_defer(
+            repository_id, None, (),
+            store=store, bounds=bounds,
+            purpose="shared-output retirement check",
+        )
+        shared = False
+        for other in all_qcovs:
+            if other.question == question:
+                continue
+            if oid in {r.id.value for r in other.result_refs}:
+                shared = True
+                break
+        if shared:
+            continue
+        # Unshared: retire.
+        try:
+            (old_item,) = store.load_by_refs(
+                repository_id,
+                (
+                    m.ClaimRef(id=m.ClaimId(oid)),
+                ),
+            )
+            if isinstance(old_item, m.SemanticClaim):
+                retires_claims.append(m.ClaimRef(id=m.ClaimId(oid)))
+            else:
+                retires_relationships.append(
+                    m.RelationshipRef(id=m.RelationshipId(oid))
+                )
+        except Exception:
+            try:
+                store.load_by_refs(
+                    repository_id,
+                    (
+                        m.RelationshipRef(
+                            id=m.RelationshipId(oid)
+                        ),
+                    ),
+                )
+                retires_relationships.append(
+                    m.RelationshipRef(id=m.RelationshipId(oid))
+                )
+            except Exception:
+                continue
 
 def _materialize_unit(
     task: InterpretationTask,
@@ -641,6 +1049,7 @@ def _materialize_unit(
     # target-accounting correction (§§4C.6B/4C.6E): content fingerprints
     # never enter TargetInventoryAccount.
     current_inventory_fingerprints: dict[str, str] | None = None,
+    correction_question: m.SemanticQuestionScope | None = None,
 ) -> None:
     """Validate and atomically materialize one submitted unit (§7.5, I-37).
 
@@ -648,6 +1057,15 @@ def _materialize_unit(
     safety, legacy-unassigned preservation, explicit withdrawals and
     entire-unit atomicity. Subject-wide omission is truncation, never
     withdrawal, for question-scoped writes.
+
+    Addendum H §6: when ``correction_question`` names the one nominated
+    already-persisted original question of a fallback refresh unit, its
+    explicit ANSWERED coverage derives/retires exactly like the bound
+    question; otherwise non-bound coverages persist as submitted. The
+    fallback bound question itself — which has no persisted row — is
+    orchestration scaffolding only: it neither synthesizes nor persists
+    its own coverage, so a successful correction leaves no synthetic
+    pending question behind.
     """
     if len(result.claims) > task.request.bounds.max_candidate_claims:
         raise _validation.InterpretationUnitRejected(
@@ -659,9 +1077,9 @@ def _materialize_unit(
         )
     result = _assign_candidate_keys(result)
     ctx = _validation_context_for(task, extra_known_subjects)
-    ctx, evidence_problems = _admit_established_evidence(
+    ctx, result, evidence_problems = _admit_cited_evidence(
         task.request.repository_id, result, ctx,
-        evidence=evidence, store=store, bounds=task.request.bounds,
+        evidence=evidence, bounds=task.request.bounds,
     )
     failures: list[str] = []
     failures.extend(evidence_problems)
@@ -706,6 +1124,7 @@ def _materialize_unit(
             ),
             evidence_fingerprints=ctx.evidence_fingerprints,
             evidence_contents=ctx.evidence_contents,
+            evidence_refs=ctx.evidence_refs,
         )
     claims: list[m.SemanticClaim] = []
     for index, candidate in enumerate(result.claims):
@@ -905,6 +1324,24 @@ def _materialize_unit(
                 )
     except Exception:
         prior_refs_for_withdrawal = set()
+    if correction_question is not None:
+        # Addendum H §6: the one nominated original question contributes
+        # its prior outputs to withdrawal scope alongside the bound
+        # question. New-unit ids are already in all_result_ids.
+        try:
+            nominated_qcovs = store.load_all_question_coverages(
+                task.request.repository_id, correction_question.scope_root,
+                (correction_question.subject,),
+            )
+        except Exception:
+            nominated_qcovs = ()
+        for qc in nominated_qcovs:
+            if qc.question is None:
+                continue
+            if qc.question == correction_question:
+                prior_refs_for_withdrawal.update(
+                    r.id.value for r in qc.result_refs
+                )
     known_for_withdrawal = frozenset(all_result_ids | prior_refs_for_withdrawal)
     validated_withdrawals: list[m.CandidateSemanticWithdrawal] = []
     for index, withdrawal in enumerate(result.candidate_withdrawals):
@@ -955,8 +1392,26 @@ def _materialize_unit(
     # compatibility. A bound question with no submitted coverages
     # synthesizes its own current-question coverage below so that every
     # materialization leaves durable question state (no silent unassessed
-    # writes); PENDING-only synthesis claims no completion.
+    # writes); PENDING-only synthesis claims no completion. Addendum H §6
+    # exception: in a correction-fallback unit (correction_question names
+    # the one nominated original question while the bound question has no
+    # persisted row and is therefore orchestration scaffolding), the
+    # fallback bound question neither synthesizes nor persists its own
+    # coverage — only the nominated original question persists.
     bound_question = task.request.question
+    bound_is_fallback_scaffolding = False
+    if correction_question is not None and bound_question is not None:
+        try:
+            bound_existing = store.load_all_question_coverages(
+                task.request.repository_id, bound_question.scope_root,
+                (bound_question.subject,),
+            )
+        except Exception:
+            bound_existing = ()
+        bound_is_fallback_scaffolding = not any(
+            cov.question is not None and cov.question == bound_question
+            for cov in bound_existing
+        )
     question_coverages_to_persist: list[m.InterpretationCoverage] = []
     reopened_coverages: list[m.InterpretationCoverage] = []
     if bound_question is not None or result.proposed_question_coverages:
@@ -1021,8 +1476,11 @@ def _materialize_unit(
         # question is required for ANSWERED/NOT_APPLICABLE. Missing
         # explicit coverage always synthesizes PENDING, never completion,
         # so claims without a completion claim stay unassigned output.
+        # Addendum H §6 correction-fallback case: the fallback bound
+        # question is scaffolding only — it neither adopts an explicitly
+        # submitted bound coverage nor synthesizes PENDING.
         current_qcov: m.InterpretationCoverage | None = None
-        if bound_question is not None:
+        if bound_question is not None and not bound_is_fallback_scaffolding:
             is_current = [
                 c for c in result.proposed_question_coverages
                 if c.question is not None and c.question == bound_question
@@ -1051,6 +1509,7 @@ def _materialize_unit(
                     derived_refs, derived_qe = (
                         _derive_current_question_support(
                             claims, relationships, task, fingerprints,
+                            extra_refs=tuple(ctx.evidence_refs.values()),
                         )
                     )
                     current_qcov = _dataclasses.replace(
@@ -1103,86 +1562,85 @@ def _materialize_unit(
                 # prior unshared outputs. PENDING/OPEN/NOT_APPLICABLE never
                 # authorize omission-based retirement; explicit withdrawals
                 # retire through the validated-withdrawal path above.
-                try:
-                    prior_qcovs = store.load_all_question_coverages(
-                        task.request.repository_id,
-                        bound_question.scope_root,
-                        (bound_question.subject,),
-                    )
-                except Exception:
-                    try:
-                        prior_qcovs = store.load_question_coverages(
-                            task.request.repository_id,
-                            bound_question.scope_root,
-                            (bound_question.subject,),
-                            task.request.bounds,
-                        )
-                    except Exception:
-                        prior_qcovs = ()
-                old_refs: set[str] = set()
-                for qc in prior_qcovs:
-                    if qc.question == bound_question:
-                        old_refs.update(r.id.value for r in qc.result_refs)
-                new_refs = {r.id.value for r in current_qcov.result_refs}
-                for oid in old_refs - new_refs:
-                    # Shared-output check across ALL questions (unbounded:
-                    # a bounded read could hide an owner and cause an
-                    # unsafe retirement). Deferral propagates: never
-                    # retire with an incomplete owner set.
-                    all_qcovs = _load_all_coverages_or_defer(
-                        task.request.repository_id, None, (),
-                        store=store, bounds=task.request.bounds,
-                        purpose="shared-output retirement check",
-                    )
-                    shared = False
-                    for other in all_qcovs:
-                        if other.question == bound_question:
-                            continue
-                        if oid in {r.id.value for r in other.result_refs}:
-                            shared = True
-                            break
-                    if shared:
-                        continue
-                    # Unshared: retire.
-                    try:
-                        (old_item,) = store.load_by_refs(
-                            task.request.repository_id,
-                            (
-                                m.ClaimRef(id=m.ClaimId(oid)),
-                            ),
-                        )
-                        if isinstance(old_item, m.SemanticClaim):
-                            retires_claims.append(m.ClaimRef(id=m.ClaimId(oid)))
-                        else:
-                            retires_relationships.append(
-                                m.RelationshipRef(id=m.RelationshipId(oid))
-                            )
-                    except Exception:
-                        try:
-                            (old_rel,) = store.load_by_refs(
-                                task.request.repository_id,
-                                (
-                                    m.RelationshipRef(
-                                        id=m.RelationshipId(oid)
+                _retire_replaced_outputs(
+                    task.request.repository_id, bound_question,
+                    {r.id.value for r in current_qcov.result_refs},
+                    store=store, bounds=task.request.bounds,
+                    retires_claims=retires_claims,
+                    retires_relationships=retires_relationships,
+                )
+        # Addendum H §6: the one nominated original question of a
+        # fallback refresh unit derives/retires exactly like the bound
+        # question. Any other non-bound coverage persists as submitted.
+        nominated_qcov: m.InterpretationCoverage | None = None
+        if correction_question is not None:
+            is_nominated = [
+                c for c in result.proposed_question_coverages
+                if c.question is not None
+                and c.question == correction_question
+            ]
+            if is_nominated:
+                nominated_qcov = is_nominated[0]
+                if (
+                    nominated_qcov.disposition
+                    is m.SemanticQuestionDisposition.ANSWERED
+                ):
+                    if not (claims or relationships):
+                        raise _validation.InterpretationUnitRejected(
+                            tuple(
+                                _member_diagnostics(
+                                    "question_coverages", 0,
+                                    correction_question.question_slice or None,
+                                    (
+                                        "explicit ANSWERED with zero "
+                                        "validated material; submit "
+                                        "PENDING/OPEN or add supported "
+                                        "candidates",
                                     ),
-                                ),
+                                )
                             )
-                            retires_relationships.append(
-                                m.RelationshipRef(id=m.RelationshipId(oid))
-                            )
-                        except Exception:
-                            continue
+                        )
+                    nominated_refs, nominated_qe = (
+                        _derive_current_question_support(
+                            claims, relationships, task, fingerprints,
+                            extra_refs=tuple(ctx.evidence_refs.values()),
+                        )
+                    )
+                    nominated_qcov = _dataclasses.replace(
+                        nominated_qcov,
+                        result_refs=nominated_refs,
+                        question_evidence=nominated_qe,
+                    )
+                    _retire_replaced_outputs(
+                        task.request.repository_id, correction_question,
+                        {r.id.value for r in nominated_qcov.result_refs},
+                        store=store, bounds=task.request.bounds,
+                        retires_claims=retires_claims,
+                        retires_relationships=retires_relationships,
+                    )
         # Addendum C C-05: the bound question persists exactly once, as
         # the derived/synthesized current coverage — never the submitted
         # original (whose empty refs are intent, not examined output).
+        # The nominated correction question likewise persists exactly
+        # once as its derived coverage. Addendum H §6 correction-fallback
+        # case: the fallback bound question persists zero times —
+        # current_qcov above stays None and explicitly submitted
+        # bound-matching entries are excluded from the bucket below.
         question_coverages_to_persist = [
             c for c in result.proposed_question_coverages
             if c.question is None
-            or bound_question is None
-            or c.question != bound_question
+            or (
+                (bound_question is None or c.question != bound_question)
+                and (
+                    correction_question is None
+                    or c.question != correction_question
+                )
+            )
         ]
         if current_qcov is not None:
             question_coverages_to_persist.append(current_qcov)
+        if nominated_qcov is not None:
+            question_coverages_to_persist.append(nominated_qcov)
         # Explicit withdrawal fanout: reopen all other referencing questions.
         # Enumeration is unbounded; overflow defers (raises, no partial
         # write) instead of retiring with an incomplete fanout.
@@ -1199,6 +1657,15 @@ def _materialize_unit(
                 if other.question is None:
                     continue
                 if bound_question is not None and other.question == bound_question:
+                    continue
+                if (
+                    correction_question is not None
+                    and other.question == correction_question
+                ):
+                    # Addendum H §6: the nominated original question is
+                    # answered by this same unit; its prior row is
+                    # superseded by the derived ANSWERED coverage above,
+                    # not reopened.
                     continue
                 if withdrawn_ids & {r.id.value for r in other.result_refs}:
                     reopened_coverages.append(
