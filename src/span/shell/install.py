@@ -25,6 +25,15 @@ from pathlib import Path
 
 INSTALL_VERSION = 1
 
+#: Managed structural-indexer identity (npm). The installer provisions
+#: exactly this package version into Span's tools directory so users
+#: never install or name the indexer themselves. Keep in sync with
+#: ``STRUCTURAL_INDEXER_{PACKAGE,VERSION}`` in
+#: ``span/shell/structural/graft.py`` (duplicated, not imported: this
+#: module must stay stdlib-only at top level).
+STRUCTURAL_INDEXER_PACKAGE = "@nanonets/graft"
+STRUCTURAL_INDEXER_VERSION = "0.21.1"
+
 # Only this table varies by OS. Everything else is platform-neutral.
 PLATFORM_PATHS = {
     "linux": {
@@ -85,14 +94,81 @@ def check_prereqs():
         errors.append(
             f"python >= 3.12 required, found {sys.version.split()[0]}"
         )
-    # Span's runtime consumes an existing machine-readable structural index;
-    # it never invokes the independent Graft CLI. Node is needed only for
-    # host-side integrations that are installed by this CLI.
-    for tool in ("node",):
+    # Node and npm provision the managed structural indexer at install
+    # time; the indexer itself is never a user prerequisite.
+    for tool in ("node", "npm"):
         if shutil.which(tool) is None:
             errors.append(f"required tool missing from PATH: {tool}")
     if errors:
         raise SystemExit("prerequisites missing:\n- " + "\n- ".join(errors))
+
+
+def default_tools_dir(venv_dir):
+    """Span-owned tools directory holding the managed indexer install."""
+    return Path(venv_dir).parent / "tools"
+
+
+def indexer_binary_path(tools_dir):
+    """Expected indexer binary inside a tools directory."""
+    return (
+        Path(tools_dir) / "node_modules" / ".bin" / "graft"
+    )
+
+
+def ensure_structural_indexer(venv_dir, dry_run=False):
+    """Provision the pinned structural indexer (auto-install, no bundle).
+
+    Installs exactly ``STRUCTURAL_INDEXER_PACKAGE @ VERSION`` via npm
+    into Span's tools directory (never global, never into targets).
+    Idempotent: skips reinstall when the pointer already names this
+    version's binary and the binary exists. Returns the binary path.
+    """
+    tools_dir = default_tools_dir(venv_dir)
+    binary = indexer_binary_path(tools_dir)
+    if binary.is_file():
+        return str(binary)
+    print(
+        f"+ provision structural indexer "
+        f"{STRUCTURAL_INDEXER_PACKAGE}@{STRUCTURAL_INDEXER_VERSION} "
+        f"-> {tools_dir}"
+    )
+    if dry_run:
+        return str(binary)
+    cmd = [
+        "npm", "install", "--prefix", str(tools_dir),
+        "--no-audit", "--no-fund",
+        f"{STRUCTURAL_INDEXER_PACKAGE}@{STRUCTURAL_INDEXER_VERSION}",
+    ]
+    print("+", " ".join(cmd))
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise SystemExit(
+            f"structural indexer provisioning failed "
+            f"({proc.returncode}): "
+            f"{proc.stderr.strip() or proc.stdout.strip()}"
+        )
+    if not binary.is_file():
+        raise SystemExit(
+            "structural indexer provisioning produced no binary at "
+            f"{binary}"
+        )
+    return str(binary)
+
+
+def write_indexer_pointer(data_dir, binary, dry_run=False):
+    """Record the provisioned indexer pointer under the data dir."""
+    payload = {
+        "package": STRUCTURAL_INDEXER_PACKAGE,
+        "version": STRUCTURAL_INDEXER_VERSION,
+        "binary": str(binary),
+    }
+    print(f"+ write indexer pointer: {Path(data_dir) / 'structural-indexer.json'}")
+    if dry_run:
+        return payload
+    Path(data_dir).mkdir(parents=True, exist_ok=True)
+    (Path(data_dir) / "structural-indexer.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return payload
 
 
 def parse_args(argv=None):
@@ -107,9 +183,9 @@ def parse_args(argv=None):
     parser.add_argument(
         "--repo", action="append", default=[], metavar="TARGET_DIR",
         help=(
-            "Target repository root (repeatable). Registered as "
-            "graft:<dir>. Requires an existing "
-            "graft/.graph/wiring.json; Span never builds it."
+            "Target repository root (repeatable). Provisioning builds "
+            "the structural index into Span's data directory when "
+            "needed (no --deep, no credentials, no target writes)."
         ),
     )
     parser.add_argument(
@@ -455,14 +531,19 @@ def expose_binary(venv_dir, bin_dir, dry_run=False):
 
 
 def check_graft_index(target):
+    """Legacy presence probe (kept for diagnostics, not a gate).
+
+    Provisioning builds the provider-owned index when needed, so a
+    missing in-target index no longer fails installation. This helper
+    remains for census/debug use only.
+    """
     wiring = Path(target) / "graft" / ".graph" / "wiring.json"
     if wiring.exists():
         print(f"structural index present: {wiring}")
         return
-    raise SystemExit(
-        f"missing structural index: {wiring}. "
-        "Build the index offline with `graft build` before installation, "
-        "then rerun Span installation. Span never writes into target repos."
+    print(
+        f"no in-target structural index at {wiring} "
+        f"(provisioning builds the provider cache when needed)."
     )
 
 
@@ -564,10 +645,10 @@ def load_seeds(path, dry_run=False):
 def preflight_facts(targets, seeds_path=None):
     """Read-only non-gating preflight facts (Addendum G §4.6).
 
-    Reports index mtime/size (via the census), git dirty/HEAD where
-    available, and seed-file facts. Never gates installation except for
-    the existing index-presence gate owned by `check_graft_index`.
-    Stdlib and git CLI only; no store, no provider writes.
+    Reports git dirty/HEAD where available and seed-file facts. Never
+    gates installation: provisioning triggers the single bounded
+    provider build when the cache is missing or stale. Stdlib and git
+    CLI only; no store, no provider writes.
     """
     facts: dict = {}
     for target in targets:
@@ -1019,15 +1100,17 @@ def main(argv=None):
     check_prereqs()
     for target in targets:
         check_graft_index(target)
-    # Addendum F: the graft server is gone, so the E-14 process/registry
-    # scan is deleted with it. The preflight is index-presence plus the
-    # read-only artifact census below, recorded in the receipt.
+    # The standalone structural server is gone, so the E-14
+    # process/registry scan is deleted with it. The preflight is the
+    # read-only target census below (proving targets stay unchanged)
+    # plus git/seed facts; provisioning performs the one bounded
+    # provider build when needed.
     opencode_config = args.opencode_config
     if opencode_config is None and Path("opencode.json").exists():
         opencode_config = "opencode.json"
-    graft_census: dict = {}
+    target_census: dict = {}
     for target in targets:
-        graft_census[str(target)] = target_artifact_snapshot(target)
+        target_census[str(target)] = target_artifact_snapshot(target)
     # Addendum G §4.6: early seed-shape validation before any mutation,
     # plus read-only non-gating preflight facts. Shape failure closes
     # before mutation; locator resolution stays at provisioning.
@@ -1035,6 +1118,9 @@ def main(argv=None):
     preflight = preflight_facts(targets, args.authority_seeds_file)
     print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
     venv_python = ensure_venv(venv_dir, dry_run=dry)
+    indexer_binary = ensure_structural_indexer(venv_dir, dry_run=dry)
+    indexer_pointer = write_indexer_pointer(data_dir, indexer_binary,
+                                            dry_run=dry)
     # Tier-1 verify-fast-path (E §9.2): skip reinstall when the venv
     # already matches source, with proof. The check itself is read-only
     # and runs on dry-run too; backup precedes mutation only.
@@ -1094,7 +1180,7 @@ def main(argv=None):
         resolved_mcp = str(Path(bin_dir) / "span-mcp")
     span_cmd = [resolved_mcp] + data_cmd
     for target in targets:
-        span_cmd += ["--repo", f"graft:{target}"]
+        span_cmd += ["--repo", str(target)]
     host_registration: dict = {}
     if opencode_config is not None:
         try:
@@ -1203,7 +1289,8 @@ def main(argv=None):
         "repos": [str(t) for t in targets],
         "verify": report,
         "host_registration": host_registration,
-        "graft_census": graft_census,
+        "target_census": target_census,
+        "structural_indexer": indexer_pointer,
         "source_venv_sync": source_venv_sync,
         "post_install_verified": post_install_verified,
         "data_backup": data_backup,

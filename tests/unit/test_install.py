@@ -274,12 +274,108 @@ class PlanningTest(unittest.TestCase):
             )
             self.assertFalse(dst.exists())
 
-    def test_graft_check_missing_index_fails_closed(self):
+    def test_structural_indexer_constants_pinned(self):
+        from span.shell.structural import graft as g
+
+        self.assertEqual(
+            install.STRUCTURAL_INDEXER_PACKAGE, g.STRUCTURAL_INDEXER_PACKAGE
+        )
+        self.assertEqual(
+            install.STRUCTURAL_INDEXER_VERSION, g.STRUCTURAL_INDEXER_VERSION
+        )
+        # Pinned to the latest published release; bumps update the
+        # installer constant, the provider constant, and the ledger row
+        # in the same change.
+        self.assertEqual(install.STRUCTURAL_INDEXER_VERSION, "0.21.1")
+
+    def test_ensure_structural_indexer_skips_when_present(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(SystemExit):
-                install.check_graft_index(tmp)
+            venv = pathlib.Path(tmp) / "venv"
+            tools = install.default_tools_dir(venv)
+            binary = install.indexer_binary_path(tools)
+            binary.parent.mkdir(parents=True)
+            binary.write_text("#!/bin/sh\n")
+            self.assertEqual(
+                install.ensure_structural_indexer(venv, dry_run=False),
+                str(binary),
+            )
+
+    def test_ensure_structural_indexer_installs_pinned_version(self):
+        import subprocess
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            venv = pathlib.Path(tmp) / "venv"
+            recorded = {}
+
+            def fake_run(cmd, **kwargs):
+                recorded["cmd"] = cmd
+                binary = install.indexer_binary_path(
+                    install.default_tools_dir(venv))
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                binary.write_text("#!/bin/sh\n")
+
+                class _Proc:
+                    returncode = 0
+                    stdout = ""
+                    stderr = ""
+                return _Proc()
+
+            with patch.object(subprocess, "run", side_effect=fake_run):
+                binary = install.ensure_structural_indexer(
+                    venv, dry_run=False)
+            self.assertIn(
+                f"{install.STRUCTURAL_INDEXER_PACKAGE}@"
+                f"{install.STRUCTURAL_INDEXER_VERSION}",
+                recorded["cmd"],
+            )
+            self.assertTrue(pathlib.Path(binary).is_file())
+
+    def test_ensure_structural_indexer_dry_run_installs_nothing(self):
+        import subprocess
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            venv = pathlib.Path(tmp) / "venv"
+            with patch.object(
+                subprocess, "run",
+                side_effect=AssertionError("dry run must not invoke npm"),
+            ):
+                binary = install.ensure_structural_indexer(
+                    venv, dry_run=True)
+            self.assertFalse(pathlib.Path(binary).exists())
+
+    def test_check_prereqs_names_node_and_npm_not_indexer(self):
+        from unittest.mock import patch
+
+        def fake_which(tool):
+            return {"node": "/node", "npm": "/npm"}.get(tool)
+
+        with patch.object(install.shutil, "which", side_effect=fake_which):
+            install.check_prereqs()  # must not raise
+
+        def fake_which_missing_npm(tool):
+            return {"node": "/node"}.get(tool)
+
+        with patch.object(
+            install.shutil, "which", side_effect=fake_which_missing_npm
+        ):
+            with self.assertRaises(SystemExit) as ctx:
+                install.check_prereqs()
+            self.assertIn("npm", str(ctx.exception))
+            self.assertNotIn("graft", str(ctx.exception))
+
+    def test_graft_check_missing_index_is_diagnostic_not_gate(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Provisioning builds the provider cache when needed; a
+            # missing in-target index is diagnostic only.
+            self.assertIsNone(install.check_graft_index(tmp))
 
     def test_target_census_is_read_only(self):
         import tempfile

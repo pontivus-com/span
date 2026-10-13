@@ -32,7 +32,11 @@ from span.shell.mcp import (
     ServiceContext,
 )
 from span.shell.sqlite_store import SqliteSemanticStore
-from span.shell.structural import structural_source_from_config
+from span.shell.structural import (
+    repo_root_from_config,
+    structural_source_from_config,
+)
+from span.shell.structural.graft import GraftStructuralSource
 from span import service as ops
 
 __all__ = [
@@ -53,12 +57,7 @@ class ServerConfig:
 
 
 def _repo_root_from_config(provider_config: str) -> _pathlib.Path:
-    scheme, _, rest = provider_config.partition(":")
-    if scheme == "graft" and rest:
-        return _pathlib.Path(rest)
-    raise ValueError(
-        f"unsupported structural provider config: {provider_config!r}"
-    )
+    return repo_root_from_config(provider_config)
 
 
 def provision_repository(
@@ -67,17 +66,32 @@ def provision_repository(
 ) -> tuple[ServiceContext, ops.SemanticInitializeRepositoryResult]:
     """Explicit provisioning for `initialize_repository` (§11.1).
 
-    Loads the structural source (read-only: an existing machine-readable
-    index is required; Span never builds it), filesystem evidence, and
-    file-backed store; resolves authority seeds against the fresh
-    inventory (unknown seed locators fail closed; inventory-canonical
-    refs replace client-supplied ones); runs initialization; returns
-    the wired context plus the init result for registration.
+    Provisioning order: structural `ensure_current` (one bounded
+    provider-owned build into Span's data directory on a missing or
+    stale index; no-op when current) → filesystem evidence setup →
+    file-backed store → authority-seed resolution → initialization →
+    registration context. Service initialization stays provider
+    agnostic; this shell owner selects and manages the provider.
+
+    A missing or malformed provider index after the bounded build is a
+    typed actionable setup failure (ValueError); a dirty tree after a
+    successful build still provisions (provider available, freshness
+    UNVERIFIABLE). Ordinary reads never build.
     """
     structural, repository_id = structural_source_from_config(
-        request.structural_provider_config
+        request.structural_provider_config, data_dir=config.data_dir
     )
     root = _repo_root_from_config(request.structural_provider_config)
+    # Explicit setup hook: bring the provider index current before any
+    # evidence/store work. One bounded attempt inside the provider.
+    currency = structural.ensure_current(repository_id)
+    if isinstance(structural, GraftStructuralSource):
+        if not structural.has_index():
+            raise ValueError(
+                f"structural indexer unavailable for {str(root)!r}: "
+                f"{currency.reason}; rerun installation to provision "
+                f"the indexer, then retry setup"
+            )
     evidence = FilesystemEvidenceSource(repository_id, root)
     config.data_dir.mkdir(parents=True, exist_ok=True)
     store = SqliteSemanticStore(
@@ -245,10 +259,12 @@ def _parse_args(argv: list[str] | None = None) -> _argparse.Namespace:
         "--repo",
         action="append",
         default=[],
-        metavar="PROVIDER_CONFIG",
+        metavar="REPO_PATH",
         help=(
             "Register a repository at startup "
-            "(repeatable; e.g. --repo graft:/path/to/repo)."
+            "(repeatable; e.g. --repo /path/to/repo). "
+            "Provider-neutral locator; the shell resolves the "
+            "structural provider internally."
         ),
     )
     return parser.parse_args(argv)

@@ -34,15 +34,22 @@ def main(argv=None):
     config = ServerConfig(data_dir=pathlib.Path(args.data_dir))
     repos = []
     for target in args.repo:
-        provider_config = f"graft:{target}"
-        context, result = provision_repository(
-            config,
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator=provider_config,
-                structural_provider_config=provider_config,
-                authority_seeds=(),
-            ),
-        )
+        # Plain provider-neutral locator (canonical); legacy graft:
+        # prefix still accepted transitionally by provisioning.
+        provider_config = target
+        try:
+            context, result = provision_repository(
+                config,
+                ops.SemanticInitializeRepositoryRequest(
+                    repository_locator=provider_config,
+                    structural_provider_config=provider_config,
+                    authority_seeds=(),
+                ),
+            )
+        except ValueError as exc:
+            raise SystemExit(
+                f"repository setup failed for {target}: {exc}"
+            ) from None
         if result.readiness.value != "READY":
             raise SystemExit(
                 f"repository not READY: {target}: {result.readiness.value}"

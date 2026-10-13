@@ -281,21 +281,23 @@ Span data lives outside the repositories it analyzes.
 Span currently requires:
 
 - Python 3.12 or newer;
-- Node.js;
-- Linux for the currently verified installation path;
-- an existing Graft structural index at:
+- Node.js plus npm (installation provisions the managed structural
+  indexer into Span's tools directory; no separate indexer download);
+- Linux for the currently verified installation path.
+
+Span uses a managed structural wiring graph as structural evidence.
+Provisioning (`initialize_repository`, including server startup
+registration and installer verification) builds the provider-owned
+index into Span's data directory when it is missing or stale:
 
 ```text
-<TARGET_REPO>/graft/.graph/wiring.json
+<DATA_DIR>/structural/<repository-id>/.graph/wiring.json
 ```
 
-Span uses the Graft wiring graph as structural evidence.
-
-The upstream project is `JCNGROUP/graft`.
-
-Span never builds or modifies that graph itself.
-
-Run the independent Graft workflow first if the index does not exist.
+Builds are wiring-only (`--no-deep`, no credentials, no target
+writes: `--no-gitignore --no-ignore`). Explicit `refresh` performs at
+most one bounded rebuild. Ordinary reads (`status`, `explain`,
+`locate`, `neighbors`), hooks, and background paths never build.
 
 macOS and Windows paths are reserved but are not currently verified.
 
@@ -359,7 +361,7 @@ Register Span:
 codex mcp add span -- \
   span-mcp \
   --data-dir <DATA_DIR> \
-  --repo graft:<TARGET_REPO>
+  --repo <TARGET_REPO>
 ```
 
 Then verify:
@@ -386,7 +388,7 @@ The equivalent manual `opencode.json` entry is:
         "--data-dir",
         "<DATA_DIR>",
         "--repo",
-        "graft:<TARGET_REPO>"
+        "<TARGET_REPO>"
       ],
       "enabled": true
     }
@@ -1032,7 +1034,7 @@ They do not:
 - interpret repository meaning;
 - invoke a model;
 - run a semantic refresh;
-- rebuild Graft;
+- rebuild the structural index;
 - make implementation decisions.
 
 When nothing relevant needs attention, hooks stay quiet.
@@ -1049,22 +1051,31 @@ The target repository is evidence.
 
 It is not Span's persistence location.
 
-Span consumes:
+Span consumes the provider-owned structural index as its structural
+source:
 
 ```text
-<TARGET_REPO>/graft/.graph/wiring.json
+<DATA_DIR>/structural/<repository-id>/.graph/wiring.json
 ```
 
-as its structural source.
+built from the target repository on explicit setup/refresh only.
+Generated provider prose stays provider-local and is never semantic
+evidence.
 
 Span does not:
 
-- invoke `graft build`;
-- create the structural index;
-- modify the Graft graph;
-- write Span semantic state into the target repository.
+- write Span semantic state into the target repository;
+- write provider artifacts into the target repository;
+- modify the target's `graft/` tree, Markdown cards, or dotfiles.
 
-The configured data directory holds Span's persistent state and exchange data.
+The configured data directory holds Span's persistent state, provider
+caches, and exchange data. Provider caches are bounded (one current
+index per repository, no per-build append-only artifacts) and are
+reused across restarts; remove
+`<DATA_DIR>/structural/<repository-id>/` on repository removal or
+uninstall. An interrupted build keeps serving the last good index;
+a missing or malformed build output provisions as unavailable, never
+as empty structural results.
 
 ---
 
@@ -1230,13 +1241,13 @@ Understanding that does not depend on changed evidence should remain current.
 
 ---
 
-### Does Span replace Graft?
+### What builds the structural index?
 
-No.
+Installation provisions a managed structural indexer into Span's tools
+directory. Setup and explicit `refresh` build the wiring-only index
+into the data directory when needed, with no target writes.
 
-Span currently consumes Graft's machine-readable structural wiring graph.
-
-Graft provides structural evidence.
+The indexer provides structural evidence.
 
 Span adds persistent semantic interpretation, semantic dependency, authority, freshness, and reassessment on top of structural evidence.
 

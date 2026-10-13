@@ -192,11 +192,22 @@ class GraftMappingTest(unittest.TestCase):
         }
         self.assertIn(m.StructuralEdgeKind.DEPENDS_ON, kinds)
 
-    def test_missing_index_raises(self):
+    def test_missing_index_defers_to_setup(self):
+        # Lifecycle contract: construction never builds and never fails
+        # for a missing index so explicit setup can run ensure_current.
+        # Ordinary reads fail closed as unavailable.
+        src = g.GraftStructuralSource("repo-1", "/nonexistent-path-xyz")
+        self.assertFalse(src.has_index())
         with self.assertRaises(g.GraftUnavailableError):
-            g.GraftStructuralSource(
-                "repo-1", "/nonexistent-path-xyz"
+            src.resolve_subject(
+                "repo-1",
+                m.SubjectSelector(None, "x", (), None),
+                _bounds(),
             )
+        freshness = src.describe_current("repo-1")
+        self.assertIs(
+            freshness.state, m.FreshnessState.UNVERIFIABLE
+        )
 
     def test_malformed_wiring_raises(self):
         with self.assertRaises(g.GraftShapeError):
@@ -427,8 +438,11 @@ class GraftPortBehaviorTest(unittest.TestCase):
             structural_source_from_config("nope:xyz")
 
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(g.GraftUnavailableError):
-                structural_source_from_config(f"graft:{tmp}")
+            src, rid = structural_source_from_config(f"graft:{tmp}")
+            self.assertEqual(rid, pathlib.Path(tmp).name)
+            # Missing index defers to setup: construction succeeds,
+            # reads fail closed, no target artifacts created.
+            self.assertFalse(src.has_index())
             self.assertFalse((pathlib.Path(tmp) / "graft").exists())
 
     def test_dirty_tree_reported_from_git(self):

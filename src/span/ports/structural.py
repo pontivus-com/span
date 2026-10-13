@@ -159,10 +159,12 @@ class StructuralSource(_typing.Protocol):
         """Refresh the provider's structural view, then report currency.
 
         Provider-owned execution against provider-owned artifacts only
-        (a graft provider rebuilds its index; a memory provider
-        no-ops). Bounded: one attempt, then report. Failures return
-        UNVERIFIABLE with a reason; never raise for build failure.
-        Invoked only from explicit maintenance paths, never from
-        ordinary reads.
+        (a graft provider rebuilds its index into Span's data directory;
+        a memory provider no-ops). Bounded: one attempt, then report.
+        Failures return UNVERIFIABLE with a reason; never raise for
+        build failure. Allowed only from explicit repository
+        provisioning (`initialize_repository`) and explicit semantic
+        `refresh`. Forbidden from `status`, `explain`, `locate`,
+        `neighbors`, hooks, background workers, and ordinary reads.
         """
         ...
