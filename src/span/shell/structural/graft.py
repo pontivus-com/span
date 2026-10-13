@@ -14,9 +14,12 @@ Suitability record (plan Phase 2.1, license MIT verified Phase 0.4):
   plus git (revision/dirty) plus target-repo file reads (fallback
   fingerprints);
 - independence: separately installable npm package, no Pontivus code;
-- build policy: this module is read-only. It never runs ``graft build``;
-  missing indexes fail closed. Index creation belongs to an independently
-  authorized Graft workflow, outside Span installation and MCP operation.
+- build policy: this module is read-only except for the provider-owned
+  currency refresh (Addendum G §4.8d): `ensure_current` alone may run a
+  plain `graft build` (no `--deep`, no credentials) for the registered
+  root, then reload. Queries never build; missing indexes fail closed.
+  Index creation otherwise belongs to an independently authorized Graft
+  workflow, outside Span installation and MCP operation.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from __future__ import annotations
 import hashlib as _hashlib
 import json as _json
 import pathlib as _pathlib
+import shutil as _shutil
 import subprocess as _subprocess
 
 from span.core import model as m
@@ -190,6 +194,30 @@ def _git_head_time(repo_path: _pathlib.Path) -> int | None:
         return int(proc.stdout.strip())
     except ValueError:
         return None
+
+
+def _run_index_build(repo_path: _pathlib.Path) -> tuple[bool, str]:
+    """Run one plain index build for a repo root (G §4.8d).
+
+    No ``--deep`` pass: wiring only, no LLM, no credentials. Bounded
+    600s timeout. Returns (ok, detail); never raises.
+    """
+    binary = _shutil.which("graft")
+    if binary is None:
+        return False, "graft binary not on PATH"
+    try:
+        proc = _subprocess.run(
+            [binary, "build", str(repo_path)],
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except (OSError, _subprocess.SubprocessError) as exc:
+        return False, f"build process failed to start: {exc}"
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        return False, f"build exited {proc.returncode}: {' '.join(tail[-2:])}"
+    return True, "rebuilt"
 
 
 class GraftStructuralSource:
@@ -783,6 +811,80 @@ class GraftStructuralSource:
             state_fingerprint=self._state_fingerprint(),
             observed_at=_datetime.datetime.now(_datetime.timezone.utc),
         )
+
+    def describe_current(
+        self,
+        repository_id: str,
+    ) -> m.Freshness:
+        """Index currency verdict (Addendum G §4.8d).
+
+        Read-only: reuses the wiring-vs-HEAD computation behind the
+        coverage tokens. Dirty trees and non-git/injected indexes
+        report UNVERIFIABLE (completeness unprovable); an index older
+        than HEAD reports STALE.
+        """
+        self._check_repository(repository_id)
+        self._ensure_fresh()
+        if self._wiring_path is None:
+            return m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason="injected index has no on-disk build to verify",
+            )
+        revision, dirty = _git_revision(self._repo_path)
+        if revision is None:
+            return m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason="non-git tree: index currency unestablishable",
+            )
+        if dirty:
+            return m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason="dirty tree: index cannot prove completeness",
+            )
+        head_time = _git_head_time(self._repo_path)
+        if head_time is None:
+            return m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason="HEAD time unreadable: index currency unestablishable",
+            )
+        if (
+            self._wiring_mtime_ns is not None
+            and self._wiring_mtime_ns < head_time * 1_000_000_000
+        ):
+            return m.Freshness(
+                state=m.FreshnessState.STALE,
+                reason="index-older-than-head",
+            )
+        return m.Freshness(
+            state=m.FreshnessState.CURRENT,
+            reason="index covers tree",
+        )
+
+    def ensure_current(
+        self,
+        repository_id: str,
+    ) -> m.Freshness:
+        """Refresh the graft index for the registered root, then report.
+
+        Provider-owned execution (Addendum G §4.8d): plain ``graft
+        build`` for this adapter's repo root — no ``--deep`` pass, no
+        credentials, bounded timeout. Reloads via ``_ensure_fresh``
+        and re-describes. Build failures return UNVERIFIABLE with a
+        reason; never raise. Invoked only from explicit maintenance
+        paths, never from ordinary reads.
+        """
+        self._check_repository(repository_id)
+        current = self.describe_current(repository_id)
+        if current.state is m.FreshnessState.CURRENT:
+            return current
+        ok, detail = _run_index_build(self._repo_path)
+        if not ok:
+            return m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason=f"index rebuild unavailable: {detail}",
+            )
+        self._ensure_fresh()
+        return self.describe_current(repository_id)
 
     def resolve_subject(
         self,

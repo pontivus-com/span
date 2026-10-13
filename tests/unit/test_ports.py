@@ -53,7 +53,8 @@ class PortShapeTest(unittest.TestCase):
         self._assert_methods(
             StructuralSource,
             {"repository_state", "resolve_subject", "locations", "edges",
-             "reach", "search_symbols", "file_outline", "verify_files"},
+             "reach", "search_symbols", "file_outline", "verify_files",
+             "describe_current", "ensure_current"},
         )
 
     def test_evidence_source_methods(self):

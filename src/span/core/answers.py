@@ -127,21 +127,55 @@ def requirements_for_relationship(
 
 def requirements_for_resolution(
     resolution: m.SubjectResolution,
+    *,
+    repository_id: str = "",
+    name_or_locator: str | None = None,
 ) -> tuple[m.ResolutionRequirement, ...]:
-    """Requirement for an ambiguous (multi-candidate) resolution."""
-    if resolution.ambiguity is not m.ResolutionAmbiguity.AMBIGUOUS:
-        return ()
-    return (
-        m.ResolutionRequirement(
-            kind=m.ResolutionKind.AMBIGUOUS_IDENTITY,
-            subject_or_claim=None,
-            description=(
-                f"{len(resolution.candidates)} subjects match; "
-                f"an exact identity is required"
+    """Requirements for ambiguous or not-found resolutions.
+
+    AMBIGUOUS keeps its exact-identity requirement. NOT_FOUND carries a
+    locator hint: locators resolve against the queried repository's own
+    root (never the workspace root), plus the discovery operations that
+    name exact locators. Text-only diagnostics; no carrier change.
+    """
+    if resolution.ambiguity is m.ResolutionAmbiguity.AMBIGUOUS:
+        return (
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.AMBIGUOUS_IDENTITY,
+                subject_or_claim=None,
+                description=(
+                    f"{len(resolution.candidates)} subjects match; "
+                    f"an exact identity is required"
+                ),
+                supporting_context=(),
             ),
-            supporting_context=(),
-        ),
-    )
+        )
+    if resolution.ambiguity is m.ResolutionAmbiguity.NOT_FOUND:
+        target = (
+            f"no indexed subject matches {name_or_locator!r}"
+            if name_or_locator
+            else "no indexed subject matched"
+        )
+        scope = (
+            f" in repository {repository_id!r}"
+            if repository_id
+            else ""
+        )
+        return (
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_EVIDENCE,
+                subject_or_claim=None,
+                description=(
+                    f"{target}{scope}; locators are relative to that "
+                    f"repository's root, not the workspace root; "
+                    f"discover exact locators with locate "
+                    f"(FILE_OUTLINE for a file, TARGET_MEMBERS for "
+                    f"scope members)"
+                ),
+                supporting_context=(),
+            ),
+        )
+    return ()
 
 
 def truncate_fields(
