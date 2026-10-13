@@ -76,6 +76,9 @@ def _inventory_snapshot(
     *,
     evidence: EvidenceSource,
     seeds: tuple[tuple[str, str], ...] = (),
+    precomputed: tuple[
+        tuple[tuple[str, str], ...], dict[str, str]
+    ] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Inventory snapshot plus per-seed map (plan §8.5).
 
@@ -88,13 +91,20 @@ def _inventory_snapshot(
     the requested seed locators, so snapshots cost one metadata walk
     instead of one full re-hash per page. Seed content fingerprints come
     from the same walk.
+
+    ``precomputed`` accepts one shared (entries, fingerprints) pair —
+    typically one walk per status call whose seed union covers every
+    coverage examined in that call. Same bytes, no extra walks.
     """
     import hashlib as _hashlib
 
-    entries, fingerprints = evidence.list_inventory_entries(
-        repository_id,
-        tuple(loc for loc, _ in seeds),
-    )
+    if precomputed is not None:
+        entries, fingerprints = precomputed
+    else:
+        entries, fingerprints = evidence.list_inventory_entries(
+            repository_id,
+            tuple(loc for loc, _ in seeds),
+        )
     pairs = sorted(eid for _, eid in entries)
     membership = _hashlib.sha256(repr(pairs).encode("utf-8")).hexdigest()
     return membership, {

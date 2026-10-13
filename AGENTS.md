@@ -42,7 +42,14 @@ ownership and boundaries; they are not advisory style guidance.
 
 ## 4. Authority rules
 
-- Authority precedes inference.
+- Code first: what code does, contains, consumes, produces, and how it
+  flows is established from code evidence plus bounded interpretation
+  alone. No document is required, and reliability never depends on
+  documentation for these claims.
+- Authority precedes inference — for normative claims only (who owns,
+  what governs, what must not be reconstructed). Such claims require
+  a cited record or stay explicitly unresolved; they are never
+  inferred from structure.
 - Structural evidence does not establish semantic authority or ownership.
 - Missing, ambiguous, conflicted, stale, or unverifiable knowledge remains
   explicit. It is never coerced into certainty.

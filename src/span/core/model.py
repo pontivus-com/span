@@ -807,6 +807,18 @@ class RepositoryReadiness(_enum.Enum):
 
 
 @_dataclass(frozen=True)
+class HookNoticeScope(_enum.Enum):
+    """Scope discriminator for hook notices (Addendum G Stage 2).
+
+    Hooks observe the triggering event's local scope only — never
+    repository inventory. Single value today; the type (not prose) is
+    what prevents misreading a silent notice as clean.
+    """
+
+    EVENT_LOCAL = "EVENT_LOCAL"
+
+
+@_dataclass(frozen=True)
 class HookStatusNotice:
     readiness: RepositoryReadiness
     affected_count: int = 0
@@ -814,6 +826,7 @@ class HookStatusNotice:
     unverifiable_count: int = 0
     affected_subject_ids: tuple[SubjectId, ...] = ()
     recommended_action: str | None = None
+    scope: HookNoticeScope = HookNoticeScope.EVENT_LOCAL
 
 
 # ---------------------------------------------------------------------------

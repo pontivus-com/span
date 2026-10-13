@@ -207,6 +207,9 @@ def _repository_coverage_entry(
     evidence: EvidenceSource,
     store: SemanticStore,
     bounds: m.QueryBounds,
+    precomputed_snapshot: tuple[
+        tuple[tuple[str, str], ...], dict[str, str]
+    ] | None = None,
 ) -> m.SemanticCoverageEntry:
     """Build one report entry from persisted semantic state only.
 
@@ -263,6 +266,7 @@ def _repository_coverage_entry(
             effective_question_view(
                 coverage, evidence=evidence, store=store,
                 repository_id=repository_id,
+                precomputed_snapshot=precomputed_snapshot,
             )
         )
     question_views.sort(
@@ -472,10 +476,36 @@ def _coverage_entries_for_subjects(
     bounds: m.QueryBounds,
 ) -> tuple[m.SemanticCoverageEntry, ...]:
     """One coverage entry per frontier subject from persisted state only."""
+    # G-17 Stage 2 (authorized: service-side dominance proven on the
+    # recorded profile): one shared inventory walk per status call. The
+    # seed union covers every dependency seed of every subject below,
+    # so each per-coverage discovery check reuses these bytes instead
+    # of re-walking the tree. Fresh per call — never shared across
+    # operations, so no stale snapshot can leak between calls.
+    try:
+        dep_rows = store.load_coverage_dependencies(
+            repository_id,
+            tuple(s.subject_id for s in subjects),
+        )
+    except Exception:
+        dep_rows = ()
+    seed_locs: list[str] = []
+    for dep in dep_rows:
+        for seed in dep.seed_fingerprints:
+            if seed.locator and seed.locator not in seed_locs:
+                seed_locs.append(seed.locator)
+    try:
+        shared_snapshot: tuple[
+            tuple[tuple[str, str], ...], dict[str, str]
+        ] | None = evidence.list_inventory_entries(
+            repository_id, tuple(seed_locs),
+        )
+    except Exception:
+        shared_snapshot = None
     return tuple(
         _repository_coverage_entry(
             repository_id, subject, evidence=evidence, store=store,
-            bounds=bounds,
+            bounds=bounds, precomputed_snapshot=shared_snapshot,
         )
         for subject in subjects
     )
