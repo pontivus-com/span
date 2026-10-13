@@ -78,10 +78,15 @@ Exact onboarding path: `docs/onboarding-runbook.md` (copied from Addendum E
 ## Initialization and readiness
 
 Initialization is explicit and administrative: identity, repository
-state, structural source, evidence inventory, authority seeds, store
+state, provider-owned structural build when needed
+(`ensure_current` into `<data-dir>/structural/<id>/`, wiring-only, no
+target writes), evidence inventory, authority seeds, store
 schema — then a readiness report. Uninitialized repositories answer
 `UNINITIALIZED` plus a setup requirement on every path; hooks and
-queries never bootstrap implicitly. Readiness is operational state,
+queries never bootstrap implicitly. A failed provider build is an
+actionable setup failure, never a usable provider; a dirty tree after a
+successful build still provisions (provider available, freshness
+UNVERIFIABLE). Readiness is operational state,
 never semantic truth. After initialization, normal repository-level
 `status(target=None)` is required to expose the bounded persisted
 semantic-coverage inventory (covered/current, incomplete, stale or

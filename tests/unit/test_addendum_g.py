@@ -945,7 +945,7 @@ class StructuralCurrentTest(unittest.TestCase):
             calls = []
             real = g._run_index_build
 
-            def _fake(path):
+            def _fake(path, artifact_dir=None):
                 calls.append(str(path))
                 return False, "t-no-builder"
 

@@ -1,7 +1,7 @@
 # MCP reference (plan Phase 4.2–4.4; Addendum E correction over B–D)
 
 Thin transport over stdio (`span-mcp --data-dir DIR
-[--repo graft:/path ...]`). Exactly twelve tools, one per canonical
+[--repo /path ...]`). Exactly twelve tools, one per canonical
 operation: `initialize_repository`, `initialize_target`, `explain`,
 `impact`, `trace`, `authority`, `status`,
 `refresh`, `submit_interpretation`, `reissue_interpretation`,
@@ -107,18 +107,34 @@ is not a correction entry; `status` is read-only.
 
 ## Structural-provider boundary
 
-Span reads the existing machine-readable Graft index at
-`<target>/graft/.graph/wiring.json`. It never invokes `graft build`, creates
-`graft/`, or generates Graft Markdown cards. A missing or invalid index is a
-fail-closed installation/provider error; the offline `graft build` step must
-produce the index before Span installation. Span stores and continuations live
-outside the target in the configured data directory; no Span path writes
-target artifacts (per-target plugin and AGENTS.md deployment are removed).
-There is no graft MCP server: structural navigation (`locate` for find/
-outline/member listing, `neighbors` for bounded adjacency) is served by
-Span itself under Addendum F, with two-tier freshness (entry verification
-plus scope coverage) and version-bound pagination. The onboarding preflight
-is index-presence plus the read-only artifact census recorded in the
+Span resolves a plain repository locator to its internal structural
+provider. The provider-owned index lives outside every target:
+
+```text
+<DATA_DIR>/structural/<repository-id>/.graph/wiring.json
+```
+
+`initialize_repository` provisioning (including server startup
+registration and installer verification) runs at most one bounded
+provider-owned build into the cache when it is missing or stale
+(wiring-only, no credentials, no target writes), then reloads and
+validates. A failed or malformed build is an actionable setup failure,
+never a usable provider. A dirty tree after a successful build still
+provisions: the provider is available but freshness is UNVERIFIABLE.
+Explicit `refresh` performs the same single bounded rebuild for its
+scoped target. `status`, `explain`, `locate`, `neighbors`, hooks, and
+all other ordinary reads never build. Span stores and continuations
+live outside the target in the configured data directory; no Span path
+writes target artifacts (per-target plugin and AGENTS.md deployment are
+removed). `initialize_repository` takes a plain `repository_locator`
+plus `structural_provider_config` (plain path canonical; legacy
+`graft:<path>` accepted transitionally); the core never interprets
+provider paths or commands. There is no graft MCP server: structural
+navigation (`locate` for find/ outline/member listing, `neighbors` for
+bounded adjacency) is served by Span itself under Addendum F, with
+two-tier freshness (entry verification plus scope coverage) and
+version-bound pagination. The onboarding preflight is the read-only
+target artifact census (proving the target unchanged) recorded in the
 receipt and acceptance evidence. Exact onboarding path:
 `docs/onboarding-runbook.md` and Addendum E §4A.
 
@@ -128,10 +144,14 @@ removes `graft` entries from opencode host configs and attempts
 codex status means the operator finishes that removal by hand).
 Removing configuration never stops an already-running graft server:
 stop any such process out of band before relying on sole-MCP
-operation. There are no Span-owned graft writers to disable — no
-Span path builds, invokes, or writes through graft; the offline
-`graft build` prerequisite stays a manual operator step performed
-before installation.
+operation. The only Span-owned structural-index writer is the bounded
+provider-owned build on explicit `initialize_repository` provisioning
+and explicit `refresh` (cache under the data directory, never target
+writes); no manual offline index preparation is required —
+provisioning builds when needed and fails with an actionable setup
+error when the indexer cannot build. (Contributor note: the provider
+is `graft --dir <cache> build --no-gitignore --no-ignore <target>`;
+see the adapter module.)
 
 ## Operation intents and selection (Addendum G §4.7)
 

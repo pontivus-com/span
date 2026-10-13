@@ -9,13 +9,13 @@ accounting uses the canonical target-association/result contract.
 ## 0. Preflight (host, fail closed)
 
 Confirm and record: installed Span source revision, registered host, data
-directory outside every target repo, exact repository root, and the
-existing structural index at `<target>/graft/.graph/wiring.json`
-(built offline via `graft build` before installation; no graft server is
-registered — structural navigation is served by Span itself under
-Addendum F). Missing prerequisites stop the run. Record the
+directory outside every target repo, and the exact repository root.
+Installation provisions the managed structural indexer, so no separate
+indexer download is needed — no separate structural server is
+registered; structural navigation is served by Span itself under
+Addendum F. Missing prerequisites stop the run. Record the
 preflight in the receipt and acceptance evidence with a target artifact
-snapshot proving only the configured data store changed.
+snapshot proving the target tree is unchanged.
 
 ## 0.1 Authority seeds convention
 
@@ -29,10 +29,14 @@ target repo they govern; unknown seed locators fail closed.
 ## 1. Operational setup
 
 Call `initialize_repository` once for the repository root with
-`repository_locator`, `structural_provider_config`, and only user-supplied
-`authority_seeds` (unknown seeds fail closed). Expected: `READY`
-operational status and schema/store identity. This proves storage readiness
-only; it is not semantic completion.
+a plain `repository_locator`, `structural_provider_config` (plain path
+canonical), and only user-supplied
+`authority_seeds` (unknown seeds fail closed). Provisioning runs the one
+bounded provider build when the cache is missing or stale; a failed
+build is an actionable setup failure. Reuse the returned canonical
+ID unchanged. If it is already initialized, do not initialize it again for a
+new target session. Expected: `READY` operational status and schema/store
+identity. This proves storage readiness only; it is not semantic completion.
 
 ## 2. Target admission
 
