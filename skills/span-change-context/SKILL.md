@@ -5,58 +5,58 @@ description: Assess a planned material code change with Span impact analysis bef
 
 # Span — pre-change context for material edits
 
-Before a material code change (cross-boundary, ownership,
-representation, configuration, lifecycle, public-contract, or
-unfamiliar-component work), call `impact` with the target, the
-change kind, a short description, and — where known — the
-`affected_assertions` references naming the established assertions the
-proposal would alter.
+Use this specialization when a proposed change is material: it crosses a
+boundary, changes ownership or representation, affects configuration or
+lifecycle, changes a public contract, or touches an unfamiliar component.
+The primary `skills/span/SKILL.md` is authoritative for operation selection,
+repository identity, readiness, evidence admission, continuation recovery,
+target accounting, freshness, and closeout.
 
-## What you get back
+## Before editing
 
-A bounded pre-change brief: relevant identity and purpose, the
-established owner/custodian, governing authority and invariants,
-boundary and representation context, derived change conditions,
-downstream impacts split into semantically established versus
-structural-only possibilities, verification currency, and blockers
-(conflicts, stale evidence, unresolved authority) with requirements
-for resolving them.
+1. Establish the exact target and proposal. Confirm the canonical registered
+   `repository_id`; a filesystem path is never an ID. If the repository is
+   `UNINITIALIZED`, use the primary skill's dedicated
+   `initialize_repository` workflow before semantic calls.
+2. Call `impact` with the target, `change_kind`, concise
+   `change_description`, and — where known — `affected_assertions` naming
+   established claim or relationship references. `impact` prepares a bounded
+   brief; it never approves the change.
+3. Follow only the required pending units. Use `trace` for established
+   producer/carrier/consumer and lifecycle relationships, `authority` for
+   governing sources, `explain` for behavior, `locate`/`neighbors` for
+   structural discovery, and `status` for read-only currency. Structural
+   reach is possibility, not established impact.
+4. Resolve blockers before relying on the brief: missing authority,
+   `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`, `UNRESOLVED`, `STALE`, and
+   `UNVERIFIABLE` findings remain visible and require the bounded action named
+   by Span. Do not treat change-condition dimensions as scores or weights.
 
-Use the same pending-task quality card when investigating or updating the
-change context: objective; exact scope and exclusions; evidence and authority;
-input → producer → transformation/state → consumer/output → terminal/failure;
-typed result; adversarial check; explicit disposition with requirements; and
-fresh readback. The card applies equally to impact follow-ups, expansion,
-refresh, and closeout. It is compact guidance over the canonical submission
-path, not a second quality model or a substitute for evidence.
+## Impact result and implementation boundary
 
-## Rules
+Separate semantically established downstream effects from structural-only
+possibilities. Preserve the owner/custodian, governing sources, invariants,
+representation, verification currency, and unresolved requirements exactly as
+evidenced. `impact` is not authorization, and Span never edits the target,
+runs application tests, or selects an LLM/provider.
 
-- `impact` prepares; it does not approve. Change conditions are
-  descriptive dimensions only — they carry no weight.
-- Structural reach is possibility, not established impact. Do not
-  treat every caller or importer as materially affected.
-- Uncertainty is never certainty: `PARTIAL`, `AMBIGUOUS`,
-  `CONFLICTED`, `UNRESOLVED`, `STALE`, and `UNVERIFIABLE` states in
-  the brief must be reported as such and never reinterpreted into a
-  firm answer. Resolve blockers first (authority lookup, refresh, or
-  narrower investigation with `trace` / `authority`).
-- Proposal-sensitive conditions fire only for typed affected
-  assertions resolved against current state. The description is
-  context for interpretation, not a field to mine for conclusions.
-- After implementation, verify with `status` plus external
-  tests/review, then close with explicit `refresh`.
-- This skill orchestrates canonical operations only
-  (`impact`, then `trace` / `authority` /
-  `status` / `refresh` where required). It defines no
-  semantic rules of its own.
+Use the primary skill's pending quality card for impact follow-ups:
+objective; exact scope and exclusions; evidence and authority; input →
+producer → transformation/state → consumer/output → terminal/failure path;
+typed result; adversarial check; explicit disposition; and fresh readback.
+Submit through the canonical `submit_interpretation` path and use its
+diagnostic recovery matrix. Do not invent a second change DTO or semantic
+policy.
 
-## Expansion identification
+## After editing and expansion
 
-Pre-change investigation that surfaces unknown participants,
-contracts, or dependencies material to the proposal: establish the
-precise material question, admit it under the existing identity/scope
-rules, and submit through the canonical path — before relying on it
-in change conditions. See the Expansion section of
-`skills/span/SKILL.md`. Structural reach is possibility, never
-admission; no silent broadening.
+After external tests/review, close the exact affected scope with the primary
+sequence: scoped `status`, explicit scoped `refresh` with a substantive
+re-submission where required, then scoped `status` again. A bare `refresh`
+does not prove correctness or currency.
+
+If the proposal surfaces an unknown participant, contract, dependency, or
+authority question, establish that precise question before relying on it and
+submit it through the canonical path. Structural adjacency is evidence only;
+it never determines ownership or semantic impact. Keep unresolved facts
+`OPEN`/`PENDING` rather than converting them into certainty.

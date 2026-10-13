@@ -142,8 +142,11 @@ For target-mode work, the result may include bounded target-inventory
 accounting proposals; ordinary question-local results leave that component
 empty. Span validates and writes accepted accounting, subjects, semantic
 results, and target-bound coverage atomically through the canonical batch.
-Use `reissue_interpretation` once and only for an ingress-failed
-transport continuation, then submit the returned identical task.
+Use `reissue_interpretation` once and only when the transport/host explicitly
+reports an eligible interpretation-task ingress failure before semantic
+submission is admitted, then submit the returned identical task. A malformed
+payload or returned `ingress`/`validation` error keeps the existing
+continuation: correct and resubmit it under that same continuation.
 An unknown or expired continuation is never reissued: re-issue the
 idempotent original operation instead. Continue until no
 unprocessed target work remains. One representative answer is never

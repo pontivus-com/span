@@ -157,8 +157,10 @@ agent intent; setup is separate from ordinary queries:
 - Interpretation exchange: `submit_interpretation`
   (`continuation` plus typed result; retained on validation failure,
   consumed only on successful commit) versus `reissue_interpretation`
-  (`continuation` only, ingress failure exactly once; expired tokens
-  recover via idempotent re-issue of the original operation).
+  (`continuation` only, an explicitly eligible interpretation-task ingress
+  failure exactly once; malformed or validation responses reuse the existing
+  continuation, and expired tokens recover via idempotent re-entry to the
+  original operation).
 
 Selection rules: need a file, symbol, or member list → `locate`; need
 structural adjacency → `neighbors`; need established semantics →
