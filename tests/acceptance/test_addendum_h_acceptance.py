@@ -8,6 +8,7 @@ target counts. All deterministic; no model invocation.
 """
 
 import datetime
+import os
 import tempfile
 import threading
 import unittest
@@ -68,7 +69,7 @@ def _ref(path, fingerprint=None, span=None):
     )
 
 
-def _harness(files=None):
+def _fixture_sources(files=None):
     files = dict(FILES) if files is None else files
     structural = InMemoryStructuralSource(
         REPO,
@@ -80,6 +81,12 @@ def _harness(files=None):
         (),
     )
     evidence = FixtureEvidenceSource(REPO, dict(files))
+    return structural, evidence
+
+
+def _harness(files=None):
+    files = dict(FILES) if files is None else files
+    structural, evidence = _fixture_sources(files)
     store = SqliteSemanticStore(":memory:")
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
@@ -134,6 +141,87 @@ def _suspend(structural, evidence, store, continuations):
     )
     assert isinstance(current, PendingInterpretation), type(current)
     return current
+
+
+def _crash_during_commit(db_path):
+    """Run one submit in a child that dies at SQLite's commit boundary."""
+    structural = InMemoryStructuralSource(
+        REPO,
+        tuple(InMemoryFile(p, c) for p, c in FILES.items()),
+        tuple(
+            InMemorySubject(p, m.SubjectKind.COMPONENT, p.split("/")[-1])
+            for p in FILES
+        ),
+        (),
+    )
+    evidence = FixtureEvidenceSource(REPO, dict(FILES))
+    store = SqliteSemanticStore(db_path)
+    ops.initialize_repository(
+        ops.SemanticInitializeRepositoryRequest(
+            repository_locator="fixture",
+            structural_provider_config="memory:test",
+            authority_seeds=(),
+        ),
+        repository_id=REPO,
+        structural=structural, evidence=evidence, store=store,
+    )
+    continuations = ContinuationStore()
+    pending = _suspend(structural, evidence, store, continuations)
+
+    def kill_at_commit(statement):
+        if statement.strip().upper().startswith("COMMIT"):
+            os._exit(86)
+
+    store._db.set_trace_callback(kill_at_commit)
+    ops.submit_interpretation(
+        pending.continuation,
+        m.SemanticInterpretationResult(
+            claims=(_purpose_claim(),), relationships=(),
+            candidate_subjects=(), candidate_conflicts=(),
+            proposed_question_coverages=(_answer_current(pending.request),),
+            candidate_withdrawals=(),
+        ),
+        structural=structural, evidence=evidence, store=store,
+        continuations=continuations,
+    )
+    raise AssertionError("the child must terminate at the SQLite commit")
+
+
+def _recover_after_commit_crash(db_path):
+    structural, evidence = _fixture_sources()
+    store = SqliteSemanticStore(db_path)
+    continuations = ContinuationStore()
+    try:
+        fresh = ops.explain(
+            ops.SemanticExplainRequest(
+                repository_id=REPO,
+                target=m.SubjectSelector(None, "src/seed.py", (), None),
+                bounds=_bounds(),
+            ),
+            structural=structural, evidence=evidence, store=store,
+            continuations=continuations,
+        )
+        if isinstance(fresh, PendingInterpretation):
+            fresh = ops.submit_interpretation(
+                fresh.continuation,
+                m.SemanticInterpretationResult(
+                    claims=(_purpose_claim(),), relationships=(),
+                    candidate_subjects=(), candidate_conflicts=(),
+                    proposed_question_coverages=(
+                        _answer_current(fresh.request),
+                    ),
+                    candidate_withdrawals=(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
+            )
+        page = store.load_claims(REPO, (_sid(),), (), _bounds())
+        coverages = store.load_question_coverages(
+            REPO, _sid(), (_sid(),), _bounds()
+        )
+        return fresh, page, coverages
+    finally:
+        store.close()
 
 
 class ContinuationOwnershipTest(unittest.TestCase):
@@ -936,6 +1024,74 @@ class TargetCountsTest(unittest.TestCase):
         finally:
             store.close()
 
+    def test_stale_membership_carries_drift_requirement(self):
+        """Workflow-issues §6: membership STALE keeps counts and explains
+        that STALE means membership drift, not stale semantic claims."""
+        structural, evidence, store = _harness()
+        try:
+            scope = m.EvidenceScope(paths=("src",), evidence_refs=())
+            canonical_scope, canonical_objective = (
+                m.canonicalize_target_scope(
+                    REPO, scope, "Establish seed areas."
+                )
+            )
+            target_id = m.derive_target_id(
+                REPO, canonical_scope, canonical_objective
+            )
+            area = _sid()
+            assoc = m.TargetAssociation(
+                target_id=target_id,
+                repository_id=REPO,
+                target_scope=canonical_scope,
+                objective=canonical_objective,
+                area_subjects=(area,),
+                target_questions=(),
+                inventory_accounting=(
+                    m.TargetInventoryAccount(
+                        evidence_ref=_ref("src/seed.py"),
+                        assigned_area_subjects=(area,),
+                    ),
+                    m.TargetInventoryAccount(
+                        evidence_ref=_ref("src/other.py"),
+                        assigned_area_subjects=(area,),
+                    ),
+                ),
+                inventory_fingerprint="drifted-membership",
+                observed_repository_state_fingerprint="fp",
+            )
+            store.write_index_batch(
+                m.CanonicalIndexBatch(target_associations=(assoc,))
+            )
+            answer = ops.status(
+                ops.SemanticStatusRequest(
+                    repository_id=REPO, target=target_id,
+                    bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIs(
+                answer.content.target_disposition,
+                m.SemanticCoverageDisposition.STALE,
+            )
+            self.assertEqual(answer.content.target_total_count, 2)
+            self.assertEqual(answer.content.target_accounted_count, 2)
+            self.assertEqual(answer.content.target_unaccounted_count, 0)
+            self.assertTrue(
+                any(
+                    "membership changed since campaign establishment"
+                    in requirement.description
+                    for requirement in answer.resolution_requirements
+                ),
+                [
+                    requirement.description
+                    for requirement in answer.resolution_requirements
+                ],
+            )
+        finally:
+            store.close()
+
     def test_target_status_carries_counts(self):
         structural, evidence, store = _harness()
         try:
@@ -1085,6 +1241,30 @@ class UnsupportedChallengeTest(unittest.TestCase):
             store.load_by_refs(REPO, (m.ClaimRef(id=old_id),))
         finally:
             store.close()
+
+
+class CommitBoundaryRecoveryTest(unittest.TestCase):
+    """A process loss at SQLite COMMIT converges on original re-entry."""
+
+    def test_crash_during_commit_reissues_original_operation(self):
+        import multiprocessing
+        import pathlib
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(pathlib.Path(tmp) / "h-commit.db")
+            context = multiprocessing.get_context("spawn")
+            process = context.Process(
+                target=_crash_during_commit, args=(db,)
+            )
+            process.start()
+            process.join(30)
+            self.assertFalse(process.is_alive())
+            self.assertEqual(process.exitcode, 86)
+            fresh, page, coverages = _recover_after_commit_crash(db)
+            self.assertIsInstance(fresh, m.SemanticAnswer)
+            self.assertEqual(len(page.items), 1)
+            self.assertEqual(len(coverages), 1)
+            self.assertEqual(len(coverages[0].result_refs), 1)
 
 
 class CrashRecoveryTest(unittest.TestCase):
@@ -1326,6 +1506,281 @@ class FreshSessionTest(unittest.TestCase):
                 )
             finally:
                 store.close()
+
+
+class DocumentMappingTest(unittest.TestCase):
+    """Workflow-issues §5: documentation members with no indexed subject
+    map to real admitted areas, never to a synthetic fallback."""
+
+    DOC_FILES = {
+        "src/app.py": "APP = 1\n",
+        "docs/contract.md": "# Contract\n",
+        "docs/notes.md": "# Notes\n",
+    }
+
+    def _doc_harness(self):
+        files = dict(self.DOC_FILES)
+        structural = InMemoryStructuralSource(
+            REPO,
+            tuple(InMemoryFile(p, c) for p, c in files.items()),
+            (
+                InMemorySubject(
+                    "src/app.py", m.SubjectKind.COMPONENT, "app.py"
+                ),
+            ),
+            (),
+        )
+        evidence = FixtureEvidenceSource(REPO, dict(files))
+        store = SqliteSemanticStore(":memory:")
+        ops.initialize_repository(
+            ops.SemanticInitializeRepositoryRequest(
+                repository_locator="fixture",
+                structural_provider_config="memory:test",
+                authority_seeds=(),
+            ),
+            repository_id=REPO,
+            structural=structural, evidence=evidence, store=store,
+        )
+        return structural, evidence, store
+
+    def _doc_area(self):
+        return m.SubjectId(
+            repository_id=REPO, subject_kind=m.SubjectKind.DOCUMENT,
+            canonical_locator="docs/contract.md",
+        )
+
+    def _doc_question(self):
+        area = self._doc_area()
+        return m.SemanticQuestionScope(
+            scope_root=area, subject=area,
+            question_class=m.SemanticQuestionClass.CQ_01,
+            question_slice="contract purpose",
+            materiality_basis="mapping admits contract",
+        )
+
+    def _doc_scope(self):
+        return m.EvidenceScope(
+            paths=(
+                "src/app.py", "docs/contract.md", "docs/notes.md",
+            ),
+            evidence_refs=(),
+        )
+
+    def _start_doc_campaign(self, structural, evidence, store,
+                            continuations):
+        pending = ops.initialize_target(
+            ops.SemanticInitializeTargetRequest(
+                repository_id=REPO, target=self._doc_scope(),
+                objective="document mapping probe", bounds=_bounds(),
+            ),
+            structural=structural, evidence=evidence, store=store,
+            continuations=continuations,
+        )
+        self.assertIsInstance(pending, PendingInterpretation)
+        return pending
+
+    def _map_current_item(self, structural, evidence, store,
+                          continuations, pending):
+        area = self._doc_area()
+        item = pending.request.target_inventory_item
+        loc = item.evidence_ref.locator
+        if loc == "docs/contract.md":
+            result = m.SemanticInterpretationResult(
+                claims=(), relationships=(),
+                candidate_subjects=(
+                    m.CandidateSubject(
+                        provisional_locator="docs/contract.md",
+                        kind=m.SubjectKind.DOCUMENT,
+                        display_name="contract",
+                        evidence=(item.evidence_ref,),
+                        basis=m.SemanticBasis(
+                            m.DerivationKind.SEMANTIC_INTERPRETATION,
+                            "contract readme is a coherent area",
+                        ),
+                    ),
+                ),
+                candidate_conflicts=(),
+                proposed_question_coverages=(
+                    m.InterpretationCoverage(
+                        subjects=(area,),
+                        question_slice="contract purpose",
+                        evidence_scope=m.EvidenceScope(
+                            paths=(), evidence_refs=()
+                        ),
+                        declared_complete=False,
+                        question=self._doc_question(),
+                        disposition=(
+                            m.SemanticQuestionDisposition.PENDING
+                        ),
+                        result_refs=(),
+                        resolution_requirements=(),
+                        disposition_basis="admitted on mapping",
+                        question_evidence=(),
+                    ),
+                ),
+                candidate_withdrawals=(),
+                proposed_target_inventory_accounting=(
+                    m.TargetInventoryAccount(
+                        evidence_ref=item.evidence_ref,
+                        assigned_area_subjects=(area,),
+                    ),
+                ),
+                proposed_target_questions=(),
+            )
+        elif loc == "docs/notes.md":
+            result = m.SemanticInterpretationResult(
+                claims=(), relationships=(),
+                candidate_subjects=(), candidate_conflicts=(),
+                proposed_question_coverages=(),
+                candidate_withdrawals=(),
+                proposed_target_inventory_accounting=(
+                    m.TargetInventoryAccount(
+                        evidence_ref=item.evidence_ref,
+                        resolution_requirements=(
+                            m.ResolutionRequirement(
+                                kind=(
+                                    m.ResolutionKind
+                                    .MISSING_SEMANTIC_COVERAGE
+                                ),
+                                subject_or_claim=None,
+                                description="notes need owner triage",
+                                supporting_context=(),
+                            ),
+                        ),
+                    ),
+                ),
+                proposed_target_questions=(),
+            )
+        else:
+            result = m.SemanticInterpretationResult(
+                claims=(), relationships=(),
+                candidate_subjects=(), candidate_conflicts=(),
+                proposed_question_coverages=(),
+                candidate_withdrawals=(),
+                proposed_target_inventory_accounting=(
+                    m.TargetInventoryAccount(
+                        evidence_ref=item.evidence_ref,
+                        assigned_area_subjects=(area,),
+                    ),
+                ),
+                proposed_target_questions=(),
+            )
+        return ops.submit_interpretation(
+            pending.continuation, result,
+            structural=structural, evidence=evidence, store=store,
+            continuations=continuations,
+        )
+
+    def _drain_doc_campaign(self, structural, evidence, store,
+                            continuations):
+        pending = self._start_doc_campaign(
+            structural, evidence, store, continuations
+        )
+        for _ in range(6):
+            self.assertIsInstance(pending, PendingInterpretation)
+            if pending.request.question is not None:
+                return pending
+            pending = self._map_current_item(
+                structural, evidence, store, continuations, pending
+            )
+        self.fail("mapping frontier did not reach a semantic question")
+
+    def _synthetic_sid(self, locator):
+        return m.SubjectId(
+            repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+            canonical_locator=locator,
+        )
+
+    def test_subject_null_document_admits_real_area(self):
+        structural, evidence, store = self._doc_harness()
+        try:
+            continuations = ContinuationStore()
+            members = ops.locate(
+                ops.SemanticStructuralLocateRequest(
+                    repository_id=REPO,
+                    mode=m.StructuralLocateMode.TARGET_MEMBERS,
+                    bounds=_bounds(),
+                    target=m.EvidenceScope(
+                        paths=("docs",), evidence_refs=()
+                    ),
+                ),
+                structural=structural, evidence=evidence, store=store,
+            )
+            by_loc = {
+                entry.evidence_ref.locator: entry
+                for entry in members.entries
+            }
+            self.assertIsNone(by_loc["docs/contract.md"].subject)
+            pending = self._drain_doc_campaign(
+                structural, evidence, store, continuations
+            )
+            self.assertIsNotNone(pending.request.question)
+            self.assertEqual(
+                pending.request.question.scope_root, self._doc_area()
+            )
+            assoc = store.load_target_association(
+                REPO, pending.request.target_id
+            )
+            self.assertIn(self._doc_area(), assoc.area_subjects)
+            self.assertFalse(
+                store.load_subjects(
+                    REPO, (self._synthetic_sid("docs/contract.md"),)
+                )
+            )
+            self.assertFalse(
+                store.load_subjects(
+                    REPO, (self._synthetic_sid("cdg-workflow-area"),)
+                )
+            )
+        finally:
+            store.close()
+
+    def test_subject_null_mapping_task_explains_null(self):
+        from span.service.interpretation import (
+            prepare_interpretation_task,
+        )
+
+        structural, evidence, store = self._doc_harness()
+        try:
+            state = structural.repository_state(REPO)
+            anchor = m.Subject(
+                subject_id=self._synthetic_sid("docs/contract.md"),
+                display_name="docs/contract.md",
+                declared_kind="docs/contract.md",
+            )
+            item = m.EvidenceInventoryItem(
+                evidence_ref=m.EvidenceRef(
+                    evidence_id=m.EvidenceId(
+                        "ev-docs/contract.md"
+                    ),
+                    repository_id=REPO,
+                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                    locator="docs/contract.md",
+                    revision_or_fingerprint=fingerprint_content(
+                        self.DOC_FILES["docs/contract.md"]
+                    ),
+                    section_or_span=None,
+                ),
+                content_fingerprint=fingerprint_content(
+                    self.DOC_FILES["docs/contract.md"]
+                ),
+            )
+            task = prepare_interpretation_task(
+                REPO, anchor,
+                structural=structural, evidence=evidence,
+                bounds=_bounds(), state=state, store=store,
+                target_scope=m.EvidenceScope(
+                    paths=("docs/contract.md",), evidence_refs=()
+                ),
+                target_inventory_item=item, mapping_mode=True,
+            )
+            text = " ".join(
+                task.request.brief.scope_boundaries
+                + task.request.brief.submission_rules
+            )
+            self.assertIn("subject: null", text)
+        finally:
+            store.close()
 
 
 if __name__ == "__main__":

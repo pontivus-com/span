@@ -775,7 +775,20 @@ def _target_status_answer(
             subject_resolution=None,
             content=content,
             evidence=(),
-            resolution_requirements=(),
+            resolution_requirements=(
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.STALE_EVIDENCE,
+                    subject_or_claim=None,
+                    description=(
+                        "STALE means target membership changed since "
+                        "campaign establishment. It is distinct from "
+                        "semantic evidence freshness. Re-run "
+                        "initialize_target for the same exact target "
+                        "and objective."
+                    ),
+                    supporting_context=(),
+                ),
+            ),
             bound_info=_bound_info(bounds, 0, False, None),
         )
     accounted = {

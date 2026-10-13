@@ -91,7 +91,7 @@ def submit_interpretation(
     record = continuations.peek(continuation)
     if record is None:
         raise InterpretationUnavailable(
-            f"unknown, expired, or in-flight continuation: {continuation}"
+            f"unknown, expired, or in-flight continuation: {continuation}. Re-run the original operation; this token cannot be recovered."
         )
     bounds = record.bounds
     task = InterpretationTask(
@@ -287,7 +287,7 @@ def submit_interpretation(
     record = continuations.acquire(continuation)
     if record is None:
         raise InterpretationUnavailable(
-            f"unknown, expired, or in-flight continuation: {continuation}"
+            f"unknown, expired, or in-flight continuation: {continuation}. Re-run the original operation; this token cannot be recovered."
         )
     try:
         _materialize_unit(
@@ -470,7 +470,7 @@ def reissue_interpretation(
     record = continuations.acquire(continuation)
     if record is None:
         raise InterpretationUnavailable(
-            f"unknown, expired, or in-flight continuation: {continuation}"
+            f"unknown, expired, or in-flight continuation: {continuation}. Re-run the original operation; this token cannot be recovered."
         )
     if record.reissues >= 1:
         continuations.claim(continuation)
