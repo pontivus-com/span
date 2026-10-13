@@ -622,7 +622,7 @@ class McpAdapter:
                 f"page_token null",
             )
         except ops.InterpretationUnitRejected as exc:
-            return _error("validation", "; ".join(exc.diagnostics))
+            return _error("validation", "; ".join(exc.diagnostics) + "; correct the result and resubmit using the same continuation.")
         except (ops.AuthorityTargetError, ops.StatusTargetError,
                 ops.RefreshScopeError, ValueError) as exc:
             return _error("rejected", str(exc))

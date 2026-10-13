@@ -399,6 +399,179 @@ class ExchangeTest(unittest.TestCase):
             store.close()
 
 
+class MappingDiagnosticsTest(unittest.TestCase):
+    """Workflow-issues §3: field-misuse diagnostics name the required
+    field without relaxing validation."""
+
+    DOC_FILES = {
+        "src/main.py": "VALUE = 1\n",
+        "docs/guide.md": "# Guide\n",
+    }
+
+    def _doc_harness(self):
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            tuple(
+                InMemoryFile(p, c) for p, c in self.DOC_FILES.items()
+            ),
+            (
+                InMemorySubject(
+                    "src/main.py", m.SubjectKind.COMPONENT, "main"
+                ),
+            ),
+        )
+        evidence = FixtureEvidenceSource("repo-1", dict(self.DOC_FILES))
+        store = SqliteSemanticStore(":memory:")
+        ops.initialize_repository(
+            ops.SemanticInitializeRepositoryRequest(
+                repository_locator="fixture",
+                structural_provider_config="memory:test",
+                authority_seeds=(),
+            ),
+            repository_id="repo-1",
+            structural=structural,
+            evidence=evidence,
+            store=store,
+        )
+        return structural, evidence, store
+
+    def _doc_area(self):
+        return m.SubjectId(
+            repository_id="repo-1", subject_kind=m.SubjectKind.DOCUMENT,
+            canonical_locator="docs/guide.md",
+        )
+
+    def _doc_question(self):
+        area = self._doc_area()
+        return m.SemanticQuestionScope(
+            scope_root=area, subject=area,
+            question_class=m.SemanticQuestionClass.CQ_01,
+            question_slice="guide purpose",
+            materiality_basis="mapping admits guide",
+        )
+
+    def _doc_item_ref(self):
+        return m.EvidenceRef(
+            evidence_id=m.EvidenceId("ev-docs/guide.md"),
+            repository_id="repo-1",
+            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+            locator="docs/guide.md",
+            revision_or_fingerprint=fingerprint_content(
+                self.DOC_FILES["docs/guide.md"]
+            ),
+            section_or_span=None,
+        )
+
+    def _mapping_pending(self, structural, evidence, store,
+                         continuations):
+        pending = ops.initialize_target(
+            ops.SemanticInitializeTargetRequest(
+                repository_id="repo-1",
+                target=m.EvidenceScope(
+                    paths=("docs/guide.md",), evidence_refs=()
+                ),
+                objective="diagnostics probe", bounds=_bounds(),
+            ),
+            structural=structural, evidence=evidence, store=store,
+            continuations=continuations,
+        )
+        self.assertIsInstance(pending, PendingInterpretation)
+        self.assertIsNone(pending.request.question)
+        return pending
+
+    def _new_area_result(self, item_ref, with_reuse):
+        area = self._doc_area()
+        return m.SemanticInterpretationResult(
+            claims=(), relationships=(),
+            candidate_subjects=(
+                m.CandidateSubject(
+                    provisional_locator="docs/guide.md",
+                    kind=m.SubjectKind.DOCUMENT,
+                    display_name="guide",
+                    evidence=(item_ref,),
+                    basis=m.SemanticBasis(
+                        m.DerivationKind.SEMANTIC_INTERPRETATION,
+                        "guide is a coherent area",
+                    ),
+                ),
+            ),
+            candidate_conflicts=(),
+            proposed_question_coverages=(),
+            candidate_withdrawals=(),
+            proposed_target_inventory_accounting=(
+                m.TargetInventoryAccount(
+                    evidence_ref=item_ref,
+                    assigned_area_subjects=(area,),
+                ),
+            ),
+            proposed_target_questions=(
+                (self._doc_question(),) if with_reuse else ()
+            ),
+        )
+
+    def test_missing_reuse_names_pending_coverage_field(self):
+        from span.core.validation import InterpretationUnitRejected
+
+        structural, evidence, store = self._doc_harness()
+        try:
+            continuations = ContinuationStore()
+            pending = self._mapping_pending(
+                structural, evidence, store, continuations
+            )
+            item_ref = (
+                pending.request.target_inventory_item.evidence_ref
+            )
+            with self.assertRaises(InterpretationUnitRejected) as ctx:
+                ops.submit_interpretation(
+                    pending.continuation,
+                    self._new_area_result(item_ref, with_reuse=True),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                )
+            self.assertTrue(
+                any(
+                    "proposed_question_coverages to create new PENDING "
+                    "coverage" in diagnostic
+                    for diagnostic in ctx.exception.diagnostics
+                ),
+                ctx.exception.diagnostics,
+            )
+            self.assertEqual(len(continuations), 1)
+        finally:
+            store.close()
+
+    def test_new_area_without_pending_names_same_unit_field(self):
+        from span.core.validation import InterpretationUnitRejected
+
+        structural, evidence, store = self._doc_harness()
+        try:
+            continuations = ContinuationStore()
+            pending = self._mapping_pending(
+                structural, evidence, store, continuations
+            )
+            item_ref = (
+                pending.request.target_inventory_item.evidence_ref
+            )
+            with self.assertRaises(InterpretationUnitRejected) as ctx:
+                ops.submit_interpretation(
+                    pending.continuation,
+                    self._new_area_result(item_ref, with_reuse=False),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                )
+            self.assertTrue(
+                any(
+                    "submit one PENDING proposed_question_coverages "
+                    "entry" in diagnostic
+                    for diagnostic in ctx.exception.diagnostics
+                ),
+                ctx.exception.diagnostics,
+            )
+            self.assertEqual(len(continuations), 1)
+        finally:
+            store.close()
+
+
 class DiscoveryTest(unittest.TestCase):
     def test_discovery_finds_identity_anchored_evidence(self):
         structural, evidence, store = _harness()

@@ -136,6 +136,9 @@ def _build_task_brief(
             authority_guidance,
             "Distinguish observed behavior from governing intent; "
             "preserve absent or conflicting authority explicitly.",
+            "Missing evidence: obtain current EvidenceRefs via locate "
+            "(TARGET_MEMBERS, FILE_OUTLINE, or SYMBOL) before "
+            "submitting claims.",
         ),
         material_path=m.TASK_BRIEF_MATERIAL_PATH,
         semantic_result=m.TASK_BRIEF_SEMANTIC_RESULT,
@@ -384,6 +387,9 @@ def prepare_interpretation_task(
                     "The anchor subject is a synthetic structural fallback "
                     "(OTHER kind): it is discovery input only, not an "
                     "admitted semantic area and not an ownership assertion. "
+                    "subject: null means the structural index has no "
+                    "subject for this member; it does not mean the "
+                    "member is unmappable. "
                     "Propose the coherent area via CandidateSubject.",
                 )
                 if subject.subject_id.subject_kind is m.SubjectKind.OTHER
@@ -1905,7 +1911,10 @@ def _materialize_unit(
                                         "target_accounts", 0, expected,
                                         (
                                             "new area without PENDING "
-                                            "question",
+                                            "question; submit one PENDING "
+                                            "proposed_question_coverages "
+                                            "entry for the new area in the "
+                                            "same unit",
                                         ),
                                     )
                                 )
@@ -1986,7 +1995,9 @@ def _materialize_unit(
                                 qq.question_slice or None,
                                 (
                                     "target question does not resolve to "
-                                    "persisted coverage",
+                                    "persisted coverage; use "
+                                    "proposed_question_coverages to "
+                                    "create new PENDING coverage",
                                 ),
                             )
                         )

@@ -170,6 +170,15 @@ class TaskBriefTest(unittest.TestCase):
             m.SA_ANALYSIS_OBLIGATIONS,
         )
 
+    def test_brief_points_to_locate_for_missing_evidence(self):
+        brief = self._task().request.brief
+        self.assertTrue(
+            any(
+                "locate" in item and "TARGET_MEMBERS" in item
+                for item in brief.evidence_authority
+            )
+        )
+
     def test_quality_card_is_uniform_across_operation_intents(self):
         explain = self._task(m.SemanticIntent.EXPLAIN).request
         trace = self._task(m.SemanticIntent.TRACE).request

@@ -513,6 +513,78 @@ class DispatchTest(unittest.TestCase):
         finally:
             adapter.contexts[REPO].store.close()
 
+    def test_unavailable_names_recovery(self):
+        adapter, _ = _harness()
+        try:
+            result = adapter.dispatch(
+                "submit_interpretation",
+                {
+                    "continuation": "cont-999",
+                    "result": m.to_canonical(
+                        m.SemanticInterpretationResult()
+                    ),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertTrue(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["error"], "unavailable")
+            self.assertIn("Re-run the original operation", body["message"])
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_validation_names_same_continuation_resubmit(self):
+        adapter, _ = _harness()
+        try:
+            pending = adapter.dispatch(
+                "explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                },
+            )
+            envelope = json.loads(pending.content)
+            continuation = envelope["continuation"]
+            result = m.SemanticInterpretationResult(
+                claims=(
+                    m.CandidateSemanticClaim(
+                        candidate_key="stray",
+                        subject=m.SubjectId(
+                            repository_id=REPO,
+                            subject_kind=m.SubjectKind.OTHER,
+                            canonical_locator="nope",
+                        ),
+                        kind=m.ClaimKind.PURPOSE,
+                        value=m.PurposeValue("stray", ()),
+                        evidence=(_ref("src/tools.py"),),
+                        basis=m.SemanticBasis(
+                            m.DerivationKind.SEMANTIC_INTERPRETATION,
+                            "stray basis",
+                        ),
+                    ),
+                ),
+                relationships=(),
+                candidate_subjects=(), candidate_conflicts=(),
+                proposed_question_coverages=(),
+                candidate_withdrawals=(),
+            )
+            rejected = adapter.dispatch(
+                "submit_interpretation",
+                {
+                    "continuation": continuation,
+                    "result": m.to_canonical(result),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertTrue(rejected.is_error)
+            body = json.loads(rejected.content)
+            self.assertEqual(body["error"], "validation")
+            self.assertIn(
+                "resubmit using the same continuation", body["message"]
+            )
+        finally:
+            adapter.contexts[REPO].store.close()
+
     def test_malformed_submit_preserves_continuation(self):
         """Invalid submissions never consume the continuation (G-04).
 
