@@ -5,440 +5,352 @@ description: Understand a repository with Span before changing it: orient, estab
 
 # Span — semantic repository lifecycle
 
-Use Span's canonical operations to understand a repository before you
-change it. Span answers from indexed evidence; it never edits code,
-runs tests, or decides for you.
+Span answers from indexed evidence and owns the task contract, validation,
+freshness, and persistence. It never edits a repository, runs application
+tests, selects or invokes an LLM/provider, or decides semantic claims for the
+agent.
 
-## Entry decision (read first)
+## Agent quick reference
 
-Three branches, no others. Pick one before calling anything:
+Use this path for every non-trivial Span interaction:
 
-1. **Ordinary orientation** (browsing, understanding, no user-given
-   target): `status` with no target, then `explain` on the chosen
-   target. Never `refresh` on first contact.
-2. **Exact user-supplied directory plus objective**: `initialize_target`
-   once with the exact `EvidenceScope` and objective; process each
-   returned unit until the target operation answers.
-3. **Post-change closeout** (you mutated code): scoped `status` on the
-   exact mutated scope; `refresh` only the scope that reads noncurrent;
-   `status` again to confirm.
+1. Discover the exact registered `repository_id` from MCP `tools/list` (or
+   from a successful `initialize_repository` result). A filesystem path is
+   never a repository ID; preserve the registered ID unchanged.
+2. Check readiness with normal `status` when the repository is registered.
+   `READY` means operational storage readiness, not semantic coverage.
+3. If readiness is `UNINITIALIZED`, run `initialize_repository` once in its
+   dedicated setup workflow. If the repository is already initialized, do not initialize it again just to orient a session.
+4. For an exact user-supplied directory plus objective, call
+   `initialize_target` with that complete exact boundary. For ordinary
+   orientation, call `status` with no target and then question-local
+   `explain`; use `explain(establish_baseline=True)` only for an ordinary
+   selected root, never as a substitute for exact-target onboarding.
+5. When a call returns `PendingInterpretation`, inspect that one bounded
+   request, use admissible canonical evidence, submit the typed
+   `SemanticInterpretationResult`, and follow the returned next unit until an
+   answer or truthful terminal state is returned.
+6. Use `status` for read-only coverage and freshness readback. Inventory
+   accounting and semantic-question coverage are separate. Preserve every
+   `OPEN`, `PENDING`, `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`, `UNRESOLVED`,
+   `STALE`, and `UNVERIFIABLE` state.
+7. For material edits, call `impact` before editing; after external
+   verification, perform scoped `status` → explicit `refresh` and re-submit
+   where required → scoped `status` again. `impact` is preparation, not
+   approval; `refresh` alone proves nothing.
 
-`locate`/`neighbors` enter when structural orientation is actually
-needed (find a symbol, outline a file, walk adjacency). Everything
-else (`trace`, `authority`, `impact`, submit/reissue) follows the
-admitted question, never curiosity.
+### Operation selection
 
-## Operation lifecycle
+| Agent intent | Operation | Select it when | Result/next action |
+| --- | --- | --- | --- |
+| Dedicated repository setup | `initialize_repository` | Readiness is `UNINITIALIZED`; use the setup workflow only | Reuse the returned canonical repository ID and check `READY`; no interpretation occurs |
+| Establish exact user-supplied target | `initialize_target` | The user supplied a complete exact target and objective | Receive a `TargetId` and bounded mapping/semantic unit; preserve the complete boundary and submit units serially |
+| Determine persisted understanding and currency | `status` | You need read-only repository, target, subject, or hook state | Examine coverage, counts, freshness, requirements, and bounds; it does not interpret or refresh |
+| Understand behavior or purpose | `explain` | You need a semantic explanation of an established or selected subject | Retrieve the answer or interpret the bounded pending task |
+| Find a file, symbol, or inventory member | `locate` | You need structural identity, outline, or target members | Use navigation evidence to choose an investigation slice; it does not establish meaning or completeness |
+| Explore structural adjacency | `neighbors` | You need bounded callers, callees, or related structural edges | Use adjacency as evidence only; it is not semantic causality |
+| Investigate established execution relationships | `trace` | You need producers, carriers, consumers, boundaries, or lifecycle | Retrieve or interpret that established relationship question; do not use it for raw structural enumeration |
+| Identify governing sources | `authority` | You need normative sources, applicability, precedence, or conflicts | Retrieve or interpret authority evidence; never infer authority from adjacency |
+| Assess a proposed change | `impact` | A material change has a target, `change_kind`, description, and affected assertions where known | Read the bounded pre-change brief and blockers; it never authorizes implementation |
+| Re-examine stale or explicitly challenged understanding | `refresh` | A scoped answer is stale, or an exact persisted question is explicitly challenged | Reinterpret only the supplied scope; examine, submit, and read back the corrected result |
+| Submit a pending interpretation | `submit_interpretation` | You hold a live continuation and a typed result for its exact request | Correct validation/evidence problems and resubmit under the same continuation; success consumes it and returns an answer or next unit |
+| Reissue an identical interpretation task | `reissue_interpretation` | The original interpretation task failed at eligible MCP ingress | Use at most once; submit the identical returned task under its new continuation |
 
+`initialize_repository` is not routine session orientation. `status` is
+read-only and differs in `NORMAL` and `HOOK_FAST`: normal status reports a
+bounded persisted coverage inventory, while `HOOK_FAST` reports only the
+event-local notice. `HOOK_FAST` sees event-local scope only; it never means
+the repository is clean. A `HOOK_FAST` `0/0 READY` notice does not describe
+the repository inventory.
+
+The twelve public operations are exactly the operations in the table. There
+are no semantic aliases. `locate` and `neighbors` return structural
+navigation evidence, not semantic claims. `page_token` values (`pg:*`) page
+one truncated listing and continuation tokens (`cont-*`) resume one pending
+interpretation; they cannot be interchanged.
+
+## Entry decision
+
+Pick one branch before making a semantic call:
+
+1. **Ordinary orientation:** normal `status` with no target, then `explain` on
+   the chosen target. Never use `refresh` on first contact.
+2. **Exact user-supplied directory plus objective:** preserve the complete
+   exact boundary and call `initialize_target` once with the exact
+   `EvidenceScope` and objective. Process every returned unit.
+3. **Post-change closeout:** run scoped `status` on the exact mutated scope;
+   refresh only the noncurrent scope, re-examine and submit its task, then run
+   scoped `status` again.
+
+If the MCP runtime returns `UNINITIALIZED`, stop normal work and use the
+dedicated repository setup workflow first. If it returns readiness only,
+report the known runtime coverage-inventory gap; do not infer that semantic
+knowledge is absent.
+
+## Repository identity and readiness
+
+`repository_locator` identifies a repository during setup. It is not the
+value used by repository-scoped operations. Never pass a filesystem path as
+`repository_id`. Obtain the exact canonical registered ID from MCP
+`tools/list`, or from the successful repository-initialization response, and
+reuse that ID unchanged. Registered-ID examples are illustrations, not fixed
+global identifiers. Do not add aliases or translate paths to IDs.
+
+The lifecycle is:
+
+1. Discover the registered canonical identity.
+2. Determine readiness.
+3. Use the registered repository directly when it is initialized.
+4. If it is `UNINITIALIZED`, perform `initialize_repository` in its dedicated
+   setup session.
+5. Begin the requested semantic operation or exact-target campaign only
+   after readiness is established.
+
+Initialization provisions identity, structural source, evidence inventory,
+authority seeds, and store schema. It performs no semantic interpretation.
+`READY` proves operational readiness only; it does not prove semantic
+coverage, correctness, target accounting, or completeness.
+
+## Exact-target establishment and accounting
+
+An exact directory supplied by the user remains the complete target boundary,
+even when it is large. Structural anchors are execution aids and never grant
+permission to narrow that boundary. `initialize_target` returns a bounded
+frontier. Partition it into coherent material areas outside the MCP call and
+account for every current inventory member. A mapping unit has
+`question=None`; it is not itself a semantic question.
+
+Each member gets exactly one target-accounting outcome:
+
+- assign its current `evidence_ref` to one or more admitted area subjects;
+- provide an evidence-backed exclusion using `exclusion_basis`; or
+- keep it explicitly unresolved with typed `resolution_requirements`.
+
+The three related result components have different jobs:
+
+- `proposed_target_inventory_accounting` accounts for target inventory
+  members;
+- `proposed_question_coverages` admits or updates semantic-question
+  coverage; first admission of a material area requires `PENDING` coverage;
+- `proposed_target_questions` associates an identical already-persisted
+  `SemanticQuestionScope` with the target.
+
+For example, during exact-target onboarding, a newly discovered material
+area is admitted with an evidence-backed subject and a `PENDING`
+`proposed_question_coverages` entry. If another area already has the exact
+same persisted question scope, reuse that scope in
+`proposed_target_questions`; do not manufacture a duplicate question. If an
+inventory member cannot yet be assigned or excluded with evidence, submit
+its current `evidence_ref` with an explicit mapping requirement. A question's
+`NOT_APPLICABLE` disposition answers only that semantic question; it is not a
+target-inventory exclusion.
+
+Use `status(TargetId)` in `NORMAL` mode for the campaign snapshot. Its
+`target_total_count`, `target_accounted_count`, and
+`target_unaccounted_count` are read-only counts from the same disposition
+snapshot; they are `None` when the disposition is `UNVERIFIABLE` or
+`UNASSESSED`, never fabricated zeros. Do not count a campaign by walking
+`locate` pages. `CURRENT` requires both complete target accounting and
+complete, current, verifiable semantic coverage.
+
+## Pending interpretation, evidence, and submission
+
+When an operation returns `PendingInterpretation`, handle only that bounded
+unit. Follow its `request` and `brief`: objective, exact scope and
+exclusions, evidence/authority, material path, typed result, adversarial
+check, disposition, and fresh readback. A brief guides the agent; it does not
+make a wrong interpretation correct.
+
+Build an admissible submission as follows:
+
+1. Inspect the pending `request`, including `evidence_units`, subjects,
+   question scope, structural observations, identity bindings, and task
+   brief.
+2. Extract the canonical `EvidenceRef` values from those evidence units. If
+   more structure is needed, use `locate` or `neighbors` and respect their
+   returned coverage and freshness; navigation does not establish truth.
+3. Cite current source files directly for observed behavior where applicable.
+   Use only references admitted by the provider and task scope. Preserve the
+   provider's `evidence_id`, `locator`, `source_kind`, and provenance.
+4. Never fabricate a locator, fingerprint, section/span, subject identity,
+   or authority citation. Current provider-backed evidence may be admitted
+   through the existing validation/normalization path even when it was not
+   previously persisted by Span. Submitted fingerprints are not authority.
+5. Construct the existing typed `SemanticInterpretationResult` with its
+   candidate claims/relationships/subjects as applicable, and include the
+   explicit question coverage or target-accounting outcome required by this
+   unit. Authority claims require qualifying authority evidence; source code
+   evidence supports observed behavior but does not become normative merely
+   by being nearby.
+6. Review the result before submitting: check alternate owners, omitted
+   participants, contradictions, unsupported routes, stale premises, missing
+   authority, and every material leg. Use leg-open for any unsupported material leg;
+   a paraphrase-only result must remain unsubmitted or be marked
+   `OPEN`/`PENDING` with its requirement.
+7. Call `submit_interpretation`, follow its returned next unit if any, and
+   perform fresh `status`/`explain` readback after the operation reaches an
+   answer. One answer, a populated store, or `READY` is never completion.
+
+### Worked typed submission excerpt
+
+This is adapted from the accepted Addendum H exchange test for a semantic
+question unit, not a target-inventory mapping unit. The evidence identity is
+taken from the pending request, the claim cites that evidence, and the
+coverage binds the result to the request's exact question. The submission
+boundary is the typed `SemanticInterpretationResult` passed to
+`submit_interpretation`:
+
+```python
+request = pending.request
+evidence_ref = request.evidence_units[0].evidence_ref
+question = request.question
+subject = request.subjects[0].subject_id
+
+claim = m.CandidateSemanticClaim(
+    candidate_key="purpose",
+    subject=subject,
+    kind=m.ClaimKind.PURPOSE,
+    value=m.PurposeValue("Sorts seeds", ()),
+    evidence=(evidence_ref,),
+    basis=m.SemanticBasis(
+        m.DerivationKind.SEMANTIC_INTERPRETATION,
+        "seed module states the seed purpose",
+    ),
+)
+coverage = m.InterpretationCoverage(
+    subjects=(question.subject,),
+    question_slice=question.question_slice,
+    evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
+    declared_complete=True,
+    question=question,
+    disposition=m.SemanticQuestionDisposition.ANSWERED,
+    result_refs=(),
+    resolution_requirements=(),
+    disposition_basis="test explicit completion",
+    question_evidence=(),
+)
+result = m.SemanticInterpretationResult(
+    claims=(claim,),
+    relationships=(),
+    candidate_subjects=(),
+    candidate_conflicts=(),
+    proposed_question_coverages=(coverage,),
+    candidate_withdrawals=(),
+)
+answer = ops.submit_interpretation(
+    pending.continuation,
+    result,
+    structural=structural,
+    evidence=evidence,
+    store=store,
+    continuations=continuations,
+)
 ```
-orient      status (no target), then explain <target>
-establish   initialize_target <exact boundary + objective>
-prepare     impact <target + change>
-investigate trace / authority (only where required)
-implement   external editing tools (Span never edits)
-verify      status + external tests/review
-close       refresh, then status
-```
 
-Exact onboarding path: `docs/onboarding-runbook.md` (Addendum E §§4A/6).
+The same typed result is the MCP submit payload; MCP adds only routing such
+as the registered `repository_id`. Span validates the evidence identity,
+question binding, and disposition before persistence and derives persisted
+result references at the commit boundary.
 
-## Uniform semantic-quality card (every lifecycle write)
+Claims alone do not complete a question. An answering submission needs an
+explicit `ANSWERED` coverage for the exact bound question with its declared
+completion; unresolved work remains visibly `OPEN` or `PENDING` with
+requirements. Do not reinterpret `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`,
+`UNRESOLVED`, `STALE`, or `UNVERIFIABLE` as certainty.
 
-Use the same short sequence for establishment, ordinary questions,
-impact/trace/authority follow-ups, expansion, refresh, maintenance, and
-closeout. Follow the pending request's `brief`; it is the canonical projection
-of this sequence for the exact admitted slice:
+## Continuation recovery
 
-1. **Objective:** what user decision or engineering question must this answer
-   support?
-2. **Scope:** exact root, subjects, boundaries, exclusions, and question.
-3. **Evidence / authority:** evidence examined, governing sources, and the
-   difference between observed behavior and intended rule.
-4. **Material path:** input → producer → transformation/state →
-   consumer/output → terminal/failure.
-5. **Semantic result:** existing typed claims and relationships only, each
-   supported by admissible evidence.
-6. **Adversarial check:** alternate owner, contradiction, omitted participant,
-   unsupported route, stale premise, and missing verification.
-7. **Disposition and readback:** `ANSWERED`, `OPEN`, `PENDING`, or
-   `NOT_APPLICABLE` with requirements for gaps; then verify what a fresh query
-   can retrieve.
+Use this matrix next to every pending submission. Diagnose the returned
+failure; do not blindly retry.
 
-This is a working projection, not a second schema, hidden reasoning record, or
-claim-count test. Keep it as small as the bounded question permits. Never
-silently broaden the slice, turn missing work into completion, or present stale
-or unverifiable knowledge as current.
+| Outcome | Continuation state | Required action |
+| --- | --- | --- |
+| Malformed submit payload or schema/transport ingress rejection | Existing continuation remains live | Correct the request and resubmit under the same continuation |
+| Semantic validation rejection | Live | Correct the named invalid content and resubmit under the same continuation |
+| Unreadable or unverifiable evidence rejection | Live, subject to normal expiry | Correct the evidence or submit an appropriate unresolved disposition under the same continuation |
+| In-process persistence failure before successful commit | Retained if the transaction fails | Investigate the error; retry only when safe, under the same continuation |
+| Successful commit | Consumed | Process the returned answer or next pending unit; never replay the consumed continuation |
+| Eligible one-time interpretation-task ingress failure, explicitly reported before the pending task is admitted for semantic submission | Reissue permitted once | Call `reissue_interpretation`; use the identical returned task under its new continuation |
+| Unknown, expired, lost, or already consumed continuation | Not reusable | Re-enter through the original idempotent operation |
+| Post-commit response loss | Already consumed; semantic state may be durable | Re-enter through the original idempotent operation and inspect persisted progress |
+| Process crash with uncertain commit | In-memory continuation lost | Re-enter through the original operation; rely on canonical persisted state |
+| Concurrent submission or in-flight token | Ownership unavailable | Do not submit a competitor or force reissue; resolve the in-flight result/state |
 
-## Semantic closeout duty (editing agent, same change, exact scope)
+`reissue_interpretation` is not the remedy for a malformed MCP payload, a
+returned `ingress` or `validation` error from `submit_interpretation`, expiry,
+timeout, process interruption, or uncertain commit. Those cases use the same
+continuation when the response says it remains live, or re-enter the original
+operation when the continuation is unavailable. Reissue is allowed only when
+the transport/host explicitly identifies the separate eligible
+interpretation-task ingress failure before semantic submission was admitted;
+do not infer it from a generic timeout or from a malformed-payload diagnostic.
+It returns the identical bounded task once; a second reissue abandons that
+path. A continuation token and a listing page token are separate mechanisms.
 
-You own closeout for every scope you mutate (code, contracts,
-evidence) — in the same change, not a later session (C-11):
+## Freshness, authority, and closeout
 
-1. Verify first with external tests/review. Passing tests confirm
-   behavior; they never prove semantics.
-2. Run `status` on the exact mutated scope; identify the stale scope.
-3. Run scoped `refresh` and re-examine what is stale: replace,
-   withdraw, or reopen explicitly with typed requirements. A bare
-   `refresh` call proves nothing — adequacy is in the resubmitted
-   content, never the invocation.
-4. Run `status` again to confirm; report incomplete closeout
-   explicitly (what stays OPEN/stale and its requirements) instead
-   of implying completeness. Where the host cannot enforce this
-   sequence, say so in the report (see `integrations/hosts/triggers.md`).
+Structural and semantic freshness are separate. Structural `UNVERIFIED` can
+support positive orientation (a found caller is useful evidence), but it
+cannot prove completeness or absence. Semantic `STALE` can explain what was
+previously known, but it is not current authority for an implementation
+decision. `CURRENT` means the stored dependencies are current and verifiable;
+it is not by itself proof of semantic correctness or sufficient exact-target
+coverage. Missing authority, contradictions, and unresolved requirements
+remain visible.
 
-## Expansion (deliberate, bounded, question-scoped)
+For a source change, or an explicitly challenged `CURRENT` explanation,
+resolve the exact persisted question from `status`/`explain` coverage and
+call scoped `refresh`. An unchanged-source challenge uses
+`stale_only=False` with the exact `SubjectSelector`; nominate exactly one
+already-persisted original `SemanticQuestionScope` in the submission and
+provide evidence-grounded withdrawals/replacements. A second distinct
+correction question in the same unit is rejected. `refresh` must be followed
+by examination, submission where needed, and readback; the call alone proves
+nothing.
 
-When an investigation surfaces materially new knowledge (owner,
-participant, contract, representation, transformation, consumer,
-lifecycle, failure, dependency, verification):
+The full lifecycle is:
 
-1. Establish the precise material question and its relevance first —
-   not every file read becomes a record.
-2. Admit it under the existing identity/scope rules (evidence-backed
-   `CandidateSubject` for unknown roots on an exact structural
-   entrypoint; never a fresh generic question where a persisted
-   identity exists) and submit through the same canonical mechanism.
-3. Never broaden repository territory silently; no separate command,
-   store, writer, or quality policy exists for expansion.
-4. Retrieve later to confirm the knowledge persisted usefully.
+`orientation → readiness → establishment or question-local investigation →
+evidence interpretation → canonical submission → validation/recovery →
+persisted readback → material-change assessment when applicable → external
+implementation/verification → explicit refresh and closeout`.
 
-Enter at any phase. Trivial local work needs no Span call. Unfamiliar
-components and cross-boundary changes should orient first; material
-changes should run `impact` before implementation.
+For material edits, the editing agent owns closeout in the same change:
+scoped `status`, external tests/review, scoped `refresh` with a substantive
+re-submission where required, then scoped `status` again. Report remaining
+`OPEN`, stale, unverifiable, or unaccounted work explicitly. Hooks only call
+`status` in `HOOK_FAST`; they never initialize, interpret, refresh, rebuild,
+or edit.
 
-## Establishing a scope (first value)
+## Shared analysis card and boundaries
 
-Bind the user's explicit onboarding intent first — exactly these four,
-no second onboarding skill exists:
+For establishment, ordinary questions, impact/trace/authority follow-ups,
+expansion, refresh, and closeout, use the pending request's compact card:
 
-For first-value work, bind the user's explicit target and objective. An exact directory or repository path supplied by the user is already the semantic
-scope: do not ask the user to choose a smaller representative root and do not
-silently reduce the target to one file or one subsystem. A request with no
-target, or with an ambiguous target, needs a small scope choice before
-establishment. Installation alone never starts this procedure.
+1. objective;
+2. exact scope, boundaries, and exclusions;
+3. evidence examined and governing authority, separating observed behavior
+   from intended rule;
+4. input → producer → transformation/state → consumer/output →
+   terminal/failure path;
+5. typed semantic result supported by admissible evidence;
+6. adversarial check;
+7. explicit `ANSWERED`, `OPEN`, `PENDING`, or `NOT_APPLICABLE` disposition
+   with requirements; and
+8. fresh readback.
 
-- **Installation only:** complete A1 and report the host-exchange and
-  establishment steps not performed.
-- **Installation plus first-value:** complete A1, execute A2 through
-  actual host MCP calls, and proceed into B.
-- **Existing installation with first-value request:** check readiness
-  and existing coverage, then begin at A2/B as appropriate without
-  reinstalling.
-- **Existing partial baseline:** reuse persisted coverage and continue
-  the unresolved material work; never re-establish what is already
-  durably answered.
+Use three bounded levels: map the exact target structurally; establish a
+coherent baseline area; then descend to member questions where a claim,
+contract, failure path, authority dependency, or unresolved requirement
+matters. Do not create one semantic subject per file merely because it
+exists, and do not compress unrelated units into one root. A user-supplied
+directory is host-owned scope, not necessarily a resolvable Span subject; do
+not fabricate a directory/document subject when the provider exposes only a
+file or symbol anchor. Record the provider limitation as `OPEN`/`PENDING`.
 
-For an explicit directory target, establish the complete target scope. The
-directory is bounded by the user's path, even when it is large. Call
-`initialize_target` with the exact scope and objective; it returns the
-deterministic `TargetId` campaign handle and mapping work for unaccounted
-inventory (`question=None`). Partition into coherent areas (multiple files may
-map to one area; one file may map to more than one area); the partition is an
-execution technique, not a semantic exclusion. First admission of an area to
-this target requires a `PENDING` question or reuse of persisted coverage via
-`proposed_target_questions`. Every contained material area must receive an answer, an explicit
-`NOT_APPLICABLE` disposition, or an `OPEN`/`PENDING` requirement, with
-no unvisited material partition left unrecorded. Any
-exclusion must be evidence-backed target accounting (not question
-`NOT_APPLICABLE`) and reported. Read campaign state only via
-`status(TargetId)` (`NORMAL` only); retrieve areas via exact `SubjectId`s.
-Membership changes re-enter via `initialize_target`; content changes use
-`refresh`. Never claim completion from a single representative root.
-
-Canonical mapping shapes (one `TargetInventoryAccount` per current
-inventory item; exactly one outcome each):
-
-- Assign: `evidence_ref=<current item ref>`,
-  `assigned_area_subjects=[<admitted or co-proposed area SubjectId>]`.
-- Evidence-backed exclusion: `evidence_ref=<current item ref>`,
-  `exclusion_basis=SemanticBasis(summary=<why, not behavior>,
-  input_refs=(<supporting EvidenceRef>, ...))`.
-- Unresolved: `evidence_ref=<current item ref>`,
-  `resolution_requirements=(<typed requirement>, ...)`.
-- New question: `proposed_question_coverages` with the new scope
-  (`PENDING` first admission). Existing question reuse:
-  `proposed_target_questions` with the exact persisted
-  `SemanticQuestionScope` (scope_root, subject, question_class,
-  question_slice) — rejected unless that identical row is already
-  persisted and its subject resolves.
-
-## Submit, correct, and discover (Addendum H)
-
-- A `validation` rejection keeps your continuation live: repair the
-  named collection/index/key and resubmit under the same `cont-*`.
-  Only a successful commit consumes it; replaying a consumed token is
-  rejected without duplicates. An unknown or expired token never
-  recovers via `reissue_interpretation` (ingress failure only, once):
-  re-run the idempotent original operation instead.
-- Cite current source files directly in any submission — no README,
-  ADR, or prior citation required for observed behavior. Keep the
-  provider's `evidence_id`/`locator`/`source_kind`; never invent a
-  `section_or_span` (unverifiable spans are stripped, not stored).
-  Authority quotes stay verbatim (`quoted_span` must occur literally).
-- To challenge a `CURRENT` explanation without a source change:
-  resolve the exact persisted question from `status`/`explain`
-  coverage, call `refresh` with the exact `SubjectSelector` and
-  `stale_only=False`, then submit exactly one
-  `proposed_question_coverages` entry carrying that persisted scope,
-  with evidence-grounded withdrawals and replacements. A second
-  distinct correction question in the same unit is rejected; each
-  further correction gets its own refresh cycle.
-- Discover identity before calling: `tools/list` descriptions carry
-  the registered canonical repository IDs. Read campaign state from
-  one `status(TargetId)` call: `target_total/accounted/unaccounted_count`
-  arrive in the same snapshot as `target_disposition` (`None` counts
-  mean `UNVERIFIABLE`/`UNASSESSED`, never zero).
-
-### Semantic-analysis granularity
-
-Use three levels, with no fixed file or claim count:
-
-1. **Map level:** enumerate the supplied target's directories, modules, files,
-   symbols, contracts, tests, configuration, and material entry/exit paths.
-   This is structural orientation, not semantic completion.
-2. **Baseline level:** choose a semantic architectural unit—a subsystem,
-   workflow/composition slice, service boundary, or governed document area—with
-   a coherent purpose, participants, material path, owner/authority boundary,
-   and lifecycle. Establish one bounded root for that unit and record its
-   member areas and exclusions.
-3. **Member-question level:** descend to a file, symbol, relationship, or
-   cross-boundary path when it carries a material claim, participant,
-   contract, failure path, authority dependency, or unresolved requirement.
-   Use the existing question-local exchange for that exact slice.
-
-Do not create one semantic subject per file merely because it exists, and do
-not compress unrelated units into one root merely to reduce work. Split a
-partition when ownership, authority, lifecycle, or material input-to-terminal
-paths diverge; merge only when one bounded analysis can substantiate them
-together. Every mapped area still receives semantic coverage or an explicit
-`NOT_APPLICABLE`/`OPEN`/`PENDING` disposition.
-
-**Span subject anchors:** the user-supplied directory is the host-owned
-boundary, not necessarily a structural `SubjectId`. With the Graft provider,
-an exact semantic exchange normally anchors on a resolved source file or code
-symbol; the architectural baseline may use that anchor while its evidence
-scope names the complete coherent unit. Do not fabricate a directory/document
-subject when the provider cannot resolve one. Record the unmapped area as an
-explicit `OPEN`/`PENDING` requirement (or `NOT_APPLICABLE` with evidence), and
-continue only after selecting a real anchor or recording the provider
-limitation. A generated graph/index is derived evidence and cannot replace its
-source-owned anchor.
-
-For a request without an exact target, establish one bounded architectural
-scope (entry points, contracts, tests, explicit exclusions) only after the
-user selects it:
-
-At normal session orientation, call `status` with no target and read the
-repository-level semantic-coverage inventory when the ACT-D-10 gate is
-available. Use it to distinguish persisted/current knowledge from
-`PENDING`/`OPEN`, stale/unverifiable, and unassessed frontier state before
-choosing an exact target. The report is bounded and does not enumerate
-structural subjects. If the runtime returns readiness only, report that as
-the known Point 4 activation gap; do not infer that no semantic knowledge
-exists, and continue with exact-target `status`/`explain` where needed.
-
-Root and partition selection: use the user's stated objective, the exact
-target boundary, existing structural candidates, authoritative contracts and
-evidence, and `roster.py::propose_territories()` only as structural support
-(no ranking and no importance judgment). For a directory target, cover every
-partition and record the target boundary, material participants, and typed
-target-inventory accounting separately from canonical question coverage.
-Structural centrality never determines semantic importance. Where
-no defensible partition can be selected, report the evidence or decision
-required and leave the area `OPEN`; never fabricate or silently omit it.
-
-Execution: initialize the repository root for operational readiness
-(`initialize_repository`, operational only), then call `initialize_target`
-with the user's exact `EvidenceScope` and objective → investigate the
-returned typed unit →
-`submit_interpretation` until it returns the next unit or final target status.
-For target-mode submissions, use the typed result's target-inventory
-accounting component for assignment, evidence-backed target exclusion, or
-unresolved mapping. A semantic question's `NOT_APPLICABLE` disposition does
-not exclude its inventory member. Span validates and persists accounting,
-admitted subjects, semantic results, and target-bound coverage atomically.
-The MCP returns a bounded structural candidate frontier; do not recreate it
-with an unbounded host-side file loop. Each target pending task carries the
-exact target boundary separately from its structural anchor. Use that full
-boundary to choose and report coherent semantic areas; an anchor is evidence
-input, not a semantic-completion claim. Use `trace`, `authority`, `impact`,
-and ordinary `explain` only where the admitted question requires them.
-Preserve exact questions and unresolved aspects; do not discard a pending
-continuation, listing page, or unresolved requirement. If a continuation
-is unknown or expired, re-issue the idempotent original operation
-(never `reissue_interpretation`, which covers ingress failure exactly
-once). Continue until the target operation returns its final status. Then
-perform independent fresh-session `status`/`explain` readback and a reuse
-check for representative questions from each material area. A
-`PendingInterpretation`, a populated store, or `READY` is never completion.
-
-## The MCP operation surface
-
-initialize_repository, initialize_target, explain, impact,
-trace, authority, status, refresh,
-submit_interpretation, reissue_interpretation,
-locate, and neighbors.
-
-Structural questions go to Span, not to a separate tool: `locate` finds
-symbols, outlines files, and lists target members; `neighbors` walks
-bounded caller/callee adjacency. Both return navigation evidence only —
-cite it as evidence, never as authority. Arbitrary in-body content
-search stays with your own grep; Span does not duplicate it.
-
-## Rules
-
-- Repository setup is explicit: if readiness is `UNINITIALIZED`, run
-  `initialize_repository` in a dedicated setup session. Normal
-  queries and hooks never initialize. Readiness is operational, never
-  semantic completeness.
-- Entry modes: default `explain` is question-local and never claims
-  baseline sufficiency. For an explicit directory initialization, use initialize_target once on the exact target and objective.
-  process each target unit returned by the MCP frontier. For an ordinary
-  selected root, use `explain(establish_baseline=True)` only for that scope.
-  `refresh` never expands scope silently. To challenge a `CURRENT`
-  explanation, resolve the exact persisted question from
-  `status`/`explain` coverage, call `refresh` with the exact
-  `SubjectSelector` and `stale_only=False`, and nominate exactly one
-  persisted original question with evidence-grounded
-  withdrawals/replacements.
-- When an operation returns a pending interpretation unit, perform the
-  bounded SA-1–SA-7 task with your own model and submit the typed
-  result via `submit_interpretation`. The unit carries a `brief`
-  (the uniform objective/scope/evidence/material-path/result/adversarial/
-  disposition/readback card, plus C-04 material aspects and recorded
-  requirements): follow it for *this slice* and never broaden the slice
-  silently. The brief is guidance, not
-  authority — a wrong brief followed faithfully still yields a wrong
-  answer, and validation never blesses content because the brief
-  says so. A submit may return the
-  final answer or the next pending unit; keep submitting until an
-  answer returns. `submit_interpretation` is exchange, never a
-  question class.
-- Hosts embedding this loop (rather than hand-rolling continuation
-  handling) use the canonical driver
-  (`integrations/hosts/exchange_driver.py`: `drive()`): it runs
-  serial submit-until-answer with measured cost, reports validation
-  rejections without retrying them, and reissues only expired
-  continuations through the idempotent original operation. The driver
-  is a helper for Python host integrations only — OpenCode and Codex
-  agents call the registered `span` MCP tools directly (Addendum D
-  §6). Neither installing a skill nor running the driver proves a
-  real host connection; only an observed host MCP request/response
-  does.
-- Review every unit as a skeptic before submitting (host review,
-  pre-submit): reject paraphrase-only results that reword without
-  advancing knowledge — return them unsubmitted, or submit the
-  question as OPEN/PENDING, rather than persisting motion without
-  meaning. Check every material leg of the admitted slice is
-  substantiated; leg-open what is not instead of declaring a partial
-  answer complete. Validation cannot do this for you: it checks
-  shape, refs, and quotes, never leg coverage or entailment.
-- Claims alone never complete a question (Addendum C C-05). Every
-  submission that answers the bound question must carry an explicit
-  `ANSWERED` coverage for that exact question (with `declared_complete`
-  set; the service derives result refs from validated candidates).
-  Submissions without explicit completion persist `PENDING` and leave
-  claims unassigned. An explicit `ANSWERED` with zero validated
-  material is rejected; only complete replacement retires unshared
-  prior outputs, and `PENDING`/`OPEN`/`NOT_APPLICABLE` never retire
-  by omission.
-- Target-inventory accounting and semantic-question coverage are separate.
-  Every material inventory member must be assigned to an admitted area,
-  evidence-backed excluded from the exact target, or left with an explicit
-  unresolved mapping requirement. `NOT_APPLICABLE` applies only to its bound
-  semantic question and cannot serve as a target-exclusion record.
-- A listing token (`page_token`, now `pg:<claims>:<rels>:<questions>`)
-  pages truncated listings including question coverage. A
-  continuation resumes one suspended interpretation. They are
-  different mechanisms; never substitute one for the other.
-  Inventory sweeps stay few-round by requesting wider bounds
-  (`max_results` up to 250) instead of walking default pages;
-  defaults stay small to protect every caller's token budget.
-- Uncertainty is never certainty: `PARTIAL`, `AMBIGUOUS`,
-  `CONFLICTED`, `UNRESOLVED`, `STALE`, and `UNVERIFIABLE` results must
-  be reported as such and never reinterpreted into a firm answer.
-  Missing authority stays missing; conflicts stay side-by-side until
-  declared precedence resolves them.
-- `refresh` is explicit. Hooks only report readiness/staleness
-  (`status` with `HOOK_FAST`) and never refresh, interpret,
-  rebuild, or initialize. `HOOK_FAST` sees event-local scope only:
-  a `0/0 READY` notice never means the repository is clean — use
-  `NORMAL` `status` for the persisted coverage inventory.
-- Targets are canonical selectors: `{"$type": "SubjectSelector", ...}`
-  with an exact id, name/locator, or kinds. Bounds may be omitted for
-  service defaults.
-
-## Reading answers
-
-Every answer carries evidence pointers, per-claim freshness, and
-requirements describing what would resolve incomplete knowledge.
-Follow `resolution_requirements` before treating partial knowledge as
-complete. Stale items need `refresh`, not reinterpretation by
-hand.
-
-Two freshness planes, never one condition. Structural `UNVERIFIED`
-(dirty tree, old index) is still usable as positive orientation
-evidence — a found caller is a real caller — but never proves
-completeness or absence ("no other callers" needs `VERIFIED`).
-Semantic `STALE` shows what was previously known; read it for
-orientation, refresh it before relying on it for change. A dirty
-tree alone never stales claims whose evidence is unchanged.
-
-## Appendix G-A: operation selection (Addendum G §4.7)
-
-Twelve operations, no merger. Setup (`initialize_repository`) is
-separate from ordinary queries. Structural discovery (`locate`,
-`neighbors`) returns evidence only, never semantic claims. Semantic
-investigation (`explain`, `authority`, `trace`) answers from persisted
-coverage or suspends honestly. Change assessment (`impact`) needs a
-proposal with `change_kind`, `change_description`, and
-`affected_assertions`. State inspection (`status`) is read-only;
-maintenance (`initialize_target`, `refresh`) is explicit and scoped.
-Exchange (`submit_interpretation`, `reissue_interpretation`) advances
-one bounded unit at a time.
-
-Rules: file, symbol, or member list → `locate`; structural adjacency →
-`neighbors`; established semantics → `trace`; behavior → `explain`;
-governance → `authority`; change consequences → `impact`; campaign with
-exact scope plus objective → `initialize_target`; stale scope →
-`refresh`; coverage check → `status`. Baseline
-(`explain(establish_baseline=True)`) audits an ordinary selected root;
-`initialize_target` campaigns an exact user-supplied directory. Do not
-substitute one for the other.
-
-## Appendix G-B: evidence and authority quality (Addendum G §4.4)
-
-Code first, always: purpose, implementation, consumption, production,
-and flow are established from code spans plus bounded interpretation
-alone — no document required, and their reliability never depends on
-documentation. Authority enters only for normative claims (ownership,
-governance, must-not-reconstruct): cite the record or leave the claim
-explicitly unresolved; never infer it from structure.
-Prefer function or block spans over whole-file citation where the
-provider supplies per-span excerpt and signature text. Cite tests,
-contracts, and docs alongside code with existing `EvidenceSourceKind`
-values. Whole-file
-citation needs a basis stating the file-wide scope. Seeds enter only as
-user-supplied `EvidenceRef` lists; unknown locators fail closed.
-`CONTRACT_SPECIFICATION` supports representation and boundary,
-`DECISION_RECORD` supports ownership and precedence,
-`TEST_VERIFICATION` supports `VERIFIED_BY`. Link `VERIFIED_BY` only on
-executed evidence with observed revision; candidate tests stay
-`CANDIDATE`. Absent authority stays `PARTIAL`/`UNRESOLVED` with
-`MISSING_AUTHORITY`. `trace`/`authority`/`impact` on uncovered subjects
-suspend by design; follow the brief, do not invent a preview.
-
-## Appendix G-C: OpenCode submit-until-answer loop (Addendum G §4.5)
-
-Serial only, one repository scope per drive. Invoke the operation; while
-the result is `PendingInterpretation`, interpret the bounded unit and
-call `submit_interpretation` under its continuation. Validation
-rejection halts with diagnostics for repair (the continuation stays
-live; repair and resubmit under it, never blind retry). Ingress
-failure halts. Unknown or expired continuation re-issues the idempotent
-original operation (recovery path, never `reissue_interpretation`,
-which covers ingress failure exactly once), then submits the
-returned identical task. Unexpected exceptions propagate visibly.
-Caller states an explicit round budget; exhaustion halts. Installing a
-skill and reading the driver never proves a host connection; only an
-observed host MCP request and response does.
+Specialized skills add task-specific guidance only: `span-document` owns
+directory-level mapping and gap reporting, while `span-change-context` owns
+pre-change `impact` and change closeout. They defer operation selection,
+identity, evidence submission, recovery, and the lifecycle above to this
+skill. The runbook and MCP reference are supporting procedures, not alternate
+contracts.

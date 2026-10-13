@@ -30,7 +30,8 @@ report-only and never refresh.
 Neglected stale scopes remain visibly noncurrent; Span never presents
 a stored `ANSWERED` as effectively current where required support is
 stale or unverifiable. Full closeout duty: `skills/span/SKILL.md`
-(Semantic closeout duty); expansion: same file (Expansion).
+(Freshness, authority, and closeout); expansion: the same skill's
+shared analysis-card and boundary guidance.
 
 Every semantic write uses the same compact pending-task card: objective; exact
 scope and exclusions; evidence and authority; material input-to-terminal path;

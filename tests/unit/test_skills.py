@@ -97,6 +97,102 @@ class SkillNonAuthorityTest(unittest.TestCase):
         for op in CANONICAL_OPS:
             self.assertIn(op, text)
 
+    def test_primary_quick_reference_selects_each_operation(self):
+        text = _text(SKILLS[0])
+        table_start = text.index("### Operation selection")
+        table_end = text.index("`initialize_repository` is not routine", table_start)
+        table = text[table_start:table_end]
+        for op in CANONICAL_OPS:
+            with self.subTest(operation=op):
+                self.assertIn(f"`{op}`", table)
+        self.assertIn("There are no semantic aliases", text)
+
+    def test_repository_identity_and_initialization_are_conditional(self):
+        text = _text(SKILLS[0])
+        for required in (
+            "Never pass a filesystem path as",
+            "canonical registered ID",
+            "from MCP `tools/list`",
+            "If readiness is `UNINITIALIZED`",
+            "do not initialize it again",
+            "`READY` proves operational readiness only",
+        ):
+            self.assertIn(required, text)
+
+    def test_continuation_recovery_matrix_preserves_ownership(self):
+        text = _text(SKILLS[0])
+        matrix_start = text.index("## Continuation recovery")
+        matrix_end = text.index("## Freshness, authority, and closeout", matrix_start)
+        matrix = text[matrix_start:matrix_end]
+        for required in (
+            "Malformed submit payload",
+            "Semantic validation rejection",
+            "Unreadable or unverifiable evidence rejection",
+            "In-process persistence failure",
+            "Successful commit",
+            "Eligible one-time interpretation-task ingress failure",
+            "Unknown, expired, lost, or already consumed continuation",
+            "Post-commit response loss",
+            "Process crash with uncertain commit",
+            "Concurrent submission or in-flight token",
+            "reissue_interpretation` is not the remedy",
+            "explicitly reported before the pending task is admitted",
+            "returned `ingress` or `validation` error",
+            "generic timeout",
+            "listing page token",
+        ):
+            self.assertIn(required, matrix)
+
+    def test_submission_example_uses_existing_typed_contract(self):
+        text = _text(SKILLS[0])
+        for required in (
+            "Worked typed submission excerpt",
+            "request.evidence_units[0].evidence_ref",
+            "CandidateSemanticClaim",
+            "InterpretationCoverage",
+            "SemanticInterpretationResult",
+            "proposed_question_coverages",
+            "ops.submit_interpretation",
+            "same typed result is the MCP submit payload",
+        ):
+            self.assertIn(required, text)
+
+    def test_lifecycle_reference_matches_primary_heading(self):
+        lifecycle = _text(REPO_ROOT / "docs" / "lifecycle.md")
+        primary = _text(SKILLS[0])
+        self.assertIn("Freshness, authority, and closeout", lifecycle)
+        self.assertIn("## Freshness, authority, and closeout", primary)
+
+    def test_submission_and_target_accounting_guidance_is_canonical(self):
+        text = _text(SKILLS[0])
+        for required in (
+            "canonical `EvidenceRef`",
+            "evidence_units",
+            "provider-backed evidence",
+            "SemanticInterpretationResult",
+            "proposed_target_inventory_accounting",
+            "proposed_question_coverages",
+            "proposed_target_questions",
+            "exact same persisted question scope",
+            "explicit mapping requirement",
+            "NOT_APPLICABLE",
+            "stale_only=False",
+            "exact `SubjectSelector`",
+        ):
+            self.assertIn(required, text)
+
+    def test_primary_preserves_agent_judgment_and_uncertainty(self):
+        text = _text(SKILLS[0])
+        for required in (
+            "does not make a wrong interpretation correct",
+            "Missing authority",
+            "contradictions",
+            "OPEN`/`PENDING",
+            "Span never",
+            "impact` is preparation, not",
+        ):
+            self.assertIn(required, text)
+
     def test_presubmit_review_guidance_present(self):
         # §14 paraphrase-only negative is owned by host pre-submit
         # review: the directing procedure must exist in prose and be
@@ -113,24 +209,21 @@ class SkillNonAuthorityTest(unittest.TestCase):
     def test_explicit_target_is_complete_semantic_scope(self):
         text = _text(SKILLS[0])
         for required in (
-            "exact directory or repository path supplied by the user",
-            "complete target scope",
-            "Every contained material area",
-            "no unvisited material partition",
-            "fresh-session `status`/`explain` readback",
+            "exact directory supplied by the user",
+            "complete target boundary",
+            "every current inventory member",
+            "fresh `status`/`explain` readback",
         ):
             self.assertIn(required, text)
 
     def test_entry_decision_comes_first(self):
-        # G-I13/G-11: one canonical three-branch entry decision before
-        # any SA material. Ordinary orientation is status-then-explain;
+        # One canonical three-branch entry decision follows the quick
+        # reference. Ordinary orientation is status-then-explain;
         # refresh is never routine first-contact.
         text = _text(SKILLS[0])
+        quick_ref_at = text.index("## Agent quick reference")
         entry_at = text.index("## Entry decision")
-        lifecycle_at = text.index("## Operation lifecycle")
-        quality_at = text.index("## Uniform semantic-quality card")
-        self.assertLess(entry_at, lifecycle_at)
-        self.assertLess(entry_at, quality_at)
+        self.assertLess(quick_ref_at, entry_at)
         for required in (
             "Ordinary orientation",
             "`status` with no target, then `explain`",
@@ -138,28 +231,25 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "`initialize_target`",
             "Post-change closeout",
             "Never `refresh` on first contact",
-            "status (no target), then explain <target>",
+            "normal `status` with no target",
         ):
             self.assertIn(required, text)
 
     def test_freshness_planes_stated(self):
-        # G-11: UNVERIFIED orientation-use vs STALE refresh-before-
-        # reliance, in the Reading-answers section.
+        # Structural orientation evidence and semantic decision currency
+        # remain distinct.
         text = _text(SKILLS[0])
         for required in (
-            "Two freshness planes",
-            "never proves",
-            "completeness or absence",
-            "refresh it before relying",
-            "relying on it for change",
-            "dirty",
-            "tree alone never stales",
+            "Structural and semantic freshness are separate",
+            "cannot prove completeness or absence",
+            "Semantic `STALE`",
+            "not current authority",
+            "`CURRENT`",
         ):
             self.assertIn(required, text)
 
-    def test_hook_scope_is_event_local_not_inventory(self):        # G §4.2c: HOOK_FAST 0/0 must never read as clean. The primary
-        # skill states the event-local boundary and names NORMAL status
-        # as the inventory path.
+    def test_hook_scope_is_event_local_not_inventory(self):
+        # HOOK_FAST is event-local, not the inventory path.
         text = _text(SKILLS[0])
         for required in (
             "event-local scope only",
@@ -174,24 +264,22 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "exact directory",
             "complete target boundary",
             "every material area",
-            "same analysis card",
+            "primary skill's shared card",
         ):
             self.assertIn(required, text)
 
     def test_semantic_granularity_is_architectural_not_file_count_based(self):
         text = _text(SKILLS[0])
         for required in (
-            "Map level",
-            "Baseline level",
-            "Member-question level",
+            "map the exact target structurally",
+            "establish a\ncoherent baseline area",
+            "descend to member questions",
             "semantic subject per file",
             "ownership, authority, lifecycle",
-            "Span subject anchors",
             "host-owned",
             "boundary",
-            "Do not fabricate",
-            "directory/document",
-            "subject when the provider cannot resolve one",
+            "do not fabricate a directory/document subject",
+            "provider exposes only",
         ):
             self.assertIn(required, text)
 
