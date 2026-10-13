@@ -957,3 +957,85 @@ class StructuralCurrentTest(unittest.TestCase):
             self.assertIs(out.state, m.FreshnessState.UNVERIFIABLE)
             self.assertIn("t-no-builder", out.reason)
             self.assertEqual(calls, [str(root)])
+
+    def test_status_shares_one_inventory_walk(self):
+        from span import service as ops
+        from span.shell.sqlite_store import SqliteSemanticStore
+        from span.shell.structural.memory import (
+            InMemoryFile,
+            InMemoryStructuralSource,
+            InMemorySubject,
+        )
+
+        files = {
+            "README.md": "# svc\n\nDoes things.\n",
+            "src/main.py": "VALUE = 1\n",
+        }
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            tuple(InMemoryFile(p, c) for p, c in files.items()),
+            (InMemorySubject(
+                "src/main.py", m.SubjectKind.COMPONENT, "main",
+            ),),
+        )
+        evidence = FixtureEvidenceSource("repo-1", dict(files))
+        store = SqliteSemanticStore(":memory:")
+        ops.initialize_repository(
+            ops.SemanticInitializeRepositoryRequest(
+                repository_locator="fixture",
+                structural_provider_config="memory:test",
+                authority_seeds=(),
+            ),
+            repository_id="repo-1",
+            structural=structural, evidence=evidence, store=store,
+        )
+        try:
+            sid = _sid()
+            for cls, sl in (
+                (m.SemanticQuestionClass.CQ_02, "alpha slice"),
+                (m.SemanticQuestionClass.CQ_03, "zeta slice"),
+            ):
+                question = m.SemanticQuestionScope(
+                    scope_root=sid, subject=sid, question_class=cls,
+                    question_slice=sl,
+                    materiality_basis="walk test",
+                )
+                store.write_index_batch(m.CanonicalIndexBatch(
+                    subjects=(m.Subject(sid, "main", None),),
+                    coverage=(m.InterpretationCoverage(
+                        subjects=(sid,), question_slice=sl,
+                        evidence_scope=m.EvidenceScope(),
+                        declared_complete=False, question=question,
+                        disposition=(
+                            m.SemanticQuestionDisposition.PENDING
+                        ),
+                        result_refs=(), resolution_requirements=(),
+                        disposition_basis="admitted",
+                        question_evidence=()),),
+                ))
+            real_list = evidence.list_inventory_entries
+            calls = []
+
+            def counting_list(repository_id, locators=()):
+                calls.append(tuple(locators))
+                return real_list(repository_id, locators)
+
+            evidence.list_inventory_entries = counting_list  # type: ignore[method-assign]
+            try:
+                answer = ops.status(
+                    ops.SemanticStatusRequest(
+                        repository_id="repo-1", target=None,
+                        bounds=_bounds(),
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=ContinuationStore(),
+                )
+            finally:
+                evidence.list_inventory_entries = real_list  # type: ignore[method-assign]
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            # One shared walk for the whole status call — not one per
+            # coverage examined. Generous bound; bites only on fan-out
+            # regressions back to per-coverage walks.
+            self.assertLessEqual(len(calls), 2)
+        finally:
+            store.close()

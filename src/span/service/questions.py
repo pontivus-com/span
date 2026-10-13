@@ -50,6 +50,9 @@ def effective_question_view(
     evidence: EvidenceSource | None = None,
     store: SemanticStore | None = None,
     repository_id: str = "",
+    precomputed_snapshot: tuple[
+        tuple[tuple[str, str], ...], dict[str, str]
+    ] | None = None,
 ) -> m.SemanticQuestionCoverageView:
     recorded = coverage.disposition
     effective = recorded
@@ -147,6 +150,7 @@ def effective_question_view(
                         (sf.locator, sf.evidence_id.value)
                         for sf in latest.seed_fingerprints
                     ),
+                    precomputed=precomputed_snapshot,
                 )
                 discovery = _freshness.classify_coverage(
                     latest, inventory_fp, seed_map

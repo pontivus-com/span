@@ -683,10 +683,50 @@ class GraftStructuralSource:
             nodes[node_id] = node
         return nodes
 
+    def _resolve_dotted(self, endpoint: str,
+                          file_ids: dict[str, str]) -> str | None:
+        """Map a dotted module id to a known file node, or None.
+
+        Provider-local evidence join (Addendum G follow-up): import
+        edges recorded against dotted module ids (``pkg.mod``) attach
+        to the file node they denote, so file-level traversal sees
+        them. ``file_ids`` maps file paths to node ids, built once per
+        parse (never per endpoint). Rules, in order: symbol fragments
+        (``#``) never map; longest dotted suffix wins; a ``mod.py``
+        versus ``mod/__init__.py`` tie stays unmapped rather than
+        guessed; anything else stays unmapped and the edge is skipped
+        exactly as before. Only FILE-kind nodes are targets.
+        """
+        if "#" in endpoint:
+            return None
+        parts = endpoint.split(".")
+        for i in range(len(parts)):
+            rel = "/".join(parts[i:])
+            if not rel:
+                continue
+            module = rel + ".py"
+            package = rel + "/__init__.py"
+            has_module = module in file_ids
+            has_package = package in file_ids
+            if has_module and has_package:
+                return None
+            if has_module:
+                return file_ids[module]
+            if has_package:
+                return file_ids[package]
+        return None
+
     def _parse_edges(self, wiring: dict) -> list[tuple[str, str, str]]:
         raw_edges = wiring.get("edges", [])
         if not isinstance(raw_edges, list):
             raise GraftShapeError("wiring.json edges is not a list")
+        # File-node path map, built once per parse: dotted-module
+        # resolution below consults it per missing endpoint without
+        # rebuilding (startup-cost bound; see DottedModuleMappingTest).
+        file_ids: dict[str, str] = {}
+        for node_id, node in self._nodes.items():
+            if node.get("kind") == "file" and node.get("path"):
+                file_ids.setdefault(str(node.get("path")), node_id)
         edges: list[tuple[str, str, str]] = []
         for edge in raw_edges:
             try:
@@ -707,9 +747,19 @@ class GraftStructuralSource:
             # (stdlib/third-party imports, unindexed supertypes).
             # A StructuralEdge needs canonical SubjectIds for both
             # ends (§4.2), so unresolvable endpoints are skipped,
-            # never guessed into identity.
-            if source not in self._nodes or target not in self._nodes:
-                continue
+            # never guessed into identity. Dotted module ids get one
+            # resolution attempt against known file nodes first; the
+            # path map is built once per parse above, never per edge.
+            if source not in self._nodes:
+                mapped = self._resolve_dotted(source, file_ids)
+                if mapped is None:
+                    continue
+                source = mapped
+            if target not in self._nodes:
+                mapped = self._resolve_dotted(target, file_ids)
+                if mapped is None:
+                    continue
+                target = mapped
             edges.append((source, target, relation))
         return edges
 

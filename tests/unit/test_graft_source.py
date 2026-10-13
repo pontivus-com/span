@@ -574,3 +574,71 @@ class GraftPortBehaviorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DottedModuleMappingTest(unittest.TestCase):
+    """Dotted import endpoints attach to known file nodes.
+
+    Adapter-local evidence join: `pkg.sub` resolves to `pkg/sub.py`
+    (or `pkg/sub/__init__.py`); ties, symbol fragments, and unknown
+    modules stay unmapped and the edge is skipped exactly as before.
+    No guessing, no cross-repo joins."""
+
+    def _nodes(self, *paths):
+        nodes = []
+        for p in paths:
+            nodes.append({
+                "id": p, "name": p.split("/")[-1], "kind": "file",
+                "path": p, "span": "L1-L2", "signature": None,
+                "body_hash": "aa01",
+            })
+        return nodes
+
+    def _src(self, nodes, edges):
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        return g.GraftStructuralSource(
+            "repo-1", tmp,
+            wiring={"nodes": self._nodes(*nodes), "edges": edges},
+        )
+
+    def _edge(self, source, target):
+        return {"source": source, "target": target, "relation": "imports"}
+
+    def test_dotted_module_resolves_to_file(self):
+        src = self._src(
+            ("pkg/sub.py", "app/main.py"),
+            [self._edge("app.main", "pkg.sub")],
+        )
+        self.assertIn(("app/main.py", "pkg/sub.py", "imports"), src._edges)
+
+    def test_ambiguous_package_module_stays_unmapped(self):
+        src = self._src(
+            ("pkg/sub.py", "pkg/sub/__init__.py", "app/main.py"),
+            [self._edge("app.main", "pkg.sub")],
+        )
+        self.assertNotIn(
+            ("app/main.py", "pkg/sub.py", "imports"), src._edges,
+        )
+        self.assertEqual(src._edges, [])
+
+    def test_symbol_fragment_never_maps(self):
+        src = self._src(
+            ("pkg/sub.py",),
+            [self._edge("pkg.sub#helper", "pkg.sub")],
+        )
+        self.assertEqual(src._edges, [])
+
+    def test_unknown_module_stays_unmapped(self):
+        src = self._src(
+            ("app/main.py",),
+            [self._edge("app.main", "stdlib.os")],
+        )
+        self.assertEqual(src._edges, [])
+
+    def test_known_ids_untouched(self):
+        src = self._src(
+            ("a.py", "b.py"),
+            [self._edge("a.py", "b.py")],
+        )
+        self.assertIn(("a.py", "b.py", "imports"), src._edges)

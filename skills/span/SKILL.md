@@ -301,6 +301,9 @@ search stays with your own grep; Span does not duplicate it.
   pages truncated listings including question coverage. A
   continuation resumes one suspended interpretation. They are
   different mechanisms; never substitute one for the other.
+  Inventory sweeps stay few-round by requesting wider bounds
+  (`max_results` up to 250) instead of walking default pages;
+  defaults stay small to protect every caller's token budget.
 - Uncertainty is never certainty: `PARTIAL`, `AMBIGUOUS`,
   `CONFLICTED`, `UNRESOLVED`, `STALE`, and `UNVERIFIABLE` results must
   be reported as such and never reinterpreted into a firm answer.
@@ -355,6 +358,12 @@ substitute one for the other.
 
 ## Appendix G-B: evidence and authority quality (Addendum G §4.4)
 
+Code first, always: purpose, implementation, consumption, production,
+and flow are established from code spans plus bounded interpretation
+alone — no document required, and their reliability never depends on
+documentation. Authority enters only for normative claims (ownership,
+governance, must-not-reconstruct): cite the record or leave the claim
+explicitly unresolved; never infer it from structure.
 Prefer function or block spans over whole-file citation where the
 provider supplies per-span excerpt and signature text. Cite tests,
 contracts, and docs alongside code with existing `EvidenceSourceKind`

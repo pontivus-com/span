@@ -477,6 +477,12 @@ class SerializationRoundTripTest(unittest.TestCase):
         )
         self._round_trip(m.HookStatusNotice, notice)
 
+    def test_hook_notice_scope_defaults_event_local(self):
+        notice = m.HookStatusNotice(readiness=m.RepositoryReadiness.READY)
+        self.assertIs(notice.scope, m.HookNoticeScope.EVENT_LOCAL)
+        self.assertIsNone(notice.recommended_action)
+        self._round_trip(m.HookStatusNotice, notice)
+
     def test_resolution_change_impact(self):
         req = m.ResolutionRequirement(
             m.ResolutionKind.MISSING_AUTHORITY, _subject_id(), "no binding",
