@@ -32,6 +32,7 @@ from span.ports.interpretation import (
     InterpretationUnavailable,
 )
 from span.ports.store import SemanticStore
+from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralSource
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.agent_exchange.continuations import ContinuationStore
@@ -77,9 +78,9 @@ def _object(description: str, required: tuple[str, ...] = ()) -> dict:
     }
 
 
-def _canonical(description: str) -> dict:
+def _canonical(description: str, *, nullable: bool = False) -> dict:
     return {
-        "type": "object",
+        "type": ["object", "null"] if nullable else "object",
         "description": (
             description + " Canonical JSON: the exact canonical "
             "encoding of the named carrier, including its $type tag."
@@ -90,12 +91,14 @@ def _canonical(description: str) -> dict:
 TOOL_DESCRIPTIONS: dict[str, str] = {
     "initialize_repository": (
         "Prepare a repository for semantic queries in a dedicated "
-        "setup session. No semantic interpretation happens here."
+        "setup session (operational storage readiness only). No semantic "
+        "interpretation happens here."
     ),
     "initialize_target": (
-        "Start semantic establishment for an exact directory or evidence "
-        "scope. Returns the next typed interpretation unit and advances "
-        "the target frontier through submit_interpretation."
+        "Establish the semantic campaign for an exact directory or "
+        "evidence scope (deterministic TargetId). Returns the next typed "
+        "interpretation unit; advance the target frontier through "
+        "submit_interpretation. Procedure lives in the skill/runbook."
     ),
     "explain": (
         "Explain what a subject is, what it does, and what governs it, "
@@ -117,15 +120,27 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Normal no-target status reports bounded persisted semantic "
         "coverage: current, incomplete, stale/unverifiable, and "
         "unassessed subjects. Exact targets report detailed freshness; "
-        "HOOK_FAST returns a compact notice only."
+        "HOOK_FAST returns a compact notice only: event-local scope, "
+        "never repository inventory, so READY 0/0 never means clean."
     ),
     "refresh": (
         "Explicitly reinterpret stale scope. Never automatic."
     ),
     "submit_interpretation": (
-        "Submit a typed interpretation result for a pending "
-        "continuation. Returns the suspended operation's answer, or "
+        "Submit the host-produced typed interpretation result for a "
+        "pending continuation; the agent performs interpretation, Span "
+        "validates and atomically persists it. Returns the answer, or "
         "the next pending unit while frontiers remain."
+    ),
+    "locate": (
+        "Read-only structural find, file outline, or target member "
+        "listing (Addendum F). Navigation evidence only — never a "
+        "semantic claim. Procedure lives in the skill/runbook."
+    ),
+    "neighbors": (
+        "Read-only bounded structural adjacency, upstream/downstream/"
+        "both, with resumable traversal (Addendum F). Navigation "
+        "evidence only — never a semantic claim."
     ),
     "reissue_interpretation": (
         "Reissue an expired or lost interpretation continuation once. "
@@ -240,8 +255,10 @@ TOOL_SCHEMAS: dict[str, dict] = {
             "repository_id": {"type": "string"},
             "target": _canonical(
                 "SubjectSelector, ClaimRef, RelationshipRef, "
-                "EvidenceScope, or null. AnswerRef is rejected: "
-                "answers are never persisted."
+                "EvidenceScope, TargetId (campaign handle, NORMAL only), "
+                "or null. AnswerRef is rejected: "
+                "answers are never persisted.",
+                nullable=True,
             ),
             "mode": {"type": "string", "enum": ["NORMAL", "HOOK_FAST"]},
             "bounds": _canonical("QueryBounds. Omit for defaults."),
@@ -256,7 +273,8 @@ TOOL_SCHEMAS: dict[str, dict] = {
             "repository_id": {"type": "string"},
             "target": _canonical(
                 "SubjectSelector, EvidenceScope, or null "
-                "(null is rejected: repo-wide refresh needs enumeration)."
+                "(null is rejected: repo-wide refresh needs enumeration).",
+                nullable=True,
             ),
             "stale_only": {"type": "boolean"},
             "bounds": _canonical("QueryBounds. Omit for defaults."),
@@ -283,6 +301,51 @@ TOOL_SCHEMAS: dict[str, dict] = {
         },
         "required": ["continuation", "repository_id"],
     },
+    "locate": {
+        "type": "object",
+        "description": TOOL_DESCRIPTIONS["locate"],
+        "properties": {
+            "repository_id": {"type": "string"},
+            "mode": {
+                "type": "string",
+                "enum": [v.value for v in m.StructuralLocateMode],
+            },
+            "query": {"type": ["string", "null"]},
+            "match": {
+                "type": "string",
+                "enum": [v.value for v in m.StructuralLocateMatch],
+            },
+            "target": _canonical(
+                "EvidenceScope or null (required for TARGET_MEMBERS, "
+                "boundary narrowing for SYMBOL, forbidden for "
+                "FILE_OUTLINE).",
+                nullable=True,
+            ),
+            "bounds": _canonical("QueryBounds. Omit for defaults."),
+            "page_token": {"type": ["string", "null"]},
+        },
+        "required": ["repository_id", "mode"],
+    },
+    "neighbors": {
+        "type": "object",
+        "description": TOOL_DESCRIPTIONS["neighbors"],
+        "properties": {
+            "repository_id": {"type": "string"},
+            "target": _canonical("SubjectSelector."),
+            "direction": {
+                "type": "string",
+                "enum": ["UPSTREAM", "DOWNSTREAM", "BOTH"],
+            },
+            "edge_kinds": {
+                "type": ["array", "null"],
+                "description": "StructuralEdgeKind values or null/empty for all.",
+            },
+            "max_depth": {"type": "integer"},
+            "bounds": _canonical("QueryBounds. Omit for defaults."),
+            "page_token": {"type": ["string", "null"]},
+        },
+        "required": ["repository_id", "target", "direction"],
+    },
 }
 
 TOOL_NAMES: tuple[str, ...] = (
@@ -296,6 +359,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "refresh",
     "submit_interpretation",
     "reissue_interpretation",
+    "locate",
+    "neighbors",
 )
 
 _REQUEST_CLASS: dict[str, type] = {
@@ -308,6 +373,8 @@ _REQUEST_CLASS: dict[str, type] = {
     "refresh": ops.SemanticRefreshRequest,
     "submit_interpretation": ops.SemanticSubmitInterpretationRequest,
     "reissue_interpretation": ops.SemanticReissueInterpretationRequest,
+    "locate": ops.SemanticStructuralLocateRequest,
+    "neighbors": ops.SemanticStructuralNeighborsRequest,
 }
 
 
@@ -339,6 +406,10 @@ def decode_request(tool_name: str, arguments: dict) -> object:
                 DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
             )
     payload["$type"] = cls.__name__
+    if tool_name == "neighbors" and payload.get("edge_kinds") is None:
+        # Schema advertises null/empty for all; the carrier default
+        # is (). Normalize here so the advertised contract decodes.
+        payload["edge_kinds"] = []
     try:
         return m.from_canonical(cls, payload)
     except m.CanonicalDecodeError as exc:
@@ -408,8 +479,10 @@ class McpAdapter:
         try:
             return self.contexts[repository_id]
         except KeyError:
+            registered = sorted(self.contexts)
             raise ValueError(
-                f"unknown repository: {repository_id}"
+                f"unknown repository: {repository_id!r}; "
+                f"registered: {registered}"
             ) from None
 
     def dispatch(
@@ -426,8 +499,33 @@ class McpAdapter:
             return _error("ingress", str(exc))
         if tool_name in ("submit_interpretation", "reissue_interpretation"):
             repository_id = arguments.get("repository_id")
+            continuation = arguments.get("continuation")
+            if isinstance(continuation, str) and (
+                continuation.startswith("pg:")
+                or continuation.startswith("pgv:")
+                or continuation.startswith("pgn:")
+            ):
+                return _error(
+                    "ingress",
+                    "page_token presented as continuation: page_token "
+                    "pages one truncated listing while continuation resumes "
+                    "one suspended interpretation; pass the cont-* "
+                    "continuation to submit/reissue and the pg:* token to "
+                    "the listing operation",
+                )
         else:
             repository_id = request.repository_id  # type: ignore[union-attr]
+            page_token = arguments.get("page_token")
+            if isinstance(page_token, str) and page_token.startswith(
+                "cont-"
+            ):
+                return _error(
+                    "ingress",
+                    "continuation presented as page_token: continuation "
+                    "resumes one suspended interpretation while page_token "
+                    "pages one truncated listing; pass cont-* to "
+                    "submit_interpretation and pg:* to the listing operation",
+                )
         if not isinstance(repository_id, str) or not repository_id:
             return _error("ingress", "repository_id must be non-empty")
         try:
@@ -492,6 +590,18 @@ class McpAdapter:
                     evidence=context.evidence, store=context.store,
                     continuations=context.continuations,
                 )
+            elif tool_name == "locate":
+                result = ops.locate(
+                    request,  # type: ignore[arg-type]
+                    structural=context.structural,
+                    evidence=context.evidence, store=context.store,
+                )
+            elif tool_name == "neighbors":
+                result = ops.neighbors(
+                    request,  # type: ignore[arg-type]
+                    structural=context.structural,
+                    store=context.store,
+                )
             elif tool_name == "reissue_interpretation":
                 result = ops.reissue_interpretation(
                     request.continuation,  # type: ignore[union-attr]
@@ -503,6 +613,12 @@ class McpAdapter:
             return _error("unavailable", str(exc))
         except InterpretationIngressFailure as exc:
             return _error("ingress", str(exc))
+        except StaleContinuationError as exc:
+            return _error(
+                "stale_continuation",
+                f"{exc}; restart the listing from page one with "
+                f"page_token null",
+            )
         except ops.InterpretationUnitRejected as exc:
             return _error("validation", "; ".join(exc.diagnostics))
         except (ops.AuthorityTargetError, ops.StatusTargetError,

@@ -250,6 +250,81 @@ class GraftPortBehaviorTest(unittest.TestCase):
             m.CandidateRankBasis.EXACT_DECLARATION,
         )
 
+    def test_search_exact_matches_bare_symbol_names(self):
+        # EXACT/CONTAINS parity: a bare symbol name must resolve under
+        # EXACT (exact-name basis), not only under CONTAINS. EXACT stays
+        # exact-only: partial names still match nothing.
+        import hashlib
+        import tempfile
+        from span.shell.structural import graft as _graft
+
+        body = "export function place(order) {\n  return order;\n}\n"
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        with tempfile.TemporaryDirectory(prefix="span-exact-") as tmp:
+            import pathlib
+
+            root = pathlib.Path(tmp)
+            (root / "src").mkdir()
+            (root / "src" / "orders.js").write_text(
+                body, encoding="utf-8"
+            )
+            src = _graft.GraftStructuralSource(
+                "repo-1",
+                root,
+                wiring={
+                    "nodes": [{
+                        "id": "src/orders.js", "name": "orders.js",
+                        "kind": "file", "path": "src/orders.js",
+                        "body_hash": digest,
+                    }, {
+                        "id": "src/orders.js#place", "name": "place",
+                        "kind": "function", "path": "src/orders.js",
+                        "span": "L1-L3",
+                        "signature": "function place(order)",
+                        "body_hash": digest,
+                    }],
+                    "edges": [],
+                },
+            )
+            exact = src.search_symbols(
+                "repo-1", "place", m.StructuralLocateMatch.EXACT,
+                _bounds(),
+            )
+            self.assertEqual(len(exact.items), 1)
+            self.assertEqual(
+                exact.items[0].candidate.subject.subject_id.canonical_locator,
+                "src/orders.js#place",
+            )
+            self.assertIs(
+                exact.items[0].candidate.rank_basis,
+                m.CandidateRankBasis.EXACT_DECLARATION,
+            )
+            full_id = src.search_symbols(
+                "repo-1", "src/orders.js#place",
+                m.StructuralLocateMatch.EXACT, _bounds(),
+            )
+            self.assertEqual(len(full_id.items), 1)
+            self.assertIs(
+                full_id.items[0].candidate.rank_basis,
+                m.CandidateRankBasis.EXACT_LOCATOR,
+            )
+            partial = src.search_symbols(
+                "repo-1", "plac", m.StructuralLocateMatch.EXACT,
+                _bounds(),
+            )
+            self.assertEqual(partial.items, ())
+            contains = src.search_symbols(
+                "repo-1", "place", m.StructuralLocateMatch.CONTAINS,
+                _bounds(),
+            )
+            self.assertTrue(
+                any(
+                    h.candidate.subject.subject_id.canonical_locator
+                    == "src/orders.js#place"
+                    for h in contains.items
+                )
+            )
+
     def test_file_subject_kinds(self):
         src = _source()
         resolution = src.resolve_subject(
@@ -327,6 +402,22 @@ class GraftPortBehaviorTest(unittest.TestCase):
         second = src.repository_state("repo-1")
         self.assertEqual(first.state_fingerprint, second.state_fingerprint)
 
+    def test_reach_unknown_subject_returns_empty_page(self):
+        # Semantic-only area subjects are never structural nodes.
+        # reach() must return the empty page (skipped, never guessed),
+        # not leak KeyError — impact() on an admitted area depends on it.
+        src = _source()
+        sid = m.SubjectId(
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.OTHER,
+            canonical_locator="some-area",
+        )
+        page = src.reach(
+            "repo-1", sid, (), StructuralDirection.BOTH, 3, _bounds()
+        )
+        self.assertEqual(page.items, ())
+        self.assertFalse(page.unsupported)
+
     def test_factory_rejects_unknown_config(self):
         import tempfile
 
@@ -394,6 +485,91 @@ class GraftPortBehaviorTest(unittest.TestCase):
         self.assertNotEqual(
             first, other.repository_state("repo-1").state_fingerprint
         )
+
+
+    def test_repeated_resolutions_bound_subprocesses(self):
+        # Perf regression: resolving several subjects must not fan out
+        # one full index fingerprint plus git subprocesses per subject.
+        # The fingerprint is memoized on the wiring stat; git runs once
+        # per status call, not per node.
+        import hashlib
+        import subprocess
+        import tempfile
+        from unittest import mock
+
+        bodies = {
+            f"src/f{i}.js": f"export function f{i}() {{}}\n"
+            for i in range(5)
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "src").mkdir()
+            nodes = []
+            for rel, body in bodies.items():
+                (root / rel).write_text(body, encoding="utf-8")
+                digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+                stem = pathlib.Path(rel).stem
+                nodes.append({
+                    "id": rel, "name": pathlib.Path(rel).name,
+                    "kind": "file", "path": rel, "body_hash": digest,
+                })
+                nodes.append({
+                    "id": f"{rel}#{stem}", "name": stem,
+                    "kind": "function", "path": rel,
+                    "body_hash": digest,
+                })
+            subprocess.run(
+                ("git", "-C", str(root), "init", "-q"),
+                check=True, timeout=60,
+            )
+            subprocess.run(
+                ("git", "-C", str(root), "add", "-A"),
+                check=True, timeout=60,
+            )
+            subprocess.run(
+                (
+                    "git", "-C", str(root),
+                    "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "x",
+                ),
+                check=True, timeout=60,
+            )
+            (root / "graft" / ".graph").mkdir(parents=True)
+            import json
+
+            (root / "graft" / ".graph" / "wiring.json").write_text(
+                json.dumps({"nodes": nodes, "edges": []}),
+                encoding="utf-8",
+            )
+            src = g.GraftStructuralSource("repo-1", root)
+            real_run = subprocess.run
+            calls = []
+
+            def counting_run(*args, **kwargs):
+                calls.append(args[0][:3])
+                return real_run(*args, **kwargs)
+
+            with mock.patch.object(
+                g._subprocess, "run", side_effect=counting_run
+            ):
+                for rel in sorted(bodies):
+                    page = src.locations(
+                        "repo-1",
+                        m.SubjectId(
+                            repository_id="repo-1",
+                            subject_kind=m.SubjectKind.COMPONENT,
+                            canonical_locator=rel,
+                        ),
+                        _bounds(),
+                    )
+                    self.assertEqual(len(page.items), 1)
+            # One git status per locations() call (5) plus the search
+            # path is gone here; the bound bites only on fan-out
+            # regressions (pre-fix: full fingerprint walk per call).
+            self.assertLessEqual(len(calls), 10)
+            self.assertTrue(
+                all(cmd[0] == "git" for cmd in calls)
+            )
 
 
 if __name__ == "__main__":

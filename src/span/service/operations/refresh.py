@@ -158,7 +158,10 @@ def refresh(
         )
     if request.target is None:
         raise RefreshScopeError(
-            "repo-wide refresh requires Phase 3 subject enumeration"
+            "refresh needs an exact scope: pass a SubjectSelector for "
+            "the stale subject or a known EvidenceScope, and use status "
+            "to find the stale scope; repo-wide refresh without "
+            "enumeration is rejected"
         )
     subjects, ambiguity = _resolve_scope_subjects(
         request.repository_id, request.target,
@@ -227,6 +230,7 @@ def refresh(
         stale_questions = _stale_question_scopes(
             request.repository_id, subject,
             store=store, evidence=evidence, bounds=bounds,
+            suspended=continuations.live_question_keys(),
         )
         if updates or coverage_updates or stale_questions:
             if updates:
@@ -304,6 +308,7 @@ def refresh(
     first_stale = _stale_question_scopes(
         request.repository_id, first,
         store=store, evidence=evidence, bounds=bounds,
+        suspended=continuations.live_question_keys(),
     )
     first_scope = first_stale[0] if first_stale else None
     task = prepare_interpretation_task(

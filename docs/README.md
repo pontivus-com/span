@@ -23,7 +23,7 @@ workflows, or originates authority).
 - `skills.md` — Agent Skills integration guide
 - `lifecycle.md` — agent execution lifecycle, init/readiness, examples
 - `hooks.md` — lifecycle-hook integration, matrix, reference adapter
-- `agents-snippet.md` — canonical AGENTS.md lifecycle block (installer source; guidance only, never semantics)
+- `agents-snippet.md` — canonical lifecycle block for host reference (read-only; never copied into targets by Addendum E §3/E-02; guidance only, never semantics)
 - `semantic-governance-addendum.md` — adopted v0.6 addendum: query-time
   store-subject resolution (F1), cross-unit established-evidence
   citation (F2), validation tests, operational prerequisites
@@ -32,7 +32,13 @@ workflows, or originates authority).
   section-aware reads, payload helpers, drift notes, validation tests
 - `semantic-governance-addendum-e.md` — binding corrective chapter for
   target-boundary semantics, read-only structural consumption, MCP/runtime
-  alignment, generated-artifact prevention, and acceptance closure
+  alignment, generated-artifact prevention, and acceptance closure;
+  §9 records adopted tier-1 operational remediation (verify-fast-path,
+  census diff, backup on install, seeds convention)
+- `semantic-governance-addendum-f.md` — adopted single-MCP direction:
+  Span absorbs read-only structural navigation (`locate`, `neighbors`),
+  graft MCP deregistered, E-14 scan deleted; implementation pending
+  authorization (E governs until F-7 passes)
 
 Governing authority: `.context/requirements/`, the v0.6 implementation plan,
 and Addendum E for the corrective boundaries named there. If any historical

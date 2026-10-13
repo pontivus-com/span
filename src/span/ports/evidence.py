@@ -29,7 +29,16 @@ class EvidenceSource(_typing.Protocol):
         bounds: QueryBounds,
         page_token: str | None = None,
     ) -> EvidenceInventoryPage:
-        """Bounded evidence inventory (fingerprints, not judgments)."""
+        """Bounded evidence inventory (fingerprints, not judgments).
+
+        Stable-identity contract (Addendum E §4C.6B): for one logical
+        inventory member in one repository, EvidenceId is stable across
+        repeated calls, restarts, and content changes. A rename/move may
+        legitimately appear as removal of the old identity and admission
+        of a new identity. Content fingerprints are per-read observations,
+        never identity. Services deduplicate identical identity and fail
+        closed on conflicting identity for one EvidenceId.
+        """
         ...
 
     def select_evidence(

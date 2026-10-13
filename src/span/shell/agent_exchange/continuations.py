@@ -58,6 +58,7 @@ class SuspendedOperation:
     trace_boundary: bool = False
     establish_baseline: bool = False
     target_scope: m.EvidenceScope = _field(default_factory=m.EvidenceScope)
+    target_id: m.TargetId | None = None
 
     def __post_init__(self) -> None:
         if self.op not in (
@@ -117,6 +118,43 @@ class ContinuationStore:
         if (now - created).total_seconds() > self._ttl:
             return None
         return entry.record
+
+    def live_question_keys(self) -> frozenset[tuple[str, str, str, str]]:
+        """Identity keys of unexpired suspended units.
+
+        One key per live entry: (repository_id, subject locator,
+        question-class value or "", question slice). Used by refresh
+        admission (G-15) so a recorded pending is never suspended
+        twice while its first unit is still outstanding. Expired
+        entries are skipped here (they are abandoned on next claim);
+        nothing is evicted by this read.
+        """
+        now = self._now()
+        keys: set[tuple[str, str, str, str]] = set()
+        for entry in self._entries.values():
+            record = entry.record
+            created = entry.created_at
+            if created.tzinfo is None or now.tzinfo is None:
+                continue
+            if (now - created).total_seconds() > self._ttl:
+                continue
+            question = record.request.question
+            if question is not None:
+                keys.add((
+                    record.repository_id,
+                    question.subject.canonical_locator,
+                    question.question_class.value,
+                    question.question_slice,
+                ))
+            elif record.request.question_slice:
+                for subject in record.request.subjects:
+                    keys.add((
+                        record.repository_id,
+                        subject.subject_id.canonical_locator,
+                        "",
+                        record.request.question_slice,
+                    ))
+        return frozenset(keys)
 
     def __len__(self) -> int:
         return len(self._entries)

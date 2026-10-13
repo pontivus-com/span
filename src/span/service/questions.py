@@ -341,6 +341,7 @@ def _stale_question_scopes(
     store: SemanticStore,
     evidence: EvidenceSource,
     bounds: m.QueryBounds,
+    suspended: frozenset[tuple[str, str, str, str]] = frozenset(),
 ) -> list[m.SemanticQuestionScope]:
     """Persisted questions requiring reassessment, deterministic order.
 
@@ -348,6 +349,18 @@ def _stale_question_scopes(
     is PENDING or whose freshness is noncurrent (changed evidence,
     moved discovery, retired/stale premises or results). Refresh
     re-examines under these persisted identities (B.3/B-06).
+
+    G-15: recorded-PENDING questions are included too (previously
+    skipped), so refresh resumes specific admitted work instead of
+    re-deriving the root question while pendings starve. Ordering
+    puts recorded-PENDING first (unexamined work before
+    re-verification), then the rest by (class, slice). Entries whose
+    question already has a live (unexpired, unclaimed) continuation
+    — passed as ``suspended`` keys of
+    (repository_id, subject locator, class value, slice) — are
+    excluded, so one question is never suspended twice concurrently.
+    Root re-verification is preserved: once no pending binds, the
+    stale root admits exactly as before.
     """
     sid = subject.subject_id
     try:
@@ -358,11 +371,21 @@ def _stale_question_scopes(
         )
     except Exception:
         return []
+    pending: list[m.SemanticQuestionScope] = []
     stale: list[m.SemanticQuestionScope] = []
     for cov in coverages:
         if cov.question is None or cov.question.subject != sid:
             continue
+        key = (
+            repository_id,
+            cov.question.subject.canonical_locator,
+            cov.question.question_class.value,
+            cov.question.question_slice,
+        )
+        if key in suspended:
+            continue
         if cov.disposition is m.SemanticQuestionDisposition.PENDING:
+            pending.append(cov.question)
             continue
         try:
             view = effective_question_view(
@@ -377,10 +400,13 @@ def _stale_question_scopes(
             or view.freshness.state is not m.FreshnessState.CURRENT
         ):
             stale.append(cov.question)
+    pending.sort(
+        key=lambda q: (q.question_class.value, q.question_slice)
+    )
     stale.sort(
         key=lambda q: (q.question_class.value, q.question_slice)
     )
-    return stale
+    return pending + stale
 
 def _question_views_for_scope(
     repository_id: str,

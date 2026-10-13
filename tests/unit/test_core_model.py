@@ -315,6 +315,37 @@ class ConstructionValidationTest(unittest.TestCase):
                 bound_info=_bound_info(), unsupported=True,
             )
 
+    def test_coverage_detail_accepts_closed_tokens_in_order(self):
+        report = m.StructuralFreshnessReport(
+            stale_files=("a.py",), unverifiable_files=(),
+            coverage=m.ScopeCoverage.UNVERIFIED,
+            coverage_detail="dirty-tree+touched-file-mismatch",
+        )
+        self.assertEqual(
+            report.coverage_detail, "dirty-tree+touched-file-mismatch"
+        )
+        clean = m.StructuralFreshnessReport(
+            coverage=m.ScopeCoverage.VERIFIED,
+            coverage_detail="clean-verified",
+        )
+        self.assertEqual(clean.coverage_detail, "clean-verified")
+
+    def test_coverage_detail_rejects_bad_shapes(self):
+        for bad in (
+            "",
+            "clean-verified+dirty-tree",
+            "dirty-tree+dirty-tree",
+            "bogus-token",
+            "dirty-tree +touched-file-mismatch",
+            "unverifiable-file+dirty-tree",
+            " dirty-tree",
+        ):
+            with self.assertRaises(ValueError, msg=bad):
+                m.StructuralFreshnessReport(
+                    coverage=m.ScopeCoverage.UNVERIFIED,
+                    coverage_detail=bad,
+                )
+
 
 class ClaimValueMappingTest(unittest.TestCase):
     """§4.4: every ClaimKind maps to exactly one typed value carrier."""
@@ -626,6 +657,24 @@ class SerializationRoundTripTest(unittest.TestCase):
         data["bogus"] = 1
         with self.assertRaises(m.CanonicalDecodeError):
             m.from_canonical(m.SubjectId, data)
+
+    def test_decode_error_carries_dotted_field_path(self):
+        data = m.to_canonical(_subject_id())
+        data["repository_id"] = 42
+        try:
+            m.from_canonical(m.SubjectId, data)
+        except m.CanonicalDecodeError as exc:
+            self.assertIn("repository_id", str(exc))
+        else:
+            self.fail("expected CanonicalDecodeError")
+        bad = m.to_canonical(_query_bounds())
+        bad["max_results"] = "many"
+        try:
+            m.from_canonical(m.QueryBounds, bad)
+        except m.CanonicalDecodeError as exc:
+            self.assertIn("max_results", str(exc))
+        else:
+            self.fail("expected CanonicalDecodeError")
 
 
 class CorePurityTest(unittest.TestCase):

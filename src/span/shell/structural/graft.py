@@ -27,6 +27,7 @@ import pathlib as _pathlib
 import subprocess as _subprocess
 
 from span.core import model as m
+from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
 from span.shell import paging as _paging
 from span.shell.structural.memory import (
@@ -137,24 +138,58 @@ def artifact_snapshot(repo_path: str | _pathlib.Path) -> dict[str, object]:
 
 
 def _git_revision(repo_path: _pathlib.Path) -> tuple[str | None, bool]:
+    """HEAD hash plus dirty boolean in a single subprocess.
+
+    One `git status --porcelain=v2 --branch` call yields both the
+    `# branch.oid` header and the entry lines; any entry line means
+    a dirty tree. This halves process spawns versus rev-parse plus
+    status Rhe separately (perf: repository_state fans out per page).
+    """
     try:
-        head = _subprocess.run(
-            ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
+        proc = _subprocess.run(
+            [
+                "git", "-C", str(repo_path), "status",
+                "--porcelain=v2", "--branch",
+            ],
             capture_output=True,
             text=True,
             timeout=30,
         )
-        if head.returncode != 0:
-            return None, False
-        status = _subprocess.run(
-            ["git", "-C", str(repo_path), "status", "--short"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        return head.stdout.strip(), bool(status.stdout.strip())
     except (OSError, _subprocess.SubprocessError):
         return None, False
+    if proc.returncode != 0:
+        return None, False
+    oid: str | None = None
+    dirty = False
+    for line in proc.stdout.splitlines():
+        if line.startswith("# branch.oid "):
+            value = line[len("# branch.oid "):].strip()
+            if value and value != "(initial)":
+                oid = value
+        elif line.startswith("#"):
+            continue
+        elif line.strip():
+            dirty = True
+    return oid, dirty
+
+
+def _git_head_time(repo_path: _pathlib.Path) -> int | None:
+    """HEAD commit timestamp (unix epoch) for scope-coverage checks."""
+    try:
+        proc = _subprocess.run(
+            ["git", "-C", str(repo_path), "log", "-1", "--format=%ct"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, _subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        return int(proc.stdout.strip())
+    except ValueError:
+        return None
 
 
 class GraftStructuralSource:
@@ -168,6 +203,9 @@ class GraftStructuralSource:
     ) -> None:
         self._repository_id = repository_id
         self._repo_path = _pathlib.Path(repo_path)
+        self._wiring_path: _pathlib.Path | None = None
+        self._wiring_mtime_ns: int | None = None
+        self._wiring_size: int | None = None
         if wiring is None:
             path = wiring_path_for(self._repo_path)
             if not path.is_file():
@@ -179,8 +217,419 @@ class GraftStructuralSource:
                 wiring = _json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 raise GraftShapeError(f"cannot read wiring.json: {exc}") from exc
+            self._wiring_path = path
+            try:
+                stat = path.stat()
+            except OSError:
+                stat = None
+            if stat is not None:
+                self._wiring_mtime_ns = stat.st_mtime_ns
+                self._wiring_size = stat.st_size
         self._nodes = self._parse_nodes(wiring)
         self._edges = self._parse_edges(wiring)
+        self._file_hashes = self._rebuild_file_hashes()
+        # Fingerprint memo: the node set derives byte-for-byte from the
+        # wiring file, so (mtime, size) keys the cached digest exactly.
+        # Must precede _compute_index_version, which reads it. Never
+        # served across index content changes (keyed, and _ensure_fresh
+        # reloads on stat change first).
+        self._state_fingerprint_memo: tuple[int | None, int | None, str] | None = None
+        self._index_version = self._compute_index_version()
+
+    def _rebuild_file_hashes(self) -> dict[str, str | None]:
+        """Recorded whole-file hashes by path (Addendum F §4.0).
+
+        Only file-kind nodes carry a comparable hash; symbols are never
+        compared against file bytes.
+        """
+        hashes: dict[str, str | None] = {}
+        for node in self._nodes.values():
+            if node["kind"] != "file":
+                continue
+            path = str(node["path"])
+            body = node.get("body_hash")
+            hashes[path] = (
+                body if isinstance(body, str) and body else None
+            )
+        return hashes
+
+    def _compute_index_version(self) -> str:
+        """Listing version binding query cursors (Addendum F §4.3)."""
+        return f"{self._wiring_mtime_ns or 0}-{self._state_fingerprint()[:16]}"
+
+    def _ensure_fresh(self) -> None:
+        """Reload rule (Addendum F §4.0): re-read the index when the
+        wiring file changed since load. Read-only reload — parsing only,
+        never a build. Injected wiring (tests) has no path to watch."""
+        if self._wiring_path is None:
+            return
+        try:
+            stat = self._wiring_path.stat()
+        except OSError:
+            return
+        if (
+            stat.st_mtime_ns == self._wiring_mtime_ns
+            and stat.st_size == self._wiring_size
+        ):
+            return
+        try:
+            wiring = _json.loads(self._wiring_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # Unreadable new index: keep serving the loaded one rather
+            # than failing the operation on a torn write.
+            return
+        try:
+            nodes = self._parse_nodes(wiring)
+            edges = self._parse_edges(wiring)
+        except (GraftShapeError, GraftVocabularyError):
+            return
+        self._nodes = nodes
+        self._edges = edges
+        self._file_hashes = self._rebuild_file_hashes()
+        self._wiring_mtime_ns = stat.st_mtime_ns
+        self._wiring_size = stat.st_size
+        self._index_version = self._compute_index_version()
+
+    def _live_file_fingerprint(self, path: str) -> str | None:
+        """Current whole-file fingerprint; None when unreadable."""
+        try:
+            return fingerprint_content(
+                (self._repo_path / path).read_text(encoding="utf-8")
+            )
+        except OSError:
+            return None
+
+    def _scope_current(self) -> bool:
+        """Index-covers-tree check (Addendum F §4.0).
+
+        True only when the tree is git-clean and the loaded index is at
+        least as new as HEAD: a clean tree equals HEAD, so an index that
+        postdates it saw exactly this content — including the absence of
+        new files. Injected wiring and non-git trees cannot establish
+        this and report False (honest UNVERIFIED, never assumed).
+        """
+        if self._wiring_mtime_ns is None:
+            return False
+        revision, dirty = _git_revision(self._repo_path)
+        if revision is None or dirty:
+            return False
+        head_time = _git_head_time(self._repo_path)
+        if head_time is None:
+            return False
+        return self._wiring_mtime_ns >= head_time * 1_000_000_000
+
+    def _coverage_detail(
+        self,
+        stale: list[str] | tuple[str, ...],
+        unverifiable: list[str] | tuple[str, ...],
+    ) -> str:
+        """Closed diagnostic tokens for the freshness verdict (G §4.2a).
+
+        Projects facts already held by the provider; computes no new
+        freshness. Fixed join order: non-git-tree, injected-index,
+        dirty-tree, touched-file-mismatch, unverifiable-file,
+        index-older-than-head. `clean-verified` only when coverage is
+        VERIFIED.
+        """
+        tokens: list[str] = []
+        if self._wiring_path is None:
+            tokens.append("injected-index")
+        else:
+            revision, dirty = _git_revision(self._repo_path)
+            if revision is None:
+                tokens.append("non-git-tree")
+            elif dirty:
+                tokens.append("dirty-tree")
+            else:
+                head_time = _git_head_time(self._repo_path)
+                if head_time is None:
+                    tokens.append("non-git-tree")
+                elif (
+                    self._wiring_mtime_ns is not None
+                    and self._wiring_mtime_ns
+                    < head_time * 1_000_000_000
+                ):
+                    tokens.append("index-older-than-head")
+        if stale:
+            tokens.append("touched-file-mismatch")
+        if unverifiable:
+            tokens.append("unverifiable-file")
+        order = {
+            "non-git-tree": 0,
+            "injected-index": 1,
+            "dirty-tree": 2,
+            "touched-file-mismatch": 3,
+            "unverifiable-file": 4,
+            "index-older-than-head": 5,
+        }
+        tokens = sorted(set(tokens), key=lambda t: order[t])
+        if not tokens:
+            return "clean-verified"
+        return "+".join(tokens)
+
+    def verify_files(
+        self,
+        repository_id: str,
+        files: tuple[str, ...],
+    ) -> m.StructuralFreshnessReport:
+        """File-set freshness verdict (Addendum F §4.0 port)."""
+        self._check_repository(repository_id)
+        self._ensure_fresh()
+        stale: list[str] = []
+        unverifiable: list[str] = []
+        for path in dict.fromkeys(files):
+            recorded = self._file_hashes.get(path)
+            if recorded is None:
+                unverifiable.append(path)
+                continue
+            live = self._live_file_fingerprint(path)
+            if live is None or live != recorded:
+                stale.append(path)
+        coverage = (
+            m.ScopeCoverage.VERIFIED
+            if not stale and not unverifiable and self._scope_current()
+            else m.ScopeCoverage.UNVERIFIED
+        )
+        detail = (
+            "clean-verified"
+            if coverage is m.ScopeCoverage.VERIFIED
+            else self._coverage_detail(stale, unverifiable)
+        )
+        return m.StructuralFreshnessReport(
+            stale_files=tuple(stale),
+            unverifiable_files=tuple(unverifiable),
+            coverage=coverage,
+            coverage_detail=detail,
+        )
+
+    def _versioned_offset(self, page_token: str | None) -> int:
+        """Decode a version-bound cursor; drift becomes StaleContinuation."""
+        try:
+            return _paging.parse_versioned_token(
+                page_token, version=self._index_version
+            )
+        except ValueError as exc:
+            if str(exc).startswith("stale listing continuation"):
+                raise StaleContinuationError(str(exc)) from None
+            raise
+
+    def _versioned_page(
+        self,
+        items: tuple[object, ...],
+        offset: int,
+        max_results: int,
+        category: str,
+    ) -> tuple[tuple[object, ...], m.BoundInfo]:
+        kept = items[offset:offset + max_results]
+        remaining = len(items) - (offset + len(kept))
+        truncated = remaining > 0
+        return tuple(kept), m.BoundInfo(
+            requested_max_results=max_results,
+            requested_max_depth=0,
+            returned_results=len(kept),
+            truncated=truncated,
+            truncated_category=category if truncated else None,
+            continuation_token=(
+                _paging.format_versioned_token(
+                    self._index_version, offset + len(kept)
+                )
+                if truncated else None
+            ),
+        )
+
+    def search_symbols(
+        self,
+        repository_id: str,
+        query: str,
+        match: m.StructuralLocateMatch,
+        bounds: m.QueryBounds,
+        page_token: str | None = None,
+    ) -> m.StructuralSearchPage:
+        """Paginated name/locator search (Addendum F §4.0 port)."""
+        self._check_repository(repository_id)
+        self._ensure_fresh()
+        if not query:
+            raise ValueError("search query must be non-empty")
+        offset = self._versioned_offset(page_token)
+        if match is m.StructuralLocateMatch.EXACT:
+            locators = [query] if query in self._nodes else []
+            ranked = [
+                (loc, m.CandidateRankBasis.EXACT_LOCATOR) for loc in locators
+            ]
+            if not ranked:
+                # Bare symbol names never equal a path#symbol node id;
+                # fall through to exact-name matching (F-01 recall fix).
+                # Still exact-only: no substring matching in this mode.
+                for node_id, node in self._nodes.items():
+                    name = str(node.get("name") or "")
+                    if query == name and query:
+                        rank = (
+                            m.CandidateRankBasis.EXACT_DECLARATION
+                            if node["kind"] != "file"
+                            else m.CandidateRankBasis.EXACT_NAME
+                        )
+                        ranked.append((node_id, rank))
+                        continue
+                    basename = node_id.split("#")[-1].rsplit("/", 1)[-1]
+                    if query == basename:
+                        ranked.append(
+                            (node_id, m.CandidateRankBasis.EXACT_NAME)
+                        )
+                order = {
+                    m.CandidateRankBasis.EXACT_LOCATOR: 0,
+                    m.CandidateRankBasis.EXACT_DECLARATION: 1,
+                    m.CandidateRankBasis.EXACT_NAME: 2,
+                }
+                ranked.sort(key=lambda x: (order[x[1]], x[0]))
+        else:
+            selector = m.SubjectSelector(
+                exact_subject_id=None,
+                name_or_locator=query,
+                expected_kinds=(),
+                retrieval_scope_hint=None,
+            )
+            ranked = [
+                (loc, rank)
+                for loc, rank in self._match_name(selector)
+            ]
+            order = {
+                m.CandidateRankBasis.EXACT_LOCATOR: 0,
+                m.CandidateRankBasis.EXACT_DECLARATION: 1,
+                m.CandidateRankBasis.EXACT_NAME: 2,
+                m.CandidateRankBasis.PARTIAL_NAME: 3,
+                m.CandidateRankBasis.STRUCTURAL_PROXIMITY: 4,
+            }
+            ranked.sort(key=lambda x: (order[x[1]], x[0]))
+        candidates = tuple(
+            m.StructuralSearchHit(
+                candidate=m.SubjectCandidate(
+                    subject=self._to_subject(loc),
+                    structural_evidence=(),
+                    rank_basis=rank,
+                ),
+                span_text=(
+                    str(node["span"]) if self._nodes[loc].get("span")
+                    else None
+                ),
+                signature_text=(
+                    str(node["signature"])
+                    if isinstance(
+                        self._nodes[loc].get("signature"), str
+                    )
+                    else None
+                ),
+            )
+            for loc, rank in ranked
+            for node in (self._nodes[loc],)
+        )
+        kept, bound_info = self._versioned_page(
+            candidates, offset, bounds.max_results, "search"
+        )
+        # Verify-then-exclude on the kept page: offsets advance over the
+        # stable index list, so live drift only shrinks pages (counted),
+        # never skips or duplicates entries.
+        files = sorted({
+            self._node_path(h.candidate.subject.subject_id.canonical_locator)
+            for h in kept
+        })
+        report = self.verify_files(repository_id, tuple(files))
+        stale_set = set(report.stale_files)
+        live_items = tuple(
+            h for h in kept
+            if self._node_path(
+                h.candidate.subject.subject_id.canonical_locator
+            ) not in stale_set
+        )
+        stale_omitted = len(kept) - len(live_items)
+        return m.StructuralSearchPage(
+            items=live_items,  # type: ignore[arg-type]
+            repository_state=self.repository_state(repository_id),
+            bound_info=bound_info,
+            unsupported=False,
+            stale_omitted=stale_omitted,
+            coverage=report.coverage,
+            coverage_detail=report.coverage_detail,
+        )
+
+    def _node_path(self, locator: str) -> str:
+        return str(self._nodes[locator]["path"])
+
+    def file_outline(
+        self,
+        repository_id: str,
+        locator: str,
+        bounds: m.QueryBounds,
+        page_token: str | None = None,
+    ) -> m.StructuralOutlinePage:
+        """Symbols defined in one file (Addendum F §4.0 port)."""
+        self._check_repository(repository_id)
+        self._ensure_fresh()
+        offset = self._versioned_offset(page_token)
+        members = sorted(
+            node_id for node_id, node in self._nodes.items()
+            if str(node["path"]) == locator
+        )
+        if not members:
+            # Indexed-nothing here: empty, with coverage reflecting
+            # whether a live file exists that the index missed.
+            try:
+                on_disk = (self._repo_path / locator).is_file()
+            except OSError:
+                on_disk = False
+            coverage = (
+                m.ScopeCoverage.UNVERIFIED if on_disk
+                else m.ScopeCoverage.VERIFIED
+            )
+            kept, bound_info = self._versioned_page((), offset, 1, "outline")
+            if coverage is m.ScopeCoverage.VERIFIED:
+                detail: str | None = "clean-verified"
+            else:
+                detail = self._coverage_detail((), (locator,))
+            return m.StructuralOutlinePage(
+                items=(),
+                repository_state=self.repository_state(repository_id),
+                bound_info=bound_info,
+                unsupported=False,
+                stale_omitted=0,
+                coverage=coverage,
+                coverage_detail=detail,
+            )
+        entries = tuple(
+            m.StructuralOutlineEntry(
+                subject=self._to_subject(node_id),
+                span_text=(
+                    str(node["span"]) if self._nodes[node_id].get("span")
+                    else None
+                ),
+                signature_text=(
+                    str(node["signature"])
+                    if isinstance(
+                        self._nodes[node_id].get("signature"), str
+                    )
+                    else None
+                ),
+            )
+            for node_id in members
+            for node in (self._nodes[node_id],)
+        )
+        kept, bound_info = self._versioned_page(
+            entries, offset, bounds.max_results, "outline"
+        )
+        report = self.verify_files(repository_id, (locator,))
+        stale_set = set(report.stale_files)
+        live_items = (
+            () if locator in stale_set else kept  # type: ignore[assignment]
+        )
+        stale_omitted = 0 if live_items else len(kept)
+        return m.StructuralOutlinePage(
+            items=tuple(live_items),  # type: ignore[arg-type]
+            repository_state=self.repository_state(repository_id),
+            bound_info=bound_info,
+            unsupported=False,
+            stale_omitted=stale_omitted,
+            coverage=report.coverage,
+            coverage_detail=report.coverage_detail,
+        )
 
     # -- parsing ----------------------------------------------------------
 
@@ -301,11 +750,19 @@ class GraftStructuralSource:
         )
 
     def _state_fingerprint(self) -> str:
+        key = (self._wiring_mtime_ns, self._wiring_size)
+        memo = self._state_fingerprint_memo
+        if memo is not None and (memo[0], memo[1]) == key:
+            return memo[2]
         parts = sorted(
             f"{node_id}:{node.get('body_hash') or ''}"
             for node_id, node in self._nodes.items()
         )
-        return _hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+        digest = _hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+        self._state_fingerprint_memo = (
+            self._wiring_mtime_ns, self._wiring_size, digest,
+        )
+        return digest
 
     def _check_repository(self, repository_id: str) -> None:
         if repository_id != self._repository_id:
@@ -315,6 +772,7 @@ class GraftStructuralSource:
 
     def repository_state(self, repository_id: str) -> m.RepositoryState:
         self._check_repository(repository_id)
+        self._ensure_fresh()
         import datetime as _datetime
 
         revision, dirty = _git_revision(self._repo_path)
@@ -333,6 +791,7 @@ class GraftStructuralSource:
         bounds: m.QueryBounds,
     ) -> m.SubjectResolution:
         self._check_repository(repository_id)
+        self._ensure_fresh()
         if selector.exact_subject_id is not None:
             locator = selector.exact_subject_id.canonical_locator
             matches = [
@@ -420,6 +879,7 @@ class GraftStructuralSource:
         page_token: str | None = None,
     ) -> m.StructuralLocationPage:
         self._check_repository(repository_id)
+        self._ensure_fresh()
         node = self._nodes.get(subject.canonical_locator)
         items: tuple[m.StructuralLocation, ...] = ()
         if node is not None:
@@ -449,6 +909,7 @@ class GraftStructuralSource:
         page_token: str | None = None,
     ) -> m.StructuralEdgePage:
         self._check_repository(repository_id)
+        self._ensure_fresh()
         locator = subject.canonical_locator
         kinds = set(edge_kinds) if edge_kinds else set(m.StructuralEdgeKind)
         found: list[m.StructuralEdge] = []
@@ -483,6 +944,37 @@ class GraftStructuralSource:
             unsupported=False,
         )
 
+    def _all_edges(
+        self,
+        repository_id: str,
+        subject: m.SubjectId,
+        edge_kinds: tuple[m.StructuralEdgeKind, ...],
+        direction: StructuralDirection,
+        bounds: m.QueryBounds,
+    ) -> list[m.StructuralEdge]:
+        """Consume every adjacency page for one node (Addendum F §4.2).
+
+        Single-page reads silently drop branches past the page limit;
+        traversal always exhausts continuations. Defensive against a
+        non-advancing token (breaks rather than loops forever).
+        """
+        out: list[m.StructuralEdge] = []
+        seen_tokens: set[str | None] = {None}
+        token: str | None = None
+        while True:
+            page = self.edges(
+                repository_id, subject, edge_kinds, direction, bounds,
+                token,
+            )
+            out.extend(page.items)
+            if not page.bound_info.truncated:
+                break
+            token = page.bound_info.continuation_token
+            if token in seen_tokens:
+                break
+            seen_tokens.add(token)
+        return out
+
     def reach(
         self,
         repository_id: str,
@@ -494,29 +986,51 @@ class GraftStructuralSource:
         page_token: str | None = None,
     ) -> m.StructuralReachPage:
         self._check_repository(repository_id)
+        self._ensure_fresh()
         limit = min(max_depth, bounds.max_depth)
+        if subject.canonical_locator not in self._nodes:
+            # Semantic-only area subjects are never structural nodes.
+            # Return the empty page (consistent with locations()/edges()
+            # for unresolvable identity: skipped, never guessed) instead
+            # of leaking KeyError; callers such as impact treat empty
+            # reach as claims-only coverage with explicit limits.
+            kept, bound_info = _paging.paginate(
+                (), bounds.max_results, "reach", page_token,
+                requested_max_depth=limit,
+            )
+            return m.StructuralReachPage(
+                items=tuple(kept),  # type: ignore[arg-type]
+                repository_state=self.repository_state(repository_id),
+                bound_info=bound_info,
+                unsupported=False,
+            )
         seen = {subject.canonical_locator}
         via: dict[str, m.StructuralEdge | None] = {
             subject.canonical_locator: None
         }
         frontier = [subject.canonical_locator]
         nodes: list[m.StructuralReachNode] = []
+        # Exhaustion rule (Addendum F §4.2): every adjacency page of
+        # every visited node is consumed — a single first page would
+        # silently drop whole branches past the page limit. The visited
+        # cap bounds total work; hitting it truncates explicitly.
+        visit_cap = bounds.max_subjects
+        capped = False
         for depth in range(1, limit + 1):
             nxt: list[str] = []
             for current in frontier:
+                if len(seen) >= visit_cap:
+                    capped = True
+                    break
                 current_id = m.SubjectId(
                     repository_id=self._repository_id,
                     subject_kind=self._subject_kind_of(self._nodes[current]),
                     canonical_locator=current,
                 )
-                page = self.edges(
-                    repository_id,
-                    current_id,
-                    edge_kinds,
-                    direction,
+                for edge in self._all_edges(
+                    repository_id, current_id, edge_kinds, direction,
                     bounds,
-                )
-                for edge in page.items:
+                ):
                     other = (
                         edge.target.canonical_locator
                         if edge.source.canonical_locator == current
@@ -536,12 +1050,21 @@ class GraftStructuralSource:
                     )
                 )
             frontier = nxt
-            if not frontier:
+            if not frontier or capped:
                 break
         kept, bound_info = _paging.paginate(
             tuple(nodes), bounds.max_results, "reach", page_token,
             requested_max_depth=limit,
         )
+        if capped and not bound_info.truncated:
+            bound_info = m.BoundInfo(
+                requested_max_results=bound_info.requested_max_results,
+                requested_max_depth=bound_info.requested_max_depth,
+                returned_results=bound_info.returned_results,
+                truncated=True,
+                truncated_category="reach",
+                continuation_token=bound_info.continuation_token,
+            )
         return m.StructuralReachPage(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),

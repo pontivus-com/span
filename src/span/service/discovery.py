@@ -16,7 +16,60 @@ __all__ = [
     'discover_evidence',
     '_coverage_for_task',
     '_read_units_within_bytes',
+    'enumerate_target_inventory',
+    'check_inventory_identity',
 ]
+
+
+def check_inventory_identity(
+    items: tuple[m.EvidenceInventoryItem, ...],
+) -> tuple[m.EvidenceInventoryItem, ...]:
+    """Enforce provider stable-identity: dedupe identical, fail on conflict."""
+    by_id: dict[str, m.EvidenceInventoryItem] = {}
+    for item in items:
+        ref = item.evidence_ref
+        key = ref.evidence_id.value
+        if key in by_id:
+            prev = by_id[key].evidence_ref
+            if prev.locator != ref.locator or prev.source_kind != ref.source_kind:
+                raise ValueError(
+                    f"conflicting provider identity for {key!r}"
+                )
+            continue
+        by_id[key] = item
+    return tuple(by_id[k] for k in sorted(by_id))
+
+
+def enumerate_target_inventory(
+    repository_id: str,
+    scope: m.EvidenceScope,
+    *,
+    evidence: EvidenceSource,
+    bounds: m.QueryBounds,
+) -> tuple[m.EvidenceInventoryItem, ...]:
+    """Fully enumerate exact-target inventory across all pages.
+
+    Raises ValueError on truncation without continuation progress or on
+    conflicting provider identity. Callers map this to UNVERIFIABLE.
+    """
+    items: list[m.EvidenceInventoryItem] = []
+    seen_tokens: set[str | None] = set()
+    page_token: str | None = None
+    while True:
+        page = evidence.inventory_evidence(
+            repository_id, scope, bounds, page_token
+        )
+        items.extend(page.items)
+        if not page.bound_info.truncated:
+            break
+        nxt = page.bound_info.continuation_token
+        if nxt is None or nxt in seen_tokens:
+            raise ValueError(
+                "target inventory truncated without continuation progress"
+            )
+        seen_tokens.add(page_token)
+        page_token = nxt
+    return check_inventory_identity(tuple(items))
 
 def _inventory_snapshot(
     repository_id: str,

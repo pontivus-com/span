@@ -41,6 +41,8 @@ from __future__ import annotations
 
 import datetime as _datetime
 import enum as _enum
+import hashlib as _hashlib
+import json as _json
 import types as _types
 import typing as _typing
 from dataclasses import dataclass as _dataclass
@@ -181,6 +183,24 @@ __all__ = [
     "SeedFingerprint",
     "CoverageDependency",
     "InterpretationCoverage",
+    "TargetId",
+    "TargetInventoryAccount",
+    "TargetAssociation",
+    "canonicalize_target_scope",
+    "derive_target_id",
+    "target_inventory_fingerprint",
+    "StructuralLocateMode",
+    "StructuralLocateMatch",
+    "ScopeCoverage",
+    "COVERAGE_DETAIL_TOKENS",
+    "StructuralLocateEntry",
+    "StructuralLocateResult",
+    "StructuralNeighborsResult",
+    "StructuralSearchHit",
+    "StructuralSearchPage",
+    "StructuralOutlineEntry",
+    "StructuralOutlinePage",
+    "StructuralFreshnessReport",
     "CanonicalIndexBatch",
     "StoreWriteResult",
     "SchemaVersion",
@@ -1101,6 +1121,8 @@ class StatusContent:
     unresolved: tuple[ResolutionRequirement, ...] = ()
     question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
     coverage_report: SemanticCoverageReport | None = None
+    target_association: TargetAssociation | None = None
+    target_disposition: SemanticCoverageDisposition | None = None
 
 
 SemanticContent = _typing.Union[
@@ -1270,10 +1292,396 @@ class StructuralReachPage:
             raise ValueError("unsupported page must carry empty items")
 
 
+class StructuralLocateMode(_enum.Enum):
+    """Locate operation modes (Addendum F §4.1 — one field, not three tools)."""
+
+    SYMBOL = "SYMBOL"
+    FILE_OUTLINE = "FILE_OUTLINE"
+    TARGET_MEMBERS = "TARGET_MEMBERS"
+
+
+class StructuralLocateMatch(_enum.Enum):
+    """Symbol match breadth (Addendum F §4.1)."""
+
+    EXACT = "EXACT"
+    CONTAINS = "CONTAINS"
+
+
+class ScopeCoverage(_enum.Enum):
+    """Search-scope currency (Addendum F §4.0 two-tier freshness).
+
+    VERIFIED means the loaded index postdates the newest source in the
+    queried scope with a clean tree and every touched file hash-verified.
+    Anything else — including empty results — is UNVERIFIED, which proves
+    nothing about absence.
+    """
+
+    VERIFIED = "VERIFIED"
+    UNVERIFIED = "UNVERIFIED"
+
+
+#: Closed structural diagnostic tokens (Addendum G §4.2a). Defined
+#: beside `ScopeCoverage`; validated at construction. Fixed join order:
+#: non-git-tree, injected-index, dirty-tree, touched-file-mismatch,
+#: unverifiable-file, index-older-than-head. `clean-verified` is
+#: exclusive and never joins.
+COVERAGE_DETAIL_TOKENS: tuple[str, ...] = (
+    "non-git-tree",
+    "injected-index",
+    "dirty-tree",
+    "touched-file-mismatch",
+    "unverifiable-file",
+    "index-older-than-head",
+    "clean-verified",
+)
+
+_COVERAGE_DETAIL_ORDER: dict[str, int] = {
+    token: index for index, token in enumerate(COVERAGE_DETAIL_TOKENS)
+}
+
+
+def _validate_coverage_detail(
+    name: str, value: str | None
+) -> str | None:
+    """Strict validation for structural diagnostic detail (Addendum G).
+
+    `None` is allowed. Any string must be a non-empty `+` join of closed
+    tokens in fixed order, with no duplicates, empty segments, or
+    surrounding whitespace; `clean-verified` only alone.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} must be None or a non-empty string")
+    if value != value.strip() or not value:
+        raise ValueError(f"{name} must not have surrounding whitespace")
+    parts = value.split("+")
+    if any(not part for part in parts):
+        raise ValueError(f"{name} has an empty token segment")
+    if any(part != part.strip() for part in parts):
+        raise ValueError(f"{name} tokens must not have whitespace")
+    if any(part not in _COVERAGE_DETAIL_ORDER for part in parts):
+        raise ValueError(f"{name} has an unknown token")
+    if len(set(parts)) != len(parts):
+        raise ValueError(f"{name} has duplicate tokens")
+    if "clean-verified" in parts and len(parts) != 1:
+        raise ValueError(f"{name}: clean-verified is exclusive")
+    order = [_COVERAGE_DETAIL_ORDER[part] for part in parts]
+    if order != sorted(order):
+        raise ValueError(f"{name} tokens are in the wrong order")
+    return value
+
+
+@_dataclass(frozen=True)
+class StructuralLocateEntry:
+    """One located structural member (Addendum F §4.1).
+
+    Identity is the stable evidence ref, not subjecthood: non-indexed
+    members carry a null subject and remain full members.
+    """
+
+    evidence_ref: EvidenceRef
+    content_fingerprint: str
+    subject: SubjectId | None = None
+    span_text: str | None = None
+    signature_text: str | None = None
+
+
+@_dataclass(frozen=True)
+class StructuralLocateResult:
+    """Locate answer (Addendum F §§4.1/4.3; detail per Addendum G §4.2a)."""
+
+    entries: tuple[StructuralLocateEntry, ...]
+    repository_state: RepositoryState
+    bound_info: BoundInfo
+    stale_omitted: int = 0
+    coverage: ScopeCoverage = ScopeCoverage.UNVERIFIED
+    coverage_detail: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_negative_int("stale_omitted", self.stale_omitted)
+        _validate_coverage_detail("coverage_detail", self.coverage_detail)
+
+
+@_dataclass(frozen=True)
+class StructuralNeighborsResult:
+    """Neighbors answer (Addendum F §4.2; detail per Addendum G §4.2a).
+
+    The four outcomes are wire-distinct: unsupported query
+    (unsupported:true, empty), unresolved subject (NOT_FOUND, empty),
+    resolved subject without edges (empty, RESOLVED), resolved subject
+    with edges.
+    """
+
+    resolution: SubjectResolution
+    repository_state: RepositoryState
+    bound_info: BoundInfo
+    edges: tuple[StructuralEdge, ...] = ()
+    unsupported: bool = False
+    stale_omitted: int = 0
+    coverage: ScopeCoverage = ScopeCoverage.UNVERIFIED
+    coverage_detail: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.unsupported and self.edges:
+            raise ValueError("unsupported result must carry empty edges")
+        _require_non_negative_int("stale_omitted", self.stale_omitted)
+        _validate_coverage_detail("coverage_detail", self.coverage_detail)
+
+
+@_dataclass(frozen=True)
+class StructuralSearchHit:
+    """One search hit: ranked candidate plus transcribed node strings."""
+
+    candidate: SubjectCandidate
+    span_text: str | None = None
+    signature_text: str | None = None
+
+
+@_dataclass(frozen=True)
+class StructuralSearchPage:
+    """Paginated name/locator search page (Addendum F §4.0 port)."""
+
+    items: tuple[StructuralSearchHit, ...]
+    repository_state: RepositoryState
+    bound_info: BoundInfo
+    unsupported: bool = False
+    stale_omitted: int = 0
+    coverage: ScopeCoverage = ScopeCoverage.UNVERIFIED
+    coverage_detail: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.unsupported and self.items:
+            raise ValueError("unsupported page must carry empty items")
+        _require_non_negative_int("stale_omitted", self.stale_omitted)
+        _validate_coverage_detail("coverage_detail", self.coverage_detail)
+
+
+@_dataclass(frozen=True)
+class StructuralOutlineEntry:
+    """One file-outline member: subject plus transcribed provider strings."""
+
+    subject: Subject
+    span_text: str | None = None
+    signature_text: str | None = None
+
+
+@_dataclass(frozen=True)
+class StructuralOutlinePage:
+    """Paginated file-outline page (Addendum F §4.0 port)."""
+
+    items: tuple[StructuralOutlineEntry, ...]
+    repository_state: RepositoryState
+    bound_info: BoundInfo
+    unsupported: bool = False
+    stale_omitted: int = 0
+    coverage: ScopeCoverage = ScopeCoverage.UNVERIFIED
+    coverage_detail: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.unsupported and self.items:
+            raise ValueError("unsupported page must carry empty items")
+        _require_non_negative_int("stale_omitted", self.stale_omitted)
+        _validate_coverage_detail("coverage_detail", self.coverage_detail)
+
+
+@_dataclass(frozen=True)
+class StructuralFreshnessReport:
+    """File-set freshness verdict (Addendum F §4.0 port; detail per G §4.2a).
+
+    Stale files hash-mismatch or are unreadable; unverifiable files have
+    no recorded file hash to compare against. Coverage applies the §4.0
+    rule to the given file set. `coverage_detail` projects the same facts
+    as closed diagnostic tokens; it never changes the verdict.
+    """
+
+    stale_files: tuple[str, ...] = ()
+    unverifiable_files: tuple[str, ...] = ()
+    coverage: ScopeCoverage = ScopeCoverage.UNVERIFIED
+    coverage_detail: str | None = None
+
+    def __post_init__(self) -> None:
+        _validate_coverage_detail("coverage_detail", self.coverage_detail)
+
+
 @_dataclass(frozen=True)
 class EvidenceInventoryItem:
     evidence_ref: EvidenceRef
     content_fingerprint: str
+
+
+@_dataclass(frozen=True)
+class TargetId:
+    """Nominal non-empty opaque target-campaign identifier (Addendum E)."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("TargetId", self.value)
+
+
+@_dataclass(frozen=True)
+class TargetInventoryAccount:
+    """One target-membership accounting entry (Addendum E §4C.2).
+
+    Exactly one outcome must be present: assignment, evidence-backed
+    exclusion, or unresolved mapping. Membership only; no semantic meaning.
+    Content fingerprints are excluded from target accounting by §§4C.6B/4C.6E;
+    content freshness remains owned by the existing evidence/question/claim/
+    relationship dependency machinery.
+    """
+
+    evidence_ref: EvidenceRef
+    assigned_area_subjects: tuple[SubjectId, ...] = ()
+    exclusion_basis: SemanticBasis | None = None
+    resolution_requirements: tuple[ResolutionRequirement, ...] = ()
+
+    def __post_init__(self) -> None:
+        has_assignment = bool(self.assigned_area_subjects)
+        has_exclusion = self.exclusion_basis is not None
+        has_unresolved = bool(self.resolution_requirements)
+        count = int(has_assignment) + int(has_exclusion) + int(has_unresolved)
+        if count != 1:
+            raise ValueError(
+                "TargetInventoryAccount requires exactly one outcome: "
+                "assigned_area_subjects, exclusion_basis, "
+                "or resolution_requirements"
+            )
+        if has_exclusion and not self.exclusion_basis.summary:
+            raise ValueError("exclusion_basis summary is empty")
+
+
+@_dataclass(frozen=True)
+class TargetAssociation:
+    """Durable target-accounting state (Addendum E §§4C.2/4C.6A–6C).
+
+    Accounting only; area meaning stays in claims/relationships, question
+    state stays in InterpretationCoverage.
+    """
+
+    target_id: TargetId
+    repository_id: str
+    target_scope: EvidenceScope
+    objective: str
+    area_subjects: tuple[SubjectId, ...] = ()
+    target_questions: tuple[SemanticQuestionScope, ...] = ()
+    inventory_accounting: tuple[TargetInventoryAccount, ...] = ()
+    inventory_fingerprint: str = ""
+    observed_repository_state_fingerprint: str = ""
+
+    def __post_init__(self) -> None:
+        _require_non_empty("repository_id", self.repository_id)
+        _require_non_empty("objective", self.objective)
+
+
+def _canonicalize_path(path: str) -> str:
+    if not path or path.startswith("/") or path == "":
+        raise ValueError(f"invalid target path: {path!r}")
+    parts = path.split("/")
+    out: list[str] = []
+    for part in parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            raise ValueError(f"path escapes repository: {path!r}")
+        if part == "":
+            raise ValueError(f"invalid target path: {path!r}")
+        out.append(part)
+    if not out:
+        return "."
+    return "/".join(out)
+
+
+def canonicalize_target_scope(
+    repository_id: str, scope: EvidenceScope, objective: str
+) -> tuple[EvidenceScope, str]:
+    """Canonicalize scope/objective per Addendum E §4C.6A (deterministic)."""
+    canonical_objective = objective.strip()
+    if not canonical_objective:
+        raise ValueError("objective is empty after strip")
+    if not scope.paths and not scope.evidence_refs:
+        raise ValueError("target scope is empty: no paths or evidence_refs")
+    canonical_paths: list[str] = []
+    for raw in scope.paths:
+        if not raw:
+            raise ValueError("empty path member")
+        canonical_paths.append(_canonicalize_path(raw))
+    canonical_paths = sorted(set(canonical_paths))
+    canonical_refs: list[EvidenceRef] = []
+    for ref in scope.evidence_refs:
+        if ref.repository_id != repository_id:
+            raise ValueError("evidence_ref repository mismatch")
+        if ref.section_or_span is not None:
+            raise ValueError("section-scoped refs are not inventory members")
+        canonical_refs.append(
+            EvidenceRef(
+                evidence_id=ref.evidence_id,
+                repository_id=ref.repository_id,
+                source_kind=ref.source_kind,
+                locator=_canonicalize_path(ref.locator),
+                revision_or_fingerprint=None,
+                section_or_span=None,
+            )
+        )
+    canonical_refs.sort(
+        key=lambda r: (
+            r.evidence_id.value,
+            r.source_kind.value,
+            r.locator,
+        )
+    )
+    seen: dict[str, EvidenceRef] = {}
+    for ref in canonical_refs:
+        key = ref.evidence_id.value
+        if key in seen:
+            prev = seen[key]
+            if prev.locator != ref.locator or prev.source_kind != ref.source_kind:
+                raise ValueError(
+                    f"conflicting provider identity for {key!r}"
+                )
+            continue
+        seen[key] = ref
+    canonical_scope = EvidenceScope(
+        paths=tuple(canonical_paths),
+        evidence_refs=tuple(seen[k] for k in sorted(seen)),
+    )
+    return canonical_scope, canonical_objective
+
+
+def derive_target_id(
+    repository_id: str, canonical_scope: EvidenceScope, canonical_objective: str
+) -> TargetId:
+    """Derive tgt- ID from canonical identity only (no revision/content)."""
+    payload = to_canonical(canonical_scope)
+    canonical_json = _json.dumps(
+        [repository_id, payload, canonical_objective],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    digest = _hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
+    return TargetId(value=f"tgt-{digest}")
+
+
+def target_inventory_fingerprint(
+    items: tuple[EvidenceInventoryItem, ...],
+) -> str:
+    """Membership fingerprint over sorted stable identity tuples."""
+    members = sorted(
+        (
+            item.evidence_ref.evidence_id.value,
+            item.evidence_ref.locator,
+            item.evidence_ref.source_kind.value,
+        )
+        for item in items
+    )
+    payload = _json.dumps(
+        [list(m) for m in members],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return _hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @_dataclass(frozen=True)
@@ -1530,6 +1938,8 @@ class SemanticInterpretationRequest:
     prior_claims: tuple[SemanticClaim, ...] = ()
     prior_relationships: tuple[SemanticRelationship, ...] = ()
     analysis_obligations: tuple[str, ...] = ()
+    target_id: TargetId | None = None
+    target_inventory_item: EvidenceInventoryItem | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty("repository_id", self.repository_id)
@@ -1565,6 +1975,8 @@ class SemanticInterpretationResult:
     candidate_conflicts: tuple[CandidateSemanticConflict, ...] = ()
     proposed_question_coverages: tuple[InterpretationCoverage, ...] = ()
     candidate_withdrawals: tuple[CandidateSemanticWithdrawal, ...] = ()
+    proposed_target_inventory_accounting: tuple[TargetInventoryAccount, ...] = ()
+    proposed_target_questions: tuple[SemanticQuestionScope, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -1666,6 +2078,7 @@ class CanonicalIndexBatch:
     retires_claims: tuple[ClaimRef, ...] = ()
     retires_relationships: tuple[RelationshipRef, ...] = ()
     conflicts: tuple[RecordedConflict, ...] = ()
+    target_associations: tuple[TargetAssociation, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -1716,7 +2129,30 @@ class ServiceBoundsPolicy:
 # ---------------------------------------------------------------------------
 
 class CanonicalDecodeError(ValueError):
-    """Raised when canonical data cannot be decoded into the target type."""
+    """Raised when canonical data cannot be decoded into the target type.
+
+    Carries append-only field-path context (Addendum G §4.1b): `path` is
+    a tuple of dotted field names with collection indices (for example
+    `("target", "exact_subject_id", "canonical_locator")` or
+    `("claims", "[3]")`). `reason` is the original failure text.
+    `str()` renders `path: reason` when a path is present, preserving
+    all existing reason substrings for backward compatibility.
+    """
+
+    def __init__(
+        self, message: str, path: tuple[str, ...] = ()
+    ) -> None:
+        self.reason = message
+        self.path = tuple(path)
+        if self.path:
+            rendered = ".".join(self.path).replace(".[", "[")
+            super().__init__(f"{rendered}: {message}")
+        else:
+            super().__init__(message)
+
+    def with_segment(self, segment: str) -> CanonicalDecodeError:
+        """Return a copy with one outer path segment prepended (pure)."""
+        return CanonicalDecodeError(self.reason, path=(segment,) + self.path)
 
 
 def to_canonical(value: object) -> object:
@@ -1819,9 +2255,15 @@ def _decode_value(hint: object, data: object) -> object:
         item_hint = args[0] if args else _typing.Any
         if item_hint is _typing.Any:
             raise CanonicalDecodeError("untyped collection decoding refused")
+        decoded: list[object] = []
+        for index, item in enumerate(data):
+            try:
+                decoded.append(_decode_value(item_hint, item))
+            except CanonicalDecodeError as exc:
+                raise exc.with_segment(f"[{index}]") from None
         if origin is tuple or hint is tuple:
-            return tuple(_decode_value(item_hint, item) for item in data)
-        return [_decode_value(item_hint, item) for item in data]
+            return tuple(decoded)
+        return decoded
 
     if isinstance(hint, type) and hasattr(hint, "__dataclass_fields__"):
         if not isinstance(data, dict):
@@ -1857,7 +2299,10 @@ def _decode_dataclass(cls: type, data: dict) -> object:
                     f"missing field {f.name!r} for {cls.__name__}"
                 )
             continue
-        kwargs[f.name] = _decode_value(hints[f.name], data[f.name])
+        try:
+            kwargs[f.name] = _decode_value(hints[f.name], data[f.name])
+        except CanonicalDecodeError as exc:
+            raise exc.with_segment(f.name) from None
     try:
         return cls(**kwargs)  # type: ignore[arg-type]
     except (ValueError, TypeError) as exc:

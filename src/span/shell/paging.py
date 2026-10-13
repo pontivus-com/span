@@ -14,10 +14,13 @@ __all__ = [
     "next_page_token",
     "parse_service_token",
     "format_service_token",
+    "format_versioned_token",
+    "parse_versioned_token",
     "paginate",
 ]
 
 _PREFIX = "pg:"
+_VERSIONED_PREFIX = "pgv:"
 
 
 def parse_page_token(page_token: str | None) -> int:
@@ -90,6 +93,50 @@ def format_service_token(
     ):
         return None
     return f"{_PREFIX}{left}:{right}:{qskip}"
+
+
+def format_versioned_token(version: str, offset: int) -> str:
+    """Encode a version-bound listing cursor (Addendum F §4.3).
+
+    Distinct format from plain ``pg:`` offsets; the two are never
+    interchanged. The version binds the query hash and listing version
+    (index mtime + index fingerprint).
+    """
+    if not version or ":" in version:
+        raise ValueError(f"invalid listing version: {version!r}")
+    if offset < 0:
+        raise ValueError(f"invalid listing offset: {offset}")
+    return f"{_VERSIONED_PREFIX}{version}:{offset}"
+
+
+def parse_versioned_token(
+    page_token: str | None, *, version: str,
+) -> int:
+    """Decode a version-bound cursor, failing closed on version drift.
+
+    ``None`` starts the listing at zero. A well-formed token bound to a
+    different version raises ValueError naming the observed version —
+    callers map this to the typed stale-continuation error and restart
+    the listing from page one.
+    """
+    if page_token is None:
+        return 0
+    if not page_token.startswith(_VERSIONED_PREFIX):
+        raise ValueError(f"unknown page token: {page_token}")
+    body = page_token[len(_VERSIONED_PREFIX):]
+    token_version, _, offset_text = body.rpartition(":")
+    try:
+        offset = int(offset_text)
+    except ValueError:
+        raise ValueError(f"unknown page token: {page_token}") from None
+    if offset < 0 or not token_version:
+        raise ValueError(f"unknown page token: {page_token}")
+    if token_version != version:
+        raise ValueError(
+            f"stale listing continuation: token version "
+            f"{token_version!r} != current {version!r}"
+        )
+    return offset
 
 
 def paginate(

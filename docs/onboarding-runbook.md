@@ -3,17 +3,28 @@
 Canonical path for an exact user-supplied target. Steps and stopping
 conditions are copied from `docs/semantic-governance-addendum-e.md` §§4A
 and 6. Guides describe; they never define semantics. No new operation,
-carrier, writer, score, or background process is introduced here.
+store, writer, score, or background process is introduced here; target
+accounting uses the canonical target-association/result contract.
 
 ## 0. Preflight (host, fail closed)
 
 Confirm and record: installed Span source revision, registered host, data
-directory outside every target repo, exact repository root, existing
-structural index at `<target>/graft/.graph/wiring.json`, and that
-independent Graft activity is disabled or demonstrably read-only for the
-run. Missing or writable-unsafe prerequisites stop the run. Record the
+directory outside every target repo, exact repository root, and the
+existing structural index at `<target>/graft/.graph/wiring.json`
+(built offline via `graft build` before installation; no graft server is
+registered — structural navigation is served by Span itself under
+Addendum F). Missing prerequisites stop the run. Record the
 preflight in the receipt and acceptance evidence with a target artifact
 snapshot proving only the configured data store changed.
+
+## 0.1 Authority seeds convention
+
+Governing sources enter only as user-supplied seeds, never invented by
+Span or the installer. Repositories carry their seeds in a checked-in
+JSON file (a list of canonical `EvidenceRef` items); the operator passes
+it via `span-install --authority-seeds-file PATH`, and a setup-session
+`initialize_repository` call provisions them. Seed files live with the
+target repo they govern; unknown seed locators fail closed.
 
 ## 1. Operational setup
 
@@ -26,11 +37,13 @@ only; it is not semantic completion.
 ## 2. Target admission
 
 Pass the exact user target and objective to `initialize_target` with the
-exact `EvidenceScope` and a non-empty objective. Expected: a resumable
-exchange containing the complete target boundary, the current structural
-anchor, and the next typed interpretation task. Record the boundary
-verbatim. An anchor is a candidate and evidence input, never a semantic
-area.
+exact `EvidenceScope` and a non-empty objective. Expected: the deterministic
+`TargetId` campaign handle plus the next typed task. Record the exact semantic
+boundary, canonicalized per Addendum E §4C.6A (not verbatim text).
+`initialize_target` creates or resumes the deterministic
+`TargetAssociation`. Mapping tasks carry `question=None` with one
+`target_inventory_item`; the anchor is a candidate and evidence input, never a
+semantic area. Membership changes re-enter here; content changes use `refresh`.
 
 ## 3. Semantic mapping
 
@@ -41,14 +54,60 @@ area. No area disappears because it is inconvenient, small, duplicated, or
 structurally difficult. `target_scope` alone does not prove grouping; see
 the E-13 constraint in `docs/lifecycle.md`.
 
-Recording convention (guidance, not a new carrier): admit one question per
-coherent area with the area anchor as `scope_root`, keep the area's complete
-evidence in that question's `evidence_scope`, and name member anchors and
-exclusions in `disposition_basis`. Admitted area subjects stay queryable by
-exact id. Exact-target `status` then reports one typed disposition per
-frontier subject (`coverage_report` entries: `CURRENT`, `INCOMPLETE`,
-`STALE`, `UNVERIFIABLE`, or explicitly `UNASSESSED`) — that report is the
-whole-target accounting. No second store, ledger, or progress model exists.
+Coverage-dimension checklist (convention, not a second model): when
+substantiating completeness for a bounded area, walk identity
+(subjects via structural discovery), structure (adjacency via
+`neighbors`), dataflow (producer-to-consumer via `trace`),
+composition (area membership and boundary crossings), authority
+(governing sources plus seeds), verification (linked tests with
+currency, never test-existence-as-pass), registration (manifest-
+declared units as candidate subjects), execution routing (declared
+routes as evidence, never runtime claims), governance (ownership and
+constraint claims), state provenance (evidence fingerprints and
+freshness), and declared configuration (config evidence marked
+declared-not-observed). Record each as ordinary questions,
+requirements, and claims — dimensions organize the work, the existing
+coverage contract records it.
+
+Recording convention: submit typed target-inventory accounting for every
+current inventory member: assign it to one or more admitted area
+subjects, provide an evidence-backed target exclusion (`SemanticBasis`), or record an explicit
+unresolved mapping requirement. First admission of an area to this target
+requires a `PENDING` question or reuse of persisted coverage via
+`proposed_target_questions`. This is separate from admitting one question
+per coherent area with the area anchor as `scope_root` and the area's complete
+evidence in that question's `evidence_scope`. `NOT_APPLICABLE` answers a
+semantic question; it does not exclude that area's inventory from the target.
+Admitted area subjects stay queryable by exact id. `status(TargetId)` (`NORMAL`
+only) then reports target accounting and semantic coverage separately; unresolved or
+unaccounted inventory prevents `CURRENT`. No second store, ledger, or
+progress model exists.
+
+### Worked structural orientation (`locate` → `neighbors` → admit)
+
+After `initialize_target` returns the campaign handle, orient with
+structure before grouping areas (Addendum F §3 rows 3b/4/7b):
+
+1. `locate` with `TARGET_MEMBERS` and the exact `EvidenceScope` → the
+   full member list (the same enumeration the frontier reconciles
+   against). A member without an indexed subject carries a null
+   subject and stays a full member.
+2. `locate` with `FILE_OUTLINE` for one file, or `SYMBOL` for a
+   name/locator (default `EXACT`; `CONTAINS` walks the match order) →
+   symbols, spans, signatures. In-body content (error strings,
+   config keys) stays with grep; Span does not duplicate it.
+3. `neighbors` with the exact subject and `UPSTREAM` / `DOWNSTREAM` /
+   `BOTH` at a bounded `max_depth` → caller/callee adjacency for
+   partition grouping and pre-change blast radius. Multi-hop pages
+   are a discovery tree; resume with the continuation token.
+4. Admit: group members into coherent areas and account every member
+   through `submit_interpretation` (assign to an area,
+   evidence-backed target exclusion, or explicit unresolved mapping).
+
+All four return navigation evidence only — cite it as evidence refs,
+never as authority. Stale entries are excluded and counted
+(`stale_omitted`); `UNVERIFIED` coverage, including an empty page,
+proves nothing about absence.
 
 ## 4. Area interpretation (one coherent area at a time)
 
@@ -67,9 +126,22 @@ still needs interpretation.
 No fixed file count, claim count, score, representative-root shortcut, or
 populated-store check satisfies this.
 
+Evidence quality (Addendum G): prefer function or block spans over
+whole-file citation where `span_text` and `signature_text` exist; cite
+tests, contracts, and docs alongside code with existing
+`EvidenceSourceKind` values. Link `VERIFIED_BY` only on executed
+evidence with observed revision. Entry modes: `initialize_target` with
+an exact `EvidenceScope` plus user objective campaigns an exact
+user-supplied directory; `explain(establish_baseline=True)` audits an
+ordinary selected root. Do not substitute one for the other.
+
 ## 5. Persistence and advance
 
 Call `submit_interpretation` with the typed result under its continuation.
+For target-mode work, the result may include bounded target-inventory
+accounting proposals; ordinary question-local results leave that component
+empty. Span validates and writes accepted accounting, subjects, semantic
+results, and target-bound coverage atomically through the canonical batch.
 Use `reissue_interpretation` once and only for an expired transport
 continuation, then submit the returned identical task. Continue until no
 unprocessed target work remains. One representative answer is never
@@ -78,9 +150,11 @@ or a truthful terminal result.
 
 ## 6. Normal retrieval
 
-Use `status`, `explain`, `impact`, `trace`, and `authority` for bounded
+Use `status(TargetId)` for campaign readback; then `explain`, `impact`,
+`trace`, and `authority` on exact area `SubjectId`s for bounded
 questions. Results distinguish persisted coverage from new pending
 interpretation. Retrieval never invents, widens, or substitutes an answer.
+`TargetId` is rejected under `HOOK_FAST`; hooks use `EvidenceScope` only.
 
 ## 7. Change maintenance
 
@@ -90,20 +164,22 @@ answer is not presented as current; `refresh` alone manufactures nothing.
 
 ## 8. Fresh-session closeout
 
-Start a new agent session. Read target `status` and representative
-`explain` answers. Expected: reusable claims/relationships/questions,
-explicit gaps, and a completion report listing every material area with
-its persisted disposition. Completion requires whole-target accounting
-plus fresh retrieval evidence — not merely `READY`, a populated store, or
-a successful transport call.
+Start a new agent session. Read `status(TargetId)` and representative
+`explain` answers for exact area ids. Expected: reusable claims/relationships/questions,
+explicit gaps, and a completion report listing every inventory accounting
+state and material area with its persisted semantic-question disposition.
+Completion requires whole-target accounting plus fresh retrieval evidence —
+not merely `READY`, a populated store, or a successful transport call.
 
 ## Stopping rule (binding)
 
-Every material area is accounted for; every accounted area has a persisted
-disposition. `PENDING` means the campaign is not complete. `OPEN` means an
-unresolved requirement is recorded, not hidden. `NOT_APPLICABLE` states
-why the area is outside the objective. Never collapse states into a single
-coverage score, count, percentage, or threshold.
+Every current inventory member is assigned, evidence-backed excluded, or
+explicitly unresolved, and every admitted area has persisted semantic
+question coverage for this target. `PENDING` means the campaign is not complete. `OPEN` means
+an unresolved requirement is recorded, not hidden. `NOT_APPLICABLE` states
+why a bound semantic question does not apply; it does not establish target
+exclusion. Never collapse these facts into a single coverage score, count,
+percentage, or threshold.
 
 ## Boundaries
 

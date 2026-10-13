@@ -1832,8 +1832,8 @@ class LegacyUpgradeTest(unittest.TestCase):
                 con.close()
             store = SqliteSemanticStore(db)
             try:
-                self.assertEqual(store.schema_version(), m.SchemaVersion(3))
-                self.assertEqual(SCHEMA_VERSION, 3)
+                self.assertEqual(store.schema_version(), m.SchemaVersion(4))
+                self.assertEqual(SCHEMA_VERSION, 4)
                 page = store.load_claims(REPO, (sid,), (), _bounds())
                 self.assertEqual(
                     [c.claim_id.value for c in page.items], ["leg-1"]

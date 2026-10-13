@@ -9,10 +9,29 @@ Use Span's canonical operations to understand a repository before you
 change it. Span answers from indexed evidence; it never edits code,
 runs tests, or decides for you.
 
+## Entry decision (read first)
+
+Three branches, no others. Pick one before calling anything:
+
+1. **Ordinary orientation** (browsing, understanding, no user-given
+   target): `status` with no target, then `explain` on the chosen
+   target. Never `refresh` on first contact.
+2. **Exact user-supplied directory plus objective**: `initialize_target`
+   once with the exact `EvidenceScope` and objective; process each
+   returned unit until the target operation answers.
+3. **Post-change closeout** (you mutated code): scoped `status` on the
+   exact mutated scope; `refresh` only the scope that reads noncurrent;
+   `status` again to confirm.
+
+`locate`/`neighbors` enter when structural orientation is actually
+needed (find a symbol, outline a file, walk adjacency). Everything
+else (`trace`, `authority`, `impact`, submit/reissue) follows the
+admitted question, never curiosity.
+
 ## Operation lifecycle
 
 ```
-orient      explain <target>
+orient      status (no target), then explain <target>
 establish   initialize_target <exact boundary + objective>
 prepare     impact <target + change>
 investigate trace / authority (only where required)
@@ -110,13 +129,21 @@ establishment. Installation alone never starts this procedure.
   durably answered.
 
 For an explicit directory target, establish the complete target scope. The
-directory is bounded by the user's path, even when it is large. Use structural
-and filesystem discovery to partition the target into manageable material
-areas; the partition is an execution technique, not a semantic exclusion.
-Every contained material area must receive an answer, an explicit
-`NOT_APPLICABLE` disposition, or an `OPEN`/`PENDING` requirement. Any
-exclusion must be evidence-backed and reported. Never claim completion from a
-single representative root.
+directory is bounded by the user's path, even when it is large. Call
+`initialize_target` with the exact scope and objective; it returns the
+deterministic `TargetId` campaign handle and mapping work for unaccounted
+inventory (`question=None`). Partition into coherent areas (multiple files may
+map to one area; one file may map to more than one area); the partition is an
+execution technique, not a semantic exclusion. First admission of an area to
+this target requires a `PENDING` question or reuse of persisted coverage via
+`proposed_target_questions`. Every contained material area must receive an answer, an explicit
+`NOT_APPLICABLE` disposition, or an `OPEN`/`PENDING` requirement, with
+no unvisited material partition left unrecorded. Any
+exclusion must be evidence-backed target accounting (not question
+`NOT_APPLICABLE`) and reported. Read campaign state only via
+`status(TargetId)` (`NORMAL` only); retrieve areas via exact `SubjectId`s.
+Membership changes re-enter via `initialize_target`; content changes use
+`refresh`. Never claim completion from a single representative root.
 
 ### Semantic-analysis granularity
 
@@ -170,9 +197,9 @@ Root and partition selection: use the user's stated objective, the exact
 target boundary, existing structural candidates, authoritative contracts and
 evidence, and `roster.py::propose_territories()` only as structural support
 (no ranking and no importance judgment). For a directory target, cover every
-partition and record the target boundary, material participants, and
-evidence-backed exclusions in the session report and canonical question
-coverage. Structural centrality never determines semantic importance. Where
+partition and record the target boundary, material participants, and typed
+target-inventory accounting separately from canonical question coverage.
+Structural centrality never determines semantic importance. Where
 no defensible partition can be selected, report the evidence or decision
 required and leave the area `OPEN`; never fabricate or silently omit it.
 
@@ -181,6 +208,11 @@ Execution: initialize the repository root for operational readiness
 with the user's exact `EvidenceScope` and objective → investigate the
 returned typed unit →
 `submit_interpretation` until it returns the next unit or final target status.
+For target-mode submissions, use the typed result's target-inventory
+accounting component for assignment, evidence-backed target exclusion, or
+unresolved mapping. A semantic question's `NOT_APPLICABLE` disposition does
+not exclude its inventory member. Span validates and persists accounting,
+admitted subjects, semantic results, and target-bound coverage atomically.
 The MCP returns a bounded structural candidate frontier; do not recreate it
 with an unbounded host-side file loop. Each target pending task carries the
 exact target boundary separately from its structural anchor. Use that full
@@ -199,7 +231,14 @@ check for representative questions from each material area. A
 
 initialize_repository, initialize_target, explain, impact,
 trace, authority, status, refresh,
-submit_interpretation, and reissue_interpretation.
+submit_interpretation, reissue_interpretation,
+locate, and neighbors.
+
+Structural questions go to Span, not to a separate tool: `locate` finds
+symbols, outlines files, and lists target members; `neighbors` walks
+bounded caller/callee adjacency. Both return navigation evidence only —
+cite it as evidence, never as authority. Arbitrary in-body content
+search stays with your own grep; Span does not duplicate it.
 
 ## Rules
 
@@ -253,6 +292,11 @@ submit_interpretation, and reissue_interpretation.
   material is rejected; only complete replacement retires unshared
   prior outputs, and `PENDING`/`OPEN`/`NOT_APPLICABLE` never retire
   by omission.
+- Target-inventory accounting and semantic-question coverage are separate.
+  Every material inventory member must be assigned to an admitted area,
+  evidence-backed excluded from the exact target, or left with an explicit
+  unresolved mapping requirement. `NOT_APPLICABLE` applies only to its bound
+  semantic question and cannot serve as a target-exclusion record.
 - A listing token (`page_token`, now `pg:<claims>:<rels>:<questions>`)
   pages truncated listings including question coverage. A
   continuation resumes one suspended interpretation. They are
@@ -264,7 +308,9 @@ submit_interpretation, and reissue_interpretation.
   declared precedence resolves them.
 - `refresh` is explicit. Hooks only report readiness/staleness
   (`status` with `HOOK_FAST`) and never refresh, interpret,
-  rebuild, or initialize.
+  rebuild, or initialize. `HOOK_FAST` sees event-local scope only:
+  a `0/0 READY` notice never means the repository is clean — use
+  `NORMAL` `status` for the persisted coverage inventory.
 - Targets are canonical selectors: `{"$type": "SubjectSelector", ...}`
   with an exact id, name/locator, or kinds. Bounds may be omitted for
   service defaults.
@@ -276,3 +322,62 @@ requirements describing what would resolve incomplete knowledge.
 Follow `resolution_requirements` before treating partial knowledge as
 complete. Stale items need `refresh`, not reinterpretation by
 hand.
+
+Two freshness planes, never one condition. Structural `UNVERIFIED`
+(dirty tree, old index) is still usable as positive orientation
+evidence — a found caller is a real caller — but never proves
+completeness or absence ("no other callers" needs `VERIFIED`).
+Semantic `STALE` shows what was previously known; read it for
+orientation, refresh it before relying on it for change. A dirty
+tree alone never stales claims whose evidence is unchanged.
+
+## Appendix G-A: operation selection (Addendum G §4.7)
+
+Twelve operations, no merger. Setup (`initialize_repository`) is
+separate from ordinary queries. Structural discovery (`locate`,
+`neighbors`) returns evidence only, never semantic claims. Semantic
+investigation (`explain`, `authority`, `trace`) answers from persisted
+coverage or suspends honestly. Change assessment (`impact`) needs a
+proposal with `change_kind`, `change_description`, and
+`affected_assertions`. State inspection (`status`) is read-only;
+maintenance (`initialize_target`, `refresh`) is explicit and scoped.
+Exchange (`submit_interpretation`, `reissue_interpretation`) advances
+one bounded unit at a time.
+
+Rules: file, symbol, or member list → `locate`; structural adjacency →
+`neighbors`; established semantics → `trace`; behavior → `explain`;
+governance → `authority`; change consequences → `impact`; campaign with
+exact scope plus objective → `initialize_target`; stale scope →
+`refresh`; coverage check → `status`. Baseline
+(`explain(establish_baseline=True)`) audits an ordinary selected root;
+`initialize_target` campaigns an exact user-supplied directory. Do not
+substitute one for the other.
+
+## Appendix G-B: evidence and authority quality (Addendum G §4.4)
+
+Prefer function or block spans over whole-file citation where the
+provider supplies per-span excerpt and signature text. Cite tests,
+contracts, and docs alongside code with existing `EvidenceSourceKind`
+values. Whole-file
+citation needs a basis stating the file-wide scope. Seeds enter only as
+user-supplied `EvidenceRef` lists; unknown locators fail closed.
+`CONTRACT_SPECIFICATION` supports representation and boundary,
+`DECISION_RECORD` supports ownership and precedence,
+`TEST_VERIFICATION` supports `VERIFIED_BY`. Link `VERIFIED_BY` only on
+executed evidence with observed revision; candidate tests stay
+`CANDIDATE`. Absent authority stays `PARTIAL`/`UNRESOLVED` with
+`MISSING_AUTHORITY`. `trace`/`authority`/`impact` on uncovered subjects
+suspend by design; follow the brief, do not invent a preview.
+
+## Appendix G-C: OpenCode submit-until-answer loop (Addendum G §4.5)
+
+Serial only, one repository scope per drive. Invoke the operation; while
+the result is `PendingInterpretation`, interpret the bounded unit and
+call `submit_interpretation` under its continuation. Validation
+rejection halts with diagnostics for repair, never blind retry. Ingress
+failure halts. Unknown or expired continuation reissues the idempotent
+original operation once via `reissue_interpretation`, then submits the
+returned identical task. Unexpected exceptions propagate visibly.
+Caller states an explicit round budget; exhaustion halts. Installing a
+skill and reading the driver never proves a host connection; only an
+observed host MCP request and response does.

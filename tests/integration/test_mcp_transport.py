@@ -140,7 +140,7 @@ def _selector_args(locator="src/tools.py"):
 class SchemaSyncTest(unittest.TestCase):
     """Tool schemas stay a mechanical projection of the contracts."""
 
-    def test_ten_canonical_tools(self):
+    def test_twelve_canonical_tools(self):
         self.assertEqual(
             TOOL_NAMES,
             (
@@ -154,6 +154,8 @@ class SchemaSyncTest(unittest.TestCase):
                 "refresh",
                 "submit_interpretation",
                 "reissue_interpretation",
+                "locate",
+                "neighbors",
             ),
         )
         self.assertEqual(set(TOOL_SCHEMAS), set(TOOL_NAMES))
@@ -166,6 +168,8 @@ class SchemaSyncTest(unittest.TestCase):
             "authority": ops.SemanticAuthorityRequest,
             "status": ops.SemanticStatusRequest,
             "refresh": ops.SemanticRefreshRequest,
+            "locate": ops.SemanticStructuralLocateRequest,
+            "neighbors": ops.SemanticStructuralNeighborsRequest,
         }
         for tool, cls in classes.items():
             with self.subTest(tool=tool):
@@ -185,6 +189,21 @@ class SchemaSyncTest(unittest.TestCase):
                 self.assertTrue(
                     set(schema["properties"]) >= names, tool
                 )
+
+    def test_nullable_targets_advertise_null(self):
+        # Nullable contract targets must survive schema-driven bridges:
+        # status/refresh/locate targets accept explicit null at ingress.
+        for tool in ("status", "refresh", "locate"):
+            with self.subTest(tool=tool):
+                target_schema = TOOL_SCHEMAS[tool]["properties"]["target"]
+                self.assertEqual(target_schema["type"], ["object", "null"])
+        for tool in (
+            "explain", "impact", "trace", "authority",
+            "initialize_target", "neighbors",
+        ):
+            with self.subTest(tool=tool):
+                target_schema = TOOL_SCHEMAS[tool]["properties"]["target"]
+                self.assertNotIn("null", target_schema["type"])
 
     def test_submit_and_init_shapes(self):
         submit = TOOL_SCHEMAS["submit_interpretation"]
@@ -277,18 +296,71 @@ class DispatchTest(unittest.TestCase):
                 "Understand the tool boundary",
                 task.brief.objective,
             )
+            # E-13B mapping task carries TargetId + item with question=None.
+            self.assertIsNone(task.question)
+            self.assertIsNotNone(task.target_id)
+            self.assertIsNotNone(task.target_inventory_item)
+            assert task.target_inventory_item is not None
+            item_ref = task.target_inventory_item.evidence_ref
+            area = m.SubjectId(
+                repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+                canonical_locator="tools-area",
+            )
+            map_q = m.SemanticQuestionScope(
+                scope_root=area, subject=area,
+                question_class=m.SemanticQuestionClass.CQ_01,
+                question_slice="tools purpose",
+                materiality_basis="mapping admits tools",
+            )
+            map_cov = m.InterpretationCoverage(
+                subjects=(area,), question_slice="tools purpose",
+                evidence_scope=m.EvidenceScope(), declared_complete=False,
+                question=map_q,
+                disposition=m.SemanticQuestionDisposition.PENDING,
+                result_refs=(), resolution_requirements=(),
+                disposition_basis="admitted", question_evidence=(),
+            )
             answered = adapter.dispatch(
                 "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
-                    "result": m.to_canonical(agent.perform(task)),
+                    "result": m.to_canonical(
+                        m.SemanticInterpretationResult(
+                            claims=(), relationships=(),
+                            governing_source_refs=(), diagnostics=("mapping",),
+                            candidate_subjects=(
+                                m.CandidateSubject(
+                                    provisional_locator="tools-area",
+                                    kind=m.SubjectKind.OTHER,
+                                    display_name="tools-area",
+                                    declared_kind="tools-area",
+                                    evidence=(item_ref,),
+                                    basis=m.SemanticBasis(
+                                        derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
+                                        summary="mapping admits tools",
+                                        input_refs=(item_ref,),
+                                    ),
+                                ),
+                            ),
+                            candidate_conflicts=(),
+                            proposed_question_coverages=(map_cov,),
+                            candidate_withdrawals=(),
+                            proposed_target_inventory_accounting=(
+                                m.TargetInventoryAccount(
+                                    evidence_ref=item_ref,
+                                    assigned_area_subjects=(area,),
+                                ),
+                            ),
+                            proposed_target_questions=(),
+                        )
+                    ),
                     "repository_id": REPO,
                 },
             )
             self.assertFalse(answered.is_error)
             answer = json.loads(answered.content)
-            self.assertEqual(answer["$type"], "SemanticAnswer")
-            self.assertEqual(answer["intent"], "STATUS")
+            # Mapping drained for the single file; semantic PENDING follows.
+            self.assertEqual(answer["$type"], "PendingInterpretation")
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -511,6 +583,47 @@ class DispatchTest(unittest.TestCase):
             self.assertTrue(result.is_error)
             body = json.loads(result.content)
             self.assertEqual(body["error"], "unknown_repository")
+            self.assertIn(REPO, body["message"])
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_page_token_as_continuation_names_both_mechanisms(self):
+        adapter, _ = _harness()
+        try:
+            result = adapter.dispatch(
+                "submit_interpretation",
+                {
+                    "continuation": "pg:0",
+                    "result": m.to_canonical(
+                        m.SemanticInterpretationResult()
+                    ),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertTrue(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["error"], "ingress")
+            self.assertIn("page_token", body["message"])
+            self.assertIn("continuation", body["message"])
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_continuation_as_page_token_names_both_mechanisms(self):
+        adapter, _ = _harness()
+        try:
+            result = adapter.dispatch(
+                "explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                    "page_token": "cont-1",
+                },
+            )
+            self.assertTrue(result.is_error)
+            body = json.loads(result.content)
+            self.assertEqual(body["error"], "ingress")
+            self.assertIn("page_token", body["message"])
+            self.assertIn("continuation", body["message"])
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -565,9 +678,9 @@ class DispatchTest(unittest.TestCase):
                 },
             )
             self.assertTrue(rejected.is_error)
-            self.assertEqual(
-                json.loads(rejected.content)["error"], "validation"
-            )
+            body = json.loads(rejected.content)
+            self.assertEqual(body["error"], "validation")
+            self.assertIn("claims[1]", body["message"])
             store = adapter.contexts[REPO].store
             page = store.load_claims(
                 REPO, (_sid(),), (),
@@ -643,13 +756,13 @@ class DispatchTest(unittest.TestCase):
 
 @unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")
 class ServerWiringTest(unittest.TestCase):
-    def test_build_server_registers_ten_tools(self):
+    def test_build_server_registers_twelve_tools(self):
         from span.shell import mcp_server
 
         adapter, _ = _harness()
         try:
             listed = mcp_server.handle_list_tools(adapter)
-            self.assertEqual(len(listed), 10)
+            self.assertEqual(len(listed), 12)
             self.assertEqual(
                 [spec["name"] for spec in listed], list(TOOL_NAMES)
             )
@@ -684,7 +797,7 @@ class ServerWiringTest(unittest.TestCase):
                 entry.handler(None, _types.PaginatedRequestParams())
             )
             self.assertIsInstance(result, _types.ListToolsResult)
-            self.assertEqual(len(result.tools), 10)
+            self.assertEqual(len(result.tools), 12)
             json.loads(result.model_dump_json(by_alias=True))
         finally:
             adapter.contexts[REPO].store.close()
@@ -740,6 +853,8 @@ class ProvisionPathTest(unittest.TestCase):
     file store, provisioned explicitly, driven over MCP dispatch."""
 
     def test_provision_then_explain_over_wire(self):
+        import hashlib
+        import json
         import pathlib
         import shutil
         import subprocess
@@ -777,6 +892,28 @@ class ProvisionPathTest(unittest.TestCase):
                     "commit", "-qm", "held-out",
                 ),
                 check=True, timeout=60,
+            )
+            # The server never builds the structural index (F §4.0, G
+            # §2): write the minimal explicitly-built wiring the test
+            # owns. The graft/ tree is git-ignored above, so the tree
+            # stays clean and the index postdates HEAD.
+            graph_dir = work / "graft" / ".graph"
+            graph_dir.mkdir(parents=True, exist_ok=True)
+            nodes = []
+            for rel in ("src/orders.js", "src/inventory.js"):
+                body = (work / rel).read_text(encoding="utf-8")
+                nodes.append({
+                    "id": rel,
+                    "name": pathlib.Path(rel).name,
+                    "kind": "file",
+                    "path": rel,
+                    "body_hash": hashlib.sha256(
+                        body.encode("utf-8")
+                    ).hexdigest(),
+                })
+            (graph_dir / "wiring.json").write_text(
+                json.dumps({"nodes": nodes, "edges": []}),
+                encoding="utf-8",
             )
             config = mcp_server.ServerConfig(data_dir=tmp / "data")
             request = ops.SemanticInitializeRepositoryRequest(

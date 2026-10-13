@@ -12,14 +12,26 @@ from span.core.model import (
     BoundInfo,  # noqa: F401  (re-exported for port consumers)
     QueryBounds,
     RepositoryState,
+    ScopeCoverage,  # noqa: F401
     StructuralEdgeKind,
     StructuralEdgePage,
+    StructuralFreshnessReport,  # noqa: F401
+    StructuralLocateMatch,  # noqa: F401
     StructuralLocationPage,
+    StructuralOutlinePage,  # noqa: F401
     StructuralReachPage,
+    StructuralSearchPage,  # noqa: F401
+    Subject,
     SubjectId,
     SubjectResolution,
     SubjectSelector,
 )
+
+
+class StaleContinuationError(ValueError):
+    """A version-bound listing continuation no longer matches the listing
+    version (Addendum F §4.3). The caller restarts the listing from page
+    one; the error names the observed new version."""
 
 
 class StructuralDirection(_enum.Enum):
@@ -80,4 +92,48 @@ class StructuralSource(_typing.Protocol):
         page_token: str | None = None,
     ) -> StructuralReachPage:
         """Bounded structural reach expansion (no semantic judgment)."""
+        ...
+
+    def search_symbols(
+        self,
+        repository_id: str,
+        query: str,
+        match: StructuralLocateMatch,
+        bounds: QueryBounds,
+        page_token: str | None = None,
+    ) -> StructuralSearchPage:
+        """Paginated name/locator search (Addendum F §4.0).
+
+        Provider match order, real continuation tokens (never the
+        tokenless truncation of resolve_subject). Tokens are
+        version-bound per §4.3: a changed listing version raises
+        StaleContinuationError.
+        """
+        ...
+
+    def file_outline(
+        self,
+        repository_id: str,
+        locator: str,
+        bounds: QueryBounds,
+        page_token: str | None = None,
+    ) -> StructuralOutlinePage:
+        """Symbols defined in one file, deterministic order (F §4.0).
+
+        Unknown file yields empty entries, never error. Tokens are
+        version-bound per §4.3.
+        """
+        ...
+
+    def verify_files(
+        self,
+        repository_id: str,
+        files: tuple[str, ...],
+    ) -> StructuralFreshnessReport:
+        """File-set freshness verdict (Addendum F §4.0).
+
+        Whole-file live fingerprints against recorded file hashes;
+        symbol hashes are never compared against file bytes. Coverage
+        follows the §4.0 two-tier rule for the given file set.
+        """
         ...
