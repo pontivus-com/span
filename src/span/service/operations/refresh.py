@@ -6,6 +6,8 @@ Explicit reassessment of stale/unverifiable semantics. Verbatim from
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
+
 from span.core import answers as _answers
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
@@ -349,6 +351,44 @@ def refresh(
         suspended=continuations.live_question_keys(),
     )
     first_scope = first_stale[0] if first_stale else None
+    # Addendum H §6: an explicit challenge (`stale_only=False`) with no
+    # stale scope still binds a fallback unit. The brief then carries the
+    # subject's persisted question identities so the agent can nominate
+    # exactly one already-persisted original question in its submission;
+    # the fallback binding alone never authorizes withdrawal of another
+    # question's outputs.
+    correction_candidates: tuple[m.SemanticQuestionScope, ...] = ()
+    if first_scope is None and not request.stale_only:
+        try:
+            existing_coverages = store.load_all_question_coverages(
+                request.repository_id, None, (first.subject_id,),
+            )
+        except Exception:
+            existing_coverages = ()
+        seen_identities: set[tuple[str, ...]] = set()
+        candidates: list[m.SemanticQuestionScope] = []
+        for existing in existing_coverages:
+            if existing.question is None:
+                continue
+            if existing.question.subject != first.subject_id:
+                continue
+            identity = (
+                existing.question.scope_root.repository_id,
+                existing.question.scope_root.subject_kind.value,
+                existing.question.scope_root.canonical_locator,
+                existing.question.subject.subject_kind.value,
+                existing.question.subject.canonical_locator,
+                existing.question.question_class.value,
+                existing.question.question_slice,
+            )
+            if identity in seen_identities:
+                continue
+            seen_identities.add(identity)
+            candidates.append(existing.question)
+        candidates.sort(
+            key=lambda q: (q.question_class.value, q.question_slice)
+        )
+        correction_candidates = tuple(candidates)
     task = prepare_interpretation_task(
         request.repository_id, first, structural=structural,
         evidence=evidence, bounds=bounds, state=state,
@@ -370,6 +410,32 @@ def refresh(
             first_scope.materiality_basis if first_scope is not None else ""
         ),
     )
+    if correction_candidates:
+        brief = task.request.brief
+        task = _dataclasses.replace(
+            task,
+            request=_dataclasses.replace(
+                task.request,
+                brief=_dataclasses.replace(
+                    brief,
+                    scope_boundaries=brief.scope_boundaries + tuple(
+                        "challenged-question candidate "
+                        f"{candidate.question_class.value} "
+                        f"'{candidate.question_slice}' (scope root "
+                        f"'{candidate.scope_root.canonical_locator}')"
+                        for candidate in correction_candidates
+                    ),
+                    submission_rules=brief.submission_rules + (
+                        "Correction mode: nominate exactly one "
+                        "already-persisted original question from the "
+                        "challenged-question candidates via one "
+                        "proposed_question_coverages entry carrying that "
+                        "exact scope; a second distinct non-bound "
+                        "correction question rejects the unit.",
+                    ),
+                ),
+            ),
+        )
     return _suspend(
         op="refresh", repository_id=request.repository_id, subject=first,
         task=task, seeds=authority_seeds, bounds=bounds, state=state,

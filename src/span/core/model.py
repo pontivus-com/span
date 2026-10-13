@@ -1136,6 +1136,13 @@ class StatusContent:
     coverage_report: SemanticCoverageReport | None = None
     target_association: TargetAssociation | None = None
     target_disposition: SemanticCoverageDisposition | None = None
+    target_total_count: int | None = None
+    target_accounted_count: int | None = None
+    target_unaccounted_count: int | None = None
+    """Read-only campaign counts from the disposition snapshot
+    (Addendum H §7): total/current-accounted/unaccounted inventory.
+    ``None`` exactly on UNVERIFIABLE/UNASSESSED (unavailable, never
+    zero-faked). Answer envelope only — never persisted."""
 
 
 SemanticContent = _typing.Union[

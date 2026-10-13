@@ -10,6 +10,7 @@ identifier values make re-indexing safe, plan §4.7).
 from __future__ import annotations
 
 import datetime as _datetime
+import threading as _threading
 from collections.abc import Callable as _Callable
 from dataclasses import dataclass as _dataclass
 from dataclasses import field as _field
@@ -97,25 +98,104 @@ class ContinuationStore:
         )
         self._counter = 0
         self._entries: dict[str, _Entry] = {}
+        self._lock = _threading.Lock()
+        self._in_flight: set[str] = set()
+
+    def _is_expired_at(
+        self, entry: _Entry, now: _datetime.datetime
+    ) -> bool:
+        """Abandonment predicate shared by reads and sweeps.
+
+        Mirrors exactly what ``claim()`` abandons: naive timestamps or
+        age beyond TTL. Takes the observation time as an argument so
+        each operation reads the clock exactly once.
+        """
+        created = entry.created_at
+        if created.tzinfo is None or now.tzinfo is None:
+            return True
+        return (now - created).total_seconds() > self._ttl
+
+    def _sweep_locked(self, now: _datetime.datetime) -> None:
+        """Evict expired entries. Caller must hold ``self._lock``.
+
+        Event-driven only (called from ``pend``/``acquire``/``claim``):
+        no background reaper, no new ledger. Abandoned expired tokens
+        are actually removed, so TTL bounds memory retention.
+        """
+        dead = [
+            token for token, entry in self._entries.items()
+            if self._is_expired_at(entry, now)
+        ]
+        for token in dead:
+            self._entries.pop(token, None)
+            self._in_flight.discard(token)
 
     def pend(self, record: SuspendedOperation) -> str:
         """Suspend an operation; returns its single-use continuation."""
-        self._counter += 1
-        token = f"cont-{self._counter}"
-        self._entries[token] = _Entry(record, self._now())
-        return token
+        with self._lock:
+            now = self._now()
+            self._sweep_locked(now)
+            self._counter += 1
+            token = f"cont-{self._counter}"
+            self._entries[token] = _Entry(record, now)
+            return token
+
+    def peek(self, continuation: str) -> SuspendedOperation | None:
+        """Read a live continuation without consuming it (Addendum H §4).
+
+        Unknown or expired yields None. Never marks in-flight; never
+        pops. Submit preparation uses this; ownership for the
+        commit-critical section comes only from ``acquire()``.
+        """
+        entry = self._entries.get(continuation)
+        if entry is None:
+            return None
+        if self._is_expired_at(entry, self._now()):
+            return None
+        return entry.record
+
+    def acquire(self, continuation: str) -> SuspendedOperation | None:
+        """Mark a live continuation in-flight for single-commit ownership.
+
+        Returns the record once; a second concurrent acquirer for the
+        same token observes in-flight/consumed/expired and receives
+        None. Pair with ``release()`` on failure or ``claim()`` on
+        successful commit. Bare ``peek()`` followed by ``claim()``
+        without this guard is prohibited.
+        """
+        with self._lock:
+            now = self._now()
+            self._sweep_locked(now)
+            if continuation in self._in_flight:
+                return None
+            entry = self._entries.get(continuation)
+            if entry is None or self._is_expired_at(entry, now):
+                return None
+            self._in_flight.add(continuation)
+            return entry.record
+
+    def release(self, continuation: str) -> None:
+        """Clear the in-flight mark, retaining the live token."""
+        with self._lock:
+            self._in_flight.discard(continuation)
 
     def claim(self, continuation: str) -> SuspendedOperation | None:
         """Take a continuation exactly once; expired or unknown yields None
-        (abandoned, per §11.12)."""
-        entry = self._entries.pop(continuation, None)
+        (abandoned, per §11.12).
+
+        Sole consuming transition. ``submit_interpretation`` calls it
+        only after a successful ``write_index_batch``;
+        ``reissue_interpretation`` acquires first (losing to an
+        in-flight submit) and claims only its owned token.
+        """
+        with self._lock:
+            now = self._now()
+            self._sweep_locked(now)
+            self._in_flight.discard(continuation)
+            entry = self._entries.pop(continuation, None)
         if entry is None:
             return None
-        created = entry.created_at
-        now = self._now()
-        if created.tzinfo is None or now.tzinfo is None:
-            return None
-        if (now - created).total_seconds() > self._ttl:
+        if self._is_expired_at(entry, now):
             return None
         return entry.record
 

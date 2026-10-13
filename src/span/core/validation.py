@@ -81,6 +81,10 @@ class ValidationContext:
     known_subject_ids: tuple[m.SubjectId, ...]
     evidence_fingerprints: dict[str, str]
     evidence_contents: dict[str, str] = _field(default_factory=dict)
+    evidence_refs: dict[str, m.EvidenceRef] = _field(default_factory=dict)
+    """Canonical evidence refs by evidence id (task-known plus
+    provider-admitted). Ephemeral validation lookup only — never
+    persisted, never a public carrier."""
 
 
 @_dataclass(frozen=True)

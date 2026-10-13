@@ -126,16 +126,55 @@ def provision_repository(
     return context, result
 
 
+#: Repository-scoped tools (Addendum H §7): their descriptions carry
+#: the currently registered canonical repository IDs at list time so
+#: agents discover identity before the first repository-scoped call.
+_REPO_SCOPED_TOOLS = frozenset({
+    "initialize_target",
+    "explain",
+    "impact",
+    "trace",
+    "authority",
+    "status",
+    "refresh",
+    "submit_interpretation",
+    "reissue_interpretation",
+    "locate",
+    "neighbors",
+})
+
+
 def handle_list_tools(adapter: McpAdapter) -> list[dict]:
-    """Tool specs verbatim from the adapter (one source of truth)."""
-    return [
-        {
-            "name": name,
-            "description": TOOL_DESCRIPTIONS[name],
-            "inputSchema": TOOL_SCHEMAS[name],
-        }
-        for name in TOOL_NAMES
-    ]
+    """Tool specs verbatim from the adapter (one source of truth).
+
+    `TOOL_DESCRIPTIONS` stays the static capability source; the
+    registered-repository note below is transport presentation only,
+    appended here so pre-call discovery needs no repository-scoped
+    request and no filesystem-path guessing.
+    """
+    registered = sorted(adapter.contexts)
+    if registered:
+        scope_note = (
+            " Registered repositories: " + ", ".join(registered) + "."
+        )
+    else:
+        scope_note = (
+            " No repositories registered yet; call "
+            "initialize_repository first."
+        )
+    specs = []
+    for name in TOOL_NAMES:
+        description = TOOL_DESCRIPTIONS[name]
+        if name in _REPO_SCOPED_TOOLS:
+            description += scope_note
+        specs.append(
+            {
+                "name": name,
+                "description": description,
+                "inputSchema": TOOL_SCHEMAS[name],
+            }
+        )
+    return specs
 
 
 def handle_call_tool(

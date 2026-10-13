@@ -93,10 +93,12 @@ def _sid(locator, kind=m.SubjectKind.COMPONENT):
 
 
 def _ref(path):
+    from span.shell.structural.memory import evidence_kind_for_path
+
     return m.EvidenceRef(
         evidence_id=m.EvidenceId(f"ev-{path}"),
         repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        source_kind=evidence_kind_for_path(path),
         locator=path,
         revision_or_fingerprint=fingerprint_content(FILES[path]),
     )

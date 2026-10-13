@@ -142,8 +142,10 @@ For target-mode work, the result may include bounded target-inventory
 accounting proposals; ordinary question-local results leave that component
 empty. Span validates and writes accepted accounting, subjects, semantic
 results, and target-bound coverage atomically through the canonical batch.
-Use `reissue_interpretation` once and only for an expired transport
-continuation, then submit the returned identical task. Continue until no
+Use `reissue_interpretation` once and only for an ingress-failed
+transport continuation, then submit the returned identical task.
+An unknown or expired continuation is never reissued: re-issue the
+idempotent original operation instead. Continue until no
 unprocessed target work remains. One representative answer is never
 completion. Each submission persists canonical results plus the next task
 or a truthful terminal result.
@@ -161,6 +163,14 @@ interpretation. Retrieval never invents, widens, or substitutes an answer.
 After source changes, call scoped `refresh`, inspect stale/unverifiable
 coverage, and repeat the same quality card for affected areas. A stale
 answer is not presented as current; `refresh` alone manufactures nothing.
+
+To challenge a `CURRENT` explanation without a source change, resolve
+the exact persisted question from `status`/`explain` question coverage,
+then call `refresh` with the exact `SubjectSelector` and explicit
+`stale_only=False`. Nominate exactly one already-persisted original
+question in the submission, with evidence-grounded withdrawals and
+replacements; a second distinct correction question in the same unit
+is rejected.
 
 ## 8. Fresh-session closeout
 

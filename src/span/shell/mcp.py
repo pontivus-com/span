@@ -143,8 +143,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "evidence only — never a semantic claim."
     ),
     "reissue_interpretation": (
-        "Reissue an expired or lost interpretation continuation once. "
-        "The original typed task is returned unchanged."
+        "Reissue the identical bounded task once on ingress failure. "
+        "The original typed task is returned unchanged. Expired or "
+        "lost continuations never reissue: re-run the idempotent "
+        "original operation instead."
     ),
 }
 

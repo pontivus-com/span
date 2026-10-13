@@ -145,6 +145,50 @@ exclusion must be evidence-backed target accounting (not question
 Membership changes re-enter via `initialize_target`; content changes use
 `refresh`. Never claim completion from a single representative root.
 
+Canonical mapping shapes (one `TargetInventoryAccount` per current
+inventory item; exactly one outcome each):
+
+- Assign: `evidence_ref=<current item ref>`,
+  `assigned_area_subjects=[<admitted or co-proposed area SubjectId>]`.
+- Evidence-backed exclusion: `evidence_ref=<current item ref>`,
+  `exclusion_basis=SemanticBasis(summary=<why, not behavior>,
+  input_refs=(<supporting EvidenceRef>, ...))`.
+- Unresolved: `evidence_ref=<current item ref>`,
+  `resolution_requirements=(<typed requirement>, ...)`.
+- New question: `proposed_question_coverages` with the new scope
+  (`PENDING` first admission). Existing question reuse:
+  `proposed_target_questions` with the exact persisted
+  `SemanticQuestionScope` (scope_root, subject, question_class,
+  question_slice) — rejected unless that identical row is already
+  persisted and its subject resolves.
+
+## Submit, correct, and discover (Addendum H)
+
+- A `validation` rejection keeps your continuation live: repair the
+  named collection/index/key and resubmit under the same `cont-*`.
+  Only a successful commit consumes it; replaying a consumed token is
+  rejected without duplicates. An unknown or expired token never
+  recovers via `reissue_interpretation` (ingress failure only, once):
+  re-run the idempotent original operation instead.
+- Cite current source files directly in any submission — no README,
+  ADR, or prior citation required for observed behavior. Keep the
+  provider's `evidence_id`/`locator`/`source_kind`; never invent a
+  `section_or_span` (unverifiable spans are stripped, not stored).
+  Authority quotes stay verbatim (`quoted_span` must occur literally).
+- To challenge a `CURRENT` explanation without a source change:
+  resolve the exact persisted question from `status`/`explain`
+  coverage, call `refresh` with the exact `SubjectSelector` and
+  `stale_only=False`, then submit exactly one
+  `proposed_question_coverages` entry carrying that persisted scope,
+  with evidence-grounded withdrawals and replacements. A second
+  distinct correction question in the same unit is rejected; each
+  further correction gets its own refresh cycle.
+- Discover identity before calling: `tools/list` descriptions carry
+  the registered canonical repository IDs. Read campaign state from
+  one `status(TargetId)` call: `target_total/accounted/unaccounted_count`
+  arrive in the same snapshot as `target_disposition` (`None` counts
+  mean `UNVERIFIABLE`/`UNASSESSED`, never zero).
+
 ### Semantic-analysis granularity
 
 Use three levels, with no fixed file or claim count:
@@ -220,9 +264,10 @@ boundary to choose and report coherent semantic areas; an anchor is evidence
 input, not a semantic-completion claim. Use `trace`, `authority`, `impact`,
 and ordinary `explain` only where the admitted question requires them.
 Preserve exact questions and unresolved aspects; do not discard a pending
-continuation, listing page, or unresolved requirement. If a continuation expires, call
-`reissue_interpretation` once, then submit the returned identical task.
-Continue until the target operation returns its final status. Then
+continuation, listing page, or unresolved requirement. If a continuation
+is unknown or expired, re-issue the idempotent original operation
+(never `reissue_interpretation`, which covers ingress failure exactly
+once). Continue until the target operation returns its final status. Then
 perform independent fresh-session `status`/`explain` readback and a reuse
 check for representative questions from each material area. A
 `PendingInterpretation`, a populated store, or `READY` is never completion.
@@ -250,7 +295,12 @@ search stays with your own grep; Span does not duplicate it.
   baseline sufficiency. For an explicit directory initialization, use initialize_target once on the exact target and objective.
   process each target unit returned by the MCP frontier. For an ordinary
   selected root, use `explain(establish_baseline=True)` only for that scope.
-  `refresh` never expands scope silently.
+  `refresh` never expands scope silently. To challenge a `CURRENT`
+  explanation, resolve the exact persisted question from
+  `status`/`explain` coverage, call `refresh` with the exact
+  `SubjectSelector` and `stale_only=False`, and nominate exactly one
+  persisted original question with evidence-grounded
+  withdrawals/replacements.
 - When an operation returns a pending interpretation unit, perform the
   bounded SA-1–SA-7 task with your own model and submit the typed
   result via `submit_interpretation`. The unit carries a `brief`
@@ -383,9 +433,11 @@ suspend by design; follow the brief, do not invent a preview.
 Serial only, one repository scope per drive. Invoke the operation; while
 the result is `PendingInterpretation`, interpret the bounded unit and
 call `submit_interpretation` under its continuation. Validation
-rejection halts with diagnostics for repair, never blind retry. Ingress
-failure halts. Unknown or expired continuation reissues the idempotent
-original operation once via `reissue_interpretation`, then submits the
+rejection halts with diagnostics for repair (the continuation stays
+live; repair and resubmit under it, never blind retry). Ingress
+failure halts. Unknown or expired continuation re-issues the idempotent
+original operation (recovery path, never `reissue_interpretation`,
+which covers ingress failure exactly once), then submits the
 returned identical task. Unexpected exceptions propagate visibly.
 Caller states an explicit round budget; exhaustion halts. Installing a
 skill and reading the driver never proves a host connection; only an
