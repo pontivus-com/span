@@ -5,8 +5,8 @@ plus query columns; no second semantic model is introduced (§10.2/§10.3,
 I-15). Table decomposition is physical only and carries no semantic
 authority. Stdlib ``sqlite3``; no third-party binding (ledger).
 
-Schema version is 3 (``SCHEMA_VERSION``): question coverage and premise
-reverse index added for Addendum B (B-01/B-05/B-08). v2 stores migrate
+Schema version is 4 (``SCHEMA_VERSION``): target-association accounting
+(Addendum E E-13A) plus question coverage (Addendum B). v2/v3 stores migrate
 non-destructively; legacy items remain unassessed without invented
 question ownership.
 """
@@ -22,9 +22,11 @@ from span.core import model as m
 from span.ports.structural import StructuralDirection
 from span.shell import paging as _paging
 
-__all__ = ["SCHEMA_VERSION", "SqliteSemanticStore"]
+__all__ = ["SCHEMA_VERSION", "TARGET_RETENTION_DAYS", "SqliteSemanticStore"]
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+TARGET_RETENTION_DAYS = 90
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories(
@@ -143,6 +145,16 @@ CREATE TABLE IF NOT EXISTS meta(
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS target_associations(
+  repository_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  last_touched_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  canonical_json TEXT NOT NULL,
+  PRIMARY KEY(repository_id, target_id)
+);
+CREATE INDEX IF NOT EXISTS idx_target_associations_repo
+  ON target_associations(repository_id);
 """
 
 
@@ -192,6 +204,32 @@ def _decode_conflict(payload: str) -> m.RecordedConflict:
     return value
 
 
+def _strip_retired_target_account_fields(data: object) -> object:
+    """Persistence-boundary transition for one retired field (E-13A/D).
+
+    Rows persisted before the membership-only correction contain
+    `observed_content_fingerprint` inside `TargetInventoryAccount`
+    entries. Remove exactly that field, only inside dicts tagged
+    `$type == "TargetInventoryAccount"`, before strict canonical
+    decoding. Every other unknown field still fails closed in the
+    decoder, and writes never re-encode the retired field.
+    """
+    if isinstance(data, list):
+        return [_strip_retired_target_account_fields(item) for item in data]
+    if isinstance(data, dict):
+        if data.get("$type") == "TargetInventoryAccount":
+            data = {
+                key: value
+                for key, value in data.items()
+                if key != "observed_content_fingerprint"
+            }
+        return {
+            key: _strip_retired_target_account_fields(value)
+            for key, value in data.items()
+        }
+    return data
+
+
 def _ref_id(ref: m.ClaimRef | m.RelationshipRef) -> str:
     return ref.id.value
 
@@ -204,9 +242,18 @@ class SqliteSemanticStore:
     writes for index materialization).
     """
 
-    def __init__(self, path: str | _pathlib.Path) -> None:
+    def __init__(
+        self,
+        path: str | _pathlib.Path,
+        target_retention_days: int = TARGET_RETENTION_DAYS,
+        utc_now: object = None,
+    ) -> None:
         self._db = _sqlite3.connect(str(path))
         self._db.execute("PRAGMA foreign_keys=ON")
+        self._target_retention_days = target_retention_days
+        self._utc_now = utc_now or (
+            lambda: _datetime.datetime.now(_datetime.timezone.utc)
+        )
         # Inspect on-disk version before mutating; fresh DB has no meta row.
         try:
             row = self._db.execute(
@@ -215,10 +262,10 @@ class SqliteSemanticStore:
         except _sqlite3.OperationalError:
             row = None
         on_disk = int(row[0]) if row is not None else 0
-        if on_disk not in (0, 2, 3):
+        if on_disk not in (0, 2, 3, 4):
             raise ValueError(f"unsupported schema version: {on_disk}")
         if on_disk == 0:
-            # Fresh database: create the full v3 schema at once.
+            # Fresh database: create the full v4 schema at once.
             self._db.executescript(_SCHEMA)
             self._db.execute(
                 "INSERT OR REPLACE INTO meta(key, value) "
@@ -226,15 +273,52 @@ class SqliteSemanticStore:
                 (str(SCHEMA_VERSION),),
             )
             self._db.commit()
+            self._reap_expired_target_associations()
+            return
+        if on_disk == 4:
+            self._db.executescript(_SCHEMA)
+            self._db.execute(
+                "INSERT OR REPLACE INTO meta(key, value) "
+                "VALUES('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            self._db.commit()
+            self._reap_expired_target_associations()
             return
         if on_disk == 3:
-            self._db.executescript(_SCHEMA)
-            self._db.execute(
-                "INSERT OR REPLACE INTO meta(key, value) "
-                "VALUES('schema_version', ?)",
-                (str(SCHEMA_VERSION),),
-            )
-            self._db.commit()
+            # v3→v4 atomic: add target_associations + index, publish v4.
+            try:
+                with self._db:
+                    self._db.execute(
+                        "CREATE TABLE IF NOT EXISTS target_associations("
+                        "  repository_id TEXT NOT NULL,"
+                        "  target_id TEXT NOT NULL,"
+                        "  last_touched_at TEXT NOT NULL,"
+                        "  expires_at TEXT NOT NULL,"
+                        "  canonical_json TEXT NOT NULL,"
+                        "  PRIMARY KEY(repository_id, target_id))"
+                    )
+                    self._db.execute(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "idx_target_associations_repo "
+                        "ON target_associations(repository_id)"
+                    )
+                    tables = {
+                        r[0]
+                        for r in self._db.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        ).fetchall()
+                    }
+                    if "target_associations" not in tables:
+                        raise RuntimeError("v3→v4 migration incomplete")
+                    self._db.execute(
+                        "INSERT OR REPLACE INTO meta(key, value) "
+                        "VALUES('schema_version', ?)",
+                        (str(SCHEMA_VERSION),),
+                    )
+            except Exception:
+                raise
+            self._reap_expired_target_associations()
             return
         # v2→v3: one explicit atomic migration transaction. New
         # question-coverage/indexing tables are created and the version
@@ -305,6 +389,21 @@ class SqliteSemanticStore:
                     raise RuntimeError(
                         f"v2→v3 migration incomplete, missing: {sorted(missing)}"
                     )
+                # v3→v4 chained in the same atomic migration.
+                self._db.execute(
+                    "CREATE TABLE IF NOT EXISTS target_associations("
+                    "  repository_id TEXT NOT NULL,"
+                    "  target_id TEXT NOT NULL,"
+                    "  last_touched_at TEXT NOT NULL,"
+                    "  expires_at TEXT NOT NULL,"
+                    "  canonical_json TEXT NOT NULL,"
+                    "  PRIMARY KEY(repository_id, target_id))"
+                )
+                self._db.execute(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "idx_target_associations_repo "
+                    "ON target_associations(repository_id)"
+                )
                 self._db.execute(
                     "INSERT OR REPLACE INTO meta(key, value) "
                     "VALUES('schema_version', ?)",
@@ -314,10 +413,58 @@ class SqliteSemanticStore:
             # Context manager rolled back: on-disk state is still v2.
             # Re-check nothing was published before surfacing.
             raise
+        self._reap_expired_target_associations()
+
+    def _now(self) -> _datetime.datetime:
+        result = self._utc_now()
+        assert isinstance(result, _datetime.datetime)
+        return result
+
+    def _reap_expired_target_associations(self) -> int:
+        now_iso = self._now().isoformat()
+        try:
+            cur = self._db.execute(
+                "DELETE FROM target_associations WHERE expires_at <= ?",
+                (now_iso,),
+            )
+            self._db.commit()
+            return cur.rowcount or 0
+        except _sqlite3.OperationalError:
+            return 0
 
     def close(self) -> None:
         """Release the database connection (shell lifecycle only)."""
         self._db.close()
+
+    def load_target_association(
+        self, repository_id: str, target_id: m.TargetId
+    ) -> m.TargetAssociation | None:
+        try:
+            row = self._db.execute(
+                "SELECT canonical_json, expires_at FROM target_associations "
+                "WHERE repository_id=? AND target_id=?",
+                (repository_id, target_id.value),
+            ).fetchone()
+        except _sqlite3.OperationalError:
+            return None
+        if row is None:
+            return None
+        payload, expires_at = row
+        # TTL-as-absent: expired rows read as absent without mutating.
+        if expires_at <= self._now().isoformat():
+            return None
+        data = _json.loads(payload)
+        # Persistence-boundary transition (Addendum E E-13A/D): rows
+        # written before the membership-only correction carry the retired
+        # `observed_content_fingerprint` inside TargetInventoryAccount
+        # entries. Strip it here, at the explicitly governed store
+        # boundary, before strict canonical decoding. The general decoder
+        # stays strict: every other unknown field still fails closed, and
+        # this retired field is never re-encoded on write.
+        data = _strip_retired_target_account_fields(data)
+        value = m.from_canonical(m.TargetAssociation, data)
+        assert isinstance(value, m.TargetAssociation)
+        return value
 
     # -- reads ----------------------------------------------------------
 
@@ -972,6 +1119,35 @@ class SqliteSemanticStore:
                     ),
                 )
                 written += 1
+            target_assocs = batch.target_associations
+            if isinstance(target_assocs, m.TargetAssociation):
+                target_assocs = (target_assocs,)
+            if target_assocs:
+                now = self._now()
+                now_iso = now.isoformat()
+                expires = (
+                    now
+                    + _datetime.timedelta(days=self._target_retention_days)
+                ).isoformat()
+                self._db.execute(
+                    "DELETE FROM target_associations WHERE expires_at <= ?",
+                    (now_iso,),
+                )
+                for assoc in target_assocs:
+                    self._db.execute(
+                        "INSERT OR REPLACE INTO target_associations"
+                        "(repository_id, target_id, last_touched_at, "
+                        "expires_at, canonical_json) "
+                        "VALUES(?, ?, ?, ?, ?)",
+                        (
+                            assoc.repository_id,
+                            assoc.target_id.value,
+                            now_iso,
+                            expires,
+                            _encode(m.to_canonical(assoc)),
+                        ),
+                    )
+                    written += 1
         return m.StoreWriteResult(written_count=written)
 
     def mark_freshness(

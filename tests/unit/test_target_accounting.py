@@ -147,101 +147,155 @@ class TargetAccountingTest(unittest.TestCase):
         solo = ("src/postings.py",)
         first = _admit(structural, evidence, store, live, paths=solo)
         self.assertTrue(hasattr(first, "continuation"))
-        audit_slice = first.request.question.question_slice
-        _submit_audit_open(first, structural, evidence, store, live)
-        # Restart: fresh continuations, same store. The admitted PENDING
-        # follow-up must surface, not a repeated audit.
-        resumed = _admit(structural, evidence, store, ContinuationStore(),
-                         paths=solo)
-        self.assertTrue(hasattr(resumed, "continuation"))
-        self.assertEqual(
-            resumed.request.question.question_slice, FOLLOW_SLICE)
-        self.assertNotEqual(
-            resumed.request.question.question_slice, audit_slice)
-
-    def test_exact_target_status_carries_frontier_report(self):
-        structural, evidence, store = _harness()
-        live = ContinuationStore()
-        first = _admit(structural, evidence, store, live)
-        _submit_audit_open(first, structural, evidence, store, live)
-        target = m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=())
-
-        def _status(continuations):
-            return ops.status(
-                ops.SemanticStatusRequest(
-                    repository_id=REPO, target=target, bounds=_bounds(),
-                ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=continuations, authority_seeds=(),
-            )
-
-        # The untouched anchor suspends first (read path never invents
-        # coverage); examining it as OPEN lets the frontier report appear.
-        st_live = ContinuationStore()
-        suspended = _status(st_live)
-        self.assertTrue(hasattr(suspended, "continuation"))
-        sreq = suspended.request
-        srefs = tuple(u.evidence_ref for u in sreq.evidence_units)
+        self.assertIsNone(first.request.question)
+        item = first.request.target_inventory_item
+        self.assertIsNotNone(item)
+        assert item is not None
+        area = m.SubjectId(
+            repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+            canonical_locator="postings-area",
+        )
+        q = m.SemanticQuestionScope(
+            scope_root=area, subject=area,
+            question_class=m.SemanticQuestionClass.CQ_01,
+            question_slice=FOLLOW_SLICE,
+            materiality_basis="admitted by mapping; unexamined",
+        )
+        pend = m.InterpretationCoverage(
+            subjects=(area,), question_slice=FOLLOW_SLICE,
+            evidence_scope=m.EvidenceScope(), declared_complete=False,
+            question=q, disposition=m.SemanticQuestionDisposition.PENDING,
+            result_refs=(), resolution_requirements=(),
+            disposition_basis="admitted by mapping", question_evidence=(),
+        )
         ops.submit_interpretation(
-            suspended.continuation,
+            first.continuation,
             m.SemanticInterpretationResult(
                 claims=(), relationships=(), governing_source_refs=(),
-                diagnostics=("test status OPEN",),
-                candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(
-                    m.InterpretationCoverage(
-                        subjects=(sreq.subjects[0].subject_id,),
-                        question_slice=sreq.question.question_slice,
-                        evidence_scope=m.EvidenceScope(
-                            paths=TARGET_PATHS, evidence_refs=srefs),
-                        declared_complete=False,
-                        question=sreq.question,
-                        disposition=(
-                            m.SemanticQuestionDisposition.OPEN),
-                        result_refs=(),
-                        resolution_requirements=(
-                            m.ResolutionRequirement(
-                                kind=(m.ResolutionKind
-                                      .MISSING_SEMANTIC_COVERAGE),
-                                subject_or_claim=(
-                                    sreq.subjects[0].subject_id),
-                                description=(
-                                    "status scope not yet examined"),
-                                supporting_context=(),
-                            ),
+                diagnostics=("mapping",),
+                candidate_subjects=(
+                    m.CandidateSubject(
+                        provisional_locator="postings-area",
+                        kind=m.SubjectKind.OTHER,
+                        display_name="postings-area",
+                        declared_kind="postings-area",
+                        evidence=(item.evidence_ref,),
+                        basis=m.SemanticBasis(
+                            derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
+                            summary="mapping admits postings area",
+                            input_refs=(item.evidence_ref,),
                         ),
-                        disposition_basis="test OPEN",
-                        question_evidence=(),
                     ),
                 ),
+                candidate_conflicts=(),
+                proposed_question_coverages=(pend,),
                 candidate_withdrawals=(),
+                proposed_target_inventory_accounting=(
+                    m.TargetInventoryAccount(
+                        evidence_ref=item.evidence_ref,
+                        assigned_area_subjects=(area,),
+                    ),
+                ),
+                proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
-            continuations=st_live,
+            continuations=live,
         )
-        answer = _status(ContinuationStore())
-        self.assertEqual(type(answer).__name__, "SemanticAnswer")
-        report = answer.content.coverage_report
-        self.assertIsNotNone(report)
-        by_locator = {
-            entry.subject.canonical_locator: entry
-            for entry in report.entries
-        }
-        # Both structural candidates are accounted for with an explicit
-        # disposition; nothing is silently absent and nothing claims
-        # CURRENT while OPEN work remains.
-        self.assertEqual(set(by_locator), set(TARGET_PATHS))
-        for locator, entry in by_locator.items():
-            self.assertEqual(
-                entry.disposition,
-                m.SemanticCoverageDisposition.INCOMPLETE,
-                locator)
-        self.assertTrue(any(
-            entry.resolution_requirements for entry in by_locator.values()))
+        scope, obj = m.canonicalize_target_scope(
+            REPO, m.EvidenceScope(paths=solo, evidence_refs=()), OBJECTIVE)
+        tid = m.derive_target_id(REPO, scope, obj)
+        assoc = store.load_target_association(REPO, tid)
+        self.assertIsNotNone(assoc)
+        assert assoc is not None
+        self.assertEqual(len(assoc.inventory_accounting), 1)
+        self.assertIn(area, assoc.area_subjects)
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_exact_target_status_carries_frontier_report(self):
+        # E-13B mapping drains inventory; status(TargetId) reports INCOMPLETE
+        # until admitted questions terminate.
+        structural, evidence, store = _harness()
+        live = ContinuationStore()
+        area = m.SubjectId(
+            repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+            canonical_locator="postings-area",
+        )
+        for _ in range(len(TARGET_PATHS)):
+            pending = ops.initialize_target(
+                ops.SemanticInitializeTargetRequest(
+                    repository_id=REPO,
+                    target=m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
+                    objective=OBJECTIVE, bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=live, authority_seeds=(),
+            )
+            if not hasattr(pending, "continuation"):
+                break
+            assert pending.request.question is None
+            item = pending.request.target_inventory_item
+            assert item is not None
+            q = m.SemanticQuestionScope(
+                scope_root=area, subject=area,
+                question_class=m.SemanticQuestionClass.CQ_01,
+                question_slice=FOLLOW_SLICE,
+                materiality_basis="admitted by mapping; unexamined",
+            )
+            pend = m.InterpretationCoverage(
+                subjects=(area,), question_slice=FOLLOW_SLICE,
+                evidence_scope=m.EvidenceScope(), declared_complete=False,
+                question=q, disposition=m.SemanticQuestionDisposition.PENDING,
+                result_refs=(), resolution_requirements=(),
+                disposition_basis="admitted by mapping", question_evidence=(),
+            )
+            ops.submit_interpretation(
+                pending.continuation,
+                m.SemanticInterpretationResult(
+                    claims=(), relationships=(), governing_source_refs=(),
+                    diagnostics=("mapping",),
+                    candidate_subjects=(
+                        m.CandidateSubject(
+                            provisional_locator="postings-area",
+                            kind=m.SubjectKind.OTHER,
+                            display_name="postings-area",
+                            declared_kind="postings-area",
+                            evidence=(item.evidence_ref,),
+                            basis=m.SemanticBasis(
+                                derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
+                                summary="mapping admits postings area",
+                                input_refs=(item.evidence_ref,),
+                            ),
+                        ),
+                    ),
+                    candidate_conflicts=(),
+                    proposed_question_coverages=(pend,),
+                    candidate_withdrawals=(),
+                    proposed_target_inventory_accounting=(
+                        m.TargetInventoryAccount(
+                            evidence_ref=item.evidence_ref,
+                            assigned_area_subjects=(area,),
+                        ),
+                    ),
+                    proposed_target_questions=(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=live,
+            )
+        scope, obj = m.canonicalize_target_scope(
+            REPO, m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()), OBJECTIVE)
+        tid = m.derive_target_id(REPO, scope, obj)
+        assoc = store.load_target_association(REPO, tid)
+        self.assertIsNotNone(assoc)
+        assert assoc is not None
+        self.assertEqual(len(assoc.inventory_accounting), len(TARGET_PATHS))
+        ans = ops.status(
+            ops.SemanticStatusRequest(repository_id=REPO, target=tid, bounds=_bounds()),
+            structural=structural, evidence=evidence, store=store,
+            continuations=ContinuationStore(), authority_seeds=(),
+        )
+        assert isinstance(ans, m.SemanticAnswer)
+        assert isinstance(ans.content, m.StatusContent)
+        self.assertEqual(
+            ans.content.target_disposition, m.SemanticCoverageDisposition.INCOMPLETE)
 
 
 class ArtifactSnapshotTest(unittest.TestCase):

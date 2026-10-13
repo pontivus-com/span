@@ -36,6 +36,8 @@ from span.service.operations.authority import authority
 from span.service.operations.explain import explain
 from span.service.operations.impact import impact
 from span.service.operations.initialize_target import initialize_target
+from span.service.operations.locate import locate
+from span.service.operations.neighbors import neighbors
 from span.service.operations.refresh import refresh
 from span.service.operations.status import status
 from span.service.operations.trace import trace
@@ -58,6 +60,8 @@ from span.service.requests import (
     SemanticRefreshRequest,
     SemanticReissueInterpretationRequest,
     SemanticStatusRequest,
+    SemanticStructuralLocateRequest,
+    SemanticStructuralNeighborsRequest,
     SemanticSubmitInterpretationRequest,
     SemanticTraceRequest,
     StatusTargetError,
@@ -77,6 +81,8 @@ __all__ = [
     "SemanticRefreshRequest",
     "SemanticReissueInterpretationRequest",
     "SemanticSubmitInterpretationRequest",
+    "SemanticStructuralLocateRequest",
+    "SemanticStructuralNeighborsRequest",
     "SemanticInitializeRepositoryRequest",
     "SemanticInitializeRepositoryResult",
     "SemanticInitializeTargetRequest",
@@ -98,6 +104,8 @@ __all__ = [
     "trace",
     "status",
     "impact",
+    "locate",
+    "neighbors",
     "initialize_repository",
     "initialize_target",
 ]

@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
+import importlib
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -158,7 +161,8 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--no-agents", action="store_true",
-        help="Skip AGENTS.md lifecycle-block deployment into target repos.",
+        help="Retained for compatibility; AGENTS.md deployment into target "
+        "repos is removed by Addendum E §3/E-02 and is always skipped.",
     )
     parser.add_argument(
         "--authority-seeds-file", default=None,
@@ -168,6 +172,14 @@ def parse_args(argv=None):
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Print planned actions; execute nothing.",
+    )
+    parser.add_argument(
+        "--snapshot-census", default=None, metavar="OUT_JSON",
+        help="Write a read-only target artifact census snapshot and exit.",
+    )
+    parser.add_argument(
+        "--compare-census", nargs=2, default=None, metavar=("BEFORE", "AFTER"),
+        help="Diff two census snapshots with a readable verdict and exit.",
     )
     parser.add_argument(
         "--verify-only", action="store_true",
@@ -225,12 +237,167 @@ def _has_venv_pip(venv_python, dry_run=False):
     return proc.returncode == 0
 
 
+def _hash_tree(root):
+    """Map relative .py paths to sha256 bytes (verify-fast-path)."""
+    out = {}
+    for path in sorted(root.rglob("*.py")):
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        out[str(path.relative_to(root))] = hashlib.sha256(data).digest()
+    return out
+
+
+def source_venv_in_sync(span_repo, venv_python):
+    """Verify-fast-path (Addendum E §9.2): compare source against venv.
+
+    Returns (in_sync, files_checked, extra_files). Every source file
+    must exist in the venv with identical bytes. Extra venv files
+    (stale remnants pip reinstall never removes) are reported, not
+    synced-away: they cannot be fixed by reinstalling, only by
+    recreating the venv, so they warn instead of forcing reinstall
+    loops. Missing venv tree or unreadable files count as drift.
+    """
+    venv_site = Path(venv_python).parent.parent / "lib"
+    candidates = sorted(venv_site.glob("python*/site-packages/span"))
+    if not candidates:
+        return False, 0, ()
+    source = _hash_tree(Path(span_repo) / "src" / "span")
+    installed = _hash_tree(candidates[0])
+    if not source:
+        return False, 0, ()
+    extra = sorted(set(installed) - set(source))
+    in_sync = all(
+        name in installed and installed[name] == digest
+        for name, digest in source.items()
+    )
+    return in_sync, len(source), tuple(extra)
+
+
+def backup_data_dir(data_dir, dry_run=False):
+    """Online SQLite backup before mutation (Addendum E §9.2).
+
+    Copies every ``*.db`` under the data dir into a timestamped
+    ``backups/`` subdirectory using the sqlite3 online backup API
+    (consistent under concurrent readers). Returns the backup dir, or
+    None when there is nothing to back up. Never touches targets.
+    """
+    data_dir = Path(data_dir)
+    if dry_run or not data_dir.is_dir():
+        return None
+    dbs = sorted(data_dir.glob("*.db"))
+    if not dbs:
+        return None
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y%m%dT%H%M%S")
+    dest_dir = data_dir / "backups" / stamp
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=False)
+    except OSError as exc:
+        raise SystemExit(f"cannot create backup dir {dest_dir}: {exc}")
+    for db in dbs:
+        try:
+            src = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            try:
+                dst = sqlite3.connect(str(dest_dir / db.name))
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+            finally:
+                src.close()
+        except Exception as exc:
+            raise SystemExit(f"backup failed for {db}: {exc}")
+    print(f"data dir backed up: {dest_dir} ({len(dbs)} databases).")
+    return str(dest_dir)
+
+
+def snapshot_census(targets, out_path, dry_run=False):
+    """Write a read-only artifact census snapshot (Addendum E §9.2)."""
+    payload = {
+        str(t): target_artifact_snapshot(t) for t in targets
+    }
+    print(f"+ snapshot census: {out_path}")
+    if dry_run:
+        return payload
+    Path(out_path).write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return payload
+
+
+def compare_census(path_a, path_b):
+    """Diff two census snapshots with a readable verdict (E §9.2).
+
+    Evidence only, never a gate: a changed wiring mtime may be a
+    legitimate offline rebuild. Always exits 0; the verdict is in the
+    printed lines.
+    """
+    def _load(path):
+        try:
+            data = json.loads(Path(path).read_text())
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"cannot read census snapshot {path}: {exc}")
+        if not isinstance(data, dict):
+            raise SystemExit(
+                f"census snapshot is not an object: {path}")
+        return data
+
+    before, after = _load(path_a), _load(path_b)
+    changed = []
+    for target in sorted(set(before) | set(after)):
+        old, new = before.get(target), after.get(target)
+        if old != new:
+            changed.append(target)
+            print(f"CHANGED: {target}")
+            print(f"  before: {json.dumps(old, sort_keys=True)}")
+            print(f"  after:  {json.dumps(new, sort_keys=True)}")
+        else:
+            print(f"UNCHANGED: {target}")
+    if changed:
+        print(f"census verdict: {len(changed)} target(s) changed.")
+    else:
+        print("census verdict: no changes.")
+    return changed
+
+
+def _clean_build_staging(span_repo, dry_run=False):
+    """Remove regenerable build staging (Addendum E §9.2).
+
+    A stale ``build/`` directory or egg-info from before a refactor
+    flip is reused by setuptools and ships deleted modules into the
+    venv — the exact silent-staleness class tier 1 exists to kill.
+    Both paths are gitignored regenerables; removing them can only
+    force a clean build, never lose source.
+    """
+    removed = []
+    for candidate in (
+        Path(span_repo) / "build",
+        *Path(span_repo, "src").glob("*.egg-info"),
+    ):
+        if not candidate.exists() and not candidate.is_symlink():
+            continue
+        print(f"+ clean build staging: {candidate}")
+        if dry_run:
+            removed.append(str(candidate))
+            continue
+        if candidate.is_symlink() or candidate.is_file():
+            candidate.unlink()
+        else:
+            shutil.rmtree(candidate)
+        removed.append(str(candidate))
+    return removed
+
+
 def pip_install(venv_python, span_repo, dry_run=False):
+    # --no-cache on both paths: the package version is static, so a
+    # warm wheel cache can serve a stale build that no byte check would
+    # otherwise catch before install. Cache must never decide content.
     if _has_venv_pip(venv_python, dry_run):
         _run(
             [
                 str(venv_python), "-m", "pip", "install",
-                "--force-reinstall", str(span_repo),
+                "--force-reinstall", "--no-cache-dir", str(span_repo),
             ],
             dry_run=dry_run,
         )
@@ -243,11 +410,32 @@ def pip_install(venv_python, span_repo, dry_run=False):
         )
     _run(
         [
-            uv, "pip", "install", "--reinstall",
+            uv, "pip", "install", "--reinstall", "--no-cache",
             "--python", str(venv_python), str(span_repo),
         ],
         dry_run=dry_run,
     )
+
+
+def verify_installed(span_repo, venv_python):
+    """Post-install re-verification (tier-1 closeout).
+
+    Compares installed bytes against source AFTER pip runs: a stale
+    build cache or packaging quirk must fail loudly here, never ship
+    silently. Returns (ok, detail); callers fail closed on not-ok.
+    """
+    in_sync, checked, extra = source_venv_in_sync(span_repo, venv_python)
+    if not in_sync:
+        return False, (
+            f"installed tree does not match source "
+            f"({checked} files checked)"
+        )
+    if extra:
+        return False, (
+            "stale files installed that source does not contain: "
+            + ", ".join(extra)
+        )
+    return True, f"{checked} files match source"
 
 
 def expose_binary(venv_dir, bin_dir, dry_run=False):
@@ -273,9 +461,55 @@ def check_graft_index(target):
         return
     raise SystemExit(
         f"missing structural index: {wiring}. "
-        "Build the index through an independent Graft workflow, then "
-        "rerun Span installation. Span never writes into target repos."
+        "Build the index offline with `graft build` before installation, "
+        "then rerun Span installation. Span never writes into target repos."
     )
+
+
+def target_artifact_snapshot(target):
+    """Read-only census of the target structural-index tree (E-14).
+
+    Stdlib-only duplicate of the provider census: counts Markdown cards
+    beside the machine-readable index and records wiring identity. Creates
+    nothing, builds nothing, writes nothing.
+    """
+    root = Path(target)
+    wiring = root / "graft" / ".graph" / "wiring.json"
+    try:
+        stat = wiring.stat()
+        wiring_info = {
+            "present": True,
+            "mtime_ns": stat.st_mtime_ns,
+            "size_bytes": stat.st_size,
+        }
+    except OSError:
+        wiring_info = {
+            "present": False, "mtime_ns": None, "size_bytes": None,
+        }
+    cards = 0
+    index_md = False
+    graph_dir = root / "graft"
+    if graph_dir.is_dir():
+        try:
+            paths = sorted(graph_dir.rglob("*"))
+        except OSError:
+            paths = []
+        for path in paths:
+            try:
+                if not path.is_file():
+                    continue
+            except OSError:
+                continue
+            if path.suffix != ".md":
+                continue
+            if path.name == "INDEX.md" and path.parent == graph_dir:
+                index_md = True
+            cards += 1
+    return {
+        "wiring": wiring_info,
+        "markdown_cards": cards,
+        "index_md": index_md,
+    }
 
 
 def load_seeds(path, dry_run=False):
@@ -290,10 +524,121 @@ def load_seeds(path, dry_run=False):
         raise SystemExit(f"cannot read seeds file {path}: {exc}")
     if not isinstance(data, list):
         raise SystemExit(f"seeds file must hold a JSON list: {path}")
+    # Addendum G §4.6: early seed-shape validation via the canonical
+    # decoder, before any mutation. The bootstrap shim
+    # (scripts/install-span.py) puts `src/` on `sys.path`, and the
+    # installed `span-install` entry point has Span installed, so the
+    # canonical decoder is always obtainable in supported paths. Shape
+    # only; no locator resolution against the store and no structural
+    # provider contact. Unknown locators stay rejected at
+    # initialize_repository provisioning, the authoritative boundary.
+    # A missing decoder is a broken checkout or install and fails
+    # closed here; validation is never skipped.
+    try:
+        _m = importlib.import_module("span.core.model")
+    except ImportError as exc:
+        raise SystemExit(
+            f"cannot validate seeds file {path}: canonical decoder "
+            f"unavailable ({exc}); refusing to install with unchecked "
+            f"authority seeds"
+        ) from None
+    validated: list[object] = []
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise SystemExit(
+                f"seeds file {path}: seeds[{index}]: expected object, "
+                f"got {type(item).__name__}"
+            )
+        payload = dict(item)
+        payload.setdefault("$type", "EvidenceRef")
+        try:
+            validated.append(_m.from_canonical(_m.EvidenceRef, payload))
+        except _m.CanonicalDecodeError as exc:
+            raise SystemExit(
+                f"seeds file {path}: seeds[{index}]: invalid "
+                f"EvidenceRef arguments: {exc}"
+            ) from None
     return data
 
 
+def preflight_facts(targets, seeds_path=None):
+    """Read-only non-gating preflight facts (Addendum G §4.6).
+
+    Reports index mtime/size (via the census), git dirty/HEAD where
+    available, and seed-file facts. Never gates installation except for
+    the existing index-presence gate owned by `check_graft_index`.
+    Stdlib and git CLI only; no store, no provider writes.
+    """
+    facts: dict = {}
+    for target in targets:
+        entry: dict = {}
+        try:
+            head = subprocess.run(
+                ["git", "-C", str(target), "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if head.returncode == 0:
+                entry["git_head"] = head.stdout.strip() or None
+                status = subprocess.run(
+                    ["git", "-C", str(target), "status", "--short"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                entry["git_dirty"] = bool(status.stdout.strip())
+                log = subprocess.run(
+                    ["git", "-C", str(target), "log", "-1",
+                     "--format=%ct"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                try:
+                    entry["git_head_time"] = int(log.stdout.strip())
+                except (ValueError, AttributeError):
+                    entry["git_head_time"] = None
+            else:
+                entry["git_head"] = None
+                entry["git_dirty"] = None
+                entry["git_head_time"] = None
+        except (OSError, subprocess.SubprocessError):
+            entry["git_head"] = None
+            entry["git_dirty"] = None
+            entry["git_head_time"] = None
+        facts[str(target)] = entry
+    if seeds_path is not None:
+        try:
+            text = Path(seeds_path).read_text()
+            parsed = json.loads(text)
+            facts["seeds_file"] = {
+                "supplied": True,
+                "readable": True,
+                "shape_valid": isinstance(parsed, list),
+                "item_count": (
+                    len(parsed) if isinstance(parsed, list) else None
+                ),
+            }
+        except (OSError, ValueError):
+            facts["seeds_file"] = {
+                "supplied": True,
+                "readable": False,
+                "shape_valid": False,
+                "item_count": None,
+            }
+    else:
+        facts["seeds_file"] = {
+            "supplied": False,
+            "readable": False,
+            "shape_valid": False,
+            "item_count": 0,
+        }
+    return facts
+
+
 def merge_opencode_config(config_path, span_cmd, dry_run=False):
+    """Merge the span MCP entry, removing legacy graft entries (F-4).
+
+    Addendum F retires the standalone graft MCP: Span serves structural
+    navigation itself. Any ``graft`` entry in the ``mcp`` map or the
+    ``mcp.servers`` map is deleted and reported; removal is verified
+    from the written config, not assumed.
+    """
     print(f"+ merge opencode config: {config_path}")
     if dry_run:
         return {"status": "skipped", "reason": "dry-run"}
@@ -308,6 +653,10 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
         "enabled": True,
     }
     mcp = config.setdefault("mcp", {})
+    removed = []
+    if "graft" in mcp:
+        del mcp["graft"]
+        removed.append("graft")
     for key in ("span",):
         slot = mcp.get(key)
         if isinstance(slot, dict):
@@ -316,13 +665,23 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
         else:
             mcp[key] = dict(entry)
     servers = mcp.get("servers")
-    if isinstance(servers, dict) and "span" in servers:
-        slot = servers["span"]
-        if isinstance(slot, dict):
-            slot["command"] = span_cmd
+    if isinstance(servers, dict):
+        if "graft" in servers:
+            del servers["graft"]
+            removed.append("servers.graft")
+        if "span" in servers:
+            slot = servers["span"]
+            if isinstance(slot, dict):
+                slot["command"] = span_cmd
     path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"opencode config updated: {config_path}")
-    return {"status": "merged", "config": str(config_path)}
+    if removed:
+        print(f"removed legacy graft MCP entries: {removed}")
+    return {
+        "status": "merged",
+        "config": str(config_path),
+        "removed_graft_entries": removed,
+    }
 
 
 def register_codex(span_cmd, dry_run=False):
@@ -342,6 +701,31 @@ def register_codex(span_cmd, dry_run=False):
         print(f"codex registration failed, continuing: {exc}")
         return {"status": "failed", "error": str(exc)}
     return {"status": "registered"}
+
+
+def deregister_codex_graft(dry_run=False):
+    """Remove a legacy graft MCP registration from codex (Addendum F F-4).
+
+    Best effort: a missing codex CLI skips, a failed removal reports
+    ``manual`` so the operator finishes it by hand. Removing
+    configuration never stops an already-running graft server; the
+    operator stops such processes out of band (see docs/mcp.md).
+    """
+    if shutil.which("codex") is None:
+        print("codex CLI absent; skipping graft deregistration.")
+        return {"status": "skipped", "reason": "codex CLI absent"}
+    if dry_run:
+        print("+ deregister codex graft (dry-run, skipped)")
+        return {"status": "skipped", "reason": "dry-run"}
+    try:
+        _run(["codex", "mcp", "remove", "graft"], dry_run=dry_run)
+    except SystemExit as exc:
+        # A pre-F graft entry the CLI cannot remove (or no such entry)
+        # is operator work, not an install failure. Warn and continue.
+        print(f"codex graft deregistration needs operator action: {exc}")
+        return {"status": "manual", "error": str(exc)}
+    print("codex graft MCP entry removed.")
+    return {"status": "removed"}
 
 
 def _hook_bin(venv_dir, bin_dir):
@@ -407,77 +791,48 @@ def wire_codex_hooks(hook_bin, dry_run=False):
 
 
 def wire_opencode_plugin(span_repo, project_dir, dry_run=False):
-    """Deploy the report-only span plugin into a project .opencode."""
-    src = Path(span_repo) / "integrations" / "hosts" / "opencode" / \
-        "span-hooks.js"
-    dst_dir = Path(project_dir) / ".opencode" / "plugins"
-    print(f"+ deploy opencode plugin: {dst_dir / 'span-hooks.js'}")
+    """Refuse per-target plugin deployment (Addendum E §3/E-02).
+
+    Span is read-only with respect to the target repository: no Span path
+    writes target artifacts. Deploying ``.opencode/plugins/span-hooks.js``
+    into the target would violate that boundary, so this entry point fails
+    closed. Host-level wiring (codex hooks, host MCP config, host skills)
+    remains outside the target and is unaffected.
+    """
     if dry_run:
-        return {"status": "skipped", "reason": "dry-run"}
-    if not src.exists():
-        raise SystemExit(f"plugin source missing: {src}")
-    dst_dir.mkdir(parents=True, exist_ok=True)
-    dst = dst_dir / "span-hooks.js"
-    dst.write_text(src.read_text())
-    print(f"opencode plugin deployed: {dst}")
-    return {"status": "wired", "dst": str(dst)}
+        return {
+            "status": "skipped",
+            "reason": "target writes prohibited by Addendum E §3",
+        }
+    raise SystemExit(
+        "refusing target write "
+        f"{Path(project_dir) / '.opencode' / 'plugins' / 'span-hooks.js'}: "
+        "Span never writes into target repositories (Addendum E §3/E-02). "
+        "Host plugin deployment into targets is removed; use host-level "
+        "MCP registration instead."
+    )
 
 
 def ensure_agents_rule(span_repo, target, dry_run=False):
-    """Deploy the canonical lifecycle block into a target AGENTS.md.
+    """Refuse target AGENTS.md deployment (Addendum E §3/E-02).
 
-    The block is copied verbatim from docs/agents-snippet.md (the
-    single canonical source) between span markers. The installer
-    never parses it for decisions. Idempotent: reruns converge on
-    the same content. The existing file is backed up once to
-    AGENTS.md.bak-span. Host wiring only: semantic stores,
-    continuations, receipts, and Graft artifacts are never placed
-    in the target.
+    Span is read-only with respect to the target repository. Creating or
+    modifying ``<target>/AGENTS.md`` (or its backup) would violate that
+    boundary, so this entry point fails closed. The canonical lifecycle
+    block remains readable at ``docs/agents-snippet.md`` in the Span
+    checkout and in deployed host skills; it is never copied into targets.
     """
-    dst = Path(target) / "AGENTS.md"
-    print(f"+ ensure agents rule: {dst}")
     if dry_run:
-        return {"status": "skipped", "reason": "dry-run",
-                "path": str(dst)}
-    src = Path(span_repo) / "docs" / "agents-snippet.md"
-    if not src.is_file():
-        raise SystemExit(f"agents snippet source missing: {src}")
-    snippet = src.read_text().rstrip("\n") + "\n"
-    if "## Span lifecycle" not in snippet:
-        raise SystemExit(f"agents snippet source malformed: {src}")
-    block = f"{AGENTS_START}\n{snippet}{AGENTS_END}\n"
-    if not dst.is_file():
-        dst.write_text(block)
-        print(f"agents rule created: {dst}")
-        return {"status": "wired", "path": str(dst)}
-    existing = dst.read_text()
-    backup = dst.with_name("AGENTS.md.bak-span")
-    if not backup.exists():
-        shutil.copy2(dst, backup)
-        print(f"agents rule backed up: {backup}")
-    start = existing.find(AGENTS_START)
-    end = existing.find(AGENTS_END)
-    if (start != -1) != (end != -1) or (
-        start != -1 and end != -1 and end < start
-    ):
-        raise SystemExit(
-            f"agents block markers malformed in {dst}; "
-            "inspect the file before rerunning."
-        )
-    if start != -1:
-        tail = existing[end + len(AGENTS_END):].strip("\n")
-        new_text = existing[:start] + block
-        if tail:
-            new_text += "\n" + tail + "\n"
-    elif existing.strip():
-        new_text = existing.rstrip("\n") + "\n\n" + block
-    else:
-        new_text = block
-    if new_text == existing:
-        return {"status": "converged", "path": str(dst)}
-    dst.write_text(new_text)
-    print(f"agents rule deployed: {dst}")
-    return {"status": "wired", "path": str(dst)}
+        return {
+            "status": "skipped",
+            "reason": "target writes prohibited by Addendum E §3",
+            "path": str(Path(target) / "AGENTS.md"),
+        }
+    raise SystemExit(
+        f"refusing target write {Path(target) / 'AGENTS.md'}: "
+        "Span never writes into target repositories (Addendum E §3/E-02). "
+        "AGENTS.md deployment into targets is removed."
+    )
 
 
 def write_receipt(data_dir, payload, dry_run=False):
@@ -653,13 +1008,73 @@ def main(argv=None):
         )
         return
 
+    if args.snapshot_census is not None:
+        snapshot_census(targets, args.snapshot_census, dry_run=dry)
+        return
+
+    if args.compare_census is not None:
+        compare_census(*args.compare_census)
+        return
+
     check_prereqs()
     for target in targets:
         check_graft_index(target)
-    venv_python = ensure_venv(venv_dir, dry_run=dry)
-    pip_install(venv_python, span_repo, dry_run=dry)
-    expose_binary(venv_dir, bin_dir, dry_run=dry)
+    # Addendum F: the graft server is gone, so the E-14 process/registry
+    # scan is deleted with it. The preflight is index-presence plus the
+    # read-only artifact census below, recorded in the receipt.
+    opencode_config = args.opencode_config
+    if opencode_config is None and Path("opencode.json").exists():
+        opencode_config = "opencode.json"
+    graft_census: dict = {}
+    for target in targets:
+        graft_census[str(target)] = target_artifact_snapshot(target)
+    # Addendum G §4.6: early seed-shape validation before any mutation,
+    # plus read-only non-gating preflight facts. Shape failure closes
+    # before mutation; locator resolution stays at provisioning.
     seeds = load_seeds(args.authority_seeds_file, dry_run=dry)
+    preflight = preflight_facts(targets, args.authority_seeds_file)
+    print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
+    venv_python = ensure_venv(venv_dir, dry_run=dry)
+    # Tier-1 verify-fast-path (E §9.2): skip reinstall when the venv
+    # already matches source, with proof. The check itself is read-only
+    # and runs on dry-run too; backup precedes mutation only.
+    in_sync, files_checked, extra_files = source_venv_in_sync(
+        span_repo, venv_python)
+    data_backup = None
+    post_install_verified = None
+    if in_sync:
+        print(
+            f"venv matches source ({files_checked} files); "
+            "skipping reinstall with proof."
+        )
+        reinstalled = False
+    else:
+        data_backup = backup_data_dir(data_dir, dry_run=dry)
+        _clean_build_staging(span_repo, dry_run=dry)
+        pip_install(venv_python, span_repo, dry_run=dry)
+        reinstalled = not dry
+        if reinstalled:
+            ok, detail = verify_installed(span_repo, venv_python)
+            if not ok:
+                raise SystemExit(
+                    f"installed runtime failed verification: {detail}. "
+                    "The install is refused rather than recorded; "
+                    "fix the build and rerun."
+                )
+            print(f"installed runtime verified: {detail}.")
+            post_install_verified = detail
+    if extra_files:
+        print(
+            "warning: stale files in venv pip reinstall never removes: "
+            + ", ".join(extra_files) + ". Recreate the venv to clear them."
+        )
+    source_venv_sync = {
+        "in_sync_before_install": bool(in_sync),
+        "files_checked": files_checked,
+        "extra_venv_files": list(extra_files),
+        "reinstalled": bool(reinstalled),
+    }
+    expose_binary(venv_dir, bin_dir, dry_run=dry)
     if seeds:
         # Verification provisions without seeds (no new flags per
         # Addendum D ACT-D-02); seeds enter through a setup-session
@@ -680,9 +1095,6 @@ def main(argv=None):
     span_cmd = [resolved_mcp] + data_cmd
     for target in targets:
         span_cmd += ["--repo", f"graft:{target}"]
-    opencode_config = args.opencode_config
-    if opencode_config is None and Path("opencode.json").exists():
-        opencode_config = "opencode.json"
     host_registration: dict = {}
     if opencode_config is not None:
         try:
@@ -709,6 +1121,12 @@ def main(argv=None):
         args.with_hooks = not args.no_hooks
     if args.with_codex:
         host_registration["codex"] = register_codex(span_cmd, dry_run=dry)
+        # Addendum F F-4: retire the standalone graft MCP alongside
+        # span registration. Reported in the receipt; a `manual` status
+        # means the operator finishes the removal by hand.
+        host_registration["codex_graft_removal"] = deregister_codex_graft(
+            dry_run=dry
+        )
     else:
         if args.no_codex:
             _codex_reason = "codex disabled (--no-codex)"
@@ -728,17 +1146,20 @@ def main(argv=None):
                 "codex": _codex_hooks, "opencode_plugin": {},
             }
             raise
-        _plugin: dict = {}
-        try:
-            for target in targets:
-                _plugin[str(target)] = wire_opencode_plugin(
-                    span_repo, target, dry_run=dry
-                )
-        except SystemExit as exc:
-            host_registration["hooks"] = {
-                "codex": _codex_hooks, "opencode_plugin": _plugin,
+        # Addendum E §3/E-02: per-target opencode plugin deployment would
+        # write into target repositories and is therefore removed. Host
+        # hooks outside targets remain allowed.
+        _plugin = {
+            str(target): {
+                "status": "skipped",
+                "reason": "target writes prohibited by Addendum E §3/E-02",
             }
-            raise
+            for target in targets
+        }
+        print(
+            "per-target opencode plugin deployment removed "
+            "(Addendum E §3/E-02: Span never writes into targets)."
+        )
         host_registration["hooks"] = {
             "codex": _codex_hooks, "opencode_plugin": _plugin,
         }
@@ -755,23 +1176,22 @@ def main(argv=None):
     else:
         print("skipping skill deployment (--no-skills).")
         host_registration["skills"] = []
+    # Addendum E §3/E-02: AGENTS.md deployment into target repositories
+    # is removed. Span is read-only with respect to targets; the canonical
+    # block stays in docs/agents-snippet.md and deployed host skills.
+    # --no-agents is retained for compatibility and is now always satisfied.
     if not args.no_agents:
-        _agents: dict = {}
-        try:
-            for target in targets:
-                _agents[str(target)] = ensure_agents_rule(
-                    span_repo, target, dry_run=dry
-                )
-        except SystemExit as exc:
-            host_registration["agents"] = _agents
-            raise
-        host_registration["agents"] = _agents
+        print(
+            "AGENTS.md deployment into targets is removed "
+            "(Addendum E §3/E-02: Span never writes into targets); "
+            "recording skipped."
+        )
     else:
         print("skipping AGENTS.md rule deployment (--no-agents).")
-        host_registration["agents"] = {
-            "status": "skipped",
-            "reason": "agents disabled (--no-agents)",
-        }
+    host_registration["agents"] = {
+        "status": "skipped",
+        "reason": "target writes prohibited by Addendum E §3/E-02",
+    }
 
     report = verify_installation(venv_python, data_dir, targets, dry)
     receipt = {
@@ -783,6 +1203,14 @@ def main(argv=None):
         "repos": [str(t) for t in targets],
         "verify": report,
         "host_registration": host_registration,
+        "graft_census": graft_census,
+        "source_venv_sync": source_venv_sync,
+        "post_install_verified": post_install_verified,
+        "data_backup": data_backup,
+        "seeds_file_supplied_and_readable": bool(seeds),
+        "seeds_shape_valid": bool(seeds),
+        "seeds_resolved_and_active": False,
+        "preflight_facts": preflight,
         # Deterministic installer performs no host exchange (A1 only).
         "a2": "not_run",
         "installed_at": datetime.datetime.now(

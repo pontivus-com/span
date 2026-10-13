@@ -30,6 +30,8 @@ from span.core.model import (
     Subject,
     SubjectPage,
     SubjectId,
+    TargetAssociation,
+    TargetId,
 )
 from span.ports.structural import StructuralDirection
 
@@ -167,6 +169,12 @@ class SemanticStore(_typing.Protocol):
     def write_index_batch(self, batch: CanonicalIndexBatch) -> StoreWriteResult:
         """Atomic reconciliation (plan §4.11, I-37): write, coverage
         record, and exactly the listed retirements — or nothing."""
+        ...
+
+    def load_target_association(
+        self, repository_id: str, target_id: TargetId
+    ) -> TargetAssociation | None:
+        """Load one target-accounting association; expired reads as absent."""
         ...
 
     def mark_freshness(

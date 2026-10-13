@@ -140,7 +140,7 @@ class TaskBriefTest(unittest.TestCase):
         task = self._task()
         brief = task.request.brief
         self.assertIn("scope root: src/main.py", brief.scope_boundaries)
-        self.assertIn("subject: src/main.py", brief.scope_boundaries)
+        self.assertIn("structural anchor: src/main.py", brief.scope_boundaries)
         # Rules are the canonical constants — no per-unit invention.
         self.assertEqual(brief.open_handling, m.TASK_BRIEF_OPEN_HANDLING)
         self.assertEqual(

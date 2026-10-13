@@ -1,7 +1,7 @@
 """Agent Skill non-authority tests (plan Phase 4.7).
 
 Skills are optional lifecycle guidance only. They may orchestrate the
-ten canonical operations but cannot establish or reinterpret
+twelve canonical operations but cannot establish or reinterpret
 semantic claims, ownership, authority, precedence, trust, or
 freshness. These tests pin that boundary mechanically:
 
@@ -34,6 +34,8 @@ CANONICAL_OPS = {
     "refresh",
     "submit_interpretation",
     "reissue_interpretation",
+    "locate",
+    "neighbors",
 }
 
 FORBIDDEN_PHRASES = (
@@ -116,6 +118,53 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "Every contained material area",
             "no unvisited material partition",
             "fresh-session `status`/`explain` readback",
+        ):
+            self.assertIn(required, text)
+
+    def test_entry_decision_comes_first(self):
+        # G-I13/G-11: one canonical three-branch entry decision before
+        # any SA material. Ordinary orientation is status-then-explain;
+        # refresh is never routine first-contact.
+        text = _text(SKILLS[0])
+        entry_at = text.index("## Entry decision")
+        lifecycle_at = text.index("## Operation lifecycle")
+        quality_at = text.index("## Uniform semantic-quality card")
+        self.assertLess(entry_at, lifecycle_at)
+        self.assertLess(entry_at, quality_at)
+        for required in (
+            "Ordinary orientation",
+            "`status` with no target, then `explain`",
+            "Exact user-supplied directory plus objective",
+            "`initialize_target`",
+            "Post-change closeout",
+            "Never `refresh` on first contact",
+            "status (no target), then explain <target>",
+        ):
+            self.assertIn(required, text)
+
+    def test_freshness_planes_stated(self):
+        # G-11: UNVERIFIED orientation-use vs STALE refresh-before-
+        # reliance, in the Reading-answers section.
+        text = _text(SKILLS[0])
+        for required in (
+            "Two freshness planes",
+            "never proves",
+            "completeness or absence",
+            "refresh it before relying",
+            "relying on it for change",
+            "dirty",
+            "tree alone never stales",
+        ):
+            self.assertIn(required, text)
+
+    def test_hook_scope_is_event_local_not_inventory(self):        # G §4.2c: HOOK_FAST 0/0 must never read as clean. The primary
+        # skill states the event-local boundary and names NORMAL status
+        # as the inventory path.
+        text = _text(SKILLS[0])
+        for required in (
+            "event-local scope only",
+            "never means the repository is clean",
+            "`NORMAL` `status`",
         ):
             self.assertIn(required, text)
 

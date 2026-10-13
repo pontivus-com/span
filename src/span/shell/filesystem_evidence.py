@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime as _datetime
 import hashlib as _hashlib
+import os as _os
 import pathlib as _pathlib
 
 from span.core import model as m
@@ -56,19 +57,25 @@ class FilesystemEvidenceSource:
 
     def _paths(self) -> list[str]:
         found: list[str] = []
-        for path in sorted(self._root.rglob("*")):
-            if not path.is_file():
-                continue
-            try:
-                relative = path.relative_to(self._root)
-            except ValueError:
-                continue
-            if any(part in _SKIP_DIRS for part in relative.parts):
-                continue
-            if not is_probably_text(path):
-                continue
-            found.append(relative.as_posix())
-        return found
+        # Prune skipped trees before descending: identical output set
+        # to the unpruned walk (same is_file/membership/text filters
+        # below), without entering .git/graft/caches.
+        for current, dirnames, filenames in _os.walk(self._root):
+            dirnames[:] = sorted(d for d in dirnames if d not in _SKIP_DIRS)
+            for name in sorted(filenames):
+                if name in _SKIP_DIRS:
+                    continue
+                path = _pathlib.Path(current) / name
+                if not path.is_file():
+                    continue
+                try:
+                    relative = path.relative_to(self._root)
+                except ValueError:
+                    continue
+                if not is_probably_text(path):
+                    continue
+                found.append(relative.as_posix())
+        return sorted(found)
 
     def _read_bytes(self, locator: str) -> bytes:
         candidate = self._root / locator
@@ -142,13 +149,13 @@ class FilesystemEvidenceSource:
         page_token: str | None = None,
     ) -> m.EvidenceInventoryPage:
         self._check_repository(repository_id)
-        if scope.paths:
+        if scope.paths or scope.evidence_refs:
             paths = self._expand_paths(scope.paths)
-        elif scope.evidence_refs:
-            paths = [
+            ref_paths = [
                 r.locator for r in scope.evidence_refs
                 if (self._root / r.locator).is_file()
             ]
+            paths = sorted(set(paths) | set(ref_paths))
         else:
             paths = self._paths()
         # Slice before fingerprinting: pages after the first must not

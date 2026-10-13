@@ -43,6 +43,8 @@ __all__ = [
     "validate_candidate_conflict",
     "validate_question_coverage",
     "validate_candidate_withdrawal",
+    "validate_target_inventory_account",
+    "validate_target_questions",
     "materialize_claim",
     "materialize_relationship",
     "find_conflicts",
@@ -336,6 +338,27 @@ def validate_candidate_subject(
             requirements=(),
             diagnostics=("subject provisional locator is empty",),
         )
+    locator = candidate.provisional_locator
+    if locator.startswith("/") or not locator or ".." in locator.split("/"):
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=("subject provisional locator is not repository-relative",),
+        )
+    for known in ctx.known_subject_ids:
+        if (
+            known.canonical_locator == locator
+            and known.subject_kind != candidate.kind
+        ):
+            return CandidateValidation(
+                ok=False,
+                trust=m.TrustState.UNRESOLVED,
+                requirements=(),
+                diagnostics=(
+                    "subject locator collides with a different-kind subject",
+                ),
+            )
     if candidate.kind is m.SubjectKind.OTHER and not candidate.declared_kind:
         return CandidateValidation(
             ok=False,
@@ -712,3 +735,56 @@ def find_conflicts(
                     )
                 )
     return tuple(conflicts)
+
+
+def validate_target_inventory_account(
+    account: m.TargetInventoryAccount,
+    ctx: ValidationContext,
+    *,
+    current_inventory_ids: frozenset[str],
+    expected_evidence_id: str | None = None,
+    admitted_area_ids: tuple[m.SubjectId, ...] = (),
+    new_area_ids: tuple[m.SubjectId, ...] = (),
+) -> CandidateValidation:
+    """Validate one TargetInventoryAccount proposal (Addendum E §4C.6D)."""
+    eid = account.evidence_ref.evidence_id.value
+    if eid not in current_inventory_ids:
+        return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target account out-of-target evidence: {eid}",))
+    if expected_evidence_id is not None and eid != expected_evidence_id:
+        return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target account does not match current item: {eid}",))
+    if account.assigned_area_subjects:
+        known = set(ctx.known_subject_ids) | set(admitted_area_ids) | set(new_area_ids)
+        for sid in account.assigned_area_subjects:
+            if sid not in known:
+                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target assignment names unknown area: {sid.canonical_locator}",))
+        return CandidateValidation(True, m.TrustState.ESTABLISHED, (), ())
+    if account.exclusion_basis is not None:
+        basis = account.exclusion_basis
+        if not basis.summary:
+            return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target exclusion without summary",))
+        if not basis.input_refs:
+            return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target exclusion without evidence support",))
+        for ref in basis.input_refs:
+            if not isinstance(ref, m.EvidenceRef):
+                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target exclusion requires evidence refs, not semantic refs",))
+            if ref.evidence_id.value not in ctx.known_evidence_ids:
+                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"exclusion evidence does not resolve: {ref.evidence_id.value}",))
+            if ref.evidence_id.value not in ctx.evidence_fingerprints:
+                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"exclusion evidence fingerprint unavailable: {ref.evidence_id.value}",))
+        return CandidateValidation(True, m.TrustState.ESTABLISHED, (), ())
+    if account.resolution_requirements:
+        return CandidateValidation(True, m.TrustState.UNRESOLVED, tuple(account.resolution_requirements), ())
+    return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target account has no outcome",))
+
+
+def validate_target_questions(
+    questions: tuple[m.SemanticQuestionScope, ...],
+    *,
+    admitted_area_ids: tuple[m.SubjectId, ...],
+) -> CandidateValidation:
+    """Every referenced question must belong to an admitted area."""
+    admitted = set(admitted_area_ids)
+    for q in questions:
+        if q.scope_root not in admitted:
+            return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target question root not admitted: {q.scope_root.canonical_locator}",))
+    return CandidateValidation(True, m.TrustState.ESTABLISHED, (), ())

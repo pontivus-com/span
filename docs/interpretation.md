@@ -22,7 +22,10 @@ material-path, typed-result, adversarial-check, disposition, and fresh-readback
 guidance, plus C-04 material aspects and recorded OPEN/PENDING requirements.
 Addendum E carries the exact user-directed `target_scope` separately from the
 current structural anchor, so a bounded candidate is never mistaken for the
-whole semantic target.
+whole semantic target. Target-mode work also carries typed target-inventory
+accounting proposals through the existing result exchange; these account for
+inventory assignment, evidence-backed target exclusion, or unresolved
+mapping. They are distinct from semantic-question `NOT_APPLICABLE` coverage.
 The brief is guidance, never validated content and never submitted back (the
 result carrier has no brief field). Nothing else crosses.
 
@@ -55,7 +58,8 @@ Exact user-supplied directory targets use `initialize_target` per
 ## Result (`SemanticInterpretationResult`)
 
 Typed candidate claims/relationships (unique keys), candidate
-subjects, candidate conflicts, governing-source refs, diagnostics.
+subjects, candidate conflicts, governing-source refs, target-inventory
+accounting proposals for target-mode tasks, and diagnostics.
 No new kinds. Authority arrives as `CandidateAuthority`: binding plus
 `AuthoritySupport` (verbatim quote + locating sections) — the core
 checks the account mechanically (resolves, belongs, quote substring,
@@ -72,7 +76,10 @@ persists `PENDING` and its claims stay unassigned output. Explicit
 `ANSWERED` with zero validated material rejects the whole unit.
 Only complete replacement retires unshared prior outputs;
 `PENDING`/`OPEN`/`NOT_APPLICABLE` never retire by omission, and the
-store refuses `ANSWERED` rows with empty result refs.
+store refuses `ANSWERED` rows with empty result refs. A semantic question's
+`NOT_APPLICABLE` disposition does not exclude an inventory member from an
+exact target; target exclusion is target-inventory accounting with its own
+evidence basis.
 
 ## Failure classes (Span-observable only)
 

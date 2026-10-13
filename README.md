@@ -31,11 +31,14 @@ Three functions, one mechanism:
   knowledge admit, examine, and persist it through the same canonical
   submission — deliberately, never by silent broadening.
 
-The agent lifecycle runs ten canonical operations:
+The agent lifecycle runs twelve canonical operations:
 `initialize_repository` (explicit setup), `initialize_target` (exact target
 boundary and bounded structural candidates), `explain`, `impact`,
-`trace`, `authority`, `status`, `refresh`, `submit_interpretation`, and
-`reissue_interpretation` (exchange recovery). When stored knowledge is insufficient, an operation
+`trace`, `authority`, `status`, `refresh`, `submit_interpretation`,
+`reissue_interpretation` (exchange recovery), `locate` (read-only
+structural find/outline/member listing), and `neighbors` (read-only
+bounded adjacency). Structural navigation is evidence input served by
+Span itself — no separate structural MCP exists. When stored knowledge is insufficient, an operation
 suspends with a bounded task; the agent investigates with its own
 model and submits the typed result. Span validates, materializes,
 and resumes — it never edits code, runs tests, selects models, or
@@ -120,9 +123,11 @@ the detailed scoped view; `HOOK_FAST` remains compact readiness/event
 reporting.
 
 **Activation status:** the repository-level inventory is the full Point 4
-promise and is tracked by ACT-D-10/D-ACCEPT-08. The current runtime must not
-be described as delivering it until that installed-runtime gate passes;
-readiness-only `status(target=None)` output is an activation gap, not proof
+promise and is tracked by ACT-D-10/D-ACCEPT-08. It is implemented in
+source (`StatusContent.coverage_report`); until the D-ACCEPT-08
+installed-runtime gate passes for the deployed revision, that revision
+must not be described as delivering it. Readiness-only
+`status(target=None)` output is an activation gap, not proof
 that the repository has no semantic knowledge.
 
 ---
@@ -231,9 +236,11 @@ guess, coerce uncertainty, or auto-fix by inventing semantics.
      session; normal queries/hooks must never bootstrap implicitly.
    - If READY: proceed. Record repository_id for all later calls.
 
-   The full Point 4 repository semantic-coverage inventory is an additional
-   ACT-D-10 gate. Until it passes, treat a readiness-only response as the
-   known implementation gap and continue only with exact-target inspection.
+   The full Point 4 repository semantic-coverage inventory is implemented
+   in source and gated on D-ACCEPT-08 installed-runtime acceptance. Until
+   that gate passes for the deployed revision, treat a readiness-only
+   response as the known activation gap and continue only with
+   exact-target inspection.
 
 7. Smoke (read-only):
    status then explain on one known symbol in
@@ -246,11 +253,13 @@ guess, coerce uncertainty, or auto-fix by inventing semantics.
    STALE/UNVERIFIABLE verbatim; missing authority stays missing.
 
 8. Boundaries to respect for this setup:
-   - 10 ops only: initialize_repository, initialize_target, explain,
+   - 12 ops only: initialize_repository, initialize_target, explain,
      impact, trace, authority, status,
-     refresh, submit_interpretation, reissue_interpretation.
+     refresh, submit_interpretation, reissue_interpretation,
+     locate, neighbors.
      No semantic_* aliases. See `docs/semantic-governance-addendum-e.md`
-     §4A lifecycle matrix for the onboarding path.
+     §4A lifecycle matrix for the onboarding path and
+     `docs/semantic-governance-addendum-f.md` for the structural tools.
    - Span never edits code, runs tests, orchestrates workflows,
      selects models, or rebuilds implicitly. Hooks call only
      status HOOK_FAST. No whole-repo crawl. Repo-wide refresh
@@ -280,8 +289,9 @@ over the 96-unit inventory maximum (`service/bounds.py` maximum bounds,
 truncation is reported in the existing `evidence_inventory_status`
 (`degraded:truncated-at-<n>`) plus warnings, never in `readiness`,
 and remaining evidence loads on demand.
-It is not a failure; `status` still reports operational
-readiness. Do not raise bounds to chase inventory completeness.
+It is not a failure; `status` still reports `READY` alongside the
+explicit `degraded:truncated-at-<n>` inventory state (readiness plus
+bounds, never readiness instead of coverage). Do not raise bounds to chase inventory completeness.
 
 ### Opencode
 
@@ -305,8 +315,9 @@ existing `graft` entry):
 ```
 
 Reload Opencode, then ask the agent: normal `status` with no target (expect
-the repository semantic-coverage inventory once ACT-D-10 is installed;
-until then, a readiness-only response is an explicit activation gap), then
+the repository semantic-coverage inventory where the deployed revision has
+passed D-ACCEPT-08; until then, a readiness-only response is an explicit
+activation gap), then
 `status`/`explain` on a known symbol. Exact-target calls may return a
 `SemanticAnswer` or `PendingInterpretation`, submitted via
 `submit_interpretation` until an answer returns; the compact
@@ -323,7 +334,7 @@ codex mcp list
 
 Use the absolute `span-mcp` path if it is not on Codex's PATH.
 Then prompt: normal `status` with no target, then exact-target
-`status`/`explain` on a known symbol; use the same Point 4 gate and
-readiness-only limitation described for Opencode. If `codex mcp list` fails on
+`status`/`explain` on a known symbol; the same D-ACCEPT-08 activation gate
+and readiness-only limitation described for Opencode apply. If `codex mcp list` fails on
 `service_tier`, fix the local Codex config first — that error is
 outside Span.

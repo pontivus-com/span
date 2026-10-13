@@ -538,6 +538,71 @@ class StatusTest(unittest.TestCase):
         finally:
             store.close()
 
+    def test_non_current_entries_carry_actionable_requirements(self):
+        from span.service.operations.status import (
+            _repository_coverage_entry,
+        )
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                _status_request(), ops.status,
+                structural, evidence, store, agent,
+            )
+            unassessed = _sid("persisted/unassessed")
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(m.Subject(unassessed, "Unassessed", None),)
+                )
+            )
+            subjects = store.load_subjects(
+                REPO, (unassessed,),
+            )
+            entry = _repository_coverage_entry(
+                REPO, subjects[0], evidence=evidence, store=store,
+                bounds=_bounds(),
+            )
+            self.assertIs(
+                entry.disposition,
+                m.SemanticCoverageDisposition.UNASSESSED,
+            )
+            self.assertTrue(entry.resolution_requirements)
+        finally:
+            store.close()
+
+    def test_repository_entries_order_within_page(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                _status_request(), ops.status,
+                structural, evidence, store, agent,
+            )
+            answer = ops.status(
+                _status_request(target=None),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            entries = answer.content.coverage_report.entries
+            rank = {
+                m.SemanticCoverageDisposition.STALE: 0,
+                m.SemanticCoverageDisposition.UNVERIFIABLE: 1,
+                m.SemanticCoverageDisposition.INCOMPLETE: 2,
+                m.SemanticCoverageDisposition.UNASSESSED: 3,
+                m.SemanticCoverageDisposition.CURRENT: 4,
+            }
+            keys = [
+                (
+                    rank[e.disposition],
+                    -e.open_question_count,
+                    -e.pending_question_count,
+                    e.subject.canonical_locator,
+                    e.subject.subject_kind.value,
+                )
+                for e in entries
+            ]
+            self.assertEqual(keys, sorted(keys))
+        finally:
+            store.close()
+
     def test_none_target_report_paginates_persisted_subjects(self):
         structural, evidence, store, agent = _harness()
         try:

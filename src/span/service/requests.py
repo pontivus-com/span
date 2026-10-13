@@ -30,7 +30,35 @@ __all__ = [
     "AuthorityTargetError",
     "RefreshScopeError",
     "StatusTargetError",
+    "SemanticStructuralLocateRequest",
+    "SemanticStructuralNeighborsRequest",
 ]
+
+
+@_dataclass(frozen=True)
+class SemanticStructuralLocateRequest:
+    """Structural locate contract (Addendum F §4.1)."""
+
+    repository_id: str
+    mode: m.StructuralLocateMode
+    bounds: m.QueryBounds
+    query: str | None = None
+    match: m.StructuralLocateMatch = m.StructuralLocateMatch.EXACT
+    target: m.EvidenceScope | None = None
+    page_token: str | None = None
+
+
+@_dataclass(frozen=True)
+class SemanticStructuralNeighborsRequest:
+    """Structural neighbors contract (Addendum F §4.2)."""
+
+    repository_id: str
+    target: m.SubjectSelector
+    direction: StructuralDirection
+    bounds: m.QueryBounds
+    edge_kinds: tuple[m.StructuralEdgeKind, ...] = ()
+    max_depth: int = 1
+    page_token: str | None = None
 
 #: Canonical change vocabulary lives in the core model (single carrier);
 #: re-exported here for service consumers (plan §11.10, I-04).
@@ -85,6 +113,7 @@ class SemanticStatusRequest:
         | m.ClaimRef
         | m.RelationshipRef
         | m.EvidenceScope
+        | m.TargetId
         | None
     )
     bounds: m.QueryBounds

@@ -2,7 +2,7 @@
 
 Skills (`skills/span/SKILL.md`, `skills/span-change-context/SKILL.md`,
 `skills/span-document/SKILL.md`)
-are optional lifecycle/orchestration guidance over the ten canonical
+are optional lifecycle/orchestration guidance over the twelve canonical
 operations. They sit outside the semantic core and the service
 contract: semantic correctness never depends on them.
 
@@ -37,6 +37,13 @@ uncertainty into certainty; referencing non-canonical operations.
 `tests/unit/test_skills.py` enforces this mechanically (canonical-ops
 allowlist, rule-vocabulary scan, uncertainty-preservation presence,
 implementation-independence).
+
+Per-skill ownership (Addendum G): `span` owns the full lifecycle plus
+operation selection rules, evidence and authority quality, and the
+OpenCode submit-until-answer loop; `span-change-context` owns
+change-scoped `impact` before editing plus refresh closeout;
+`span-document` owns documentation-area interpretation. All three share
+the pending-task card and the exact-target boundary rule above.
 
 Distribution is by filesystem. Serving skills through the MCP Skills
 extension is permitted but deferred until a proven consumer exists;

@@ -61,10 +61,14 @@ without an exact target still requires an explicit bounded scope choice.
 
 Target accounting constraint: structural candidates make the exchange
 resumable; they are not semantic areas. Coherent grouping is host-owned and
-must be recorded through canonical question coverage with no second progress
-store, ledger, or writer. `target_scope` alone does not prove grouping or
-completeness. The exact accounting carrier remains open under E-13 and
-requires a contract amendment before implementation.
+must be recorded through canonical subjects, relationships, semantic question
+coverage, and typed target-inventory accounting in the single
+`TargetAssociation` carrier. Target-inventory assignment, evidence-backed
+exclusion, or unresolved mapping is distinct from question-level
+`NOT_APPLICABLE`. No second progress store, ledger, or writer exists.
+`target_scope` alone does not prove grouping or completeness. The accounting
+carrier and atomic result/store contract are defined in Addendum E §4C.2 and
+remain implementation-gated under E-13.
 
 Exact onboarding path: `docs/onboarding-runbook.md` (copied from Addendum E
 §§4A and 6).

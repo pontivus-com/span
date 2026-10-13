@@ -436,6 +436,69 @@ class RefreshExchangeTest(unittest.TestCase):
     def test_nothing_stale_answers_directly(self):
         structural, evidence, store, continuations, _ = self._indexed()
         try:
+            observed = fingerprint_content(FILES["src/main.py"])
+            # G-15: drain admitted pendings first (refresh now resumes
+            # them in order); the all-clear path must then answer
+            # directly with nothing outstanding.
+            for _ in range(4):
+                pending = [
+                    cov for cov in store.load_all_question_coverages(
+                        "repo-1", None, (_sid(),),
+                    )
+                    if cov.disposition
+                    is m.SemanticQuestionDisposition.PENDING
+                    and cov.question is not None
+                ]
+                if not pending:
+                    break
+                unit = ops.refresh(
+                    ops.SemanticRefreshRequest(
+                        repository_id="repo-1",
+                        target=m.SubjectSelector(
+                            None, "src/main.py", (), None,
+                        ),
+                        bounds=_bounds(),
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                    authority_seeds=(_ref("README.md"),),
+                )
+                self.assertIsInstance(unit, PendingInterpretation)
+                ops.submit_interpretation(
+                    unit.continuation,
+                    m.SemanticInterpretationResult(
+                        claims=(), relationships=(),
+                        governing_source_refs=(), diagnostics=(),
+                        candidate_subjects=(), candidate_conflicts=(),
+                        proposed_question_coverages=(
+                            m.InterpretationCoverage(
+                                subjects=(unit.request.question.subject,),
+                                question_slice=(
+                                    unit.request.question.question_slice
+                                ),
+                                evidence_scope=m.EvidenceScope(),
+                                declared_complete=False,
+                                question=unit.request.question,
+                                disposition=(
+                                    m.SemanticQuestionDisposition
+                                    .NOT_APPLICABLE
+                                ),
+                                result_refs=(), resolution_requirements=(),
+                                disposition_basis="drain test",
+                                question_evidence=(
+                                    m.QuestionEvidenceObservation(
+                                        evidence_ref=_ref("src/main.py"),
+                                        observed_fingerprint=observed,
+                                    ),
+                                )),
+                        ),
+                        candidate_withdrawals=(),
+                        proposed_target_inventory_accounting=(),
+                        proposed_target_questions=(),
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                )
             answer = ops.refresh(
                 ops.SemanticRefreshRequest(
                     repository_id="repo-1",

@@ -1,7 +1,7 @@
 """AGENTS.md lifecycle-block governance tests (plan §3.5).
 
 The lifecycle block is orchestration guidance only. It may tell an
-agent when/how to invoke the ten canonical operations but defines
+agent when/how to invoke the twelve canonical operations but defines
 no semantic rules. The single canonical source is
 docs/agents-snippet.md; the installer copies it verbatim between
 span markers and never parses it for decisions.
@@ -30,6 +30,8 @@ CANONICAL_OPS = {
     "refresh",
     "submit_interpretation",
     "reissue_interpretation",
+    "locate",
+    "neighbors",
 }
 
 FORBIDDEN_PHRASES = (
@@ -59,7 +61,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertTrue(SNIPPET.is_file(), SNIPPET)
         self.assertIn("## Span lifecycle", _text(SNIPPET))
 
-    def test_lists_all_ten_operations(self):
+    def test_lists_all_twelve_operations(self):
         text = _text(SNIPPET)
         for op in CANONICAL_OPS:
             self.assertIn(op, text, op)
@@ -126,65 +128,18 @@ class AgentsRuleDeployTest(unittest.TestCase):
             span_repo, target, dry_run=False
         )
 
-    def test_deploys_verbatim_and_converges(self):
+    def test_target_deploy_refused(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             target = pathlib.Path(tmp) / "proj"
             target.mkdir()
-            first = self._run(REPO_ROOT, target)
-            self.assertEqual(first["status"], "wired")
-            dst = target / "AGENTS.md"
-            content = dst.read_text(encoding="utf-8")
-            self.assertIn(install.AGENTS_START, content)
-            self.assertIn(install.AGENTS_END, content)
-            inner = content.split(install.AGENTS_START)[1].split(
-                install.AGENTS_END
-            )[0].strip("\n")
-            self.assertEqual(
-                inner, _text(SNIPPET).rstrip("\n")
-            )
-            second = self._run(REPO_ROOT, target)
-            self.assertEqual(second["status"], "converged")
-            self.assertEqual(
-                dst.read_text(encoding="utf-8"), content
-            )
-
-    def test_appends_to_existing_file(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = pathlib.Path(tmp) / "proj"
-            target.mkdir()
-            (target / "AGENTS.md").write_text("# Existing\n")
-            self._run(REPO_ROOT, target)
-            content = (target / "AGENTS.md").read_text(
-                encoding="utf-8"
-            )
-            self.assertTrue(content.startswith("# Existing\n"))
-            self.assertIn("## Span lifecycle", content)
-            self.assertTrue(
-                (target / "AGENTS.md.bak-span").is_file()
-            )
-
-    def test_replaces_stale_block(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = pathlib.Path(tmp) / "proj"
-            target.mkdir()
-            (target / "AGENTS.md").write_text(
-                "# Top\n\n" + install.AGENTS_START + "\nSTALE\n"
-                + install.AGENTS_END + "\n\n## Next\n"
-            )
-            self._run(REPO_ROOT, target)
-            content = (target / "AGENTS.md").read_text(
-                encoding="utf-8"
-            )
-            self.assertNotIn("\nSTALE\n", content)
-            self.assertIn("## Span lifecycle", content)
-            self.assertTrue(content.startswith("# Top\n"))
-            self.assertIn("## Next", content)
+            # Addendum E §3/E-02: AGENTS.md deployment into targets is
+            # removed; the installer fails closed instead of writing.
+            with self.assertRaises(SystemExit):
+                self._run(REPO_ROOT, target)
+            self.assertFalse((target / "AGENTS.md").exists())
+            self.assertFalse((target / "AGENTS.md.bak-span").exists())
 
     def test_dry_run_writes_nothing(self):
         import tempfile
@@ -198,7 +153,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
             self.assertEqual(result["status"], "skipped")
             self.assertFalse((target / "AGENTS.md").exists())
 
-    def test_missing_source_fails_closed(self):
+    def test_missing_source_still_refused(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -206,6 +161,8 @@ class AgentsRuleDeployTest(unittest.TestCase):
             target.mkdir()
             empty_repo = pathlib.Path(tmp) / "span"
             empty_repo.mkdir()
+            # Prohibition applies regardless of snippet presence: no target
+            # write is attempted.
             with self.assertRaises(SystemExit):
                 install.ensure_agents_rule(
                     empty_repo, target, dry_run=False

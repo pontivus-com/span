@@ -106,6 +106,8 @@ def resolve_bounds(
         if getattr(requested, field_name) > getattr(maximum, field_name):
             raise BoundsRejectedError(
                 f"{field_name}={getattr(requested, field_name)} exceeds "
-                f"maximum {getattr(maximum, field_name)}"
+                f"maximum {getattr(maximum, field_name)}; "
+                f"default when omitted is "
+                f"{getattr(policy.default_query_bounds, field_name)}"
             )
     return requested

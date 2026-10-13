@@ -101,10 +101,19 @@ def _hook_fast(
         return m.HookStatusNotice(
             readiness=m.RepositoryReadiness.READY
         )
-    subjects, _ = _resolve_scope_subjects(
-        repository_id, target, structural=structural, store=store,
-        bounds=bounds, evidence=evidence,
-    )
+    if (
+        isinstance(target, m.EvidenceScope)
+        and not target.paths
+        and not target.evidence_refs
+    ):
+        # Empty event scope carries no subjects. Hooks stay silent
+        # (I-32); strict empty-scope rejection lives on NORMAL paths.
+        subjects: tuple[m.Subject, ...] = ()
+    else:
+        subjects, _ = _resolve_scope_subjects(
+            repository_id, target, structural=structural, store=store,
+            bounds=bounds, evidence=evidence,
+        )
     affected: list[m.SubjectId] = []
     stale = 0
     unverifiable = 0
@@ -199,7 +208,12 @@ def _repository_coverage_entry(
     store: SemanticStore,
     bounds: m.QueryBounds,
 ) -> m.SemanticCoverageEntry:
-    """Build one report entry from persisted semantic state only."""
+    """Build one report entry from persisted semantic state only.
+
+    G-16: path-like subjects absent from the evidence inventory read
+    UNVERIFIABLE with an absence requirement, regardless of stale
+    priors (a deleted file's old claims verify nothing).
+    """
     claims, relationships, claim_token, rel_token = _load_subject_state(
         repository_id, subject.subject_id, store=store, bounds=bounds
     )
@@ -328,6 +342,110 @@ def _repository_coverage_entry(
         disposition = m.SemanticCoverageDisposition.UNASSESSED
     else:
         disposition = m.SemanticCoverageDisposition.CURRENT
+    if not requirements and disposition is not (
+        m.SemanticCoverageDisposition.CURRENT
+    ):
+        # Addendum G §4.2c fallback: every non-current repository entry
+        # carries one actionable canonical requirement. Read-time
+        # projection only; never persisted; never invents an objective.
+        locator = subject.subject_id.canonical_locator
+        if disposition is m.SemanticCoverageDisposition.STALE:
+            requirements.append(
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.STALE_EVIDENCE,
+                    subject_or_claim=subject.subject_id,
+                    description=(
+                        "subject has stale semantic items; refresh the "
+                        f"stale scope with an exact SubjectSelector for "
+                        f"'{locator}' (use status to confirm the scope)"
+                    ),
+                    supporting_context=(),
+                )
+            )
+        elif disposition is m.SemanticCoverageDisposition.UNVERIFIABLE:
+            requirements.append(
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+                    subject_or_claim=subject.subject_id,
+                    description=(
+                        "subject freshness cannot be established; refresh "
+                        f"with an exact SubjectSelector for '{locator}'; "
+                        "an UNVERIFIABLE empty result proves nothing"
+                    ),
+                    supporting_context=(),
+                )
+            )
+        elif disposition is m.SemanticCoverageDisposition.UNASSESSED:
+            requirements.append(
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                    subject_or_claim=subject.subject_id,
+                    description=(
+                        "no adopted question coverage is persisted for this "
+                        f"semantic subject; run question-local explain for "
+                        f"'{locator}'"
+                    ),
+                    supporting_context=(),
+                )
+            )
+        else:
+            requirements.append(
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+                    subject_or_claim=subject.subject_id,
+                    description=(
+                        "subject work is incomplete; continue the pending "
+                        f"questions for '{locator}' within bounds"
+                    ),
+                    supporting_context=(),
+                )
+            )
+    locator = subject.subject_id.canonical_locator
+    file_part = locator.split("#", 1)[0]
+    basename = file_part.rsplit("/", 1)[-1]
+    suffix = basename.rsplit(".", 1)[-1] if "." in basename else ""
+    # Path-like (slash plus short file suffix) with persisted records:
+    # pure-UNASSESSED subjects keep UNASSESSED, and semantic-only
+    # identifiers without file shape never qualify.
+    if (
+        "/" in file_part
+        and suffix.isalnum()
+        and 1 <= len(suffix) <= 8
+        and (semantic_ids or question_total)
+    ):
+        # G-16 ghost rule: a recorded path-like subject absent from the
+        # evidence inventory reads UNVERIFIABLE with an explicit
+        # absence requirement (restore, re-anchor, or retire the
+        # record). Provider-agnostic inventory membership — never
+        # filesystem walks. Inventory failure must not fake a ghost.
+        try:
+            present = evidence.inventory_evidence(
+                repository_id,
+                m.EvidenceScope(paths=(file_part,), evidence_refs=()),
+                bounds,
+            )
+            ghost = not any(
+                item.evidence_ref.locator == file_part
+                for item in present.items
+            )
+        except Exception:
+            ghost = False
+        if ghost:
+            disposition = m.SemanticCoverageDisposition.UNVERIFIABLE
+            requirements.append(
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+                    subject_or_claim=subject.subject_id,
+                    description=(
+                        f"recorded path '{file_part}' is absent from "
+                        "the evidence inventory; restore the file, "
+                        "re-anchor the subject to its moved location, "
+                        "or retire the record — an UNVERIFIABLE empty "
+                        "result proves nothing"
+                    ),
+                    supporting_context=(),
+                )
+            )
     return m.SemanticCoverageEntry(
         subject=subject.subject_id,
         disposition=disposition,
@@ -410,6 +528,28 @@ def _compose_repository_status_answer(
         repository_id, subject_page.items, evidence=evidence, store=store,
         bounds=bounds,
     )
+    # Addendum G §4.2b within-page display order only: deterministic by
+    # (coverage-rank, open desc, pending desc, locator, kind). Pagination
+    # stays locator order; truncation follows retention priority.
+    _rank = {
+        m.SemanticCoverageDisposition.STALE: 0,
+        m.SemanticCoverageDisposition.UNVERIFIABLE: 1,
+        m.SemanticCoverageDisposition.INCOMPLETE: 2,
+        m.SemanticCoverageDisposition.UNASSESSED: 3,
+        m.SemanticCoverageDisposition.CURRENT: 4,
+    }
+    entries = tuple(
+        sorted(
+            entries,
+            key=lambda e: (
+                _rank[e.disposition],
+                -e.open_question_count,
+                -e.pending_question_count,
+                e.subject.canonical_locator,
+                e.subject.subject_kind.value,
+            ),
+        )
+    )
     report = _coverage_report(
         entries,
         persisted_subject_count=store.count_repository_subjects(
@@ -484,6 +624,230 @@ def _repository_status_page(
         state=state,
         subject_offset=subject_skip,
     )
+
+def _target_status_answer(
+    repository_id: str,
+    target_id: m.TargetId,
+    *,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    state: m.RepositoryState,
+) -> m.SemanticAnswer:
+    """Campaign readback: absent → UNASSESSED, then UNVERIFIABLE→STALE→INCOMPLETE→CURRENT."""
+    assoc: m.TargetAssociation | None = None
+    try:
+        assoc = store.load_target_association(repository_id, target_id)
+    except Exception:
+        # Store failure is not absence: without the durable association
+        # the campaign cannot be evaluated.
+        content = m.StatusContent(
+            target_association=None,
+            target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
+        )
+        return m.SemanticAnswer(
+            answer_id=_answer_id("stt", repository_id, "target"),
+            intent=m.SemanticIntent.STATUS,
+            repository_state=state,
+            subject_resolution=None,
+            content=content,
+            evidence=(),
+            resolution_requirements=(),
+            bound_info=_bound_info(bounds, 0, False, None),
+        )
+    if assoc is None:
+        content = m.StatusContent(
+            target_association=None,
+            target_disposition=m.SemanticCoverageDisposition.UNASSESSED,
+        )
+        return m.SemanticAnswer(
+            answer_id=_answer_id("stt", repository_id, "target"),
+            intent=m.SemanticIntent.STATUS,
+            repository_state=state,
+            subject_resolution=None,
+            content=content,
+            evidence=(),
+            resolution_requirements=(),
+            bound_info=_bound_info(bounds, 0, False, None),
+        )
+    try:
+        from span.service.discovery import enumerate_target_inventory
+
+        inv_items = enumerate_target_inventory(
+            repository_id, assoc.target_scope, evidence=evidence,
+            bounds=bounds,
+        )
+    except (ValueError, Exception):
+        content = m.StatusContent(
+            target_association=assoc,
+            target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
+        )
+        return m.SemanticAnswer(
+            answer_id=_answer_id("stt", repository_id, "target"),
+            intent=m.SemanticIntent.STATUS,
+            repository_state=state,
+            subject_resolution=None,
+            content=content,
+            evidence=(),
+            resolution_requirements=(),
+            bound_info=_bound_info(bounds, 0, False, None),
+        )
+    current_fp = m.target_inventory_fingerprint(inv_items)
+    if current_fp != assoc.inventory_fingerprint:
+        content = m.StatusContent(
+            target_association=assoc,
+            target_disposition=m.SemanticCoverageDisposition.STALE,
+        )
+        return m.SemanticAnswer(
+            answer_id=_answer_id("stt", repository_id, "target"),
+            intent=m.SemanticIntent.STATUS,
+            repository_state=state,
+            subject_resolution=None,
+            content=content,
+            evidence=(),
+            resolution_requirements=(),
+            bound_info=_bound_info(bounds, 0, False, None),
+        )
+    accounted = {
+        acc.evidence_ref.evidence_id.value: acc
+        for acc in assoc.inventory_accounting
+    }
+    if len(accounted) > bounds.max_results:
+        # Bounded projection: completeness cannot be proven within bounds.
+        content = m.StatusContent(
+            target_association=assoc,
+            target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
+        )
+        return m.SemanticAnswer(
+            answer_id=_answer_id("stt", repository_id, "target"),
+            intent=m.SemanticIntent.STATUS,
+            repository_state=state,
+            subject_resolution=None,
+            content=content,
+            evidence=(),
+            resolution_requirements=(),
+            bound_info=_bound_info(bounds, 0, False, None),
+        )
+    # Global precedence: evaluate the whole campaign, then apply
+    # UNVERIFIABLE -> STALE -> INCOMPLETE -> CURRENT. Everything below
+    # accumulates flags across all members, areas, and questions.
+    # Membership staleness is the inventory fingerprint above; content
+    # freshness for stable members is owned exclusively by the existing
+    # evidence/question/claim/relationship dependency machinery below
+    # (§§4C.6B/4C.6E). Target accounting carries no content fingerprint.
+    saw_unverifiable = False
+    saw_stale = False
+    saw_incomplete = False
+    residual: list[m.ResolutionRequirement] = []
+    for item in inv_items:
+        eid = item.evidence_ref.evidence_id.value
+        if eid not in accounted:
+            saw_incomplete = True
+            continue
+        if accounted[eid].resolution_requirements:
+            saw_incomplete = True
+            residual.extend(accounted[eid].resolution_requirements)
+    questions_by_area: dict[m.SubjectId, list[m.SemanticQuestionScope]] = {}
+    for q in assoc.target_questions:
+        questions_by_area.setdefault(q.scope_root, []).append(q)
+    for area in assoc.area_subjects:
+        if area not in questions_by_area:
+            saw_incomplete = True
+    for q in assoc.target_questions:
+        try:
+            anchors = store.load_subjects(repository_id, (q.subject,))
+        except Exception:
+            anchors = None
+        anchor_requirement = None
+        if anchors is not None and not anchors:
+            # §4C.6D amendment (answerability, 2026-10-11): an admitted
+            # question with no established anchor can never suspend.
+            # Name it instead of sinking it into silent INCOMPLETE.
+            anchor_requirement = m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=q.subject,
+                description=(
+                    "question subject anchor is not established: admit "
+                    + q.subject.canonical_locator
+                    + " as CandidateSubject on its structural entrypoint, "
+                    "then re-kick initialize_target"
+                ),
+                supporting_context=(),
+            )
+        try:
+            coverages = store.load_all_question_coverages(
+                repository_id, q.scope_root, (q.subject,),
+            )
+        except Exception:
+            saw_unverifiable = True
+            continue
+        match = None
+        for cov in coverages:
+            if cov.question is None:
+                continue
+            if (
+                cov.question.scope_root == q.scope_root
+                and cov.question.subject == q.subject
+                and cov.question.question_class == q.question_class
+                and cov.question.question_slice == q.question_slice
+            ):
+                match = cov
+                break
+        if match is None:
+            saw_incomplete = True
+            if anchor_requirement is not None:
+                residual.append(anchor_requirement)
+            continue
+        # Canonical freshness: effective disposition + dependency state.
+        try:
+            view = effective_question_view(
+                match, evidence=evidence, store=store,
+                repository_id=repository_id,
+            )
+        except Exception:
+            saw_unverifiable = True
+            continue
+        if view.freshness.state is m.FreshnessState.UNVERIFIABLE:
+            saw_unverifiable = True
+        elif view.freshness.state is m.FreshnessState.STALE:
+            saw_stale = True
+        elif view.effective_disposition in (
+            m.SemanticQuestionDisposition.PENDING,
+            m.SemanticQuestionDisposition.OPEN,
+        ):
+            saw_incomplete = True
+            residual.extend(view.resolution_requirements)
+            if anchor_requirement is not None:
+                residual.append(anchor_requirement)
+        elif view.effective_disposition not in (
+            m.SemanticQuestionDisposition.ANSWERED,
+            m.SemanticQuestionDisposition.NOT_APPLICABLE,
+        ):
+            saw_incomplete = True
+    if saw_unverifiable:
+        disposition = m.SemanticCoverageDisposition.UNVERIFIABLE
+    elif saw_stale:
+        disposition = m.SemanticCoverageDisposition.STALE
+    elif saw_incomplete:
+        disposition = m.SemanticCoverageDisposition.INCOMPLETE
+    else:
+        disposition = m.SemanticCoverageDisposition.CURRENT
+    content = m.StatusContent(
+        target_association=assoc,
+        target_disposition=disposition,
+        unresolved=tuple(residual) if saw_incomplete else (),
+    )
+    return m.SemanticAnswer(
+        answer_id=_answer_id("stt", repository_id, "target"),
+        intent=m.SemanticIntent.STATUS,
+        repository_state=state,
+        subject_resolution=None,
+        content=content,
+        evidence=(),
+        resolution_requirements=tuple(residual) if saw_incomplete else (),
+        bound_info=_bound_info(bounds, 0, False, None),
+    )
+
 
 def _compose_status_answer(
     repository_id: str,
@@ -678,6 +1042,21 @@ def status(
             "subject, claim, relationship, and evidence-scope targets"
         )
     bounds = _resolve_bounds(request.bounds, hook=False)
+    if isinstance(request.target, m.TargetId):
+        if request.mode is m.StatusMode.HOOK_FAST:
+            raise StatusTargetError(
+                "campaign status requires StatusMode.NORMAL"
+            )
+        state = structural.repository_state(request.repository_id)
+        if not _is_initialized(request.repository_id, store=store):
+            return _uninitialized_answer(
+                m.SemanticIntent.STATUS, request.repository_id,
+                bounds, state,
+            )
+        return _target_status_answer(
+            request.repository_id, request.target,
+            evidence=evidence, store=store, bounds=bounds, state=state,
+        )
     if request.mode is m.StatusMode.HOOK_FAST:
         return _hook_fast(
             request.repository_id, request.target,

@@ -67,12 +67,12 @@ class FixtureEvidenceSource:
         page_token: str | None = None,
     ) -> m.EvidenceInventoryPage:
         self._check_repository(repository_id)
-        if scope.paths:
+        if scope.paths or scope.evidence_refs:
             paths = self._expand_paths(tuple(scope.paths))
-        elif scope.evidence_refs:
-            paths = [
+            ref_paths = [
                 r.locator for r in scope.evidence_refs if r.locator in self._files
             ]
+            paths = sorted(set(paths) | set(ref_paths))
         else:
             paths = sorted(self._files)
         items = tuple(

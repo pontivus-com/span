@@ -12,12 +12,13 @@ evidence; it never edits code, runs tests, or decides for you.
 
 ## The cold-start order (structure before meaning)
 
-A fresh scope is a chicken-and-egg problem: interpretation needs
-targets, and targets come from the map. So map first, interpret
-second, synthesize last. Never top-down: no synthesis before member
-knowledge exists. When the user supplies an exact directory, that
-directory is the complete target boundary; mapping partitions it for
-execution and must not silently narrow it.
+A fresh scope is a chicken-and-egg problem: interpretation needs bounded
+evidence, while semantic areas must be established by the host agent. So
+discover structure first, establish canonical area subjects and target
+accounting second, interpret questions third, and synthesize last. Never
+top-down: no synthesis before member knowledge exists. When the user supplies
+an exact directory, that directory is the complete target boundary; structural
+discovery partitions it for execution and must not silently narrow it.
 
 ```
 map         orient with existing repository context plus structural and
@@ -27,12 +28,13 @@ map         orient with existing repository context plus structural and
 symbols     explain each key symbol, submit, verify served
 modules     explain each key file, submit purpose plus responsibility
 subsystem   for an explicit directory, call initialize_target once with the exact target and objective,
-            `explain(establish_baseline=True)` for every material
-            partition/root, then process every admitted member question
-            in dependency order; register semantic-only scope subjects
-            through evidence-backed CandidateSubject on an existing
-            structural entrypoint; synthesize only on established
-            member evidence, verify served by exact locator
+            use the bounded discovery context to establish canonical area
+            subjects and typed target-inventory accounting, then process
+            every admitted area question in dependency order; register
+            semantic-only scope subjects through evidence-backed
+            CandidateSubject on an existing structural entrypoint; synthesize
+            only on established member evidence, verify served by exact
+            locator
 govern      explain authority subjects as found; record ownership
             only where evidence names it
 verify      status the bounded persisted frontier and finished subjects;
@@ -57,7 +59,8 @@ Setup stays explicit: an `UNINITIALIZED` repository needs
 - **Baseline unit:** use a coherent subsystem, workflow/composition slice,
   service boundary, or governed document area with one purpose, participant
   set, material path, authority/ownership boundary, and lifecycle. Establish
-  one bounded root and record its member areas and exclusions.
+  one bounded root, record target-inventory assignment or evidence-backed
+  exclusion separately, and record semantic-question coverage for the area.
 - **Member question:** descend to a symbol, module, relationship, or
   cross-boundary path when it carries a material claim, contract, failure path,
   authority dependency, or unresolved requirement. Use the exact question-local
@@ -72,11 +75,13 @@ Setup stays explicit: an `UNINITIALIZED` repository needs
 
 ## Completeness-correctness (the bar)
 
-Complete means every material area in the explicit target has a stored
-answer, an explicit `NOT_APPLICABLE` disposition, or an unresolved
-requirement naming what would resolve it. A representative root is not
-the target. No area may be silently omitted because the directory is
-large.
+Complete means every material inventory member in the explicit target has a
+target-accounting assignment, an evidence-backed target exclusion, or an
+unresolved requirement naming what would resolve the mapping, and every
+admitted area has semantic-question coverage. A semantic question's
+`NOT_APPLICABLE` disposition does not itself exclude inventory. A
+representative root is not the target. No area or inventory member may be
+silently omitted because the directory is large.
 Correct means every stored item is quote-backed, trust-calibrated,
 and freshness-tracked. All-green is not the bar: an honest
 `UNRESOLVED` with a requirement beats an invented answer, and stale
@@ -117,8 +122,9 @@ If a material area has no structural anchor, preserve it as an explicit
 - If the user supplied an exact directory, do not ask them to reduce it
   to one subsystem and do not stop after one representative root. Work
   through all material partitions, preserving page tokens and pending
-  continuations. Record every deliberate exclusion with its evidence and
-  disposition. If no exact target was supplied, agree a bounded scope
+  continuations. Record every deliberate target-inventory exclusion with its
+  evidence-backed accounting basis, separately from semantic-question
+  dispositions. If no exact target was supplied, agree a bounded scope
   with the user first.
 
 ## Expansion identification
