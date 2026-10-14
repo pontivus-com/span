@@ -128,18 +128,92 @@ class AgentsRuleDeployTest(unittest.TestCase):
             span_repo, target, dry_run=False
         )
 
-    def test_target_deploy_refused(self):
+    def test_deploys_verbatim_and_converges(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             target = pathlib.Path(tmp) / "proj"
             target.mkdir()
-            # Addendum E §3/E-02: AGENTS.md deployment into targets is
-            # removed; the installer fails closed instead of writing.
+            first = self._run(REPO_ROOT, target)
+            self.assertEqual(first["status"], "wired")
+            dst = target / "AGENTS.md"
+            content = dst.read_text(encoding="utf-8")
+            self.assertIn(install.AGENTS_START, content)
+            self.assertIn(install.AGENTS_END, content)
+            inner = content.split(install.AGENTS_START)[1].split(
+                install.AGENTS_END
+            )[0].strip("\n")
+            self.assertEqual(inner, _text(SNIPPET).rstrip("\n"))
+            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
+            second = self._run(REPO_ROOT, target)
+            self.assertEqual(second["status"], "converged")
+            self.assertEqual(dst.read_text(encoding="utf-8"), content)
+
+    def test_appends_to_existing_file_and_backs_up_once(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "proj"
+            target.mkdir()
+            dst = target / "AGENTS.md"
+            dst.write_text("# Existing\n", encoding="utf-8")
+            self._run(REPO_ROOT, target)
+            content = dst.read_text(encoding="utf-8")
+            self.assertTrue(content.startswith("# Existing\n"))
+            self.assertIn("## Span lifecycle", content)
+            self.assertTrue(dst.with_name("AGENTS.md.bak-span").is_file())
+
+    def test_replaces_stale_block_and_preserves_surrounding_content(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "proj"
+            target.mkdir()
+            dst = target / "AGENTS.md"
+            dst.write_text(
+                "# Top\n\n" + install.AGENTS_START + "\nSTALE\n"
+                + install.AGENTS_END + "\n\n## Next\n",
+                encoding="utf-8",
+            )
+            self._run(REPO_ROOT, target)
+            content = dst.read_text(encoding="utf-8")
+            self.assertNotIn("\nSTALE\n", content)
+            self.assertIn("## Span lifecycle", content)
+            self.assertTrue(content.startswith("# Top\n\n"))
+            self.assertTrue(content.endswith("\n\n## Next\n"))
+
+    def test_duplicate_markers_fail_closed_without_backup(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "proj"
+            target.mkdir()
+            dst = target / "AGENTS.md"
+            original = (
+                install.AGENTS_START + "\nA\n"
+                + install.AGENTS_END + "\n"
+                + install.AGENTS_START + "\nB\n"
+                + install.AGENTS_END + "\n"
+            )
+            dst.write_text(original, encoding="utf-8")
             with self.assertRaises(SystemExit):
                 self._run(REPO_ROOT, target)
-            self.assertFalse((target / "AGENTS.md").exists())
-            self.assertFalse((target / "AGENTS.md.bak-span").exists())
+            self.assertEqual(dst.read_text(encoding="utf-8"), original)
+            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
+
+    def test_malformed_markers_fail_closed_without_writing(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "proj"
+            target.mkdir()
+            dst = target / "AGENTS.md"
+            original = "# Existing\n" + install.AGENTS_START + "\n"
+            dst.write_text(original, encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                self._run(REPO_ROOT, target)
+            self.assertEqual(dst.read_text(encoding="utf-8"), original)
+            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
 
     def test_dry_run_writes_nothing(self):
         import tempfile
@@ -153,7 +227,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
             self.assertEqual(result["status"], "skipped")
             self.assertFalse((target / "AGENTS.md").exists())
 
-    def test_missing_source_still_refused(self):
+    def test_missing_source_fails_closed(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -161,8 +235,6 @@ class AgentsRuleDeployTest(unittest.TestCase):
             target.mkdir()
             empty_repo = pathlib.Path(tmp) / "span"
             empty_repo.mkdir()
-            # Prohibition applies regardless of snippet presence: no target
-            # write is attempted.
             with self.assertRaises(SystemExit):
                 install.ensure_agents_rule(
                     empty_repo, target, dry_run=False

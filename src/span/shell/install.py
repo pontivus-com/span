@@ -895,25 +895,72 @@ def wire_opencode_plugin(span_repo, project_dir, dry_run=False):
 
 
 def ensure_agents_rule(span_repo, target, dry_run=False):
-    """Refuse target AGENTS.md deployment (Addendum E §3/E-02).
+    """Deploy the canonical lifecycle block into a target AGENTS.md.
 
-    Span is read-only with respect to the target repository. Creating or
-    modifying ``<target>/AGENTS.md`` (or its backup) would violate that
-    boundary, so this entry point fails closed. The canonical lifecycle
-    block remains readable at ``docs/agents-snippet.md`` in the Span
-    checkout and in deployed host skills; it is never copied into targets.
+    The block is copied verbatim from ``docs/agents-snippet.md`` between
+    Span-owned markers. The installer never parses it for decisions and
+    preserves all content outside the managed block. Existing files receive
+    one backup before their managed block is replaced.
     """
+    dst = Path(target) / "AGENTS.md"
+    print(f"+ ensure agents rule: {dst}")
     if dry_run:
         return {
-            "status": "skipped",
-            "reason": "target writes prohibited by Addendum E §3",
-            "path": str(Path(target) / "AGENTS.md"),
+            "status": "skipped", "reason": "dry-run",
+            "path": str(dst),
         }
-    raise SystemExit(
-        f"refusing target write {Path(target) / 'AGENTS.md'}: "
-        "Span never writes into target repositories (Addendum E §3/E-02). "
-        "AGENTS.md deployment into targets is removed."
-    )
+    src = Path(span_repo) / "docs" / "agents-snippet.md"
+    if not src.is_file():
+        raise SystemExit(f"agents snippet source missing: {src}")
+    snippet = src.read_text().rstrip("\n") + "\n"
+    if "## Span lifecycle" not in snippet:
+        raise SystemExit(f"agents snippet source malformed: {src}")
+    block = f"{AGENTS_START}\n{snippet}{AGENTS_END}"
+    if not dst.is_file():
+        dst.write_text(block + "\n")
+        print(f"agents rule created: {dst}")
+        return {"status": "wired", "path": str(dst)}
+    existing = dst.read_text()
+    backup = dst.with_name("AGENTS.md.bak-span")
+    if existing.count(AGENTS_START) > 1 or existing.count(AGENTS_END) > 1:
+        raise SystemExit(
+            f"agents block markers duplicated in {dst}; "
+            "inspect the file before rerunning."
+        )
+    start = existing.find(AGENTS_START)
+    end = existing.find(AGENTS_END)
+    if (start != -1) != (end != -1) or (
+        start != -1 and end != -1 and end < start
+    ):
+        raise SystemExit(
+            f"agents block markers malformed in {dst}; "
+            "inspect the file before rerunning."
+        )
+    if start != -1:
+        new_text = (
+            existing[:start] + block
+            + existing[end + len(AGENTS_END):]
+        )
+    elif existing.strip():
+        new_text = existing.rstrip("\n") + "\n\n" + block + "\n"
+    else:
+        new_text = block + "\n"
+    if new_text == existing:
+        return {"status": "converged", "path": str(dst)}
+    if not backup.exists():
+        shutil.copy2(dst, backup)
+        print(f"agents rule backed up: {backup}")
+    dst.write_text(new_text)
+    print(f"agents rule deployed: {dst}")
+    return {"status": "wired", "path": str(dst)}
+
+
+def deploy_agents_rules(span_repo, targets, dry_run=False):
+    """Synchronize the managed lifecycle block for every target."""
+    return {
+        str(target): ensure_agents_rule(span_repo, target, dry_run=dry_run)
+        for target in targets
+    }
 
 
 def write_receipt(data_dir, payload, dry_run=False):
@@ -1262,22 +1309,16 @@ def main(argv=None):
     else:
         print("skipping skill deployment (--no-skills).")
         host_registration["skills"] = []
-    # Addendum E §3/E-02: AGENTS.md deployment into target repositories
-    # is removed. Span is read-only with respect to targets; the canonical
-    # block stays in docs/agents-snippet.md and deployed host skills.
-    # --no-agents is retained for compatibility and is now always satisfied.
     if not args.no_agents:
-        print(
-            "AGENTS.md deployment into targets is removed "
-            "(Addendum E §3/E-02: Span never writes into targets); "
-            "recording skipped."
+        host_registration["agents"] = deploy_agents_rules(
+            span_repo, targets, dry_run=dry
         )
     else:
         print("skipping AGENTS.md rule deployment (--no-agents).")
-    host_registration["agents"] = {
-        "status": "skipped",
-        "reason": "target writes prohibited by Addendum E §3/E-02",
-    }
+        host_registration["agents"] = {
+            "status": "skipped",
+            "reason": "agents disabled (--no-agents)",
+        }
 
     report = verify_installation(venv_python, data_dir, targets, dry)
     receipt = {
