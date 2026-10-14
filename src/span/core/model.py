@@ -50,6 +50,8 @@ from dataclasses import field as _field
 from dataclasses import fields as _fields
 from dataclasses import MISSING as _MISSING
 
+from span.core import schema as _canonical_schema_projection  # noqa: F401
+
 __all__ = [
     # §4.1 subjects
     "SubjectKind",
@@ -62,6 +64,10 @@ __all__ = [
     "SubjectResolution",
     # §4.3 claim kinds
     "ClaimKind",
+    "AssertionNature",
+    "CandidateAssertionNature",
+    "NORMATIVE_ONLY_CLAIM_KINDS",
+    "NORMATIVE_ONLY_RELATIONSHIP_KINDS",
     # §4.4 typed claim values
     "PurposeValue",
     "CapabilityMembershipValue",
@@ -119,6 +125,7 @@ __all__ = [
     "SemanticQuestionClass",
     "SemanticQuestionDisposition",
     "SemanticQuestionScope",
+    "SemanticQuestionSelection",
     "QuestionEvidenceObservation",
     "CandidateSemanticWithdrawal",
     "SemanticQuestionCoverageView",
@@ -145,6 +152,7 @@ __all__ = [
     "INTENT_CONTENT_TYPE",
     # §4.11 supporting contracts
     "RepositoryState",
+    "EvidenceLineRange",
     "EvidenceUnit",
     "StructuralObservation",
     "StructuralEdgeKind",
@@ -338,6 +346,46 @@ class ClaimKind(_enum.Enum):
     CONFIGURATION_ENVIRONMENT = "CONFIGURATION_ENVIRONMENT"
     LIFECYCLE_STATE = "LIFECYCLE_STATE"
     VERIFICATION = "VERIFICATION"
+
+
+class AssertionNature(_enum.Enum):
+    """Descriptive vs normative modality (Addendum I S6 §5.6).
+
+    DESCRIPTIVE observes behavior; NORMATIVE asserts assigned custody,
+    contracts, or governance. LEGACY_UNCLASSIFIED exists only for
+    pre-v5 migrated records whose nature was never asserted; it is
+    store-read-only and never appears in candidate schemas. Trust
+    derivation is unchanged for both natures (MI-05).
+    """
+
+    DESCRIPTIVE = "DESCRIPTIVE"
+    NORMATIVE = "NORMATIVE"
+    LEGACY_UNCLASSIFIED = "LEGACY_UNCLASSIFIED"
+
+
+#: Narrowed candidate ingress over the same canonical enum values —
+#: there is no second candidate assertion-nature enum. Generated MCP
+#: schemas advertise exactly the two submittable values; the canonical
+#: decoder rejects LEGACY_UNCLASSIFIED at candidate ingress while the
+#: store reader accepts it for migrated records only.
+CandidateAssertionNature = _typing.Literal[
+    AssertionNature.DESCRIPTIVE, AssertionNature.NORMATIVE
+]
+
+#: Normative-only kinds assert assigned custody, contracts, or
+#: governance: they cannot bypass authority by choosing a descriptive
+#: label. This is an explicit contract rule, not keyword
+#: classification.
+NORMATIVE_ONLY_CLAIM_KINDS: tuple[ClaimKind, ...] = (
+    ClaimKind.OWNERSHIP_CUSTODY,
+    ClaimKind.TRANSFORMATION_OWNERSHIP,
+    ClaimKind.INVARIANT_CONSTRAINT,
+)
+
+NORMATIVE_ONLY_RELATIONSHIP_KINDS: tuple[str, ...] = (
+    "GOVERNED_BY",
+    "SUPERSEDES",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -737,6 +785,7 @@ class SemanticClaim:
     subject: SubjectId
     kind: ClaimKind
     value: TypedClaimValue
+    assertion_nature: AssertionNature = _field(kw_only=True)
     evidence: tuple[EvidenceRef, ...] = ()
     authority: AuthorityBinding | None = None
     trust: TrustState = TrustState.UNRESOLVED
@@ -757,6 +806,7 @@ class SemanticRelationship:
     source: SubjectId
     kind: RelationshipKind
     target: SubjectId
+    assertion_nature: AssertionNature = _field(kw_only=True)
     evidence: tuple[EvidenceRef, ...] = ()
     authority: AuthorityBinding | None = None
     trust: TrustState = TrustState.UNRESOLVED
@@ -887,6 +937,37 @@ class SemanticQuestionScope:
     def __post_init__(self) -> None:
         _require_non_empty("question_slice", self.question_slice)
         _require_non_empty("materiality_basis", self.materiality_basis)
+
+
+@_dataclass(frozen=True)
+class SemanticQuestionSelection:
+    """Host-owned narrowed question selection (Addendum I S4 §5.4).
+
+    Carries only slice/basis/anchors; the service derives scope_root,
+    subject, question_class and constructs the full scope server-side.
+    Slice nonempty and immutable once admitted. Basis empty means the
+    service records the operation-derived default basis; a supplied
+    basis is stored verbatim as explanatory metadata. Anchors are at
+    most 8 literal retrieval substrings, each nonempty of at most 120
+    characters; more or longer anchors reject deterministically. The
+    service canonicalizes the slice verbatim (no paraphrase equivalence
+    or synonym guessing) and rejects full-scope supply.
+    """
+
+    question_slice: str
+    materiality_basis: str = ""
+    question_anchors: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_non_empty("question_slice", self.question_slice)
+        if len(self.question_anchors) > 8:
+            raise ValueError("question_anchors holds at most 8 anchors")
+        for anchor in self.question_anchors:
+            if not anchor or len(anchor) > 120:
+                raise ValueError(
+                    "question anchor must be nonempty of at most "
+                    "120 characters"
+                )
 
 
 @_dataclass(frozen=True)
@@ -1174,6 +1255,7 @@ class SemanticAnswer:
     evidence: tuple[EvidenceRef, ...] = ()
     resolution_requirements: tuple[ResolutionRequirement, ...] = ()
     bound_info: BoundInfo = _field(default_factory=lambda: BoundInfo(0, 0, 0, False))
+    state_explanation: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         expected = INTENT_CONTENT_TYPE[self.intent]
@@ -1182,6 +1264,60 @@ class SemanticAnswer:
                 f"content for {self.intent.value} must be {expected.__name__}, "
                 f"got {type(self.content).__name__}"
             )
+        if not self.state_explanation:
+            claims = tuple(getattr(self.content, "claims", ()))
+            relationships = tuple(
+                getattr(self.content, "relationships", ())
+            )
+            items = (*claims, *relationships)
+            if not items:
+                object.__setattr__(
+                    self, "state_explanation",
+                    ("returned assertions: none",),
+                )
+            else:
+                descriptive = sum(
+                    1 for i in items
+                    if getattr(i, "assertion_nature", None)
+                    is AssertionNature.DESCRIPTIVE
+                )
+                normative = sum(
+                    1 for i in items
+                    if getattr(i, "assertion_nature", None)
+                    is AssertionNature.NORMATIVE
+                )
+                legacy = len(items) - descriptive - normative
+                if descriptive and not normative and not legacy:
+                    distribution = "descriptive-only"
+                elif normative and not descriptive and not legacy:
+                    distribution = "normative-only"
+                else:
+                    distribution = "mixed"
+                if legacy and not descriptive and not normative:
+                    sentence = (
+                        f"returned assertions: {distribution} "
+                        f"(0 descriptive, 0 normative, {legacy} "
+                        "legacy-unclassified); authority-unresolved "
+                        "items stay qualified regardless of nature"
+                    )
+                elif legacy:
+                    sentence = (
+                        f"returned assertions: {distribution} "
+                        f"({descriptive} descriptive, {normative} "
+                        f"normative, {legacy} legacy-unclassified); "
+                        "authority-unresolved items stay qualified "
+                        "regardless of nature"
+                    )
+                else:
+                    sentence = (
+                        f"returned assertions: {distribution} "
+                        f"({descriptive} descriptive, {normative} "
+                        "normative); authority-unresolved items stay "
+                        "qualified regardless of nature"
+                    )
+                object.__setattr__(
+                    self, "state_explanation", (sentence,),
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -1205,10 +1341,34 @@ class RepositoryState:
 
 
 @_dataclass(frozen=True)
+class EvidenceLineRange:
+    """Canonical excerpt range (Addendum I S7 §5.7).
+
+    One-based positive integers with start_line <= end_line <=
+    total_lines. None on the unit means complete provider text.
+    """
+
+    start_line: int
+    end_line: int
+    total_lines: int
+
+    def __post_init__(self) -> None:
+        _require_positive_int("start_line", self.start_line)
+        _require_positive_int("end_line", self.end_line)
+        _require_positive_int("total_lines", self.total_lines)
+        if not (self.start_line <= self.end_line <= self.total_lines):
+            raise ValueError(
+                "EvidenceLineRange requires start_line <= end_line <= "
+                "total_lines"
+            )
+
+
+@_dataclass(frozen=True)
 class EvidenceUnit:
     evidence_ref: EvidenceRef
     content: str
     content_fingerprint: str
+    content_range: EvidenceLineRange | None = None
 
 
 class StructuralEdgeKind(_enum.Enum):
@@ -1745,6 +1905,7 @@ class CandidateSemanticClaim:
     value: TypedClaimValue = _field(
         default_factory=lambda: PurposeValue(summary="")
     )
+    assertion_nature: CandidateAssertionNature = _field(kw_only=True)  # type: ignore[assignment]
     evidence: tuple[EvidenceRef, ...] = ()
     candidate_authority: CandidateAuthority | None = None
     basis: SemanticBasis = _field(
@@ -1773,6 +1934,7 @@ class CandidateSemanticRelationship:
             canonical_locator="unset",
         )
     )
+    assertion_nature: CandidateAssertionNature = _field(kw_only=True)  # type: ignore[assignment]
     evidence: tuple[EvidenceRef, ...] = ()
     candidate_authority: CandidateAuthority | None = None
     basis: SemanticBasis = _field(
@@ -1909,6 +2071,8 @@ TASK_BRIEF_MATERIAL_PATH: tuple[str, ...] = (
     "Trace input → producer → transformation/state → consumer/output → "
     "terminal/failure.",
     "Account only for legs material to this exact question slice.",
+    "Request the material input, producer, transformation, carrier/state, "
+    "consumer, failure branch, and terminal outcome for the execution path.",
 )
 
 TASK_BRIEF_SEMANTIC_RESULT: tuple[str, ...] = (
@@ -2142,6 +2306,7 @@ class ServiceBoundsPolicy:
     default_query_bounds: QueryBounds
     maximum_query_bounds: QueryBounds
     hook_fast_bounds: QueryBounds
+    max_delivered_evidence_bytes: int = 96_000
 
 
 # ---------------------------------------------------------------------------
@@ -2233,6 +2398,13 @@ def _decode_value(hint: object, data: object) -> object:
     if origin is _typing.Literal:
         if data in args:
             return data
+        # Enum-valued Literal (S6 §5.6): wire strings map through the
+        # literal enum members to the canonical member. Raw JSON
+        # "DESCRIPTIVE" decodes to AssertionNature.DESCRIPTIVE, not a
+        # failed identity test against enum instances.
+        for arg in args:
+            if isinstance(arg, _enum.Enum) and data == arg.value:
+                return arg
         raise CanonicalDecodeError(f"expected one of {args!r}, got {data!r}")
 
     if isinstance(hint, type) and issubclass(hint, _enum.Enum):

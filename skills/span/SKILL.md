@@ -6,7 +6,7 @@ description: Understand a repository with Span before changing it: orient, estab
 # Span — semantic repository lifecycle
 
 Span answers from indexed evidence and owns the task contract, validation,
-freshness, and persistence. It never edits a repository, runs application
+freshness, and persistence. Span never edits a repository, runs application
 tests, selects or invokes an LLM/provider, or decides semantic claims for the
 agent.
 
@@ -30,10 +30,16 @@ Use this path for every non-trivial Span interaction:
    request, use admissible canonical evidence, submit the typed
    `SemanticInterpretationResult`, and follow the returned next unit until an
    answer or truthful terminal state is returned.
-6. Use `status` for read-only coverage and freshness readback. Inventory
-   accounting and semantic-question coverage are separate. Preserve every
-   `OPEN`, `PENDING`, `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`, `UNRESOLVED`,
-   `STALE`, and `UNVERIFIABLE` state.
+6. Use `status` for read-only coverage and freshness readback. Status
+   never initiates interpretation, allocates continuations, or persists
+   freshness. Inventory accounting and semantic-question coverage are
+   separate. Preserve every `OPEN`, `PENDING`, `PARTIAL`, `AMBIGUOUS`,
+   `CONFLICTED`, `UNRESOLVED`, `STALE`, and `UNVERIFIABLE` state.
+   Schemas are generated from canonical types: construct submissions
+   from `tools/list` schemas without reading implementation. Narrow
+   questions accept `question_selection` (slice/basis/anchors only);
+   anchors are literal substrings. Excerpts carry ranges and omissions;
+   answers carry `state_explanation` with descriptive/normative counts.
 7. For material edits, call `impact` before editing; after external
    verification, perform scoped `status` → explicit `refresh` and re-submit
    where required → scoped `status` again. `impact` is preparation, not
@@ -57,14 +63,12 @@ Use this path for every non-trivial Span interaction:
 | Reissue an identical interpretation task | `reissue_interpretation` | The original interpretation task failed at eligible MCP ingress | Use at most once; submit the identical returned task under its new continuation |
 
 `initialize_repository` is not routine session orientation. `status` is
-read-only and differs in `NORMAL` and `HOOK_FAST`: normal status reports a
+read-only and differs in `NORMAL` and `HOOK_FAST`: `NORMAL` `status` reports a
 bounded persisted coverage inventory, while `HOOK_FAST` reports only the
-event-local notice. `HOOK_FAST` sees event-local scope only; it never means
-the repository is clean. A `HOOK_FAST` `0/0 READY` notice does not describe
+event-local notice. `HOOK_FAST` sees event-local scope only; it never means the repository is clean. A `HOOK_FAST` `0/0 READY` notice does not describe
 the repository inventory.
 
-The twelve public operations are exactly the operations in the table. There
-are no semantic aliases. `locate` and `neighbors` return structural
+The twelve public operations are exactly the operations in the table. There are no semantic aliases. `locate` and `neighbors` return structural
 navigation evidence, not semantic claims. `page_token` values (`pg:*`) page
 one truncated listing and continuation tokens (`cont-*`) resume one pending
 interpretation; they cannot be interchanged.
@@ -74,7 +78,7 @@ interpretation; they cannot be interchanged.
 Pick one branch before making a semantic call:
 
 1. **Ordinary orientation:** normal `status` with no target, then `explain` on
-   the chosen target. Never use `refresh` on first contact.
+   the chosen target. Never `refresh` on first contact.
 2. **Exact user-supplied directory plus objective:** preserve the complete
    exact boundary and call `initialize_target` once with the exact
    `EvidenceScope` and objective. Process every returned unit.
@@ -137,8 +141,7 @@ The three related result components have different jobs:
 
 For example, during exact-target onboarding, a newly discovered material
 area is admitted with an evidence-backed subject and a `PENDING`
-`proposed_question_coverages` entry. If another area already has the exact
-same persisted question scope, reuse that scope in
+`proposed_question_coverages` entry. If another area already has the exact same persisted question scope, reuse that scope in
 `proposed_target_questions`; do not manufacture a duplicate question. If an
 inventory member cannot yet be assigned or excluded with evidence, submit
 its current `evidence_ref` with an explicit mapping requirement. A question's
@@ -158,8 +161,7 @@ complete, current, verifiable semantic coverage.
 When an operation returns `PendingInterpretation`, handle only that bounded
 unit. Follow its `request` and `brief`: objective, exact scope and
 exclusions, evidence/authority, material path, typed result, adversarial
-check, disposition, and fresh readback. A brief guides the agent; it does not
-make a wrong interpretation correct.
+check, disposition, and fresh readback. A brief guides the agent; it does not make a wrong interpretation correct.
 
 Build an admissible submission as follows:
 
@@ -341,11 +343,10 @@ expansion, refresh, and closeout, use the pending request's compact card:
 
 Use three bounded levels: map the exact target structurally; establish a
 coherent baseline area; then descend to member questions where a claim,
-contract, failure path, authority dependency, or unresolved requirement
-matters. Do not create one semantic subject per file merely because it
+contract, failure path, ownership, authority, lifecycle, or unresolved
+requirement matters. Do not create one semantic subject per file merely because it
 exists, and do not compress unrelated units into one root. A user-supplied
-directory is host-owned scope, not necessarily a resolvable Span subject; do
-not fabricate a directory/document subject when the provider exposes only a
+directory is host-owned scope, not necessarily a resolvable Span subject; do not fabricate a directory/document subject when the provider exposes only a
 file or symbol anchor. Record the provider limitation as `OPEN`/`PENDING`.
 
 Specialized skills add task-specific guidance only: `span-document` owns

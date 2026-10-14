@@ -52,15 +52,31 @@ projection of persisted semantic coverage: covered/current knowledge,
 unassessed semantic items in the returned frontier, and explicit bounds,
 pagination, or outstanding scope. It does not enumerate structural
 subjects, invoke interpretation, write state, or claim repository
-completeness.
+completeness. Status never initiates interpretation, allocates
+continuations, or persists freshness (Addendum I S2 observational).
 
 Normal `status` with an exact target returns the same coverage semantics
-narrowed to that target. `HOOK_FAST` remains a compact readiness/event
-notice and does not return the repository inventory. ACT-D-10 is
-implemented in source; D-ACCEPT-08 is the installed-runtime verification
-gate; until it passes for the deployed revision, readiness-only repository
-status is an identified activation gap rather than
-evidence of empty semantic state.
+narrowed to that target with live freshness qualifications and
+next-operation guidance. `HOOK_FAST` remains a compact readiness/event
+notice and does not return the repository inventory.
+
+## Question selection, schemas, excerpts, and state explanation (Addendum I)
+
+- `explain`, `trace`, `authority` (SubjectSelector only), and `impact`
+  accept narrowed `question_selection` (slice/basis/anchors only). The
+  service derives root/subject/class, canonicalizes verbatim, appends
+  TRACE/IMPACT discriminators, and rejects full-scope supply, baseline
+  conflicts, and ClaimRef-with-selection. Anchors pass verbatim as
+  `question_terms`. Pages use `pgq:<digest>:<claims>:<rels>:<questions>`;
+  old service cursors are rejected.
+- Input schemas are generated from the canonical dataclasses with
+  `$defs`, `$type` constants, and `additionalProperties: false`.
+  Candidate nature exposes only `DESCRIPTIVE | NORMATIVE`. The pending
+  brief carries a task-bound PENDING submission template.
+- Narrow answers deliver bounded excerpts (`EvidenceLineRange`) with
+  full-source fingerprints and explicit `excerpt omitted …` plus summary
+  lines. Validation uses full provider content. Every answer carries
+  `state_explanation` with the exact nature-sentence syntax.
 
 ## Worked exchange (schematic)
 

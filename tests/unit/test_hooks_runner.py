@@ -57,6 +57,7 @@ class HookNoticeTest(unittest.TestCase):
         claim = m.SemanticClaim(
             claim_id=m.ClaimId("clm-1"), subject=sid,
             kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("does things", ()),
             evidence=(ref,),
             trust=m.TrustState.PARTIAL,

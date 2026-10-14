@@ -7,6 +7,7 @@ dist/
 .tmp-e2e/
 .pytest_cache/
 .coverage
+.venv/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/

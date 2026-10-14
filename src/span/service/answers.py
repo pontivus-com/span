@@ -28,6 +28,9 @@ __all__ = [
     "_select_answer_items",
     "_freshness_items_for",
     "_next_service_token",
+    "coverage_counts_for",
+    "state_explanation_for",
+    "verification_currencies_for",
 ]
 
 
@@ -50,15 +53,29 @@ def _next_service_token(
     rels_token: str | None,
     questions_skip: int = 0,
     questions_remaining: int = 0,
+    query_digest: str = "default",
 ) -> str | None:
-    """Answer-level next token from shown counts (plan I-39).
+    """Answer-level next token from shown counts (plan I-39; I S4 pgq).
 
-    Each side advances past shown items only, so unshown-but-loaded
-    items reappear in the next window instead of being skipped. A side
-    is exhausted when its load cursor is done and everything loaded
-    was shown.
+    Binds pages to the selected question via query_digest. Rejects old
+    pg: service cursors upstream; emits pgq only. Each side advances
+    past shown items only. A side is exhausted when its load cursor is
+    done and everything loaded was shown.
     """
-    claims_skip, rels_skip, qskip = _paging.parse_service_token(page_token)
+    # Decode incoming offsets via pgq-aware parser (old pg: rejected).
+    try:
+        if page_token is not None and page_token.startswith("pgq:"):
+            _, claims_skip, rels_skip, qskip = (
+                _paging.parse_question_token(page_token)
+            )
+        elif page_token is None:
+            claims_skip, rels_skip, qskip = 0, 0, 0
+        else:
+            # Old cursor: force restart diagnostic upstream.
+            raise ValueError(f"unknown page token: {page_token}")
+    except ValueError:
+        # Let caller map to typed invalid-token error; re-raise.
+        raise
     claims_exhausted = (
         claims_token is None and len(kept_claims) >= len(loaded_claims)
     )
@@ -68,7 +85,8 @@ def _next_service_token(
     questions_exhausted = questions_remaining <= 0
     if claims_exhausted and rels_exhausted and questions_exhausted:
         return None
-    return _paging.format_service_token(
+    return _paging.format_question_token(
+        query_digest,
         claims_skip + len(kept_claims),
         rels_skip + len(kept_rels),
         (qskip + questions_skip) if not questions_exhausted else qskip,
@@ -250,3 +268,215 @@ def _freshness_items_for(
         + [m.FreshnessItem(_relationship_ref(r), r.source, r.freshness, r.trust)
            for r in relationships]
     )
+
+
+#: Verification currency literals for state explanation (Addendum I S8
+#: §5.8): the enum meaning in words. `current pass` / `current fail`
+#: use a space, matching the adopted contract vocabulary.
+_CURRENCY_LITERAL = {
+    m.VerificationCurrency.CANDIDATE: "candidate",
+    m.VerificationCurrency.CURRENT_PASS: "current pass",
+    m.VerificationCurrency.CURRENT_FAIL: "current fail",
+    m.VerificationCurrency.STALE: "stale",
+    m.VerificationCurrency.UNKNOWN: "unknown",
+}
+
+
+def verification_currencies_for(
+    claims: tuple[m.SemanticClaim, ...],
+) -> tuple[str, ...]:
+    """Distinct verification currency literals over carried VERIFICATION
+    values, sorted. Empty when the page carries no verification."""
+    found: set[str] = set()
+    for claim in claims:
+        if (
+            claim.kind is m.ClaimKind.VERIFICATION
+            and isinstance(claim.value, m.VerificationValue)
+        ):
+            found.add(
+                _CURRENCY_LITERAL.get(claim.value.currency, "unknown")
+            )
+    return tuple(sorted(found))
+
+
+def coverage_counts_for(
+    views: tuple[m.SemanticQuestionCoverageView, ...],
+) -> tuple[int, int, int]:
+    """(answered, open, total) over returned question-coverage views.
+
+    OPEN and PENDING both count as open: work the agent still owes.
+    Deterministic; page-scoped like every explanation sentence.
+    """
+    answered = sum(
+        1 for v in views
+        if v.effective_disposition
+        is m.SemanticQuestionDisposition.ANSWERED
+    )
+    open_ = sum(
+        1 for v in views
+        if v.effective_disposition
+        in (
+            m.SemanticQuestionDisposition.OPEN,
+            m.SemanticQuestionDisposition.PENDING,
+        )
+    )
+    return (answered, open_, len(views))
+
+
+def _distribution_sentence(
+    label: str,
+    counts: tuple[tuple[str, int], ...],
+) -> str:
+    """`label: <n> <name>, ...` over nonzero categories in fixed order.
+
+    Mixed states receive qualified wording (every nonzero state shown)
+    rather than a single best status.
+    """
+    shown = ", ".join(f"{n} {name}" for name, n in counts if n)
+    return f"{label}: {shown}" if shown else f"{label}: none"
+
+
+def state_explanation_for(
+    claims: tuple[m.SemanticClaim, ...],
+    relationships: tuple[m.SemanticRelationship, ...],
+    *,
+    coverage: tuple[int, int, int] | None = None,
+    bounds: tuple[int, bool] | None = None,
+) -> tuple[str, ...]:
+    """Project plain-language state explanation (Addendum I S8 §5.8).
+
+    At most one bounded nature sentence with precise conditional syntax:
+    `returned assertions: none` when no assertions are returned; otherwise
+    `returned assertions: <distribution> (<d> descriptive, <n> normative)`
+    with <distribution> one of descriptive-only, normative-only, or mixed,
+    appending `, <q> legacy-unclassified` inside the parentheses only when
+    <q> is greater than zero; authority-unresolved items stay qualified
+    regardless of nature. Counts are non-negative integers over the
+    returned page.
+
+    Further deterministic sentences cover trust (returned items'
+    authority states), freshness (returned items' currency states),
+    verification currency (literals over carried VERIFICATION values, or
+    an explicit absent statement that never claims tests never ran),
+    bounds ((max_results, truncated) page window), and coverage
+    ((answered, open, total) over returned question views). The field is
+    not persisted. Transport only serializes it. Every sentence describes
+    returned scope/page; it cannot imply repository completeness.
+    """
+    items = (*claims, *relationships)
+    if not items:
+        # No assertions returned — but a caller that supplies coverage
+        # or bounds still gets those page dimensions plus the
+        # verification context, instead of losing them with the nature
+        # sentence. Bare calls keep the exact none sentence.
+        if coverage is None and bounds is None:
+            return ("returned assertions: none",)
+        empty: list[str] = ["returned assertions: none"]
+        empty.append("no current passing verification carried for this scope")
+        if bounds is not None:
+            max_results, truncated = bounds
+            empty.append(
+                f"bounds: at most {max_results} returned items per page"
+                + ("; listing truncated" if truncated else "")
+            )
+        if coverage is not None:
+            answered, open_, total = coverage
+            empty.append(
+                f"coverage: {answered} answered, {open_} open "
+                f"of {total} questions"
+            )
+        return tuple(empty)
+    descriptive = 0
+    normative = 0
+    legacy = 0
+    for item in items:
+        nature = item.assertion_nature
+        if nature is m.AssertionNature.DESCRIPTIVE:
+            descriptive += 1
+        elif nature is m.AssertionNature.NORMATIVE:
+            normative += 1
+        else:
+            legacy += 1
+    if descriptive and not normative and not legacy:
+        distribution = "descriptive-only"
+    elif normative and not descriptive and not legacy:
+        distribution = "normative-only"
+    elif legacy and not descriptive and not normative:
+        distribution = "mixed"
+    elif descriptive and normative:
+        distribution = "mixed"
+    elif descriptive and legacy:
+        distribution = "mixed"
+    elif normative and legacy:
+        distribution = "mixed"
+    else:
+        distribution = "mixed"
+    # When only legacy remains, still report as mixed with zero
+    # descriptive/normative to preserve exact syntax.
+    if legacy and not descriptive and not normative:
+        nature_sentence = (
+            f"returned assertions: {distribution} "
+            f"(0 descriptive, 0 normative, {legacy} legacy-unclassified); "
+            "authority-unresolved items stay qualified regardless of nature"
+        )
+    elif legacy:
+        nature_sentence = (
+            f"returned assertions: {distribution} "
+            f"({descriptive} descriptive, {normative} normative, "
+            f"{legacy} legacy-unclassified); authority-unresolved items "
+            "stay qualified regardless of nature"
+        )
+    else:
+        nature_sentence = (
+            f"returned assertions: {distribution} "
+            f"({descriptive} descriptive, {normative} normative); "
+            "authority-unresolved items stay qualified regardless of nature"
+        )
+    trust_counts: dict[m.TrustState, int] = {}
+    freshness_counts: dict[m.FreshnessState, int] = {}
+    for item in items:
+        trust_counts[item.trust] = trust_counts.get(item.trust, 0) + 1
+        freshness_counts[item.freshness.state] = (
+            freshness_counts.get(item.freshness.state, 0) + 1
+        )
+    sentences = [
+        nature_sentence,
+        _distribution_sentence(
+            "trust",
+            tuple(
+                (state.value.lower(), trust_counts.get(state, 0))
+                for state in m.TrustState
+            ),
+        ),
+        _distribution_sentence(
+            "freshness",
+            tuple(
+                (state.value.lower(), freshness_counts.get(state, 0))
+                for state in m.FreshnessState
+            ),
+        ),
+    ]
+    currencies = verification_currencies_for(tuple(claims))
+    if not currencies:
+        sentences.append(
+            "no current passing verification carried for this scope"
+        )
+    elif len(currencies) == 1:
+        sentences.append(f"verification: {currencies[0]}")
+    else:
+        sentences.append(
+            f"verification: mixed ({', '.join(currencies)})"
+        )
+    if bounds is not None:
+        max_results, truncated = bounds
+        sentences.append(
+            f"bounds: at most {max_results} returned items per page"
+            + ("; listing truncated" if truncated else "")
+        )
+    if coverage is not None:
+        answered, open_, total = coverage
+        sentences.append(
+            f"coverage: {answered} answered, {open_} open "
+            f"of {total} questions"
+        )
+    return tuple(sentences)

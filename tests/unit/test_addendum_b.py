@@ -41,6 +41,7 @@ def _claim_candidate(sid, key="k1", summary="does X"):
     )
     return m.CandidateSemanticClaim(
         candidate_key=key, subject=sid, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue(summary, ()),
         evidence=(ref,),
         basis=m.SemanticBasis(
@@ -128,7 +129,8 @@ class SharedRetirementTest(unittest.TestCase):
             root = _sid("cap/root", m.SubjectKind.CAPABILITY)
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("shared-1"), subject=sid,
-                kind=m.ClaimKind.PURPOSE, value=m.PurposeValue("s", ()),
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("s", ()),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
             q1 = m.SemanticQuestionScope(
@@ -183,13 +185,15 @@ class PremiseStalenessTest(unittest.TestCase):
             sid = _sid()
             premise = m.SemanticClaim(
                 claim_id=m.ClaimId("prem-1"), subject=sid,
-                kind=m.ClaimKind.PURPOSE, value=m.PurposeValue("p", ()),
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("p", ()),
                 freshness=m.Freshness(m.FreshnessState.STALE, reason="src changed"),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
             dep = m.SemanticClaim(
                 claim_id=m.ClaimId("dep-1"), subject=sid,
                 kind=m.ClaimKind.RESPONSIBILITY,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.ResponsibilityValue("r"),
                 freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
                 basis=m.SemanticBasis(
@@ -246,7 +250,8 @@ class EffectiveDispositionTest(unittest.TestCase):
         try:
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("c-eff"), subject=sid,
-                kind=m.ClaimKind.PURPOSE, value=m.PurposeValue("s", ()),
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("s", ()),
                 freshness=m.Freshness(m.FreshnessState.STALE, reason="changed"),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
@@ -279,14 +284,15 @@ class EffectiveDispositionTest(unittest.TestCase):
 
 class MigrationTest(unittest.TestCase):
     def test_schema_v3_and_legacy_unassessed(self):
-        self.assertEqual(SCHEMA_VERSION, 4)
+        self.assertEqual(SCHEMA_VERSION, 5)
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(4))
+            self.assertEqual(store.schema_version(), m.SchemaVersion(5))
             sid = _sid()
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("leg-1"), subject=sid,
-                kind=m.ClaimKind.PURPOSE, value=m.PurposeValue("s", ()),
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("s", ()),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
             store.write_index_batch(

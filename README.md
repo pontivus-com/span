@@ -1,5 +1,7 @@
 # Span
 
+Establish. Maintain. Expand. Span is evidence-grounded semantic memory: retained meaning with provenance, reusable while its supporting evidence stays current.
+
 ## Documentation that can't go stale silently.
 
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
@@ -612,7 +614,7 @@ See [the lifecycle documentation](docs/lifecycle.md).
 
 ## MCP operations
 
-Span exposes twelve canonical MCP operations.
+Span exposes twelve canonical MCP operations. No semantic_* aliases exist.
 
 | Need | Operation |
 | --- | --- |
@@ -850,7 +852,7 @@ It does not:
 - infer precedence where none is established;
 - claim complete understanding of an entire repository;
 - claim infallible interpretation;
-- claim that persisted knowledge is always current.
+- claim that persisted knowledge is unconditionally current.
 
 **No claim of infallible interpretation, universal coverage, or autonomous maintenance is made.**
 

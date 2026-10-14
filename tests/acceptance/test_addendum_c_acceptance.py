@@ -81,6 +81,7 @@ def _purpose_claim():
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
         subject=_sid("src/seed.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Sorts seeds", ()),
         evidence=(_ref("README.md"),),
         basis=m.SemanticBasis(
@@ -379,6 +380,7 @@ class CampaignIntegrityTest(unittest.TestCase):
                     candidate_key=f"facet-{i}",
                     subject=_sid("src/seed.py"),
                     kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(f"Sorts seeds facet {i}", ()),
                     evidence=(_ref("README.md"),),
                     basis=m.SemanticBasis(
@@ -515,6 +517,7 @@ class MechanicalLimitsTest(unittest.TestCase):
                 candidate_key="wrong",
                 subject=_sid("src/seed.py"),
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts pebbles", ()),
                 evidence=(_ref("README.md"),),
                 candidate_authority=m.CandidateAuthority(
@@ -606,6 +609,7 @@ class PostcommitCorrectionTest(unittest.TestCase):
                 candidate_key="purpose-v2",
                 subject=_sid("src/seed.py"),
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts seeds reliably", ()),
                 evidence=(
                     m.EvidenceRef(

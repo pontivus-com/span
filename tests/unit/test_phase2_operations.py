@@ -72,6 +72,7 @@ def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-main",
         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=(_ref("README.md"), _ref("src/main.py")),
         candidate_authority=m.CandidateAuthority(
@@ -315,6 +316,7 @@ class ExchangeTest(unittest.TestCase):
             )
             bad = m.CandidateSemanticClaim(
                 subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("ghost", ()),
                 evidence=(
                     m.EvidenceRef(
@@ -377,6 +379,7 @@ class ExchangeTest(unittest.TestCase):
                 tuple(
                     m.CandidateSemanticClaim(
                         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue(f"s-{n}", ()),
                         evidence=(_ref("README.md"),),
                         basis=m.SemanticBasis(
@@ -758,6 +761,7 @@ class RefreshExchangeTest(unittest.TestCase):
                 (
                     m.CandidateSemanticClaim(
                         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue("ghost", ()),
                         evidence=(
                             m.EvidenceRef(
@@ -1177,8 +1181,28 @@ class StoreResolutionTest(unittest.TestCase):
             store.close()
 
     def test_name_only_query_never_reaches_store(self):
+        # Addendum I S1 amends A-F1 narrowly: exact canonical locator
+        # reaches the store; display-name text never does.
         structural = self._empty_structural()
         store, _ = self._store_with_workflow()
+        try:
+            resolution = _resolve_query_subject(
+                "repo-1",
+                m.SubjectSelector(None, "tta workflow", (), None),
+                structural=structural, store=store, bounds=_bounds(),
+            )
+            self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
+            )
+        finally:
+            store.close()
+
+    def test_exact_locator_reaches_store(self):
+        # S1 §5.1: exact ID and exact relative path recover the same
+        # stored subject; exact stored locator wins over non-exact
+        # structural candidates.
+        structural = self._empty_structural()
+        store, sid = self._store_with_workflow()
         try:
             resolution = _resolve_query_subject(
                 "repo-1",
@@ -1186,8 +1210,389 @@ class StoreResolutionTest(unittest.TestCase):
                 structural=structural, store=store, bounds=_bounds(),
             )
             self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
+            )
+            self.assertEqual(
+                resolution.candidates[0].subject.subject_id, sid
+            )
+            self.assertIs(
+                resolution.candidates[0].rank_basis,
+                m.CandidateRankBasis.EXACT_LOCATOR,
+            )
+        finally:
+            store.close()
+
+
+class S1ExactLocatorEdgeTest(unittest.TestCase):
+    """S1 §5.1 edge cases: case, kinds, non-canonical, truncation, plans."""
+
+    def _empty_structural(self):
+        return InMemoryStructuralSource("repo-1", (), ())
+
+    def _store_with(self, subjects):
+        from span.shell.sqlite_store import SqliteSemanticStore
+
+        store = SqliteSemanticStore(":memory:")
+        store.write_index_batch(
+            m.CanonicalIndexBatch(subjects=tuple(subjects))
+        )
+        return store
+
+    def _subject(self, locator, kind, display="d"):
+        return m.Subject(
+            m.SubjectId(
+                repository_id="repo-1",
+                subject_kind=kind,
+                canonical_locator=locator,
+            ),
+            display,
+            None,
+        )
+
+    def test_case_sensitive_no_fold(self):
+        store = self._store_with(
+            [self._subject("workflows/tta", m.SubjectKind.SUBSYSTEM, "tta")]
+        )
+        try:
+            resolution = _resolve_query_subject(
+                "repo-1",
+                m.SubjectSelector(None, "Workflows/tta", (), None),
+                structural=self._empty_structural(),
+                store=store,
+                bounds=_bounds(),
+            )
+            self.assertIs(
                 resolution.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
             )
+        finally:
+            store.close()
+
+    def test_same_locator_different_kinds_ambiguous(self):
+        store = self._store_with(
+            [
+                self._subject(
+                    "docs/guide.md", m.SubjectKind.DOCUMENT, "guide"
+                ),
+                self._subject(
+                    "docs/guide.md", m.SubjectKind.COMPONENT, "guide"
+                ),
+            ]
+        )
+        try:
+            resolution = _resolve_query_subject(
+                "repo-1",
+                m.SubjectSelector(None, "docs/guide.md", (), None),
+                structural=self._empty_structural(),
+                store=store,
+                bounds=_bounds(),
+            )
+            self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
+            )
+            self.assertEqual(len(resolution.candidates), 2)
+            kinds = [
+                c.subject.subject_id.subject_kind
+                for c in resolution.candidates
+            ]
+            self.assertEqual(
+                kinds,
+                sorted(kinds, key=lambda k: k.value),
+            )
+        finally:
+            store.close()
+
+    def test_kind_filtered_uniqueness(self):
+        store = self._store_with(
+            [
+                self._subject(
+                    "docs/guide.md", m.SubjectKind.DOCUMENT, "guide"
+                ),
+                self._subject(
+                    "docs/guide.md", m.SubjectKind.COMPONENT, "guide"
+                ),
+            ]
+        )
+        try:
+            resolution = _resolve_query_subject(
+                "repo-1",
+                m.SubjectSelector(
+                    None,
+                    "docs/guide.md",
+                    (m.SubjectKind.DOCUMENT,),
+                    None,
+                ),
+                structural=self._empty_structural(),
+                store=store,
+                bounds=_bounds(),
+            )
+            self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
+            )
+            self.assertIs(
+                resolution.candidates[0].subject.subject_id.subject_kind,
+                m.SubjectKind.DOCUMENT,
+            )
+        finally:
+            store.close()
+
+    def test_non_canonical_never_via_store(self):
+        store = self._store_with(
+            [self._subject("workflows/tta", m.SubjectKind.SUBSYSTEM, "tta")]
+        )
+        try:
+            for query in (
+                "/workflows/tta",
+                "workflows/../workflows/tta",
+                "WORKFLOWS/TTA",
+            ):
+                if query == "WORKFLOWS/TTA":
+                    continue
+                resolution = _resolve_query_subject(
+                    "repo-1",
+                    m.SubjectSelector(None, query, (), None),
+                    structural=self._empty_structural(),
+                    store=store,
+                    bounds=_bounds(),
+                )
+                self.assertIs(
+                    resolution.ambiguity,
+                    m.ResolutionAmbiguity.NOT_FOUND,
+                    query,
+                )
+        finally:
+            store.close()
+
+    def test_exact_stored_beats_non_exact_structural(self):
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            (InMemoryFile("a.py", "x\n"),),
+            (
+                InMemorySubject("a.py#dup", m.SubjectKind.CODE_SYMBOL, "dup"),
+            ),
+        )
+        store = self._store_with(
+            [self._subject("dup", m.SubjectKind.SUBSYSTEM, "dup area")]
+        )
+        try:
+            resolution = _resolve_query_subject(
+                "repo-1",
+                m.SubjectSelector(None, "dup", (), None),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
+            )
+            self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
+            )
+            self.assertEqual(
+                resolution.candidates[0]
+                .subject.subject_id.canonical_locator,
+                "dup",
+            )
+        finally:
+            store.close()
+
+    def test_structural_exact_ambiguity_preserved(self):
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            (
+                InMemoryFile("a.py", "x\n"),
+                InMemoryFile("b.py", "x\n"),
+            ),
+            (
+                InMemorySubject(
+                    "shared.md", m.SubjectKind.COMPONENT, "shared"
+                ),
+            ),
+        )
+        # Force structural exact ambiguity by mirroring the stored locator
+        # as an exact structural locator plus a second exact kind.
+        store = self._store_with(
+            [
+                self._subject(
+                    "shared.md", m.SubjectKind.DOCUMENT, "shared doc"
+                ),
+            ]
+        )
+        try:
+            resolution = _resolve_query_subject(
+                "repo-1",
+                m.SubjectSelector(None, "shared.md", (), None),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
+            )
+            # Stored exact plus structural exact with different kinds:
+            # multiple exact identities remain ambiguous.
+            self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
+            )
+        finally:
+            store.close()
+
+    def test_truncated_never_resolves(self):
+        store = self._store_with(
+            [
+                self._subject(
+                    "docs/guide.md", m.SubjectKind.DOCUMENT, "guide"
+                ),
+                self._subject(
+                    "docs/guide.md", m.SubjectKind.COMPONENT, "guide"
+                ),
+            ]
+        )
+        try:
+            resolution = _resolve_query_subject(
+                "repo-1",
+                m.SubjectSelector(None, "docs/guide.md", (), None),
+                structural=self._empty_structural(),
+                store=store,
+                bounds=_bounds(max_subjects=1),
+            )
+            self.assertIs(
+                resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
+            )
+            self.assertTrue(resolution.bound_info.truncated)
+        finally:
+            store.close()
+
+    def test_store_lookup_uses_index_not_enumeration(self):
+        from span.shell.sqlite_store import SqliteSemanticStore
+
+        store = SqliteSemanticStore(":memory:")
+        try:
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        self._subject(
+                            "a.py", m.SubjectKind.COMPONENT, "a"
+                        ),
+                        self._subject(
+                            "b.py", m.SubjectKind.COMPONENT, "b"
+                        ),
+                    )
+                )
+            )
+            plan = store._db.execute(
+                "EXPLAIN QUERY PLAN SELECT canonical_json, kind FROM subjects "
+                "WHERE repository_id=? AND locator=? ORDER BY kind LIMIT ?",
+                ("repo-1", "a.py", 9),
+            ).fetchall()
+            text = " ".join(str(col) for row in plan for col in row)
+            self.assertIn("SEARCH", text)
+            self.assertNotIn("SCAN subjects", text)
+            page = store.load_subjects_by_locator(
+                "repo-1", "a.py", (), _bounds()
+            )
+            self.assertEqual(len(page.items), 1)
+            self.assertEqual(
+                page.items[0].subject_id.canonical_locator, "a.py"
+            )
+        finally:
+            store.close()
+
+    def test_graft_kind_filter_parity(self):
+        from span.shell.structural.graft import GraftStructuralSource
+
+        wiring = {
+            "nodes": [
+                {
+                    "id": "src/a.py",
+                    "name": "a.py",
+                    "kind": "file",
+                    "path": "src/a.py",
+                    "span": None,
+                    "signature": None,
+                    "body_hash": "h1",
+                },
+                {
+                    "id": "src/a.py#sym",
+                    "name": "sym",
+                    "kind": "function",
+                    "path": "src/a.py",
+                    "span": "L1-L2",
+                    "signature": "def sym()",
+                    "body_hash": "h2",
+                },
+            ],
+            "edges": [],
+        }
+        graft = GraftStructuralSource("repo-1", ".", wiring=wiring)
+        memory = InMemoryStructuralSource(
+            "repo-1",
+            (InMemoryFile("src/a.py", "x\n"),),
+            (
+                InMemorySubject(
+                    "src/a.py", m.SubjectKind.COMPONENT, "a.py"
+                ),
+                InMemorySubject(
+                    "src/a.py#sym",
+                    m.SubjectKind.CODE_SYMBOL,
+                    "sym",
+                ),
+            ),
+        )
+        selector = m.SubjectSelector(
+            None, "sym", (m.SubjectKind.COMPONENT,), None
+        )
+        graft_res = graft.resolve_subject(
+            "repo-1", selector, _bounds()
+        )
+        memory_res = memory.resolve_subject(
+            "repo-1", selector, _bounds()
+        )
+        self.assertEqual(
+            graft_res.ambiguity, memory_res.ambiguity
+        )
+        self.assertEqual(
+            [c.subject.subject_id.canonical_locator for c in graft_res.candidates],
+            [c.subject.subject_id.canonical_locator for c in memory_res.candidates],
+        )
+
+    def test_provider_failure_unavailable_envelope(self):
+        from span.shell.mcp import McpAdapter, ServiceContext
+        from span.shell.agent_exchange.continuations import (
+            ContinuationStore,
+        )
+        from span.shell.structural.graft import GraftUnavailableError
+
+        class _FailingStructural:
+            def repository_state(self, repository_id):
+                raise GraftUnavailableError("no usable structural index")
+
+            def resolve_subject(self, repository_id, selector, bounds):
+                raise GraftUnavailableError("no usable structural index")
+
+        from span.shell.evidence import FixtureEvidenceSource
+
+        evidence = FixtureEvidenceSource("repo-1", {})
+        store = self._store_with([])
+        try:
+            adapter = McpAdapter(
+                contexts={
+                    "repo-1": ServiceContext(
+                        structural=_FailingStructural(),  # type: ignore[arg-type]
+                        evidence=evidence,
+                        store=store,
+                        continuations=ContinuationStore(),
+                    )
+                }
+            )
+            result = adapter.dispatch(
+                "explain",
+                {
+                    "repository_id": "repo-1",
+                    "target": {
+                        "$type": "SubjectSelector",
+                        "exact_subject_id": None,
+                        "name_or_locator": "missing",
+                        "expected_kinds": [],
+                        "retrieval_scope_hint": None,
+                    },
+                },
+            )
+            self.assertTrue(result.is_error)
+            self.assertIn("unavailable", result.content)
         finally:
             store.close()
 
@@ -1248,6 +1653,7 @@ class CrossUnitCitationTest(unittest.TestCase):
                 canonical_locator=locator,
             ),
             kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue(f"{locator} serves its module", ()),
             evidence=(ref,),
             candidate_authority=None,
@@ -1529,6 +1935,7 @@ class SemanticOutcomeTest(unittest.TestCase):
                 canonical_locator=locator,
             ),
             kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue(f"{locator} serves its module", ()),
             evidence=(ref,),
             candidate_authority=None,
@@ -1590,6 +1997,7 @@ class SemanticOutcomeTest(unittest.TestCase):
                     canonical_locator="workflows/tta",
                 ),
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue(self.SUMMARY, ()),
                 evidence=(
                     self._ref("a.py", fp_a), self._ref("b.py", fp_b),

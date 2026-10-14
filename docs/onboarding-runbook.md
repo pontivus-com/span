@@ -28,7 +28,9 @@ target repo they govern; unknown seed locators fail closed.
 
 ## 1. Operational setup
 
-Call `initialize_repository` once for the repository root with
+Discover the exact registered canonical `repository_id` through MCP
+`tools/list`. If the repository is `UNINITIALIZED`, call
+`initialize_repository` once for the repository root with
 a plain `repository_locator`, `structural_provider_config` (plain path
 canonical), and only user-supplied
 `authority_seeds` (unknown seeds fail closed). Provisioning runs the one

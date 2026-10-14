@@ -38,6 +38,13 @@ from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span import service as ops
 
+try:  # Shell-owned provider-error mapping (I S1 §5.1): graft failure maps
+    # to the existing unavailable envelope. The generic port gains no new
+    # result and the service catches no shell-specific exception.
+    from span.shell.structural.graft import GraftUnavailableError
+except Exception:  # pragma: no cover - import-time fallback
+    GraftUnavailableError = None  # type: ignore[assignment,misc]
+
 __all__ = [
     "TOOL_NAMES",
     "TOOL_SCHEMAS",
@@ -150,205 +157,164 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
-TOOL_SCHEMAS: dict[str, dict] = {
-    "initialize_repository": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["initialize_repository"],
-        "properties": {
-            "repository_locator": {"type": "string"},
-            "structural_provider_config": {"type": "string"},
-            "authority_seeds": {
-                "type": "array",
-                "description": "Canonical EvidenceRef items.",
-            },
-        },
-        "required": ["repository_locator", "structural_provider_config"],
-    },
-    "explain": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["explain"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical("SubjectSelector."),
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-            "establish_baseline": {"type": "boolean"},
-        },
-        "required": ["repository_id", "target"],
-    },
-    "initialize_target": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["initialize_target"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical("EvidenceScope; exact target boundary."),
-            "objective": {
-                "type": "string",
-                "description": "User-directed engineering objective.",
-            },
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-        },
-        "required": ["repository_id", "target", "objective"],
-    },
-    "impact": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["impact"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical("SubjectSelector."),
-            "change_kind": {
-                "type": "string",
-                "enum": [k.value for k in m.ChangeKind],
-            },
-            "change_description": {"type": ["string", "null"]},
-            "affected_assertions": {
+def _generated_tool_schemas() -> dict[str, dict]:
+    """Generate input schemas from canonical dataclasses (Addendum I S3).
+
+    Uses the same dataclasses and enums used by canonical decoding.
+    Referenced definitions for nested types and tagged unions. Retains
+    the canonical decoder as the only ingress parser. A generated
+    schema is a projection, not a second domain contract. Top-level
+    transport requests omit the carrier tag; nested carriers retain
+    theirs. Only the reachable definition closure per operation.
+    Defaults advertised equal canonical decoder defaults, including
+    omitted bounds. repository_id for submit/reissue remains a
+    transport routing field.
+    """
+    from span.core import schema as _schema
+
+    mapping: dict[str, type] = {
+        "initialize_repository": ops.SemanticInitializeRepositoryRequest,
+        "initialize_target": ops.SemanticInitializeTargetRequest,
+        "explain": ops.SemanticExplainRequest,
+        "impact": ops.SemanticImpactRequest,
+        "trace": ops.SemanticTraceRequest,
+        "authority": ops.SemanticAuthorityRequest,
+        "status": ops.SemanticStatusRequest,
+        "refresh": ops.SemanticRefreshRequest,
+        "submit_interpretation": ops.SemanticSubmitInterpretationRequest,
+        "reissue_interpretation": ops.SemanticReissueInterpretationRequest,
+        "locate": ops.SemanticStructuralLocateRequest,
+        "neighbors": ops.SemanticStructuralNeighborsRequest,
+    }
+    out: dict[str, dict] = {}
+    for tool, cls in mapping.items():
+        # Fail fast: schema projection is the advertised ingress
+        # contract. A generation failure is a programming defect and
+        # must break the build, never serve a degraded schema.
+        generated = _schema.schema_for_request(
+            cls, description=TOOL_DESCRIPTIONS[tool]
+        )
+        # Transport-owned routing fields explicitly without duplicating
+        # semantic request types: submit/reissue carry repository_id as
+        # routing only (their canonical carriers lack it).
+        if tool in ("submit_interpretation", "reissue_interpretation"):
+            props = dict(generated.get("properties", {}))
+            props["repository_id"] = {"type": "string"}
+            generated["properties"] = props
+            required = list(generated.get("required", []))
+            if "repository_id" not in required:
+                required.append("repository_id")
+            generated["required"] = sorted(required)
+        # Bounds are never required at the boundary: omitted bounds
+        # decode to the service default (see decode_request). Advertise
+        # that exact decoder default so schema and decoder agree (§5.3).
+        props = dict(generated.get("properties", {}))
+        if "bounds" in props:
+            bound_prop = dict(props["bounds"])
+            bound_prop["default"] = m.to_canonical(
+                DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
+            )
+            props["bounds"] = bound_prop
+            generated["properties"] = props
+            generated["required"] = sorted(
+                r for r in generated.get("required", []) if r != "bounds"
+            )
+        # Preserve the advertised target nullability shape alongside
+        # the generated union alternatives: a top-level type marker
+        # keeps the pre-generation contract readable without dropping
+        # refs. Single-ref targets gain a plain object marker.
+        target_prop = props.get("target")
+        if isinstance(target_prop, dict):
+            alternatives = target_prop.get("anyOf")
+            if (
+                isinstance(alternatives, list)
+                and alternatives
+                and all(
+                    isinstance(a, dict)
+                    and (a.get("type") == "null" or "$ref" in a)
+                    for a in alternatives
+                )
+            ):
+                target_prop = dict(target_prop)
+                target_prop["type"] = (
+                    ["object", "null"]
+                    if any(a.get("type") == "null" for a in alternatives)
+                    else "object"
+                )
+                props["target"] = target_prop
+                generated["properties"] = props
+            elif set(target_prop.keys()) == {"$ref"}:
+                target_prop = dict(target_prop)
+                target_prop["type"] = "object"
+                props["target"] = target_prop
+                generated["properties"] = props
+        # Correct affected_assertions item schemas to canonical
+        # claim/relationship references (tagged union refs).
+        if tool == "impact":
+            props = dict(generated.get("properties", {}))
+            props["affected_assertions"] = {
                 "type": "array",
                 "description": (
                     "Canonical ClaimRef/RelationshipRef items naming "
                     "the established assertions the proposal alters."
                 ),
-            },
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-        },
-        "required": [
-            "repository_id", "target", "change_kind",
-            "change_description",
-        ],
-    },
-    "trace": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["trace"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical("SubjectSelector."),
-            "direction": {
-                "type": "string",
-                "enum": ["UPSTREAM", "DOWNSTREAM", "BOTH"],
-            },
-            "relationship_filter": {
-                "type": ["array", "null"],
-                "description": "RelationshipKind values or null.",
-            },
-            "boundary_only": {"type": "boolean"},
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-        },
-        "required": [
-            "repository_id", "target", "direction", "relationship_filter",
-            "boundary_only",
-        ],
-    },
-    "authority": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["authority"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical("SubjectSelector or ClaimRef."),
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-        },
-        "required": ["repository_id", "target"],
-    },
-    "status": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["status"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical(
-                "SubjectSelector, ClaimRef, RelationshipRef, "
-                "EvidenceScope, TargetId (campaign handle, NORMAL only), "
-                "or null. AnswerRef is rejected: "
-                "answers are never persisted.",
-                nullable=True,
-            ),
-            "mode": {"type": "string", "enum": ["NORMAL", "HOOK_FAST"]},
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-        },
-        "required": ["repository_id", "target"],
-    },
-    "refresh": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["refresh"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical(
-                "SubjectSelector, EvidenceScope, or null "
-                "(null is rejected: repo-wide refresh needs enumeration).",
-                nullable=True,
-            ),
-            "stale_only": {"type": "boolean"},
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-        },
-        "required": ["repository_id", "target"],
-    },
-    "submit_interpretation": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["submit_interpretation"],
-        "properties": {
-            "continuation": {"type": "string"},
-            "result": _canonical("SemanticInterpretationResult."),
-            "repository_id": {"type": "string"},
-        },
-        "required": ["continuation", "result", "repository_id"],
-    },
-    "reissue_interpretation": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["reissue_interpretation"],
-        "properties": {
-            "continuation": {"type": "string"},
-            "repository_id": {"type": "string"},
-        },
-        "required": ["continuation", "repository_id"],
-    },
-    "locate": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["locate"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "mode": {
-                "type": "string",
-                "enum": [v.value for v in m.StructuralLocateMode],
-            },
-            "query": {"type": ["string", "null"]},
-            "match": {
-                "type": "string",
-                "enum": [v.value for v in m.StructuralLocateMatch],
-            },
-            "target": _canonical(
-                "EvidenceScope or null (required for TARGET_MEMBERS, "
-                "boundary narrowing for SYMBOL, forbidden for "
-                "FILE_OUTLINE).",
-                nullable=True,
-            ),
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-        },
-        "required": ["repository_id", "mode"],
-    },
-    "neighbors": {
-        "type": "object",
-        "description": TOOL_DESCRIPTIONS["neighbors"],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "target": _canonical("SubjectSelector."),
-            "direction": {
-                "type": "string",
-                "enum": ["UPSTREAM", "DOWNSTREAM", "BOTH"],
-            },
-            "edge_kinds": {
-                "type": ["array", "null"],
-                "description": "StructuralEdgeKind values or null/empty for all.",
-            },
-            "max_depth": {"type": "integer"},
-            "bounds": _canonical("QueryBounds. Omit for defaults."),
-            "page_token": {"type": ["string", "null"]},
-        },
-        "required": ["repository_id", "target", "direction"],
-    },
-}
+                "items": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/ClaimRef"},
+                        {"$ref": "#/$defs/RelationshipRef"},
+                    ]
+                },
+            }
+            generated["properties"] = props
+        # Claim kind/value compatibility reuses CLAIM_VALUE_TYPE (§5.3):
+        # each claim definition gains kind-gated value alternatives so
+        # the schema rejects the mismatched pairs the canonical
+        # constructor would reject. No mapping is copied here.
+        _defs = generated.get("$defs")
+        if isinstance(_defs, dict):
+            for _claim_def in (
+                "CandidateSemanticClaim", "SemanticClaim",
+            ):
+                _definition = _defs.get(_claim_def)
+                if not isinstance(_definition, dict):
+                    continue
+                _branches = []
+                for _kind in sorted(
+                    m.CLAIM_VALUE_TYPE, key=lambda k: k.value
+                ):
+                    _value_cls = m.CLAIM_VALUE_TYPE[_kind]
+                    _branches.append({
+                        "if": {
+                            "properties": {
+                                "kind": {"const": _kind.value}
+                            },
+                            "required": ["kind"],
+                        },
+                        "then": {
+                            "properties": {
+                                "value": {
+                                    "$ref": (
+                                        "#/$defs/"
+                                        f"{_value_cls.__name__}"
+                                    )
+                                }
+                            },
+                        },
+                    })
+                _definition = dict(_definition)
+                _existing_allof = _definition.get("allOf")
+                _definition["allOf"] = (
+                    list(_existing_allof)
+                    if isinstance(_existing_allof, list)
+                    else []
+                ) + _branches
+                _defs[_claim_def] = _definition
+            generated["$defs"] = _defs
+        out[tool] = generated
+    return out
+
+
+TOOL_SCHEMAS: dict[str, dict] = _generated_tool_schemas()
 
 TOOL_NAMES: tuple[str, ...] = (
     "initialize_repository",
@@ -626,6 +592,15 @@ class McpAdapter:
         except (ops.AuthorityTargetError, ops.StatusTargetError,
                 ops.RefreshScopeError, ValueError) as exc:
             return _error("rejected", str(exc))
+        except Exception as exc:
+            # Shell-owned GraftUnavailableError mapping (I S1 §5.1): an
+            # Exception outside the typed/ValueError envelope path maps to
+            # the existing unavailable envelope. No stored fallback.
+            if GraftUnavailableError is not None and isinstance(
+                exc, GraftUnavailableError
+            ):
+                return _error("unavailable", str(exc))
+            raise
         try:
             return ToolResult(content=encode_result(result))
         except (TypeError, ValueError) as exc:

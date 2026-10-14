@@ -10,11 +10,9 @@ from __future__ import annotations
 from span.core import answers as _answers
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
-from span.ports.interpretation import PendingInterpretation
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.continuations import SuspendedOperation
 
 from span.service.answers import (
     _answer_id,
@@ -23,24 +21,20 @@ from span.service.answers import (
     _freshness_items_for,
     _next_service_token,
     _select_answer_items,
+    coverage_counts_for,
+    state_explanation_for,
 )
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
 )
 from span.service.freshness import (
     _classify_current,
+    _evaluate_current,
     _latest_coverages,
-    _refresh_view,
-)
-from span.service.interpretation import (
-    _suspend,
-    prepare_interpretation_task,
 )
 from span.service.questions import (
     effective_question_view,
-    _missing_subjects,
     _paged_question_views,
-    _question_local_missing,
 )
 from span.service.refs import (
     _claim_ref,
@@ -64,7 +58,6 @@ __all__ = [
     '_hook_fast',
     '_compose_status_answer',
     'status',
-    '_resume_status',
 ]
 
 def _hook_fast(
@@ -624,6 +617,10 @@ def _compose_repository_status_answer(
         bound_info=_bound_info(
             bounds, returned, truncated, category, next_token
         ),
+        state_explanation=state_explanation_for(
+            (), (),
+            bounds=(bounds.max_results, truncated),
+        ),
     )
 
 
@@ -927,6 +924,9 @@ def _target_status_answer(
         evidence=(),
         resolution_requirements=tuple(residual) if saw_incomplete else (),
         bound_info=_bound_info(bounds, 0, False, None),
+        state_explanation=state_explanation_for(
+            (), (), bounds=(bounds.max_results, False)
+        ),
     )
 
 
@@ -954,16 +954,25 @@ def _compose_status_answer(
         all_rels.extend(relationships)
         if position == 0:
             first_claims_token, first_rels_token = tok_c, tok_r
-    # Classify before the view persists anything: _refresh_view marks
-    # state, after which a second classification would always report
-    # clean and changed_dependencies would always be empty.
+    # S2 §5.2 read-only route: evaluate via the non-persisting
+    # classifier (direct + premise live overlay + discovery) and project
+    # returned freshness onto answer items only. No preflight, no
+    # coverage_check persistence, no _refresh_view store writes.
     pre_ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
         _claim_ref(c) for c in all_claims
     ) + tuple(_relationship_ref(r) for r in all_rels)
-    updates, dependencies = _classify_current(
-        repository_id, pre_ids, evidence=evidence, store=store, bounds=bounds
+    all_items = tuple(all_claims) + tuple(all_rels)
+    updates, dependencies = _evaluate_current(
+        repository_id, pre_ids, all_items, evidence=evidence,
+        store=store, bounds=bounds,
     )
-    updated_ids = {u.semantic_id.id.value for u in updates}
+    live_states: dict[str, m.FreshnessState] = {
+        u.semantic_id.id.value: u.freshness.state for u in updates
+    }
+    updated_ids = set(live_states)
+    # Items without updates are CURRENT in the live overlay.
+    for ref in pre_ids:
+        live_states.setdefault(ref.id.value, m.FreshnessState.CURRENT)
     changed = tuple(
         dep for dep in dependencies if dep.semantic_id.id.value in updated_ids
     )
@@ -972,10 +981,38 @@ def _compose_status_answer(
         for dep in dependencies
         if dep.semantic_id.id.value in updated_ids
     }
-    claims_t, rels_t = _refresh_view(
-        repository_id, tuple(all_claims), tuple(all_rels),
-        evidence=evidence, store=store, bounds=bounds,
-    )
+    by_id = {u.semantic_id.id.value: u.freshness for u in updates}
+
+    def _with_live_claim(claim: m.SemanticClaim) -> m.SemanticClaim:
+        freshness = by_id.get(claim.claim_id.value)
+        if freshness is None:
+            return claim
+        return m.SemanticClaim(
+            claim_id=claim.claim_id, subject=claim.subject,
+            kind=claim.kind, value=claim.value,
+            assertion_nature=claim.assertion_nature,
+            evidence=claim.evidence,
+            authority=claim.authority, trust=claim.trust,
+            freshness=freshness, basis=claim.basis,
+        )
+
+    def _with_live_rel(
+        rel: m.SemanticRelationship,
+    ) -> m.SemanticRelationship:
+        freshness = by_id.get(rel.relationship_id.value)
+        if freshness is None:
+            return rel
+        return m.SemanticRelationship(
+            relationship_id=rel.relationship_id, source=rel.source,
+            kind=rel.kind, target=rel.target,
+            assertion_nature=rel.assertion_nature,
+            evidence=rel.evidence,
+            authority=rel.authority, trust=rel.trust,
+            freshness=freshness, basis=rel.basis,
+        )
+
+    claims_t = tuple(_with_live_claim(c) for c in all_claims)
+    rels_t = tuple(_with_live_rel(r) for r in all_rels)
     verification_all = tuple(
         claim.value
         for claim in claims_t
@@ -1024,7 +1061,7 @@ def _compose_status_answer(
             repository_id, subjects[0].subject_id,
             tuple(s.subject_id for s in subjects),
             store=store, bounds=bounds, page_token=page_token,
-            evidence=evidence,
+            evidence=evidence, live_states=live_states,
         )
         token: str | None = _next_service_token(
             page_token, kept_claims, kept_rels, claims_t, rels_t,
@@ -1037,7 +1074,7 @@ def _compose_status_answer(
             repository_id, None,
             tuple(s.subject_id for s in subjects),
             store=store, bounds=bounds, page_token=None,
-            evidence=evidence,
+            evidence=evidence, live_states=live_states,
         )
         token = None
     if qremaining > 0:
@@ -1093,6 +1130,11 @@ def _compose_status_answer(
         evidence=tuple(ref for c in kept_claims for ref in c.evidence),
         resolution_requirements=tuple(unresolved),
         bound_info=_bound_info(bounds, returned, truncated, category, token),
+        state_explanation=state_explanation_for(
+            tuple(kept_claims), tuple(kept_rels),
+            coverage=coverage_counts_for(views),
+            bounds=(bounds.max_results, truncated),
+        ),
     )
 
 def status(
@@ -1103,14 +1145,17 @@ def status(
     store: SemanticStore,
     continuations: ContinuationStore,
     authority_seeds: tuple[m.EvidenceRef, ...] = (),
-) -> m.SemanticAnswer | PendingInterpretation | m.HookStatusNotice:
-    """Currency operation (plan §11.8).
+) -> m.SemanticAnswer | m.HookStatusNotice:
+    """Currency operation (plan §11.8; Addendum I S2 observational).
 
-    NORMAL performs the full bounded status operation, suspending via
-    §11.12 when subject interpretation is missing. HOOK_FAST is read-only
-    lifecycle observation returning a compact notice — never suspension,
-    never writes. Claim/relationship targets resolve through the §5.5
-    ref lookup; answer envelopes are never persisted (StatusTargetError).
+    NORMAL performs the full bounded read-only status operation over
+    existing knowledge plus live freshness qualifications. It never
+    initiates interpretation, allocates continuations, or persists
+    freshness. Unexamined subjects return explicit missing coverage
+    with next-operation guidance. HOOK_FAST is read-only lifecycle
+    observation returning a compact notice — never suspension, never
+    writes. Claim/relationship targets resolve through the §5.5 ref
+    lookup; answer envelopes are never persisted (StatusTargetError).
 
     Paging (plan I-39): `page_token` carries per-list offsets redeemed
     for single-subject and ref targets. A no-target request pages the
@@ -1188,13 +1233,6 @@ def status(
         structural=structural, store=store, bounds=bounds,
         evidence=evidence,
     )
-    # E-03: an exact-target status that suspends must carry the user boundary
-    # in every pending task, exactly like target-establishment units.
-    scope_target = (
-        request.target
-        if isinstance(request.target, m.EvidenceScope)
-        else m.EvidenceScope()
-    )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
         requirements: tuple[m.ResolutionRequirement, ...] = ()
         if ambiguity is m.ResolutionAmbiguity.AMBIGUOUS:
@@ -1218,108 +1256,12 @@ def status(
             resolution_requirements=requirements,
             bound_info=_bound_info(bounds, 0, False, None),
         )
-    missing = _missing_subjects(
-        request.repository_id, subjects, store=store, bounds=bounds,
-        suspended=(), evidence=evidence,
-    )
-    if missing is not None:
-        needed = _question_local_missing(
-            request.repository_id, missing, m.SemanticIntent.STATUS,
-            store=store, evidence=evidence, bounds=bounds,
-        )
-        task = prepare_interpretation_task(
-            request.repository_id, missing, structural=structural,
-            evidence=evidence, bounds=bounds, state=state,
-            authority_seeds=authority_seeds,
-            operation_intent=m.SemanticIntent.STATUS,
-            question_slice=(
-                needed.question_slice if needed is not None
-                else missing.subject_id.canonical_locator
-            ),
-            store=store,
-            scope_root=(
-                needed.scope_root if needed is not None
-                else missing.subject_id
-            ),
-            question_class=(
-                needed.question_class if needed is not None else None
-            ),
-            materiality_basis=(
-                needed.materiality_basis if needed is not None else ""
-            ),
-            target_scope=scope_target,
-        )
-        return _suspend(
-            op="status", repository_id=request.repository_id,
-            subject=missing, task=task, seeds=authority_seeds,
-            bounds=bounds, state=state, resolution=None, scope=subjects,
-            suspended=(missing.subject_id.canonical_locator,),
-            continuations=continuations,
-            operation_intent="STATUS",
-            question_slice=task.request.question_slice,
-            target_scope=scope_target,
-        )
+    # S2 §5.2 observational status: never suspend, never persist.
+    # Unexamined subjects return explicit missing coverage with
+    # next-operation guidance from _compose_status_answer; absent,
+    # ambiguous, unexamined, stale, and unverifiable stay distinct.
     return _compose_status_answer(
         request.repository_id, subjects, structural=structural,
         evidence=evidence, store=store, bounds=bounds, state=state,
         page_token=request.page_token,
-    )
-
-def _resume_status(
-    record: SuspendedOperation,
-    *,
-    structural: StructuralSource,
-    evidence: EvidenceSource,
-    store: SemanticStore,
-    bounds: m.QueryBounds,
-    state: m.RepositoryState,
-    continuations: ContinuationStore,
-) -> m.SemanticAnswer | PendingInterpretation:
-    suspended = record.suspended + (
-        record.subject.subject_id.canonical_locator,
-    )
-    missing = _missing_subjects(
-        record.repository_id, record.scope, store=store, bounds=bounds,
-        suspended=suspended, evidence=evidence,
-    )
-    if missing is not None:
-        needed = _question_local_missing(
-            record.repository_id, missing, m.SemanticIntent.STATUS,
-            store=store, evidence=evidence, bounds=bounds,
-        )
-        task = prepare_interpretation_task(
-            record.repository_id, missing, structural=structural,
-            evidence=evidence, bounds=bounds, state=state,
-            authority_seeds=record.seeds,
-            operation_intent=m.SemanticIntent.STATUS,
-            question_slice=(
-                needed.question_slice if needed is not None
-                else missing.subject_id.canonical_locator
-            ),
-            store=store,
-            scope_root=(
-                needed.scope_root if needed is not None
-                else missing.subject_id
-            ),
-            question_class=(
-                needed.question_class if needed is not None else None
-            ),
-            materiality_basis=(
-                needed.materiality_basis if needed is not None else ""
-            ),
-            target_scope=record.target_scope,
-        )
-        return _suspend(
-            op="status", repository_id=record.repository_id,
-            subject=missing, task=task, seeds=record.seeds,
-            bounds=bounds, state=state, resolution=None,
-            scope=record.scope, suspended=suspended,
-            continuations=continuations,
-            operation_intent="STATUS",
-            question_slice=task.request.question_slice,
-            target_scope=record.target_scope,
-        )
-    return _compose_status_answer(
-        record.repository_id, record.scope, structural=structural,
-        evidence=evidence, store=store, bounds=bounds, state=state,
     )

@@ -21,6 +21,10 @@ from span.service.resolution import (
 
 __all__ = [
     '_question_identity_key',
+    'filter_views_by_scope',
+    'effective_trace_slice',
+    'effective_impact_slice',
+    'derive_service_question',
     'effective_question_view',
     'question_coverage_check',
     '_question_local_missing',
@@ -32,7 +36,23 @@ __all__ = [
     '_REQUIRED_QUESTION_CLASS',
 ]
 
-def _question_identity_key(question: m.SemanticQuestionScope) -> tuple[str, ...]:
+
+def filter_views_by_scope(
+    views: tuple[m.SemanticQuestionCoverageView, ...],
+    scope: m.SemanticQuestionScope | None,
+) -> tuple[m.SemanticQuestionCoverageView, ...]:
+    """Filter returned coverage by selected identity (S4 §5.4)."""
+    if scope is None:
+        return views
+    key = _question_identity_key(scope)
+    return tuple(
+        v for v in views if _question_identity_key(v.question) == key
+    ) or views[:0]
+
+
+def _question_identity_key(
+    question: m.SemanticQuestionScope,
+) -> tuple[str, ...]:
     return (
         "q",
         question.scope_root.repository_id,
@@ -44,6 +64,116 @@ def _question_identity_key(question: m.SemanticQuestionScope) -> tuple[str, ...]
         question.question_slice,
     )
 
+
+def effective_trace_slice(
+    host_slice: str,
+    direction: object,
+    relationship_filter: tuple[m.RelationshipKind, ...] | None,
+    boundary_only: bool,
+) -> str:
+    """Persisted effective slice for TRACE (S4 §5.4 discriminator).
+
+    Appends ``|dir=<UPSTREAM|DOWNSTREAM|BOTH>|filter=<ALL|NONE|sorted
+    kind names>|boundary=<0|1>``. A None filter encodes as ALL and an
+    explicitly empty tuple encodes as NONE, so different traversal
+    parameters never share one persisted identity.
+    """
+    direction_value = (
+        direction.value
+        if hasattr(direction, "value")
+        else str(direction)
+    )
+    if relationship_filter is None:
+        filter_part = "ALL"
+    elif not relationship_filter:
+        filter_part = "NONE"
+    else:
+        filter_part = ",".join(
+            sorted(k.value if hasattr(k, "value") else str(k) for k in relationship_filter)
+        )
+    boundary_part = "1" if boundary_only else "0"
+    return (
+        f"{host_slice}|dir={direction_value}"
+        f"|filter={filter_part}|boundary={boundary_part}"
+    )
+
+
+def effective_impact_slice(
+    host_slice: str,
+    change_kind: object,
+    change_description: str | None,
+    affected_assertions: tuple[object, ...] = (),
+) -> str:
+    """Persisted effective slice for IMPACT (S4 §5.4 discriminator).
+
+    Appends ``|kind=<name>|desc=<sha16 hex of exact UTF-8 bytes of the
+    description, - when None or empty>|affected=<sorted ref values or ->``.
+    Different change proposals never share one persisted identity.
+    """
+    import hashlib as _hashlib
+
+    kind_value = (
+        change_kind.value
+        if hasattr(change_kind, "value")
+        else str(change_kind)
+    )
+    if change_description:
+        desc_part = _hashlib.sha256(
+            change_description.encode("utf-8")
+        ).hexdigest()[:16]
+    else:
+        desc_part = "-"
+    ref_values: list[str] = []
+    for ref in affected_assertions:
+        ref_id = getattr(getattr(ref, "id", None), "value", None)
+        if ref_id:
+            ref_values.append(str(ref_id))
+    affected_part = ",".join(sorted(ref_values)) if ref_values else "-"
+    return (
+        f"{host_slice}|kind={kind_value}"
+        f"|desc={desc_part}|affected={affected_part}"
+    )
+
+
+def derive_service_question(
+    *,
+    subject: m.Subject,
+    scope_root: m.SubjectId,
+    question_class: m.SemanticQuestionClass,
+    selection: m.SemanticQuestionSelection | None,
+    default_slice: str,
+    default_basis: str,
+) -> tuple[m.SemanticQuestionScope, tuple[str, ...]]:
+    """Build the service-owned full scope from host selection (S4 §5.4).
+
+    Returns (scope, anchors). The service derives scope_root, subject,
+    and question_class; the host supplies only slice/basis/anchors.
+    Missing basis fills with the operation-derived default so the
+    required non-empty invariant holds. Slice canonicalized verbatim
+    (no paraphrase equivalence). Anchors passed verbatim as
+    question_terms into bounded discovery.
+    """
+    if selection is not None:
+        host_slice = selection.question_slice
+        basis = selection.materiality_basis or default_basis
+        anchors = tuple(selection.question_anchors)
+    else:
+        host_slice = default_slice
+        basis = default_basis
+        anchors = ()
+    if not host_slice:
+        raise ValueError("question slice must be nonempty")
+    if not basis:
+        raise ValueError("materiality basis must be nonempty")
+    scope = m.SemanticQuestionScope(
+        scope_root=scope_root,
+        subject=subject.subject_id,
+        question_class=question_class,
+        question_slice=host_slice,
+        materiality_basis=basis,
+    )
+    return scope, anchors
+
 def effective_question_view(
     coverage: m.InterpretationCoverage,
     *,
@@ -53,6 +183,7 @@ def effective_question_view(
     precomputed_snapshot: tuple[
         tuple[tuple[str, str], ...], dict[str, str]
     ] | None = None,
+    live_states: dict[str, m.FreshnessState] | None = None,
 ) -> m.SemanticQuestionCoverageView:
     recorded = coverage.disposition
     effective = recorded
@@ -62,6 +193,8 @@ def effective_question_view(
     requirements = tuple(coverage.resolution_requirements)
     # Result/premise check: any noncurrent result ref makes a recorded
     # ANSWERED/NOT_APPLICABLE noncurrent (effective PENDING).
+    # S2 §5.2: a per-call live overlay (from _evaluate_current) overrides
+    # stored freshness so the returned view agrees without a prior write.
     if store is not None and repository_id and coverage.result_refs:
         try:
             items = store.load_by_refs(
@@ -76,7 +209,22 @@ def effective_question_view(
             )
         else:
             for item in items:
-                if item.freshness.state is not m.FreshnessState.CURRENT:
+                item_id = (
+                    item.claim_id.value
+                    if isinstance(item, m.SemanticClaim)
+                    else item.relationship_id.value
+                )
+                live_state = (
+                    live_states.get(item_id)
+                    if live_states is not None
+                    else None
+                )
+                state = (
+                    live_state
+                    if live_state is not None
+                    else item.freshness.state
+                )
+                if state is not m.FreshnessState.CURRENT:
                     if recorded in (
                         m.SemanticQuestionDisposition.ANSWERED,
                         m.SemanticQuestionDisposition.NOT_APPLICABLE,
@@ -420,6 +568,7 @@ def _question_views_for_scope(
     store: SemanticStore,
     bounds: m.QueryBounds,
     evidence: EvidenceSource | None = None,
+    live_states: dict[str, m.FreshnessState] | None = None,
 ) -> tuple[m.SemanticQuestionCoverageView, ...]:
     try:
         coverages = store.load_question_coverages(
@@ -436,6 +585,7 @@ def _question_views_for_scope(
                 effective_question_view(
                     cov, evidence=evidence, store=store,
                     repository_id=repository_id,
+                    live_states=live_states,
                 )
             )
         except Exception:
@@ -458,6 +608,7 @@ def _paged_question_views(
     bounds: m.QueryBounds,
     page_token: str | None = None,
     evidence: EvidenceSource | None = None,
+    live_states: dict[str, m.FreshnessState] | None = None,
 ) -> tuple[tuple[m.SemanticQuestionCoverageView, ...], int, int]:
     """Return (kept views, shown count, remaining count) for paging."""
     from span.shell import paging as _paging
@@ -469,6 +620,7 @@ def _paged_question_views(
     all_views = _question_views_for_scope(
         repository_id, scope_root, subject_ids,
         store=store, bounds=bounds, evidence=evidence,
+        live_states=live_states,
     )
     # Reserve budget: questions share max_results with claims/rels.
     # Simple policy: show up to remaining budget after caller slices

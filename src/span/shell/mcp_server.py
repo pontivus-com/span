@@ -204,12 +204,22 @@ def build_server(adapter: McpAdapter):
 
     The SDK import lives in this function: `shell/mcp.py` (adapter,
     specs, ingress/egress) never imports the SDK and stays testable
-    without it.
+    without it. S9 §5.9: package version exposed through server
+    initialization metadata.
     """
     from mcp.server import Server
     import mcp.types as _types
 
-    server: Server = Server("span")
+    try:
+        from span import __version__ as _pkg_version
+    except Exception:
+        _pkg_version = "unknown"
+    try:
+        server: Server = Server("span", version=str(_pkg_version))
+    except TypeError:
+        # Older SDK without version kwarg: name only, version carried
+        # in list-tools description suffix via handle_list_tools.
+        server = Server("span")
 
     async def _list_tools(_request: object, _params: object) -> object:
         return _types.ListToolsResult(

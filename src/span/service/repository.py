@@ -86,6 +86,7 @@ def _uninitialized_answer(
         evidence=(),
         resolution_requirements=(_setup_requirement(repository_id),),
         bound_info=_bound_info(bounds, 0, False, None),
+        state_explanation=("returned assertions: none",),
     )
 
 

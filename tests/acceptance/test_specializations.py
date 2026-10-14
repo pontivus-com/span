@@ -130,6 +130,7 @@ def _candidates():
                 m.CandidateSemanticClaim(
                     subject=_sid("cap/amount", m.SubjectKind.CAPABILITY),
                     kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("canonical money concept", ()),
                     evidence=(term_ref,),
                     candidate_authority=accepted_term,
@@ -145,6 +146,7 @@ def _candidates():
                 m.CandidateSemanticClaim(
                     subject=wire,
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
                         "wire-cents", None,
                         m.RepresentationDirection.SOURCE,
@@ -160,6 +162,7 @@ def _candidates():
                 m.CandidateSemanticRelationship(
                     source=wire,
                     kind=m.RelationshipKind.TRANSFORMS_TO,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     target=display,
                     evidence=(term_ref,),
                     basis=m.SemanticBasis(
@@ -174,6 +177,7 @@ def _candidates():
                     candidate_key="display-governed",
                     subject=display,
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
                         "display-dollars", None,
                         m.RepresentationDirection.DESTINATION,
@@ -189,6 +193,7 @@ def _candidates():
                     candidate_key="display-observed",
                     subject=display,
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
                         "raw-dollars", None,
                         m.RepresentationDirection.DESTINATION,
@@ -216,6 +221,7 @@ def _candidates():
             claims=(
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("release 1.0 contract", ()),
                     evidence=(_ref("RELEASE.md"),),
                     candidate_authority=_release_authority(),
@@ -225,6 +231,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.LIFECYCLE_STATE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.LifecycleStateValue(
                         m.LifecyclePhase.TERMINAL, "published"
                     ),
@@ -236,6 +243,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.VERIFICATION,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
                         _sid("src/publish.py"),
                         m.VerificationKind.TEST,
@@ -248,6 +256,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.VERIFICATION,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
                         _sid("src/publish.py"),
                         m.VerificationKind.GATE,
@@ -262,6 +271,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=release, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.OwnershipCustodyValue(
                         _sid(
                             "downstream/mirror",
@@ -279,6 +289,7 @@ def _candidates():
                 m.CandidateSemanticClaim(
                     candidate_key="invariant-copy-only",
                     subject=release, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.InvariantConstraintValue("copy-only downstream"),
                     evidence=(_ref("RELEASE.md"),),
                     candidate_authority=_release_authority(),
@@ -290,6 +301,7 @@ def _candidates():
                 m.CandidateSemanticClaim(
                     candidate_key="invariant-recompute",
                     subject=release, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.InvariantConstraintValue(
                         "downstream may recompute"
                     ),

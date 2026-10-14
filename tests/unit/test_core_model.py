@@ -80,6 +80,7 @@ def _semantic_claim():
         claim_id=m.ClaimId("claim-1"),
         subject=_subject_id(),
         kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue(summary="does X", capability_refs=(_subject_id(),)),
         evidence=(_evidence_ref(),),
         authority=_authority_binding(),
@@ -102,6 +103,7 @@ def _semantic_relationship():
         relationship_id=m.RelationshipId("rel-1"),
         source=_subject_id(),
         kind=m.RelationshipKind.MEMBER_OF,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         target=_subject_id(m.SubjectKind.CAPABILITY, "cap/payments"),
         evidence=(_evidence_ref(),),
         authority=None,
@@ -378,6 +380,7 @@ class ClaimValueMappingTest(unittest.TestCase):
         for n, (kind, value) in enumerate(values.items()):
             claim = m.SemanticClaim(
                 m.ClaimId(f"c-{n}"), sid, kind, value,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             self.assertIs(claim.kind, kind)
@@ -387,11 +390,13 @@ class ClaimValueMappingTest(unittest.TestCase):
             m.SemanticClaim(
                 m.ClaimId("c-x"), _subject_id(), m.ClaimKind.PURPOSE,
                 m.ResponsibilityValue("r"),
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
         with self.assertRaises(ValueError):
             m.CandidateSemanticClaim(
                 subject=_subject_id(), kind=m.ClaimKind.VERIFICATION,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("s", ()),
             )
 
@@ -588,6 +593,7 @@ class SerializationRoundTripTest(unittest.TestCase):
             (
                 m.CandidateSemanticClaim(
                     subject=_subject_id(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("s", ()),
                 ),
             ),

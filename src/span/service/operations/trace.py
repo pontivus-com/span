@@ -21,6 +21,8 @@ from span.service.answers import (
     _bound_info,
     _conflicts_for,
     _select_answer_items,
+    coverage_counts_for,
+    state_explanation_for,
 )
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
@@ -96,20 +98,55 @@ def _trace_drive(
     relationship_filter: tuple[m.RelationshipKind, ...] | None,
     boundary_only: bool,
     seeds: tuple[m.EvidenceRef, ...],
-    suspended: tuple[str, ...],
+    suspended: tuple[m.SubjectId, ...],
     page_token: str | None = None,
+    question_selection: m.SemanticQuestionSelection | None = None,
+    root_subject: m.SubjectId | None = None,
 ) -> m.SemanticAnswer | PendingInterpretation:
     """Bounded iterative frontier expansion (plan §8.6) with suspension.
 
-    Expands one deterministic frontier at a time. The first subject with
-    no semantic state that was not already suspended suspends the
-    operation (§11.12); resume restarts the deterministic walk, so each
-    subject is requested at most once and the walk always terminates.
+    S4 §5.4: gates interpretation on the relevant question's effective
+    coverage (not claim/relationship existence). Carries an explicitly
+    selected bounded question through discovery, interpretation,
+    persistence, and readback. Anchors pass verbatim as question_terms.
+    Every resumption and new frontier task forwards the retained
+    selection; later frontiers never re-derive anchors by mining prose.
 
-    Paging (plan I-39): `page_token` windows the target subject's
+    Expands one deterministic frontier at a time. Resume restarts the
+    deterministic walk, so each subject is requested at most once and
+    the walk always terminates.
+
+    Paging (I S4 pgq): `page_token` windows the target subject's
     initial state load only; frontier expansion loads proceed unpaged.
     Page deep results through narrower targets.
     """
+    from span.service.questions import (
+        derive_service_question as _derive,
+        effective_trace_slice as _eff_slice,
+    )
+
+    _root = root_subject or target.subject_id
+    # Derive effective question identity for the primary target.
+    if question_selection is not None:
+        _host_slice = question_selection.question_slice
+        _basis = (
+            question_selection.materiality_basis or "TRACE question-local"
+        )
+        _anchors = tuple(question_selection.question_anchors)
+    else:
+        _host_slice = target.subject_id.canonical_locator
+        _basis = "TRACE question-local"
+        _anchors = ()
+    _effective_slice = _eff_slice(
+        _host_slice, direction, relationship_filter, boundary_only
+    )
+    _primary_scope = m.SemanticQuestionScope(
+        scope_root=_root,
+        subject=target.subject_id,
+        question_class=m.SemanticQuestionClass.CQ_04,
+        question_slice=_effective_slice,
+        materiality_basis=_basis,
+    )
     kinds = (
         tuple(relationship_filter)
         if relationship_filter is not None
@@ -119,7 +156,7 @@ def _trace_drive(
         kinds = tuple(
             k for k in kinds if k is m.RelationshipKind.CROSSES_BOUNDARY
         )
-    visited: list[str] = []
+    visited: list[m.SubjectId] = []
     rels: list[m.SemanticRelationship] = []
     claims: list[m.SemanticClaim] = []
     sedges: list[m.StructuralEdge] = []
@@ -129,34 +166,76 @@ def _trace_drive(
     while queue and len(rels) + len(sedges) < bounds.max_results:
         sid, depth = queue.pop(0)
         locator = sid.canonical_locator
-        if locator in visited:
+        if sid in visited:
             continue
-        visited.append(locator)
+        visited.append(sid)
         window = None if target_windowed else page_token
         target_windowed = True
         loaded_claims, loaded_rels, _, _ = _load_subject_state(
             repository_id, sid, store=store, bounds=bounds,
             direction=direction, page_token=window,
         )
-        if not loaded_claims and not loaded_rels and locator not in suspended:
+        # S4: question-aware gate (Addendum B B.7). The frontier
+        # subject's derived question (original root, class, exact slice,
+        # subject changed) needs recorded non-PENDING coverage; recorded
+        # PENDING is admitted-but-unexamined. Claim existence alone
+        # never counts.
+        _frontier_scope = m.SemanticQuestionScope(
+            scope_root=_root,
+            subject=sid,
+            question_class=m.SemanticQuestionClass.CQ_04,
+            question_slice=_effective_slice,
+            materiality_basis=_basis,
+        )
+        try:
+            _covs = store.load_all_question_coverages(
+                repository_id, _root, (sid,),
+            )
+        except Exception:
+            _covs = ()
+        _covered = any(
+            _c.question is not None
+            and _c.question.scope_root == _root
+            and _c.question.subject == sid
+            and _c.question.question_class
+            is m.SemanticQuestionClass.CQ_04
+            and _c.question.question_slice == _effective_slice
+            and _c.disposition
+            is not m.SemanticQuestionDisposition.PENDING
+            for _c in _covs
+        )
+        if not _covered and sid not in suspended:
+            # Resolve semantic-only frontier subjects through shared
+            # resolver rather than structural identity alone.
             full = _resolve_exact_subject(
                 repository_id, sid, structural=structural, bounds=bounds
             )
+            if full is None:
+                try:
+                    _stored = store.load_subjects(repository_id, (sid,))
+                except Exception:
+                    _stored = ()
+                full = _stored[0] if _stored else None
             if full is not None:
                 task = prepare_interpretation_task(
                     repository_id, full, structural=structural,
                     evidence=evidence, bounds=bounds, state=state,
                     authority_seeds=seeds,
                     operation_intent=m.SemanticIntent.TRACE,
-                    question_slice=full.subject_id.canonical_locator,
+                    question_slice=_effective_slice,
+                    store=store,
+                    scope_root=_root,
+                    question_class=m.SemanticQuestionClass.CQ_04,
+                    materiality_basis=_basis,
+                    question_terms=_anchors,
                 )
                 return _suspend(
                     op="trace", repository_id=repository_id, subject=full,
                     task=task, seeds=seeds, bounds=bounds, state=state,
                     resolution=resolution, scope=(target,),
-                    suspended=suspended + (locator,),
+                    suspended=suspended + (sid,),
                     operation_intent="TRACE",
-                    question_slice=full.subject_id.canonical_locator,
+                    question_slice=_effective_slice,
                     trace_direction=direction.value,
                     trace_filter=tuple(relationship_filter)
                     if relationship_filter is not None
@@ -164,6 +243,8 @@ def _trace_drive(
                     trace_filter_set=relationship_filter is not None,
                     trace_boundary=boundary_only,
                     continuations=continuations,
+                    root_question=_primary_scope,
+                    question_selection=question_selection,
                 )
         for claim in loaded_claims:
             claims.append(claim)
@@ -227,7 +308,8 @@ def _compose_trace_answer(
             return claim
         return m.SemanticClaim(
             claim_id=claim.claim_id, subject=claim.subject, kind=claim.kind,
-            value=claim.value, evidence=claim.evidence,
+            value=claim.value, assertion_nature=claim.assertion_nature,
+            evidence=claim.evidence,
             authority=claim.authority, trust=claim.trust,
             freshness=freshness, basis=claim.basis,
         )
@@ -238,7 +320,9 @@ def _compose_trace_answer(
             return rel
         return m.SemanticRelationship(
             relationship_id=rel.relationship_id, source=rel.source,
-            kind=rel.kind, target=rel.target, evidence=rel.evidence,
+            kind=rel.kind, target=rel.target,
+            assertion_nature=rel.assertion_nature,
+            evidence=rel.evidence,
             authority=rel.authority, trust=rel.trust,
             freshness=freshness, basis=rel.basis,
         )
@@ -340,6 +424,11 @@ def _compose_trace_answer(
             bounds, returned, truncated or truncated_walk,
             category or ("walk" if truncated_walk else None), token,
         ),
+        state_explanation=state_explanation_for(
+            tuple(kept_claims), tuple(kept_rels),
+            coverage=coverage_counts_for(views),
+            bounds=(bounds.max_results, truncated or truncated_walk),
+        ),
     )
 
 def trace(
@@ -398,6 +487,8 @@ def trace(
         boundary_only=request.boundary_only,
         seeds=authority_seeds, suspended=(),
         page_token=request.page_token,
+        question_selection=request.question_selection,
+        root_subject=resolution.candidates[0].subject.subject_id,
     )
 
 def _resume_trace(
@@ -411,6 +502,9 @@ def _resume_trace(
     continuations: ContinuationStore,
 ) -> m.SemanticAnswer | PendingInterpretation:
     target = record.scope[0] if record.scope else record.subject
+    resumed = record.suspended
+    if record.subject.subject_id not in resumed:
+        resumed = resumed + (record.subject.subject_id,)
     return _trace_drive(
         record.repository_id, target, record.resolution,
         structural=structural, evidence=evidence, store=store,
@@ -421,7 +515,11 @@ def _resume_trace(
         ),
         boundary_only=record.trace_boundary,
         seeds=record.seeds,
-        suspended=record.suspended + (
-            record.subject.subject_id.canonical_locator,
+        suspended=resumed,
+        question_selection=record.question_selection,
+        root_subject=(
+            record.root_question.scope_root
+            if record.root_question is not None
+            else target.subject_id
         ),
     )

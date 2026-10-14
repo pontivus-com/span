@@ -86,7 +86,7 @@ def _load_subject_state(
     """Load one subject's state window plus per-list next tokens.
 
     The answer-level token carries per-list offsets
-    (``pg:<claims_skip>:<rels_skip>:<questions_skip>``); each load windows
+    (``pgq:<digest>:<claims_skip>:<rels_skip>:<questions_skip>``); each load windows
     from its own offset, so every item is reachable exactly once across
     pages. The returned tokens are the raw store cursors (``None`` =
     exhausted).
@@ -146,44 +146,157 @@ def _resolve_query_subject(
     store: SemanticStore,
     bounds: m.QueryBounds,
 ) -> m.SubjectResolution:
-    """Query-time subject resolution (addendum A, F1).
+    """Query-time subject resolution (Addendum A F1 as amended by I S1).
 
-    Structural first; on NOT_FOUND with an exact identity, fall back
-    to the stored subject record (registered semantic-only subjects
-    live in the store, never in the structural source). Ambiguity is
-    never overridden and name-only queries never reach the store
-    (§4.2: names alone are never identity).
+    Explicit ``exact_subject_id`` keeps the existing exact-ID path.
+    Otherwise structural resolution and exact stored-locator matches for
+    ``name_or_locator`` are merged by complete ``SubjectId`` with the
+    §5.1 exact-precedence rule: an exact stored locator defeats
+    non-exact structural name candidates; only multiple exact
+    identities may remain ambiguous. Stored lookup is exact string
+    equality only, never normalization. Truncated sets never resolve.
+    Structural-provider failure propagates; no stored fallback on that
+    path. ``expected_kinds`` filtering is provider-owned on both paths.
     """
     resolution = structural.resolve_subject(repository_id, target, bounds)
-    if resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED:
-        return resolution
-    if (
-        resolution.ambiguity is m.ResolutionAmbiguity.NOT_FOUND
-        and target.exact_subject_id is not None
-    ):
-        found = store.load_subjects(
-            repository_id, (target.exact_subject_id,)
-        )
-        if found:
-            return m.SubjectResolution(
-                candidates=(
-                    m.SubjectCandidate(
-                        subject=found[0],
-                        structural_evidence=(),
-                        rank_basis=m.CandidateRankBasis.EXACT_LOCATOR,
+    if target.exact_subject_id is not None:
+        if resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED:
+            return resolution
+        if resolution.ambiguity is m.ResolutionAmbiguity.NOT_FOUND:
+            found = store.load_subjects(
+                repository_id, (target.exact_subject_id,)
+            )
+            if found:
+                return m.SubjectResolution(
+                    candidates=(
+                        m.SubjectCandidate(
+                            subject=found[0],
+                            structural_evidence=(),
+                            rank_basis=m.CandidateRankBasis.EXACT_LOCATOR,
+                        ),
                     ),
-                ),
+                    ambiguity=m.ResolutionAmbiguity.RESOLVED,
+                    bound_info=m.BoundInfo(
+                        requested_max_results=bounds.max_subjects,
+                        requested_max_depth=0,
+                        returned_results=1,
+                        truncated=False,
+                        truncated_category=None,
+                        continuation_token=None,
+                    ),
+                )
+        return resolution
+    query = target.name_or_locator
+    if not query:
+        return resolution
+    stored_page = store.load_subjects_by_locator(
+        repository_id, query, target.expected_kinds, bounds
+    )
+    if not stored_page.items:
+        return resolution
+    stored_by_id: dict[tuple[str, str, str], m.Subject] = {}
+    for subject in stored_page.items:
+        sid = subject.subject_id
+        stored_by_id[
+            (sid.repository_id, sid.subject_kind.value, sid.canonical_locator)
+        ] = subject
+    structural_exact: dict[tuple[str, str, str], m.Subject] = {}
+    for candidate in resolution.candidates:
+        if candidate.rank_basis is m.CandidateRankBasis.EXACT_LOCATOR:
+            sid = candidate.subject.subject_id
+            structural_exact[
+                (
+                    sid.repository_id,
+                    sid.subject_kind.value,
+                    sid.canonical_locator,
+                )
+            ] = candidate.subject
+    if not structural_exact:
+        # Only non-exact structural candidates or NOT_FOUND: exact stored
+        # identity wins; non-exact names never defeat it.
+        combined = sorted(
+            stored_by_id.values(),
+            key=lambda s: (
+                s.subject_id.subject_kind.value,
+                s.subject_id.canonical_locator,
+            ),
+        )
+        truncated = stored_page.bound_info.truncated
+        if len(combined) > bounds.max_subjects:
+            truncated = True
+        kept = tuple(combined[: bounds.max_subjects])
+        candidates = tuple(
+            m.SubjectCandidate(
+                subject=subject,
+                structural_evidence=(),
+                rank_basis=m.CandidateRankBasis.EXACT_LOCATOR,
+            )
+            for subject in kept
+        )
+        if len(kept) == 1 and not truncated:
+            return m.SubjectResolution(
+                candidates=candidates,
                 ambiguity=m.ResolutionAmbiguity.RESOLVED,
                 bound_info=m.BoundInfo(
                     requested_max_results=bounds.max_subjects,
                     requested_max_depth=0,
-                    returned_results=1,
+                    returned_results=len(candidates),
                     truncated=False,
                     truncated_category=None,
                     continuation_token=None,
                 ),
             )
-    return resolution
+        return m.SubjectResolution(
+            candidates=candidates,
+            ambiguity=m.ResolutionAmbiguity.AMBIGUOUS,
+            bound_info=m.BoundInfo(
+                requested_max_results=bounds.max_subjects,
+                requested_max_depth=0,
+                returned_results=len(candidates),
+                truncated=truncated,
+                truncated_category="candidates" if truncated else None,
+                continuation_token=None,
+            ),
+        )
+    # Both sides have exact identities: merge by complete SubjectId.
+    merged: dict[tuple[str, str, str], m.Subject] = dict(structural_exact)
+    for key, subject in stored_by_id.items():
+        merged.setdefault(key, subject)
+    combined = list(merged.values())
+    combined.sort(
+        key=lambda s: (
+            s.subject_id.subject_kind.value,
+            s.subject_id.canonical_locator,
+        )
+    )
+    truncated = stored_page.bound_info.truncated or resolution.bound_info.truncated
+    if len(combined) > bounds.max_subjects:
+        truncated = True
+    kept = tuple(combined[: bounds.max_subjects])
+    candidates = tuple(
+        m.SubjectCandidate(
+            subject=subject,
+            structural_evidence=(),
+            rank_basis=m.CandidateRankBasis.EXACT_LOCATOR,
+        )
+        for subject in kept
+    )
+    if len(kept) == 1 and not truncated:
+        ambiguity = m.ResolutionAmbiguity.RESOLVED
+    else:
+        ambiguity = m.ResolutionAmbiguity.AMBIGUOUS
+    return m.SubjectResolution(
+        candidates=candidates,
+        ambiguity=ambiguity,
+        bound_info=m.BoundInfo(
+            requested_max_results=bounds.max_subjects,
+            requested_max_depth=0,
+            returned_results=len(candidates),
+            truncated=truncated,
+            truncated_category="candidates" if truncated else None,
+            continuation_token=None,
+        ),
+    )
 
 
 def _resolve_scope_subjects(

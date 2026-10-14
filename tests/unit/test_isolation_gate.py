@@ -58,6 +58,10 @@ def _repo_files():
     for path in sorted(REPO_ROOT.rglob("*")):
         if ".git" in path.parts:
             continue
+        # Local tooling environments are not Span coupling: a venv
+        # records its own absolute base paths and symlinks by design.
+        if ".venv" in path.parts:
+            continue
         if path.is_dir():
             continue
         yield path

@@ -10,7 +10,7 @@ Resolution order per repository root comes from the install receipt
 (``<data-dir>/install.json``: ``repos`` plus ``data_dir``). Database
 file is ``<data-dir>/<repository_id>.db`` where the id is derived
 from the receipt's verify record when present, else the root's base
-name. Only current-schema (4) stores are read; anything else is reported as
+name. Only current-schema (5) stores are read; anything else is reported as
 needing attention, never migrated or touched.
 
 Commands (exception-oriented per addendum D §9: routine current
@@ -38,7 +38,7 @@ import os
 import sqlite3
 import sys
 
-EXPECTED_SCHEMA = "4"
+EXPECTED_SCHEMA = "5"
 
 
 def _fail_silent(message):

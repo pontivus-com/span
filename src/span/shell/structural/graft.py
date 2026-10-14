@@ -1362,6 +1362,16 @@ class GraftStructuralSource:
             ]
         else:
             matches = self._match_name(selector)
+        if selector.expected_kinds:
+            wanted = set(selector.expected_kinds)
+            filtered: list[tuple[str, m.CandidateRankBasis]] = []
+            for locator, rank in matches:
+                node = self._nodes.get(locator)
+                if node is None:
+                    continue
+                if self._subject_kind_of(node) in wanted:
+                    filtered.append((locator, rank))
+            matches = filtered
         order = {
             m.CandidateRankBasis.EXACT_LOCATOR: 0,
             m.CandidateRankBasis.EXACT_DECLARATION: 1,

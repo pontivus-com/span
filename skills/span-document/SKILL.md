@@ -13,8 +13,7 @@ adds only the documentation-area procedure.
 
 ## Procedure
 
-1. If the user supplied an exact directory, preserve that complete target
-   boundary. Do not ask for a smaller representative root or silently narrow
+1. If the user supplied an exact directory, preserve that complete target boundary. Do not ask for a smaller representative root or silently narrow
    the work. Follow the primary skill's readiness and `initialize_target`
    path; an `UNINITIALIZED` repository needs `initialize_repository` in its
    dedicated setup session.
@@ -25,7 +24,8 @@ adds only the documentation-area procedure.
    authority, or completeness.
 3. Partition the complete boundary into coherent areas: subsystem,
    workflow/composition slice, service boundary, governed document area, or
-   cross-boundary path. Grouping is an execution aid. Split where ownership,
+   cross-boundary path. Grouping is an execution aid that must cover
+   every material area. Split where ownership,
    authority, lifecycle, or material input-to-terminal paths diverge; merge
    only where one bounded analysis can substantiate the areas together.
 4. Account for every target inventory member through the canonical
