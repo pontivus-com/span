@@ -122,6 +122,7 @@ def _candidates():
             claims=(
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("moves records", (cap,)),
                     evidence=(_ref("README.md"),),
                     candidate_authority=_accepted(
@@ -133,6 +134,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.CONFIGURATION_ENVIRONMENT,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.ConfigurationEnvironmentValue(
                         "worker count",
                         _sid("conf/workers", m.SubjectKind.CONFIGURATION),
@@ -148,6 +150,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.LIFECYCLE_STATE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.LifecycleStateValue(m.LifecyclePhase.USE),
                     evidence=(_ref("src/flow.py"),),
                     candidate_authority=_accepted(
@@ -159,6 +162,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.VERIFICATION,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
                         test, m.VerificationKind.TEST,
                         m.VerificationCurrency.CANDIDATE,
@@ -170,6 +174,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.VERIFICATION,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
                         test, m.VerificationKind.GATE,
                         m.VerificationCurrency.CURRENT_PASS,
@@ -185,6 +190,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.OwnershipCustodyValue(
                         _sid("team/flow"), m.OwnershipRole.OWNER,
                         m.OwnershipExclusivity.EXCLUSIVE,
@@ -199,6 +205,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.InvariantConstraintValue("records are immutable"),
                     evidence=(_ref("README.md"),),
                     candidate_authority=_accepted(
@@ -210,6 +217,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.REPRESENTATION_CONTRACT,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
                         "wire",
                         _sid("contract/api", m.SubjectKind.CONTRACT),
@@ -225,6 +233,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticClaim(
                     subject=flow, kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.CapabilityMembershipValue(cap),
                     evidence=(_ref("src/flow.py"),),
                     basis=m.SemanticBasis(
@@ -235,6 +244,7 @@ def _candidates():
             relationships=(
                 m.CandidateSemanticRelationship(
                     source=flow, kind=m.RelationshipKind.CROSSES_BOUNDARY,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     target=store,
                     evidence=(_ref("src/flow.py"),),
                     candidate_authority=_accepted(
@@ -246,6 +256,7 @@ def _candidates():
                 ),
                 m.CandidateSemanticRelationship(
                     source=test, kind=m.RelationshipKind.VERIFIED_BY,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     target=flow,
                     evidence=(_ref("src/flow.py"),),
                     basis=m.SemanticBasis(
@@ -261,6 +272,7 @@ def _candidates():
                         "contract/api", m.SubjectKind.CONTRACT
                     ),
                     kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("public record API", ()),
                     evidence=(_ref("README.md"),),
                     candidate_authority=_accepted(
@@ -450,6 +462,19 @@ class StatusTest(unittest.TestCase):
     def test_normal_full_answer(self):
         structural, evidence, store, agent = _harness()
         try:
+            # S2 observational: establish via explain first, then status
+            # reads back without suspending.
+            from span import service as _ops
+
+            _explain_req = _ops.SemanticExplainRequest(
+                repository_id=REPO,
+                target=m.SubjectSelector(None, "src/flow.py", (), None),
+                bounds=_bounds(),
+            )
+            _exchange(
+                _explain_req, _ops.explain,
+                structural, evidence, store, agent,
+            )
             answer = _exchange(
                 _status_request(), ops.status,
                 structural, evidence, store, agent,
@@ -493,8 +518,15 @@ class StatusTest(unittest.TestCase):
     def test_none_target_reports_persisted_frontier_states(self):
         structural, evidence, store, agent = _harness()
         try:
+            from span import service as _ops
+
             _exchange(
-                _status_request(), ops.status,
+                _ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                _ops.explain,
                 structural, evidence, store, agent,
             )
             unassessed = _sid("persisted/unassessed")
@@ -544,8 +576,15 @@ class StatusTest(unittest.TestCase):
         )
         structural, evidence, store, agent = _harness()
         try:
+            from span import service as _ops
+
             _exchange(
-                _status_request(), ops.status,
+                _ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                _ops.explain,
                 structural, evidence, store, agent,
             )
             unassessed = _sid("persisted/unassessed")
@@ -606,17 +645,27 @@ class StatusTest(unittest.TestCase):
     def test_none_target_report_paginates_persisted_subjects(self):
         structural, evidence, store, agent = _harness()
         try:
+            # S2 observational: establish via explain first; status only
+            # reads back persisted subjects.
             _exchange(
-                _status_request(), ops.status,
-                structural, evidence, store, agent,
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "src/flow.py", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                ops.explain, structural, evidence, store, agent,
             )
             _exchange(
-                _status_request(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
                     target=m.SubjectSelector(
                         None, "contract/api", (), None
-                    )
+                    ),
+                    bounds=_bounds(),
                 ),
-                ops.status, structural, evidence, store, agent,
+                ops.explain, structural, evidence, store, agent,
             )
             bounds = _bounds(max_subjects=1)
             first = ops.status(
@@ -719,6 +768,18 @@ class StatusTest(unittest.TestCase):
     def test_known_claim_ref_target_served(self):
         structural, evidence, store, agent = _harness()
         try:
+            # S2 observational: establish via explain first, then status
+            # reads back without suspending.
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "src/flow.py", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                ops.explain, structural, evidence, store, agent,
+            )
             indexed = _exchange(
                 _status_request(), ops.status,
                 structural, evidence, store, agent,
@@ -743,6 +804,18 @@ class StatusTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             continuations = ContinuationStore()
+            # S2 observational: establish via explain first so later
+            # readback observes persisted coverage, not synthesis.
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "src/flow.py", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                ops.explain, structural, evidence, store, agent,
+            )
             _exchange(
                 _status_request(), ops.status,
                 structural, evidence, store, agent,
@@ -806,6 +879,7 @@ class SelectionAtomicityTest(unittest.TestCase):
             claim_id=m.ClaimId(cid),
             subject=_sid("src/flow.py"),
             kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+            assertion_nature=m.AssertionNature.NORMATIVE,
             value=m.OwnershipCustodyValue(
                 _sid(owner), m.OwnershipRole.OWNER,
                 m.OwnershipExclusivity.EXCLUSIVE,
@@ -824,6 +898,7 @@ class SelectionAtomicityTest(unittest.TestCase):
                 claim_id=m.ClaimId(f"c-{n}"),
                 subject=_sid("src/flow.py"),
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue(f"s{n}", ()),
                 evidence=(_ref("README.md"),),
                 trust=m.TrustState.UNRESOLVED,
@@ -1066,12 +1141,24 @@ class ImpactTest(unittest.TestCase):
     def test_second_page_retrieval(self):
         """Pagination is explicit and redeemable (plan I-39).
 
-        A bounded status over many claims returns a `pg:` cursor;
+        A bounded status over many claims returns a `pgq:` cursor;
         resubmitting it yields the remaining items with no repeats and
         no dangling references.
         """
         structural, evidence, store, agent = _harness()
         try:
+            # S2 observational: establish via explain first so the
+            # bounded status pages persisted claims.
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "src/flow.py", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                ops.explain, structural, evidence, store, agent,
+            )
             first = _exchange(
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
@@ -1082,7 +1169,7 @@ class ImpactTest(unittest.TestCase):
             )
             token = first.bound_info.continuation_token
             self.assertTrue(first.bound_info.truncated)
-            self.assertTrue(token.startswith("pg:"))
+            self.assertTrue(token.startswith("pgq:"))
             first_ids = {
                 item.item.id.value
                 for item in first.content.freshness_items

@@ -28,6 +28,7 @@ from span.core.model import (
     SemanticRelationship,
     StoreWriteResult,
     Subject,
+    SubjectKind,
     SubjectPage,
     SubjectId,
     TargetAssociation,
@@ -41,6 +42,21 @@ class SemanticStore(_typing.Protocol):
     def load_subjects(
         self, repository_id: str, subject_ids: tuple[SubjectId, ...]
     ) -> tuple[Subject, ...]:
+        ...
+
+    def load_subjects_by_locator(
+        self,
+        repository_id: str,
+        locator: str,
+        expected_kinds: tuple[SubjectKind, ...],
+        bounds: QueryBounds,
+    ) -> SubjectPage:
+        """Exact canonical-locator lookup (Addendum I S1).
+
+        Exact string equality against the stored canonical locator only.
+        No normalization, no fuzzy matching. Kinds filtered before
+        limiting, ordered by kind, one extra row to detect truncation.
+        """
         ...
 
     def load_repository_subjects(

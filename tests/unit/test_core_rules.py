@@ -48,6 +48,7 @@ def _claim(**overrides):
     base = dict(
         subject=_sid(),
         kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does X", ()),
         evidence=(_ref(),),
         candidate_authority=None,
@@ -220,6 +221,7 @@ class CandidateValidationTest(unittest.TestCase):
         rel = m.CandidateSemanticRelationship(
             source=_sid(),
             kind=m.RelationshipKind.MEMBER_OF,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
             target=m.SubjectId(
                 repository_id="repo-1",
                 subject_kind=m.SubjectKind.CAPABILITY,
@@ -257,6 +259,7 @@ class ConflictDetectionTest(unittest.TestCase):
             subject=_sid(),
             kind=kind,
             value=value,
+            assertion_nature=m.AssertionNature.NORMATIVE,
             evidence=(_ref(),),
             authority=_accepted_binding(),
             trust=m.TrustState.ESTABLISHED,
@@ -312,6 +315,7 @@ class ConflictDetectionTest(unittest.TestCase):
             relationship_id=m.RelationshipId("r-sup"),
             source=_sid("src/b.py"),
             kind=m.RelationshipKind.SUPERSEDES,
+        assertion_nature=m.AssertionNature.NORMATIVE,
             target=_sid(),
             evidence=(_ref(),),
             authority=_accepted_binding(),
@@ -438,6 +442,7 @@ class AnswerHelpersTest(unittest.TestCase):
     def test_requirements_for_claim_states(self):
         base = dict(
             claim_id=m.ClaimId("c-1"), subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("s", ()), evidence=(_ref(),),
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
         )

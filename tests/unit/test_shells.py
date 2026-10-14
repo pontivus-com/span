@@ -222,6 +222,7 @@ class FixtureAgentTest(unittest.TestCase):
         candidate = m.CandidateSemanticClaim(
             subject=sid,
             kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("processes payments", ()),
             evidence=(_ref("README.md"),),
             basis=m.SemanticBasis(
@@ -242,6 +243,7 @@ class FixtureAgentTest(unittest.TestCase):
         candidate = m.CandidateSemanticClaim(
             subject=sid,
             kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("processes payments", ()),
             evidence=(_ref("README.md"),),
             basis=m.SemanticBasis(
@@ -279,6 +281,7 @@ def _claim(cid="c-9", locator="src/payments.py"):
         claim_id=m.ClaimId(cid),
         subject=sid,
         kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does X", ()),
         evidence=(_ref("src/payments.py"),),
         trust=m.TrustState.ESTABLISHED,
@@ -291,8 +294,8 @@ class SqliteStoreTest(unittest.TestCase):
     def test_schema_version(self):
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(4))
-            self.assertEqual(SCHEMA_VERSION, 4)
+            self.assertEqual(store.schema_version(), m.SchemaVersion(5))
+            self.assertEqual(SCHEMA_VERSION, 5)
         finally:
             store.close()
 
@@ -408,6 +411,7 @@ class SqliteStoreTest(unittest.TestCase):
                 subject=claim.subject,
                 kind=claim.kind,
                 value=claim.value,
+                assertion_nature=claim.assertion_nature,
                 evidence=claim.evidence,
                 trust=claim.trust,
                 freshness=claim.freshness,
@@ -453,6 +457,7 @@ class SqliteStoreTest(unittest.TestCase):
                     claim_id=m.ClaimId(f"c-{n}"),
                     subject=subject,
                     kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(f"s{n}", ()),
                     evidence=(),
                     basis=m.SemanticBasis(

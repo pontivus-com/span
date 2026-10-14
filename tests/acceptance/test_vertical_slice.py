@@ -131,6 +131,7 @@ def _payments_candidates():
         claims=(
             m.CandidateSemanticClaim(
                 subject=sid, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("processes payments", (cap,)),
                 evidence=(_ref("README.md"),),
                 candidate_authority=_accepted(
@@ -140,18 +141,21 @@ def _payments_candidates():
             ),
             m.CandidateSemanticClaim(
                 subject=sid, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("sends receipts", ()),
                 evidence=(_ref("README.md"),),
                 basis=m.SemanticBasis(interp, "mentioned in README"),
             ),
             m.CandidateSemanticClaim(
                 subject=sid, kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.CapabilityMembershipValue(cap, "processor"),
                 evidence=(_ref("src/payments.py"),),
                 basis=m.SemanticBasis(interp, "module docstring"),
             ),
             m.CandidateSemanticClaim(
                 subject=sid, kind=m.ClaimKind.RESPONSIBILITY,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.ResponsibilityValue(
                     "captures charges", "checkout path"
                 ),
@@ -160,6 +164,7 @@ def _payments_candidates():
             ),
             m.CandidateSemanticClaim(
                 subject=sid, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.OwnershipCustodyValue(
                     _sid("team/payments", m.SubjectKind.COMPONENT),
                     m.OwnershipRole.OWNER,
@@ -173,6 +178,7 @@ def _payments_candidates():
             ),
             m.CandidateSemanticClaim(
                 subject=sid, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.InvariantConstraintValue(
                     "refunds never exceed the captured amount",
                     "refund path",
@@ -199,6 +205,7 @@ def _payments_candidates():
                     "src/payments.py:Handler", m.SubjectKind.CODE_SYMBOL
                 ),
                 kind=m.RelationshipKind.MEMBER_OF,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 target=sid,
                 evidence=(_ref("src/payments.py"),),
                 basis=m.SemanticBasis(interp, "Handler defined in payments"),
@@ -508,6 +515,7 @@ class VerticalSliceTest(unittest.TestCase):
             self.assertIsInstance(pending, PendingInterpretation)
             bad = m.CandidateSemanticClaim(
                 subject=_sid("src/payments.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("ghost", ()),
                 evidence=(
                     m.EvidenceRef(

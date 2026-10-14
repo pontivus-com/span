@@ -70,6 +70,7 @@ def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("serves tools", ()),
         evidence=(_ref("README.md"),),
         candidate_authority=m.CandidateAuthority(
@@ -555,6 +556,7 @@ class DispatchTest(unittest.TestCase):
                             canonical_locator="nope",
                         ),
                         kind=m.ClaimKind.PURPOSE,
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue("stray", ()),
                         evidence=(_ref("src/tools.py"),),
                         basis=m.SemanticBasis(

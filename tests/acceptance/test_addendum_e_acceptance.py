@@ -315,6 +315,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 claim = m.CandidateSemanticClaim(
                     candidate_key="billing-purpose",
                     subject=billing, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(summary="billing computes charges"),
                     evidence=(ref,),
                     basis=m.SemanticBasis(
@@ -325,6 +326,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 rel = m.CandidateSemanticRelationship(
                     candidate_key="billing-depends-shipping",
                     source=billing, kind=m.RelationshipKind.DEPENDS_ON,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     target=shipping, evidence=(ref,),
                     basis=m.SemanticBasis(
                         derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
@@ -366,6 +368,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 claim = m.CandidateSemanticClaim(
                     candidate_key="shipping-purpose",
                     subject=shipping, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(summary="shipping fulfills orders"),
                     evidence=(ref,),
                     basis=m.SemanticBasis(
@@ -481,6 +484,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 rclaim = m.CandidateSemanticClaim(
                     candidate_key=f"billing-purpose-r{_refresh_round}",
                     subject=billing, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(summary="billing computes charges refreshed"),
                     evidence=(runits[0],),
                     basis=m.SemanticBasis(
@@ -1073,6 +1077,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         claim = m.CandidateSemanticClaim(
             candidate_key="nav-purpose", subject=file_a,
             kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue(summary="solo_a holds navigation state"),
             evidence=(refs[0],),
             basis=_basis("mapping admits nav purpose", (refs[0],)),
@@ -1353,6 +1358,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     m.CandidateSemanticClaim(
                         candidate_key="nav-purpose", subject=file_a,
                         kind=m.ClaimKind.PURPOSE,
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue(summary="solo_a holds state"),
                         evidence=(refs[0],),
                         basis=_basis("mapping admits nav purpose", (refs[0],)),
@@ -1403,6 +1409,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     m.CandidateSemanticClaim(
                         candidate_key="nav-purpose-again", subject=file_a,
                         kind=m.ClaimKind.PURPOSE,
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue(summary="solo_a holds state"),
                         evidence=(rrefs[0],),
                         basis=_basis("re-examined after churn", (rrefs[0],)),

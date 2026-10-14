@@ -199,6 +199,7 @@ def _purpose_claim(files=None, key="purpose"):
     return m.CandidateSemanticClaim(
         candidate_key=key,
         subject=_sid("src/parcel.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Sorts parcels", ()),
         evidence=(_ref("README.md", files),),
         candidate_authority=_authority(
@@ -215,6 +216,7 @@ def _ownership_claim(files=None, key="ownership"):
     return m.CandidateSemanticClaim(
         candidate_key=key,
         subject=_sid("src/parcel.py"), kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+        assertion_nature=m.AssertionNature.NORMATIVE,
         value=m.OwnershipCustodyValue(
             _sid("team/parcel"), m.OwnershipRole.OWNER,
             m.OwnershipExclusivity.EXCLUSIVE,
@@ -666,6 +668,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
             replacement = m.CandidateSemanticClaim(
                 candidate_key="purpose-v2",
                 subject=root, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts parcels fast", ()),
                 evidence=(_ref("README.md", grown),),
                 basis=m.SemanticBasis(
@@ -723,6 +726,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
                             candidate_key="x",
                             subject=_sid("src/events.py"),
                             kind=m.ClaimKind.PURPOSE,
+                            assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.PurposeValue("emits events", ()),
                             evidence=(_ref("src/events.py"),),
                             basis=m.SemanticBasis(
@@ -854,6 +858,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("shared-x"), subject=root,
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts parcels", ()),
                 evidence=(_ref("README.md"),),
                 basis=m.SemanticBasis(
@@ -921,6 +926,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("shared-y"), subject=root,
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts parcels", ()),
                 evidence=(_ref("README.md"),),
                 basis=m.SemanticBasis(
@@ -1026,6 +1032,7 @@ class QuestionIsolationTest(unittest.TestCase):
                             candidate_key="purpose",
                             subject=root,
                             kind=m.ClaimKind.PURPOSE,
+                            assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.PurposeValue(
                                 "Sorts parcels", ()
                             ),
@@ -1128,6 +1135,7 @@ class SemanticPremiseTest(unittest.TestCase):
                             candidate_key="consumer",
                             subject=sid,
                             kind=m.ClaimKind.RESPONSIBILITY,
+                            assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.ResponsibilityValue(
                                 "owns parcel state"
                             ),
@@ -1223,6 +1231,7 @@ class SemanticPremiseTest(unittest.TestCase):
         consumer = m.CandidateSemanticClaim(
             candidate_key="consumer",
             subject=sid, kind=m.ClaimKind.RESPONSIBILITY,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.ResponsibilityValue("owns parcel state"),
             evidence=(units["src/store.py"],),
             basis=m.SemanticBasis(
@@ -1250,6 +1259,7 @@ class SemanticPremiseTest(unittest.TestCase):
         premise = m.CandidateSemanticClaim(
             candidate_key="premise",
             subject=sid, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("Sorts parcels", ()),
             evidence=(units["README.md"],),
             basis=m.SemanticBasis(
@@ -1289,6 +1299,7 @@ class CyclesBoundsTest(unittest.TestCase):
             leaf = m.CandidateSemanticClaim(
                 candidate_key="leaf",
                 subject=sid, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("emits events", ()),
                 evidence=(units["src/events.py"],),
                 basis=m.SemanticBasis(
@@ -1301,6 +1312,7 @@ class CyclesBoundsTest(unittest.TestCase):
             head = m.CandidateSemanticClaim(
                 candidate_key="head",
                 subject=sid, kind=m.ClaimKind.RESPONSIBILITY,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.ResponsibilityValue("notifies downstream"),
                 evidence=(units["src/events.py"],),
                 basis=m.SemanticBasis(
@@ -1341,6 +1353,7 @@ class CyclesBoundsTest(unittest.TestCase):
                 claim = m.SemanticClaim(
                     claim_id=m.ClaimId(f"link-{n}"), subject=sid,
                     kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(f"link {n}", ()),
                     evidence=(_ref("README.md"),),
                     freshness=m.Freshness(
@@ -1409,6 +1422,7 @@ class ReconcileFailureTest(unittest.TestCase):
                 candidate_key="bad",
                 subject=_sid("src/failures.py"),
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("x", ()),
                 evidence=(
                     m.EvidenceRef(
@@ -1469,6 +1483,7 @@ class AuthorityConflictTest(unittest.TestCase):
                             candidate_key="rival",
                             subject=_sid("src/parcel.py"),
                             kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                            assertion_nature=m.AssertionNature.NORMATIVE,
                             value=m.OwnershipCustodyValue(
                                 _sid("team/rival"),
                                 m.OwnershipRole.OWNER,
@@ -1529,6 +1544,7 @@ class AuthorityConflictTest(unittest.TestCase):
                 candidate_key="bad",
                 subject=_sid("src/parcel.py"),
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts parcels", ()),
                 evidence=(units[loc],),
                 candidate_authority=m.CandidateAuthority(
@@ -1574,6 +1590,7 @@ class PaginationContinuationTest(unittest.TestCase):
                             candidate_key=f"p{n}",
                             subject=_sid("src/parcel.py"),
                             kind=m.ClaimKind.PURPOSE,
+                            assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.PurposeValue(f"Sorts parcels {n}", ()),
                             evidence=(_ref("README.md"),),
                             basis=m.SemanticBasis(
@@ -1607,8 +1624,8 @@ class PaginationContinuationTest(unittest.TestCase):
             )
             self.assertIsInstance(first, m.SemanticAnswer)
             token = first.bound_info.continuation_token
-            self.assertTrue(token.startswith("pg:"))
-            self.assertEqual(len(token.split(":")), 4)
+            self.assertTrue(token.startswith("pgq:"))
+            self.assertEqual(len(token.split(":")), 5)
             seen = [c.claim_id.value for c in first.content.claims]
             while token is not None:
                 page = ops.explain(
@@ -1783,6 +1800,7 @@ class LegacyUpgradeTest(unittest.TestCase):
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("leg-1"), subject=sid,
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts parcels", ()),
                 evidence=(_ref("README.md"),),
                 trust=m.TrustState.UNRESOLVED,
@@ -1832,8 +1850,8 @@ class LegacyUpgradeTest(unittest.TestCase):
                 con.close()
             store = SqliteSemanticStore(db)
             try:
-                self.assertEqual(store.schema_version(), m.SchemaVersion(4))
-                self.assertEqual(SCHEMA_VERSION, 4)
+                self.assertEqual(store.schema_version(), m.SchemaVersion(5))
+                self.assertEqual(SCHEMA_VERSION, 5)
                 page = store.load_claims(REPO, (sid,), (), _bounds())
                 self.assertEqual(
                     [c.claim_id.value for c in page.items], ["leg-1"]
@@ -1909,6 +1927,7 @@ class SubstantiveOracleMustFailTest(unittest.TestCase):
                             candidate_key="wrong-owner",
                             subject=_sid("src/parcel.py"),
                             kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                            assertion_nature=m.AssertionNature.NORMATIVE,
                             value=m.OwnershipCustodyValue(
                                 _sid("team/ghost"),
                                 m.OwnershipRole.OWNER,

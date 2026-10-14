@@ -20,6 +20,8 @@ from span.service.answers import (
     _bound_info,
     _conflicts_for,
     _select_answer_items,
+    coverage_counts_for,
+    state_explanation_for,
 )
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
@@ -33,6 +35,8 @@ from span.service.interpretation import (
 )
 from span.service.questions import (
     _paged_question_views,
+    derive_service_question,
+    effective_impact_slice,
 )
 from span.service.refs import (
     _claim_ref,
@@ -211,8 +215,10 @@ def _compose_impact_answer(
     change_description: str | None,
     affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = (),
     seeds: tuple[m.EvidenceRef, ...] = (),
-    suspended: tuple[str, ...] = (),
+    suspended: tuple[m.SubjectId, ...] = (),
     page_token: str | None = None,
+    question_selection: m.SemanticQuestionSelection | None = None,
+    root_question: m.SemanticQuestionScope | None = None,
 ) -> m.SemanticAnswer | PendingInterpretation:
     # change_description is carried on suspend/resume for agent context but
     # never text-mined: proposal-content inference would violate AP-01.
@@ -222,38 +228,92 @@ def _compose_impact_answer(
         affected_assertions=affected_assertions,
     )
     sid = subject.subject_id
+    # S4 §5.4: every IMPACT question — default or explicit — carries the
+    # discriminated slice. Frontier subjects reuse the original root,
+    # class, and exact slice with only the subject changed; anchors pass
+    # verbatim as question_terms and are never mined from prose.
+    if question_selection is not None:
+        _host_slice = question_selection.question_slice
+        _basis = (
+            question_selection.materiality_basis or "IMPACT question-local"
+        )
+        _anchors = tuple(question_selection.question_anchors)
+    else:
+        _host_slice = sid.canonical_locator
+        _basis = "IMPACT question-local"
+        _anchors = ()
+    _eff_slice = effective_impact_slice(
+        _host_slice, change_kind, change_description, affected_assertions
+    )
+    _root = (
+        root_question.scope_root
+        if root_question is not None
+        else sid
+    )
+    _primary_scope = m.SemanticQuestionScope(
+        scope_root=_root, subject=sid,
+        question_class=m.SemanticQuestionClass.CQ_08,
+        question_slice=_eff_slice, materiality_basis=_basis,
+    )
     claims, relationships, _, _ = _load_subject_state(
         repository_id, sid, store=store, bounds=bounds,
         page_token=page_token if not suspended else None,
     )
-    if not claims and not relationships:
-        if sid.canonical_locator not in suspended:
-            full = _resolve_exact_subject(
-                repository_id, sid, structural=structural, bounds=bounds
+    # S4: question-aware gate (Addendum B B.7). The frontier subject's
+    # derived question (original root, class, exact slice, subject
+    # changed) needs recorded non-PENDING coverage: recorded PENDING is
+    # admitted-but-unexamined and still needs its first examination,
+    # while ANSWERED/OPEN/NOT_APPLICABLE serve as qualified views with
+    # reassessment through explicit refresh. Claim existence alone
+    # never counts.
+    try:
+        _covs = store.load_all_question_coverages(
+            repository_id, _root, (sid,),
+        )
+    except Exception:
+        _covs = ()
+    _covered = any(
+        _c.question is not None
+        and _c.question.scope_root == _root
+        and _c.question.subject == sid
+        and _c.question.question_class
+        is m.SemanticQuestionClass.CQ_08
+        and _c.question.question_slice == _eff_slice
+        and _c.disposition
+        is not m.SemanticQuestionDisposition.PENDING
+        for _c in _covs
+    )
+    if not _covered and sid not in suspended:
+        # Resolve semantic-only frontier subjects through shared
+        # resolver rather than structural identity alone.
+        full = _resolve_exact_subject(
+            repository_id, sid, structural=structural, bounds=bounds
+        )
+        if full is not None:
+            task = prepare_interpretation_task(
+                repository_id, full, structural=structural,
+                evidence=evidence, bounds=bounds, state=state,
+                authority_seeds=seeds,
+                operation_intent=m.SemanticIntent.IMPACT,
+                question_slice=_eff_slice,
+                proposed_change=proposal,
+                question_terms=_anchors,
             )
-            if full is not None:
-                task = prepare_interpretation_task(
-                    repository_id, full, structural=structural,
-                    evidence=evidence, bounds=bounds, state=state,
-                    authority_seeds=seeds,
-                    operation_intent=m.SemanticIntent.IMPACT,
-                    question_slice=full.subject_id.canonical_locator,
-                    proposed_change=proposal,
-                )
-                return _suspend(
-                    op="impact", repository_id=repository_id,
-                    subject=full, task=task, seeds=seeds,
-                    bounds=bounds, state=state, resolution=resolution,
-                    scope=(subject,),
-                    suspended=suspended + (sid.canonical_locator,),
-                    change_kind=change_kind.value,
-                    change_description=change_description,
-                    affected_assertions=affected_assertions,
-                    operation_intent="IMPACT",
-                    question_slice=full.subject_id.canonical_locator,
-                    continuations=continuations,
-                )
-        claims, relationships = (), ()
+            return _suspend(
+                op="impact", repository_id=repository_id,
+                subject=full, task=task, seeds=seeds,
+                bounds=bounds, state=state, resolution=resolution,
+                scope=(subject,),
+                suspended=suspended + (sid,),
+                change_kind=change_kind.value,
+                change_description=change_description,
+                affected_assertions=affected_assertions,
+                operation_intent="IMPACT",
+                question_slice=_eff_slice,
+                continuations=continuations,
+                root_question=_primary_scope,
+                question_selection=question_selection,
+            )
     claims, relationships = _refresh_view(
         repository_id, claims, relationships,
         evidence=evidence, store=store, bounds=bounds,
@@ -266,29 +326,42 @@ def _compose_impact_answer(
     except ValueError:
         reach = None
     visited: list[m.SubjectId] = [sid]
-    via_edge: dict[str, m.StructuralEdge | None] = {
-        sid.canonical_locator: None
-    }
+    via_edge: dict[m.SubjectId, m.StructuralEdge | None] = {sid: None}
     if reach is not None:
         for node in reach.items:
-            locator = node.subject.canonical_locator
-            if locator not in [v.canonical_locator for v in visited]:
+            if node.subject not in visited:
                 if len(visited) >= bounds.max_subjects:
                     break
                 visited.append(node.subject)
-                via_edge[locator] = node.via
-    node_claims: dict[str, tuple[m.SemanticClaim, ...]] = {}
-    node_rels: dict[str, tuple[m.SemanticRelationship, ...]] = {}
+                via_edge[node.subject] = node.via
+    node_claims: dict[m.SubjectId, tuple[m.SemanticClaim, ...]] = {}
+    node_rels: dict[m.SubjectId, tuple[m.SemanticRelationship, ...]] = {}
     for visited_id in visited:
-        locator = visited_id.canonical_locator
-        if locator == sid.canonical_locator:
-            node_claims[locator] = claims
-            node_rels[locator] = relationships
+        if visited_id == sid:
+            node_claims[visited_id] = claims
+            node_rels[visited_id] = relationships
             continue
         loaded_c, loaded_r, _, _ = _load_subject_state(
             repository_id, visited_id, store=store, bounds=bounds
         )
-        if not loaded_c and not loaded_r and locator not in suspended:
+        try:
+            _v_covs = store.load_all_question_coverages(
+                repository_id, _root, (visited_id,),
+            )
+        except Exception:
+            _v_covs = ()
+        _v_covered = any(
+            _c.question is not None
+            and _c.question.scope_root == _root
+            and _c.question.subject == visited_id
+            and _c.question.question_class
+            is m.SemanticQuestionClass.CQ_08
+            and _c.question.question_slice == _eff_slice
+            and _c.disposition
+            is not m.SemanticQuestionDisposition.PENDING
+            for _c in _v_covs
+        )
+        if not _v_covered and visited_id not in suspended:
             full = _resolve_exact_subject(
                 repository_id, visited_id, structural=structural,
                 bounds=bounds,
@@ -299,24 +372,27 @@ def _compose_impact_answer(
                     evidence=evidence, bounds=bounds, state=state,
                     authority_seeds=seeds,
                     operation_intent=m.SemanticIntent.IMPACT,
-                    question_slice=full.subject_id.canonical_locator,
+                    question_slice=_eff_slice,
                     proposed_change=proposal,
+                    question_terms=_anchors,
                 )
                 return _suspend(
                     op="impact", repository_id=repository_id,
                     subject=full, task=task, seeds=seeds,
                     bounds=bounds, state=state, resolution=resolution,
                     scope=(subject,),
-                    suspended=suspended + (locator,),
+                    suspended=suspended + (visited_id,),
                     change_kind=change_kind.value,
                     change_description=change_description,
                     affected_assertions=affected_assertions,
                     operation_intent="IMPACT",
-                    question_slice=full.subject_id.canonical_locator,
+                    question_slice=_eff_slice,
                     continuations=continuations,
+                    root_question=_primary_scope,
+                    question_selection=question_selection,
                 )
-        node_claims[locator] = loaded_c
-        node_rels[locator] = loaded_r
+        node_claims[visited_id] = loaded_c
+        node_rels[visited_id] = loaded_r
     target_rels = [
         r for r in relationships
         if r.source == sid or r.target == sid
@@ -327,11 +403,10 @@ def _compose_impact_answer(
     )
     items: list[m.ImpactItem] = []
     for visited_id in visited:
-        locator = visited_id.canonical_locator
-        if locator == sid.canonical_locator:
+        if visited_id == sid:
             continue
-        claims_here = node_claims[locator]
-        rels_here = node_rels[locator]
+        claims_here = node_claims[visited_id]
+        rels_here = node_rels[visited_id]
         linking = [
             r for r in list(rels_here) + target_rels
             if (r.source == sid and r.target == visited_id)
@@ -349,7 +424,7 @@ def _compose_impact_answer(
                 m.TrustState.PARTIAL,
             )
         ]
-        edge = via_edge.get(locator)
+        edge = via_edge.get(visited_id)
         if questionable:
             establishment = m.ImpactEstablishment.PARTIAL_OR_UNRESOLVED
             basis = m.SemanticBasis(
@@ -413,14 +488,14 @@ def _compose_impact_answer(
         ]
     )
     all_claims = list(claims) + [
-        c for loc, cs in node_claims.items()
+        c for node_id, cs in node_claims.items()
         for c in cs
-        if loc != sid.canonical_locator
+        if node_id != sid
     ]
     all_rels = list(relationships) + [
-        r for loc, rs in node_rels.items()
+        r for node_id, rs in node_rels.items()
         for r in rs
-        if loc != sid.canonical_locator
+        if node_id != sid
     ]
     conflicts_all = _conflicts_for(
         repository_id, tuple(all_claims), tuple(all_rels), store=store
@@ -513,6 +588,11 @@ def _compose_impact_answer(
         evidence=tuple(ref for c in kept_claims for ref in c.evidence),
         resolution_requirements=tuple(unresolved),
         bound_info=_bound_info(bounds, returned, truncated, category, None),
+        state_explanation=state_explanation_for(
+            tuple(kept_claims), tuple(kept_rels),
+            coverage=coverage_counts_for(views),
+            bounds=(bounds.max_results, truncated),
+        ),
     )
 
 def impact(
@@ -570,6 +650,80 @@ def impact(
         raise ValueError(
             "change_kind OTHER requires a change_description (§11.10)"
         )
+    # S4 §5.4 IMPACT discriminator: different change proposals never
+    # share one persisted identity — for explicit AND default questions.
+    # Host slice/basis/anchors only; service derives root/subject/class.
+    _sel_scope, _sel_anchors = derive_service_question(
+        subject=resolution.candidates[0].subject,
+        scope_root=resolution.candidates[0].subject.subject_id,
+        question_class=m.SemanticQuestionClass.CQ_08,
+        selection=request.question_selection,
+        default_slice=resolution.candidates[0].subject.subject_id.canonical_locator,
+        default_basis="IMPACT question-local",
+    )
+    _eff_slice = effective_impact_slice(
+        _sel_scope.question_slice,
+        request.change_kind,
+        request.change_description,
+        request.affected_assertions,
+    )
+    _eff_scope = m.SemanticQuestionScope(
+        scope_root=_sel_scope.scope_root,
+        subject=_sel_scope.subject,
+        question_class=_sel_scope.question_class,
+        question_slice=_eff_slice,
+        materiality_basis=_sel_scope.materiality_basis,
+    )
+    try:
+        _existing = store.load_all_question_coverages(
+            request.repository_id, _eff_scope.scope_root,
+            (_eff_scope.subject,),
+        )
+    except Exception:
+        _existing = ()
+    _found = any(
+        _c.question is not None
+        and _c.question.scope_root == _eff_scope.scope_root
+        and _c.question.subject == _eff_scope.subject
+        and _c.question.question_class == _eff_scope.question_class
+        and _c.question.question_slice == _eff_scope.question_slice
+        for _c in _existing
+    )
+    if not _found:
+        _task = prepare_interpretation_task(
+            request.repository_id,
+            resolution.candidates[0].subject,
+            structural=structural, evidence=evidence, bounds=bounds,
+            state=state, authority_seeds=authority_seeds,
+            operation_intent=m.SemanticIntent.IMPACT,
+            question_slice=_eff_slice,
+            proposed_change=m.ProposedChange(
+                change_kind=request.change_kind,
+                change_description=request.change_description,
+                affected_assertions=request.affected_assertions,
+            ),
+            store=store, scope_root=_eff_scope.scope_root,
+            question_class=_eff_scope.question_class,
+            materiality_basis=_eff_scope.materiality_basis,
+            question_terms=_sel_anchors,
+        )
+        return _suspend(
+            op="impact", repository_id=request.repository_id,
+            subject=resolution.candidates[0].subject, task=_task,
+            seeds=authority_seeds, bounds=bounds, state=state,
+            resolution=resolution, scope=(
+                resolution.candidates[0].subject,
+            ),
+            suspended=(),
+            change_kind=request.change_kind.value,
+            change_description=request.change_description,
+            affected_assertions=request.affected_assertions,
+            operation_intent="IMPACT",
+            question_slice=_eff_slice,
+            continuations=continuations,
+            root_question=_eff_scope,
+            question_selection=request.question_selection,
+        )
     return _compose_impact_answer(
         request.repository_id, resolution.candidates[0].subject, resolution,
         structural=structural, evidence=evidence, store=store,
@@ -579,4 +733,6 @@ def impact(
         affected_assertions=request.affected_assertions,
         seeds=authority_seeds, suspended=(),
         page_token=request.page_token,
+        question_selection=request.question_selection,
+        root_question=None,
     )

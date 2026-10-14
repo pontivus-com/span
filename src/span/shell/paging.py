@@ -14,12 +14,16 @@ __all__ = [
     "next_page_token",
     "parse_service_token",
     "format_service_token",
+    "parse_question_token",
+    "format_question_token",
+    "question_digest",
     "format_versioned_token",
     "parse_versioned_token",
     "paginate",
 ]
 
 _PREFIX = "pg:"
+_QUESTION_PREFIX = "pgq:"
 _VERSIONED_PREFIX = "pgv:"
 
 
@@ -46,43 +50,59 @@ def next_page_token(offset: int) -> str:
 def parse_service_token(page_token: str | None) -> tuple[int, int, int]:
     """Decode an answer-level token to per-list offsets (fail closed).
 
-    Answer tokens are ``pg:<claims_skip>:<rels_skip>:<questions_skip>``.
-    An absent token begins at zero. Pre-cutover two-offset tokens are
-    rejected with a typed invalid-token error; no dual-format fallback.
+    Addendum I S4 §5.4 cutover: service answer cursors use the single
+    grammar `pgq:<query_digest>:<claims_offset>:<relationships_offset>:
+    <questions_offset>`. Old `pg:` service cursors are rejected with a
+    restart-listing diagnostic; no legacy fallback. Plain single-offset
+    store cursors (`pg:<offset>`) and structural `pgv` cursors retain
+    their distinct contracts and are never interchanged here.
     """
     if page_token is None:
         return (0, 0, 0)
-    if not page_token.startswith(_PREFIX):
-        raise ValueError(f"unknown page token: {page_token}")
-    parts = page_token[len(_PREFIX):].split(":")
-    try:
-        if len(parts) == 3:
-            offsets = (int(parts[0]), int(parts[1]), int(parts[2]))
-        else:
-            raise ValueError(f"unknown page token: {page_token}")
-    except ValueError:
-        raise ValueError(f"unknown page token: {page_token}") from None
-    if offsets[0] < 0 or offsets[1] < 0 or offsets[2] < 0:
-        raise ValueError(f"unknown page token: {page_token}")
-    return offsets
+    if page_token.startswith(_QUESTION_PREFIX):
+        # New grammar handled by parse_question_token; for callers that
+        # only need offsets without digest binding, decode offsets here.
+        try:
+            _, c, r, q = parse_question_token(page_token)
+        except ValueError:
+            raise ValueError(
+                f"unknown page token: {page_token}; restart the listing "
+                "from page one with page_token null"
+            ) from None
+        return (c, r, q)
+    # Old service cursors rejected atomically.
+    raise ValueError(
+        f"unknown page token: {page_token}; service cursors use "
+        "pgq:<query_digest>:<claims>:<relationships>:<questions>; "
+        "restart the listing from page one with page_token null"
+    )
 
 
-def format_service_token(
-    claims_next: int | None, rels_next: int | None,
+def question_digest(*parts: str) -> str:
+    """Digest binding pages to their selected question (S4 §5.4).
+
+    Covers operation, repository, target identity, service-derived
+    question identity or default marker, and listing-affecting filters.
+    16 hex chars of sha256 over exact UTF-8 bytes. Binds pages to the
+    selected question; does not promise snapshot isolation.
+    """
+    import hashlib as _hashlib
+
+    payload = "\x00".join(parts)
+    return _hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def format_question_token(
+    digest: str,
+    claims_next: int | None,
+    rels_next: int | None,
     questions_next: int | None = 0,
 ) -> str | None:
-    """Encode per-list next offsets.
-
-    Offsets always advance past shown items, including on exhausted
-    sides: re-querying windows from the consumed position, so later
-    arrivals on an exhausted side still surface. ``None`` only when
-    all sides are exhausted.
-    """
+    """Encode per-list offsets bound to a question digest (S4 §5.4)."""
     if (
         claims_next is None and rels_next is None
         and (questions_next is None or questions_next == 0)
     ):
-        # Preserve v0.6 two-None fast path only when no question page.
         if questions_next in (None, 0):
             return None
     left = claims_next if claims_next is not None else 0
@@ -92,7 +112,71 @@ def format_service_token(
         claims_next is None and rels_next is None
     ):
         return None
-    return f"{_PREFIX}{left}:{right}:{qskip}"
+    if not digest or ":" in digest:
+        raise ValueError(f"invalid question digest: {digest!r}")
+    return f"{_QUESTION_PREFIX}{digest}:{left}:{right}:{qskip}"
+
+
+def parse_question_token(
+    page_token: str | None,
+) -> tuple[str, int, int, int]:
+    """Decode pgq token to (digest, claims, rels, questions)."""
+    if page_token is None:
+        raise ValueError("missing pgq page token")
+    if not page_token.startswith(_QUESTION_PREFIX):
+        raise ValueError(
+            f"unknown page token: {page_token}; restart the listing "
+            "from page one with page_token null"
+        )
+    body = page_token[len(_QUESTION_PREFIX):]
+    parts = body.split(":")
+    if len(parts) != 4:
+        raise ValueError(
+            f"unknown page token: {page_token}; restart the listing "
+            "from page one with page_token null"
+        )
+    digest, c_text, r_text, q_text = parts
+    try:
+        c, r, q = int(c_text), int(r_text), int(q_text)
+    except ValueError:
+        raise ValueError(
+            f"unknown page token: {page_token}; restart the listing "
+            "from page one with page_token null"
+        ) from None
+    if not digest or c < 0 or r < 0 or q < 0:
+        raise ValueError(
+            f"unknown page token: {page_token}; restart the listing "
+            "from page one with page_token null"
+        )
+    return digest, c, r, q
+
+
+def format_service_token(
+    claims_next: int | None, rels_next: int | None,
+    questions_next: int | None = 0,
+) -> str | None:
+    """Encode per-list offsets (I S4 §5.4 cutover: pgq only).
+
+    Service answer cursors use the single grammar
+    `pgq:<query_digest>:<claims>:<relationships>:<questions>`. Old `pg:`
+    service cursors are rejected. This wrapper emits pgq with a default
+    digest for non-question-bound listings; question-bound callers must
+    use format_question_token with the real digest.
+    """
+    if (
+        claims_next is None and rels_next is None
+        and (questions_next is None or questions_next == 0)
+    ):
+        if questions_next in (None, 0):
+            return None
+    left = claims_next if claims_next is not None else 0
+    right = rels_next if rels_next is not None else 0
+    qskip = questions_next if questions_next is not None else 0
+    if qskip == 0 and left == 0 and right == 0 and (
+        claims_next is None and rels_next is None
+    ):
+        return None
+    return format_question_token("default", left, right, qskip)
 
 
 def format_versioned_token(version: str, offset: int) -> str:

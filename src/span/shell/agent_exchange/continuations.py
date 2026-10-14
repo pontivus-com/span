@@ -45,7 +45,10 @@ class SuspendedOperation:
     known_subject_ids: tuple[m.SubjectId, ...] = ()
     seeds: tuple[m.EvidenceRef, ...] = ()
     reissues: int = 0
-    suspended: tuple[str, ...] = ()
+    # Frontier subjects already suspended, as full canonical identities:
+    # two distinct SubjectIds never suppress each other even when they
+    # share a locator string.
+    suspended: tuple[m.SubjectId, ...] = ()
     change_kind: str | None = None
     change_description: str | None = None
     affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
@@ -60,10 +63,12 @@ class SuspendedOperation:
     establish_baseline: bool = False
     target_scope: m.EvidenceScope = _field(default_factory=m.EvidenceScope)
     target_id: m.TargetId | None = None
+    root_question: m.SemanticQuestionScope | None = None
+    question_selection: m.SemanticQuestionSelection | None = None
 
     def __post_init__(self) -> None:
         if self.op not in (
-            "explain", "authority", "refresh", "trace", "status", "impact",
+            "explain", "authority", "refresh", "trace", "impact",
             "initialize_target",
         ):
             raise ValueError(f"unknown suspended op: {self.op}")

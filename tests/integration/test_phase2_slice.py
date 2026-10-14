@@ -221,6 +221,7 @@ class Phase2SliceTest(unittest.TestCase):
                             m.CandidateSemanticClaim(
                                 subject=orders,
                                 kind=m.ClaimKind.PURPOSE,
+                                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                                 value=m.PurposeValue("takes orders", ()),
                                 evidence=(
                                     _ref(repo_id, "README.md", files),
@@ -248,6 +249,7 @@ class Phase2SliceTest(unittest.TestCase):
                             m.CandidateSemanticClaim(
                                 subject=orders,
                                 kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                                assertion_nature=m.AssertionNature.NORMATIVE,
                                 value=m.OwnershipCustodyValue(
                                     m.SubjectId(
                                         repository_id=repo_id,

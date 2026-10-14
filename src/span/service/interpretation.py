@@ -80,6 +80,300 @@ class InterpretationTask:
     observations: tuple[m.StructuralObservation, ...]
 
 
+def _project_excerpts(
+    units: tuple[m.EvidenceUnit, ...],
+    question_terms: tuple[str, ...],
+    subject: m.Subject,
+    delivery_budget: int,
+    structural_spans: dict[str, tuple[int, int]] | None = None,
+) -> tuple[
+    tuple[m.EvidenceUnit, ...], tuple[str, ...],
+    tuple[m.ResolutionRequirement, ...],
+]:
+    """Bounded excerpt delivery (Addendum I S7 §5.7).
+
+    Keeps canonical envelope and item shapes. Full-source
+    identity/fingerprint versus delivered range. Anchors are literal
+    substrings matched exactly as discovery does; no tokenization or
+    expansion. Exact provider structural spans (1-based inclusive line
+    ranges keyed by evidence locator), when supplied, select the
+    delivered range directly; no current provider supplies typed spans,
+    so the literal-substring path below is the ordinary one. Delivers
+    one contiguous enclosing line range for selected hits if it fits;
+    else maximal prefix of hits in line order. Reports omissions
+    deterministically in scope_boundaries strings with at most
+    8 coalesced range lines plus one summary line. Never silently cuts
+    prose and labels it complete. Byte accounting is exact UTF-8 bytes
+    of delivered content plus the canonical range metadata. With no
+    grounded range, retains full fitting unit or reports missing
+    bounded evidence via omission lines. A single line that cannot fit
+    produces a named evidence-delivery requirement instead of a silent
+    cut.
+    """
+    import dataclasses as _dc
+    import json as _json
+
+    def _range_meta(start: int, end: int, total: int) -> int:
+        return len(
+            _json.dumps(
+                m.to_canonical(
+                    m.EvidenceLineRange(
+                        start_line=start,
+                        end_line=end,
+                        total_lines=total,
+                    )
+                ),
+                sort_keys=True,
+            ).encode("utf-8")
+        )
+
+    def _delivery_requirement(
+        unit: m.EvidenceUnit, start: int, end: int, total: int
+    ) -> m.ResolutionRequirement:
+        return m.ResolutionRequirement(
+            kind=m.ResolutionKind.MISSING_EVIDENCE,
+            subject_or_claim=subject.subject_id,
+            description=(
+                f"evidence delivery: {unit.evidence_ref.locator} "
+                f"lines {start}-{end} of {total} exceed the delivery "
+                "budget; inspect the file directly and cite its "
+                "canonical EvidenceRef"
+            ),
+            supporting_context=(unit.evidence_ref,),
+        )
+
+    # Default anchors plus verbatim host anchors.
+    default_anchors = (
+        subject.display_name,
+        subject.subject_id.canonical_locator.rsplit("/", 1)[-1],
+    )
+    anchors = tuple(
+        dict.fromkeys(
+            a for a in (*default_anchors, *question_terms) if a
+        )
+    )
+    spans = structural_spans or {}
+    projected: list[m.EvidenceUnit] = []
+    omissions: list[str] = []
+    requirements: list[m.ResolutionRequirement] = []
+    total_ranges = 0
+    total_omitted_hits = 0
+    used = 0
+    for unit in units:
+        content = unit.content
+        lines = content.splitlines() or [""]
+        total = len(lines)
+        span = spans.get(unit.evidence_ref.locator)
+        if span is not None:
+            start, end = span
+            start = max(1, start)
+            end = min(total, end)
+        else:
+            start, end = 0, 0
+        if span is None or start > end:
+            hits: list[int] = []
+            for idx, line in enumerate(lines, start=1):
+                for anchor in anchors:
+                    if anchor and anchor in line:
+                        hits.append(idx)
+                        break
+        else:
+            hits = []
+        if span is not None and start <= end:
+            # Exact provider structural span: deliver those lines with
+            # explicit range metadata, or report omission/requirement.
+            if start == 1 and end == total:
+                size = len(content.encode("utf-8"))
+                if used + size <= delivery_budget:
+                    projected.append(unit)
+                    used += size
+                    continue
+            excerpt_text = "\n".join(lines[start - 1:end])
+            if content.endswith("\n") and end == total:
+                excerpt_text += "\n"
+            size = len(excerpt_text.encode("utf-8")) + _range_meta(
+                start, end, total
+            )
+            if used + size <= delivery_budget:
+                projected.append(
+                    _dc.replace(
+                        unit,
+                        content=excerpt_text,
+                        content_range=m.EvidenceLineRange(
+                            start_line=start,
+                            end_line=end,
+                            total_lines=total,
+                        ),
+                    )
+                )
+                used += size
+                if start > 1 or end < total:
+                    if start > 1:
+                        omissions.append(
+                            f"excerpt omitted {unit.evidence_ref.locator} "
+                            f"lines 1-{start - 1} of {total} "
+                            f"(0 hits unexamined)"
+                        )
+                        total_ranges += 1
+                    if end < total:
+                        omissions.append(
+                            f"excerpt omitted {unit.evidence_ref.locator} "
+                            f"lines {end + 1}-{total} of {total} "
+                            f"(0 hits unexamined)"
+                        )
+                        total_ranges += 1
+                continue
+            first_line = lines[start - 1] + (
+                "\n" if content.endswith("\n") and start == end == total
+                else ""
+            )
+            if start == end or used + len(
+                first_line.encode("utf-8")
+            ) + _range_meta(start, start, total) > delivery_budget:
+                requirements.append(
+                    _delivery_requirement(unit, start, end, total)
+                )
+            omissions.append(
+                f"excerpt omitted {unit.evidence_ref.locator} lines "
+                f"{start}-{end} of {total} "
+                f"({end - start + 1} hits unexamined)"
+            )
+            total_ranges += 1
+            total_omitted_hits += end - start + 1
+            continue
+        if not hits:
+            size = len(content.encode("utf-8"))
+            if used + size <= delivery_budget:
+                projected.append(unit)
+                used += size
+            else:
+                omissions.append(
+                    f"excerpt omitted {unit.evidence_ref.locator} lines "
+                    f"1-{total} of {total} (0 hits unexamined)"
+                )
+                total_ranges += 1
+                if total == 1:
+                    # A single ungrounded line that cannot fit is still
+                    # a named delivery requirement, not silent omission.
+                    requirements.append(
+                        _delivery_requirement(unit, 1, total, total)
+                    )
+            continue
+        first, last = hits[0], hits[-1]
+        # Contiguous enclosing range.
+        excerpt_lines = lines[first - 1:last]
+        excerpt_text = "\n".join(excerpt_lines)
+        # Preserve trailing newline semantics minimally.
+        if content.endswith("\n") and last == total:
+            excerpt_text += "\n"
+        size = len(excerpt_text.encode("utf-8")) + _range_meta(
+            first, last, total
+        )
+        if used + size <= delivery_budget:
+            projected.append(
+                _dc.replace(
+                    unit,
+                    content=excerpt_text,
+                    content_range=m.EvidenceLineRange(
+                        start_line=first,
+                        end_line=last,
+                        total_lines=total,
+                    ),
+                )
+            )
+            used += size
+            # Report non-delivered outside ranges as omitted when sparse.
+            if first > 1 or last < total:
+                # Coalesce to at most one range line per unit here; the
+                # caller caps total lines at 8.
+                if first > 1:
+                    omissions.append(
+                        f"excerpt omitted {unit.evidence_ref.locator} "
+                        f"lines 1-{first - 1} of {total} "
+                        f"(0 hits unexamined)"
+                    )
+                    total_ranges += 1
+                if last < total:
+                    omissions.append(
+                        f"excerpt omitted {unit.evidence_ref.locator} "
+                        f"lines {last + 1}-{total} of {total} "
+                        f"(0 hits unexamined)"
+                    )
+                    total_ranges += 1
+            continue
+        # Maximal prefix of hits in line order that fits.
+        kept_last = first
+        for h in hits:
+            trial = "\n".join(lines[first - 1:h])
+            if content.endswith("\n") and h == total:
+                trial += "\n"
+            trial_size = len(trial.encode("utf-8")) + _range_meta(
+                first, h, total
+            )
+            if used + trial_size <= delivery_budget:
+                kept_last = h
+            else:
+                break
+        excerpt_text = "\n".join(lines[first - 1:kept_last])
+        if content.endswith("\n") and kept_last == total:
+            excerpt_text += "\n"
+        size = len(excerpt_text.encode("utf-8")) + _range_meta(
+            first, kept_last, total
+        )
+        if not excerpt_text or used + size > delivery_budget:
+            first_line = lines[first - 1] + (
+                "\n"
+                if content.endswith("\n") and first == total
+                else ""
+            )
+            if first == last or used + len(
+                first_line.encode("utf-8")
+            ) + _range_meta(first, first, total) > delivery_budget:
+                requirements.append(
+                    _delivery_requirement(unit, first, last, total)
+                )
+            omissions.append(
+                f"excerpt omitted {unit.evidence_ref.locator} lines "
+                f"{first}-{last} of {total} "
+                f"({len(hits)} hits unexamined)"
+            )
+            total_ranges += 1
+            total_omitted_hits += len(hits)
+            continue
+        projected.append(
+            _dc.replace(
+                unit,
+                content=excerpt_text,
+                content_range=m.EvidenceLineRange(
+                    start_line=first,
+                    end_line=kept_last,
+                    total_lines=total,
+                ),
+            )
+        )
+        used += size
+        omitted = len([h for h in hits if h > kept_last])
+        if omitted or kept_last < last or first > 1 or last < total:
+            omissions.append(
+                f"excerpt omitted {unit.evidence_ref.locator} lines "
+                f"{kept_last + 1}-{last} of {total} "
+                f"({omitted} hits unexamined)"
+            )
+            total_ranges += 1
+            total_omitted_hits += omitted
+    # Cap at 8 coalesced range lines plus one summary line.
+    kept_omissions = omissions[:8]
+    truncated = len(omissions) - len(kept_omissions)
+    summary = (
+        f"excerpt omissions: {total_omitted_hits} hits in "
+        f"{total_ranges} ranges"
+        + (f", +{truncated} further ranges truncated" if truncated else "")
+    )
+    if omissions or not projected:
+        kept_omissions = (*kept_omissions, summary)
+    return tuple(projected), tuple(kept_omissions), tuple(requirements)
+
+
 def _build_task_brief(
     *,
     resolved_slice: str,
@@ -91,6 +385,8 @@ def _build_task_brief(
     open_requirements: tuple[m.ResolutionRequirement, ...],
     target_scope: m.EvidenceScope,
     objective: str = "",
+    excerpt_omissions: tuple[str, ...] = (),
+    bound_question: m.SemanticQuestionScope | None = None,
 ) -> m.TaskBrief:
     """Project one admitted task into the uniform quality card."""
     evidence_authority = (
@@ -116,6 +412,59 @@ def _build_task_brief(
             for ref in target_scope.evidence_refs
         ]
     )
+    scope_boundaries = target_boundaries + (
+        f"scope root: {root.canonical_locator}",
+        f"structural anchor: {subject.subject_id.canonical_locator}",
+    ) + tuple(excerpt_omissions)
+    # S3.4 task-bound submission example: minimal shape populated with
+    # bound question and immutable identities, PENDING + missing
+    # examination, not a fabricated answer. Agents supply validated
+    # candidates and disposition. No parallel template carrier.
+    submission_example = ""
+    if bound_question is not None:
+        import json as _json
+
+        example = {
+            "$type": "SemanticInterpretationResult",
+            "claims": [],
+            "relationships": [],
+            "governing_source_refs": [],
+            "diagnostics": [],
+            "candidate_subjects": [],
+            "candidate_conflicts": [],
+            "proposed_question_coverages": [
+                {
+                    "$type": "InterpretationCoverage",
+                    "subjects": [m.to_canonical(bound_question.subject)],
+                    "question_slice": bound_question.question_slice,
+                    "evidence_scope": {"$type": "EvidenceScope"},
+                    "declared_complete": False,
+                    "question": m.to_canonical(bound_question),
+                    "disposition": "PENDING",
+                    "result_refs": [],
+                    "resolution_requirements": [],
+                    "disposition_basis": "",
+                    "question_evidence": [],
+                }
+            ],
+            "candidate_withdrawals": [],
+            "proposed_target_inventory_accounting": [],
+            "proposed_target_questions": [],
+        }
+        submission_example = (
+            "Minimal submission template (unfinished, PENDING with "
+            "missing-examination requirement; add validated candidates "
+            "and actual disposition; do not predeclare ANSWERED): "
+            + _json.dumps(example, sort_keys=True)
+        )
+    submission_rules = m.TASK_BRIEF_SUBMISSION_RULES + (
+        (
+            submission_example
+            if submission_example
+            else "Submit one strict canonical result with an explicit "
+            "question disposition."
+        ),
+    )
     return m.TaskBrief(
         objective=(
             (
@@ -127,10 +476,7 @@ def _build_task_brief(
         material_aspects=m.QUESTION_CLASS_ASPECTS.get(
             resolved_class, ()
         ),
-        scope_boundaries=target_boundaries + (
-            f"scope root: {root.canonical_locator}",
-            f"structural anchor: {subject.subject_id.canonical_locator}",
-        ),
+        scope_boundaries=scope_boundaries,
         evidence_authority=(
             evidence_authority,
             authority_guidance,
@@ -146,7 +492,7 @@ def _build_task_brief(
         readback=m.TASK_BRIEF_READBACK,
         open_requirements=open_requirements,
         open_handling=m.TASK_BRIEF_OPEN_HANDLING,
-        submission_rules=m.TASK_BRIEF_SUBMISSION_RULES,
+        submission_rules=submission_rules,
     )
 
 
@@ -173,11 +519,17 @@ def prepare_interpretation_task(
     target_inventory_item: m.EvidenceInventoryItem | None = None,
     mapping_mode: bool = False,
     required_evidence_refs: tuple[m.EvidenceRef, ...] = (),
+    question_terms: tuple[str, ...] = (),
 ) -> InterpretationTask:
     """Build the bounded task for the invoking agent (§8.3/§11.12).
 
     Addendum B: constructs the immutable question scope, loads bounded
     prior canonical items, and attaches service-owned SA obligations.
+    Addendum I S4: question_terms are verbatim host anchors forwarded
+    into bounded discovery; the service performs no tokenization or
+    semantic expansion. Addendum I S7: excerpt projection applies after
+    bounded read with omission reporting; full-source validation stays
+    in admission.
     """
     sid = subject.subject_id
     edges = structural.edges(
@@ -207,9 +559,22 @@ def prepare_interpretation_task(
     selection = discover_evidence(
         repository_id, subject, structural=structural, evidence=evidence,
         bounds=bounds, state=state, authority_seeds=authority_seeds,
+        question_terms=question_terms,
     )
     units = _read_units_within_bytes(
         evidence, selection.selected_refs, bounds
+    )
+    # S7 §5.7 excerpt projection: service-owned, after bounded read.
+    # Full-source identity/fingerprint versus delivered range; omissions
+    # in scope_boundaries; byte accounting UTF-8 against delivery ceiling.
+    from span.service.bounds import (
+        DEFAULT_SERVICE_BOUNDS_POLICY as _default_policy,
+    )
+
+    _delivery_ceiling = _default_policy.max_delivered_evidence_bytes
+    _delivery_budget = min(_delivery_ceiling, bounds.max_evidence_bytes)
+    units, _excerpt_omissions, _excerpt_requirements = _project_excerpts(
+        tuple(units), question_terms, subject, _delivery_budget
     )
     fingerprints = tuple(
         (unit.evidence_ref.evidence_id.value, unit.content_fingerprint)
@@ -293,6 +658,7 @@ def prepare_interpretation_task(
             ):
                 continue
             open_requirements.extend(cov.resolution_requirements)
+    open_requirements.extend(_excerpt_requirements)
     open_requirements.sort(key=lambda req: req.description)
     units_list = list(units)
     fingerprints_list = list(fingerprints)
@@ -426,6 +792,8 @@ def prepare_interpretation_task(
             open_requirements=tuple(open_requirements),
             target_scope=target_scope,
             objective=objective,
+            excerpt_omissions=_excerpt_omissions,
+            bound_question=question,
         ),
         target_scope=target_scope,
         target_id=target_id,
@@ -507,6 +875,7 @@ def _assign_candidate_keys(
             subject=c.subject,
             kind=c.kind,
             value=c.value,
+            assertion_nature=c.assertion_nature,
             evidence=c.evidence,
             candidate_authority=c.candidate_authority,
             basis=c.basis,
@@ -519,6 +888,7 @@ def _assign_candidate_keys(
             source=r.source,
             kind=r.kind,
             target=r.target,
+            assertion_nature=r.assertion_nature,
             evidence=r.evidence,
             candidate_authority=r.candidate_authority,
             basis=r.basis,
@@ -1083,6 +1453,52 @@ def _materialize_unit(
         )
     result = _assign_candidate_keys(result)
     ctx = _validation_context_for(task, extra_known_subjects)
+    # S7 §5.7 full-source validation: excerpt-bearing task units must
+    # load canonical full units before quote or content validation, even
+    # when the ID is already in task fingerprints. Reuses per-submission
+    # map to avoid duplicate reads. Fingerprints stay complete source.
+    # A full unit that cannot be loaded is an actionable rejection with
+    # a live continuation; an excerpt never substitutes for it.
+    _full_contents = dict(ctx.evidence_contents)
+    _full_refs = dict(ctx.evidence_refs)
+    _reload_failures: list[str] = []
+    for _unit in task.request.evidence_units:
+        if _unit.content_range is None:
+            continue
+        _eid = _unit.evidence_ref.evidence_id.value
+        _canonical_ref = _full_refs.get(_eid, _unit.evidence_ref)
+        try:
+            _full_units = evidence.read_evidence(
+                (_canonical_ref,), task.request.bounds
+            )
+        except ValueError as exc:
+            _reload_failures.append(
+                f"excerpt full-source reload failed for {_eid}: {exc}; "
+                "re-check the source range and resubmit under the same "
+                "continuation"
+            )
+            continue
+        if len(_full_units) != 1:
+            _reload_failures.append(
+                f"excerpt full-source reload failed for {_eid}: "
+                "unreadable; re-check the source range and resubmit "
+                "under the same continuation"
+            )
+            continue
+        _full_contents[_eid] = _full_units[0].content
+    if _reload_failures:
+        raise _validation.InterpretationUnitRejected(
+            tuple(_reload_failures)
+        )
+    ctx = _validation.ValidationContext(
+        allowed_claim_kinds=ctx.allowed_claim_kinds,
+        allowed_relationship_kinds=ctx.allowed_relationship_kinds,
+        known_evidence_ids=ctx.known_evidence_ids,
+        known_subject_ids=ctx.known_subject_ids,
+        evidence_fingerprints=dict(ctx.evidence_fingerprints),
+        evidence_contents=_full_contents,
+        evidence_refs=_full_refs,
+    )
     ctx, result, evidence_problems = _admit_cited_evidence(
         task.request.repository_id, result, ctx,
         evidence=evidence, bounds=task.request.bounds,
@@ -1659,6 +2075,11 @@ def _materialize_unit(
             withdrawn_ids = {
                 w.target.id.value for w in validated_withdrawals
             }
+            withdrawn_reasons: dict[str, str] = {}
+            for w in validated_withdrawals:
+                withdrawn_reasons.setdefault(
+                    w.target.id.value, w.basis.summary
+                )
             for other in all_qcovs:
                 if other.question is None:
                     continue
@@ -1673,7 +2094,23 @@ def _materialize_unit(
                     # superseded by the derived ANSWERED coverage above,
                     # not reopened.
                     continue
-                if withdrawn_ids & {r.id.value for r in other.result_refs}:
+                other_ref_ids = {
+                    r.id.value for r in other.result_refs
+                }
+                if withdrawn_ids & other_ref_ids:
+                    # S8.3: reopen with the actual withdrawal reason
+                    # while preserving the dependent question's useful
+                    # original requirements.
+                    reasons = sorted({
+                        withdrawn_reasons[rid]
+                        for rid in other_ref_ids
+                        if rid in withdrawn_reasons
+                    })
+                    reason = (
+                        "; ".join(reasons)
+                        if reasons
+                        else "shared output withdrawn"
+                    )
                     reopened_coverages.append(
                         m.InterpretationCoverage(
                             subjects=other.subjects,
@@ -1684,15 +2121,28 @@ def _materialize_unit(
                             disposition=m.SemanticQuestionDisposition.PENDING,
                             result_refs=other.result_refs,
                             resolution_requirements=(
-                                m.ResolutionRequirement(
-                                    kind=m.ResolutionKind.STALE_EVIDENCE,
-                                    subject_or_claim=other.question.subject,
-                                    description=(
-                                        "shared output withdrawn; reassessment "
-                                        "required"
+                                tuple(other.resolution_requirements)
+                                + (
+                                    m.ResolutionRequirement(
+                                        kind=(
+                                            m.ResolutionKind.STALE_EVIDENCE
+                                        ),
+                                        subject_or_claim=(
+                                            other.question.subject
+                                        ),
+                                        description=(
+                                            "shared output withdrawn "
+                                            f"({reason}); reassessment "
+                                            "required"
+                                        ),
+                                        supporting_context=tuple(
+                                            w.target
+                                            for w in validated_withdrawals
+                                            if w.target.id.value
+                                            in other_ref_ids
+                                        ),
                                     ),
-                                    supporting_context=(),
-                                ),
+                                )
                             ),
                             disposition_basis=(
                                 "reopened by explicit withdrawal in bound question"
@@ -2283,7 +2733,7 @@ def _suspend(
     scope: tuple[m.Subject, ...] = (),
     remaining: tuple[m.Subject, ...] = (),
     changed: tuple[m.EvidenceDependency, ...] = (),
-    suspended: tuple[str, ...] = (),
+    suspended: tuple[m.SubjectId, ...] = (),
     change_kind: str | None = None,
     change_description: str | None = None,
     affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = (),
@@ -2299,6 +2749,8 @@ def _suspend(
     objective: str = "",
     target_scope: m.EvidenceScope = m.EvidenceScope(),
     target_id: m.TargetId | None = None,
+    root_question: m.SemanticQuestionScope | None = None,
+    question_selection: m.SemanticQuestionSelection | None = None,
 ) -> PendingInterpretation:
     token = continuations.pend(
         SuspendedOperation(
@@ -2330,6 +2782,8 @@ def _suspend(
             establish_baseline=establish_baseline,
             target_scope=target_scope,
             target_id=target_id,
+            root_question=root_question,
+            question_selection=question_selection,
         )
     )
     return PendingInterpretation(continuation=token, request=task.request)

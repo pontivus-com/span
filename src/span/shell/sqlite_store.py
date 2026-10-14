@@ -5,10 +5,11 @@ plus query columns; no second semantic model is introduced (§10.2/§10.3,
 I-15). Table decomposition is physical only and carries no semantic
 authority. Stdlib ``sqlite3``; no third-party binding (ledger).
 
-Schema version is 4 (``SCHEMA_VERSION``): target-association accounting
-(Addendum E E-13A) plus question coverage (Addendum B). v2/v3 stores migrate
+Schema version is 5 (``SCHEMA_VERSION``): assertion-nature modality
+(Addendum I S6) plus target-association accounting (Addendum E E-13A)
+plus question coverage (Addendum B). v2/v3/v4 stores migrate
 non-destructively; legacy items remain unassessed without invented
-question ownership.
+question ownership and preserve history without inferred nature.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from span.shell import paging as _paging
 
 __all__ = ["SCHEMA_VERSION", "TARGET_RETENTION_DAYS", "SqliteSemanticStore"]
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 TARGET_RETENTION_DAYS = 90
 
@@ -262,10 +263,20 @@ class SqliteSemanticStore:
         except _sqlite3.OperationalError:
             row = None
         on_disk = int(row[0]) if row is not None else 0
-        if on_disk not in (0, 2, 3, 4):
+        if on_disk not in (0, 2, 3, 4, 5):
             raise ValueError(f"unsupported schema version: {on_disk}")
         if on_disk == 0:
-            # Fresh database: create the full v4 schema at once.
+            # Fresh database: create the full v5 schema at once.
+            self._db.executescript(_SCHEMA)
+            self._db.execute(
+                "INSERT OR REPLACE INTO meta(key, value) "
+                "VALUES('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            self._db.commit()
+            self._reap_expired_target_associations()
+            return
+        if on_disk == 5:
             self._db.executescript(_SCHEMA)
             self._db.execute(
                 "INSERT OR REPLACE INTO meta(key, value) "
@@ -276,17 +287,25 @@ class SqliteSemanticStore:
             self._reap_expired_target_associations()
             return
         if on_disk == 4:
-            self._db.executescript(_SCHEMA)
-            self._db.execute(
-                "INSERT OR REPLACE INTO meta(key, value) "
-                "VALUES('schema_version', ?)",
-                (str(SCHEMA_VERSION),),
-            )
-            self._db.commit()
+            # v4→v5 atomic: rewrite active and retired payloads with
+            # LEGACY_UNCLASSIFIED, preserve IDs/trust/evidence/history,
+            # publish v5 only after success. No decoder fallback remains
+            # after migration except this single-version step.
+            try:
+                with self._db:
+                    self._db.executescript(_SCHEMA)
+                    self._migrate_v4_payloads_to_v5()
+                    self._db.execute(
+                        "INSERT OR REPLACE INTO meta(key, value) "
+                        "VALUES('schema_version', ?)",
+                        (str(SCHEMA_VERSION),),
+                    )
+            except Exception:
+                raise
             self._reap_expired_target_associations()
             return
         if on_disk == 3:
-            # v3→v4 atomic: add target_associations + index, publish v4.
+            # v3→v4 tables then v4→v5 payloads, atomically; publish v5.
             try:
                 with self._db:
                     self._db.execute(
@@ -311,6 +330,7 @@ class SqliteSemanticStore:
                     }
                     if "target_associations" not in tables:
                         raise RuntimeError("v3→v4 migration incomplete")
+                    self._migrate_v4_payloads_to_v5()
                     self._db.execute(
                         "INSERT OR REPLACE INTO meta(key, value) "
                         "VALUES('schema_version', ?)",
@@ -389,7 +409,8 @@ class SqliteSemanticStore:
                     raise RuntimeError(
                         f"v2→v3 migration incomplete, missing: {sorted(missing)}"
                     )
-                # v3→v4 chained in the same atomic migration.
+                # v3→v4 tables chained in the same atomic migration,
+                # then v4→v5 payloads; publish v5 only after success.
                 self._db.execute(
                     "CREATE TABLE IF NOT EXISTS target_associations("
                     "  repository_id TEXT NOT NULL,"
@@ -404,6 +425,7 @@ class SqliteSemanticStore:
                     "idx_target_associations_repo "
                     "ON target_associations(repository_id)"
                 )
+                self._migrate_v4_payloads_to_v5()
                 self._db.execute(
                     "INSERT OR REPLACE INTO meta(key, value) "
                     "VALUES('schema_version', ?)",
@@ -414,6 +436,80 @@ class SqliteSemanticStore:
             # Re-check nothing was published before surfacing.
             raise
         self._reap_expired_target_associations()
+
+    def _migrate_v4_payloads_to_v5(self) -> None:
+        """Rewrite v4 claim/relationship payloads with LEGACY nature (S6).
+
+        In one transaction, adds assertion_nature=LEGACY_UNCLASSIFIED to
+        existing active and retired payloads, preserving old universal-
+        authority trust outcome without classifying prose. Preserves
+        original IDs, references, trust, evidence, retirement history,
+        and question dispositions. New IDs include nature; old IDs are
+        not recomputed. Malformed payloads rollback the transaction.
+        Idempotent: rows already carrying nature are left untouched.
+        Caller holds the migration transaction; version is published
+        only after this succeeds.
+        """
+        for table, id_col in (
+            ("claims", "claim_id"),
+            ("relationships", "relationship_id"),
+            ("retired_claims", "claim_id"),
+            ("retired_relationships", "relationship_id"),
+        ):
+            try:
+                rows = self._db.execute(
+                    f"SELECT {id_col}, canonical_json FROM {table}"
+                ).fetchall()
+            except _sqlite3.OperationalError:
+                continue
+            for row_id, payload in rows:
+                try:
+                    data = _json.loads(payload)
+                except ValueError as exc:
+                    raise RuntimeError(
+                        f"v4→v5 migration malformed payload in {table}: "
+                        f"{row_id}: {exc}"
+                    ) from exc
+                if not isinstance(data, dict):
+                    raise RuntimeError(
+                        f"v4→v5 migration malformed payload in {table}: "
+                        f"{row_id}"
+                    )
+                if "assertion_nature" in data:
+                    continue
+                data["assertion_nature"] = "LEGACY_UNCLASSIFIED"
+                # Validate the rewritten payload decodes under v5 before
+                # writing: preserves trust/evidence/history, rejects
+                # malformed without partial state (transaction rolls back).
+                try:
+                    if table in ("claims", "retired_claims"):
+                        decoded = m.from_canonical(m.SemanticClaim, data)
+                        assert isinstance(decoded, m.SemanticClaim)
+                        assert (
+                            decoded.assertion_nature
+                            is m.AssertionNature.LEGACY_UNCLASSIFIED
+                        )
+                    else:
+                        decoded = m.from_canonical(
+                            m.SemanticRelationship, data
+                        )
+                        assert isinstance(
+                            decoded, m.SemanticRelationship
+                        )
+                        assert (
+                            decoded.assertion_nature
+                            is m.AssertionNature.LEGACY_UNCLASSIFIED
+                        )
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"v4→v5 migration validation failed in {table}: "
+                        f"{row_id}: {exc}"
+                    ) from exc
+                self._db.execute(
+                    f"UPDATE {table} SET canonical_json=? "
+                    f"WHERE {id_col}=?",
+                    (_encode(m.to_canonical(decoded)), row_id),
+                )
 
     def _now(self) -> _datetime.datetime:
         result = self._utc_now()
@@ -481,6 +577,63 @@ class SqliteSemanticStore:
             if row is not None:
                 found.append(_decode_subject(row[0]))
         return tuple(found)
+
+    def load_subjects_by_locator(
+        self,
+        repository_id: str,
+        locator: str,
+        expected_kinds: tuple[m.SubjectKind, ...],
+        bounds: m.QueryBounds,
+    ) -> m.SubjectPage:
+        """Exact canonical-locator lookup (Addendum I S1 §5.1).
+
+        Exact string equality only. Kinds filtered before limiting,
+        ordered by kind, one extra row to detect truncation. Uses the
+        existing (repository_id, locator, kind) subject key; no new
+        identity table or name index.
+        """
+        if not locator:
+            return m.SubjectPage(
+                items=(),
+                bound_info=m.BoundInfo(
+                    requested_max_results=bounds.max_subjects,
+                    requested_max_depth=0,
+                    returned_results=0,
+                    truncated=False,
+                    truncated_category=None,
+                    continuation_token=None,
+                ),
+            )
+        if expected_kinds:
+            kinds = [k.value for k in expected_kinds]
+            placeholders = ",".join("?" for _ in kinds)
+            rows = self._db.execute(
+                "SELECT canonical_json, kind FROM subjects "
+                f"WHERE repository_id=? AND locator=? AND kind IN ({placeholders}) "
+                "ORDER BY kind LIMIT ?",
+                (repository_id, locator, *kinds, bounds.max_subjects + 1),
+            ).fetchall()
+        else:
+            rows = self._db.execute(
+                "SELECT canonical_json, kind FROM subjects "
+                "WHERE repository_id=? AND locator=? "
+                "ORDER BY kind LIMIT ?",
+                (repository_id, locator, bounds.max_subjects + 1),
+            ).fetchall()
+        truncated = len(rows) > bounds.max_subjects
+        kept = rows[: bounds.max_subjects]
+        items = tuple(_decode_subject(payload) for payload, _ in kept)
+        return m.SubjectPage(
+            items=items,
+            bound_info=m.BoundInfo(
+                requested_max_results=bounds.max_subjects,
+                requested_max_depth=0,
+                returned_results=len(items),
+                truncated=truncated,
+                truncated_category="candidates" if truncated else None,
+                continuation_token=None,
+            ),
+        )
 
     def load_repository_subjects(
         self,
@@ -1170,6 +1323,7 @@ class SqliteSemanticStore:
                         subject=claim.subject,
                         kind=claim.kind,
                         value=claim.value,
+                        assertion_nature=claim.assertion_nature,
                         evidence=claim.evidence,
                         authority=claim.authority,
                         trust=claim.trust,
@@ -1200,6 +1354,7 @@ class SqliteSemanticStore:
                         source=rel.source,
                         kind=rel.kind,
                         target=rel.target,
+                        assertion_nature=rel.assertion_nature,
                         evidence=rel.evidence,
                         authority=rel.authority,
                         trust=rel.trust,

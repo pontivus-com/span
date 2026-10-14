@@ -20,6 +20,8 @@ from span.service.answers import (
     _conflicts_for,
     _next_service_token,
     _select_answer_items,
+    coverage_counts_for,
+    state_explanation_for,
 )
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
@@ -307,6 +309,11 @@ def _compose_explain_answer(
                 questions_remaining=qremaining,
             ),
         ),
+        state_explanation=state_explanation_for(
+            tuple(kept_claims), tuple(kept_rels),
+            coverage=coverage_counts_for(views),
+            bounds=(bounds.max_results, truncated),
+        ),
     )
 
 def explain(
@@ -351,8 +358,57 @@ def explain(
             evidence=(),
             resolution_requirements=requirements,
             bound_info=_bound_info(bounds, 0, False, None),
+            state_explanation=("returned assertions: none",),
         )
     subject = resolution.candidates[0].subject
+    # S4 §5.4: question_selection and establish_baseline together rejected.
+    if request.question_selection is not None and request.establish_baseline:
+        raise ValueError(
+            "question_selection and explain(establish_baseline=True) "
+            "together are rejected; use one mode: baseline audit or "
+            "narrowed question selection"
+        )
+    # S4: narrowed selection derives service-owned scope; anchors pass
+    # verbatim as question_terms into bounded discovery. Effective slice
+    # equals host slice verbatim for EXPLAIN/AUTHORITY (discriminator
+    # empty). Full-scope supply rejected (selection carries only
+    # slice/basis/anchors by type).
+    _selection_anchors: tuple[str, ...] = ()
+    _selected_scope: m.SemanticQuestionScope | None = None
+    if request.question_selection is not None:
+        from span.service.questions import derive_service_question as _derive
+
+        _selected_scope, _selection_anchors = _derive(
+            subject=subject,
+            scope_root=subject.subject_id,
+            question_class=m.SemanticQuestionClass.CQ_01,
+            selection=request.question_selection,
+            default_slice=subject.subject_id.canonical_locator,
+            default_basis="EXPLAIN question-local",
+        )
+        # Page-token digest binding: reject mismatched question pages.
+        if request.page_token is not None:
+            from span.shell import paging as _pg
+
+            try:
+                _tok_digest, _, _, _ = _pg.parse_question_token(
+                    request.page_token
+                )
+            except ValueError as exc:
+                raise ValueError(str(exc)) from None
+            from span.shell.paging import question_digest as _qd
+
+            _expected = _qd(
+                "EXPLAIN", request.repository_id,
+                subject.subject_id.canonical_locator,
+                _selected_scope.question_slice,
+                _selected_scope.question_class.value,
+            )
+            if _tok_digest not in ("default", _expected):
+                raise ValueError(
+                    "page token does not match current question; restart "
+                    "the listing from page one with page_token null"
+                )
     if request.establish_baseline:
         if _baseline_sufficient(
             request.repository_id, subject.subject_id,
@@ -425,6 +481,71 @@ def explain(
         request.repository_id, subject.subject_id,
         store=store, bounds=bounds,
     )
+    # S4: selected-question path replaces claim-existence shortcut with
+    # primary-question coverage. When selection present, use derived
+    # scope; otherwise default question-local missing logic.
+    if _selected_scope is not None:
+        try:
+            _existing = store.load_all_question_coverages(
+                request.repository_id, _selected_scope.scope_root,
+                (_selected_scope.subject,),
+            )
+        except Exception:
+            _existing = ()
+        _match = None
+        for _cov in _existing:
+            if _cov.question is None:
+                continue
+            _q = _cov.question
+            if (
+                _q.scope_root == _selected_scope.scope_root
+                and _q.subject == _selected_scope.subject
+                and _q.question_class == _selected_scope.question_class
+                and _q.question_slice == _selected_scope.question_slice
+            ):
+                _match = _cov
+                break
+        if _match is None:
+            task = prepare_interpretation_task(
+                request.repository_id, subject, structural=structural,
+                evidence=evidence, bounds=bounds, state=state,
+                authority_seeds=authority_seeds,
+                operation_intent=m.SemanticIntent.EXPLAIN,
+                question_slice=_selected_scope.question_slice,
+                store=store,
+                scope_root=_selected_scope.scope_root,
+                question_class=_selected_scope.question_class,
+                materiality_basis=_selected_scope.materiality_basis,
+                question_terms=_selection_anchors,
+            )
+            return _suspend(
+                op="explain", repository_id=request.repository_id,
+                subject=subject, task=task, seeds=authority_seeds,
+                bounds=bounds, state=state, resolution=resolution,
+                continuations=continuations,
+                operation_intent="EXPLAIN",
+                question_slice=_selected_scope.question_slice,
+                root_question=_selected_scope,
+                question_selection=request.question_selection,
+            )
+        # Existing coverage found: answer filtered to selected identity.
+        import dataclasses as _dc
+
+        from span.service.questions import (
+            filter_views_by_scope as _filter_views,
+        )
+
+        _ans = _compose_explain_answer(
+            request.repository_id, subject, resolution,
+            structural=structural, evidence=evidence, store=store,
+            bounds=bounds, state=state, page_token=request.page_token,
+            scope_root=subject.subject_id,
+        )
+        _filtered = _filter_views(
+            _ans.content.question_coverage, _selected_scope
+        )
+        _content = _dc.replace(_ans.content, question_coverage=_filtered)
+        return _dc.replace(_ans, content=_content)
     missing_question = _question_local_missing(
         request.repository_id, subject, m.SemanticIntent.EXPLAIN,
         store=store, evidence=evidence, bounds=bounds,

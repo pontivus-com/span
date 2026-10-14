@@ -44,9 +44,6 @@ from span.service.operations.initialize_target import (
 from span.service.operations.refresh import (
     _compose_refresh_answer,
 )
-from span.service.operations.status import (
-    _resume_status,
-)
 from span.service.operations.trace import (
     _resume_trace,
 )
@@ -419,13 +416,11 @@ def submit_interpretation(
             record, structural=structural, evidence=evidence, store=store,
             bounds=bounds, state=state, continuations=continuations,
         )
-    if record.op == "status":
-        return _resume_status(
-            record, structural=structural, evidence=evidence, store=store,
-            bounds=bounds, state=state, continuations=continuations,
-        )
     if record.op == "impact":
         target = record.scope[0] if record.scope else record.subject
+        resumed = record.suspended
+        if record.subject.subject_id not in resumed:
+            resumed = resumed + (record.subject.subject_id,)
         return _compose_impact_answer(
             record.repository_id, target, record.resolution,
             structural=structural, evidence=evidence, store=store,
@@ -438,10 +433,10 @@ def submit_interpretation(
             change_description=record.change_description,
             affected_assertions=record.affected_assertions,
             seeds=record.seeds,
-            suspended=record.suspended + (
-                record.subject.subject_id.canonical_locator,
-            ),
+            suspended=resumed,
             continuations=continuations,
+            question_selection=record.question_selection,
+            root_question=record.root_question,
         )
     return _compose_refresh_answer(
         record.repository_id, record.scope,

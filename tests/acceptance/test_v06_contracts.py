@@ -79,6 +79,7 @@ def _billing_claims(with_ownership=True):
         m.CandidateSemanticClaim(
             candidate_key="purpose",
             subject=sid, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("billing capability", ()),
             evidence=(_ref("README.md"),),
             candidate_authority=_authority(
@@ -91,6 +92,7 @@ def _billing_claims(with_ownership=True):
         m.CandidateSemanticClaim(
             candidate_key="invariant",
             subject=sid, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+        assertion_nature=m.AssertionNature.NORMATIVE,
             value=m.InvariantConstraintValue("no partial capture"),
             evidence=(_ref("README.md"),),
             candidate_authority=_authority(
@@ -106,6 +108,7 @@ def _billing_claims(with_ownership=True):
             m.CandidateSemanticClaim(
                 candidate_key="ownership",
                 subject=sid, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.OwnershipCustodyValue(
                     _sid("team/ledger"), m.OwnershipRole.OWNER,
                     m.OwnershipExclusivity.EXCLUSIVE,
@@ -353,6 +356,7 @@ class DocumentationOnlySubjectTest(unittest.TestCase):
                 canonical_locator="cap/billing",
             ),
             kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("billing capability", ()),
             evidence=(_ref("README.md"),),
             candidate_authority=_authority(
@@ -614,6 +618,7 @@ class RetiredOwnerTest(unittest.TestCase):
             successor = m.CandidateSemanticClaim(
                 candidate_key="ownership",
                 subject=sid, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+        assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.OwnershipCustodyValue(
                     new_owner, m.OwnershipRole.OWNER,
                     m.OwnershipExclusivity.EXCLUSIVE,

@@ -73,6 +73,7 @@ class SemanticExplainRequest:
     bounds: m.QueryBounds
     page_token: str | None = None
     establish_baseline: bool = False
+    question_selection: m.SemanticQuestionSelection | None = None
 
 
 @_dataclass(frozen=True)
@@ -84,6 +85,7 @@ class SemanticImpactRequest:
     bounds: m.QueryBounds
     affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
     page_token: str | None = None
+    question_selection: m.SemanticQuestionSelection | None = None
 
 
 @_dataclass(frozen=True)
@@ -95,6 +97,7 @@ class SemanticTraceRequest:
     boundary_only: bool
     bounds: m.QueryBounds
     page_token: str | None = None
+    question_selection: m.SemanticQuestionSelection | None = None
 
 
 @_dataclass(frozen=True)
@@ -103,6 +106,7 @@ class SemanticAuthorityRequest:
     target: m.SubjectSelector | m.ClaimRef
     bounds: m.QueryBounds
     page_token: str | None = None
+    question_selection: m.SemanticQuestionSelection | None = None
 
 
 @_dataclass(frozen=True)

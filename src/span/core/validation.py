@@ -237,6 +237,35 @@ def validate_candidate_claim(
             requirements=(),
             diagnostics=(f"claim kind not allowed: {candidate.kind.value}",),
         )
+    # S6 §5.6: LEGACY_UNCLASSIFIED is store-read-only, never in
+    # candidate ingress. Required explicit DESCRIPTIVE or NORMATIVE;
+    # no default to descriptive (missing fails at decode).
+    nature = candidate.assertion_nature
+    if nature is m.AssertionNature.LEGACY_UNCLASSIFIED:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=(
+                "claim assertion_nature LEGACY_UNCLASSIFIED is "
+                "store-read-only; submit DESCRIPTIVE or NORMATIVE",
+            ),
+        )
+    # Normative-only kinds assert assigned custody, contracts, or
+    # governance: they cannot bypass authority by choosing descriptive.
+    if (
+        candidate.kind in m.NORMATIVE_ONLY_CLAIM_KINDS
+        and nature is not m.AssertionNature.NORMATIVE
+    ):
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=(
+                f"claim kind {candidate.kind.value} is normative-only; "
+                "descriptive nature cannot carry it",
+            ),
+        )
     if candidate.subject not in ctx.known_subject_ids:
         return CandidateValidation(
             ok=False,
@@ -284,6 +313,30 @@ def validate_candidate_relationship(
             requirements=(),
             diagnostics=(
                 f"relationship kind not allowed: {candidate.kind.value}",
+            ),
+        )
+    nature = candidate.assertion_nature
+    if nature is m.AssertionNature.LEGACY_UNCLASSIFIED:
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=(
+                "relationship assertion_nature LEGACY_UNCLASSIFIED is "
+                "store-read-only; submit DESCRIPTIVE or NORMATIVE",
+            ),
+        )
+    if (
+        candidate.kind.value in m.NORMATIVE_ONLY_RELATIONSHIP_KINDS
+        and nature is not m.AssertionNature.NORMATIVE
+    ):
+        return CandidateValidation(
+            ok=False,
+            trust=m.TrustState.UNRESOLVED,
+            requirements=(),
+            diagnostics=(
+                f"relationship kind {candidate.kind.value} is "
+                "normative-only; descriptive nature cannot carry it",
             ),
         )
     if (
@@ -449,6 +502,7 @@ def _claim_content_payload(
         subject=candidate.subject,
         kind=candidate.kind,
         value=candidate.value,
+        assertion_nature=candidate.assertion_nature,
         evidence=tuple(sorted(
             candidate.evidence,
             key=lambda r: (r.evidence_id.value, r.locator),
@@ -478,6 +532,7 @@ def _relationship_content_payload(
         source=candidate.source,
         kind=candidate.kind,
         target=candidate.target,
+        assertion_nature=candidate.assertion_nature,
         evidence=tuple(sorted(
             candidate.evidence,
             key=lambda r: (r.evidence_id.value, r.locator),
@@ -615,6 +670,7 @@ def materialize_claim(
         subject=candidate.subject,
         kind=candidate.kind,
         value=candidate.value,
+        assertion_nature=candidate.assertion_nature,  # type: ignore[arg-type]
         evidence=candidate.evidence,
         authority=authority,
         trust=validation.trust,
@@ -652,6 +708,7 @@ def materialize_relationship(
         source=candidate.source,
         kind=candidate.kind,
         target=candidate.target,
+        assertion_nature=candidate.assertion_nature,  # type: ignore[arg-type]
         evidence=candidate.evidence,
         authority=authority,
         trust=validation.trust,

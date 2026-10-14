@@ -99,6 +99,7 @@ def _claim(key, evidence):
     return m.CandidateSemanticClaim(
         candidate_key=key,
         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=evidence,
         basis=m.SemanticBasis(

@@ -1,10 +1,10 @@
-"""Paging mechanic tests (plan §5, I-39).
+"""Paging mechanic tests (plan §5, I-39; Addendum I S4 §5.4 pgq).
 
-Listing cursors (`pg:<offset>`) paginate one truncated listing and are
-redeemable through `page_token` inputs. Answer-level composite cursors
-(`pg:<claims>:<rels>`) advance each side past shown items only.
-Interpretation continuations are a distinct mechanism and never appear
-here.
+Listing cursors (`pg:<offset>`) paginate one truncated store listing.
+Answer-level cursors use the single grammar
+(`pgq:<digest>:<claims>:<rels>:<questions>`) bound to the selected
+question. Old `pg:` service cursors are rejected. Interpretation
+continuations are distinct and never appear here.
 """
 
 import unittest
@@ -49,16 +49,31 @@ class ServiceTokenTest(unittest.TestCase):
 
     def test_composite_round_trip(self):
         token = paging.format_service_token(3, 0, 0)
-        self.assertTrue(token.startswith("pg:"))
+        assert token is not None
+        self.assertTrue(token.startswith("pgq:"))
         self.assertEqual(paging.parse_service_token(token), (3, 0, 0))
+
+    def test_question_token_binds_digest(self):
+        digest = paging.question_digest("EXPLAIN", "r", "a.py", "slice", "CQ_01")
+        token = paging.format_question_token(digest, 1, 2, 3)
+        assert token is not None
+        got_digest, c, r, q = paging.parse_question_token(token)
+        self.assertEqual(got_digest, digest)
+        self.assertEqual((c, r, q), (1, 2, 3))
+
+    def test_old_service_cursor_rejected(self):
+        for bad in ("pg:1:2:3", "pg:0:0:0"):
+            with self.assertRaises(ValueError, msg=bad):
+                paging.parse_service_token(bad)
 
     def test_both_exhausted_is_none(self):
         self.assertIsNone(paging.format_service_token(None, None, 0))
         token = paging.format_service_token(5, 5, 2)
+        assert token is not None
         self.assertEqual(paging.parse_service_token(token), (5, 5, 2))
 
     def test_malformed_fails_closed(self):
-        for bad in ("bogus", "pg:", "pg:-1:0:0", "pg:1:2", "pg:1", "trunc:c:3"):
+        for bad in ("bogus", "pg:", "pgq:", "pgq:bad", "pgq:d:1:2", "trunc:c:3"):
             with self.assertRaises(ValueError, msg=bad):
                 paging.parse_service_token(bad)
 

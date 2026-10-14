@@ -120,6 +120,7 @@ def _purpose_claim(summary="Sorts seeds"):
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue(summary, ()),
         evidence=(_ref("src/seed.py"),),
         basis=m.SemanticBasis(
@@ -537,6 +538,7 @@ class EvidenceProvenanceTest(unittest.TestCase):
                 subject=claim.subject,
                 kind=claim.kind,
                 value=claim.value,
+                assertion_nature=claim.assertion_nature,
                 evidence=claim.evidence,
                 candidate_authority=claim.candidate_authority,
                 basis=m.SemanticBasis(
@@ -581,6 +583,7 @@ class EvidenceProvenanceTest(unittest.TestCase):
                 subject=claim.subject,
                 kind=claim.kind,
                 value=claim.value,
+                assertion_nature=claim.assertion_nature,
                 evidence=claim.evidence,
                 candidate_authority=claim.candidate_authority,
                 basis=m.SemanticBasis(
@@ -630,6 +633,7 @@ class EvidenceProvenanceTest(unittest.TestCase):
                 subject=forged.subject,
                 kind=forged.kind,
                 value=forged.value,
+                assertion_nature=forged.assertion_nature,
                 evidence=(
                     _ref(
                         "src/seed.py", fingerprint=stale_fp,
@@ -1342,6 +1346,7 @@ class QuestionEvidenceUnionTest(unittest.TestCase):
             claim = m.CandidateSemanticClaim(
                 candidate_key="purpose-other",
                 subject=other_sid, kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Other module", ()),
                 evidence=(_ref("src/seed.py"),),
                 basis=m.SemanticBasis(

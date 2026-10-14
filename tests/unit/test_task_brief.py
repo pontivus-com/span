@@ -60,6 +60,7 @@ def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-main",
         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=(_ref("README.md"), _ref("src/main.py")),
         candidate_authority=m.CandidateAuthority(
@@ -142,9 +143,17 @@ class TaskBriefTest(unittest.TestCase):
         self.assertIn("scope root: src/main.py", brief.scope_boundaries)
         self.assertIn("structural anchor: src/main.py", brief.scope_boundaries)
         # Rules are the canonical constants — no per-unit invention.
+        # The only permitted addition is the deterministic S3.4
+        # task-bound PENDING submission template in submission_rules.
         self.assertEqual(brief.open_handling, m.TASK_BRIEF_OPEN_HANDLING)
         self.assertEqual(
-            brief.submission_rules, m.TASK_BRIEF_SUBMISSION_RULES
+            brief.submission_rules[: len(m.TASK_BRIEF_SUBMISSION_RULES)],
+            m.TASK_BRIEF_SUBMISSION_RULES,
+        )
+        self.assertTrue(
+            brief.submission_rules[-1].startswith(
+                "Minimal submission template (unfinished, PENDING"
+            )
         )
         self.assertTrue(brief.open_handling and brief.submission_rules)
 

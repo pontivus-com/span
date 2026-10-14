@@ -209,6 +209,7 @@ def _purpose_claim():
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
         subject=_sid("src/postings.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Tracks balances", ()),
         evidence=(_ref("README.md"),),
         candidate_authority=_authority("README.md", "Tracks balances"),
@@ -224,6 +225,7 @@ def _ownership_claim():
         candidate_key="ownership",
         subject=_sid("src/postings.py"),
         kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+        assertion_nature=m.AssertionNature.NORMATIVE,
         value=m.OwnershipCustodyValue(
             _sid("team/ledger"), m.OwnershipRole.OWNER,
             m.OwnershipExclusivity.EXCLUSIVE,
@@ -414,6 +416,7 @@ def _inventory_claim():
     return m.CandidateSemanticClaim(
         candidate_key="inventory-purpose",
         subject=_sid("src/inventory.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("holds stock", ()),
         evidence=(_ref("src/inventory.py"),),
         candidate_authority=_authority("src/inventory.py", "STOCK"),
@@ -428,6 +431,7 @@ def _failures_claim():
     return m.CandidateSemanticClaim(
         candidate_key="failures-purpose",
         subject=_sid("src/failures.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("dead-letters failed postings", ()),
         evidence=(_ref("src/failures.py"),),
         candidate_authority=_authority("src/failures.py", "dead_letter"),
@@ -669,6 +673,7 @@ def _corrected_purpose_claim():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-v2",
         subject=_sid("src/postings.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Tracks balances and limits", ()),
         evidence=(_ref_v2("README.md"),),
         candidate_authority=_authority_v2(
@@ -1006,6 +1011,7 @@ class UniformQualityTest(unittest.TestCase):
         wrong = m.CandidateSemanticClaim(
             candidate_key="wrong",
             subject=_sid("src/postings.py"), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("Moves parcels", ()),
             evidence=(_ref("README.md"),),
             candidate_authority=_authority("README.md", "Tracks balances"),
@@ -1020,6 +1026,7 @@ class UniformQualityTest(unittest.TestCase):
                         claim_id=m.ClaimId("clm-x"),
                         subject=_sid("src/postings.py"),
                         kind=m.ClaimKind.PURPOSE,
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=wrong.value,
                         evidence=wrong.evidence,
                         authority=None,
@@ -1686,6 +1693,7 @@ class UndisclosedInstanceTest(unittest.TestCase):
                 candidate_key="purpose",
                 subject=vsid("src/postings.py"),
                 kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Grinds grain", ()),
                 evidence=(vref("README.md"),),
                 candidate_authority=_vauthority(

@@ -79,6 +79,7 @@ def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-main",
         subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=(_ref("README.md"), _ref("src/main.py")),
         candidate_authority=m.CandidateAuthority(
@@ -219,6 +220,7 @@ class DriverServiceTest(unittest.TestCase):
                         m.CandidateSemanticClaim(
                             candidate_key="bad",
                             subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.PurposeValue("no evidence", ()),
                             evidence=(),
                             candidate_authority=None,

@@ -22,6 +22,8 @@ from span.service.answers import (
     _conflicts_for,
     _freshness_items_for,
     _select_answer_items,
+    coverage_counts_for,
+    state_explanation_for,
 )
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
@@ -157,6 +159,11 @@ def _compose_refresh_answer(
             bounds,
             len(kept_claims) + len(kept_rels) + len(kept_conf),
             truncated, category, None,
+        ),
+        state_explanation=state_explanation_for(
+            tuple(kept_claims), tuple(kept_rels),
+            coverage=coverage_counts_for(views),
+            bounds=(bounds.max_results, truncated),
         ),
     )
 
