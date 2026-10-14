@@ -68,8 +68,11 @@ One complete target campaign over the twelve tools (exact carriers in
 `tests/acceptance/test_addendum_e_acceptance.py`; full procedure in
 `docs/onboarding-runbook.md`):
 
-1. `initialize_repository` once per repository (dedicated setup session) →
-   `READY` operational status. Storage readiness only.
+1. Discover the registered canonical `repository_id` through `tools/list`.
+   If readiness is `UNINITIALIZED`, call `initialize_repository` once in its
+   dedicated setup session and reuse the returned ID; an already initialized
+   repository is used directly. `READY` is operational storage readiness
+   only.
 2. `initialize_target` with the exact `EvidenceScope` and objective →
    deterministic `TargetId` plus a `PendingInterpretation` carrying one
    `target_inventory_item` (`question=None`: mapping work, not a semantic
@@ -123,10 +126,11 @@ never a usable provider. A dirty tree after a successful build still
 provisions: the provider is available but freshness is UNVERIFIABLE.
 Explicit `refresh` performs the same single bounded rebuild for its
 scoped target. `status`, `explain`, `locate`, `neighbors`, hooks, and
-all other ordinary reads never build. Span stores and continuations
-live outside the target in the configured data directory; no Span path
-writes target artifacts (per-target plugin and AGENTS.md deployment are
-removed). `initialize_repository` takes a plain `repository_locator`
+all other ordinary reads never build. Span stores and continuations live
+outside the target in the configured data directory. The installer may
+update only the managed Span lifecycle block in the target `AGENTS.md`;
+per-target plugins and all other target artifacts are not written.
+`initialize_repository` takes a plain `repository_locator`
 plus `structural_provider_config` (plain path canonical; legacy
 `graft:<path>` accepted transitionally); the core never interprets
 provider paths or commands. There is no graft MCP server: structural
@@ -134,7 +138,8 @@ navigation (`locate` for find/ outline/member listing, `neighbors` for
 bounded adjacency) is served by Span itself under Addendum F, with
 two-tier freshness (entry verification plus scope coverage) and
 version-bound pagination. The onboarding preflight is the read-only
-target artifact census (proving the target unchanged) recorded in the
+structural-artifact census (the managed `AGENTS.md` guidance block is the
+intentional installer exception) recorded in the
 receipt and acceptance evidence. Exact onboarding path:
 `docs/onboarding-runbook.md` and Addendum E §4A.
 

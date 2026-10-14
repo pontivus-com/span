@@ -5,7 +5,7 @@ OFFLINE (dedicated setup session)
   initialize_repository → READY (no interpretation happens here)
 
 NORMAL CODING SESSION (enter anywhere)
-  ORIENT        explain
+  ORIENT        status (no target) → explain
   PREPARE       impact  (material changes: always before editing)
   INVESTIGATE   trace / authority (where required)
   IMPLEMENT     external editing tools
@@ -13,8 +13,10 @@ NORMAL CODING SESSION (enter anywhere)
   CLOSE         refresh + status
 ```
 
-Span never edits, generates patches, runs tests, or orchestrates
-workflows. When stored semantics are insufficient, the operation
+Span never edits target code, generates patches, runs tests, or orchestrates
+workflows. The installer synchronizes the managed lifecycle block in the
+target `AGENTS.md`; that guidance write is separate from semantic state.
+When stored semantics are insufficient, the operation
 suspends with a bounded task: interpret it with your own model,
 submit via `submit_interpretation`, and continue — a submit may
 return the answer or the next pending unit.
@@ -41,7 +43,8 @@ does not add a second semantic state or quality model.
 
 ## Explicit target semantic establishment (Addendum E)
 
-After the repository root is initialized for operational readiness, an exact
+After the repository is identified and confirmed ready (initializing it only
+when readiness is `UNINITIALIZED`), an exact
 directory or repository path supplied by the user becomes a host-owned
 semantic campaign, not a stronger form of administrative readiness. That
 supplied path is the complete semantic boundary. The canonical entry point

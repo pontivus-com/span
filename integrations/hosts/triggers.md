@@ -17,18 +17,24 @@ explicitly; Codex relies on the hook process working directory. A hook
 outside every registered target is silent. `source-changed` continues to
 route each changed path to its longest matching registered root.
 
-## opencode (`hosts/opencode/span-hooks.js`, deployed as a plugin)
+## opencode (skill-driven fallback; no plugin deployment)
 
-| Trigger | span-hooks command | Status | Evidence |
-|---|---|---|---|
-| `session.created` | `session-start` | implemented + tested | `test_hooks_runner.py` covers the command; plugin event mapping verified live 2026-10-08 against a fixture store (silent-when-clean, exception lines, scratch node harness — no committed JS runner); installed-CLI arrival re-demonstrated 2026-10-09 (exit 0 silent on CURRENT store; uninitialized-scope notice on empty data dir, no mutation) |
-| `tool.execute.after` (`edit`, `write`) | `source-changed <paths>` | implemented + tested | same as above (unchanged-silence + moved-notice both observed; installed-CLI no-op on unchanged path 2026-10-09) |
-| `session.idle` | `session-stop` | implemented + tested | same as above (clean-close silence + dirty-close counts both observed; installed-CLI clean-close silence 2026-10-09) |
-| other events | — | unsupported | plugin ignores them by construction |
+Per Addendum E §3/E-02 the installer does not deploy
+`.opencode/plugins/span-hooks.js` into registered repositories. It does
+synchronize the managed lifecycle block in `AGENTS.md`; the reference
+implementation is retained at
+`hosts/opencode/span-hooks.js`; the `span-hooks` CLI commands
+(`session-start`, `source-changed`, `session-stop`) remain tested via
+`test_hooks_runner.py`. Lifecycle notices are not claimed for OpenCode
+sessions; the agent follows the skill-driven lifecycle instead.
 
-Vendor-app event→plugin dispatch remains outside observable boundary
-(verified to plugin code + installed hook CLI + MCP wire). Arrival
-evidence: `hook_arrivals_opencode.json` (adoption-ledger live section).
+| Duty | Agent action |
+|---|---|
+| orient | normal `status` (no target), then `explain` |
+| material change | `impact` before editing; scoped `status` → tests → scoped `refresh` → scoped `status` after |
+
+Prior live plugin arrival evidence (`hook_arrivals_opencode.json`) is
+retained as history; it does not support a current deployment claim.
 
 Fallback: events the host does not emit are covered by the
 skill-driven lifecycle (`skills/span/SKILL.md` operation lifecycle +
@@ -59,6 +65,13 @@ absent (installer reports, never fails). Fallback: identical
 skill-driven procedure; where a host cannot enforce closeout, that
 limitation is stated by the agent in its closeout report rather than
 assumed away.
+
+## claude (fallback-only; no hook wiring claimed)
+
+No Span hook wiring is claimed for Claude Code sessions (neither target
+`.claude/settings.json` nor any host-level entry). The agent follows the
+same skill-driven lifecycle and states the limitation in its closeout
+report rather than assuming it away.
 
 ## Out of scope for every host
 
