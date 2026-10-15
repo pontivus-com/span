@@ -1066,5 +1066,120 @@ class ProvisionPathTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class ContextualPathSmokeTest(unittest.TestCase):
+    """Unchanged SubjectSelector schema reaches contextual resolution."""
+
+    def test_twelve_tools_and_path_explain(self):
+        self.assertEqual(len(TOOL_NAMES), 12)
+        decoded = decode_request(
+            "explain",
+            {
+                "repository_id": REPO,
+                "target": _selector_args("src/tools.py"),
+            },
+        )
+        self.assertIsInstance(decoded, ops.SemanticExplainRequest)
+        self.assertEqual(
+            decoded.target.name_or_locator, "src/tools.py"
+        )
+        adapter, _ = _harness()
+        try:
+            ctx = adapter.contexts[REPO]
+            area = m.SubjectId(
+                repository_id=REPO, subject_kind=m.SubjectKind.COMPONENT,
+                canonical_locator="tools_area",
+            )
+            feature = m.SubjectId(
+                repository_id=REPO, subject_kind=m.SubjectKind.SUBSYSTEM,
+                canonical_locator="tools_feature",
+            )
+            eref = m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-src/tools.py"),
+                repository_id=REPO,
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/tools.py",
+                revision_or_fingerprint=fingerprint_content(
+                    FILES["src/tools.py"]
+                ),
+            )
+            fp = fingerprint_content(FILES["src/tools.py"])
+            claim = m.SemanticClaim(
+                claim_id=m.ClaimId("c-tools"), subject=area,
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.PurposeValue("serves tools", ()),
+                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(
+                    m.FreshnessState.CURRENT, reason="t"
+                ),
+                basis=m.SemanticBasis(
+                    m.DerivationKind.EXPLICIT_EVIDENCE
+                ),
+            )
+            mem = m.SemanticRelationship(
+                relationship_id=m.RelationshipId("r-tools-mem"),
+                source=area, kind=m.RelationshipKind.MEMBER_OF,
+                target=feature,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(
+                    m.FreshnessState.CURRENT, reason="t"
+                ),
+                basis=m.SemanticBasis(
+                    m.DerivationKind.EXPLICIT_EVIDENCE
+                ),
+            )
+            question = m.SemanticQuestionScope(
+                scope_root=area, subject=area,
+                question_class=m.SemanticQuestionClass.CQ_01,
+                question_slice=area.canonical_locator,
+                materiality_basis="EXPLAIN question-local",
+            )
+            coverage = m.InterpretationCoverage(
+                subjects=(area,),
+                question_slice=area.canonical_locator,
+                declared_complete=True, question=question,
+                disposition=m.SemanticQuestionDisposition.ANSWERED,
+                result_refs=(m.ClaimRef(id=claim.claim_id),),
+                disposition_basis="b",
+            )
+            ctx.store.write_index_batch(m.CanonicalIndexBatch(
+                subjects=(
+                    m.Subject(area, "Tools Area", None),
+                    m.Subject(feature, "Tools Feature", None),
+                ),
+                claims=(claim,), relationships=(mem,),
+                evidence_dependencies=(
+                    m.EvidenceDependency(
+                        m.ClaimRef(id=claim.claim_id), eref, fp
+                    ),
+                    m.EvidenceDependency(
+                        m.RelationshipRef(id=mem.relationship_id),
+                        eref, fp,
+                    ),
+                ),
+                coverage=(coverage,),
+            ))
+            pending = adapter.dispatch(
+                "explain",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args("src/tools.py"),
+                },
+            )
+            self.assertFalse(pending.is_error)
+            answer = json.loads(pending.content)
+            self.assertEqual(answer["$type"], "SemanticAnswer")
+            candidates = answer["subject_resolution"]["candidates"]
+            self.assertTrue(candidates)
+            locators = {
+                c["subject"]["subject_id"]["canonical_locator"]
+                for c in candidates
+            }
+            self.assertIn("tools_area", locators)
+        finally:
+            adapter.contexts[REPO].store.close()
+
+
 if __name__ == "__main__":
     unittest.main()
