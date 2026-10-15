@@ -2079,6 +2079,10 @@ TASK_BRIEF_SEMANTIC_RESULT: tuple[str, ...] = (
     "Use existing typed claims and relationships only.",
     "Give each asserted result admissible evidence and distinguish observed "
     "behavior from governing intent.",
+    "When the admitted evidence establishes that the examined subject "
+    "participates in a larger coherent semantic context, preserve that "
+    "membership using the existing CAPABILITY_MEMBERSHIP claim or MEMBER_OF "
+    "relationship. Never infer membership from directory structure alone.",
 )
 
 TASK_BRIEF_ADVERSARIAL_CHECKS: tuple[str, ...] = (

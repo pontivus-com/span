@@ -542,5 +542,222 @@ class VerticalSliceTest(unittest.TestCase):
             store.close()
 
 
+class FreshSessionPathReuseTest(unittest.TestCase):
+    """Fresh session recovers established context from path only."""
+
+    CTX = "fresh-ctx"
+
+    def _bounds(self):
+        return m.QueryBounds(
+            50, 5, 8, 24, 96_000, 64, 64,
+        )
+
+    def test_path_only_explain_and_trace(self):
+        from span import service as ops
+        from span.ports.structural import StructuralDirection
+        from span.service.questions import effective_trace_slice
+        from span.service.requests import SemanticTraceRequest
+        repo = self.CTX
+        files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
+        structural = InMemoryStructuralSource(
+            repo,
+            tuple(InMemoryFile(p, c) for p, c in files.items()),
+            (InMemorySubject(
+                "canonical_assembly/candidate_packager.py",
+                m.SubjectKind.COMPONENT, "candidate_packager",
+            ),),
+        )
+        evidence = FixtureEvidenceSource(repo, dict(files))
+        store = SqliteSemanticStore(":memory:")
+        try:
+            ops.initialize_repository(
+                ops.SemanticInitializeRepositoryRequest(
+                    repository_locator="fixture",
+                    structural_provider_config="memory:test",
+                    authority_seeds=(),
+                ),
+                repository_id=repo, structural=structural,
+                evidence=evidence, store=store,
+            )
+            canon = m.SubjectId(
+                repository_id=repo, subject_kind=m.SubjectKind.COMPONENT,
+                canonical_locator="canonical_assembly",
+            )
+            root = m.SubjectId(
+                repository_id=repo, subject_kind=m.SubjectKind.SUBSYSTEM,
+                canonical_locator="review_workflow",
+            )
+            term = m.SubjectId(
+                repository_id=repo, subject_kind=m.SubjectKind.COMPONENT,
+                canonical_locator="terminal",
+            )
+            fp = fingerprint_content(
+                files["canonical_assembly/candidate_packager.py"]
+            )
+            eref = m.EvidenceRef(
+                evidence_id=m.EvidenceId(
+                    "ev-canonical_assembly/candidate_packager.py"
+                ),
+                repository_id=repo,
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="canonical_assembly/candidate_packager.py",
+                revision_or_fingerprint=fp,
+            )
+            claim = m.SemanticClaim(
+                claim_id=m.ClaimId("c-purpose"), subject=canon,
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.PurposeValue("packs", ()), evidence=(eref,),
+                trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(
+                    m.FreshnessState.CURRENT, reason="t"
+                ),
+                basis=m.SemanticBasis(
+                    m.DerivationKind.EXPLICIT_EVIDENCE
+                ),
+            )
+            mem = m.SemanticRelationship(
+                relationship_id=m.RelationshipId("r-mem"),
+                source=canon, kind=m.RelationshipKind.MEMBER_OF,
+                target=root,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(
+                    m.FreshnessState.CURRENT, reason="t"
+                ),
+                basis=m.SemanticBasis(
+                    m.DerivationKind.EXPLICIT_EVIDENCE
+                ),
+            )
+            exec_rel = m.SemanticRelationship(
+                relationship_id=m.RelationshipId("r-exec"),
+                source=root, kind=m.RelationshipKind.PRODUCES,
+                target=term,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(
+                    m.FreshnessState.CURRENT, reason="t"
+                ),
+                basis=m.SemanticBasis(
+                    m.DerivationKind.EXPLICIT_EVIDENCE
+                ),
+            )
+            explain_q = m.SemanticQuestionScope(
+                scope_root=canon, subject=canon,
+                question_class=m.SemanticQuestionClass.CQ_01,
+                question_slice=canon.canonical_locator,
+                materiality_basis="EXPLAIN question-local",
+            )
+            explain_cov = m.InterpretationCoverage(
+                subjects=(canon,),
+                question_slice=canon.canonical_locator,
+                declared_complete=True, question=explain_q,
+                disposition=m.SemanticQuestionDisposition.ANSWERED,
+                result_refs=(m.ClaimRef(id=claim.claim_id),),
+                disposition_basis="b",
+            )
+            trace_slice = effective_trace_slice(
+                root.canonical_locator, StructuralDirection.BOTH,
+                None, False,
+            )
+
+            def _tcov(subj, ref):
+                q = m.SemanticQuestionScope(
+                    scope_root=root, subject=subj,
+                    question_class=m.SemanticQuestionClass.CQ_04,
+                    question_slice=trace_slice,
+                    materiality_basis="TRACE question-local",
+                )
+                return m.InterpretationCoverage(
+                    subjects=(subj,), question_slice=trace_slice,
+                    declared_complete=True, question=q,
+                    disposition=m.SemanticQuestionDisposition.ANSWERED,
+                    result_refs=(ref,), disposition_basis="b",
+                )
+
+            store.write_index_batch(m.CanonicalIndexBatch(
+                subjects=(
+                    m.Subject(canon, "Canonical Assembly", None),
+                    m.Subject(root, "Review Workflow", None),
+                    m.Subject(term, "Terminal", None),
+                ),
+                claims=(claim,), relationships=(mem, exec_rel),
+                evidence_dependencies=(
+                    m.EvidenceDependency(
+                        m.ClaimRef(id=claim.claim_id), eref, fp
+                    ),
+                    m.EvidenceDependency(
+                        m.RelationshipRef(id=mem.relationship_id),
+                        eref, fp,
+                    ),
+                    m.EvidenceDependency(
+                        m.RelationshipRef(id=exec_rel.relationship_id),
+                        eref, fp,
+                    ),
+                ),
+                coverage=(
+                    explain_cov,
+                    _tcov(
+                        root,
+                        m.RelationshipRef(id=exec_rel.relationship_id),
+                    ),
+                    _tcov(
+                        term,
+                        m.RelationshipRef(id=exec_rel.relationship_id),
+                    ),
+                    _tcov(
+                        canon,
+                        m.RelationshipRef(id=mem.relationship_id),
+                    ),
+                ),
+            ))
+            # Session 2: new continuations, no retained semantic IDs.
+            fresh_continuations = ContinuationStore()
+            explained = ops.explain(
+                ops.SemanticExplainRequest(
+                    repository_id=repo,
+                    target=m.SubjectSelector(
+                        None, "canonical_assembly/candidate_packager.py",
+                        (), None,
+                    ),
+                    bounds=self._bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=fresh_continuations,
+            )
+            self.assertIsInstance(explained, m.SemanticAnswer)
+            self.assertEqual(
+                explained.subject_resolution.candidates[0]
+                .subject.subject_id,
+                canon,
+            )
+            traced = ops.trace(
+                SemanticTraceRequest(
+                    repository_id=repo,
+                    target=m.SubjectSelector(
+                        None, "canonical_assembly/candidate_packager.py",
+                        (), None,
+                    ),
+                    direction=StructuralDirection.BOTH,
+                    relationship_filter=None, boundary_only=False,
+                    bounds=self._bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(traced, m.SemanticAnswer)
+            self.assertEqual(
+                traced.subject_resolution.candidates[0]
+                .subject.subject_id,
+                root,
+            )
+            self.assertTrue(any(
+                r.kind is m.RelationshipKind.PRODUCES
+                for r in traced.content.relationships
+            ))
+        finally:
+            store.close()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -49,7 +49,9 @@ from span.service.requests import (
     SemanticTraceRequest,
 )
 from span.service.resolution import (
+    _has_established_semantic_state,
     _load_subject_state,
+    _resolve_contextual_subjects,
     _resolve_exact_subject,
     _resolve_query_subject,
 )
@@ -460,11 +462,52 @@ def trace(
         request.repository_id, request.target, structural=structural,
         store=store, bounds=bounds,
     )
+    if request.target.exact_subject_id is None:
+        use_direct = False
+        if resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED:
+            if resolution.candidates and _has_established_semantic_state(
+                request.repository_id, resolution.candidates[0].subject,
+                store=store, bounds=bounds,
+            ):
+                use_direct = True
+        elif resolution.ambiguity is m.ResolutionAmbiguity.AMBIGUOUS:
+            for candidate in resolution.candidates:
+                if _has_established_semantic_state(
+                    request.repository_id, candidate.subject,
+                    store=store, bounds=bounds,
+                ):
+                    use_direct = True
+                    break
+        if not use_direct:
+            _, trace_root = _resolve_contextual_subjects(
+                request.repository_id, request.target,
+                structural=structural, evidence=evidence,
+                store=store, bounds=bounds,
+            )
+            if trace_root.ambiguity is not m.ResolutionAmbiguity.NOT_FOUND:
+                resolution = trace_root
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         requirements = _answers.requirements_for_resolution(
             resolution, repository_id=request.repository_id,
             name_or_locator=request.target.name_or_locator,
         )
+        if (
+            resolution.ambiguity is m.ResolutionAmbiguity.AMBIGUOUS
+            and resolution.bound_info.truncated
+            and resolution.bound_info.truncated_category
+            in ("inventory", "context")
+        ):
+            requirements = requirements + (
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+                    subject_or_claim=None,
+                    description=(
+                        "path context not completely examined within "
+                        "bounds; narrow the path or raise bounds"
+                    ),
+                    supporting_context=(),
+                ),
+            )
         return m.SemanticAnswer(
             answer_id=_answer_id(
                 "trc", request.repository_id,

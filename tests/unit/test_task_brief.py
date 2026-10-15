@@ -444,5 +444,17 @@ class TaskBriefTest(unittest.TestCase):
             store.close()
 
 
+class TaskBriefMembershipGuidanceTest(unittest.TestCase):
+    def test_semantic_result_requires_evidence_backed_membership(self):
+        guidance = " ".join(m.TASK_BRIEF_SEMANTIC_RESULT)
+        self.assertIn("CAPABILITY_MEMBERSHIP", guidance)
+        self.assertIn("MEMBER_OF", guidance)
+        self.assertIn("larger coherent semantic context", guidance)
+        self.assertIn(
+            "Never infer membership from directory structure alone",
+            guidance,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
