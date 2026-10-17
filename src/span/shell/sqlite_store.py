@@ -691,10 +691,52 @@ class SqliteSemanticStore:
 
     def count_target_associations(self, repository_id: str) -> int:
         row = self._db.execute(
-            "SELECT COUNT(*) FROM target_associations WHERE repository_id=?",
-            (repository_id,),
+            "SELECT COUNT(*) FROM target_associations "
+            "WHERE repository_id=? AND expires_at > ?",
+            (repository_id, self._now().isoformat()),
         ).fetchone()
         return int(row[0]) if row is not None else 0
+
+    def count_target_inventory_outcomes(
+        self, repository_id: str
+    ) -> tuple[int, int]:
+        """Count persisted accounted/unresolved members with SQLite JSON."""
+        row = self._db.execute(
+            "SELECT "
+            "COALESCE(SUM(CASE WHEN "
+            "(COALESCE(json_array_length(json_extract(item.value, "
+            "'$.assigned_area_subjects')), 0) > 0 OR "
+            "json_type(json_extract(item.value, '$.exclusion_basis')) "
+            "IS NOT NULL) THEN 1 ELSE 0 END), 0), "
+            "COALESCE(SUM(CASE WHEN "
+            "COALESCE(json_array_length(json_extract(item.value, "
+            "'$.resolution_requirements')), 0) > 0 "
+            "THEN 1 ELSE 0 END), 0) "
+            "FROM target_associations AS association, "
+            "json_each(association.canonical_json, "
+            "'$.inventory_accounting') AS item "
+            "WHERE association.repository_id=? AND association.expires_at > ?",
+            (repository_id, self._now().isoformat()),
+        ).fetchone()
+        if row is None:
+            return 0, 0
+        return int(row[0]), int(row[1])
+
+    def load_active_target_associations(
+        self, repository_id: str
+    ) -> tuple[m.TargetAssociation, ...]:
+        rows = self._db.execute(
+            "SELECT canonical_json FROM target_associations "
+            "WHERE repository_id=? AND expires_at > ? ORDER BY target_id",
+            (repository_id, self._now().isoformat()),
+        ).fetchall()
+        associations: list[m.TargetAssociation] = []
+        for (payload,) in rows:
+            data = _strip_retired_target_account_fields(_json.loads(payload))
+            value = m.from_canonical(m.TargetAssociation, data)
+            assert isinstance(value, m.TargetAssociation)
+            associations.append(value)
+        return tuple(associations)
 
     def load_by_refs(
         self,

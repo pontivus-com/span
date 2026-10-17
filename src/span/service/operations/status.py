@@ -27,6 +27,7 @@ from span.service.answers import (
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
 )
+from span.service.discovery import enumerate_target_inventory
 from span.service.freshness import (
     _classify_current,
     _evaluate_current,
@@ -287,7 +288,7 @@ def _repository_coverage_entry(
         is m.SemanticQuestionDisposition.NOT_APPLICABLE
         for view in question_views
     )
-    question_stale = any(
+    stale_effective_question_count = sum(
         view.freshness.state is m.FreshnessState.STALE
         for view in question_views
     )
@@ -331,7 +332,7 @@ def _repository_coverage_entry(
     )
     if question_unverifiable or unverifiable_count:
         disposition = m.SemanticCoverageDisposition.UNVERIFIABLE
-    elif question_stale or stale_count:
+    elif stale_effective_question_count or stale_count:
         disposition = m.SemanticCoverageDisposition.STALE
     elif incomplete:
         disposition = m.SemanticCoverageDisposition.INCOMPLETE
@@ -455,6 +456,7 @@ def _repository_coverage_entry(
         pending_question_count=pending_count,
         open_question_count=open_count,
         not_applicable_question_count=not_applicable_count,
+        stale_effective_question_count=stale_effective_question_count,
         resolution_requirements=tuple(requirements[:bounds.max_results]),
         truncated=truncated,
     )
@@ -509,10 +511,16 @@ def _coverage_report(
     *,
     persisted_subject_count: int,
     returned_subject_count: int,
-    pending_question_count: int = 0,
-    open_question_count: int = 0,
-    active_target_association_count: int = 0,
+    question_counts: tuple[int, int] = (0, 0),
+    target_counts: tuple[int, int, int, int | None] = (0, 0, 0, 0),
 ) -> m.SemanticCoverageReport:
+    pending_question_count, open_question_count = question_counts
+    (
+        active_target_association_count,
+        persisted_target_accounted_count,
+        persisted_target_unresolved_count,
+        bounded_live_target_unaccounted_count,
+    ) = target_counts
     counts = {
         disposition: sum(
             entry.disposition is disposition for entry in entries
@@ -536,8 +544,57 @@ def _coverage_report(
         ],
         pending_question_count=pending_question_count,
         open_question_count=open_question_count,
+        stale_effective_question_count=sum(
+            entry.stale_effective_question_count for entry in entries
+        ),
         active_target_association_count=active_target_association_count,
+        persisted_target_accounted_count=persisted_target_accounted_count,
+        persisted_target_unresolved_count=persisted_target_unresolved_count,
+        bounded_live_target_unaccounted_count=(
+            bounded_live_target_unaccounted_count
+        ),
+        target_burden_live_scope=(
+            m.SemanticCoverageAggregateScope.BOUNDED_LIVE
+            if bounded_live_target_unaccounted_count is not None
+            else m.SemanticCoverageAggregateScope.UNKNOWN
+        ),
     )
+
+
+def _target_burden_aggregates(
+    repository_id: str,
+    *,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> tuple[int, int, int | None]:
+    """Read persisted target burden and bounded live unaccounted members."""
+    accounted, unresolved = store.count_target_inventory_outcomes(
+        repository_id
+    )
+    associations = store.load_active_target_associations(repository_id)
+    live_unaccounted = 0
+    try:
+        for association in associations:
+            inventory = enumerate_target_inventory(
+                repository_id,
+                association.target_scope,
+                evidence=evidence,
+                bounds=bounds,
+            )
+            accounted_ids = {
+                item.evidence_ref.evidence_id.value
+                for item in association.inventory_accounting
+            }
+            live_unaccounted += sum(
+                item.evidence_ref.evidence_id.value not in accounted_ids
+                for item in inventory
+            )
+    except ValueError:
+        # A provider cannot establish the bounded live observation. Preserve
+        # the exact persisted burden and mark the live projection unknown.
+        live_unaccounted = None
+    return accounted, unresolved, live_unaccounted
 
 
 def _compose_repository_status_answer(
@@ -580,16 +637,28 @@ def _compose_repository_status_answer(
         )
     )
     _qdisp = store.count_question_dispositions(repository_id)
+    (
+        persisted_target_accounted_count,
+        persisted_target_unresolved_count,
+        bounded_live_target_unaccounted_count,
+    ) = _target_burden_aggregates(
+        repository_id, evidence=evidence, store=store, bounds=bounds
+    )
     report = _coverage_report(
         entries,
         persisted_subject_count=store.count_repository_subjects(
             repository_id
         ),
         returned_subject_count=len(entries),
-        pending_question_count=_qdisp.get("PENDING", 0),
-        open_question_count=_qdisp.get("OPEN", 0),
-        active_target_association_count=store.count_target_associations(
-            repository_id
+        question_counts=(
+            _qdisp.get("PENDING", 0),
+            _qdisp.get("OPEN", 0),
+        ),
+        target_counts=(
+            store.count_target_associations(repository_id),
+            persisted_target_accounted_count,
+            persisted_target_unresolved_count,
+            bounded_live_target_unaccounted_count,
         ),
     )
     requirements = tuple(
@@ -1101,6 +1170,14 @@ def _compose_status_answer(
         repository_id, subjects, evidence=evidence, store=store,
         bounds=bounds,
     )
+    (
+        persisted_target_accounted_count,
+        persisted_target_unresolved_count,
+        bounded_live_target_unaccounted_count,
+    ) = _target_burden_aggregates(
+        repository_id, evidence=evidence, store=store, bounds=bounds
+    )
+    _qdisp = store.count_question_dispositions(repository_id)
     frontier_report = _coverage_report(
         frontier_entries,
         persisted_subject_count=sum(
@@ -1108,14 +1185,15 @@ def _compose_status_answer(
             if entry.semantic_item_count or entry.question_count
         ),
         returned_subject_count=len(frontier_entries),
-        pending_question_count=store.count_question_dispositions(
-            repository_id
-        ).get("PENDING", 0),
-        open_question_count=store.count_question_dispositions(
-            repository_id
-        ).get("OPEN", 0),
-        active_target_association_count=store.count_target_associations(
-            repository_id
+        question_counts=(
+            _qdisp.get("PENDING", 0),
+            _qdisp.get("OPEN", 0),
+        ),
+        target_counts=(
+            store.count_target_associations(repository_id),
+            persisted_target_accounted_count,
+            persisted_target_unresolved_count,
+            bounded_live_target_unaccounted_count,
         ),
     )
     content = m.StatusContent(

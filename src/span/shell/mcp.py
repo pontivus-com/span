@@ -138,7 +138,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Submit the host-produced typed interpretation result for a "
         "pending continuation; the agent performs interpretation, Span "
         "validates and atomically persists it. Returns the answer, or "
-        "the next pending unit while frontiers remain."
+        "the next pending unit while frontiers remain. Pending tasks use "
+        "the SA_1_7_V1 interpretation profile; satisfy its evidence, "
+        "scope, typed-disposition, adversarial, and fresh-readback "
+        "obligations before submitting."
     ),
     "locate": (
         "Read-only structural find, file outline, or target member "
@@ -423,20 +426,39 @@ def _omit_static_profile(compact: dict) -> dict:
         request.pop("bounds", None)
     brief = request.get("brief")
     if isinstance(brief, dict):
-        brief = dict(brief)
-        base = {
-            "material_path": list(m.TASK_BRIEF_MATERIAL_PATH),
-            "semantic_result": list(m.TASK_BRIEF_SEMANTIC_RESULT),
-            "adversarial_checks": list(m.TASK_BRIEF_ADVERSARIAL_CHECKS),
-            "readback": list(m.TASK_BRIEF_READBACK),
-        }
-        for key, value in base.items():
-            if brief.get(key) == value:
-                brief.pop(key)
-        request["brief"] = brief
+        request["brief"] = _omit_static_brief(brief)
     compact = dict(compact)
     compact["request"] = request
     return compact
+
+
+def _omit_static_brief(brief: object) -> object:
+    if not isinstance(brief, dict):
+        return brief
+    brief = dict(brief)
+    base = {
+        "material_path": list(m.TASK_BRIEF_MATERIAL_PATH),
+        "semantic_result": list(m.TASK_BRIEF_SEMANTIC_RESULT),
+        "adversarial_checks": list(m.TASK_BRIEF_ADVERSARIAL_CHECKS),
+        "readback": list(m.TASK_BRIEF_READBACK),
+    }
+    for key, value in base.items():
+        if brief.get(key) == value:
+            brief.pop(key)
+    if brief.get("open_handling") == list(m.TASK_BRIEF_OPEN_HANDLING):
+        brief.pop("open_handling")
+    submission_rules = brief.get("submission_rules")
+    base_rules = list(m.TASK_BRIEF_SUBMISSION_RULES)
+    if (
+        isinstance(submission_rules, list)
+        and submission_rules[: len(base_rules)] == base_rules
+    ):
+        dynamic_rules = submission_rules[len(base_rules):]
+        if dynamic_rules:
+            brief["submission_rules"] = dynamic_rules
+        else:
+            brief.pop("submission_rules")
+    return brief
 
 
 def _error(kind: str, message: str) -> ToolResult:

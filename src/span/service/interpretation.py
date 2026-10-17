@@ -16,6 +16,7 @@ import dataclasses as _dataclasses
 from dataclasses import dataclass as _dataclass
 
 from span.core import model as m
+from span.core import schema as _schema
 from span.core import validation as _validation
 from span.ports.evidence import EvidenceSource
 from span.ports.interpretation import PendingInterpretation
@@ -374,6 +375,51 @@ def _project_excerpts(
     return tuple(projected), tuple(kept_omissions), tuple(requirements)
 
 
+def _submission_template(
+    bound_question: m.SemanticQuestionScope | None,
+) -> str:
+    if bound_question is None:
+        return ""
+    import json as _json
+
+    example = {
+        "$type": "SemanticInterpretationResult",
+        "claims": [],
+        "relationships": [],
+        "governing_source_refs": [],
+        "diagnostics": [],
+        "candidate_subjects": [],
+        "candidate_conflicts": [],
+        "proposed_question_coverages": [
+            {
+                "$type": "InterpretationCoverage",
+                "subjects": [m.to_canonical(bound_question.subject)],
+                "question_slice": bound_question.question_slice,
+                "evidence_scope": {"$type": "EvidenceScope"},
+                "declared_complete": False,
+                "question": m.to_canonical(bound_question),
+                "disposition": "PENDING",
+                "result_refs": [],
+                "resolution_requirements": [],
+                "disposition_basis": "",
+                "question_evidence": [],
+            }
+        ],
+        "candidate_withdrawals": [],
+        "proposed_target_inventory_accounting": [],
+        "proposed_target_questions": [],
+    }
+    compact = _schema.compact_payload(
+        m.SemanticInterpretationResult, example
+    )
+    return (
+        "Minimal submission template (unfinished, PENDING with "
+        "missing-examination requirement; add validated candidates "
+        "and actual disposition; do not predeclare ANSWERED): "
+        + _json.dumps(compact, sort_keys=True)
+    )
+
+
 def _build_task_brief(
     *,
     resolved_slice: str,
@@ -420,43 +466,7 @@ def _build_task_brief(
     # bound question and immutable identities, PENDING + missing
     # examination, not a fabricated answer. Agents supply validated
     # candidates and disposition. No parallel template carrier.
-    submission_example = ""
-    if bound_question is not None:
-        import json as _json
-
-        example = {
-            "$type": "SemanticInterpretationResult",
-            "claims": [],
-            "relationships": [],
-            "governing_source_refs": [],
-            "diagnostics": [],
-            "candidate_subjects": [],
-            "candidate_conflicts": [],
-            "proposed_question_coverages": [
-                {
-                    "$type": "InterpretationCoverage",
-                    "subjects": [m.to_canonical(bound_question.subject)],
-                    "question_slice": bound_question.question_slice,
-                    "evidence_scope": {"$type": "EvidenceScope"},
-                    "declared_complete": False,
-                    "question": m.to_canonical(bound_question),
-                    "disposition": "PENDING",
-                    "result_refs": [],
-                    "resolution_requirements": [],
-                    "disposition_basis": "",
-                    "question_evidence": [],
-                }
-            ],
-            "candidate_withdrawals": [],
-            "proposed_target_inventory_accounting": [],
-            "proposed_target_questions": [],
-        }
-        submission_example = (
-            "Minimal submission template (unfinished, PENDING with "
-            "missing-examination requirement; add validated candidates "
-            "and actual disposition; do not predeclare ANSWERED): "
-            + _json.dumps(example, sort_keys=True)
-        )
+    submission_example = _submission_template(bound_question)
     submission_rules = m.TASK_BRIEF_SUBMISSION_RULES + (
         (
             submission_example

@@ -69,7 +69,7 @@ __all__ = [
 #: ``span/shell/install.py`` (which must stay stdlib-only, so the
 #: constants are duplicated, not imported).
 STRUCTURAL_INDEXER_PACKAGE = "@nanonets/graft"
-STRUCTURAL_INDEXER_VERSION = "0.21.1"
+STRUCTURAL_INDEXER_VERSION = "0.23.0"
 
 #: Env override for the indexer binary (contributor/debug use). The
 #: normal path is the installer-written pointer under the data dir.
@@ -848,6 +848,27 @@ class GraftStructuralSource:
         toks = sorted(set(tokens), key=lambda t: order[t])
         return "clean-verified" if not toks else "+".join(toks)
 
+    def _repository_detail_tokens(self) -> list[str]:
+        tokens: list[str] = []
+        if self._wiring_path is None:
+            return ["injected-index"]
+        revision, dirty = _git_revision(self._repo_path)
+        if revision is None:
+            return ["non-git-tree"]
+        if dirty:
+            return ["dirty-tree"]
+        head_time = _git_head_time(self._repo_path)
+        if head_time is None:
+            return ["non-git-tree"]
+        if (
+            self._wiring_mtime_ns is not None
+            and self._wiring_mtime_ns < head_time * 1_000_000_000
+        ):
+            tokens.append("index-older-than-head")
+        if not self._repository_population_current():
+            tokens.append("repository-population-unverified")
+        return tokens
+
     def _coverage_detail(
         self,
         stale: list[str] | tuple[str, ...],
@@ -861,42 +882,12 @@ class GraftStructuralSource:
         index-older-than-head. `clean-verified` only when coverage is
         VERIFIED.
         """
-        tokens: list[str] = []
-        if self._wiring_path is None:
-            tokens.append("injected-index")
-        else:
-            revision, dirty = _git_revision(self._repo_path)
-            if revision is None:
-                tokens.append("non-git-tree")
-            elif dirty:
-                tokens.append("dirty-tree")
-            else:
-                head_time = _git_head_time(self._repo_path)
-                if head_time is None:
-                    tokens.append("non-git-tree")
-                elif (
-                    self._wiring_mtime_ns is not None
-                    and self._wiring_mtime_ns
-                    < head_time * 1_000_000_000
-                ):
-                    tokens.append("index-older-than-head")
+        tokens = self._repository_detail_tokens()
         if stale:
             tokens.append("touched-file-mismatch")
         if unverifiable:
             tokens.append("unverifiable-file")
-        order = {
-            "non-git-tree": 0,
-            "injected-index": 1,
-            "dirty-tree": 2,
-            "touched-file-mismatch": 3,
-            "unverifiable-file": 4,
-            "index-older-than-head": 5,
-            "repository-population-unverified": 6,
-        }
-        tokens = sorted(set(tokens), key=lambda t: order[t])
-        if not tokens:
-            return "clean-verified"
-        return "+".join(tokens)
+        return self._join_detail(tokens)
 
     def verify_files(
         self,

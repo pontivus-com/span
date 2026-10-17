@@ -305,6 +305,13 @@ class DispatchTest(unittest.TestCase):
                 m.SemanticInterpretationRequest,
                 envelope["request"],
             )
+            wire_brief = envelope["request"]["brief"]
+            self.assertNotIn("open_handling", wire_brief)
+            self.assertTrue(
+                set(m.TASK_BRIEF_SUBMISSION_RULES).isdisjoint(
+                    wire_brief.get("submission_rules", [])
+                )
+            )
             self.assertEqual(task.target_scope.paths, ("src/tools.py",))
             self.assertIn(
                 "target path: src/tools.py",
@@ -788,6 +795,116 @@ class DispatchTest(unittest.TestCase):
             m.SemanticInterpretationResult()
         ))
         json.loads(first)
+
+    def test_graft_edge_population_is_unverified_when_index_predates_head(self):
+        import hashlib
+        import os
+        import pathlib
+        import subprocess
+        import tempfile
+
+        from span.shell.structural.graft import GraftStructuralSource
+
+        with tempfile.TemporaryDirectory(prefix="span-mcp-graft-") as tmp:
+            root = pathlib.Path(tmp)
+            (root / "src").mkdir()
+            (root / "src" / "a.py").write_text(
+                "import b\n", encoding="utf-8"
+            )
+            (root / "src" / "b.py").write_text(
+                "VALUE = 1\n", encoding="utf-8"
+            )
+            graph = root / "graft" / ".graph"
+            graph.mkdir(parents=True)
+            (root / ".gitignore").write_text("graft/\n", encoding="utf-8")
+            wiring = {
+                "nodes": [
+                    {
+                        "id": path,
+                        "name": pathlib.Path(path).name,
+                        "kind": "file",
+                        "path": path,
+                        "body_hash": hashlib.sha256(
+                            (root / path).read_bytes()
+                        ).hexdigest(),
+                    }
+                    for path in ("src/a.py", "src/b.py")
+                ],
+                "edges": [
+                    {
+                        "source": "src/a.py",
+                        "target": "src/b.py",
+                        "relation": "imports",
+                    }
+                ],
+            }
+            (graph / "wiring.json").write_text(
+                json.dumps(wiring), encoding="utf-8"
+            )
+            subprocess.run(("git", "-C", str(root), "init", "-q"), check=True)
+            subprocess.run(("git", "-C", str(root), "add", "-A"), check=True)
+            subprocess.run(
+                (
+                    "git", "-C", str(root), "-c", "user.email=t@t",
+                    "-c", "user.name=t", "commit", "-qm", "after-index",
+                ),
+                check=True,
+                env={
+                    **os.environ,
+                    "GIT_AUTHOR_DATE": "2030-01-01T00:00:00Z",
+                    "GIT_COMMITTER_DATE": "2030-01-01T00:00:00Z",
+                },
+            )
+            structural = GraftStructuralSource(REPO, root)
+            evidence = FixtureEvidenceSource(
+                REPO,
+                {
+                    "src/a.py": "import b\n",
+                    "src/b.py": "VALUE = 1\n",
+                },
+            )
+            store = SqliteSemanticStore(":memory:")
+            try:
+                ops.initialize_repository(
+                    ops.SemanticInitializeRepositoryRequest(
+                        repository_locator=f"graft:{root}",
+                        structural_provider_config=f"graft:{root}",
+                        authority_seeds=(),
+                    ),
+                    repository_id=REPO,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                )
+                adapter = McpAdapter()
+                adapter.register(
+                    REPO,
+                    ServiceContext(
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=ContinuationStore(),
+                    ),
+                )
+                result = _dispatch(
+                    adapter,
+                    "neighbors",
+                    {
+                        "repository_id": REPO,
+                        "target": _selector_args("src/a.py"),
+                        "direction": "DOWNSTREAM",
+                        "edge_kinds": [],
+                    },
+                )
+                self.assertFalse(result.is_error)
+                body = json.loads(result.content)
+                self.assertEqual(body["coverage"], "UNVERIFIED")
+                self.assertIn(
+                    "repository-population-unverified",
+                    body["coverage_detail"],
+                )
+            finally:
+                store.close()
 
     def test_adapter_is_sdk_free(self):
         import pathlib as _pathlib

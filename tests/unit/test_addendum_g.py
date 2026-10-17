@@ -404,7 +404,8 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
                 report.coverage, m.ScopeCoverage.UNVERIFIED
             )
             self.assertEqual(
-                report.coverage_detail, "index-older-than-head"
+                report.coverage_detail,
+                "index-older-than-head+repository-population-unverified",
             )
         finally:
             import shutil

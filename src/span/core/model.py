@@ -131,6 +131,7 @@ __all__ = [
     "CandidateSemanticWithdrawal",
     "SemanticQuestionCoverageView",
     "SemanticCoverageDisposition",
+    "SemanticCoverageAggregateScope",
     "SemanticCoverageEntry",
     "SemanticCoverageReport",
     "ChangeKind",
@@ -1022,6 +1023,14 @@ class SemanticCoverageDisposition(_enum.Enum):
     UNASSESSED = "UNASSESSED"
 
 
+class SemanticCoverageAggregateScope(_enum.Enum):
+    """Provenance for repository coverage aggregates (D-10/S8)."""
+
+    PERSISTED_GLOBAL = "PERSISTED_GLOBAL"
+    BOUNDED_LIVE = "BOUNDED_LIVE"
+    UNKNOWN = "UNKNOWN"
+
+
 @_dataclass(frozen=True)
 class SemanticCoverageEntry:
     """Bounded read projection for one persisted semantic subject."""
@@ -1037,6 +1046,7 @@ class SemanticCoverageEntry:
     pending_question_count: int = 0
     open_question_count: int = 0
     not_applicable_question_count: int = 0
+    stale_effective_question_count: int = 0
     resolution_requirements: tuple[ResolutionRequirement, ...] = ()
     truncated: bool = False
 
@@ -1051,6 +1061,7 @@ class SemanticCoverageEntry:
             "pending_question_count",
             "open_question_count",
             "not_applicable_question_count",
+            "stale_effective_question_count",
         ):
             _require_non_negative_int(name, getattr(self, name))
 
@@ -1076,7 +1087,26 @@ class SemanticCoverageReport:
     # above are the bounded-live classification over the returned frontier.
     pending_question_count: int = 0
     open_question_count: int = 0
+    stale_effective_question_count: int = 0
     active_target_association_count: int = 0
+    persisted_target_accounted_count: int = 0
+    persisted_target_unresolved_count: int = 0
+    bounded_live_target_unaccounted_count: int | None = 0
+    subject_disposition_scope: SemanticCoverageAggregateScope = (
+        SemanticCoverageAggregateScope.BOUNDED_LIVE
+    )
+    question_disposition_scope: SemanticCoverageAggregateScope = (
+        SemanticCoverageAggregateScope.PERSISTED_GLOBAL
+    )
+    stale_effective_question_scope: SemanticCoverageAggregateScope = (
+        SemanticCoverageAggregateScope.BOUNDED_LIVE
+    )
+    target_burden_persisted_scope: SemanticCoverageAggregateScope = (
+        SemanticCoverageAggregateScope.PERSISTED_GLOBAL
+    )
+    target_burden_live_scope: SemanticCoverageAggregateScope = (
+        SemanticCoverageAggregateScope.BOUNDED_LIVE
+    )
 
     def __post_init__(self) -> None:
         for name in (
@@ -1089,9 +1119,17 @@ class SemanticCoverageReport:
             "unassessed_subject_count",
             "pending_question_count",
             "open_question_count",
+            "stale_effective_question_count",
             "active_target_association_count",
+            "persisted_target_accounted_count",
+            "persisted_target_unresolved_count",
         ):
             _require_non_negative_int(name, getattr(self, name))
+        if self.bounded_live_target_unaccounted_count is not None:
+            _require_non_negative_int(
+                "bounded_live_target_unaccounted_count",
+                self.bounded_live_target_unaccounted_count,
+            )
 
 
 class ChangeKind(_enum.Enum):
