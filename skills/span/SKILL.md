@@ -355,3 +355,13 @@ pre-change `impact` and change closeout. They defer operation selection,
 identity, evidence submission, recovery, and the lifecycle above to this
 skill. The runbook and MCP reference are supporting procedures, not alternate
 contracts.
+
+## Addendum J note
+
+Requests use a compact grammar: supply `$type` only where a field is a
+genuine dataclass union; omit it elsewhere (a redundant tag is rejected).
+Pending units carry an `interpretation_profile` naming the immutable SA
+obligations. Target mapping submits `CandidateTargetInventoryAccount`
+(stable `EvidenceId` + one outcome); Span derives the durable account and the
+first-admission question. Mapping binds a bounded batch — disposition every
+bound member in one atomic unit.

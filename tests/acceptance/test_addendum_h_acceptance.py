@@ -1587,7 +1587,7 @@ class DocumentMappingTest(unittest.TestCase):
     def _map_current_item(self, structural, evidence, store,
                           continuations, pending):
         area = self._doc_area()
-        item = pending.request.target_inventory_item
+        item = pending.request.target_inventory_items[0]
         loc = item.evidence_ref.locator
         if loc == "docs/contract.md":
             result = m.SemanticInterpretationResult(
@@ -1625,8 +1625,8 @@ class DocumentMappingTest(unittest.TestCase):
                 ),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item.evidence_ref,
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
                     ),
                 ),
@@ -1639,8 +1639,8 @@ class DocumentMappingTest(unittest.TestCase):
                 proposed_question_coverages=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item.evidence_ref,
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item.evidence_ref.evidence_id,
                         resolution_requirements=(
                             m.ResolutionRequirement(
                                 kind=(
@@ -1663,12 +1663,22 @@ class DocumentMappingTest(unittest.TestCase):
                 proposed_question_coverages=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item.evidence_ref,
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
                     ),
                 ),
                 proposed_target_questions=(),
+            )
+        from dataclasses import replace as _dc_replace
+
+        if result.proposed_target_inventory_accounting:
+            # S5/J-6: one unit accounts for the whole bound batch.
+            result = _dc_replace(
+                result,
+                proposed_target_inventory_accounting=_fill_batch(
+                    pending, result.proposed_target_inventory_accounting
+                ),
             )
         return ops.submit_interpretation(
             pending.continuation, result,
@@ -1777,7 +1787,7 @@ class DocumentMappingTest(unittest.TestCase):
                 target_scope=m.EvidenceScope(
                     paths=("docs/contract.md",), evidence_refs=()
                 ),
-                target_inventory_item=item, mapping_mode=True,
+                target_inventory_items=(item,), mapping_mode=True,
             )
             text = " ".join(
                 task.request.brief.scope_boundaries
@@ -1786,6 +1796,29 @@ class DocumentMappingTest(unittest.TestCase):
             self.assertIn("subject: null", text)
         finally:
             store.close()
+
+
+def _fill_batch(pending, accounts):
+    """S5/J-6 test helper: account for every bound inventory item."""
+    accounts = tuple(accounts)
+    if not accounts:
+        return accounts
+    have = {a.evidence_id.value for a in accounts}
+    out = list(accounts)
+    for it in pending.request.target_inventory_items:
+        eid = it.evidence_ref.evidence_id.value
+        if eid in have:
+            continue
+        out.append(m.CandidateTargetInventoryAccount(
+            evidence_id=it.evidence_ref.evidence_id,
+            resolution_requirements=(m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=None,
+                description="not examined in this test",
+                supporting_context=(),
+            ),),
+        ))
+    return tuple(out)
 
 
 if __name__ == "__main__":

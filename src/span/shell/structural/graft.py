@@ -401,6 +401,67 @@ def _git_head_time(repo_path: _pathlib.Path) -> int | None:
         return None
 
 
+def _git_scope_baseline_time(
+    repo_path: _pathlib.Path, scope_paths: tuple[str, ...]
+) -> int | None:
+    """Most recent commit time touching the scope (J-7 scoped baseline).
+
+    ``git log -1 --format=%ct -- <pathspecs>``. When no commit touched
+    the scope, fall back to the repository-global HEAD time.
+    """
+    if not scope_paths:
+        return _git_head_time(repo_path)
+    try:
+        proc = _subprocess.run(
+            [
+                "git", "-C", str(repo_path), "log", "-1", "--format=%ct",
+                "--", *scope_paths,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, _subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    out = proc.stdout.strip()
+    if not out:
+        return _git_head_time(repo_path)
+    try:
+        return int(out)
+    except ValueError:
+        return None
+
+
+def _git_scope_dirty(
+    repo_path: _pathlib.Path, scope_paths: tuple[str, ...]
+) -> bool | None:
+    """Scoped working-tree dirtiness including untracked (J-7).
+
+    ``git status --porcelain -- <pathspecs>``; any entry means a
+    changed/untracked path intersecting the scope. None when git cannot
+    answer.
+    """
+    if not scope_paths:
+        return None
+    try:
+        proc = _subprocess.run(
+            [
+                "git", "-C", str(repo_path), "status", "--porcelain",
+                "--", *scope_paths,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, _subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return bool(proc.stdout.strip())
+
+
 def _run_index_build(
     repo_path: _pathlib.Path,
     artifact_dir: str | _pathlib.Path | None = None,
@@ -705,14 +766,30 @@ class GraftStructuralSource:
         except OSError:
             return None
 
-    def _scope_current(self) -> bool:
-        """Index-covers-tree check (Addendum F §4.0).
+    def _verify_exact_files(
+        self, files: tuple[str, ...] | list[str]
+    ) -> tuple[list[str], list[str]]:
+        """Per-file live verification with no repository-wide gate (S2.1)."""
+        stale: list[str] = []
+        unverifiable: list[str] = []
+        for path in dict.fromkeys(files):
+            recorded = self._file_hashes.get(path)
+            if recorded is None:
+                unverifiable.append(path)
+                continue
+            live = self._live_file_fingerprint(path)
+            if live is None or live != recorded:
+                stale.append(path)
+        return stale, unverifiable
+
+    def _repository_population_current(self) -> bool:
+        """Whole-repository candidate population is unchanged (S2.1).
 
         True only when the tree is git-clean and the loaded index is at
-        least as new as HEAD: a clean tree equals HEAD, so an index that
-        postdates it saw exactly this content — including the absence of
-        new files. Injected wiring and non-git trees cannot establish
-        this and report False (honest UNVERIFIED, never assumed).
+        least as new as HEAD. Used for open-world queries whose
+        completeness a changed or untracked file could alter. Injected
+        wiring and non-git trees cannot establish this (honest
+        UNVERIFIED, never assumed).
         """
         if self._wiring_mtime_ns is None:
             return False
@@ -723,6 +800,53 @@ class GraftStructuralSource:
         if head_time is None:
             return False
         return self._wiring_mtime_ns >= head_time * 1_000_000_000
+
+    def _scope_inventory_current(self, scope_paths: tuple[str, ...]) -> bool:
+        """Exact-scope currentness: scoped committed baseline + scoped status.
+
+        The baseline is the most recent commit touching the scope
+        (`git log -1 --format=%ct -- <pathspecs>`), never
+        repository-global HEAD, so a newer unrelated commit cannot make a
+        current scoped index look old (J-7). Any staged/unstaged/deleted/
+        untracked path intersecting the scope makes it unproven; non-git
+        or unprovable scopes are False, never assumed.
+        """
+        if self._wiring_mtime_ns is None or not scope_paths:
+            return False
+        revision, _dirty = _git_revision(self._repo_path)
+        if revision is None:
+            return False
+        baseline = _git_scope_baseline_time(self._repo_path, scope_paths)
+        if baseline is None:
+            return False
+        if self._wiring_mtime_ns < baseline * 1_000_000_000:
+            return False
+        return _git_scope_dirty(self._repo_path, scope_paths) is False
+
+    def _file_detail(
+        self, stale: list[str] | tuple[str, ...],
+        unverifiable: list[str] | tuple[str, ...],
+    ) -> str:
+        """File-only diagnostic tokens (no tree/population tokens)."""
+        tokens: list[str] = []
+        if stale:
+            tokens.append("touched-file-mismatch")
+        if unverifiable:
+            tokens.append("unverifiable-file")
+        if not tokens:
+            return "clean-verified"
+        return "+".join(tokens)
+
+    def _join_detail(self, tokens: list[str] | tuple[str, ...]) -> str:
+        """Join diagnostic tokens in the closed fixed order (J-11)."""
+        order = {
+            "non-git-tree": 0, "injected-index": 1, "dirty-tree": 2,
+            "touched-file-mismatch": 3, "unverifiable-file": 4,
+            "index-older-than-head": 5,
+            "repository-population-unverified": 6,
+        }
+        toks = sorted(set(tokens), key=lambda t: order[t])
+        return "clean-verified" if not toks else "+".join(toks)
 
     def _coverage_detail(
         self,
@@ -767,6 +891,7 @@ class GraftStructuralSource:
             "touched-file-mismatch": 3,
             "unverifiable-file": 4,
             "index-older-than-head": 5,
+            "repository-population-unverified": 6,
         }
         tokens = sorted(set(tokens), key=lambda t: order[t])
         if not tokens:
@@ -782,19 +907,12 @@ class GraftStructuralSource:
         self._check_repository(repository_id)
         self._ensure_fresh()
         self._require_index()
-        stale: list[str] = []
-        unverifiable: list[str] = []
-        for path in dict.fromkeys(files):
-            recorded = self._file_hashes.get(path)
-            if recorded is None:
-                unverifiable.append(path)
-                continue
-            live = self._live_file_fingerprint(path)
-            if live is None or live != recorded:
-                stale.append(path)
+        stale, unverifiable = self._verify_exact_files(files)
         coverage = (
             m.ScopeCoverage.VERIFIED
-            if not stale and not unverifiable and self._scope_current()
+            if not stale
+            and not unverifiable
+            and self._repository_population_current()
             else m.ScopeCoverage.UNVERIFIED
         )
         detail = (
@@ -809,11 +927,20 @@ class GraftStructuralSource:
             coverage_detail=detail,
         )
 
-    def _versioned_offset(self, page_token: str | None) -> int:
+    def _scoped_version(self, scope: m.EvidenceScope | None) -> str:
+        """Index version bound to the exact scope (J-10 token identity)."""
+        if scope is None or not (scope.paths or scope.evidence_refs):
+            return self._index_version
+        return f"{self._index_version}|{m.evidence_scope_fingerprint(scope)}"
+
+    def _versioned_offset(
+        self, page_token: str | None, version: str | None = None
+    ) -> int:
         """Decode a version-bound cursor; drift becomes StaleContinuation."""
         try:
             return _paging.parse_versioned_token(
-                page_token, version=self._index_version
+                page_token,
+                version=self._index_version if version is None else version,
             )
         except ValueError as exc:
             if str(exc).startswith("stale listing continuation"):
@@ -826,10 +953,12 @@ class GraftStructuralSource:
         offset: int,
         max_results: int,
         category: str,
+        version: str | None = None,
     ) -> tuple[tuple[object, ...], m.BoundInfo]:
         kept = items[offset:offset + max_results]
         remaining = len(items) - (offset + len(kept))
         truncated = remaining > 0
+        token_version = self._index_version if version is None else version
         return tuple(kept), m.BoundInfo(
             requested_max_results=max_results,
             requested_max_depth=0,
@@ -838,7 +967,7 @@ class GraftStructuralSource:
             truncated_category=category if truncated else None,
             continuation_token=(
                 _paging.format_versioned_token(
-                    self._index_version, offset + len(kept)
+                    token_version, offset + len(kept)
                 )
                 if truncated else None
             ),
@@ -851,14 +980,16 @@ class GraftStructuralSource:
         match: m.StructuralLocateMatch,
         bounds: m.QueryBounds,
         page_token: str | None = None,
+        scope: m.EvidenceScope | None = None,
     ) -> m.StructuralSearchPage:
-        """Paginated name/locator search (Addendum F §4.0 port)."""
+        """Paginated name/locator search (Addendum F §4.0 port; J-10)."""
         self._check_repository(repository_id)
         self._ensure_fresh()
         self._require_index()
         if not query:
             raise ValueError("search query must be non-empty")
-        offset = self._versioned_offset(page_token)
+        version = self._scoped_version(scope)
+        offset = self._versioned_offset(page_token, version=version)
         if match is m.StructuralLocateMatch.EXACT:
             locators = [query] if query in self._nodes else []
             ranked = [
@@ -908,6 +1039,15 @@ class GraftStructuralSource:
                 m.CandidateRankBasis.STRUCTURAL_PROXIMITY: 4,
             }
             ranked.sort(key=lambda x: (order[x[1]], x[0]))
+        if scope is not None:
+            # J-10: filter the candidate population to the exact scope
+            # BEFORE ranking materialisation and pagination so an
+            # out-of-scope global match cannot consume a page or hide an
+            # in-scope result.
+            ranked = [
+                (loc, rank) for loc, rank in ranked
+                if m.evidence_scope_allows(loc, scope)
+            ]
         candidates = tuple(
             m.StructuralSearchHit(
                 candidate=m.SubjectCandidate(
@@ -931,17 +1071,39 @@ class GraftStructuralSource:
             for node in (self._nodes[loc],)
         )
         kept, bound_info = self._versioned_page(
-            candidates, offset, bounds.max_results, "search"
+            candidates, offset, bounds.max_results, "search", version=version
         )
         # Verify-then-exclude on the kept page: offsets advance over the
         # stable index list, so live drift only shrinks pages (counted),
         # never skips or duplicates entries.
-        files = sorted({
-            self._node_path(h.candidate.subject.subject_id.canonical_locator)
-            for h in kept
-        })
-        report = self.verify_files(repository_id, tuple(files))
-        stale_set = set(report.stale_files)
+        if scope is not None:
+            # J-10: scope-local completeness. Verify all indexable files
+            # inside the exact scope and prove scope currency against the
+            # scoped committed baseline + scoped status — never global HEAD.
+            scope_paths = tuple(sorted(scope.paths))
+            scoped_files = tuple(
+                sorted(
+                    p for p in self._file_hashes
+                    if m.evidence_scope_allows(p, scope)
+                )
+            )
+            stale, unverifiable = self._verify_exact_files(scoped_files)
+            population_ok = self._scope_inventory_current(scope_paths)
+        else:
+            # Unscoped: whole-result completeness requires the repository
+            # candidate population to be proven current.
+            stale, unverifiable = self._verify_exact_files(
+                tuple(
+                    sorted({
+                        self._node_path(
+                            h.candidate.subject.subject_id.canonical_locator
+                        )
+                        for h in kept
+                    })
+                )
+            )
+            population_ok = self._repository_population_current()
+        stale_set = set(stale)
         live_items = tuple(
             h for h in kept
             if self._node_path(
@@ -949,14 +1111,34 @@ class GraftStructuralSource:
             ) not in stale_set
         )
         stale_omitted = len(kept) - len(live_items)
+        if not stale and not unverifiable and population_ok:
+            coverage = m.ScopeCoverage.VERIFIED
+            detail: str | None = "clean-verified"
+        else:
+            coverage = m.ScopeCoverage.UNVERIFIED
+            if scope is not None:
+                tokens: list[str] = []
+                if not population_ok:
+                    dirty = _git_scope_dirty(self._repo_path, scope_paths)
+                    tokens.append(
+                        "dirty-tree" if dirty
+                        else "repository-population-unverified"
+                    )
+                if stale:
+                    tokens.append("touched-file-mismatch")
+                if unverifiable:
+                    tokens.append("unverifiable-file")
+                detail = self._join_detail(tokens)
+            else:
+                detail = self._coverage_detail(stale, unverifiable)
         return m.StructuralSearchPage(
             items=live_items,  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
             stale_omitted=stale_omitted,
-            coverage=report.coverage,
-            coverage_detail=report.coverage_detail,
+            coverage=coverage,
+            coverage_detail=detail,
         )
 
     def _node_path(self, locator: str) -> str:
@@ -993,7 +1175,7 @@ class GraftStructuralSource:
             if coverage is m.ScopeCoverage.VERIFIED:
                 detail: str | None = "clean-verified"
             else:
-                detail = self._coverage_detail((), (locator,))
+                detail = "unverifiable-file"
             return m.StructuralOutlinePage(
                 items=(),
                 repository_state=self.repository_state(repository_id),
@@ -1030,14 +1212,24 @@ class GraftStructuralSource:
             () if locator in stale_set else kept  # type: ignore[assignment]
         )
         stale_omitted = 0 if live_items else len(kept)
+        # S2.2: a file outline is VERIFIED when the requested file matches
+        # the loaded index; unrelated dirty files are irrelevant (J-7).
+        if report.stale_files or report.unverifiable_files:
+            coverage = m.ScopeCoverage.UNVERIFIED
+            detail: str | None = self._file_detail(
+                list(report.stale_files), list(report.unverifiable_files)
+            )
+        else:
+            coverage = m.ScopeCoverage.VERIFIED
+            detail = "clean-verified"
         return m.StructuralOutlinePage(
             items=tuple(live_items),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
             stale_omitted=stale_omitted,
-            coverage=report.coverage,
-            coverage_detail=report.coverage_detail,
+            coverage=coverage,
+            coverage_detail=detail,
         )
 
     # -- parsing ----------------------------------------------------------

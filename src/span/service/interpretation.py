@@ -516,7 +516,7 @@ def prepare_interpretation_task(
     objective: str = "",
     target_scope: m.EvidenceScope = m.EvidenceScope(),
     target_id: m.TargetId | None = None,
-    target_inventory_item: m.EvidenceInventoryItem | None = None,
+    target_inventory_items: tuple[m.EvidenceInventoryItem, ...] = (),
     mapping_mode: bool = False,
     required_evidence_refs: tuple[m.EvidenceRef, ...] = (),
     question_terms: tuple[str, ...] = (),
@@ -559,7 +559,7 @@ def prepare_interpretation_task(
     selection = discover_evidence(
         repository_id, subject, structural=structural, evidence=evidence,
         bounds=bounds, state=state, authority_seeds=authority_seeds,
-        question_terms=question_terms,
+        question_terms=question_terms, target_scope=target_scope,
     )
     units = _read_units_within_bytes(
         evidence, selection.selected_refs, bounds
@@ -585,9 +585,14 @@ def prepare_interpretation_task(
         for obs in observations
         if obs.target_subject is not None
     ) + tuple(obs.source_subject for obs in observations)
-    resolved_slice = question_slice or sid.canonical_locator
     resolved_class = question_class or _question_class_for_intent(
         operation_intent, establish_baseline
+    )
+    # J-3/S3.2: never use a subject locator as the question slice. When the
+    # host supplied no selection, use the canonical operation/CQ default.
+    resolved_slice = (
+        question_slice
+        or m.QUESTION_CLASS_DEFAULT_SLICE[resolved_class]
     )
     if establish_baseline and not question_slice:
         resolved_slice = (
@@ -662,24 +667,34 @@ def prepare_interpretation_task(
     open_requirements.sort(key=lambda req: req.description)
     units_list = list(units)
     fingerprints_list = list(fingerprints)
-    item_unreadable_note: str | None = None
-    if mapping_mode and target_inventory_item is not None:
-        item_ref = target_inventory_item.evidence_ref
-        if all(u.evidence_ref.evidence_id.value != item_ref.evidence_id.value for u in units_list):
-            try:
-                item_units = evidence.read_evidence((item_ref,), bounds)
-            except Exception as exc:
-                item_unreadable_note = (
-                    f"current inventory item evidence unreadable: "
-                    f"{item_ref.locator} ({exc}); record an unresolved "
-                    f"mapping requirement, do not skip this item"
-                )
-            else:
-                for iu in item_units:
-                    units_list.insert(0, iu)
-                    fingerprints_list.insert(
-                        0, (iu.evidence_ref.evidence_id.value, iu.content_fingerprint)
+    item_unreadable_notes: list[str] = []
+    if mapping_mode and target_inventory_items:
+        # S5.2: deliver every bound member's canonical EvidenceRef,
+        # inserting in batch order; an unreadable member is reported, not
+        # dropped — the agent records an unresolved mapping requirement.
+        for item in reversed(target_inventory_items):
+            item_ref = item.evidence_ref
+            if all(
+                u.evidence_ref.evidence_id.value != item_ref.evidence_id.value
+                for u in units_list
+            ):
+                try:
+                    item_units = evidence.read_evidence((item_ref,), bounds)
+                except Exception as exc:
+                    item_unreadable_notes.append(
+                        f"current inventory item evidence unreadable: "
+                        f"{item_ref.locator} ({exc}); record an unresolved "
+                        f"mapping requirement, do not skip this item"
                     )
+                else:
+                    for iu in item_units:
+                        units_list.insert(0, iu)
+                        fingerprints_list.insert(
+                            0, (
+                                iu.evidence_ref.evidence_id.value,
+                                iu.content_fingerprint,
+                            )
+                        )
     if required_evidence_refs:
         present = {u.evidence_ref.evidence_id.value for u in units_list}
         missing = [
@@ -698,32 +713,39 @@ def prepare_interpretation_task(
                 fingerprints_list.append(
                     (iu.evidence_ref.evidence_id.value, iu.content_fingerprint)
                 )
-    if mapping_mode:
-        if target_inventory_item is not None and all(
-            u.evidence_ref.evidence_id.value
-            != target_inventory_item.evidence_ref.evidence_id.value
-            for u in units_list
-        ) and item_unreadable_note is None:
+    if mapping_mode and target_inventory_items:
+        present_ids = {u.evidence_ref.evidence_id.value for u in units_list}
+        if any(
+            item.evidence_ref.evidence_id.value not in present_ids
+            and not any(
+                item.evidence_ref.locator in note
+                for note in item_unreadable_notes
+            )
+            for item in target_inventory_items
+        ):
             raise _validation.InterpretationUnitRejected(
                 ("mapping item evidence missing from task",)
             )
     if mapping_mode:
+        item_locators = ", ".join(
+            item.evidence_ref.locator for item in target_inventory_items
+        ) or sid.canonical_locator
         mapping_slice = (
-            f"Account for inventory member "
-            f"{target_inventory_item.evidence_ref.locator if target_inventory_item else sid.canonical_locator} "
-            f"in target: assign to admitted area(s), record an evidence-backed "
-            f"exclusion, or record an unresolved mapping requirement."
+            f"Account for inventory member(s) {item_locators} in target: "
+            f"assign to admitted area(s), record an evidence-backed "
+            f"exclusion, or record an unresolved mapping requirement for "
+            f"each."
         )
         mapping_brief = m.TaskBrief(
             objective=((objective.strip() + " — ") if objective.strip() else "") + mapping_slice,
             scope_boundaries=tuple(
                 [f"target path: {p}" for p in target_scope.paths]
                 + [f"target evidence: {r.locator}" for r in target_scope.evidence_refs]
-                + (
-                    [f"current inventory item: {target_inventory_item.evidence_ref.locator}"]
-                    if target_inventory_item is not None else []
-                )
-                + ([item_unreadable_note] if item_unreadable_note else [])
+                + [
+                    f"current inventory item: {item.evidence_ref.locator}"
+                    for item in target_inventory_items
+                ]
+                + list(item_unreadable_notes)
             ),
             evidence_authority=(
                 ("Evidence examined: " + ", ".join(r.locator for r in selection.selected_refs))
@@ -797,7 +819,8 @@ def prepare_interpretation_task(
         ),
         target_scope=target_scope,
         target_id=target_id,
-        target_inventory_item=target_inventory_item,
+        target_inventory_items=target_inventory_items,
+        discovery_scope=selection.discovery_scope,
     )
     if len(request.subjects) > bounds.max_subjects:
         raise _validation.InterpretationUnitRejected(
@@ -1007,7 +1030,6 @@ def _admit_cited_evidence(
             _note(obs.evidence_ref)
         _note_nested_requirements(coverage.resolution_requirements)
     for account in result.proposed_target_inventory_accounting:
-        _note(account.evidence_ref)
         if account.exclusion_basis is not None:
             _note_nested_basis(account.exclusion_basis)
         _note_nested_requirements(account.resolution_requirements)
@@ -1225,7 +1247,6 @@ def _admit_cited_evidence(
     accounts = tuple(
         _dataclasses.replace(
             account,
-            evidence_ref=_normalize(account.evidence_ref),
             exclusion_basis=(
                 None
                 if account.exclusion_basis is None
@@ -1417,7 +1438,7 @@ def _materialize_unit(
     declared_complete: bool,
     retire_scope: tuple[m.SubjectId, ...],
     target_id: m.TargetId | None = None,
-    target_inventory_item: m.EvidenceInventoryItem | None = None,
+    target_inventory_items: tuple[m.EvidenceInventoryItem, ...] = (),
     target_association: m.TargetAssociation | None = None,
     current_inventory_ids: frozenset[str] = frozenset(),
     current_inventory_snapshot: dict[str, m.EvidenceRef] | None = None,
@@ -1687,7 +1708,7 @@ def _materialize_unit(
     fingerprints = dict(ctx.evidence_fingerprints)
     is_mapping_write = (
         task.request.question is None
-        and task.request.target_inventory_item is not None
+        and bool(task.request.target_inventory_items)
     )
     if is_mapping_write:
         # Mapping anchors are discovery inputs, never semantic areas:
@@ -2205,12 +2226,12 @@ def _materialize_unit(
                 )
             )
         )
+    bound_items = (
+        target_inventory_items
+        or task.request.target_inventory_items
+    )
     is_mapping_task = (
-        task.request.question is None
-        and (
-            target_inventory_item is not None
-            or task.request.target_inventory_item is not None
-        )
+        task.request.question is None and bool(bound_items)
     )
     if is_mapping_task and not result.proposed_target_inventory_accounting:
         raise _validation.InterpretationUnitRejected(
@@ -2238,7 +2259,7 @@ def _materialize_unit(
             for tindex, acc in enumerate(
                 result.proposed_target_inventory_accounting
             ):
-                eid = acc.evidence_ref.evidence_id.value
+                eid = acc.evidence_id.value
                 if eid in seen_ids:
                     raise _validation.InterpretationUnitRejected(
                         tuple(
@@ -2249,15 +2270,9 @@ def _materialize_unit(
                         )
                     )
                 seen_ids.add(eid)
-            expected = (
-                target_inventory_item.evidence_ref.evidence_id.value
-                if target_inventory_item is not None
-                else (
-                    task.request.target_inventory_item.evidence_ref.evidence_id.value
-                    if task.request.target_inventory_item is not None
-                    else None
-                )
-            )
+            expected_ids = {
+                item.evidence_ref.evidence_id.value for item in bound_items
+            }
             admitted_existing = tuple(target_association.area_subjects)
             new_ids = tuple(new_subject_ids)
             snapshot = current_inventory_snapshot or {}
@@ -2267,7 +2282,7 @@ def _materialize_unit(
                 validation = _validation.validate_target_inventory_account(
                     acc, ctx,
                     current_inventory_ids=current_inventory_ids,
-                    expected_evidence_id=expected,
+                    expected_evidence_id=None,
                     admitted_area_ids=admitted_existing,
                     new_area_ids=new_ids,
                 )
@@ -2276,67 +2291,64 @@ def _materialize_unit(
                         tuple(
                             _member_diagnostics(
                                 "target_accounts", tindex,
-                                acc.evidence_ref.evidence_id.value,
+                                acc.evidence_id.value,
                                 tuple(validation.diagnostics),
                             )
                         )
                     )
-                snap = snapshot.get(acc.evidence_ref.evidence_id.value)
-                if snap is not None:
-                    if (
-                        snap.locator != acc.evidence_ref.locator
-                        or snap.source_kind != acc.evidence_ref.source_kind
-                    ):
-                        raise _validation.InterpretationUnitRejected(
-                            tuple(
-                                _member_diagnostics(
-                                    "target_accounts", tindex,
-                                    acc.evidence_ref.evidence_id.value,
-                                    (
-                                        "target account identity does not "
-                                        "match provider snapshot: "
-                                        f"{acc.evidence_ref.evidence_id.value}",
-                                    ),
-                                )
-                            )
-                        )
-            if expected is not None:
-                matched = [
-                    acc for acc in result.proposed_target_inventory_accounting
-                    if acc.evidence_ref.evidence_id.value == expected
-                ]
-                if len(matched) != 1:
+                # J-4/S4.2: the accounted member's canonical current ref is
+                # a provider fact, never agent-supplied. It must resolve in
+                # the provider snapshot.
+                if snapshot.get(acc.evidence_id.value) is None:
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "target_accounts", 0, expected,
+                                "target_accounts", tindex,
+                                acc.evidence_id.value,
                                 (
-                                    "mapping result does not account for "
-                                    "its item",
+                                    "target account not in provider "
+                                    f"snapshot: {acc.evidence_id.value}",
+                                ),
+                            )
+                        )
+                    )
+            if expected_ids:
+                candidate_ids = [
+                    acc.evidence_id.value
+                    for acc in result.proposed_target_inventory_accounting
+                ]
+                if sorted(candidate_ids) != sorted(expected_ids):
+                    raise _validation.InterpretationUnitRejected(
+                        tuple(
+                            _member_diagnostics(
+                                "target_accounts", 0, None,
+                                (
+                                    "mapping result must account for "
+                                    "exactly its bound items: "
+                                    f"expected={sorted(expected_ids)} "
+                                    f"got={sorted(candidate_ids)}",
                                 ),
                             )
                         )
                     )
                 # Orphan prohibition: every new subject from a mapping task
-                # must be referenced by the current item's assignment.
-                matched_assigned = set(matched[0].assigned_area_subjects)
+                # must be referenced by at least one bound assignment.
+                assigned_any = {
+                    sid
+                    for acc in result.proposed_target_inventory_accounting
+                    for sid in acc.assigned_area_subjects
+                }
                 for sid in new_subject_ids:
-                    if sid not in matched_assigned:
+                    if sid not in assigned_any:
                         raise _validation.InterpretationUnitRejected(
                             tuple(
                                 _member_diagnostics(
-                                    "target_accounts", 0, expected,
+                                    "target_accounts", 0, None,
                                     ("orphan target-mapping subject",),
                                 )
                             )
                         )
-                # First-admission rule: a newly admitted area requires at
-                # least one target question in this same unit: either a new
-                # PENDING coverage, or reuse of already-persisted current
-                # coverage via proposed_target_questions (§4C.4). Manufacturing
-                # a new PENDING coverage merely to associate reusable existing
-                # coverage is prohibited (§§4C.2/4C.4, E-13B/C).
-                assigned = matched[0].assigned_area_subjects
+                assigned = tuple(assigned_any)
                 fresh_areas = [
                     sid for sid in assigned if sid not in set(admitted_existing)
                 ]
@@ -2353,22 +2365,78 @@ def _materialize_unit(
                         for qq in result.proposed_target_questions
                     }
                     satisfying = new_roots | reuse_roots
+                    area_member_refs = {
+                        sid: tuple(
+                            snapshot[acc.evidence_id.value]
+                            for acc in result.proposed_target_inventory_accounting
+                            if sid in acc.assigned_area_subjects
+                            and snapshot.get(acc.evidence_id.value) is not None
+                        )
+                        for sid in fresh_areas
+                    }
                     for sid in fresh_areas:
-                        if sid not in satisfying:
-                            raise _validation.InterpretationUnitRejected(
-                                tuple(
-                                    _member_diagnostics(
-                                        "target_accounts", 0, expected,
-                                        (
-                                            "new area without PENDING "
-                                            "question; submit one PENDING "
-                                            "proposed_question_coverages "
-                                            "entry for the new area in the "
-                                            "same unit",
+                        if sid in satisfying:
+                            continue
+                        # J-5/S4.4: exactly one service-owned PENDING CQ-01
+                        # seed for a newly admitted area with no reusable
+                        # current target question. The agent is never
+                        # required to manufacture it. The seed asserts no
+                        # area meaning; its discovery support is the
+                        # canonical mapping member(s) assigned to the area.
+                        seed_slice = m.QUESTION_CLASS_DEFAULT_SLICE[
+                            m.SemanticQuestionClass.CQ_01
+                        ]
+                        seed_question = m.SemanticQuestionScope(
+                            scope_root=sid,
+                            subject=sid,
+                            question_class=m.SemanticQuestionClass.CQ_01,
+                            question_slice=seed_slice,
+                            materiality_basis=(
+                                "service-owned first-admission target seed"
+                            ),
+                        )
+                        question_coverages_to_persist.append(
+                            m.InterpretationCoverage(
+                                subjects=(sid,),
+                                question_slice=seed_slice,
+                                evidence_scope=m.EvidenceScope(
+                                    evidence_refs=area_member_refs.get(sid, ())
+                                ),
+                                declared_complete=False,
+                                question=seed_question,
+                                disposition=(
+                                    m.SemanticQuestionDisposition.PENDING
+                                ),
+                                result_refs=(),
+                                resolution_requirements=(
+                                    m.ResolutionRequirement(
+                                        kind=(
+                                            m.ResolutionKind
+                                            .INCOMPLETE_SEMANTIC_SCOPE
                                         ),
-                                    )
-                                )
+                                        subject_or_claim=sid,
+                                        description=(
+                                            "service-owned first-admission "
+                                            "target seed: establish this "
+                                            "admitted area's purpose and "
+                                            "material questions for the "
+                                            "selected target."
+                                        ),
+                                        supporting_context=(),
+                                    ),
+                                ),
+                                disposition_basis=(
+                                    "service-owned first-admission "
+                                    "target seed"
+                                ),
+                                question_evidence=(),
                             )
+                        )
+                    # The persisted coverage set changed: recompute before
+                    # it is consumed by the atomic batch.
+                    all_coverages = tuple(
+                        question_coverages_to_persist
+                    ) + tuple(reopened_coverages)
             else:
                 # Semantic-phase revisions are task-evidence-bounded: a
                 # revised member must be present in this task's evidence.
@@ -2379,16 +2447,16 @@ def _materialize_unit(
                 for tindex, acc in enumerate(
                     result.proposed_target_inventory_accounting
                 ):
-                    if acc.evidence_ref.evidence_id.value not in in_task:
+                    if acc.evidence_id.value not in in_task:
                         raise _validation.InterpretationUnitRejected(
                             tuple(
                                 _member_diagnostics(
                                     "target_accounts", tindex,
-                                    acc.evidence_ref.evidence_id.value,
+                                    acc.evidence_id.value,
                                     (
                                         "target revision outside task "
                                         "evidence: "
-                                        f"{acc.evidence_ref.evidence_id.value}",
+                                        f"{acc.evidence_id.value}",
                                     ),
                                 )
                             )
@@ -2475,8 +2543,28 @@ def _materialize_unit(
             acc.evidence_ref.evidence_id.value: acc
             for acc in target_association.inventory_accounting
         }
+        snapshot_map = current_inventory_snapshot or {}
         for acc in result.proposed_target_inventory_accounting:
-            merged[acc.evidence_ref.evidence_id.value] = acc
+            eid = acc.evidence_id.value
+            canonical_ref = snapshot_map.get(eid)
+            if canonical_ref is None:
+                raise _validation.InterpretationUnitRejected(
+                    tuple(
+                        _member_diagnostics(
+                            "target_accounts", 0, eid,
+                            (
+                                "target account not in provider "
+                                f"snapshot: {eid}",
+                            ),
+                        )
+                    )
+                )
+            merged[eid] = m.TargetInventoryAccount(
+                evidence_ref=canonical_ref,
+                assigned_area_subjects=acc.assigned_area_subjects,
+                exclusion_basis=acc.exclusion_basis,
+                resolution_requirements=acc.resolution_requirements,
+            )
         new_area_union = tuple(
             dict.fromkeys(
                 sid

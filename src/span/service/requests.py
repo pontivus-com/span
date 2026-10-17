@@ -41,7 +41,7 @@ class SemanticStructuralLocateRequest:
 
     repository_id: str
     mode: m.StructuralLocateMode
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
     query: str | None = None
     match: m.StructuralLocateMatch = m.StructuralLocateMatch.EXACT
     target: m.EvidenceScope | None = None
@@ -55,7 +55,7 @@ class SemanticStructuralNeighborsRequest:
     repository_id: str
     target: m.SubjectSelector
     direction: StructuralDirection
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
     edge_kinds: tuple[m.StructuralEdgeKind, ...] = ()
     max_depth: int = 1
     page_token: str | None = None
@@ -70,7 +70,7 @@ ProposedChange = m.ProposedChange
 class SemanticExplainRequest:
     repository_id: str
     target: m.SubjectSelector
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
     page_token: str | None = None
     establish_baseline: bool = False
     question_selection: m.SemanticQuestionSelection | None = None
@@ -82,7 +82,7 @@ class SemanticImpactRequest:
     target: m.SubjectSelector
     change_kind: ChangeKind
     change_description: str | None
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
     affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
     page_token: str | None = None
     question_selection: m.SemanticQuestionSelection | None = None
@@ -95,7 +95,7 @@ class SemanticTraceRequest:
     direction: StructuralDirection
     relationship_filter: tuple[m.RelationshipKind, ...] | None
     boundary_only: bool
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
     page_token: str | None = None
     question_selection: m.SemanticQuestionSelection | None = None
 
@@ -104,7 +104,7 @@ class SemanticTraceRequest:
 class SemanticAuthorityRequest:
     repository_id: str
     target: m.SubjectSelector | m.ClaimRef
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
     page_token: str | None = None
     question_selection: m.SemanticQuestionSelection | None = None
 
@@ -119,8 +119,8 @@ class SemanticStatusRequest:
         | m.EvidenceScope
         | m.TargetId
         | None
-    )
-    bounds: m.QueryBounds
+    ) = None
+    bounds: m.QueryBounds | None = None
     mode: m.StatusMode = m.StatusMode.NORMAL
     page_token: str | None = None
 
@@ -129,7 +129,7 @@ class SemanticStatusRequest:
 class SemanticRefreshRequest:
     repository_id: str
     target: m.SubjectSelector | m.EvidenceScope | None
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
     stale_only: bool = True
     page_token: str | None = None
 
@@ -141,7 +141,7 @@ class SemanticInitializeTargetRequest:
     repository_id: str
     target: m.EvidenceScope
     objective: str
-    bounds: m.QueryBounds
+    bounds: m.QueryBounds | None = None
 
 
 @_dataclass(frozen=True)

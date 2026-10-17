@@ -43,3 +43,10 @@ The Point 4 report must distinguish covered/current, incomplete
 items, and must disclose page/truncation/outstanding scope. Missing items
 outside the returned frontier remain unknown, not silently current or
 silently absent.
+
+## Addendum J delta — scoped coverage dependency
+
+`CoverageDependency` carries `discovery_scope` (the exact bounded search
+universe) alongside `scope_subjects`, `inventory_fingerprint`, and
+`seed_fingerprints`. Rows sharing a scope share one membership walk. The
+empty scope denotes migrated legacy coverage only.

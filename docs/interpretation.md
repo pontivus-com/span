@@ -91,3 +91,16 @@ rejected, no salvage, continuation abandoned). Provider transports,
 HTTP statuses, and model errors belong to the agent's environment and
 never enter Span's failure model. Continuations are single-use,
 TTL-bounded (30 min default), never persisted, never authoritative.
+
+## Addendum J delta
+
+- A pending unit carries an `interpretation_profile` (`SA_1_7_V1`); the
+  static SA obligations live in the tool contract, not in every unit.
+- Target mapping submits `CandidateTargetInventoryAccount` (stable
+  `EvidenceId` + one outcome); the durable `TargetInventoryAccount` is built
+  server-side from the provider snapshot.
+- A newly admitted area with no reusable current question receives exactly
+  one service-owned `PENDING` CQ-01 first-admission seed; the agent is never
+  required to manufacture it.
+- Mapping binds a bounded batch of inventory members per unit; every bound
+  member receives exactly one disposition, atomically.

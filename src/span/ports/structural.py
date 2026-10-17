@@ -10,6 +10,7 @@ import typing as _typing
 
 from span.core.model import (
     BoundInfo,  # noqa: F401  (re-exported for port consumers)
+    EvidenceScope,
     Freshness,
     QueryBounds,
     RepositoryState,
@@ -102,13 +103,18 @@ class StructuralSource(_typing.Protocol):
         match: StructuralLocateMatch,
         bounds: QueryBounds,
         page_token: str | None = None,
+        scope: EvidenceScope | None = None,
     ) -> StructuralSearchPage:
-        """Paginated name/locator search (Addendum F §4.0).
+        """Paginated name/locator search (Addendum F §4.0; J-10).
 
         Provider match order, real continuation tokens (never the
         tokenless truncation of resolve_subject). Tokens are
         version-bound per §4.3: a changed listing version raises
-        StaleContinuationError.
+        StaleContinuationError. When ``scope`` is supplied the candidate
+        population is filtered to it **before** ranking and pagination,
+        entry currentness and whole-result coverage are computed against
+        that exact scope, and the continuation token binds the scope so a
+        token issued for one scope never resumes another.
         """
         ...
 

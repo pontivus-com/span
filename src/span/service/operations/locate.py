@@ -23,28 +23,6 @@ from span.shell import paging as _paging
 __all__ = ["locate"]
 
 
-def _boundary_allows(locator: str, scope: m.EvidenceScope) -> bool:
-    """Syntax-level boundary narrowing (Addendum F §4.1).
-
-    Scope paths are file-or-directory prefixes; refs are exact members.
-    Provider-agnostic: matches ``path``, ``path/...``, ``path#...`` and
-    ``path:...`` forms without knowing the provider's locator grammar.
-    """
-    exact = {ref.locator for ref in scope.evidence_refs}
-    if locator in exact:
-        return True
-    for prefix in scope.paths:
-        stem = prefix.rstrip("/")
-        if (
-            locator == stem
-            or locator.startswith(stem + "/")
-            or locator.startswith(stem + "#")
-            or locator.startswith(stem + ":")
-        ):
-            return True
-    return False
-
-
 def _listing_version(structural: StructuralSource, repository_id: str) -> str:
     """Listing version binding locate page tokens (Addendum F §4.3)."""
     return structural.repository_state(repository_id).state_fingerprint
@@ -112,7 +90,7 @@ def _locate_symbol(
 ) -> m.StructuralLocateResult:
     try:
         page = structural.search_symbols(
-            repository_id, query, match, bounds, page_token
+            repository_id, query, match, bounds, page_token, scope=scope
         )
     except StaleContinuationError:
         raise
@@ -122,8 +100,6 @@ def _locate_symbol(
     for hit in page.items:
         subject = hit.candidate.subject.subject_id
         locator = subject.canonical_locator
-        if scope is not None and not _boundary_allows(locator, scope):
-            continue
         refs = structural.locations(
             repository_id, subject, bounds
         ).items

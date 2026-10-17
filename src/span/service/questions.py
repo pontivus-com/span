@@ -291,14 +291,17 @@ def effective_question_view(
         if mine:
             latest = mine[-1]
             try:
+                _scope = latest.discovery_scope
+                _legacy = not (_scope.paths or _scope.evidence_refs)
                 inventory_fp, seed_map = _inventory_snapshot(
                     repository_id,
+                    _scope,
                     evidence=evidence,
                     seeds=tuple(
                         (sf.locator, sf.evidence_id.value)
                         for sf in latest.seed_fingerprints
                     ),
-                    precomputed=precomputed_snapshot,
+                    precomputed=precomputed_snapshot if _legacy else None,
                 )
                 discovery = _freshness.classify_coverage(
                     latest, inventory_fp, seed_map
@@ -452,7 +455,7 @@ def _question_local_missing(
                     scope_root=sid,
                     subject=sid,
                     question_class=primary,
-                    question_slice=sid.canonical_locator,
+                    question_slice=m.QUESTION_CLASS_DEFAULT_SLICE[primary],
                     materiality_basis=f"{intent.value} question-local",
                 )
         return None
@@ -462,7 +465,7 @@ def _question_local_missing(
             scope_root=sid,
             subject=sid,
             question_class=primary,
-            question_slice=sid.canonical_locator,
+            question_slice=m.QUESTION_CLASS_DEFAULT_SLICE[primary],
             materiality_basis=f"{intent.value} question-local",
         )
     primary_covs = [
@@ -475,7 +478,7 @@ def _question_local_missing(
             scope_root=sid,
             subject=sid,
             question_class=primary,
-            question_slice=sid.canonical_locator,
+            question_slice=m.QUESTION_CLASS_DEFAULT_SLICE[primary],
             materiality_basis=f"{intent.value} question-local",
         )
     for cov in primary_covs:

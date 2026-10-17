@@ -246,10 +246,20 @@ class InMemoryStructuralSource:
         """
         return f"mem-{self._state_fingerprint()[:16]}"
 
-    def _versioned_offset(self, page_token: str | None) -> int:
+    def _scoped_version(self, scope: m.EvidenceScope | None) -> str:
+        """Index version bound to the exact scope (J-10 token identity)."""
+        base = self._index_version()
+        if scope is None or not (scope.paths or scope.evidence_refs):
+            return base
+        return f"{base}|{m.evidence_scope_fingerprint(scope)}"
+
+    def _versioned_offset(
+        self, page_token: str | None, version: str | None = None
+    ) -> int:
         try:
             return _paging.parse_versioned_token(
-                page_token, version=self._index_version()
+                page_token,
+                version=self._index_version() if version is None else version,
             )
         except ValueError as exc:
             if str(exc).startswith("stale listing continuation"):
@@ -262,10 +272,12 @@ class InMemoryStructuralSource:
         offset: int,
         max_results: int,
         category: str,
+        version: str | None = None,
     ) -> tuple[tuple[object, ...], m.BoundInfo]:
         kept = items[offset:offset + max_results]
         remaining = len(items) - (offset + len(kept))
         truncated = remaining > 0
+        token_version = self._index_version() if version is None else version
         return tuple(kept), m.BoundInfo(
             requested_max_results=max_results,
             requested_max_depth=0,
@@ -274,7 +286,7 @@ class InMemoryStructuralSource:
             truncated_category=category if truncated else None,
             continuation_token=(
                 _paging.format_versioned_token(
-                    self._index_version(), offset + len(kept)
+                    token_version, offset + len(kept)
                 )
                 if truncated else None
             ),
@@ -317,12 +329,14 @@ class InMemoryStructuralSource:
         match: m.StructuralLocateMatch,
         bounds: m.QueryBounds,
         page_token: str | None = None,
+        scope: m.EvidenceScope | None = None,
     ) -> m.StructuralSearchPage:
-        """Paginated name/locator search (Addendum F §4.0 port)."""
+        """Paginated name/locator search (Addendum F §4.0 port; J-10)."""
         self._check_repository(repository_id)
         if not query:
             raise ValueError("search query must be non-empty")
-        offset = self._versioned_offset(page_token)
+        version = self._scoped_version(scope)
+        offset = self._versioned_offset(page_token, version=version)
         if match is m.StructuralLocateMatch.EXACT:
             ranked = [
                 (s, m.CandidateRankBasis.EXACT_LOCATOR)
@@ -361,6 +375,13 @@ class InMemoryStructuralSource:
             m.CandidateRankBasis.STRUCTURAL_PROXIMITY: 4,
         }
         ranked.sort(key=lambda x: (order[x[1]], x[0].locator))
+        if scope is not None:
+            # J-10: scope applied before ranking/pagination so an
+            # out-of-scope global match can never consume a page.
+            ranked = [
+                (s, rank) for s, rank in ranked
+                if m.evidence_scope_allows(s.locator, scope)
+            ]
         candidates = tuple(
             m.StructuralSearchHit(
                 candidate=m.SubjectCandidate(
@@ -374,7 +395,7 @@ class InMemoryStructuralSource:
             for s, rank in ranked
         )
         kept, bound_info = self._versioned_page(
-            candidates, offset, bounds.max_results, "search"
+            candidates, offset, bounds.max_results, "search", version=version
         )
         return m.StructuralSearchPage(
             items=kept,  # type: ignore[arg-type]

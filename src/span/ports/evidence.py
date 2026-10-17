@@ -63,14 +63,18 @@ class EvidenceSource(_typing.Protocol):
     def list_inventory_entries(
         self,
         repository_id: str,
+        scope: EvidenceScope,
         fingerprint_locators: tuple[str, ...] = (),
     ) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
         """Membership-only inventory listing plus targeted fingerprints.
 
         Returns ((locator, evidence_id value) pairs in deterministic
         order, {locator: content fingerprint} for the requested
-        locators present). Same inclusion filter as inventory_evidence;
-        non-requested content is neither read nor hashed. Retrieval
-        mechanics only — never authority.
+        locators present). Membership is restricted to ``scope``; an
+        empty ``scope`` (no paths and no refs) preserves repository-wide
+        membership (migrated legacy coverage). Requested fingerprints
+        may resolve outside the scope for explicit authority seeds and
+        never enlarge membership. Non-requested content is neither read
+        nor hashed. Retrieval mechanics only — never authority.
         """
         ...

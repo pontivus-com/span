@@ -239,3 +239,23 @@ No semantic rule lives in transport: descriptions are
 capability-oriented; skill/hook guidance lives outside the server.
 Filesystem skill distribution is canonical; MCP Skills-extension
 exposure is deferred until a proven consumer exists.
+
+## Compact wire grammar and interpretation profile (Addendum J, S6–S9)
+
+- The agent-facing request grammar is a deterministic projection of the
+  canonical carriers. `$type` is a property of the field **position**: it is
+  absent (and rejected if supplied) where the expected type is statically
+  unique, and required only at genuine multi-dataclass unions. Root result
+  tags are retained; nested unambiguous tags are compacted.
+- Omitted `bounds` uses the service default; repository-wide `status`
+  accepts an omitted `target`.
+- Pending interpretation units carry an `interpretation_profile`
+  (`SA_1_7_V1`) naming the immutable SA-1..SA-7 obligations documented once in
+  the `submit_interpretation` tool description. The static handbook, the
+  default bounds, and the base task-brief rules are not repeated per unit;
+  dynamic question/evidence/requirements remain.
+- `submit_interpretation` maps target inventory with a
+  `CandidateTargetInventoryAccount` (stable `EvidenceId` + exactly one
+  semantic outcome). Span resolves the provider-canonical `EvidenceRef`,
+  constructs the durable account, and creates the service-owned
+  first-admission `PENDING` CQ-01 seed for a newly admitted area.

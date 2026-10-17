@@ -38,3 +38,16 @@ silently adopted or retired. Unknown retire ids fail the unit.
 Retired history is preserved, never discarded. Latest coverage per
 question scope wins so old rows never re-invalidate refreshed
 conclusions.
+
+## Addendum J delta — scoped discovery freshness
+
+- `CoverageDependency.discovery_scope` records the exact bounded scope used
+  for discovery. Membership of that scope (plus authority-seed fingerprints)
+  joins the direct per-evidence fingerprints as the question's freshness
+  inputs. A change outside the scope does not invalidate the question; a
+  change inside it does.
+- An empty scope is reserved for migrated legacy coverage (repository-global
+  semantics) until the question is explicitly refreshed or reinterpreted.
+  Post-adoption coverage always carries a non-empty scope; when no defensible
+  scope can be derived the write fails closed with
+  `INCOMPLETE_SEMANTIC_SCOPE`.

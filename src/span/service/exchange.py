@@ -223,7 +223,7 @@ def submit_interpretation(
     inventory_ids: frozenset[str] = frozenset()
     inventory_snapshot: dict[str, m.EvidenceRef] = {}
     inventory_fingerprints: dict[str, str] = {}
-    target_item: m.EvidenceInventoryItem | None = task.request.target_inventory_item
+    target_items: tuple[m.EvidenceInventoryItem, ...] = task.request.target_inventory_items
     if effective_target_id is not None or has_target_proposals:
         try:
             target_assoc = store.load_target_association(
@@ -295,11 +295,12 @@ def submit_interpretation(
                 tuple(s.subject_id for s in task.request.subjects),
                 evidence=evidence, seeds=record.seeds,
                 question=task.request.question,
+                discovery_scope=task.request.discovery_scope,
             ),
             declared_complete=record.declared_complete,
             retire_scope=tuple(s.subject_id for s in task.request.subjects),
             target_id=effective_target_id,
-            target_inventory_item=target_item,
+            target_inventory_items=target_items,
             target_association=target_assoc,
             current_inventory_ids=inventory_ids,
             current_inventory_snapshot=inventory_snapshot,

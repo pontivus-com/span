@@ -76,6 +76,16 @@ class SemanticStore(_typing.Protocol):
         """Count persisted semantic subjects for report bounds."""
         ...
 
+    def count_question_dispositions(
+        self, repository_id: str
+    ) -> dict[str, int]:
+        """Persisted question-coverage counts by disposition (S8/D-10)."""
+        ...
+
+    def count_target_associations(self, repository_id: str) -> int:
+        """Count active target associations (S8/D-10)."""
+        ...
+
     def load_by_refs(
         self,
         repository_id: str,

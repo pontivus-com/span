@@ -25,7 +25,7 @@ from span.shell import paging as _paging
 
 __all__ = ["SCHEMA_VERSION", "TARGET_RETENTION_DAYS", "SqliteSemanticStore"]
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 TARGET_RETENTION_DAYS = 90
 
@@ -263,7 +263,7 @@ class SqliteSemanticStore:
         except _sqlite3.OperationalError:
             row = None
         on_disk = int(row[0]) if row is not None else 0
-        if on_disk not in (0, 2, 3, 4, 5):
+        if on_disk not in (0, 2, 3, 4, 5, 6):
             raise ValueError(f"unsupported schema version: {on_disk}")
         if on_disk == 0:
             # Fresh database: create the full v5 schema at once.
@@ -276,7 +276,11 @@ class SqliteSemanticStore:
             self._db.commit()
             self._reap_expired_target_associations()
             return
-        if on_disk == 5:
+        if on_disk in (5, 6):
+            # v5→v6: additive discovery-scope metadata rides inside
+            # coverage_dependencies.canonical_json with a dataclass
+            # default, so no ALTER and no payload rewrite are required;
+            # idempotent schema re-create plus the version stamp.
             self._db.executescript(_SCHEMA)
             self._db.execute(
                 "INSERT OR REPLACE INTO meta(key, value) "
@@ -671,6 +675,23 @@ class SqliteSemanticStore:
     def count_repository_subjects(self, repository_id: str) -> int:
         row = self._db.execute(
             "SELECT COUNT(*) FROM subjects WHERE repository_id=?",
+            (repository_id,),
+        ).fetchone()
+        return int(row[0]) if row is not None else 0
+
+    def count_question_dispositions(
+        self, repository_id: str
+    ) -> dict[str, int]:
+        rows = self._db.execute(
+            "SELECT disposition, COUNT(*) FROM question_coverages "
+            "WHERE repository_id=? GROUP BY disposition",
+            (repository_id,),
+        ).fetchall()
+        return {str(d): int(n) for d, n in rows}
+
+    def count_target_associations(self, repository_id: str) -> int:
+        row = self._db.execute(
+            "SELECT COUNT(*) FROM target_associations WHERE repository_id=?",
             (repository_id,),
         ).fetchone()
         return int(row[0]) if row is not None else 0

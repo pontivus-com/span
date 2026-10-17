@@ -35,6 +35,34 @@ OBJECTIVE = "Establish reusable memory for the postings scope."
 FOLLOW_SLICE = "Establish the postings root purpose from direct evidence."
 
 
+
+def _fill_batch(pending, accounts):
+    """S5/J-6 test helper: account for every bound inventory item.
+
+    A mapping result must contain exactly one candidate per bound item;
+    items the test does not exercise are recorded as unresolved mapping
+    requirements. No-op for an empty accounts tuple (non-mapping units).
+    """
+    accounts = tuple(accounts)
+    if not accounts:
+        return accounts
+    have = {a.evidence_id.value for a in accounts}
+    out = list(accounts)
+    for it in pending.request.target_inventory_items:
+        eid = it.evidence_ref.evidence_id.value
+        if eid in have:
+            continue
+        out.append(m.CandidateTargetInventoryAccount(
+            evidence_id=it.evidence_ref.evidence_id,
+            resolution_requirements=(m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=None,
+                description="not examined in this test",
+                supporting_context=(),
+            ),),
+        ))
+    return tuple(out)
+
 def _bounds():
     return m.QueryBounds(
         max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
@@ -148,7 +176,7 @@ class TargetAccountingTest(unittest.TestCase):
         first = _admit(structural, evidence, store, live, paths=solo)
         self.assertTrue(hasattr(first, "continuation"))
         self.assertIsNone(first.request.question)
-        item = first.request.target_inventory_item
+        item = first.request.target_inventory_items[0]
         self.assertIsNotNone(item)
         assert item is not None
         area = m.SubjectId(
@@ -190,12 +218,12 @@ class TargetAccountingTest(unittest.TestCase):
                 candidate_conflicts=(),
                 proposed_question_coverages=(pend,),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item.evidence_ref,
+                proposed_target_inventory_accounting=_fill_batch(first, (
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
                     ),
-                ),
+                )),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -219,7 +247,7 @@ class TargetAccountingTest(unittest.TestCase):
             repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
             canonical_locator="postings-area",
         )
-        for _ in range(len(TARGET_PATHS)):
+        for _ in range(1):
             pending = ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
                     repository_id=REPO,
@@ -232,7 +260,7 @@ class TargetAccountingTest(unittest.TestCase):
             if not hasattr(pending, "continuation"):
                 break
             assert pending.request.question is None
-            item = pending.request.target_inventory_item
+            item = pending.request.target_inventory_items[0]
             assert item is not None
             q = m.SemanticQuestionScope(
                 scope_root=area, subject=area,
@@ -269,12 +297,12 @@ class TargetAccountingTest(unittest.TestCase):
                     candidate_conflicts=(),
                     proposed_question_coverages=(pend,),
                     candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=(
-                        m.TargetInventoryAccount(
-                            evidence_ref=item.evidence_ref,
+                    proposed_target_inventory_accounting=_fill_batch(pending, (
+                        m.CandidateTargetInventoryAccount(
+                             evidence_id=item.evidence_ref.evidence_id,
                             assigned_area_subjects=(area,),
                         ),
-                    ),
+                    )),
                     proposed_target_questions=(),
                 ),
                 structural=structural, evidence=evidence, store=store,

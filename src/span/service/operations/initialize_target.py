@@ -91,7 +91,14 @@ def _next_target_pending(
                     key=lambda it: (it.evidence_ref.evidence_id.value, it.evidence_ref.locator),
                 )
                 if unaccounted:
-                    item = unaccounted[0]
+                    # S5/J-6: bind a bounded, deterministic batch of
+                    # unaccounted members in one mapping unit. No new
+                    # batch-size constant: the existing evidence bound is
+                    # the limit; the frontier order is stable identity.
+                    batch = tuple(
+                        unaccounted[: bounds.max_evidence_units]
+                    )
+                    item = batch[0]
                     anchor = None
                     for cand in candidates:
                         if cand.subject_id.canonical_locator == item.evidence_ref.locator:
@@ -120,7 +127,7 @@ def _next_target_pending(
                         operation_intent=m.SemanticIntent.EXPLAIN,
                         store=store, scope_root=anchor.subject_id,
                         objective=objective, target_scope=target_scope,
-                        target_id=target_id, target_inventory_item=item,
+                        target_id=target_id, target_inventory_items=batch,
                         mapping_mode=True,
                     )
                     return _suspend(

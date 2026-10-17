@@ -658,7 +658,9 @@ def impact(
         scope_root=resolution.candidates[0].subject.subject_id,
         question_class=m.SemanticQuestionClass.CQ_08,
         selection=request.question_selection,
-        default_slice=resolution.candidates[0].subject.subject_id.canonical_locator,
+        default_slice=m.QUESTION_CLASS_DEFAULT_SLICE[
+            m.SemanticQuestionClass.CQ_08
+        ],
         default_basis="IMPACT question-local",
     )
     _eff_slice = effective_impact_slice(

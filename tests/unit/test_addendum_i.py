@@ -229,10 +229,11 @@ class S3SchemaTest(unittest.TestCase):
         out = adapter.dispatch("explain", {"repository_id": "r"})
         self.assertTrue(out.is_error)
 
-    def test_nested_type_tags_required(self):
-        # S3.1/S3.5: the canonical decoder requires $type on every
-        # nested carrier, so the advertised schemas must require it
-        # too — otherwise a schema-valid request is decoder-invalid.
+    def test_type_tag_is_positional_not_definitional(self):
+        # J-8/S6.2: $type is a property of the field POSITION. Every
+        # definition advertises it as an OPTIONAL const (never required);
+        # a genuine dataclass-union branch requires it and an unambiguous
+        # use site forbids it — the decoder enforces both directions.
         from span.shell.mcp import TOOL_SCHEMAS
 
         for tool, schema in TOOL_SCHEMAS.items():
@@ -240,9 +241,11 @@ class S3SchemaTest(unittest.TestCase):
                 with self.subTest(tool=tool, definition=name):
                     properties = definition.get("properties", {})
                     if "$type" in properties:
-                        self.assertIn("$type", definition.get("required", []))
                         self.assertEqual(
                             properties["$type"], {"const": name}
+                        )
+                        self.assertNotIn(
+                            "$type", definition.get("required", [])
                         )
 
     def test_claim_kind_value_compatibility_advertised(self):
@@ -271,7 +274,7 @@ class S3SchemaTest(unittest.TestCase):
                 branch["if"]["properties"]["kind"],
                 {"const": kind.value},
             )
-            ref = branch["then"]["properties"]["value"]["$ref"]
+            ref = branch["then"]["properties"]["value"]["allOf"][0]["$ref"]
             expected = (
                 "#/$defs/"
                 f"{CLAIM_VALUE_TYPE[kind].__name__}"
@@ -1313,7 +1316,7 @@ class S6NatureTest(unittest.TestCase):
         self.assertFalse(validation.ok)
 
     def test_migration_preserves_trust(self):
-        self.assertEqual(SCHEMA_VERSION, 5)
+        self.assertEqual(SCHEMA_VERSION, 6)
 
     def _legacy_candidate(self, summary="does things"):
         from span.core import validation as _v
@@ -1485,7 +1488,7 @@ class S6NatureTest(unittest.TestCase):
             self.assertEqual(self._disk_version(path), "4")
             store = SqliteSemanticStore(path)
             try:
-                self.assertEqual(self._disk_version(path), "5")
+                self.assertEqual(self._disk_version(path), "6")
                 page = store.load_claims(
                     "repo-1", (_sid(),), (), _bounds()
                 )
@@ -1531,7 +1534,7 @@ class S6NatureTest(unittest.TestCase):
             finally:
                 reopened.close()
 
-    def test_v2_v3_chain_migrates_to_v5(self):
+    def test_v2_v3_chain_migrates_to_current(self):
         import tempfile as _tempfile
 
         layouts = {
@@ -1551,7 +1554,7 @@ class S6NatureTest(unittest.TestCase):
                     self._downgrade(path, version, drop=drop)
                     store = SqliteSemanticStore(path)
                     try:
-                        self.assertEqual(self._disk_version(path), "5")
+                        self.assertEqual(self._disk_version(path), "6")
                         page = store.load_claims(
                             "repo-1", (_sid(),), (), _bounds()
                         )
@@ -1627,7 +1630,7 @@ class S6NatureTest(unittest.TestCase):
                 conn.close()
             recovered = SqliteSemanticStore(path)
             try:
-                self.assertEqual(self._disk_version(path), "5")
+                self.assertEqual(self._disk_version(path), "6")
                 page = recovered.load_claims(
                     "repo-1", (_sid(),), (), _bounds()
                 )
