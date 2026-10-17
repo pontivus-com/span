@@ -193,7 +193,7 @@ class TransportDiagnosticsTest(unittest.TestCase):
         import json
 
         adapter = McpAdapter()
-        result = adapter.dispatch(
+        result = _dispatch(adapter, 
             "status", {"repository_id": "nope", "target": None}
         )
         self.assertTrue(result.is_error)
@@ -206,7 +206,7 @@ class TransportDiagnosticsTest(unittest.TestCase):
         import json
 
         adapter = McpAdapter()
-        result = adapter.dispatch(
+        result = _dispatch(adapter, 
             "locate",
             {
                 "repository_id": "repo-1",
@@ -226,7 +226,7 @@ class TransportDiagnosticsTest(unittest.TestCase):
         import json
 
         adapter = McpAdapter()
-        result = adapter.dispatch(
+        result = _dispatch(adapter, 
             "neighbors",
             {
                 "repository_id": "nope",
@@ -251,7 +251,7 @@ class TransportDiagnosticsTest(unittest.TestCase):
         import json
 
         adapter = McpAdapter()
-        result = adapter.dispatch(
+        result = _dispatch(adapter, 
             "submit_interpretation",
             {
                 "repository_id": "repo-1",
@@ -1017,9 +1017,9 @@ class StructuralCurrentTest(unittest.TestCase):
             real_list = evidence.list_inventory_entries
             calls = []
 
-            def counting_list(repository_id, locators=()):
-                calls.append(tuple(locators))
-                return real_list(repository_id, locators)
+            def counting_list(repository_id, scope, fingerprint_locators=()):
+                calls.append((scope, tuple(fingerprint_locators)))
+                return real_list(repository_id, scope, fingerprint_locators)
 
             evidence.list_inventory_entries = counting_list  # type: ignore[method-assign]
             try:
@@ -1040,3 +1040,15 @@ class StructuralCurrentTest(unittest.TestCase):
             self.assertLessEqual(len(calls), 2)
         finally:
             store.close()
+
+
+def _dispatch(adapter, tool, arguments):
+    """S6 migration: project the payload to the compact wire grammar."""
+    from span.core import schema as _schema
+    from span.shell.mcp import _REQUEST_CLASS, McpAdapter
+
+    if isinstance(arguments, dict):
+        cls = _REQUEST_CLASS.get(tool)
+        if cls is not None:
+            arguments = _schema.compact_payload(cls, arguments)
+    return McpAdapter.dispatch(adapter, tool, arguments)

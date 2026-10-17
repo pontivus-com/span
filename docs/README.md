@@ -39,6 +39,11 @@ workflows, or originates authority).
   Span absorbs read-only structural navigation (`locate`, `neighbors`),
   graft MCP deregistered, E-14 scan deleted; implementation pending
   authorization (E governs until F-7 passes)
+- `semantic-governance-addendum-j-locality-derivation-and-wire-projection.md`
+  — adopted locality (scoped discovery freshness, operation-local structural
+  completeness), service-owned derivation (default question slices, candidate
+  target accounts, first-admission seed, bounded mapping batches), the
+  one-grammar compact MCP wire codec, and the interpretation profile
 
 Governing authority: `.context/requirements/`, the v0.6 implementation plan,
 and Addendum E for the corrective boundaries named there. If any historical

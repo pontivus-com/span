@@ -27,6 +27,34 @@ FILES = {
 OBJECTIVE = "Establish billing and shipping areas with exclusions."
 
 
+
+def _fill_batch(pending, accounts):
+    """S5/J-6 test helper: account for every bound inventory item.
+
+    A mapping result must contain exactly one candidate per bound item;
+    items the test does not exercise are recorded as unresolved mapping
+    requirements. No-op for an empty accounts tuple (non-mapping units).
+    """
+    accounts = tuple(accounts)
+    if not accounts:
+        return accounts
+    have = {a.evidence_id.value for a in accounts}
+    out = list(accounts)
+    for it in pending.request.target_inventory_items:
+        eid = it.evidence_ref.evidence_id.value
+        if eid in have:
+            continue
+        out.append(m.CandidateTargetInventoryAccount(
+            evidence_id=it.evidence_ref.evidence_id,
+            resolution_requirements=(m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=None,
+                description="not examined in this test",
+                supporting_context=(),
+            ),),
+        ))
+    return tuple(out)
+
 def _bounds():
     return m.QueryBounds(
         max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
@@ -137,85 +165,95 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             req = pending.request
             if req.question is not None:
                 break
-            item = req.target_inventory_item
-            assert item is not None
-            loc = item.evidence_ref.locator
-            if loc in ("billing_a1.py", "billing_a2.py"):
-                area = billing
-            elif loc == "shipping_b.py":
-                area = shipping
-            elif loc == "config_d.py":
-                area = billing
-            elif loc == "vendor_c.py":
-                area = None
-            else:
-                area = None  # legacy_e unresolved
-            if loc == "vendor_c.py":
-                acc = m.TargetInventoryAccount(
-                    evidence_ref=item.evidence_ref,
-                    exclusion_basis=_basis("third-party vendored code", (item.evidence_ref,)),
-                )
-                covs, qs = (), ()
-            elif loc == "legacy_e.py":
-                acc = m.TargetInventoryAccount(
-                    evidence_ref=item.evidence_ref,
-                    resolution_requirements=(
-                        m.ResolutionRequirement(
-                            kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                            subject_or_claim=None,
-                            description="needs owner interview",
-                            supporting_context=(),
+            # S5/J-6: one unit accounts for the whole bound batch.
+            accs = []
+            cands = []
+            cov_list = []
+            for item in req.target_inventory_items:
+                loc = item.evidence_ref.locator
+                if loc in ("billing_a1.py", "billing_a2.py"):
+                    area = billing
+                elif loc == "shipping_b.py":
+                    area = shipping
+                elif loc == "config_d.py":
+                    area = billing
+                else:
+                    area = None  # vendor_c / legacy_e unresolved
+                if loc == "vendor_c.py":
+                    accs.append(m.CandidateTargetInventoryAccount(
+                        evidence_id=item.evidence_ref.evidence_id,
+                        exclusion_basis=_basis(
+                            "third-party vendored code", (item.evidence_ref,)
                         ),
-                    ),
-                )
-                covs, qs = (), ()
-            else:
-                acc = m.TargetInventoryAccount(
-                    evidence_ref=item.evidence_ref, assigned_area_subjects=(area,)
-                )
-                covs, qs = (), ()
-                need = None
-                if area == billing and "billing" not in admitted:
-                    admitted.add("billing")
-                    need = (billing, billing_q, "billing purpose")
-                elif area == shipping and "shipping" not in admitted:
-                    admitted.add("shipping")
-                    need = (shipping, shipping_q, "shipping purpose")
-                if need is not None:
-                    subj, qq, sl = need
-                    covs = (
-                        m.InterpretationCoverage(
-                            subjects=(subj,), question_slice=sl,
-                            evidence_scope=m.EvidenceScope(), declared_complete=False,
-                            question=qq,
-                            disposition=m.SemanticQuestionDisposition.PENDING,
-                            result_refs=(), resolution_requirements=(),
-                            disposition_basis="admitted", question_evidence=(),
+                    ))
+                elif loc == "legacy_e.py":
+                    accs.append(m.CandidateTargetInventoryAccount(
+                        evidence_id=item.evidence_ref.evidence_id,
+                        resolution_requirements=(
+                            m.ResolutionRequirement(
+                                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                                subject_or_claim=None,
+                                description="needs owner interview",
+                                supporting_context=(),
+                            ),
                         ),
-                    )
-                    qs = (qq,)
-            subj_basis = _basis(f"mapping admits {loc}", (item.evidence_ref,))
-            cands = ()
-            if area is not None and (
-                (area.canonical_locator == "billing" and loc == "billing_a1.py")
-                or (area.canonical_locator == "shipping" and loc == "shipping_b.py")
-            ):
-                cands = (
-                    m.CandidateSubject(
-                        provisional_locator=area.canonical_locator,
-                        kind=m.SubjectKind.OTHER, display_name=area.canonical_locator,
-                        declared_kind=area.canonical_locator,
-                        evidence=(item.evidence_ref,), basis=subj_basis,
-                    ),
-                )
+                    ))
+                else:
+                    accs.append(m.CandidateTargetInventoryAccount(
+                        evidence_id=item.evidence_ref.evidence_id,
+                        assigned_area_subjects=(area,),
+                    ))
+                    if area == billing and "billing" not in admitted:
+                        admitted.add("billing")
+                        cov_list.append(
+                            m.InterpretationCoverage(
+                                subjects=(billing,),
+                                question_slice="billing purpose",
+                                evidence_scope=m.EvidenceScope(),
+                                declared_complete=False, question=billing_q,
+                                disposition=m.SemanticQuestionDisposition.PENDING,
+                                result_refs=(), resolution_requirements=(),
+                                disposition_basis="admitted", question_evidence=(),
+                            )
+                        )
+                    elif area == shipping and "shipping" not in admitted:
+                        admitted.add("shipping")
+                        cov_list.append(
+                            m.InterpretationCoverage(
+                                subjects=(shipping,),
+                                question_slice="shipping purpose",
+                                evidence_scope=m.EvidenceScope(),
+                                declared_complete=False, question=shipping_q,
+                                disposition=m.SemanticQuestionDisposition.PENDING,
+                                result_refs=(), resolution_requirements=(),
+                                disposition_basis="admitted", question_evidence=(),
+                            )
+                        )
+                    if area is not None and (
+                        (area.canonical_locator == "billing" and loc == "billing_a1.py")
+                        or (area.canonical_locator == "shipping" and loc == "shipping_b.py")
+                    ):
+                        cands.append(
+                            m.CandidateSubject(
+                                provisional_locator=area.canonical_locator,
+                                kind=m.SubjectKind.OTHER,
+                                display_name=area.canonical_locator,
+                                declared_kind=area.canonical_locator,
+                                evidence=(item.evidence_ref,),
+                                basis=_basis(
+                                    f"mapping admits {loc}", (item.evidence_ref,)
+                                ),
+                            )
+                        )
             ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
                     claims=(), relationships=(), governing_source_refs=(),
-                    diagnostics=("mapping",), candidate_subjects=cands,
-                    candidate_conflicts=(), proposed_question_coverages=covs,
+                    diagnostics=("mapping",),
+                    candidate_subjects=tuple(cands),
+                    candidate_conflicts=(), proposed_question_coverages=tuple(cov_list),
                     candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=(acc,),
+                    proposed_target_inventory_accounting=_fill_batch(pending, tuple(accs)),
                     proposed_target_questions=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -252,8 +290,8 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         )
         # Fabricated area identity rejects.
         fake = m.SubjectId(repository_id=REPO, subject_kind=m.SubjectKind.OTHER, canonical_locator="nope")
-        bad = m.TargetInventoryAccount(
-            evidence_ref=by_eid["billing_a1.py"].evidence_ref,
+        bad = m.CandidateTargetInventoryAccount(
+             evidence_id=by_eid["billing_a1.py"].evidence_ref.evidence_id,
             assigned_area_subjects=(fake,),
         )
         self.assertFalse(
@@ -290,7 +328,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                     candidate_subjects=(), candidate_conflicts=(),
                     proposed_question_coverages=tuple(coverages),
                     candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=tuple(extra_accounts),
+                    proposed_target_inventory_accounting=_fill_batch(pending, tuple(extra_accounts)),
                     proposed_target_questions=tuple(extra_qs),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -390,8 +428,8 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                     a for a in assoc_now.inventory_accounting
                     if a.evidence_ref.locator == "legacy_e.py"
                 )
-                resolved = m.TargetInventoryAccount(
-                    evidence_ref=e_acc.evidence_ref,
+                resolved = m.CandidateTargetInventoryAccount(
+                     evidence_id=e_acc.evidence_ref.evidence_id,
                     assigned_area_subjects=(shipping,),
                 )
                 _answer_pending(pending, q, (claim,), (), (cov,), (resolved,), ())
@@ -637,7 +675,7 @@ class TargetReuseTest(unittest.TestCase):
         # Map one.py: new area + PENDING coverage (no reuse entry).
         first = _admit()
         assert first.request.question is None
-        item1 = first.request.target_inventory_item
+        item1 = first.request.target_inventory_items[0]
         assert item1 is not None
         ops.submit_interpretation(
             first.continuation,
@@ -664,44 +702,20 @@ class TargetReuseTest(unittest.TestCase):
                     ),
                 ),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item1.evidence_ref,
+                proposed_target_inventory_accounting=tuple(
+                    m.CandidateTargetInventoryAccount(
+                        evidence_id=it.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
-                    ),
+                    )
+                    for it in first.request.target_inventory_items
                 ),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
             continuations=live,
         )
-        # Map two.py: same existing area, reuse persisted question only.
-        second = _admit()
-        assert second.request.question is None
-        item2 = second.request.target_inventory_item
-        assert item2 is not None
-        self.assertNotEqual(
-            item1.evidence_ref.evidence_id.value,
-            item2.evidence_ref.evidence_id.value,
-        )
-        ops.submit_interpretation(
-            second.continuation,
-            m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
-                diagnostics=("m2 reuse",), candidate_subjects=(),
-                candidate_conflicts=(), proposed_question_coverages=(),
-                candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item2.evidence_ref,
-                        assigned_area_subjects=(area,),
-                    ),
-                ),
-                proposed_target_questions=(question,),
-            ),
-            structural=structural, evidence=evidence, store=store,
-            continuations=live,
-        )
+        # S5/J-6: the frontier binds the whole unaccounted batch in one
+        # unit, so two.py is disposed in the same unit (see _fill_batch).
         assoc = store.load_target_association(repo, tid)
         assert assoc is not None
         self.assertEqual(len(assoc.inventory_accounting), 2)
@@ -717,8 +731,8 @@ class TargetReuseTest(unittest.TestCase):
         )
         from span.core import validation as v
         got = {a.evidence_ref.locator: a for a in assoc.inventory_accounting}
-        wrong = m.TargetInventoryAccount(
-            evidence_ref=got["two.py"].evidence_ref,
+        wrong = m.CandidateTargetInventoryAccount(
+             evidence_id=got["two.py"].evidence_ref.evidence_id,
             assigned_area_subjects=(other,),
         )
         ctx = v.ValidationContext(
@@ -814,7 +828,7 @@ class TargetReuseTest(unittest.TestCase):
             continuations=live_a, authority_seeds=(),
         )
         assert first_a.request.question is None
-        item_a = first_a.request.target_inventory_item
+        item_a = first_a.request.target_inventory_items[0]
         assert item_a is not None
         ops.submit_interpretation(
             first_a.continuation,
@@ -841,12 +855,12 @@ class TargetReuseTest(unittest.TestCase):
                     ),
                 ),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item_a.evidence_ref,
+                proposed_target_inventory_accounting=_fill_batch(first_a, (
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item_a.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
                     ),
-                ),
+                )),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -876,7 +890,7 @@ class TargetReuseTest(unittest.TestCase):
             continuations=live_b, authority_seeds=(),
         )
         assert first_b.request.question is None
-        item_b = first_b.request.target_inventory_item
+        item_b = first_b.request.target_inventory_items[0]
         assert item_b is not None
         ops.submit_interpretation(
             first_b.continuation,
@@ -885,12 +899,12 @@ class TargetReuseTest(unittest.TestCase):
                 diagnostics=("campaign-b first admission via reuse",),
                 candidate_subjects=(), candidate_conflicts=(),
                 proposed_question_coverages=(), candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item_b.evidence_ref,
+                proposed_target_inventory_accounting=_fill_batch(first_b, (
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item_b.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
                     ),
-                ),
+                )),
                 proposed_target_questions=(question,),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -1012,7 +1026,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 candidate_conflicts=(),
                 proposed_question_coverages=(),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(),
+                proposed_target_inventory_accounting=_fill_batch(suspended, ()),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -1023,7 +1037,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         self.assertTrue(hasattr(first, "continuation"))
         req = first.request
         self.assertIsNone(req.question)
-        item = req.target_inventory_item
+        item = req.target_inventory_items[0]
         assert item is not None
         question = m.SemanticQuestionScope(
             scope_root=nav, subject=file_a,
@@ -1055,12 +1069,12 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 candidate_conflicts=(),
                 proposed_question_coverages=(pending_cov,),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item.evidence_ref,
+                proposed_target_inventory_accounting=_fill_batch(first, (
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(nav,),
                     ),
-                ),
+                )),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -1101,7 +1115,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     ),
                 ),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(),
+                proposed_target_inventory_accounting=_fill_batch(pending, ()),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -1136,7 +1150,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         live = ContinuationStore()
         first = self._admit(structural, evidence, store, live)
         self.assertTrue(hasattr(first, "continuation"))
-        item = first.request.target_inventory_item
+        item = first.request.target_inventory_items[0]
         assert item is not None
         nav, file_a = self._nav_area(), self._file_a()
 
@@ -1166,8 +1180,8 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 ),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
-                    m.TargetInventoryAccount(
-                        evidence_ref=item.evidence_ref,
+                    m.CandidateTargetInventoryAccount(
+                         evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(nav,),
                     ),
                 ),
@@ -1283,7 +1297,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 ),
                 candidate_conflicts=(),
                 proposed_question_coverages=(), candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(),
+                proposed_target_inventory_accounting=_fill_batch(suspended, ()),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -1304,7 +1318,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
             req = pending.request
             if req.question is not None:
                 break
-            item = req.target_inventory_item
+            item = req.target_inventory_items[0]
             assert item is not None
             if item.evidence_ref.locator == "solo_a.py":
                 covs = (
@@ -1334,12 +1348,12 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     diagnostics=("mapping",), candidate_subjects=cands,
                     candidate_conflicts=(),
                     proposed_question_coverages=covs, candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=(
-                        m.TargetInventoryAccount(
-                            evidence_ref=item.evidence_ref,
+                    proposed_target_inventory_accounting=_fill_batch(pending, (
+                        m.CandidateTargetInventoryAccount(
+                             evidence_id=item.evidence_ref.evidence_id,
                             assigned_area_subjects=(nav,),
                         ),
-                    ),
+                    )),
                     proposed_target_questions=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -1379,7 +1393,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     ),
                 ),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(),
+                proposed_target_inventory_accounting=_fill_batch(pending, ()),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -1430,7 +1444,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     ),
                 ),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(),
+                proposed_target_inventory_accounting=_fill_batch(suspended_refresh, ()),
                 proposed_target_questions=(),
             ),
             structural=structural, evidence=evidence2, store=store,

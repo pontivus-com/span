@@ -18,6 +18,7 @@ from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
     InMemorySubject,
+    evidence_kind_for_path,
     fingerprint_content,
 )
 
@@ -50,7 +51,7 @@ def _ref(path):
     return m.EvidenceRef(
         evidence_id=m.EvidenceId(f"ev-{path}"),
         repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        source_kind=evidence_kind_for_path(path),
         locator=path,
         revision_or_fingerprint=fingerprint_content(FILES[path]),
     )
@@ -615,7 +616,7 @@ class PostcommitCorrectionTest(unittest.TestCase):
                     m.EvidenceRef(
                         evidence_id=m.EvidenceId("ev-README.md"),
                         repository_id=REPO,
-                        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                        source_kind=evidence_kind_for_path("README.md"),
                         locator="README.md",
                         revision_or_fingerprint=fingerprint_content(
                             grown["README.md"]

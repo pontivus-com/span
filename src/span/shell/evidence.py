@@ -103,12 +103,20 @@ class FixtureEvidenceSource:
     def list_inventory_entries(
         self,
         repository_id: str,
+        scope: m.EvidenceScope,
         fingerprint_locators: tuple[str, ...] = (),
     ) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
         self._check_repository(repository_id)
-        paths = sorted(self._files)
+        if scope.paths or scope.evidence_refs:
+            expanded = self._expand_paths(tuple(scope.paths))
+            ref_paths = [
+                r.locator for r in scope.evidence_refs if r.locator in self._files
+            ]
+            paths = sorted(set(expanded) | set(ref_paths))
+        else:
+            paths = sorted(self._files)
         return (
-            tuple((p, f"ev-{p}") for p in paths),
+            tuple((p, f"ev-{p}") for p in paths if p in self._files),
             {
                 loc: fingerprint_content(self._files[loc])
                 for loc in dict.fromkeys(fingerprint_locators)

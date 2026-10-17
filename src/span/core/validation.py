@@ -799,7 +799,7 @@ def find_conflicts(
 
 
 def validate_target_inventory_account(
-    account: m.TargetInventoryAccount,
+    account: m.CandidateTargetInventoryAccount,
     ctx: ValidationContext,
     *,
     current_inventory_ids: frozenset[str],
@@ -807,8 +807,16 @@ def validate_target_inventory_account(
     admitted_area_ids: tuple[m.SubjectId, ...] = (),
     new_area_ids: tuple[m.SubjectId, ...] = (),
 ) -> CandidateValidation:
-    """Validate one TargetInventoryAccount proposal (Addendum E §4C.6D)."""
-    eid = account.evidence_ref.evidence_id.value
+    """Validate one CandidateTargetInventoryAccount (Addendum E §4C.6D; J-4).
+
+    The input type is locked to the candidate carrier. The
+    exactly-one-outcome shape invariant is guaranteed by construction
+    (one shared helper in ``core/model.py``) and is not re-checked here;
+    this validates what construction cannot: bound-item and
+    current-inventory membership, known/admitted/new area references, and
+    exclusion evidence resolution and fingerprint availability.
+    """
+    eid = account.evidence_id.value
     if eid not in current_inventory_ids:
         return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target account out-of-target evidence: {eid}",))
     if expected_evidence_id is not None and eid != expected_evidence_id:
@@ -835,7 +843,7 @@ def validate_target_inventory_account(
         return CandidateValidation(True, m.TrustState.ESTABLISHED, (), ())
     if account.resolution_requirements:
         return CandidateValidation(True, m.TrustState.UNRESOLVED, tuple(account.resolution_requirements), ())
-    return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target account has no outcome",))
+    return CandidateValidation(True, m.TrustState.UNRESOLVED, (), ())
 
 
 def validate_target_questions(

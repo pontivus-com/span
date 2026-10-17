@@ -38,7 +38,7 @@ import os
 import sqlite3
 import sys
 
-EXPECTED_SCHEMA = "5"
+EXPECTED_SCHEMA = "6"
 
 
 def _fail_silent(message):

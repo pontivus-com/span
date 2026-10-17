@@ -263,7 +263,11 @@ class WithdrawalTest(unittest.TestCase):
 
 
 class SupersedingEvidenceTest(unittest.TestCase):
-    def test_new_authority_file_invalidates_then_recovers(self):
+    def test_scope_bound_membership_vs_cited_change_then_recovers(self):
+        """J-1: discovery membership is bounded by the subject's scope, so
+        a new out-of-scope file does not invalidate coverage (J-A1), while
+        a changed *cited* source stales exactly its dependents (J-A3,
+        MI-07 partial staleness). Explicit refresh recovers."""
         structural, evidence, store, agent = _harness()
         try:
             first, _ = _exchange(
@@ -276,13 +280,15 @@ class SupersedingEvidenceTest(unittest.TestCase):
                     for c in first.content.claims
                 )
             )
-            # A new authority document appears; no existing bytes change.
+            # A new authority document OUTSIDE the subject's bounded
+            # discovery scope; no existing bytes change. Coverage stays
+            # current (J-A1).
             grown = dict(FILES)
             grown["docs/charter.md"] = (
                 "# Charter\n\nLedger governs billing.\n"
             )
             evidence_v2 = FixtureEvidenceSource(REPO, grown)
-            stale_answer, _ = _exchange(
+            still_current, _ = _exchange(
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
                     target=m.SubjectSelector(
@@ -292,18 +298,56 @@ class SupersedingEvidenceTest(unittest.TestCase):
                 ),
                 ops.status, structural, evidence_v2, store, agent,
             )
+            out_of_scope_states = {
+                item.item.id.value: item.freshness.state
+                for item in still_current.content.freshness_items
+            }
+            self.assertTrue(out_of_scope_states)
+            self.assertTrue(
+                all(
+                    s is m.FreshnessState.CURRENT
+                    for s in out_of_scope_states.values()
+                ),
+                "out-of-scope membership change must not invalidate",
+            )
+            # A change to a source the assertions cite (a direct evidence
+            # dependency, not discovery membership) still stales exactly
+            # its dependents and leaves unrelated ones current (J-A3).
+            changed = dict(grown)
+            changed["README.md"] = (
+                "# v06-svc\n\nBilling capability changed.\n"
+            )
+            evidence_v3 = FixtureEvidenceSource(REPO, changed)
+            stale_answer, _ = _exchange(
+                ops.SemanticStatusRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "src/billing.py", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                ops.status, structural, evidence_v3, store, agent,
+            )
             states = {
                 item.item.id.value: item.freshness.state
                 for item in stale_answer.content.freshness_items
             }
             self.assertTrue(states)
             self.assertTrue(
-                all(
+                any(
                     s is not m.FreshnessState.CURRENT
                     for s in states.values()
-                )
+                ),
+                "a changed cited source must stale its dependents",
             )
-            # Explicit refresh re-resolves discovery and recovers.
+            self.assertTrue(
+                any(
+                    s is m.FreshnessState.CURRENT
+                    for s in states.values()
+                ),
+                "unrelated dependents stay current (MI-07)",
+            )
+            # Explicit refresh re-resolves and recovers.
             _exchange(
                 ops.SemanticRefreshRequest(
                     repository_id=REPO,
@@ -312,7 +356,7 @@ class SupersedingEvidenceTest(unittest.TestCase):
                     ),
                     bounds=_bounds(),
                 ),
-                ops.refresh, structural, evidence_v2, store, agent,
+                ops.refresh, structural, evidence_v3, store, agent,
             )
             recovered, _ = _exchange(
                 ops.SemanticStatusRequest(
@@ -322,7 +366,7 @@ class SupersedingEvidenceTest(unittest.TestCase):
                     ),
                     bounds=_bounds(),
                 ),
-                ops.status, structural, evidence_v2, store, agent,
+                ops.status, structural, evidence_v3, store, agent,
             )
             self.assertTrue(
                 all(

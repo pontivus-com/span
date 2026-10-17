@@ -121,3 +121,11 @@ repository-wide enumerate/map. Normal repository-level `status` reads only persi
 semantic coverage and reports its bounded frontier; it never enumerates
 structural subjects or interprets them. Skills are guidance only, never
 semantic authority.
+
+## Addendum J delta — target mapping
+
+`initialize_target` binds a bounded, deterministic batch of unaccounted
+inventory members per mapping unit; every bound member receives exactly one
+disposition (assignment, evidence-backed exclusion, or unresolved mapping),
+validated atomically. Newly admitted areas take a service-owned first
+`PENDING` CQ-01 seed when no reusable current question exists.

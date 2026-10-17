@@ -122,7 +122,9 @@ def _ref(path, files=None):
     return m.EvidenceRef(
         evidence_id=m.EvidenceId(f"ev-{path}"),
         repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        source_kind=m.EvidenceSourceKind.DOCUMENTATION
+        if path.endswith(".md")
+        else m.EvidenceSourceKind.SOURCE_CODE,
         locator=path,
         revision_or_fingerprint=fingerprint_content(files[path]),
     )
@@ -1850,8 +1852,8 @@ class LegacyUpgradeTest(unittest.TestCase):
                 con.close()
             store = SqliteSemanticStore(db)
             try:
-                self.assertEqual(store.schema_version(), m.SchemaVersion(5))
-                self.assertEqual(SCHEMA_VERSION, 5)
+                self.assertEqual(store.schema_version(), m.SchemaVersion(6))
+                self.assertEqual(SCHEMA_VERSION, 6)
                 page = store.load_claims(REPO, (sid,), (), _bounds())
                 self.assertEqual(
                     [c.claim_id.value for c in page.items], ["leg-1"]

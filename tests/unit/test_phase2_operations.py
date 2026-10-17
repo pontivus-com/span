@@ -502,8 +502,8 @@ class MappingDiagnosticsTest(unittest.TestCase):
             proposed_question_coverages=(),
             candidate_withdrawals=(),
             proposed_target_inventory_accounting=(
-                m.TargetInventoryAccount(
-                    evidence_ref=item_ref,
+                m.CandidateTargetInventoryAccount(
+                    evidence_id=item_ref.evidence_id,
                     assigned_area_subjects=(area,),
                 ),
             ),
@@ -522,7 +522,7 @@ class MappingDiagnosticsTest(unittest.TestCase):
                 structural, evidence, store, continuations
             )
             item_ref = (
-                pending.request.target_inventory_item.evidence_ref
+                pending.request.target_inventory_items[0].evidence_ref
             )
             with self.assertRaises(InterpretationUnitRejected) as ctx:
                 ops.submit_interpretation(
@@ -543,9 +543,7 @@ class MappingDiagnosticsTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_new_area_without_pending_names_same_unit_field(self):
-        from span.core.validation import InterpretationUnitRejected
-
+    def test_new_area_without_pending_creates_service_seed(self):
         structural, evidence, store = self._doc_harness()
         try:
             continuations = ContinuationStore()
@@ -553,24 +551,32 @@ class MappingDiagnosticsTest(unittest.TestCase):
                 structural, evidence, store, continuations
             )
             item_ref = (
-                pending.request.target_inventory_item.evidence_ref
+                pending.request.target_inventory_items[0].evidence_ref
             )
-            with self.assertRaises(InterpretationUnitRejected) as ctx:
-                ops.submit_interpretation(
-                    pending.continuation,
-                    self._new_area_result(item_ref, with_reuse=False),
-                    structural=structural, evidence=evidence, store=store,
-                    continuations=continuations,
-                )
-            self.assertTrue(
-                any(
-                    "submit one PENDING proposed_question_coverages "
-                    "entry" in diagnostic
-                    for diagnostic in ctx.exception.diagnostics
-                ),
-                ctx.exception.diagnostics,
+            # S4.4/J-5: a newly admitted area with no reusable current
+            # target question no longer rejects; the service creates
+            # exactly one PENDING CQ-01 first-admission seed.
+            ops.submit_interpretation(
+                pending.continuation,
+                self._new_area_result(item_ref, with_reuse=False),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
             )
-            self.assertEqual(len(continuations), 1)
+            area = self._doc_area()
+            rows = store.load_all_question_coverages(
+                "repo-1", area, (area,)
+            )
+            seeds = [
+                row for row in rows
+                if row.question is not None
+                and row.question.question_class
+                is m.SemanticQuestionClass.CQ_01
+                and row.disposition
+                is m.SemanticQuestionDisposition.PENDING
+                and row.disposition_basis
+                == "service-owned first-admission target seed"
+            ]
+            self.assertEqual(len(seeds), 1)
         finally:
             store.close()
 
@@ -973,6 +979,7 @@ class InventorySnapshotTest(unittest.TestCase):
         ).hexdigest()
         membership, seed_map = _inventory_snapshot(
             "repo-1",
+            m.EvidenceScope(),
             evidence=evidence,
             seeds=(("README.md", "ev-README.md"),
                    ("nope.md", "ev-nope.md")),
@@ -1004,6 +1011,7 @@ class InventorySnapshotTest(unittest.TestCase):
             ).hexdigest()
             membership, seed_map = _inventory_snapshot(
                 "repo-1",
+                m.EvidenceScope(),
                 evidence=evidence,
                 seeds=(("a.py", "ev-a.py"),),
             )
@@ -1578,7 +1586,7 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                     )
                 }
             )
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": "repo-1",
@@ -3588,3 +3596,15 @@ class ContextualResolutionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _dispatch(adapter, tool, arguments):
+    """S6 migration: project the payload to the compact wire grammar."""
+    from span.core import schema as _schema
+    from span.shell.mcp import _REQUEST_CLASS, McpAdapter
+
+    if isinstance(arguments, dict):
+        cls = _REQUEST_CLASS.get(tool)
+        if cls is not None:
+            arguments = _schema.compact_payload(cls, arguments)
+    return McpAdapter.dispatch(adapter, tool, arguments)

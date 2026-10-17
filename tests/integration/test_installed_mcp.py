@@ -259,6 +259,14 @@ class _Wire:
         self._transcript = transcript
 
     async def call(self, tool, args):
+        # S6 migration: project the payload to the compact wire grammar.
+        from span.core import schema as _schema
+        from span.shell.mcp import _REQUEST_CLASS
+
+        if isinstance(args, dict):
+            cls = _REQUEST_CLASS.get(tool)
+            if cls is not None:
+                args = _schema.compact_payload(cls, args)
         result = await self._session.call_tool(tool, args)
         texts = [
             block.text for block in result.content
@@ -525,7 +533,7 @@ async def _lane(exe, work, data_dir, transcript):
             "resolution_requirements": [{
                 "$type": "ResolutionRequirement",
                 "kind": "MISSING_SEMANTIC_COVERAGE",
-                "subject_or_claim": beta_subject,
+                "subject_or_claim": {"$type": "SubjectId", **beta_subject},
                 "description": "second gap stays open",
                 "supporting_context": [],
             }],
@@ -687,7 +695,7 @@ async def _lane(exe, work, data_dir, transcript):
             "resolution_requirements": [{
                 "$type": "ResolutionRequirement",
                 "kind": "MISSING_AUTHORITY",
-                "subject_or_claim": refresh_subject,
+                "subject_or_claim": {"$type": "SubjectId", **refresh_subject},
                 "description": "shared dependent original gap",
                 "supporting_context": [],
             }],

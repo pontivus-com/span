@@ -12,8 +12,10 @@ import pathlib
 import unittest
 
 from span.core import model as m
+from span.core import schema as _schema
 from span import service as ops
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.bounds import resolve_bounds
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
 from span.shell.evidence import FixtureEvidenceSource
@@ -22,6 +24,7 @@ from span.shell.mcp import (
     TOOL_SCHEMAS,
     McpAdapter,
     ServiceContext,
+    _REQUEST_CLASS,
     decode_request,
     encode_result,
 )
@@ -60,7 +63,9 @@ def _ref(path):
     return m.EvidenceRef(
         evidence_id=m.EvidenceId(f"ev-{path}"),
         repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        source_kind=m.EvidenceSourceKind.DOCUMENTATION
+        if path.endswith(".md")
+        else m.EvidenceSourceKind.SOURCE_CODE,
         locator=path,
         revision_or_fingerprint=fingerprint_content(FILES[path]),
     )
@@ -192,19 +197,28 @@ class SchemaSyncTest(unittest.TestCase):
                 )
 
     def test_nullable_targets_advertise_null(self):
-        # Nullable contract targets must survive schema-driven bridges:
-        # status/refresh/locate targets accept explicit null at ingress.
+        # J-8/S6.2: a single-dataclass (or X|None) position forbids the
+        # tag; a nullable contract target advertises an explicit null
+        # alternative, and a non-null target does not.
         for tool in ("status", "refresh", "locate"):
             with self.subTest(tool=tool):
                 target_schema = TOOL_SCHEMAS[tool]["properties"]["target"]
-                self.assertEqual(target_schema["type"], ["object", "null"])
+                alternatives = target_schema.get("anyOf", [])
+                self.assertTrue(
+                    any(a == {"type": "null"} for a in alternatives),
+                    target_schema,
+                )
         for tool in (
             "explain", "impact", "trace", "authority",
             "initialize_target", "neighbors",
         ):
             with self.subTest(tool=tool):
                 target_schema = TOOL_SCHEMAS[tool]["properties"]["target"]
-                self.assertNotIn("null", target_schema["type"])
+                alternatives = target_schema.get("anyOf", [])
+                self.assertFalse(
+                    any(a.get("type") == "null" for a in alternatives),
+                    target_schema,
+                )
 
     def test_submit_and_init_shapes(self):
         submit = TOOL_SCHEMAS["submit_interpretation"]
@@ -221,7 +235,7 @@ class SchemaSyncTest(unittest.TestCase):
 
 class IngressTest(unittest.TestCase):
     def test_decode_explain(self):
-        request = decode_request(
+        request = _decode_request(
             "explain",
             {
                 "repository_id": REPO,
@@ -229,14 +243,17 @@ class IngressTest(unittest.TestCase):
             },
         )
         self.assertIsInstance(request, ops.SemanticExplainRequest)
+        # S6.3: omitted bounds decode to None; the service resolves the
+        # default via resolve_bounds() at operation entry.
+        self.assertIsNone(request.bounds)
         self.assertEqual(
-            request.bounds,
+            resolve_bounds(request.bounds, hook=False),
             DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
         )
 
     def test_unknown_field_rejected(self):
         with self.assertRaises(ValueError):
-            decode_request(
+            _decode_request(
                 "explain",
                 {
                     "repository_id": REPO,
@@ -254,22 +271,22 @@ class IngressTest(unittest.TestCase):
             "boundary_only": False,
         }
         with self.assertRaises(ValueError):
-            decode_request("trace", args)
+            _decode_request("trace", args)
 
     def test_missing_required_rejected(self):
         with self.assertRaises(ValueError):
-            decode_request("explain", {"repository_id": REPO})
+            _decode_request("explain", {"repository_id": REPO})
 
     def test_unknown_tool_rejected(self):
         with self.assertRaises(ValueError):
-            decode_request("span_nope", {})
+            _decode_request("span_nope", {})
 
 
 class DispatchTest(unittest.TestCase):
     def test_initialize_target_advances_complete_boundary(self):
         adapter, agent = _harness()
         try:
-            pending = adapter.dispatch(
+            pending = _dispatch(adapter, 
                 "initialize_target",
                 {
                     "repository_id": REPO,
@@ -284,7 +301,7 @@ class DispatchTest(unittest.TestCase):
             self.assertFalse(pending.is_error)
             envelope = json.loads(pending.content)
             self.assertEqual(envelope["$type"], "PendingInterpretation")
-            task = m.from_canonical(
+            task = _schema.from_wire(
                 m.SemanticInterpretationRequest,
                 envelope["request"],
             )
@@ -300,9 +317,9 @@ class DispatchTest(unittest.TestCase):
             # E-13B mapping task carries TargetId + item with question=None.
             self.assertIsNone(task.question)
             self.assertIsNotNone(task.target_id)
-            self.assertIsNotNone(task.target_inventory_item)
-            assert task.target_inventory_item is not None
-            item_ref = task.target_inventory_item.evidence_ref
+            self.assertIsNotNone(task.target_inventory_items[0])
+            assert task.target_inventory_items[0] is not None
+            item_ref = task.target_inventory_items[0].evidence_ref
             area = m.SubjectId(
                 repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
                 canonical_locator="tools-area",
@@ -321,7 +338,7 @@ class DispatchTest(unittest.TestCase):
                 result_refs=(), resolution_requirements=(),
                 disposition_basis="admitted", question_evidence=(),
             )
-            answered = adapter.dispatch(
+            answered = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
@@ -347,8 +364,8 @@ class DispatchTest(unittest.TestCase):
                             proposed_question_coverages=(map_cov,),
                             candidate_withdrawals=(),
                             proposed_target_inventory_accounting=(
-                                m.TargetInventoryAccount(
-                                    evidence_ref=item_ref,
+                                m.CandidateTargetInventoryAccount(
+                                    evidence_id=item_ref.evidence_id,
                                     assigned_area_subjects=(area,),
                                 ),
                             ),
@@ -368,7 +385,7 @@ class DispatchTest(unittest.TestCase):
     def test_explain_suspend_then_submit_over_wire(self):
         adapter, agent = _harness()
         try:
-            pending = adapter.dispatch(
+            pending = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": REPO,
@@ -378,12 +395,12 @@ class DispatchTest(unittest.TestCase):
             self.assertFalse(pending.is_error)
             envelope = json.loads(pending.content)
             self.assertEqual(envelope["$type"], "PendingInterpretation")
-            task = m.from_canonical(
+            task = _schema.from_wire(
                 m.SemanticInterpretationRequest,
                 envelope["request"],
             )
             result = agent.perform(task)
-            answered = adapter.dispatch(
+            answered = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
@@ -412,7 +429,7 @@ class DispatchTest(unittest.TestCase):
     def test_reissue_is_available_over_wire(self):
         adapter, agent = _harness()
         try:
-            pending = adapter.dispatch(
+            pending = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": REPO,
@@ -420,7 +437,7 @@ class DispatchTest(unittest.TestCase):
                 },
             )
             envelope = json.loads(pending.content)
-            reissued = adapter.dispatch(
+            reissued = _dispatch(adapter, 
                 "reissue_interpretation",
                 {
                     "continuation": envelope["continuation"],
@@ -430,11 +447,11 @@ class DispatchTest(unittest.TestCase):
             self.assertFalse(reissued.is_error)
             replacement = json.loads(reissued.content)
             self.assertEqual(replacement["$type"], "PendingInterpretation")
-            task = m.from_canonical(
+            task = _schema.from_wire(
                 m.SemanticInterpretationRequest,
                 replacement["request"],
             )
-            answered = adapter.dispatch(
+            answered = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": replacement["continuation"],
@@ -449,7 +466,7 @@ class DispatchTest(unittest.TestCase):
     def test_status_hook_fast_notice_shape(self):
         adapter, _ = _harness()
         try:
-            notice = adapter.dispatch(
+            notice = _dispatch(adapter, 
                 "status",
                 {
                     "repository_id": REPO,
@@ -466,7 +483,7 @@ class DispatchTest(unittest.TestCase):
     def test_status_normal_exposes_repository_coverage_report(self):
         adapter, _ = _harness()
         try:
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "status",
                 {
                     "repository_id": REPO,
@@ -488,7 +505,7 @@ class DispatchTest(unittest.TestCase):
     def test_unknown_tool_is_typed_error(self):
         adapter, _ = _harness()
         try:
-            result = adapter.dispatch("span_nope", {})
+            result = _dispatch(adapter, "span_nope", {})
             self.assertTrue(result.is_error)
             body = json.loads(result.content)
             self.assertEqual(body["error"], "unknown_tool")
@@ -498,7 +515,7 @@ class DispatchTest(unittest.TestCase):
     def test_bad_continuation_is_unavailable(self):
         adapter, _ = _harness()
         try:
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": "cont-999",
@@ -517,7 +534,7 @@ class DispatchTest(unittest.TestCase):
     def test_unavailable_names_recovery(self):
         adapter, _ = _harness()
         try:
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": "cont-999",
@@ -537,7 +554,7 @@ class DispatchTest(unittest.TestCase):
     def test_validation_names_same_continuation_resubmit(self):
         adapter, _ = _harness()
         try:
-            pending = adapter.dispatch(
+            pending = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": REPO,
@@ -570,7 +587,7 @@ class DispatchTest(unittest.TestCase):
                 proposed_question_coverages=(),
                 candidate_withdrawals=(),
             )
-            rejected = adapter.dispatch(
+            rejected = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": continuation,
@@ -596,7 +613,7 @@ class DispatchTest(unittest.TestCase):
         """
         adapter, agent = _harness()
         try:
-            pending = adapter.dispatch(
+            pending = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": REPO,
@@ -605,7 +622,7 @@ class DispatchTest(unittest.TestCase):
             )
             envelope = json.loads(pending.content)
             continuation = envelope["continuation"]
-            task = m.from_canonical(
+            task = _schema.from_wire(
                 m.SemanticInterpretationRequest,
                 envelope["request"],
             )
@@ -618,7 +635,7 @@ class DispatchTest(unittest.TestCase):
                 )
                 for claim in bad["claims"]
             ]
-            rejected = adapter.dispatch(
+            rejected = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": continuation,
@@ -630,7 +647,7 @@ class DispatchTest(unittest.TestCase):
             self.assertEqual(
                 json.loads(rejected.content)["error"], "ingress"
             )
-            recovered = adapter.dispatch(
+            recovered = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": continuation,
@@ -647,7 +664,7 @@ class DispatchTest(unittest.TestCase):
     def test_unknown_repository_is_typed_error(self):
         adapter, _ = _harness()
         try:
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": "nope",
@@ -664,7 +681,7 @@ class DispatchTest(unittest.TestCase):
     def test_page_token_as_continuation_names_both_mechanisms(self):
         adapter, _ = _harness()
         try:
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": "pg:0",
@@ -685,7 +702,7 @@ class DispatchTest(unittest.TestCase):
     def test_continuation_as_page_token_names_both_mechanisms(self):
         adapter, _ = _harness()
         try:
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": REPO,
@@ -709,7 +726,7 @@ class DispatchTest(unittest.TestCase):
         """
         adapter, agent = _harness()
         try:
-            pending = adapter.dispatch(
+            pending = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": REPO,
@@ -717,7 +734,7 @@ class DispatchTest(unittest.TestCase):
                 },
             )
             envelope = json.loads(pending.content)
-            task = m.from_canonical(
+            task = _schema.from_wire(
                 m.SemanticInterpretationRequest,
                 envelope["request"],
             )
@@ -743,7 +760,7 @@ class DispatchTest(unittest.TestCase):
                 candidate_subjects=(),
                 candidate_conflicts=(),
             )
-            rejected = adapter.dispatch(
+            rejected = _dispatch(adapter, 
                 "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
@@ -804,7 +821,7 @@ class DispatchTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             adapter = McpAdapter()
-            result = adapter.dispatch(
+            result = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": "ghost",
@@ -814,7 +831,7 @@ class DispatchTest(unittest.TestCase):
             self.assertTrue(result.is_error)
             body = json.loads(result.content)
             self.assertEqual(body["error"], "unknown_repository")
-            init = adapter.dispatch(
+            init = _dispatch(adapter, 
                 "initialize_repository",
                 {
                     "repository_locator": "x",
@@ -1047,7 +1064,7 @@ class ProvisionPathTest(unittest.TestCase):
                     )
                 )
                 adapter.register(result.repository_id, context)
-                status = adapter.dispatch(
+                status = _dispatch(adapter, 
                     "status",
                     {
                         "repository_id": "order-svc",
@@ -1071,7 +1088,7 @@ class ContextualPathSmokeTest(unittest.TestCase):
 
     def test_twelve_tools_and_path_explain(self):
         self.assertEqual(len(TOOL_NAMES), 12)
-        decoded = decode_request(
+        decoded = _decode_request(
             "explain",
             {
                 "repository_id": REPO,
@@ -1160,7 +1177,7 @@ class ContextualPathSmokeTest(unittest.TestCase):
                 ),
                 coverage=(coverage,),
             ))
-            pending = adapter.dispatch(
+            pending = _dispatch(adapter, 
                 "explain",
                 {
                     "repository_id": REPO,
@@ -1183,3 +1200,27 @@ class ContextualPathSmokeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- S6 wire-grammar migration helpers -------------------------------------
+# Tests build fully-tagged canonical payloads; the compact grammar is the
+# agent-facing form. These wrappers project a payload to that grammar before
+# the transport consumes it (schema-driven, exact).
+
+def _compact_args(tool, arguments):
+    if not isinstance(arguments, dict):
+        return arguments
+    cls = _REQUEST_CLASS.get(tool) or ops.SemanticInitializeRepositoryRequest
+    return _schema.compact_payload(cls, arguments)
+
+
+def _dispatch(adapter, tool, arguments):
+    return McpAdapter.dispatch(
+        adapter, tool, _compact_args(tool, arguments)
+    )
+
+
+def _decode_request(tool, arguments):
+    from span.shell.mcp import decode_request as _orig_decode
+
+    return _orig_decode(tool, _compact_args(tool, arguments))

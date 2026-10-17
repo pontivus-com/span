@@ -123,6 +123,7 @@ __all__ = [
     "ResolutionKind",
     "ResolutionRequirement",
     "SemanticQuestionClass",
+    "InterpretationProfile",
     "SemanticQuestionDisposition",
     "SemanticQuestionScope",
     "SemanticQuestionSelection",
@@ -161,6 +162,8 @@ __all__ = [
     "StructuralReachNode",
     "BoundInfo",
     "EvidenceScope",
+    "evidence_scope_allows",
+    "evidence_scope_fingerprint",
     "StatusMode",
     "SubjectPage",
     "StructuralLocationPage",
@@ -178,6 +181,7 @@ __all__ = [
     "SA_ANALYSIS_OBLIGATIONS",
     "TaskBrief",
     "QUESTION_CLASS_ASPECTS",
+    "QUESTION_CLASS_DEFAULT_SLICE",
     "TASK_BRIEF_MATERIAL_PATH",
     "TASK_BRIEF_SEMANTIC_RESULT",
     "TASK_BRIEF_ADVERSARIAL_CHECKS",
@@ -193,6 +197,7 @@ __all__ = [
     "InterpretationCoverage",
     "TargetId",
     "TargetInventoryAccount",
+    "CandidateTargetInventoryAccount",
     "TargetAssociation",
     "canonicalize_target_scope",
     "derive_target_id",
@@ -903,6 +908,17 @@ class ResolutionRequirement:
     supporting_context: tuple[ClaimRef | RelationshipRef | EvidenceRef, ...] = ()
 
 
+class InterpretationProfile(_enum.Enum):
+    """Immutable interpretation submission profile (J-9/S7).
+
+    Names the static SA-1..SA-7 obligations, allowed vocabularies, default
+    bounds, and base task-brief rules documented once in the MCP tool
+    contract. Pending units carry dynamic content plus this identifier.
+    """
+
+    SA_1_7_V1 = "SA_1_7_V1"
+
+
 class SemanticQuestionClass(_enum.Enum):
     """Closed CQ identifiers for question-scoped coverage (Addendum B)."""
 
@@ -1055,6 +1071,12 @@ class SemanticCoverageReport:
     stale_subject_count: int = 0
     unverifiable_subject_count: int = 0
     unassessed_subject_count: int = 0
+    # D-10/S8: persisted question and target burden aggregates. Persisted
+    # values are global and exact (SQL); the subject disposition counts
+    # above are the bounded-live classification over the returned frontier.
+    pending_question_count: int = 0
+    open_question_count: int = 0
+    active_target_association_count: int = 0
 
     def __post_init__(self) -> None:
         for name in (
@@ -1065,6 +1087,9 @@ class SemanticCoverageReport:
             "stale_subject_count",
             "unverifiable_subject_count",
             "unassessed_subject_count",
+            "pending_question_count",
+            "open_question_count",
+            "active_target_association_count",
         ):
             _require_non_negative_int(name, getattr(self, name))
 
@@ -1430,6 +1455,46 @@ class EvidenceScope:
     evidence_refs: tuple[EvidenceRef, ...] = ()
 
 
+def evidence_scope_allows(locator: str, scope: EvidenceScope) -> bool:
+    """Canonical scope-membership predicate for one locator (J-10).
+
+    Scope paths are file-or-directory prefixes; refs are exact members.
+    Provider-agnostic: matches ``path``, ``path/...``, ``path#...`` and
+    ``path:...`` forms without knowing the provider's locator grammar.
+    The single shared predicate used by every structural provider and by
+    the service; never re-implemented per provider or in the service.
+    """
+    for ref in scope.evidence_refs:
+        if locator == ref.locator:
+            return True
+    for prefix in scope.paths:
+        stem = prefix.rstrip("/")
+        if (
+            locator == stem
+            or locator.startswith(stem + "/")
+            or locator.startswith(stem + "#")
+            or locator.startswith(stem + ":")
+        ):
+            return True
+    return False
+
+
+def evidence_scope_fingerprint(scope: EvidenceScope) -> str:
+    """Deterministic, order-normalized fingerprint of one scope (J-10).
+
+    Used to bind continuation-token identity to the exact scope so a token
+    issued for one scope never resumes another. Not an identity authority:
+    it derives from the canonical scope only.
+    """
+    import hashlib as _hashlib
+
+    paths = tuple(sorted(set(scope.paths)))
+    refs = tuple(sorted({ref.locator for ref in scope.evidence_refs}))
+    return _hashlib.sha256(
+        repr((paths, refs)).encode("utf-8")
+    ).hexdigest()[:16]
+
+
 class StatusMode(_enum.Enum):
     NORMAL = "NORMAL"
     HOOK_FAST = "HOOK_FAST"
@@ -1500,11 +1565,13 @@ class ScopeCoverage(_enum.Enum):
     UNVERIFIED = "UNVERIFIED"
 
 
-#: Closed structural diagnostic tokens (Addendum G §4.2a). Defined
-#: beside `ScopeCoverage`; validated at construction. Fixed join order:
-#: non-git-tree, injected-index, dirty-tree, touched-file-mismatch,
-#: unverifiable-file, index-older-than-head. `clean-verified` is
-#: exclusive and never joins.
+#: Closed structural diagnostic tokens (Addendum G §4.2a, as amended by
+#: Addendum J J-11). Defined beside `ScopeCoverage`; validated at
+#: construction. Fixed join order: non-git-tree, injected-index,
+#: dirty-tree, touched-file-mismatch, unverifiable-file,
+#: index-older-than-head, repository-population-unverified.
+#: `dirty-tree` now means dirtiness intersecting the operation's required
+#: population scope. `clean-verified` is exclusive and never joins.
 COVERAGE_DETAIL_TOKENS: tuple[str, ...] = (
     "non-git-tree",
     "injected-index",
@@ -1512,6 +1579,7 @@ COVERAGE_DETAIL_TOKENS: tuple[str, ...] = (
     "touched-file-mismatch",
     "unverifiable-file",
     "index-older-than-head",
+    "repository-population-unverified",
     "clean-verified",
 )
 
@@ -1709,6 +1777,9 @@ class TargetInventoryAccount:
     Content fingerprints are excluded from target accounting by §§4C.6B/4C.6E;
     content freshness remains owned by the existing evidence/question/claim/
     relationship dependency machinery.
+
+    This is the only durable accounting record (J-4). Agent submissions use
+    ``CandidateTargetInventoryAccount`` and are enriched server-side.
     """
 
     evidence_ref: EvidenceRef
@@ -1717,18 +1788,64 @@ class TargetInventoryAccount:
     resolution_requirements: tuple[ResolutionRequirement, ...] = ()
 
     def __post_init__(self) -> None:
-        has_assignment = bool(self.assigned_area_subjects)
-        has_exclusion = self.exclusion_basis is not None
-        has_unresolved = bool(self.resolution_requirements)
-        count = int(has_assignment) + int(has_exclusion) + int(has_unresolved)
-        if count != 1:
-            raise ValueError(
-                "TargetInventoryAccount requires exactly one outcome: "
-                "assigned_area_subjects, exclusion_basis, "
-                "or resolution_requirements"
-            )
-        if has_exclusion and not self.exclusion_basis.summary:
-            raise ValueError("exclusion_basis summary is empty")
+        _require_exactly_one_target_outcome(
+            "TargetInventoryAccount",
+            self.assigned_area_subjects,
+            self.exclusion_basis,
+            self.resolution_requirements,
+        )
+
+
+def _require_exactly_one_target_outcome(
+    name: str,
+    assigned_area_subjects: tuple[SubjectId, ...],
+    exclusion_basis: SemanticBasis | None,
+    resolution_requirements: tuple[ResolutionRequirement, ...],
+) -> None:
+    """One shared field-level invariant for both target-account carriers.
+
+    Lives in ``core/model.py`` beside the carriers because
+    ``core/validation.py`` imports this module; the dependency direction is
+    never reversed and there is no second copy of the rule (J-4).
+    """
+    count = (
+        int(bool(assigned_area_subjects))
+        + int(exclusion_basis is not None)
+        + int(bool(resolution_requirements))
+    )
+    if count != 1:
+        raise ValueError(
+            f"{name} requires exactly one outcome: assigned_area_subjects, "
+            "exclusion_basis, or resolution_requirements"
+        )
+    if exclusion_basis is not None and not exclusion_basis.summary:
+        raise ValueError(f"{name} exclusion_basis summary is empty")
+
+
+@_dataclass(frozen=True)
+class CandidateTargetInventoryAccount:
+    """Agent-proposed target-account command (J-4).
+
+    Carries the stable inventory identity and one semantic outcome but
+    **not** provider-owned locator/kind/fingerprint observations: the
+    service resolves the canonical current ``EvidenceRef`` from the
+    provider snapshot and constructs the durable
+    ``TargetInventoryAccount``. Analogous to
+    ``CandidateSemanticClaim`` versus ``SemanticClaim``; never persisted.
+    """
+
+    evidence_id: EvidenceId
+    assigned_area_subjects: tuple[SubjectId, ...] = ()
+    exclusion_basis: SemanticBasis | None = None
+    resolution_requirements: tuple[ResolutionRequirement, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_exactly_one_target_outcome(
+            "CandidateTargetInventoryAccount",
+            self.assigned_area_subjects,
+            self.exclusion_basis,
+            self.resolution_requirements,
+        )
 
 
 @_dataclass(frozen=True)
@@ -1875,6 +1992,7 @@ class EvidenceInventoryPage:
 class EvidenceSelection:
     selected_refs: tuple[EvidenceRef, ...]
     bound_info: BoundInfo
+    discovery_scope: EvidenceScope = _field(default_factory=EvidenceScope)
 
 
 @_dataclass(frozen=True)
@@ -2041,6 +2159,49 @@ QUESTION_CLASS_ASPECTS: dict[SemanticQuestionClass, tuple[str, ...]] = {
     ),
 }
 
+#: Canonical service-owned default question sentences per CQ class
+#: (Addendum J J-3; implementation plan §S3.1). These strings are
+#: byte-exact, identity-bearing contract text: `question_slice` is part of
+#: immutable `SemanticQuestionScope` identity, so any rewording creates a
+#: new question. Used only when the host did not supply a slice.
+QUESTION_CLASS_DEFAULT_SLICE: dict[SemanticQuestionClass, str] = {
+    SemanticQuestionClass.CQ_01: (
+        "What is this subject, what does it do, and what capability or "
+        "concept does it belong to?"
+    ),
+    SemanticQuestionClass.CQ_02: (
+        "Where and by which components is this subject implemented?"
+    ),
+    SemanticQuestionClass.CQ_03: (
+        "Who or what owns, produces, writes, judges, or is responsible "
+        "for this subject?"
+    ),
+    SemanticQuestionClass.CQ_04: (
+        "What does this subject consume, produce, depend on, feed, "
+        "contain, or participate in?"
+    ),
+    SemanticQuestionClass.CQ_05: (
+        "Which meaningful boundaries does this subject cross, what "
+        "representation crosses them, and who owns transformation?"
+    ),
+    SemanticQuestionClass.CQ_06: (
+        "What authority, contract, invariant, decision, or configuration "
+        "governs this subject?"
+    ),
+    SemanticQuestionClass.CQ_07: (
+        "Where is this subject created, changed, persisted, terminated, "
+        "failed, recovered, retained, or removed?"
+    ),
+    SemanticQuestionClass.CQ_08: (
+        "What is materially affected by the proposed change to this "
+        "subject?"
+    ),
+    SemanticQuestionClass.CQ_09: (
+        "How is this subject proven or checked, and what verification is "
+        "current?"
+    ),
+}
+
 #: Static OPEN/PENDING handling rules attached to every brief (C-04,
 #: addendum B reconciliation rules). Contract prose, not per-unit
 #: invention.
@@ -2106,8 +2267,6 @@ class SemanticInterpretationRequest:
     subjects: tuple[Subject, ...]
     evidence_units: tuple[EvidenceUnit, ...]
     structural_observations: tuple[StructuralObservation, ...]
-    allowed_claim_kinds: tuple[ClaimKind, ...]
-    allowed_relationship_kinds: tuple[RelationshipKind, ...]
     identity_bindings: tuple[SubjectId, ...]
     # Required, never defaulted: every interpretation task carries its
     # slice-derived brief (no brief-less legacy path, no dual semantics).
@@ -2126,8 +2285,21 @@ class SemanticInterpretationRequest:
     prior_claims: tuple[SemanticClaim, ...] = ()
     prior_relationships: tuple[SemanticRelationship, ...] = ()
     analysis_obligations: tuple[str, ...] = ()
+    interpretation_profile: InterpretationProfile = (
+        InterpretationProfile.SA_1_7_V1
+    )
     target_id: TargetId | None = None
-    target_inventory_item: EvidenceInventoryItem | None = None
+    target_inventory_items: tuple[EvidenceInventoryItem, ...] = ()
+    discovery_scope: EvidenceScope = _field(default_factory=EvidenceScope)
+    # J-9/S7: the full default vocabularies are the profile default; the
+    # canonical request defaults them so omission in the pending egress is
+    # decoder-valid (a narrowed task still supplies them explicitly).
+    allowed_claim_kinds: tuple[ClaimKind, ...] = _field(
+        default_factory=lambda: tuple(ClaimKind)
+    )
+    allowed_relationship_kinds: tuple[RelationshipKind, ...] = _field(
+        default_factory=lambda: tuple(RelationshipKind)
+    )
 
     def __post_init__(self) -> None:
         _require_non_empty("repository_id", self.repository_id)
@@ -2163,7 +2335,7 @@ class SemanticInterpretationResult:
     candidate_conflicts: tuple[CandidateSemanticConflict, ...] = ()
     proposed_question_coverages: tuple[InterpretationCoverage, ...] = ()
     candidate_withdrawals: tuple[CandidateSemanticWithdrawal, ...] = ()
-    proposed_target_inventory_accounting: tuple[TargetInventoryAccount, ...] = ()
+    proposed_target_inventory_accounting: tuple[CandidateTargetInventoryAccount, ...] = ()
     proposed_target_questions: tuple[SemanticQuestionScope, ...] = ()
 
 
@@ -2215,6 +2387,7 @@ class CoverageDependency:
     """
 
     scope_subjects: tuple[SubjectId, ...] = ()
+    discovery_scope: EvidenceScope = _field(default_factory=EvidenceScope)
     inventory_fingerprint: str = ""
     seed_fingerprints: tuple[SeedFingerprint, ...] = ()
     observed_at: _datetime.datetime = _field(

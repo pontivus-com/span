@@ -247,7 +247,9 @@ def authority(
             scope_root=subject.subject_id,
             question_class=m.SemanticQuestionClass.CQ_06,
             selection=request.question_selection,
-            default_slice=subject.subject_id.canonical_locator,
+            default_slice=m.QUESTION_CLASS_DEFAULT_SLICE[
+                m.SemanticQuestionClass.CQ_06
+            ],
             default_basis="AUTHORITY question-local",
         )
         try:

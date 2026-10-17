@@ -93,13 +93,20 @@ class FilesystemEvidenceSource:
     def list_inventory_entries(
         self,
         repository_id: str,
+        scope: m.EvidenceScope,
         fingerprint_locators: tuple[str, ...] = (),
     ) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
         self._check_repository(repository_id)
-        paths = self._paths()
-        in_tree = set(paths)
+        all_paths = self._paths()
+        if scope.paths or scope.evidence_refs:
+            paths = self._expand_paths(tuple(scope.paths))
+            ref_paths = [r.locator for r in scope.evidence_refs]
+            paths = sorted(set(paths) | set(ref_paths))
+        else:
+            paths = all_paths
+        in_tree = set(all_paths)
         return (
-            tuple((p, f"ev-{p}") for p in paths),
+            tuple((p, f"ev-{p}") for p in paths if p in in_tree),
             {
                 loc: _fingerprint_bytes(self._read_bytes(loc))
                 for loc in dict.fromkeys(fingerprint_locators)

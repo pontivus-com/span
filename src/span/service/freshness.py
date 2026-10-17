@@ -13,7 +13,7 @@ from span.core import freshness as _freshness
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
 from span.ports.store import SemanticStore
-from span.service.discovery import _inventory_snapshot
+from span.service.discovery import _coverage_scope_snapshots
 from span.service.refs import _claim_ref, _ref_value, _relationship_ref
 
 __all__ = [
@@ -239,17 +239,12 @@ def _classify_coverage_updates(
     )
     if not coverages:
         return ()
-    inventory_fp, seed_map = _inventory_snapshot(
-        repository_id,
-        evidence=evidence,
-        seeds=tuple(
-            (sf.locator, sf.evidence_id.value)
-            for cov in coverages
-            for sf in cov.seed_fingerprints
-        ),
+    snapshots = _coverage_scope_snapshots(
+        repository_id, coverages, evidence=evidence
     )
     updates: list[m.FreshnessUpdate] = []
     for coverage in _latest_coverages(coverages):
+        inventory_fp, seed_map = snapshots[coverage.discovery_scope]
         freshness = _freshness.classify_coverage(
             coverage, inventory_fp, seed_map
         )
@@ -310,17 +305,12 @@ def coverage_check(
     )
     if not coverages:
         return ()
-    inventory_fp, seed_map = _inventory_snapshot(
-        repository_id,
-        evidence=evidence,
-        seeds=tuple(
-            (sf.locator, sf.evidence_id.value)
-            for cov in coverages
-            for sf in cov.seed_fingerprints
-        ),
+    snapshots = _coverage_scope_snapshots(
+        repository_id, coverages, evidence=evidence
     )
     updates: list[m.FreshnessUpdate] = []
     for coverage in _latest_coverages(coverages):
+        inventory_fp, seed_map = snapshots[coverage.discovery_scope]
         freshness = _freshness.classify_coverage(
             coverage, inventory_fp, seed_map
         )

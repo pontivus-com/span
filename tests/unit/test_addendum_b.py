@@ -284,10 +284,10 @@ class EffectiveDispositionTest(unittest.TestCase):
 
 class MigrationTest(unittest.TestCase):
     def test_schema_v3_and_legacy_unassessed(self):
-        self.assertEqual(SCHEMA_VERSION, 5)
+        self.assertEqual(SCHEMA_VERSION, 6)
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(5))
+            self.assertEqual(store.schema_version(), m.SchemaVersion(6))
             sid = _sid()
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("leg-1"), subject=sid,

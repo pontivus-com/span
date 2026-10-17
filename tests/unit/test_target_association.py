@@ -188,7 +188,9 @@ class TargetValidationTest(unittest.TestCase):
             known_subject_ids=(sid,),
             evidence_fingerprints={"ev-a": "fp"},
         )
-        ok_acc = m.TargetInventoryAccount(evidence_ref=ref, assigned_area_subjects=(sid,))
+        ok_acc = m.CandidateTargetInventoryAccount(
+            evidence_id=ref.evidence_id, assigned_area_subjects=(sid,)
+        )
         ok = v.validate_target_inventory_account(
             ok_acc, ctx, current_inventory_ids=frozenset({"ev-a"}),
             expected_evidence_id="ev-a", admitted_area_ids=(sid,),

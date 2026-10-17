@@ -161,7 +161,10 @@ class TaskBriefTest(unittest.TestCase):
         task = self._task()
         brief = task.request.brief
 
-        self.assertIn("src/main.py", brief.objective)
+        self.assertIn(
+            m.QUESTION_CLASS_DEFAULT_SLICE[m.SemanticQuestionClass.CQ_01],
+            brief.objective,
+        )
         self.assertEqual(brief.material_path, m.TASK_BRIEF_MATERIAL_PATH)
         self.assertEqual(
             brief.semantic_result, m.TASK_BRIEF_SEMANTIC_RESULT
@@ -192,7 +195,9 @@ class TaskBriefTest(unittest.TestCase):
         explain = self._task(m.SemanticIntent.EXPLAIN).request
         trace = self._task(m.SemanticIntent.TRACE).request
 
-        self.assertEqual(explain.brief.objective, trace.brief.objective)
+        # S3/J-3: the objective embeds the class-specific canonical slice,
+        # so it differs by intent; the quality card itself stays uniform.
+        self.assertNotEqual(explain.brief.objective, trace.brief.objective)
         self.assertEqual(
             explain.brief.evidence_authority,
             trace.brief.evidence_authority,

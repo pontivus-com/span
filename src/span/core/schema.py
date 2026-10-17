@@ -21,6 +21,10 @@ import typing as _typing
 __all__ = [
     "schema_for_request",
     "definition_closure",
+    "from_wire",
+    "to_wire",
+    "to_wire_root",
+    "compact_payload",
 ]
 
 
@@ -39,6 +43,10 @@ def _project_hint(
 ) -> dict:
     nullable, inner = _is_optional(hint)
     schema = _project_inner(inner, defs, seen)
+    # Single-dataclass position (including ``X | None``): the tag is not
+    # advertised and must be absent on the wire (J-8/S6.2).
+    if isinstance(inner, type) and _dataclasses.is_dataclass(inner):
+        schema = {"allOf": [schema, {"not": {"required": ["$type"]}}]}
     if nullable:
         schema = {"anyOf": [schema, {"type": "null"}]}
     return schema
@@ -103,7 +111,12 @@ def _project_inner(
                     member, "__dataclass_fields__"
                 ):
                     _ensure_def(member, defs, seen)
-                    refs.append({"$ref": f"#/$defs/{member.__name__}"})
+                    refs.append({
+                        "allOf": [
+                            {"$ref": f"#/$defs/{member.__name__}"},
+                            {"required": ["$type"]},
+                        ]
+                    })
                 else:
                     refs.append(_project_hint(member, defs, seen))
             if len(refs) == 1:
@@ -158,12 +171,11 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
         else:
             required.append(field.name)
         properties[field.name] = field_schema
-    # Nested carriers retain their $type tag as a constant, and the
-    # canonical decoder requires it on every nested dataclass: a
-    # schema-valid request without the tag would be decoder-invalid,
-    # so the tag is a required property of every definition.
+    # J-8/S6.2: the tag is a property of the field POSITION, not the
+    # definition. Each carrier keeps one shared definition advertising
+    # `$type` as an OPTIONAL constant; an unambiguous use site forbids it
+    # and a genuine dataclass-union branch requires it (see _project_*).
     properties["$type"] = {"const": name}
-    required.append("$type")
     definition: dict[str, object] = {
         "type": "object",
         "properties": properties,
@@ -261,3 +273,153 @@ def _collect_hint_defs(
                 return
             for field_hint in hints.values():
                 _collect_hint_defs(field_hint, defs, seen)
+
+
+# ---------------------------------------------------------------------------
+# Compact wire codec (J-8/S6). Tagging is a property of the field POSITION.
+# ---------------------------------------------------------------------------
+
+def _dataclass_members(hint: object) -> list:
+    origin = _typing.get_origin(hint)
+    args = _typing.get_args(hint)
+    if origin is _typing.Union or origin is _types.UnionType:
+        return [
+            a for a in args
+            if isinstance(a, type) and _dataclasses.is_dataclass(a)
+        ]
+    return []
+
+
+def from_wire(root: type, payload: dict) -> object:
+    """Strict ingress for the compact agent-facing grammar (J-8/S6.2)."""
+    from span.core import model as _m
+
+    if not isinstance(payload, dict):
+        raise ValueError("request payload must be an object")
+    if "$type" in payload:
+        raise ValueError("top-level $type is never supplied on the wire")
+    tagged = _inject(root, payload, "")
+    return _m.from_canonical(root, tagged)
+
+
+def _inject(hint: object, value: object, path: str) -> object:
+    if value is None:
+        return None
+    origin = _typing.get_origin(hint)
+    args = _typing.get_args(hint)
+    if origin is _typing.Union or origin is _types.UnionType:
+        dms = [
+            a for a in args
+            if isinstance(a, type) and _dataclasses.is_dataclass(a)
+        ]
+        non_none = [a for a in args if a is not type(None)]
+        if len(dms) >= 2:
+            if not isinstance(value, dict) or not isinstance(
+                value.get("$type"), str
+            ):
+                raise ValueError(
+                    f"missing $type discriminator at {path or 'root'}"
+                )
+            tag = value["$type"]
+            member = next((mm for mm in dms if mm.__name__ == tag), None)
+            if member is None:
+                raise ValueError(
+                    f"unknown $type {tag!r} at {path or 'root'}"
+                )
+            return _inject_dataclass(member, value, path, keep_tag=True)
+        if len(dms) == 1 and len(non_none) == 1:
+            return _inject_dataclass(dms[0], value, path, keep_tag=False)
+        return value
+    if isinstance(hint, type) and _dataclasses.is_dataclass(hint):
+        return _inject_dataclass(hint, value, path, keep_tag=False)
+    if origin in (tuple, list):
+        item = args[0] if args else None
+        return [
+            _inject(item, v, f"{path}[{i}]")
+            for i, v in enumerate(value)  # type: ignore[union-attr]
+        ]
+    return value
+
+
+def _inject_dataclass(
+    cls: type, value: object, path: str, *, keep_tag: bool
+) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"expected object at {path or cls.__name__}")
+    hints = _typing.get_type_hints(cls)
+    if "$type" in value and not keep_tag:
+        raise ValueError(
+            "unexpected $type at unambiguous position: "
+            f"{path or cls.__name__}"
+        )
+    out: dict = {"$type": cls.__name__}
+    for key, v in value.items():
+        if key == "$type":
+            continue
+        out[key] = _inject(
+            hints.get(key), v, f"{path}.{key}" if path else key
+        )
+    return out
+
+
+def to_wire(value: object, hint: object) -> object:
+    """Project a canonical object to the compact grammar (S6.4)."""
+    if value is None:
+        return None
+    origin = _typing.get_origin(hint)
+    args = _typing.get_args(hint)
+    if origin is _typing.Union or origin is _types.UnionType:
+        dms = [
+            a for a in args
+            if isinstance(a, type) and _dataclasses.is_dataclass(a)
+        ]
+        if len(dms) >= 2:
+            tag = value.get("$type") if isinstance(value, dict) else None
+            member = next(
+                (mm for mm in dms if mm.__name__ == tag), None
+            )
+            if member is None:
+                return value
+            return _compact_dataclass(member, value, keep_tag=True)
+        if len(dms) == 1:
+            return _compact_dataclass(dms[0], value, keep_tag=False)
+        return value
+    if isinstance(hint, type) and _dataclasses.is_dataclass(hint):
+        return _compact_dataclass(hint, value, keep_tag=False)
+    if origin in (tuple, list):
+        item = args[0] if args else None
+        return [
+            to_wire(v, item)
+            for v in value  # type: ignore[union-attr]
+        ]
+    return value
+
+
+def to_wire_root(cls: type, canonical: object) -> object:
+    """Egress root: retain the root result ``$type`` (S6.4)."""
+    return _compact_dataclass(cls, canonical, keep_tag=True)
+
+
+def _compact_dataclass(cls: type, value: object, *, keep_tag: bool) -> object:
+    if not isinstance(value, dict):
+        return value
+    hints = _typing.get_type_hints(cls)
+    out: dict = {}
+    for key, v in value.items():
+        if key == "$type":
+            if keep_tag:
+                out[key] = v
+            continue
+        out[key] = to_wire(v, hints.get(key))
+    return out
+
+
+def compact_payload(root: type, payload: dict) -> dict:
+    """Compact a fully-tagged transport payload to the agent-facing grammar.
+
+    Migration/utility projection mirroring ``from_wire``: a single-dataclass
+    field drops ``$type``; a genuine dataclass union keeps it. Unknown
+    transport-only keys pass through unchanged.
+    """
+    compacted = _compact_dataclass(root, payload, keep_tag=False)
+    return compacted if isinstance(compacted, dict) else payload

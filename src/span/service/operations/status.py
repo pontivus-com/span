@@ -491,7 +491,7 @@ def _coverage_entries_for_subjects(
         shared_snapshot: tuple[
             tuple[tuple[str, str], ...], dict[str, str]
         ] | None = evidence.list_inventory_entries(
-            repository_id, tuple(seed_locs),
+            repository_id, m.EvidenceScope(), tuple(seed_locs),
         )
     except Exception:
         shared_snapshot = None
@@ -509,6 +509,9 @@ def _coverage_report(
     *,
     persisted_subject_count: int,
     returned_subject_count: int,
+    pending_question_count: int = 0,
+    open_question_count: int = 0,
+    active_target_association_count: int = 0,
 ) -> m.SemanticCoverageReport:
     counts = {
         disposition: sum(
@@ -531,6 +534,9 @@ def _coverage_report(
         unassessed_subject_count=counts[
             m.SemanticCoverageDisposition.UNASSESSED
         ],
+        pending_question_count=pending_question_count,
+        open_question_count=open_question_count,
+        active_target_association_count=active_target_association_count,
     )
 
 
@@ -573,12 +579,18 @@ def _compose_repository_status_answer(
             ),
         )
     )
+    _qdisp = store.count_question_dispositions(repository_id)
     report = _coverage_report(
         entries,
         persisted_subject_count=store.count_repository_subjects(
             repository_id
         ),
         returned_subject_count=len(entries),
+        pending_question_count=_qdisp.get("PENDING", 0),
+        open_question_count=_qdisp.get("OPEN", 0),
+        active_target_association_count=store.count_target_associations(
+            repository_id
+        ),
     )
     requirements = tuple(
         requirement
@@ -1096,6 +1108,15 @@ def _compose_status_answer(
             if entry.semantic_item_count or entry.question_count
         ),
         returned_subject_count=len(frontier_entries),
+        pending_question_count=store.count_question_dispositions(
+            repository_id
+        ).get("PENDING", 0),
+        open_question_count=store.count_question_dispositions(
+            repository_id
+        ).get("OPEN", 0),
+        active_target_association_count=store.count_target_associations(
+            repository_id
+        ),
     )
     content = m.StatusContent(
         readiness=m.RepositoryReadiness.READY,
