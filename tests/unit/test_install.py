@@ -286,7 +286,7 @@ class PlanningTest(unittest.TestCase):
         # Pinned to the latest published release; bumps update the
         # installer constant, the provider constant, and the ledger row
         # in the same change.
-        self.assertEqual(install.STRUCTURAL_INDEXER_VERSION, "0.21.1")
+        self.assertEqual(install.STRUCTURAL_INDEXER_VERSION, "0.23.0")
 
     def test_ensure_structural_indexer_skips_when_present(self):
         import tempfile
@@ -297,9 +297,60 @@ class PlanningTest(unittest.TestCase):
             binary = install.indexer_binary_path(tools)
             binary.parent.mkdir(parents=True)
             binary.write_text("#!/bin/sh\n")
+            package_json = (
+                tools / "node_modules" / install.STRUCTURAL_INDEXER_PACKAGE
+                / "package.json"
+            )
+            package_json.parent.mkdir(parents=True)
+            package_json.write_text(
+                json.dumps({
+                    "name": install.STRUCTURAL_INDEXER_PACKAGE,
+                    "version": install.STRUCTURAL_INDEXER_VERSION,
+                })
+            )
             self.assertEqual(
                 install.ensure_structural_indexer(venv, dry_run=False),
                 str(binary),
+            )
+
+    def test_ensure_structural_indexer_replaces_stale_version(self):
+        import subprocess
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            venv = pathlib.Path(tmp) / "venv"
+            tools = install.default_tools_dir(venv)
+            binary = install.indexer_binary_path(tools)
+            binary.parent.mkdir(parents=True)
+            binary.write_text("#!/bin/sh\n")
+            package_json = (
+                tools / "node_modules" / install.STRUCTURAL_INDEXER_PACKAGE
+                / "package.json"
+            )
+            package_json.parent.mkdir(parents=True)
+            package_json.write_text(json.dumps({
+                "name": install.STRUCTURAL_INDEXER_PACKAGE,
+                "version": "0.21.1",
+            }))
+            recorded = {}
+
+            def fake_run(cmd, **kwargs):
+                recorded["cmd"] = cmd
+
+                class _Proc:
+                    returncode = 0
+                    stdout = ""
+                    stderr = ""
+
+                return _Proc()
+
+            with patch.object(subprocess, "run", side_effect=fake_run):
+                install.ensure_structural_indexer(venv, dry_run=False)
+            self.assertIn(
+                f"{install.STRUCTURAL_INDEXER_PACKAGE}@"
+                f"{install.STRUCTURAL_INDEXER_VERSION}",
+                recorded["cmd"],
             )
 
     def test_ensure_structural_indexer_installs_pinned_version(self):

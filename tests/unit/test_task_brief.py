@@ -1,9 +1,11 @@
 """Task-brief tests (addendum D TASK-D-01, §8)."""
 
 import dataclasses
+import json
 import unittest
 
 from span.core import model as m
+from span.core import schema
 from span import service as ops
 from span.service.interpretation import prepare_interpretation_task
 from span.shell.agent_exchange.continuations import ContinuationStore
@@ -156,6 +158,19 @@ class TaskBriefTest(unittest.TestCase):
             )
         )
         self.assertTrue(brief.open_handling and brief.submission_rules)
+
+    def test_submission_template_is_compact_and_decodable(self):
+        task = self._task()
+        template_rule = task.request.brief.submission_rules[-1]
+        payload = json.loads(template_rule.split(": ", 1)[1])
+
+        self.assertNotIn("$type", payload)
+        decoded = schema.from_wire(m.SemanticInterpretationResult, payload)
+        self.assertIsInstance(decoded, m.SemanticInterpretationResult)
+        self.assertEqual(
+            decoded.proposed_question_coverages[0].disposition,
+            m.SemanticQuestionDisposition.PENDING,
+        )
 
     def test_brief_exposes_the_complete_compact_quality_card(self):
         task = self._task()

@@ -23,7 +23,7 @@ questions need a contract amendment, not inference).
 `DEPENDENCY_LEDGER.md` is binding: no runtime dependency without a
 verified identity/license row (MI-13). Current: Python ≥3.12 stdlib,
 `setuptools` (build), MCP SDK `mcp==2.3.0` (MIT) + permissive closure,
-managed structural indexer `@nanonets/graft@0.21.1` (MIT, provisioned by
+managed structural indexer `@nanonets/graft@0.23.0` (MIT, provisioned by
 the installer into Span's tools dir — never a user prerequisite),
 `pytest` (MIT, test runner).
 

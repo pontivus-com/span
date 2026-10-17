@@ -19,6 +19,7 @@ from span.service.discovery import (
     _inventory_snapshot,
 )
 from span.shell.evidence import FixtureEvidenceSource
+from span.shell.sqlite_store import SqliteSemanticStore
 
 REPO = "j-repo"
 
@@ -135,11 +136,80 @@ class StoreHealthAggregateTest(unittest.TestCase):
             report = m.SemanticCoverageReport(
                 pending_question_count=2,
                 open_question_count=1,
+                stale_effective_question_count=1,
                 active_target_association_count=3,
+                persisted_target_accounted_count=4,
+                persisted_target_unresolved_count=2,
+                bounded_live_target_unaccounted_count=1,
             )
             self.assertEqual(report.pending_question_count, 2)
             self.assertEqual(report.open_question_count, 1)
+            self.assertEqual(report.stale_effective_question_count, 1)
             self.assertEqual(report.active_target_association_count, 3)
+            self.assertEqual(report.persisted_target_accounted_count, 4)
+            self.assertEqual(report.persisted_target_unresolved_count, 2)
+            self.assertEqual(report.bounded_live_target_unaccounted_count, 1)
+            self.assertIs(
+                report.question_disposition_scope,
+                m.SemanticCoverageAggregateScope.PERSISTED_GLOBAL,
+            )
+            self.assertIs(
+                report.target_burden_live_scope,
+                m.SemanticCoverageAggregateScope.BOUNDED_LIVE,
+            )
+        finally:
+            store.close()
+
+    def test_target_burden_aggregates_are_store_owned(self):
+        store = SqliteSemanticStore(":memory:")
+        try:
+            subject = m.SubjectId(
+                repository_id="r",
+                subject_kind=m.SubjectKind.COMPONENT,
+                canonical_locator="src/a.py",
+            )
+            ref = m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-a"),
+                repository_id="r",
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/a.py",
+                revision_or_fingerprint="fp-a",
+            )
+            unresolved = m.TargetInventoryAccount(
+                evidence_ref=ref,
+                resolution_requirements=(m.ResolutionRequirement(
+                    kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                    description="unresolved mapping",
+                ),),
+            )
+            accounted = m.TargetInventoryAccount(
+                evidence_ref=m.EvidenceRef(
+                    evidence_id=m.EvidenceId("ev-b"),
+                    repository_id="r",
+                    source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                    locator="src/b.py",
+                    revision_or_fingerprint="fp-b",
+                ),
+                assigned_area_subjects=(subject,),
+            )
+            association = m.TargetAssociation(
+                target_id=m.TargetId("target-r"),
+                repository_id="r",
+                target_scope=m.EvidenceScope(paths=("src/",)),
+                objective="test target burden",
+                area_subjects=(subject,),
+                inventory_accounting=(accounted, unresolved),
+            )
+            store.write_index_batch(
+                m.CanonicalIndexBatch(target_associations=(association,))
+            )
+            self.assertEqual(store.count_target_associations("r"), 1)
+            self.assertEqual(
+                store.count_target_inventory_outcomes("r"), (1, 1)
+            )
+            self.assertEqual(
+                store.load_active_target_associations("r"), (association,)
+            )
         finally:
             store.close()
 

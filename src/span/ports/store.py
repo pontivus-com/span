@@ -86,6 +86,18 @@ class SemanticStore(_typing.Protocol):
         """Count active target associations (S8/D-10)."""
         ...
 
+    def count_target_inventory_outcomes(
+        self, repository_id: str
+    ) -> tuple[int, int]:
+        """Count persisted accounted and unresolved target members."""
+        ...
+
+    def load_active_target_associations(
+        self, repository_id: str
+    ) -> tuple[TargetAssociation, ...]:
+        """Load active target campaigns for bounded live inventory reads."""
+        ...
+
     def load_by_refs(
         self,
         repository_id: str,

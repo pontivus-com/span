@@ -102,6 +102,8 @@ class PortShapeTest(unittest.TestCase):
                 "load_subjects_by_locator",
                 "load_repository_subjects", "count_repository_subjects",
                 "count_question_dispositions", "count_target_associations",
+                "count_target_inventory_outcomes",
+                "load_active_target_associations",
                 "load_relationships", "load_evidence_dependencies",
                 "load_evidence_records", "load_coverage_dependencies",
                 "load_question_coverages", "load_all_question_coverages",

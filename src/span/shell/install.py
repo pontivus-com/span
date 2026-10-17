@@ -32,7 +32,7 @@ INSTALL_VERSION = 1
 #: ``span/shell/structural/graft.py`` (duplicated, not imported: this
 #: module must stay stdlib-only at top level).
 STRUCTURAL_INDEXER_PACKAGE = "@nanonets/graft"
-STRUCTURAL_INDEXER_VERSION = "0.21.1"
+STRUCTURAL_INDEXER_VERSION = "0.23.0"
 
 # Only this table varies by OS. Everything else is platform-neutral.
 PLATFORM_PATHS = {
@@ -120,12 +120,25 @@ def ensure_structural_indexer(venv_dir, dry_run=False):
 
     Installs exactly ``STRUCTURAL_INDEXER_PACKAGE @ VERSION`` via npm
     into Span's tools directory (never global, never into targets).
-    Idempotent: skips reinstall when the pointer already names this
-    version's binary and the binary exists. Returns the binary path.
+    Idempotent: skips reinstall only when the managed binary and its
+    installed package metadata both name this exact version. Returns the
+    binary path.
     """
     tools_dir = default_tools_dir(venv_dir)
     binary = indexer_binary_path(tools_dir)
-    if binary.is_file():
+    package_json = (
+        tools_dir / "node_modules" / STRUCTURAL_INDEXER_PACKAGE
+        / "package.json"
+    )
+    installed_version = None
+    try:
+        metadata = json.loads(package_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        metadata = None
+    if isinstance(metadata, dict):
+        if metadata.get("name") == STRUCTURAL_INDEXER_PACKAGE:
+            installed_version = metadata.get("version")
+    if binary.is_file() and installed_version == STRUCTURAL_INDEXER_VERSION:
         return str(binary)
     print(
         f"+ provision structural indexer "
