@@ -94,8 +94,11 @@ never semantic truth. After initialization, normal repository-level
 `status(target=None)` is required to expose the bounded persisted
 semantic-coverage inventory (covered/current, incomplete, stale or
 unverifiable, unassessed, and explicit bounds), without a structural crawl
-or interpretation. This inventory is distinct from readiness and remains
-an ACT-D-10 installed-runtime gate until verified.
+or interpretation. This inventory is distinct from readiness. The
+ACT-D-10 installed-runtime gate was verified in the 2026-10-17 closeout
+run against the installed MCP process; the remaining status-path and
+documentation synchronization work is tracked in the current closeout
+report.
 
 ## Workflow examples
 

@@ -9,6 +9,8 @@ module path changed.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from span.core import freshness as _freshness
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
@@ -180,8 +182,8 @@ def effective_question_view(
     evidence: EvidenceSource | None = None,
     store: SemanticStore | None = None,
     repository_id: str = "",
-    precomputed_snapshot: tuple[
-        tuple[tuple[str, str], ...], dict[str, str]
+    precomputed_snapshots: Mapping[
+        m.EvidenceScope, tuple[str, dict[str, str]]
     ] | None = None,
     live_states: dict[str, m.FreshnessState] | None = None,
 ) -> m.SemanticQuestionCoverageView:
@@ -292,7 +294,11 @@ def effective_question_view(
             latest = mine[-1]
             try:
                 _scope = latest.discovery_scope
-                _legacy = not (_scope.paths or _scope.evidence_refs)
+                precomputed_snapshot = (
+                    precomputed_snapshots.get(_scope)
+                    if precomputed_snapshots is not None
+                    else None
+                )
                 inventory_fp, seed_map = _inventory_snapshot(
                     repository_id,
                     _scope,
@@ -301,7 +307,7 @@ def effective_question_view(
                         (sf.locator, sf.evidence_id.value)
                         for sf in latest.seed_fingerprints
                     ),
-                    precomputed=precomputed_snapshot if _legacy else None,
+                    precomputed=precomputed_snapshot,
                 )
                 discovery = _freshness.classify_coverage(
                     latest, inventory_fp, seed_map

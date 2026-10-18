@@ -47,8 +47,11 @@ exact `EvidenceScope` and a non-empty objective. Expected: the deterministic
 `TargetId` campaign handle plus the next typed task. Record the exact semantic
 boundary, canonicalized per Addendum E §4C.6A (not verbatim text).
 `initialize_target` creates or resumes the deterministic
-`TargetAssociation`. Mapping tasks carry `question=None` with one
-`target_inventory_item`; the anchor is a candidate and evidence input, never a
+`TargetAssociation`. Mapping tasks carry `question=None` with a bounded
+`target_inventory_items` batch. The provider-enriched items are orientation
+evidence; the agent submits stable `EvidenceId`-based
+`CandidateTargetInventoryAccount` outcomes, and Span resolves the canonical
+provider `EvidenceRef`. The anchor is a candidate and evidence input, never a
 semantic area. Membership changes re-enter here; content changes use `refresh`.
 
 ## 3. Semantic mapping
