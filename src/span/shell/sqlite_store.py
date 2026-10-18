@@ -5,9 +5,10 @@ plus query columns; no second semantic model is introduced (§10.2/§10.3,
 I-15). Table decomposition is physical only and carries no semantic
 authority. Stdlib ``sqlite3``; no third-party binding (ledger).
 
-Schema version is 5 (``SCHEMA_VERSION``): assertion-nature modality
-(Addendum I S6) plus target-association accounting (Addendum E E-13A)
-plus question coverage (Addendum B). v2/v3/v4 stores migrate
+Schema version is 6 (``SCHEMA_VERSION``): assertion-nature modality
+(Addendum I S6), target-association accounting (Addendum E E-13A),
+question coverage (Addendum B), and scoped coverage discovery metadata
+(Addendum J S1). v2/v3/v4/v5 stores migrate
 non-destructively; legacy items remain unassessed without invented
 question ownership and preserve history without inferred nature.
 """
@@ -414,7 +415,7 @@ class SqliteSemanticStore:
                         f"v2→v3 migration incomplete, missing: {sorted(missing)}"
                     )
                 # v3→v4 tables chained in the same atomic migration,
-                # then v4→v5 payloads; publish v5 only after success.
+                # then v4→v5 payloads; publish v6 only after success.
                 self._db.execute(
                     "CREATE TABLE IF NOT EXISTS target_associations("
                     "  repository_id TEXT NOT NULL,"

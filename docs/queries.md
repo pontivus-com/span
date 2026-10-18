@@ -26,7 +26,11 @@ continuation exists.
 
 ## Pagination vs continuation (I-39)
 
-`page_token` (`pg:<claims>:<relations>`) pages one truncated listing
-and is redeemable on single-subject and ref-targeted operations. A
-`PendingInterpretation` continuation resumes one suspended
-interpretation. Different mechanisms; never substituted.
+`page_token` is an opaque token returned by the listing operation. Service
+answer pages use `pgq:<digest>:<claims>:<relations>:<questions>`; structural
+`locate` pages use their returned versioned `pgv:*` token and `neighbors`
+uses its returned `pgn:*` traversal token; and
+normal repository `status(target=null)` uses `pgq:` with the subject offset
+in the claims position and zero relationship/question offsets. A
+`PendingInterpretation` continuation (`cont-*`) resumes one suspended
+interpretation. Different mechanisms; never substitute one for another.

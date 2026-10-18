@@ -533,8 +533,8 @@ class McpAdapter:
                     "page_token presented as continuation: page_token "
                     "pages one truncated listing while continuation resumes "
                     "one suspended interpretation; pass the cont-* "
-                    "continuation to submit/reissue and the pg:* token to "
-                    "the listing operation",
+                    "continuation to submit/reissue and the page_token "
+                    "returned by the listing operation",
                 )
         else:
             repository_id = request.repository_id  # type: ignore[union-attr]
@@ -547,7 +547,8 @@ class McpAdapter:
                     "continuation presented as page_token: continuation "
                     "resumes one suspended interpretation while page_token "
                     "pages one truncated listing; pass cont-* to "
-                    "submit_interpretation and pg:* to the listing operation",
+                    "submit_interpretation and the returned page_token to "
+                    "the listing operation",
                 )
         if not isinstance(repository_id, str) or not repository_id:
             return _error("ingress", "repository_id must be non-empty")

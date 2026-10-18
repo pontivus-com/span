@@ -14,9 +14,11 @@ that bounded candidate frontier; Span never invokes a model.
 
 ## Ingress
 
-Each tool takes its canonical service request as canonical JSON
-(without `$type`; complex fields carry their `$type`-tagged
-encoding). `bounds` may be omitted for service defaults. Unknown
+Each tool takes its canonical service request as compact wire JSON.
+`$type` is absent at statically unambiguous field positions and is
+required only where a genuine multi-dataclass union needs a discriminator;
+redundant tags are rejected. `bounds` may be omitted for service defaults.
+Unknown
 tools/fields/enums and missing required fields fail closed.
 `submit_interpretation` additionally takes the routing key
 `repository_id` (transport-level, never parsed as semantics).
@@ -91,12 +93,16 @@ One complete target campaign over the twelve tools (exact carriers in
    only.
 2. `initialize_target` with the exact `EvidenceScope` and objective →
    deterministic `TargetId` plus a `PendingInterpretation` carrying one
-   `target_inventory_item` (`question=None`: mapping work, not a semantic
-   question).
-3. The host maps that member (assign to area, evidence-backed exclusion,
-   or unresolved mapping) and calls `submit_interpretation` with the typed
-   result → the next `PendingInterpretation`, until every inventory member
-   is accounted for.
+   `target_inventory_items` (`question=None`: mapping work, not a semantic
+   question). The batch members carry provider-enriched evidence for
+   orientation; their stable `EvidenceId` values are the agent's mapping
+   input.
+3. The host maps every batch member with a
+   `CandidateTargetInventoryAccount` (assignment, evidence-backed
+   exclusion, or unresolved mapping) and calls `submit_interpretation`.
+   Span resolves the provider-owned `EvidenceRef`, persists the durable
+   account, and creates the first-admission `PENDING` CQ-01 seed when no
+   reusable question exists.
 4. `initialize_target` then yields `PENDING` semantic questions per
    admitted area; the host examines each slice with its own model and
    submits `ANSWERED`/`OPEN`/`NOT_APPLICABLE`/`PENDING` coverage until an
@@ -214,8 +220,15 @@ router exists; apparent overlap is resolved by these rules.
 
 `unknown_repository` lists the sorted registered ids. Bounds rejection
 names the received value, the maximum, and the omission default.
-`page_token` (`pg:*`) versus `continuation` (`cont-*`) misuse names both
-mechanisms. Campaign status under `HOOK_FAST` requires `NORMAL`.
+`page_token` and `continuation` (`cont-*`) misuse names both mechanisms.
+Service answer pages use the returned opaque `pgq:<digest>:<claims>:<rels>:<questions>`
+token; normal repository `status(target=null)` uses the same grammar with
+the subject offset in the first position and zero relationship/question
+offsets. Structural `locate` pages use their returned versioned `pgv:*`
+token and `neighbors` uses its resumable `pgn:*` traversal token. These
+page-token families are not interchangeable, and
+`pg:<offset>` is an internal store cursor, not an agent-facing token.
+Campaign status under `HOOK_FAST` requires `NORMAL`.
 Null `refresh` names the scoped selector or scope plus `status`.
 Stale listing continuations name the new version and direct restart from
 page one. Canonical decode failures carry dotted field paths with
@@ -225,9 +238,10 @@ whole-unit atomic rejection.
 ## Freshness transparency (Addendum G §4.2)
 
 Structural pages carry `coverage` plus `coverage_detail` (closed tokens:
-`clean-verified`, `dirty-tree`, `index-older-than-head`,
-`touched-file-mismatch`, `unverifiable-file`, `non-git-tree`,
-`injected-index`). Missing or unparseable indexes fail closed with no
+`non-git-tree`, `injected-index`, `dirty-tree`, `touched-file-mismatch`,
+`unverifiable-file`, `index-older-than-head`,
+`repository-population-unverified`, `clean-verified`). Missing or
+unparseable indexes fail closed with no
 report. Repository `status` orders its current page deterministically
 and guarantees every non-current repository entry carries an actionable
 canonical requirement; campaign `UNASSESSED`/`UNVERIFIABLE` paths keep

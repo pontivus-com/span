@@ -94,6 +94,124 @@ class DiscoveryScopeLocalityTest(unittest.TestCase):
         snaps = _coverage_scope_snapshots(REPO, rows, evidence=_evidence())
         self.assertEqual(set(snaps), {scope_a, scope_b})
 
+    def test_repository_status_groups_snapshots_by_recorded_scope(self):
+        # J-A4/S1.5: exercise the actual repository-status projection, not
+        # only the grouping helper. Two subjects share one scope and one
+        # subject uses another; status must perform exactly one walk per
+        # distinct recorded scope and never fall back to an unconditional
+        # repository-global walk.
+        import datetime
+
+        from span.service.operations.status import (
+            _compose_repository_status_answer,
+        )
+
+        class CountingEvidence(FixtureEvidenceSource):
+            def __init__(self, files):
+                super().__init__(REPO, files)
+                self.scopes = []
+
+            def list_inventory_entries(
+                self, repository_id, scope, fingerprint_locators=()
+            ):
+                self.scopes.append(scope)
+                return super().list_inventory_entries(
+                    repository_id, scope, fingerprint_locators
+                )
+
+        files = {
+            "mod/a.py": "A = 1\n",
+            "mod/b.py": "B = 2\n",
+            "other/c.py": "C = 3\n",
+        }
+        evidence = CountingEvidence(files)
+        subjects = tuple(
+            m.Subject(
+                subject_id=m.SubjectId(
+                    repository_id=REPO,
+                    subject_kind=m.SubjectKind.COMPONENT,
+                    canonical_locator=path,
+                ),
+                display_name=path,
+                declared_kind=None,
+            )
+            for path in files
+        )
+        scope_mod = m.EvidenceScope(paths=("mod",))
+        scope_other = m.EvidenceScope(paths=("other",))
+        dependencies = []
+        coverages = []
+        for subject, scope in zip(
+            subjects, (scope_mod, scope_mod, scope_other)
+        ):
+            question = m.SemanticQuestionScope(
+                scope_root=subject.subject_id,
+                subject=subject.subject_id,
+                question_class=m.SemanticQuestionClass.CQ_01,
+                question_slice=f"purpose:{subject.display_name}",
+                materiality_basis="status locality test",
+            )
+            dependencies.append(
+                m.CoverageDependency(
+                    scope_subjects=(subject.subject_id,),
+                    discovery_scope=scope,
+                    question=question,
+                )
+            )
+            coverages.append(
+                m.InterpretationCoverage(
+                    subjects=(subject.subject_id,),
+                    question_slice=question.question_slice,
+                    evidence_scope=scope,
+                    question=question,
+                    disposition=m.SemanticQuestionDisposition.OPEN,
+                    resolution_requirements=(
+                        m.ResolutionRequirement(
+                            kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+                            description="status locality test",
+                        ),
+                    ),
+                    disposition_basis="status locality test",
+                )
+            )
+        store = SqliteSemanticStore(":memory:")
+        try:
+            bounds = m.QueryBounds(
+                max_results=50,
+                max_depth=5,
+                max_subjects=8,
+                max_evidence_units=24,
+                max_evidence_bytes=96_000,
+                max_candidate_claims=64,
+                max_candidate_relationships=64,
+            )
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=subjects,
+                    coverage_dependencies=tuple(dependencies),
+                    coverage=tuple(coverages),
+                )
+            )
+            _compose_repository_status_answer(
+                REPO,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
+                state=m.RepositoryState(
+                    repository_id=REPO,
+                    revision_id="fixture",
+                    dirty=False,
+                    state_fingerprint="fixture",
+                    observed_at=datetime.datetime.now(datetime.timezone.utc),
+                ),
+            )
+        finally:
+            store.close()
+        self.assertEqual(
+            evidence.scopes,
+            [scope_mod, scope_other],
+        )
+
 
 class PerItemFreshnessIsUnaffectedTest(unittest.TestCase):
     def test_cited_source_change_is_per_item(self):

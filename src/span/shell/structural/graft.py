@@ -1479,6 +1479,27 @@ class GraftStructuralSource:
             reason="index covers tree",
         )
 
+    def _index_missing_or_stale(self) -> bool:
+        """Whether the lifecycle contract warrants one bounded build.
+
+        The contract builds only when the index is *missing or stale*
+        (README / `docs/mcp.md` / `docs/lifecycle.md`). Missing means
+        nothing usable is loaded, or there is no provable build time;
+        stale means the index predates HEAD. A present index at least
+        as new as HEAD is never rebuildable: `describe_current` may
+        still report UNVERIFIABLE for a dirty or non-git tree, but a
+        rebuild cannot make such a tree CURRENT, so provisioning must
+        not pay rebuild cost on every startup registration for it.
+        """
+        if not self._loaded:
+            return True
+        if self._wiring_mtime_ns is None:
+            return True
+        head_time = _git_head_time(self._repo_path)
+        if head_time is None:
+            return False
+        return self._wiring_mtime_ns < head_time * 1_000_000_000
+
     def ensure_current(
         self,
         repository_id: str,
@@ -1487,17 +1508,20 @@ class GraftStructuralSource:
 
         Provider-owned execution (lifecycle contract): one bounded
         ``graft --dir <cache> build`` for this adapter's repo root — no
-        ``--deep`` pass, no credentials, no target writes. At most one
-        build attempt, guarded by a provider-local lock per cache
-        location; concurrent callers serialize on the lock. Reloads and
-        validates after a successful build. Build failures and
-        malformed/missing output return UNVERIFIABLE with a reason;
+        ``--deep`` pass, no credentials, no target writes — and only
+        when the index is missing or stale (``_index_missing_or_stale``).
+        At most one build attempt, guarded by a provider-local lock per
+        cache location; concurrent callers serialize on the lock.
+        Reloads and validates after a successful build. Build failures
+        and malformed/missing output return UNVERIFIABLE with a reason;
         never raise. Invoked only from `initialize_repository`
         provisioning and explicit `refresh`, never from ordinary reads.
         """
         self._check_repository(repository_id)
         current = self.describe_current(repository_id)
         if current.state is m.FreshnessState.CURRENT:
+            return current
+        if not self._index_missing_or_stale():
             return current
         lock_key = str(
             self._wiring_path
@@ -1510,6 +1534,8 @@ class GraftStructuralSource:
             # already rebuilt.
             current = self.describe_current(repository_id)
             if current.state is m.FreshnessState.CURRENT:
+                return current
+            if not self._index_missing_or_stale():
                 return current
             ok, detail = _run_index_build(
                 self._repo_path, self._artifact_dir

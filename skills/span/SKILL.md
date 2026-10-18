@@ -69,9 +69,14 @@ event-local notice. `HOOK_FAST` sees event-local scope only; it never means the 
 the repository inventory.
 
 The twelve public operations are exactly the operations in the table. There are no semantic aliases. `locate` and `neighbors` return structural
-navigation evidence, not semantic claims. `page_token` values (`pg:*`) page
-one truncated listing and continuation tokens (`cont-*`) resume one pending
-interpretation; they cannot be interchanged.
+navigation evidence, not semantic claims. `page_token` is an opaque token
+returned by the operation being paged: service answer pages use `pgq:*`,
+structural `locate` pages use `pgv:*`, `neighbors` uses `pgn:*`, and normal
+repository `status(target=null)` uses `pgq:` with the subject offset in its
+first numeric position. Store-level `pg:*` cursors are internal and are not
+agent input.
+Continuation tokens (`cont-*`) resume one pending interpretation; these
+mechanisms cannot be interchanged.
 
 ## Entry decision
 
@@ -168,12 +173,15 @@ Build an admissible submission as follows:
 1. Inspect the pending `request`, including `evidence_units`, subjects,
    question scope, structural observations, identity bindings, and task
    brief.
-2. Extract the canonical `EvidenceRef` values from those evidence units. If
-   more structure is needed, use `locate` or `neighbors` and respect their
-   returned coverage and freshness; navigation does not establish truth.
+2. For a semantic question, extract the canonical `EvidenceRef` values from
+   the admitted evidence units. For a target-mapping task
+   (`question=None`), use each `target_inventory_items` member's stable
+   `evidence_id` and submit a `CandidateTargetInventoryAccount`; do not
+   author its provider-owned locator, kind, or fingerprint.
 3. Cite current source files directly for observed behavior where applicable.
    Use only references admitted by the provider and task scope. Preserve the
-   provider's `evidence_id`, `locator`, `source_kind`, and provenance.
+   provider's identity and provenance; Span resolves canonical target
+   `EvidenceRef` fields server-side.
 4. Never fabricate a locator, fingerprint, section/span, subject identity,
    or authority citation. Current provider-backed evidence may be admitted
    through the existing validation/normalization path even when it was not

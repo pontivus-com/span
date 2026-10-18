@@ -18,6 +18,7 @@ from span.service.answers import _select_answer_items
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
 from span.shell.evidence import FixtureEvidenceSource
+from span.shell import paging as _paging
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
@@ -674,12 +675,17 @@ class StatusTest(unittest.TestCase):
                 continuations=ContinuationStore(),
             )
             self.assertTrue(first.bound_info.truncated)
-            self.assertIsNotNone(first.bound_info.continuation_token)
+            token = first.bound_info.continuation_token
+            self.assertIsNotNone(token)
+            self.assertEqual(
+                _paging.parse_question_token(token),
+                ("default", 1, 0, 0),
+            )
             second = ops.status(
                 _status_request(
                     target=None,
                     bounds=bounds,
-                    page_token=first.bound_info.continuation_token,
+                    page_token=token,
                 ),
                 structural=structural, evidence=evidence, store=store,
                 continuations=ContinuationStore(),

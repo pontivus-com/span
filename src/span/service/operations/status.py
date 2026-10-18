@@ -7,6 +7,8 @@ module path changed.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from span.core import answers as _answers
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
@@ -27,7 +29,10 @@ from span.service.answers import (
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
 )
-from span.service.discovery import enumerate_target_inventory
+from span.service.discovery import (
+    _coverage_scope_snapshots,
+    enumerate_target_inventory,
+)
 from span.service.freshness import (
     _classify_current,
     _evaluate_current,
@@ -201,8 +206,8 @@ def _repository_coverage_entry(
     evidence: EvidenceSource,
     store: SemanticStore,
     bounds: m.QueryBounds,
-    precomputed_snapshot: tuple[
-        tuple[tuple[str, str], ...], dict[str, str]
+    precomputed_snapshots: Mapping[
+        m.EvidenceScope, tuple[str, dict[str, str]]
     ] | None = None,
 ) -> m.SemanticCoverageEntry:
     """Build one report entry from persisted semantic state only.
@@ -260,7 +265,7 @@ def _repository_coverage_entry(
             effective_question_view(
                 coverage, evidence=evidence, store=store,
                 repository_id=repository_id,
-                precomputed_snapshot=precomputed_snapshot,
+                precomputed_snapshots=precomputed_snapshots,
             )
         )
     question_views.sort(
@@ -471,36 +476,28 @@ def _coverage_entries_for_subjects(
     bounds: m.QueryBounds,
 ) -> tuple[m.SemanticCoverageEntry, ...]:
     """One coverage entry per frontier subject from persisted state only."""
-    # G-17 Stage 2 (authorized: service-side dominance proven on the
-    # recorded profile): one shared inventory walk per status call. The
-    # seed union covers every dependency seed of every subject below,
-    # so each per-coverage discovery check reuses these bytes instead
-    # of re-walking the tree. Fresh per call — never shared across
-    # operations, so no stale snapshot can leak between calls.
+    # J-1/S1.5: group loaded dependencies by exact recorded discovery
+    # scope. Each distinct scope receives one fresh membership walk; the
+    # empty scope remains the legacy-global path only for migrated rows.
+    # Snapshots are scoped to this status call and never shared across
+    # operations.
     try:
-        dep_rows = store.load_coverage_dependencies(
+        coverages = store.load_coverage_dependencies(
             repository_id,
             tuple(s.subject_id for s in subjects),
         )
     except Exception:
-        dep_rows = ()
-    seed_locs: list[str] = []
-    for dep in dep_rows:
-        for seed in dep.seed_fingerprints:
-            if seed.locator and seed.locator not in seed_locs:
-                seed_locs.append(seed.locator)
+        coverages = ()
     try:
-        shared_snapshot: tuple[
-            tuple[tuple[str, str], ...], dict[str, str]
-        ] | None = evidence.list_inventory_entries(
-            repository_id, m.EvidenceScope(), tuple(seed_locs),
+        scope_snapshots = _coverage_scope_snapshots(
+            repository_id, coverages, evidence=evidence
         )
     except Exception:
-        shared_snapshot = None
+        scope_snapshots = {}
     return tuple(
         _repository_coverage_entry(
             repository_id, subject, evidence=evidence, store=store,
-            bounds=bounds, precomputed_snapshot=shared_snapshot,
+            bounds=bounds, precomputed_snapshots=scope_snapshots,
         )
         for subject in subjects
     )

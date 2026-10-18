@@ -265,6 +265,41 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             self.assertTrue(src.has_index())
             self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
 
+    def test_dirty_tree_with_current_cache_skips_build(self):
+        # Lifecycle contract: one bounded build only when the index is
+        # missing or stale. A present index at least as new as HEAD on
+        # a dirty tree is UNVERIFIABLE, not stale, so provisioning must
+        # not rebuild (this is the startup-registration rebuild loop).
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp) / "repo"
+            repo.mkdir()
+            (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+            _git_init(repo)
+            from span.shell.structural import default_artifact_dir
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
+                                            repo.name)
+            wp = g.wiring_path_for(repo, artifact)
+            _write_wiring(wp)
+            # Cache newer than HEAD, then dirty the working tree.
+            import time
+            time.sleep(1.05)
+            wp.touch()
+            (repo / "a.py").write_text("x = 2\n", encoding="utf-8")
+            src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
+            self.assertIs(
+                src.describe_current("repo").state,
+                m.FreshnessState.UNVERIFIABLE,
+            )
+            with mock.patch.object(
+                g, "_run_index_build",
+                side_effect=AssertionError(
+                    "dirty tree with a current cache must not rebuild"
+                ),
+            ):
+                freshness = src.ensure_current("repo")
+            self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
+            self.assertTrue(src.has_index())
+
     def test_concurrent_setup_does_not_corrupt_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = pathlib.Path(tmp) / "repo"
