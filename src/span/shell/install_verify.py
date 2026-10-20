@@ -114,8 +114,8 @@ def main(argv=None):
     config = ServerConfig(data_dir=pathlib.Path(args.data_dir))
     repos = []
     for target in args.repo:
-        # Plain provider-neutral locator (canonical); legacy graft:
-        # prefix still accepted transitionally by provisioning.
+        # Plain provider-neutral locator; provider selection stays
+        # shell-internal.
         provider_config = target
         try:
             context, result = provision_repository(

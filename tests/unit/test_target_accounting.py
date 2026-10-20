@@ -11,6 +11,7 @@ Two binding behaviors with no new store, carrier, or writer:
 import unittest
 
 from span.core import model as m
+from span.core.validation import InterpretationUnitRejected
 from span import service as ops
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.evidence import FixtureEvidenceSource
@@ -63,12 +64,14 @@ def _fill_batch(pending, accounts):
         ))
     return tuple(out)
 
-def _bounds():
-    return m.QueryBounds(
+def _bounds(**overrides):
+    base = dict(
         max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
         max_evidence_bytes=96_000, max_candidate_claims=64,
         max_candidate_relationships=64,
     )
+    base.update(overrides)
+    return m.QueryBounds(**base)
 
 
 def _harness():
@@ -324,6 +327,211 @@ class TargetAccountingTest(unittest.TestCase):
         assert isinstance(ans.content, m.StatusContent)
         self.assertEqual(
             ans.content.target_disposition, m.SemanticCoverageDisposition.INCOMPLETE)
+
+
+def _unresolved_account(item):
+    return m.CandidateTargetInventoryAccount(
+        evidence_id=item.evidence_ref.evidence_id,
+        resolution_requirements=(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=None,
+                description="not examined in this test",
+                supporting_context=(),
+            ),
+        ),
+    )
+
+
+def _target_id():
+    scope, obj = m.canonicalize_target_scope(
+        REPO, m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
+        OBJECTIVE,
+    )
+    return m.derive_target_id(REPO, scope, obj)
+
+
+class MappingBatchIdentityTest(unittest.TestCase):
+    """SPMCP-04: mapping batches correlate by stable EvidenceId.
+
+    Submission order is irrelevant; each rejection names the exact bound
+    member by EvidenceId, and the whole unit stays atomic with a live
+    continuation.
+    """
+
+    def test_batch_accounts_by_evidence_id_regardless_of_order(self):
+        structural, evidence, store = _harness()
+        live = ContinuationStore()
+        try:
+            pending = _admit(structural, evidence, store, live)
+            self.assertEqual(len(pending.request.target_inventory_items), 2)
+            reversed_items = tuple(
+                reversed(pending.request.target_inventory_items)
+            )
+            ops.submit_interpretation(
+                pending.continuation,
+                m.SemanticInterpretationResult(
+                    claims=(), relationships=(), governing_source_refs=(),
+                    diagnostics=("mapping in reverse order",),
+                    candidate_subjects=(), candidate_conflicts=(),
+                    proposed_question_coverages=(),
+                    candidate_withdrawals=(),
+                    proposed_target_inventory_accounting=tuple(
+                        _unresolved_account(item) for item in reversed_items
+                    ),
+                    proposed_target_questions=(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=live,
+            )
+            assoc = store.load_target_association(REPO, _target_id())
+            assert assoc is not None
+            self.assertEqual(
+                {acc.evidence_ref.evidence_id.value
+                 for acc in assoc.inventory_accounting},
+                {item.evidence_ref.evidence_id.value
+                 for item in pending.request.target_inventory_items},
+            )
+        finally:
+            store.close()
+
+    def test_missing_bound_member_is_named_and_atomic(self):
+        structural, evidence, store = _harness()
+        live = ContinuationStore()
+        try:
+            pending = _admit(structural, evidence, store, live)
+            items = pending.request.target_inventory_items
+            self.assertEqual(len(items), 2)
+            with self.assertRaises(InterpretationUnitRejected) as ctx:
+                ops.submit_interpretation(
+                    pending.continuation,
+                    m.SemanticInterpretationResult(
+                        claims=(), relationships=(), governing_source_refs=(),
+                        diagnostics=("partial mapping",),
+                        candidate_subjects=(), candidate_conflicts=(),
+                        proposed_question_coverages=(),
+                        candidate_withdrawals=(),
+                        proposed_target_inventory_accounting=(
+                            _unresolved_account(items[0]),
+                        ),
+                        proposed_target_questions=(),
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=live,
+                )
+            message = str(ctx.exception)
+            missing = items[1].evidence_ref.evidence_id.value
+            self.assertIn(missing, message)
+            self.assertIn("bound mapping item has no accounting candidate",
+                          message)
+            self.assertIn("bound_items[1]", message)
+            # Atomic rejection: no accounting committed, continuation live.
+            assoc = store.load_target_association(REPO, _target_id())
+            assert assoc is not None
+            self.assertEqual(assoc.inventory_accounting, ())
+            self.assertEqual(len(live), 1)
+        finally:
+            store.close()
+
+    def test_unbound_account_is_named_and_atomic(self):
+        structural, evidence, store = _harness()
+        live = ContinuationStore()
+        try:
+            from span.service.discovery import enumerate_target_inventory
+
+            bounds = _bounds(max_evidence_units=1)
+            pending = ops.initialize_target(
+                ops.SemanticInitializeTargetRequest(
+                    repository_id=REPO,
+                    target=m.EvidenceScope(
+                        paths=TARGET_PATHS, evidence_refs=()
+                    ),
+                    objective=OBJECTIVE,
+                    bounds=bounds,
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=live, authority_seeds=(),
+            )
+            self.assertEqual(len(pending.request.target_inventory_items), 1)
+            inventory = enumerate_target_inventory(
+                REPO, m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
+                evidence=evidence, bounds=_bounds(),
+            )
+            bound_id = (
+                pending.request.target_inventory_items[0]
+                .evidence_ref.evidence_id.value
+            )
+            extra = next(
+                item for item in inventory
+                if item.evidence_ref.evidence_id.value != bound_id
+            )
+            with self.assertRaises(InterpretationUnitRejected) as ctx:
+                ops.submit_interpretation(
+                    pending.continuation,
+                    m.SemanticInterpretationResult(
+                        claims=(), relationships=(), governing_source_refs=(),
+                        diagnostics=("extra mapping",),
+                        candidate_subjects=(), candidate_conflicts=(),
+                        proposed_question_coverages=(),
+                        candidate_withdrawals=(),
+                        proposed_target_inventory_accounting=(
+                            _unresolved_account(
+                                pending.request.target_inventory_items[0]
+                            ),
+                            _unresolved_account(extra),
+                        ),
+                        proposed_target_questions=(),
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=live,
+                )
+            message = str(ctx.exception)
+            self.assertIn(extra.evidence_ref.evidence_id.value, message)
+            self.assertIn("outside the bound mapping batch", message)
+            self.assertIn("target_accounts[1]", message)
+            assoc = store.load_target_association(REPO, _target_id())
+            assert assoc is not None
+            self.assertEqual(assoc.inventory_accounting, ())
+            self.assertEqual(len(live), 1)
+        finally:
+            store.close()
+
+    def test_duplicate_account_is_named_and_atomic(self):
+        structural, evidence, store = _harness()
+        live = ContinuationStore()
+        try:
+            pending = _admit(structural, evidence, store, live)
+            items = pending.request.target_inventory_items
+            duplicated = (
+                _unresolved_account(items[0]),
+                _unresolved_account(items[0]),
+                _unresolved_account(items[1]),
+            )
+            with self.assertRaises(InterpretationUnitRejected) as ctx:
+                ops.submit_interpretation(
+                    pending.continuation,
+                    m.SemanticInterpretationResult(
+                        claims=(), relationships=(), governing_source_refs=(),
+                        diagnostics=("duplicate mapping",),
+                        candidate_subjects=(), candidate_conflicts=(),
+                        proposed_question_coverages=(),
+                        candidate_withdrawals=(),
+                        proposed_target_inventory_accounting=duplicated,
+                        proposed_target_questions=(),
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=live,
+                )
+            message = str(ctx.exception)
+            eid = items[0].evidence_ref.evidence_id.value
+            self.assertIn(f"duplicate target account: {eid}", message)
+            self.assertIn("target_accounts[1]", message)
+            assoc = store.load_target_association(REPO, _target_id())
+            assert assoc is not None
+            self.assertEqual(assoc.inventory_accounting, ())
+            self.assertEqual(len(live), 1)
+        finally:
+            store.close()
 
 
 class ArtifactSnapshotTest(unittest.TestCase):

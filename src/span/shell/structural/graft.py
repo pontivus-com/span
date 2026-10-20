@@ -1243,7 +1243,9 @@ class GraftStructuralSource:
                     f"node missing id/kind/path: {node!r}"
                 ) from exc
             if kind not in NODE_SUBJECT_KIND:
-                raise GraftVocabularyError(f"unknown Graft node kind: {kind}")
+                raise GraftVocabularyError(
+                    f"unknown structural node kind: {kind}"
+                )
             nodes[node_id] = node
         return nodes
 
@@ -1305,7 +1307,7 @@ class GraftStructuralSource:
                 ) from exc
             if relation not in RELATION_EDGE_KIND:
                 raise GraftVocabularyError(
-                    f"unknown Graft edge relation: {relation}"
+                    f"unknown structural edge relation: {relation}"
                 )
             # Dangling edges reference modules outside the index
             # (stdlib/third-party imports, unindexed supertypes).

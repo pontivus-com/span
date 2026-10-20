@@ -102,9 +102,13 @@ structure before grouping areas (Addendum F §3 rows 3b/4/7b):
    against). A member without an indexed subject carries a null
    subject and stays a full member.
 2. `locate` with `FILE_OUTLINE` for one file, or `SYMBOL` for a
-   name/locator (default `EXACT`; `CONTAINS` walks the match order) →
-   symbols, spans, signatures. In-body content (error strings,
-   config keys) stays with grep; Span does not duplicate it.
+   name/locator (`EXACT` resolves that exact locator to its
+   declaration/name with no partial matches; `CONTAINS` returns
+   substring matches in provider order) → symbols, spans, signatures.
+   `FILE_OUTLINE` takes one file locator and no target scope or match
+   mode; `SYMBOL` accepts an optional target scope. In-body content
+   (error strings, config keys) stays with grep; Span does not
+   duplicate it.
 3. `neighbors` with the exact subject and `UPSTREAM` / `DOWNSTREAM` /
    `BOTH` at a bounded `max_depth` → caller/callee adjacency for
    partition grouping and pre-change blast radius. Multi-hop pages

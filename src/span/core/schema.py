@@ -334,10 +334,20 @@ def _inject(hint: object, value: object, path: str) -> object:
         return _inject_dataclass(hint, value, path, keep_tag=False)
     if origin in (tuple, list):
         item = args[0] if args else None
-        return [
-            _inject(item, v, f"{path}[{i}]")
-            for i, v in enumerate(value)  # type: ignore[union-attr]
-        ]
+        # Aggregate sibling faults so one call reports every bad member
+        # instead of the caller discovering them one round trip at a
+        # time; a single fault keeps its exact previous text.
+        injected: list[object] = []
+        faults: list[str] = []
+        for i, v in enumerate(value):  # type: ignore[union-attr]
+            try:
+                injected.append(_inject(item, v, f"{path}[{i}]"))
+            except ValueError as exc:
+                faults.append(str(exc))
+                injected.append(v)
+        if faults:
+            raise ValueError("; ".join(faults))
+        return injected
     return value
 
 
@@ -347,18 +357,45 @@ def _inject_dataclass(
     if not isinstance(value, dict):
         raise ValueError(f"expected object at {path or cls.__name__}")
     hints = _typing.get_type_hints(cls)
+    fields = {field.name: field for field in _dataclasses.fields(cls)}
+    at = f"{path}: " if path else ""
+    faults: list[str] = []
     if "$type" in value and not keep_tag:
-        raise ValueError(
+        faults.append(
             "unexpected $type at unambiguous position: "
             f"{path or cls.__name__}"
         )
+    # The tagging pass is the first ingress pass, so it also reports the
+    # field-shape faults the strict decoder would raise later; otherwise
+    # a tag fault and an unknown/missing field cost two round trips.
+    # Texts match the decoder's for the single-fault case.
+    unknown = sorted(
+        key for key in value if key != "$type" and key not in fields
+    )
+    if unknown:
+        faults.append(f"{at}unknown fields for {cls.__name__}: {unknown}")
+    for field in fields.values():
+        if field.name in value:
+            continue
+        if (
+            field.default is _dataclasses.MISSING
+            and field.default_factory is _dataclasses.MISSING  # type: ignore[misc]
+        ):
+            faults.append(
+                f"{at}missing field {field.name!r} for {cls.__name__}"
+            )
     out: dict = {"$type": cls.__name__}
     for key, v in value.items():
-        if key == "$type":
+        if key == "$type" or key not in fields:
             continue
-        out[key] = _inject(
-            hints.get(key), v, f"{path}.{key}" if path else key
-        )
+        child_path = f"{path}.{key}" if path else key
+        try:
+            out[key] = _inject(hints.get(key), v, child_path)
+        except ValueError as exc:
+            faults.append(str(exc))
+            out[key] = v
+    if faults:
+        raise ValueError("; ".join(faults))
     return out
 
 

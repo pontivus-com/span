@@ -32,9 +32,13 @@ Use this path for every non-trivial Span interaction:
    answer or truthful terminal state is returned.
 6. Use `status` for read-only coverage and freshness readback. Status
    never initiates interpretation, allocates continuations, or persists
-   freshness. Inventory accounting and semantic-question coverage are
-   separate. Preserve every `OPEN`, `PENDING`, `PARTIAL`, `AMBIGUOUS`,
-   `CONFLICTED`, `UNRESOLVED`, `STALE`, and `UNVERIFIABLE` state.
+   freshness. Follow its entry guidance: stale/unverifiable → `refresh`
+   with the exact `SubjectSelector` it names; `UNASSESSED` →
+   question-local `explain`; pending question work → only the
+   continuation returned by the suspending operation. Inventory
+   accounting and semantic-question coverage are separate. Preserve
+   every `OPEN`, `PENDING`, `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`,
+   `UNRESOLVED`, `STALE`, and `UNVERIFIABLE` state.
    Schemas are generated from canonical types: construct submissions
    from `tools/list` schemas without reading implementation. Narrow
    questions accept `question_selection` (slice/basis/anchors only);
@@ -76,7 +80,16 @@ repository `status(target=null)` uses `pgq:` with the subject offset in its
 first numeric position. Store-level `pg:*` cursors are internal and are not
 agent input.
 Continuation tokens (`cont-*`) resume one pending interpretation; these
-mechanisms cannot be interchanged.
+mechanisms cannot be interchanged. Never invent or reuse a `cont-*`
+token: the only valid value is the one returned by the operation that
+suspended.
+
+`locate` takes exactly one mode. `SYMBOL` requires `query` and accepts an
+optional `target` scope; `EXACT` resolves an exact locator to its
+declaration/name with no partial matches, while `CONTAINS` returns
+substring matches in provider order. `FILE_OUTLINE` requires one file
+locator and takes no target scope or match mode. `TARGET_MEMBERS`
+requires the exact `target` scope and takes no query.
 
 ## Entry decision
 

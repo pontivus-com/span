@@ -10,7 +10,7 @@ Resolution order per repository root comes from the install receipt
 (``<data-dir>/install.json``: ``repos`` plus ``data_dir``). Database
 file is ``<data-dir>/<repository_id>.db`` where the id is derived
 from the receipt's verify record when present, else the root's base
-name. Only current-schema (5) stores are read; anything else is reported as
+name. Only current-schema (6) stores are read; anything else is reported as
 needing attention, never migrated or touched.
 
 Commands (exception-oriented per addendum D §9: routine current
@@ -169,6 +169,30 @@ def _scope_counts(connection):
     return action
 
 
+def _attention_hint(counts):
+    """Name the exact next operation without inventing a continuation.
+
+    Hooks stay read-only and SQL-only: they never allocate or echo a
+    ``cont-*`` token. Stale work points at a scoped refresh; pending/open
+    question work points at the continuation returned by the operation
+    that suspended.
+    """
+    hints = []
+    if counts.get("stale") or counts.get("unverifiable"):
+        hints.append(
+            "run status, then refresh each stale scope with an exact "
+            "SubjectSelector"
+        )
+    if counts.get("open") or counts.get("pending"):
+        hints.append(
+            "continue pending work through the continuation returned by "
+            "the suspending operation; never invent a cont-* token"
+        )
+    if not hints:
+        return ""
+    return " " + "; ".join(hints) + "."
+
+
 def cmd_session_start(data_dir, repo_root=None):
     mapping = repo_map(data_dir)
     if not mapping:
@@ -193,11 +217,15 @@ def cmd_session_start(data_dir, repo_root=None):
         if not counts.get("established", True):
             print(
                 f"span: {repo_id} READY with no established coverage — "
-                f"orient with explain on a bounded scope."
+                f"orient with a question-local explain on a bounded "
+                f"scope; no continuation token exists yet."
             )
             continue
         parts = ", ".join(f"{v} {k}" for k, v in counts.items())
-        print(f"span: {repo_id} needs attention ({parts}).")
+        print(
+            f"span: {repo_id} needs attention ({parts})."
+            + _attention_hint(counts)
+        )
 
 
 def _stdin_paths():
@@ -320,7 +348,10 @@ def cmd_session_stop(data_dir, repo_root=None):
             # session-start already prompts orientation where needed.
             continue
         parts = ", ".join(f"{v} {k}" for k, v in counts.items())
-        print(f"span: {repo_id} close: {parts}.")
+        print(
+            f"span: {repo_id} close: {parts}."
+            + _attention_hint(counts)
+        )
 
 
 def parse_args(argv=None):

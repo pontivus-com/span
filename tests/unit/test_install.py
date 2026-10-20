@@ -87,12 +87,11 @@ class OpencodeMergeTest(unittest.TestCase):
                 config["mcp"]["span"]["command"],
                 ["span-mcp", "--data-dir", "/d"],
             )
-            # Addendum F F-4: the standalone graft MCP is deregistered;
-            # its entries are removed, not preserved.
+            # An obsolete structural-MCP registration is removed, not preserved.
             self.assertNotIn("graft", config["mcp"])
-            self.assertEqual(result["removed_graft_entries"], ["graft"])
+            self.assertEqual(result["removed_obsolete_entries"], 1)
 
-    def test_merge_removes_graft_server_entries(self):
+    def test_merge_removes_obsolete_server_entries(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -114,7 +113,7 @@ class OpencodeMergeTest(unittest.TestCase):
                 config["mcp"]["servers"]["span"]["command"], ["span-mcp"]
             )
             self.assertEqual(
-                result["removed_graft_entries"], ["servers.graft"])
+                result["removed_obsolete_entries"], 1)
 
     def test_merge_reports_no_removal_when_absent(self):
         import tempfile
@@ -125,7 +124,7 @@ class OpencodeMergeTest(unittest.TestCase):
             result = install.merge_opencode_config(
                 str(config_path), ["span-mcp"], dry_run=False
             )
-            self.assertEqual(result["removed_graft_entries"], [])
+            self.assertEqual(result["removed_obsolete_entries"], 0)
 
     def test_merge_creates_missing_entry(self):
         import tempfile
@@ -153,17 +152,19 @@ class OpencodeMergeTest(unittest.TestCase):
             )
 
 
-class CodexGraftDeregistrationTest(unittest.TestCase):
-    """Addendum F F-4: legacy graft MCP removal from codex."""
+class CodexObsoleteMcpDeregistrationTest(unittest.TestCase):
+    """Obsolete structural-MCP cleanup on codex."""
 
     def test_removed_on_success(self):
         from unittest.mock import patch
 
         with patch.object(install.shutil, "which", return_value="/codex"), \
                 patch.object(install, "_run", return_value="") as run:
-            result = install.deregister_codex_graft(dry_run=False)
+            result = install.deregister_obsolete_codex_mcp(dry_run=False)
         run.assert_called_once_with(
-            ["codex", "mcp", "remove", "graft"], dry_run=False
+            ["codex", "mcp", "remove", "graft"],
+            dry_run=False,
+            label="remove obsolete codex MCP entry",
         )
         self.assertEqual(result["status"], "removed")
 
@@ -175,14 +176,14 @@ class CodexGraftDeregistrationTest(unittest.TestCase):
                     install, "_run",
                     side_effect=SystemExit("no such entry"),
                 ):
-            result = install.deregister_codex_graft(dry_run=False)
+            result = install.deregister_obsolete_codex_mcp(dry_run=False)
         self.assertEqual(result["status"], "manual")
 
     def test_absent_cli_skips(self):
         from unittest.mock import patch
 
         with patch.object(install.shutil, "which", return_value=None):
-            result = install.deregister_codex_graft(dry_run=False)
+            result = install.deregister_obsolete_codex_mcp(dry_run=False)
         self.assertEqual(result["status"], "skipped")
 
     def test_dry_run_runs_nothing(self):
@@ -190,7 +191,7 @@ class CodexGraftDeregistrationTest(unittest.TestCase):
 
         with patch.object(install.shutil, "which", return_value="/codex"), \
                 patch.object(install, "_run") as run:
-            result = install.deregister_codex_graft(dry_run=True)
+            result = install.deregister_obsolete_codex_mcp(dry_run=True)
         run.assert_not_called()
         self.assertEqual(result["status"], "skipped")
 
@@ -419,14 +420,6 @@ class PlanningTest(unittest.TestCase):
                 install.check_prereqs()
             self.assertIn("npm", str(ctx.exception))
             self.assertNotIn("graft", str(ctx.exception))
-
-    def test_graft_check_missing_index_is_diagnostic_not_gate(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            # Provisioning builds the provider cache when needed; a
-            # missing in-target index is diagnostic only.
-            self.assertIsNone(install.check_graft_index(tmp))
 
     def test_target_census_is_read_only(self):
         import tempfile
@@ -817,6 +810,172 @@ class SkillDeployTest(unittest.TestCase):
         hosts = install.detect_hosts()
         self.assertTrue(hosts["opencode"])
         self.assertIn("codex", hosts)
+
+
+class HostRegistrationInspectionTest(unittest.TestCase):
+    """SPMCP-01: read-only, truthful host-registration discovery."""
+
+    def _config(self, tmp, command, enabled=True):
+        path = pathlib.Path(tmp) / "opencode.json"
+        path.write_text(json.dumps({
+            "mcp": {
+                "span": {
+                    "type": "local",
+                    "command": command,
+                    "enabled": enabled,
+                },
+            },
+        }))
+        return path
+
+    def test_matching_command_is_matched(self):
+        import tempfile
+
+        expected = ["/bin/span-mcp", "--data-dir", "/d", "--repo", "/r"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._config(tmp, expected)
+            result = install.inspect_opencode_registration(
+                str(path), expected)
+        self.assertEqual(result["status"], "matched")
+
+    def test_wrong_data_dir_is_mismatched(self):
+        import tempfile
+
+        expected = ["/bin/span-mcp", "--data-dir", "/d", "--repo", "/r"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._config(tmp, [
+                "/bin/span-mcp", "--data-dir", "/other", "--repo", "/r",
+            ])
+            result = install.inspect_opencode_registration(
+                str(path), expected)
+        self.assertEqual(result["status"], "mismatched")
+
+    def test_wrong_or_missing_repo_is_mismatched(self):
+        import tempfile
+
+        expected = ["/bin/span-mcp", "--data-dir", "/d", "--repo", "/r"]
+        with tempfile.TemporaryDirectory() as tmp:
+            wrong = self._config(tmp, [
+                "/bin/span-mcp", "--data-dir", "/d", "--repo", "/other",
+            ])
+            result = install.inspect_opencode_registration(
+                str(wrong), expected)
+            self.assertEqual(result["status"], "mismatched")
+            missing = self._config(tmp, [
+                "/bin/span-mcp", "--data-dir", "/d",
+            ])
+            result = install.inspect_opencode_registration(
+                str(missing), expected)
+            self.assertEqual(result["status"], "mismatched")
+
+    def test_disabled_entry_is_mismatched(self):
+        import tempfile
+
+        expected = ["/bin/span-mcp", "--data-dir", "/d"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._config(tmp, expected, enabled=False)
+            result = install.inspect_opencode_registration(
+                str(path), expected)
+        self.assertEqual(result["status"], "mismatched")
+        self.assertIn("disabled", result["reason"])
+
+    def test_missing_span_entry_is_missing(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "opencode.json"
+            path.write_text(json.dumps({"mcp": {}}))
+            result = install.inspect_opencode_registration(
+                str(path), ["/bin/span-mcp"])
+        self.assertEqual(result["status"], "missing")
+
+    def test_no_config_available_is_missing(self):
+        result = install.inspect_opencode_registration(
+            None, ["/bin/span-mcp"])
+        self.assertEqual(result["status"], "missing")
+
+    def test_invalid_json_is_unreadable(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "opencode.json"
+            path.write_text("{not json")
+            result = install.inspect_opencode_registration(
+                str(path), ["/bin/span-mcp"])
+        self.assertEqual(result["status"], "unreadable")
+
+    def test_doctor_inspection_leaves_config_bytes_unchanged(self):
+        import tempfile
+        from unittest.mock import patch
+
+        expected = ["/bin/span-mcp", "--data-dir", "/d"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._config(tmp, expected)
+            before = path.read_bytes()
+            with patch.object(
+                install.shutil, "which", return_value="/bin/span-mcp"
+            ), patch.object(
+                install, "verify_installation", return_value={"repos": []}
+            ), patch.object(install, "check_skills"):
+                report = install.doctor(
+                    "/venv/bin/python", "/d", [], str(path),
+                )
+            self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(
+            report["opencode_registration"]["status"], "matched")
+
+    def test_codex_present_reports_manual_without_registry_query(self):
+        from unittest.mock import patch
+
+        with patch.object(
+            install.shutil, "which", return_value="/bin/span-mcp"
+        ), patch.object(
+            install, "verify_installation", return_value={"repos": []}
+        ), patch.object(install, "check_skills"), patch.object(
+            install, "detect_hosts", return_value={"opencode": True,
+                                                   "codex": True}
+        ), patch.object(
+            install.subprocess, "run",
+            side_effect=AssertionError("doctor must not query a registry"),
+        ):
+            report = install.doctor(
+                "/venv/bin/python", "/d", [], None,
+            )
+        self.assertEqual(
+            report["codex_registration"]["status"], "manual")
+        self.assertIn(
+            "not deterministically inspectable",
+            report["codex_registration"]["reason"],
+        )
+
+    def test_codex_absent_reports_skipped(self):
+        from unittest.mock import patch
+
+        with patch.object(
+            install.shutil, "which", return_value="/bin/span-mcp"
+        ), patch.object(
+            install, "verify_installation", return_value={"repos": []}
+        ), patch.object(install, "check_skills"), patch.object(
+            install, "detect_hosts", return_value={"opencode": True,
+                                                   "codex": False}
+        ):
+            report = install.doctor(
+                "/venv/bin/python", "/d", [], None,
+            )
+        self.assertEqual(
+            report["codex_registration"]["status"], "skipped")
+
+    def test_verify_only_is_the_only_verification_flag(self):
+        args = install.parse_args(["--verify-only"])
+        self.assertTrue(args.verify_only)
+        self.assertFalse(hasattr(args, "verify"))
+        verification_keys = {
+            key for key in vars(args).keys() if "verify" in key
+        }
+        self.assertEqual(verification_keys, {"verify_only"})
+        source = pathlib.Path(install.__file__).read_text()
+        self.assertNotIn('"--verify"', source)
+        self.assertIn('"--verify-only"', source)
 
 
 if __name__ == "__main__":

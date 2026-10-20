@@ -438,12 +438,15 @@ class GraftPortBehaviorTest(unittest.TestCase):
             structural_source_from_config("nope:xyz")
 
         with tempfile.TemporaryDirectory() as tmp:
-            src, rid = structural_source_from_config(f"graft:{tmp}")
+            src, rid = structural_source_from_config(tmp)
             self.assertEqual(rid, pathlib.Path(tmp).name)
             # Missing index defers to setup: construction succeeds,
             # reads fail closed, no target artifacts created.
             self.assertFalse(src.has_index())
             self.assertFalse((pathlib.Path(tmp) / "graft").exists())
+            # Provider prefixes never reach the public locator surface.
+            with self.assertRaises(ValueError):
+                structural_source_from_config(f"graft:{tmp}")
 
     def test_dirty_tree_reported_from_git(self):
         import subprocess

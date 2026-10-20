@@ -115,6 +115,12 @@ def indexer_binary_path(tools_dir):
     )
 
 
+def _redact_provider(text):
+    """Keep the managed provider name out of end-user output."""
+    text = text.replace(STRUCTURAL_INDEXER_PACKAGE, "structural indexer")
+    return text.replace("graft", "structural-indexer")
+
+
 def ensure_structural_indexer(venv_dir, dry_run=False):
     """Provision the pinned structural indexer (auto-install, no bundle).
 
@@ -142,8 +148,7 @@ def ensure_structural_indexer(venv_dir, dry_run=False):
         return str(binary)
     print(
         f"+ provision structural indexer "
-        f"{STRUCTURAL_INDEXER_PACKAGE}@{STRUCTURAL_INDEXER_VERSION} "
-        f"-> {tools_dir}"
+        f"{STRUCTURAL_INDEXER_VERSION} -> {tools_dir}"
     )
     if dry_run:
         return str(binary)
@@ -152,18 +157,19 @@ def ensure_structural_indexer(venv_dir, dry_run=False):
         "--no-audit", "--no-fund",
         f"{STRUCTURAL_INDEXER_PACKAGE}@{STRUCTURAL_INDEXER_VERSION}",
     ]
-    print("+", " ".join(cmd))
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
+        detail = _redact_provider(
+            proc.stderr.strip() or proc.stdout.strip()
+        )
         raise SystemExit(
             f"structural indexer provisioning failed "
-            f"({proc.returncode}): "
-            f"{proc.stderr.strip() or proc.stdout.strip()}"
+            f"({proc.returncode}): {detail}"
         )
     if not binary.is_file():
         raise SystemExit(
-            "structural indexer provisioning produced no binary at "
-            f"{binary}"
+            "structural indexer provisioning produced no binary in "
+            "the managed tools directory"
         )
     return str(binary)
 
@@ -277,8 +283,8 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def _run(cmd, cwd=None, dry_run=False):
-    print("+", " ".join(str(c) for c in cmd))
+def _run(cmd, cwd=None, dry_run=False, label=None):
+    print("+", label if label is not None else " ".join(str(c) for c in cmd))
     if dry_run:
         return None
     proc = subprocess.run(
@@ -543,23 +549,6 @@ def expose_binary(venv_dir, bin_dir, dry_run=False):
     return Path(bin_dir) / "span-mcp"
 
 
-def check_graft_index(target):
-    """Legacy presence probe (kept for diagnostics, not a gate).
-
-    Provisioning builds the provider-owned index when needed, so a
-    missing in-target index no longer fails installation. This helper
-    remains for census/debug use only.
-    """
-    wiring = Path(target) / "graft" / ".graph" / "wiring.json"
-    if wiring.exists():
-        print(f"structural index present: {wiring}")
-        return
-    print(
-        f"no in-target structural index at {wiring} "
-        f"(provisioning builds the provider cache when needed)."
-    )
-
-
 def target_artifact_snapshot(target):
     """Read-only census of the target structural-index tree (E-14).
 
@@ -726,12 +715,12 @@ def preflight_facts(targets, seeds_path=None):
 
 
 def merge_opencode_config(config_path, span_cmd, dry_run=False):
-    """Merge the span MCP entry, removing legacy graft entries (F-4).
+    """Merge the span MCP entry, removing obsolete structural-MCP entries.
 
-    Addendum F retires the standalone graft MCP: Span serves structural
-    navigation itself. Any ``graft`` entry in the ``mcp`` map or the
-    ``mcp.servers`` map is deleted and reported; removal is verified
-    from the written config, not assumed.
+    Span serves structural navigation itself, so a standalone structural
+    MCP entry left in the ``mcp`` map or the ``mcp.servers`` map is
+    deleted and counted; removal is verified from the written config,
+    not assumed. Nothing here is named in operator output.
     """
     print(f"+ merge opencode config: {config_path}")
     if dry_run:
@@ -750,7 +739,7 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
     removed = []
     if "graft" in mcp:
         del mcp["graft"]
-        removed.append("graft")
+        removed.append("mcp")
     for key in ("span",):
         slot = mcp.get(key)
         if isinstance(slot, dict):
@@ -762,7 +751,7 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
     if isinstance(servers, dict):
         if "graft" in servers:
             del servers["graft"]
-            removed.append("servers.graft")
+            removed.append("servers")
         if "span" in servers:
             slot = servers["span"]
             if isinstance(slot, dict):
@@ -770,11 +759,11 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
     path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"opencode config updated: {config_path}")
     if removed:
-        print(f"removed legacy graft MCP entries: {removed}")
+        print(f"removed obsolete MCP entries: {len(removed)}")
     return {
         "status": "merged",
         "config": str(config_path),
-        "removed_graft_entries": removed,
+        "removed_obsolete_entries": len(removed),
     }
 
 
@@ -797,28 +786,34 @@ def register_codex(span_cmd, dry_run=False):
     return {"status": "registered"}
 
 
-def deregister_codex_graft(dry_run=False):
-    """Remove a legacy graft MCP registration from codex (Addendum F F-4).
+def deregister_obsolete_codex_mcp(dry_run=False):
+    """Remove an obsolete structural MCP registration from codex.
 
     Best effort: a missing codex CLI skips, a failed removal reports
     ``manual`` so the operator finishes it by hand. Removing
-    configuration never stops an already-running graft server; the
-    operator stops such processes out of band (see docs/mcp.md).
+    configuration never stops an already-running server; the operator
+    stops such processes out of band (see docs/mcp.md). The provider
+    name never appears in operator output.
     """
     if shutil.which("codex") is None:
-        print("codex CLI absent; skipping graft deregistration.")
+        print("codex CLI absent; skipping obsolete MCP deregistration.")
         return {"status": "skipped", "reason": "codex CLI absent"}
     if dry_run:
-        print("+ deregister codex graft (dry-run, skipped)")
+        print("+ deregister obsolete codex MCP entry (dry-run, skipped)")
         return {"status": "skipped", "reason": "dry-run"}
     try:
-        _run(["codex", "mcp", "remove", "graft"], dry_run=dry_run)
+        _run(
+            ["codex", "mcp", "remove", "graft"],
+            dry_run=dry_run,
+            label="remove obsolete codex MCP entry",
+        )
     except SystemExit as exc:
-        # A pre-F graft entry the CLI cannot remove (or no such entry)
-        # is operator work, not an install failure. Warn and continue.
-        print(f"codex graft deregistration needs operator action: {exc}")
-        return {"status": "manual", "error": str(exc)}
-    print("codex graft MCP entry removed.")
+        # An obsolete entry the CLI cannot remove (or no such entry) is
+        # operator work, not an install failure. Warn and continue.
+        detail = str(exc).replace("graft", "obsolete entry")
+        print(f"codex MCP cleanup needs operator action: {detail}")
+        return {"status": "manual", "error": detail}
+    print("obsolete codex MCP entry removed.")
     return {"status": "removed"}
 
 
@@ -1109,6 +1104,85 @@ def check_skills(dry_run=False):
             )
 
 
+def expected_span_command(span_mcp, data_dir, repos):
+    """Installed invocation shape used for host-registration inspection."""
+    command = [str(span_mcp), "--data-dir", str(data_dir)]
+    for repo in repos:
+        command += ["--repo", str(repo)]
+    return command
+
+
+def inspect_opencode_registration(config_path, span_cmd):
+    """Read-only OpenCode ``mcp.span`` registration inspection.
+
+    Returns exactly one of ``matched``, ``mismatched``, ``missing``, or
+    ``unreadable``. Never calls ``merge_opencode_config`` and never
+    writes the config. A missing config path means no OpenCode config is
+    available; an explicitly supplied but unreadable path is reported as
+    unreadable rather than guessed.
+    """
+    expected = list(span_cmd)
+    result = {
+        "status": "missing",
+        "config": None if config_path is None else str(config_path),
+        "expected_command": expected,
+    }
+    if config_path is None:
+        result["reason"] = "no OpenCode config available"
+        return result
+    path = Path(config_path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        result["status"] = "unreadable"
+        result["reason"] = f"cannot read OpenCode config: {exc}"
+        return result
+    try:
+        config = json.loads(text)
+    except ValueError as exc:
+        result["status"] = "unreadable"
+        result["reason"] = f"cannot parse OpenCode config: {exc}"
+        return result
+    mcp = config.get("mcp") if isinstance(config, dict) else None
+    entry = mcp.get("span") if isinstance(mcp, dict) else None
+    if not isinstance(entry, dict):
+        result["reason"] = "no mcp.span entry"
+        return result
+    result["configured_command"] = entry.get("command")
+    if entry.get("enabled") is False:
+        result["status"] = "mismatched"
+        result["reason"] = "mcp.span entry is disabled"
+        return result
+    if entry.get("command") == expected:
+        result["status"] = "matched"
+        return result
+    result["status"] = "mismatched"
+    result["reason"] = (
+        "mcp.span command does not match the installed invocation"
+    )
+    return result
+
+
+def inspect_codex_registration():
+    """Report Codex registration observability honestly.
+
+    The repository establishes no stable Codex MCP configuration-file
+    contract, so this read-only check never inspects or executes the
+    Codex CLI: detection reports ``manual``, absence reports
+    ``skipped``.
+    """
+    if detect_hosts()["codex"]:
+        return {
+            "status": "manual",
+            "reason": (
+                "installer receipt may record prior registration, but "
+                "current Codex MCP registration is not deterministically "
+                "inspectable by Span's read-only contract"
+            ),
+        }
+    return {"status": "skipped", "reason": "codex CLI not detected"}
+
+
 def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     """Re-verify an existing installation without changing anything."""
     print("== span install doctor ==")
@@ -1118,11 +1192,44 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         raise SystemExit("span-mcp not found on PATH")
     receipt_path = Path(data_dir) / "install.json"
     if receipt_path.exists() and not dry_run:
-        print(f"receipt: {receipt_path.read_text().strip()[:400]}")
+        print(f"receipt: {receipt_path}")
     else:
         print(f"no receipt at: {receipt_path}")
     check_skills(dry_run=dry_run)
-    return verify_installation(venv_python, data_dir, repos, dry_run)
+    # Read-only host-registration inspection: file inspection only, no
+    # MCP registry/process enumeration and no host configuration writes.
+    selected_config = opencode_config
+    if selected_config is None and Path("opencode.json").exists():
+        selected_config = "opencode.json"
+    opencode_state = inspect_opencode_registration(
+        selected_config,
+        expected_span_command(
+            resolved if resolved is not None else "span-mcp",
+            data_dir,
+            repos,
+        ),
+    )
+    codex_state = inspect_codex_registration()
+    print(f"opencode registration: {opencode_state['status']}")
+    if opencode_state.get("reason"):
+        print(f"  {opencode_state['reason']}")
+    print(
+        f"codex registration: {codex_state['status']} "
+        f"({codex_state.get('reason', '')})"
+    )
+    report = verify_installation(venv_python, data_dir, repos, dry_run)
+    print(f"runtime verification: span-mcp={resolved}")
+    readiness = report.get("repos", []) if isinstance(report, dict) else []
+    print(f"repository readiness: {readiness}")
+    return {
+        "runtime_verification": {
+            "span_mcp": resolved,
+            "dry_run": bool(dry_run),
+        },
+        "repository_readiness": report,
+        "opencode_registration": opencode_state,
+        "codex_registration": codex_state,
+    }
 
 
 def main(argv=None):
@@ -1158,8 +1265,6 @@ def main(argv=None):
         return
 
     check_prereqs()
-    for target in targets:
-        check_graft_index(target)
     # The standalone structural server is gone, so the E-14
     # process/registry scan is deleted with it. The preflight is the
     # read-only target census below (proving targets stay unchanged)
@@ -1270,8 +1375,8 @@ def main(argv=None):
         # Addendum F F-4: retire the standalone graft MCP alongside
         # span registration. Reported in the receipt; a `manual` status
         # means the operator finishes the removal by hand.
-        host_registration["codex_graft_removal"] = deregister_codex_graft(
-            dry_run=dry
+        host_registration["codex_obsolete_mcp_removal"] = (
+            deregister_obsolete_codex_mcp(dry_run=dry)
         )
     else:
         if args.no_codex:
@@ -1344,7 +1449,12 @@ def main(argv=None):
         "verify": report,
         "host_registration": host_registration,
         "target_census": target_census,
-        "structural_indexer": indexer_pointer,
+        "structural_indexer": {
+            # Neutral summary only: the managed binary path is internal
+            # state and never part of the operator-facing receipt.
+            "managed": bool(indexer_pointer),
+            "version": (indexer_pointer or {}).get("version"),
+        },
         "source_venv_sync": source_venv_sync,
         "post_install_verified": post_install_verified,
         "data_backup": data_backup,

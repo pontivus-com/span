@@ -229,6 +229,108 @@ class S3SchemaTest(unittest.TestCase):
         out = adapter.dispatch("explain", {"repository_id": "r"})
         self.assertTrue(out.is_error)
 
+    def test_ingress_reports_all_shape_faults_in_one_response(self):
+        # One malformed call must not cost one round trip per fault: the
+        # wire passes report every sibling fault they find. A single
+        # fault keeps its exact previous text.
+        from span.shell.mcp import decode_request
+
+        coverage = {
+            "$type": "InterpretationCoverage",
+            "subjects": [],
+            "evidence_scope": {"paths": [], "evidence_refs": []},
+        }
+        with self.assertRaises(ValueError) as ctx:
+            decode_request("submit_interpretation", {
+                "repository_id": "r",
+                "continuation": "cont-1",
+                "result": {
+                    "proposed_question_coverages": [
+                        dict(coverage), dict(coverage)
+                    ],
+                },
+            })
+        text = str(ctx.exception)
+        self.assertIn("result.proposed_question_coverages[0]", text)
+        self.assertIn("result.proposed_question_coverages[1]", text)
+
+    def test_ingress_reports_cross_pass_faults_together(self):
+        # The tagging pass runs first; it must also report the unknown and
+        # missing fields the strict decoder would find, so a tag fault
+        # plus a field fault do not cost two round trips.
+        from span.shell.mcp import decode_request
+
+        with self.assertRaises(ValueError) as ctx:
+            decode_request("initialize_target", {
+                "repository_id": "r",
+                "target": {
+                    "$type": "EvidenceScope",
+                    "paths": [],
+                    "evidence_refs": [],
+                    "bogus": 1,
+                },
+            })
+        text = str(ctx.exception)
+        self.assertIn("missing field 'objective'", text)
+        self.assertIn(
+            "unexpected $type at unambiguous position: target", text
+        )
+        self.assertIn(
+            "target: unknown fields for EvidenceScope: ['bogus']", text
+        )
+
+    def test_single_shape_fault_keeps_decoder_text(self):
+        # Aggregation must not alter the one-fault message callers and
+        # tests already depend on.
+        from span.shell.mcp import decode_request
+
+        cases = (
+            (
+                "unknown field",
+                {
+                    "$type": "SubjectSelector",
+                    "exact_subject_id": None,
+                    "name_or_locator": None,
+                    "expected_kinds": [],
+                    "bogus": 1,
+                },
+                "target: unknown fields for SubjectSelector: ['bogus']",
+            ),
+            (
+                "missing field",
+                {
+                    "$type": "SubjectSelector",
+                    "exact_subject_id": None,
+                    "expected_kinds": [],
+                },
+                "target: missing field 'name_or_locator' for SubjectSelector",
+            ),
+        )
+        for label, target, expected in cases:
+            with self.subTest(label=label):
+                with self.assertRaises(ValueError) as ctx:
+                    decode_request(
+                        "status", {"repository_id": "r", "target": target}
+                    )
+                self.assertEqual(
+                    str(ctx.exception),
+                    f"invalid status arguments: {expected}",
+                )
+
+    def test_submit_description_states_shape_invariants(self):
+        # The schema cannot express these constructor invariants; the
+        # tool description is the advertised contract for them.
+        from span.shell.mcp import TOOL_DESCRIPTIONS
+
+        text = TOOL_DESCRIPTIONS["submit_interpretation"]
+        for rule in (
+            "exactly one outcome",
+            "OPEN carries resolution_requirements",
+            "ANSWERED sets declared_complete",
+            "NOT_APPLICABLE carries empty result_refs",
+        ):
+            self.assertIn(rule, text)
+
     def test_type_tag_is_positional_not_definitional(self):
         # J-8/S6.2: $type is a property of the field POSITION. Every
         # definition advertises it as an OPTIONAL const (never required);

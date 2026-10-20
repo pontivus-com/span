@@ -127,12 +127,20 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "status": (
         "Normal no-target status reports bounded persisted semantic "
         "coverage: current, incomplete, stale/unverifiable, and "
-        "unassessed subjects. Exact targets report detailed freshness; "
-        "HOOK_FAST returns a compact notice only: event-local scope, "
-        "never repository inventory, so READY 0/0 never means clean."
+        "unassessed subjects. Entry guidance names the next exact step: "
+        "stale or unverifiable work uses refresh with an exact "
+        "SubjectSelector; unassessed work uses a question-local explain; "
+        "pending question work continues only through the continuation "
+        "returned by the suspending operation, never an invented cont-* "
+        "token. Exact targets report detailed freshness; HOOK_FAST "
+        "returns a compact notice only: event-local scope, never "
+        "repository inventory, so READY 0/0 never means clean."
     ),
     "refresh": (
-        "Explicitly reinterpret stale scope. Never automatic."
+        "Explicitly reinterpret a scoped semantic target. For stale "
+        "work, use an exact SubjectSelector or EvidenceScope. Challenging "
+        "an otherwise CURRENT subject requires stale_only=false with an "
+        "exact SubjectSelector. Never automatic."
     ),
     "submit_interpretation": (
         "Submit the host-produced typed interpretation result for a "
@@ -141,12 +149,24 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "the next pending unit while frontiers remain. Pending tasks use "
         "the SA_1_7_V1 interpretation profile; satisfy its evidence, "
         "scope, typed-disposition, adversarial, and fresh-readback "
-        "obligations before submitting."
+        "obligations before submitting. Each target inventory account "
+        "carries exactly one outcome: assigned_area_subjects, "
+        "exclusion_basis, or resolution_requirements. A coverage marked "
+        "OPEN carries resolution_requirements, ANSWERED sets "
+        "declared_complete, and NOT_APPLICABLE carries empty result_refs."
     ),
     "locate": (
         "Read-only structural find, file outline, or target member "
-        "listing (Addendum F). Navigation evidence only — never a "
-        "semantic claim. Procedure lives in the skill/runbook."
+        "listing (Addendum F). SYMBOL requires query and accepts an "
+        "optional target scope; match EXACT resolves an exact locator to "
+        "its declaration/name and never returns partial hits, while "
+        "CONTAINS returns substring matches in provider order. "
+        "FILE_OUTLINE requires one file locator and takes no target scope "
+        "or match mode. TARGET_MEMBERS requires the exact target scope and "
+        "takes no query; it lists the same members the target frontier "
+        "reconciles against. Resume a page with the returned pgv:* token. "
+        "Navigation evidence only — never a semantic claim. Procedure "
+        "lives in the skill/runbook."
     ),
     "neighbors": (
         "Read-only bounded structural adjacency, upstream/downstream/"

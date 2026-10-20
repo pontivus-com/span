@@ -408,10 +408,10 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 )
             self.assertEqual(result.readiness, m.RepositoryReadiness.READY)
             self.assertTrue(context.structural.has_index())
-            # Same path for legacy prefix (transitional).
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_build):
-                context2, _ = provision_repository(
+            # A provider-prefixed locator is not part of the public
+            # surface: provisioning rejects it instead of interpreting it.
+            with self.assertRaises(ValueError):
+                provision_repository(
                     ServerConfig(data_dir=data),
                     ops.SemanticInitializeRepositoryRequest(
                         repository_locator=f"graft:{repo}",
@@ -419,13 +419,13 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                         authority_seeds=(),
                     ),
                 )
-            self.assertTrue(context2.structural.has_index())
 
     def test_public_surface_hides_graft(self):
         from span.shell import mcp_server
         from span.shell import install
         from span.shell.mcp import TOOL_DESCRIPTIONS, TOOL_SCHEMAS
         import json as _json
+        import tempfile as _tempfile
         args = mcp_server._parse_args(
             ["--data-dir", "/tmp/d", "--repo", "/tmp/repo"])
         self.assertEqual(args.repo, ["/tmp/repo"])
@@ -437,10 +437,51 @@ class ProvisioningLifecycleTest(unittest.TestCase):
         self.assertNotIn("--repo graft:", readme)
         self.assertNotIn('"graft:<TARGET_REPO>"', readme)
         self.assertNotIn("graft` on `PATH", readme)
+        # Active user-facing docs name no provider.
+        self.assertNotIn("graft", readme.lower())
+        mcp_doc = (_pl.Path(__file__).resolve().parents[2]
+                   / "docs" / "mcp.md").read_text(encoding="utf-8")
+        self.assertNotIn("graft", mcp_doc.lower())
         for name, description in TOOL_DESCRIPTIONS.items():
             self.assertNotIn("graft", description.lower(), name)
         for name, schema in TOOL_SCHEMAS.items():
             self.assertNotIn("graft", _json.dumps(schema).lower(), name)
+        # Provider vocabulary failures reach clients without the name.
+        with _tempfile.TemporaryDirectory() as _tmp_kind:
+            _root_kind = _pl.Path(_tmp_kind) / "repo"
+            (_root_kind / "graft" / ".graph").mkdir(parents=True)
+            (_root_kind / "graft" / ".graph" / "wiring.json").write_text(
+                _json.dumps({
+                    "nodes": [{"id": "x", "name": "x",
+                               "kind": "NOT_A_KIND", "path": "a.py"}],
+                    "edges": [],
+                })
+            )
+            _bad = g.GraftStructuralSource("repo", _root_kind)
+            self.assertFalse(_bad.has_index())
+            with self.assertRaises(Exception) as _kind_ctx:
+                _bad._require_index()
+            self.assertNotIn("graft", str(_kind_ctx.exception).lower())
+        # Installer output never names the provider either.
+        import contextlib as _contextlib
+        import io as _io
+        with _tempfile.TemporaryDirectory() as _tmp_out:
+            _cfg = _pl.Path(_tmp_out) / "opencode.json"
+            _cfg.write_text(_json.dumps({
+                "mcp": {"graft": {"command": ["obsolete"]}},
+            }))
+            _buf = _io.StringIO()
+            with _contextlib.redirect_stdout(_buf):
+                install.merge_opencode_config(str(_cfg), ["span-mcp"])
+            self.assertNotIn("graft", _buf.getvalue().lower())
+            self.assertIn("removed obsolete MCP entries", _buf.getvalue())
+            _dry = _io.StringIO()
+            with _contextlib.redirect_stdout(_dry):
+                with mock.patch.object(
+                    install.shutil, "which", return_value="/codex"
+                ):
+                    install.deregister_obsolete_codex_mcp(dry_run=True)
+            self.assertNotIn("graft", _dry.getvalue().lower())
         # User-facing setup failure must not name the indexer: trigger
         # a real provisioning failure with no binary anywhere.
         from span.shell.mcp_server import (
@@ -448,7 +489,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             provision_repository as _provision,
         )
         from span import service as _ops
-        import tempfile as _tempfile
         with _tempfile.TemporaryDirectory() as _tmp:
             _repo = _pl.Path(_tmp) / "repo"
             _repo.mkdir()

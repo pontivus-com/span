@@ -2240,15 +2240,25 @@ def _materialize_unit(
         target_inventory_items
         or task.request.target_inventory_items
     )
+    # J-6/S5: a mapping batch is correlated strictly by stable EvidenceId,
+    # never by position in the submitted list. The map is built once from
+    # the bound batch so every later check names the exact member.
+    bound_by_id = {
+        item.evidence_ref.evidence_id.value: item
+        for item in bound_items
+    }
     is_mapping_task = (
         task.request.question is None and bool(bound_items)
     )
     if is_mapping_task and not result.proposed_target_inventory_accounting:
         raise _validation.InterpretationUnitRejected(
             tuple(
-                _member_diagnostics(
-                    "target_accounts", 0, None,
-                    ("mapping result does not account for its item",),
+                diagnostic
+                for index, item in enumerate(bound_items)
+                for diagnostic in _member_diagnostics(
+                    "bound_items", index,
+                    item.evidence_ref.evidence_id.value,
+                    ("bound mapping item has no accounting candidate",),
                 )
             )
         )
@@ -2283,6 +2293,23 @@ def _materialize_unit(
             expected_ids = {
                 item.evidence_ref.evidence_id.value for item in bound_items
             }
+            if expected_ids:
+                for tindex, acc in enumerate(
+                    result.proposed_target_inventory_accounting
+                ):
+                    eid = acc.evidence_id.value
+                    if eid not in bound_by_id:
+                        raise _validation.InterpretationUnitRejected(
+                            tuple(
+                                _member_diagnostics(
+                                    "target_accounts", tindex, eid,
+                                    (
+                                        "target account is outside the bound "
+                                        "mapping batch",
+                                    ),
+                                )
+                            )
+                        )
             admitted_existing = tuple(target_association.area_subjects)
             new_ids = tuple(new_subject_ids)
             snapshot = current_inventory_snapshot or {}
@@ -2323,20 +2350,20 @@ def _materialize_unit(
                         )
                     )
             if expected_ids:
-                candidate_ids = [
-                    acc.evidence_id.value
-                    for acc in result.proposed_target_inventory_accounting
-                ]
-                if sorted(candidate_ids) != sorted(expected_ids):
+                missing_ids = expected_ids - seen_ids
+                if missing_ids:
                     raise _validation.InterpretationUnitRejected(
                         tuple(
-                            _member_diagnostics(
-                                "target_accounts", 0, None,
+                            diagnostic
+                            for index, item in enumerate(bound_items)
+                            if item.evidence_ref.evidence_id.value
+                            in missing_ids
+                            for diagnostic in _member_diagnostics(
+                                "bound_items", index,
+                                item.evidence_ref.evidence_id.value,
                                 (
-                                    "mapping result must account for "
-                                    "exactly its bound items: "
-                                    f"expected={sorted(expected_ids)} "
-                                    f"got={sorted(candidate_ids)}",
+                                    "bound mapping item has no accounting "
+                                    "candidate",
                                 ),
                             )
                         )
