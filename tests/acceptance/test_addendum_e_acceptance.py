@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from span.core import model as m
+from span.ports.interpretation import PendingInterpretation
 from span import service as ops
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.evidence import FixtureEvidenceSource
@@ -1518,6 +1519,74 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         ]
         self.assertTrue(named)
         self.assertIn("CandidateSubject", named[0].description)
+
+
+class MappingBatchOrderAcceptanceTest(unittest.TestCase):
+    """SPMCP-04: a mapping batch correlates strictly by stable EvidenceId.
+
+    The same bound batch submitted in reverse order accounts exactly the
+    same members; no positional assumption exists in validation or
+    persistence.
+    """
+
+    def test_batch_correlates_by_evidence_id_not_order(self):
+        structural, evidence, store = _harness()
+        try:
+            live = ContinuationStore()
+            scope = m.EvidenceScope(
+                paths=tuple(sorted(FILES)), evidence_refs=()
+            )
+            pending = ops.initialize_target(
+                ops.SemanticInitializeTargetRequest(
+                    repository_id=REPO, target=scope,
+                    objective=OBJECTIVE, bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=live, authority_seeds=(),
+            )
+            self.assertIsInstance(pending, PendingInterpretation)
+            items = pending.request.target_inventory_items
+            self.assertEqual(len(items), len(FILES))
+            accounts = tuple(
+                m.CandidateTargetInventoryAccount(
+                    evidence_id=item.evidence_ref.evidence_id,
+                    resolution_requirements=(
+                        m.ResolutionRequirement(
+                            kind=(
+                                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
+                            ),
+                            subject_or_claim=None,
+                            description="not examined in this test",
+                            supporting_context=(),
+                        ),
+                    ),
+                )
+                for item in reversed(items)
+            )
+            ops.submit_interpretation(
+                pending.continuation,
+                m.SemanticInterpretationResult(
+                    claims=(), relationships=(), governing_source_refs=(),
+                    diagnostics=("reverse batch",),
+                    candidate_subjects=(), candidate_conflicts=(),
+                    proposed_question_coverages=(),
+                    candidate_withdrawals=(),
+                    proposed_target_inventory_accounting=accounts,
+                    proposed_target_questions=(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=live,
+            )
+            tid, _, _ = _tid()
+            assoc = store.load_target_association(REPO, tid)
+            assert assoc is not None
+            self.assertEqual(
+                {acc.evidence_ref.evidence_id.value
+                 for acc in assoc.inventory_accounting},
+                {item.evidence_ref.evidence_id.value for item in items},
+            )
+        finally:
+            store.close()
 
 
 if __name__ == "__main__":

@@ -21,6 +21,38 @@ suspends with a bounded task: interpret it with your own model,
 submit via `submit_interpretation`, and continue — a submit may
 return the answer or the next pending unit.
 
+## Refresh scope types
+
+```text
+stale refresh:
+  SubjectSelector OR EvidenceScope
+  stale_only=True (default)
+
+CURRENT/unchanged-source challenge:
+  SubjectSelector only
+  stale_only=false
+```
+
+An `EvidenceScope` with `stale_only=false` is rejected: it is not an
+unchanged-source challenge target. Ordinary scoped stale refresh continues
+to accept either target type.
+
+## Status entry guidance
+
+Normal `status` names the next exact step in each non-current entry:
+
+- `STALE` or `UNVERIFIABLE` → `refresh` with the exact `SubjectSelector`
+  for that subject; an `UNVERIFIABLE` empty result proves nothing.
+- `UNASSESSED` (no adopted question coverage) → question-local `explain`
+  on that subject. A continuation exists only after that operation
+  suspends.
+- Pending or open question work → continue through the continuation
+  returned by the operation that suspended. Never invent or reuse a
+  `cont-*` token.
+
+Hooks report the same distinction in compact form and never allocate a
+continuation.
+
 ## Refresh ownership (Addendum C C-11)
 
 The agent that changes implementation or governing semantic evidence

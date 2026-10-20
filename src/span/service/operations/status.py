@@ -185,9 +185,14 @@ def _hook_fast(
             stale += len(claims) + len(relationships)
     action = None
     if stale or unverifiable:
+        # SPMCP-05: name the exact resolution path and scope. A refresh
+        # never accepts a bare count or an invented scope.
+        locators = ", ".join(
+            sorted(sid.canonical_locator for sid in affected)
+        )
         action = (
-            f"run refresh: {stale} stale, "
-            f"{unverifiable} unverifiable items"
+            f"run refresh with an exact SubjectSelector for: {locators} "
+            f"({stale} stale, {unverifiable} unverifiable items)"
         )
     return m.HookStatusNotice(
         readiness=m.RepositoryReadiness.READY,
@@ -314,7 +319,10 @@ def _repository_coverage_entry(
                 subject_or_claim=subject.subject_id,
                 description=(
                     "no adopted question coverage is persisted for this "
-                    "semantic subject"
+                    "semantic subject; run question-local explain for "
+                    f"'{subject.subject_id.canonical_locator}'; a "
+                    "continuation exists only after that operation "
+                    "suspends"
                 ),
                 supporting_context=(),
             )
@@ -386,7 +394,8 @@ def _repository_coverage_entry(
                     description=(
                         "no adopted question coverage is persisted for this "
                         f"semantic subject; run question-local explain for "
-                        f"'{locator}'"
+                        f"'{locator}'; a continuation exists only after "
+                        "that operation suspends"
                     ),
                     supporting_context=(),
                 )
@@ -398,7 +407,9 @@ def _repository_coverage_entry(
                     subject_or_claim=subject.subject_id,
                     description=(
                         "subject work is incomplete; continue the pending "
-                        f"questions for '{locator}' within bounds"
+                        f"questions for '{locator}' within bounds through "
+                        "the continuation returned by the suspending "
+                        "operation; never invent a cont-* token"
                     ),
                     supporting_context=(),
                 )

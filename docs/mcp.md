@@ -19,7 +19,9 @@ Each tool takes its canonical service request as compact wire JSON.
 required only where a genuine multi-dataclass union needs a discriminator;
 redundant tags are rejected. `bounds` may be omitted for service defaults.
 Unknown
-tools/fields/enums and missing required fields fail closed.
+tools/fields/enums and missing required fields fail closed. One
+ingress failure reports every shape fault it found, so a single
+correction round suffices.
 `submit_interpretation` additionally takes the routing key
 `repository_id` (transport-level, never parsed as semantics).
 
@@ -29,8 +31,12 @@ Deterministic canonical JSON of exactly what the service returned:
 `SemanticAnswer`, `PendingInterpretation` (keep submitting until an
 answer returns), `HookStatusNotice`, or the init result. Failures are
 typed error envelopes (`unknown_tool`, `ingress`, `unknown_repository`,
-`unavailable`, `validation`, `rejected`, `transport`) — never invented
-semantics. A JSON ingress failure never consumes the continuation:
+`unavailable`, `validation`, `rejected`, `transport`,
+`stale_continuation`) — never invented semantics. A stale structural
+listing continuation (`stale_continuation`) names the new listing version
+and directs a restart of that listing from page one with
+`page_token: null`; no snapshot is persisted and no continuation is
+recovered. A JSON ingress failure never consumes the continuation:
 resubmit the corrected result under the same continuation. A semantic
 validation rejection (`validation`) likewise retains the live
 continuation: correct and resubmit under the same continuation. Only a
@@ -153,32 +159,31 @@ outside the target in the configured data directory. The installer may
 update only the managed Span lifecycle block in the target `AGENTS.md`;
 per-target plugins and all other target artifacts are not written.
 `initialize_repository` takes a plain `repository_locator`
-plus `structural_provider_config` (plain path canonical; legacy
-`graft:<path>` accepted transitionally); the core never interprets
-provider paths or commands. There is no graft MCP server: structural
-navigation (`locate` for find/ outline/member listing, `neighbors` for
-bounded adjacency) is served by Span itself under Addendum F, with
-two-tier freshness (entry verification plus scope coverage) and
-version-bound pagination. The onboarding preflight is the read-only
-structural-artifact census (the managed `AGENTS.md` guidance block is the
-intentional installer exception) recorded in the
-receipt and acceptance evidence. Exact onboarding path:
+plus `structural_provider_config` (a plain repository path; provider
+selection stays shell-internal); the core never interprets provider
+paths or commands. There is no separate structural MCP server:
+structural navigation (`locate` for find/ outline/member listing,
+`neighbors` for bounded adjacency) is served by Span itself under
+Addendum F, with two-tier freshness (entry verification plus scope
+coverage) and version-bound pagination. The onboarding preflight is the
+read-only structural-artifact census (the managed `AGENTS.md` guidance
+block is the intentional installer exception) recorded in the receipt
+and acceptance evidence. Exact onboarding path:
 `docs/onboarding-runbook.md` and Addendum E §4A.
 
 Migration from a pre-F install (one time, operator): the installer
-removes `graft` entries from opencode host configs and attempts
-`codex mcp remove graft`, both reported in the receipt (a `manual`
-codex status means the operator finishes that removal by hand).
-Removing configuration never stops an already-running graft server:
-stop any such process out of band before relying on sole-MCP
+removes an obsolete structural MCP registration from opencode host
+configs and attempts the equivalent Codex cleanup, both reported in the
+receipt (a `manual` codex status means the operator finishes that
+removal by hand). Removing configuration never stops an already-running
+server: stop any such process out of band before relying on sole-MCP
 operation. The only Span-owned structural-index writer is the bounded
-provider-owned build on explicit `initialize_repository` provisioning
+managed-indexer build on explicit `initialize_repository` provisioning
 and explicit `refresh` (cache under the data directory, never target
 writes); no manual offline index preparation is required —
 provisioning builds when needed and fails with an actionable setup
-error when the indexer cannot build. (Contributor note: the provider
-is `graft --dir <cache> build --no-gitignore --no-ignore <target>`;
-see the adapter module.)
+error when the indexer cannot build. (Contributor note: the adapter
+module documents the indexer invocation.)
 
 ## Operation intents and selection (Addendum G §4.7)
 
@@ -197,10 +202,16 @@ agent intent; setup is separate from ordinary queries:
   assertions).
 - State inspection: `status` (`NORMAL` repository or exact-target
   coverage; `HOOK_FAST` event-local notice only, never inventory).
+  Status entry requirements name the next exact step: stale or
+  unverifiable → `refresh` with the exact `SubjectSelector`; `UNASSESSED`
+  → question-local `explain`; pending question work → only the
+  continuation returned by the suspending operation, never an invented
+  `cont-*` token.
 - Knowledge maintenance: `initialize_target` (exact `EvidenceScope`
-  plus user-directed objective; admits a campaign), `refresh` (scoped
-  `SubjectSelector` or `EvidenceScope`; never repo-wide without
-  enumeration).
+  plus user-directed objective; admits a campaign), `refresh` (ordinary
+  stale refresh accepts a scoped `SubjectSelector` or `EvidenceScope`;
+  an unchanged-source/CURRENT challenge requires `stale_only=false` with
+  an exact `SubjectSelector` only; never repo-wide without enumeration).
 - Interpretation exchange: `submit_interpretation`
   (`continuation` plus typed result; retained on validation failure,
   consumed only on successful commit) versus `reissue_interpretation`
@@ -215,6 +226,14 @@ structural adjacency → `neighbors`; need established semantics →
 need change consequences → `impact`. Structural adjacency is evidence,
 never a semantic trace. `status` never triggers `refresh`. No generic
 router exists; apparent overlap is resolved by these rules.
+
+`locate` modes carry distinct arguments. `SYMBOL` requires `query` and
+accepts an optional `target` scope; `match=EXACT` resolves an exact
+locator to its declaration/name and never returns partial hits, while
+`match=CONTAINS` returns substring matches in provider order.
+`FILE_OUTLINE` requires one file locator and takes no target scope or
+match mode. `TARGET_MEMBERS` requires the exact `target` scope and takes
+no query. Pages resume with the returned `pgv:*` token.
 
 ## Error recovery (Addendum G §4.1)
 
@@ -273,3 +292,6 @@ exposure is deferred until a proven consumer exists.
   semantic outcome). Span resolves the provider-canonical `EvidenceRef`,
   constructs the durable account, and creates the service-owned
   first-admission `PENDING` CQ-01 seed for a newly admitted area.
+- Coverage shape is fixed per disposition: `OPEN` carries
+  `resolution_requirements`, `ANSWERED` sets `declared_complete`, and
+  `NOT_APPLICABLE` carries empty `result_refs`.

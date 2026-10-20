@@ -62,6 +62,30 @@ __all__ = [
     'reissue_interpretation',
 ]
 
+
+def _format_question_identity(question: m.SemanticQuestionScope) -> str:
+    """Render the complete canonical question identity for diagnostics.
+
+    Pure formatting over the same identity fields used by
+    ``_question_identity``: no hashing, normalization, or paraphrase
+    equivalence.
+    """
+    return (
+        "("
+        f"scope_root.repository_id={question.scope_root.repository_id}, "
+        f"scope_root.subject_kind={question.scope_root.subject_kind.value}, "
+        f"scope_root.canonical_locator="
+        f"{question.scope_root.canonical_locator}, "
+        f"subject.repository_id={question.subject.repository_id}, "
+        f"subject.subject_kind={question.subject.subject_kind.value}, "
+        f"subject.canonical_locator="
+        f"{question.subject.canonical_locator}, "
+        f"question_class={question.question_class.value}, "
+        f"question_slice={question.question_slice}"
+        ")"
+    )
+
+
 def submit_interpretation(
     continuation: str,
     result: m.SemanticInterpretationResult,
@@ -175,11 +199,16 @@ def submit_interpretation(
                 _question_identity(submitted.question), submitted.question
             )
         if len(nominated_by_identity) > 1:
+            submitted = "; ".join(
+                _format_question_identity(question)
+                for question in nominated_by_identity.values()
+            )
             raise _CorrectionRejected(
                 (
-                    "refresh correction admits exactly one original "
-                    "question per unit; submit each additional correction "
-                    "in its own refresh cycle",
+                    "refresh correction admits exactly one persisted "
+                    "original question per unit; conflicting submitted "
+                    f"question identities: {submitted}; submit each "
+                    "additional correction in its own refresh cycle",
                 )
             )
         if nominated_by_identity:
@@ -198,10 +227,12 @@ def submit_interpretation(
             ):
                 raise _CorrectionRejected(
                     (
-                        "correction question is not a persisted question "
-                        "for this subject; resolve the exact persisted "
-                        "scope via status/explain question coverage: "
-                        f"{correction_question.question_slice}",
+                        "correction question is not an exact persisted "
+                        "SemanticQuestionScope; submitted question identity: "
+                        f"{_format_question_identity(correction_question)}; "
+                        "reuse exactly one identity exposed by the "
+                        "PendingInterpretation correction brief or "
+                        "status/explain question coverage",
                     )
                 )
             for sid in (

@@ -689,6 +689,69 @@ class SerializationRoundTripTest(unittest.TestCase):
             self.fail("expected CanonicalDecodeError")
 
 
+class IngressFaultAggregationTest(unittest.TestCase):
+    """Ingress reports every shape fault it finds, not only the first.
+
+    Serial discovery (fix one field, get rejected for the next) made one
+    malformed call cost several round trips; each pass now reports all
+    sibling faults together while a single fault keeps its exact text.
+    """
+
+    def test_sibling_missing_fields_reported_together(self):
+        try:
+            m.from_canonical(m.SubjectSelector, {"$type": "SubjectSelector"})
+        except m.CanonicalDecodeError as exc:
+            text = str(exc)
+        else:
+            self.fail("expected CanonicalDecodeError")
+        self.assertIn("missing field 'exact_subject_id'", text)
+        self.assertIn("missing field 'name_or_locator'", text)
+
+    def test_sibling_collection_members_reported_together(self):
+        coverage = {
+            "$type": "InterpretationCoverage",
+            "subjects": [
+                {
+                    "$type": "SubjectId",
+                    "repository_id": 1,
+                    "subject_kind": "COMPONENT",
+                    "canonical_locator": "a",
+                },
+                {
+                    "$type": "SubjectId",
+                    "repository_id": 2,
+                    "subject_kind": "COMPONENT",
+                    "canonical_locator": "b",
+                },
+            ],
+            "evidence_scope": {
+                "$type": "EvidenceScope", "paths": [], "evidence_refs": []
+            },
+        }
+        try:
+            m.from_canonical(m.InterpretationCoverage, coverage)
+        except m.CanonicalDecodeError as exc:
+            text = str(exc)
+        else:
+            self.fail("expected CanonicalDecodeError")
+        self.assertIn("[0]: repository_id", text)
+        self.assertIn("[1]: repository_id", text)
+
+    def test_single_fault_text_is_unchanged(self):
+        try:
+            m.from_canonical(
+                m.SubjectSelector,
+                {"$type": "SubjectSelector", "exact_subject_id": None},
+            )
+        except m.CanonicalDecodeError as exc:
+            self.assertEqual(
+                str(exc),
+                "missing field 'name_or_locator' for SubjectSelector",
+            )
+        else:
+            self.fail("expected CanonicalDecodeError")
+
+
 class CorePurityTest(unittest.TestCase):
     def test_core_imports_values_only(self):
         import ast

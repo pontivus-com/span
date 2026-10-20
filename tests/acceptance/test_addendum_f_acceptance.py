@@ -73,8 +73,8 @@ def _harness(tmp, files, wiring=None):
     store = SqliteSemanticStore(":memory:")
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
-            repository_locator=f"graft:{tmp}",
-            structural_provider_config=f"graft:{tmp}",
+            repository_locator=str(tmp),
+            structural_provider_config=str(tmp),
             authority_seeds=(),
         ),
         repository_id=REPO, structural=structural, evidence=evidence,

@@ -699,6 +699,143 @@ class CorrectionBindingTest(unittest.TestCase):
         self.assertIsInstance(answer, m.SemanticAnswer)
         return pending.request.question, answer.content.claims[0]
 
+    def _challenge(self, structural, evidence, store, continuations):
+        challenged = ops.refresh(
+            ops.SemanticRefreshRequest(
+                repository_id=REPO,
+                target=m.SubjectSelector(None, "src/seed.py", (), None),
+                bounds=_bounds(),
+                stale_only=False,
+            ),
+            structural=structural, evidence=evidence, store=store,
+            continuations=continuations,
+        )
+        self.assertIsInstance(challenged, PendingInterpretation)
+        return challenged
+
+    @staticmethod
+    def _coverage(scope):
+        return m.InterpretationCoverage(
+            subjects=(scope.subject,),
+            question_slice=scope.question_slice,
+            evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
+            declared_complete=True,
+            question=scope,
+            disposition=m.SemanticQuestionDisposition.ANSWERED,
+            result_refs=(),
+            resolution_requirements=(),
+            disposition_basis="test correction identity",
+            question_evidence=(),
+        )
+
+    def test_same_slice_different_subject_is_rejected(self):
+        structural, evidence, store = _harness()
+        try:
+            continuations = ContinuationStore()
+            original_scope, _ = self._establish(
+                structural, evidence, store, continuations
+            )
+            challenged = self._challenge(
+                structural, evidence, store, continuations
+            )
+            wrong = m.SemanticQuestionScope(
+                scope_root=original_scope.scope_root,
+                subject=_sid("src/other.py"),
+                question_class=original_scope.question_class,
+                question_slice=original_scope.question_slice,
+                materiality_basis=original_scope.materiality_basis,
+            )
+            self._assert_rejected(original_scope, wrong, challenged,
+                                  structural, evidence, store, continuations)
+        finally:
+            store.close()
+
+    def test_same_subject_and_slice_different_class_is_rejected(self):
+        structural, evidence, store = _harness()
+        try:
+            continuations = ContinuationStore()
+            original_scope, _ = self._establish(
+                structural, evidence, store, continuations
+            )
+            challenged = self._challenge(
+                structural, evidence, store, continuations
+            )
+            wrong = m.SemanticQuestionScope(
+                scope_root=original_scope.scope_root,
+                subject=original_scope.subject,
+                question_class=m.SemanticQuestionClass.CQ_09,
+                question_slice=original_scope.question_slice,
+                materiality_basis=original_scope.materiality_basis,
+            )
+            self._assert_rejected(original_scope, wrong, challenged,
+                                  structural, evidence, store, continuations)
+        finally:
+            store.close()
+
+    def test_same_subject_and_class_different_scope_root_is_rejected(self):
+        structural, evidence, store = _harness()
+        try:
+            continuations = ContinuationStore()
+            original_scope, _ = self._establish(
+                structural, evidence, store, continuations
+            )
+            challenged = self._challenge(
+                structural, evidence, store, continuations
+            )
+            wrong = m.SemanticQuestionScope(
+                scope_root=_sid("src/other.py"),
+                subject=original_scope.subject,
+                question_class=original_scope.question_class,
+                question_slice=original_scope.question_slice,
+                materiality_basis=original_scope.materiality_basis,
+            )
+            self._assert_rejected(original_scope, wrong, challenged,
+                                  structural, evidence, store, continuations)
+        finally:
+            store.close()
+
+    def _assert_rejected(
+        self, original_scope, wrong, challenged, structural, evidence,
+        store, continuations,
+    ):
+        with self.assertRaises(InterpretationUnitRejected) as cm:
+            ops.submit_interpretation(
+                challenged.continuation,
+                m.SemanticInterpretationResult(
+                    claims=(_purpose_claim(),), relationships=(),
+                    candidate_subjects=(), candidate_conflicts=(),
+                    proposed_question_coverages=(self._coverage(wrong),),
+                    candidate_withdrawals=(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
+            )
+        message = str(cm.exception)
+        self.assertIn(
+            "correction question is not an exact persisted "
+            "SemanticQuestionScope",
+            message,
+        )
+        self.assertIn("scope_root.repository_id=", message)
+        self.assertIn("subject.canonical_locator=", message)
+        self.assertIn("question_class=", message)
+        self.assertIn("question_slice=", message)
+        corrected = ops.submit_interpretation(
+            challenged.continuation,
+            m.SemanticInterpretationResult(
+                claims=(_purpose_claim("Sorts seeds reliably"),),
+                relationships=(),
+                candidate_subjects=(), candidate_conflicts=(),
+                proposed_question_coverages=(
+                    self._coverage(original_scope),
+                ),
+                candidate_withdrawals=(),
+            ),
+            structural=structural, evidence=evidence, store=store,
+            continuations=continuations,
+        )
+        self.assertIsInstance(corrected, m.SemanticAnswer)
+
     def test_unchanged_source_correction_preserves_question(self):
         structural, evidence, store = _harness()
         try:
@@ -927,7 +1064,15 @@ class CorrectionBindingTest(unittest.TestCase):
                     structural=structural, evidence=evidence, store=store,
                     continuations=continuations,
                 )
-            self.assertIn("exactly one original question", str(cm.exception))
+            self.assertIn(
+                "refresh correction admits exactly one persisted original "
+                "question per unit",
+                str(cm.exception),
+            )
+            self.assertIn(
+                "scope_root.canonical_locator=src/seed.py",
+                str(cm.exception),
+            )
             # The rejected correction retains the live continuation: a
             # corrected single-question submission succeeds on it.
             answer = ops.submit_interpretation(
@@ -1705,6 +1850,61 @@ class DocumentMappingTest(unittest.TestCase):
             repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
             canonical_locator=locator,
         )
+
+    def test_partial_mapping_batch_named_and_atomic(self):
+        """SPMCP-04/H: a partial batch rejects by EvidenceId, writes no
+        accounting, and leaves the continuation live for correction."""
+        structural, evidence, store = self._doc_harness()
+        try:
+            continuations = ContinuationStore()
+            pending = self._start_doc_campaign(
+                structural, evidence, store, continuations
+            )
+            items = pending.request.target_inventory_items
+            self.assertEqual(len(items), 3)
+            partial = m.SemanticInterpretationResult(
+                claims=(), relationships=(),
+                candidate_subjects=(), candidate_conflicts=(),
+                proposed_question_coverages=(),
+                candidate_withdrawals=(),
+                proposed_target_inventory_accounting=(
+                    m.CandidateTargetInventoryAccount(
+                        evidence_id=items[0].evidence_ref.evidence_id,
+                        resolution_requirements=(
+                            m.ResolutionRequirement(
+                                kind=(
+                                    m.ResolutionKind
+                                    .MISSING_SEMANTIC_COVERAGE
+                                ),
+                                subject_or_claim=None,
+                                description="not examined in this test",
+                                supporting_context=(),
+                            ),
+                        ),
+                    ),
+                ),
+                proposed_target_questions=(),
+            )
+            with self.assertRaises(InterpretationUnitRejected) as ctx:
+                ops.submit_interpretation(
+                    pending.continuation, partial,
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                )
+            message = str(ctx.exception)
+            for item in items[1:]:
+                self.assertIn(item.evidence_ref.evidence_id.value, message)
+            self.assertIn(
+                "bound mapping item has no accounting candidate", message
+            )
+            assoc = store.load_target_association(
+                REPO, pending.request.target_id
+            )
+            assert assoc is not None
+            self.assertEqual(assoc.inventory_accounting, ())
+            self.assertEqual(len(continuations), 1)
+        finally:
+            store.close()
 
     def test_subject_null_document_admits_real_area(self):
         structural, evidence, store = self._doc_harness()

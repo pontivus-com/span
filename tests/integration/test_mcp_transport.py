@@ -389,6 +389,85 @@ class DispatchTest(unittest.TestCase):
         finally:
             adapter.contexts[REPO].store.close()
 
+    def test_mapping_batch_rejection_names_evidence_id(self):
+        """SPMCP-04: an account outside the bound batch rejects by stable
+        EvidenceId over the wire and leaves the continuation usable."""
+        adapter, agent = _harness()
+        try:
+            pending = _dispatch(
+                adapter,
+                "initialize_target",
+                {
+                    "repository_id": REPO,
+                    "target": m.to_canonical(
+                        m.EvidenceScope(
+                            paths=("src/tools.py",), evidence_refs=()
+                        )
+                    ),
+                    "objective": "Understand the tool boundary and its use.",
+                },
+            )
+            self.assertFalse(pending.is_error)
+            envelope = json.loads(pending.content)
+            task = _schema.from_wire(
+                m.SemanticInterpretationRequest,
+                envelope["request"],
+            )
+            item_ref = task.target_inventory_items[0].evidence_ref
+
+            def _unresolved(evidence_id):
+                return m.CandidateTargetInventoryAccount(
+                    evidence_id=evidence_id,
+                    resolution_requirements=(
+                        m.ResolutionRequirement(
+                            kind=(
+                                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
+                            ),
+                            subject_or_claim=None,
+                            description="not examined in this test",
+                            supporting_context=(),
+                        ),
+                    ),
+                )
+
+            def _submit(account):
+                return _dispatch(
+                    adapter,
+                    "submit_interpretation",
+                    {
+                        "continuation": envelope["continuation"],
+                        "result": m.to_canonical(
+                            m.SemanticInterpretationResult(
+                                claims=(), relationships=(),
+                                governing_source_refs=(),
+                                diagnostics=("mapping",),
+                                candidate_subjects=(),
+                                candidate_conflicts=(),
+                                proposed_question_coverages=(),
+                                candidate_withdrawals=(),
+                                proposed_target_inventory_accounting=(
+                                    account,
+                                ),
+                                proposed_target_questions=(),
+                            )
+                        ),
+                        "repository_id": REPO,
+                    },
+                )
+
+            failed = _submit(_unresolved(m.EvidenceId("ev-not-bound")))
+            self.assertTrue(failed.is_error)
+            payload = json.loads(failed.content)
+            self.assertEqual(payload["error"], "validation")
+            self.assertIn("ev-not-bound", payload["message"])
+            self.assertIn("outside the bound mapping batch",
+                          payload["message"])
+
+            corrected = _submit(_unresolved(item_ref.evidence_id))
+            self.assertFalse(corrected.is_error)
+        finally:
+            adapter.contexts[REPO].store.close()
+
     def test_explain_suspend_then_submit_over_wire(self):
         adapter, agent = _harness()
         try:
@@ -610,6 +689,127 @@ class DispatchTest(unittest.TestCase):
             )
         finally:
             adapter.contexts[REPO].store.close()
+
+    def test_correction_validation_names_exact_question_identity(self):
+        """SPMCP-02: a wrong correction question is a validation error
+        naming the complete canonical identity, and the same live
+        continuation accepts the corrected submission."""
+        from span.ports.interpretation import PendingInterpretation
+
+        adapter, _ = _harness()
+        context = adapter.contexts[REPO]
+        try:
+            pending = ops.explain(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        exact_subject_id=None,
+                        name_or_locator="src/tools.py",
+                        expected_kinds=(),
+                        retrieval_scope_hint=None,
+                    ),
+                    bounds=DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
+                ),
+                structural=context.structural, evidence=context.evidence,
+                store=context.store,
+                continuations=context.continuations,
+            )
+            self.assertIsInstance(pending, PendingInterpretation)
+            original_scope = pending.request.question
+            coverage = m.InterpretationCoverage(
+                subjects=(original_scope.subject,),
+                question_slice=original_scope.question_slice,
+                evidence_scope=m.EvidenceScope(
+                    paths=(), evidence_refs=()
+                ),
+                declared_complete=True,
+                question=original_scope,
+                disposition=m.SemanticQuestionDisposition.ANSWERED,
+                result_refs=(),
+                resolution_requirements=(),
+                disposition_basis="transport correction test",
+                question_evidence=(),
+            )
+            answered = ops.submit_interpretation(
+                pending.continuation,
+                m.SemanticInterpretationResult(
+                    claims=(_candidate(),), relationships=(),
+                    candidate_subjects=(), candidate_conflicts=(),
+                    proposed_question_coverages=(coverage,),
+                    candidate_withdrawals=(),
+                ),
+                structural=context.structural, evidence=context.evidence,
+                store=context.store,
+                continuations=context.continuations,
+            )
+            self.assertIsInstance(answered, m.SemanticAnswer)
+            challenged = _dispatch(
+                adapter,
+                "refresh",
+                {
+                    "repository_id": REPO,
+                    "target": _selector_args(),
+                    "stale_only": False,
+                },
+            )
+            self.assertFalse(challenged.is_error)
+            envelope = json.loads(challenged.content)
+            wrong = m.SemanticQuestionScope(
+                scope_root=original_scope.scope_root,
+                subject=original_scope.subject,
+                question_class=m.SemanticQuestionClass.CQ_09,
+                question_slice=original_scope.question_slice,
+                materiality_basis=original_scope.materiality_basis,
+            )
+            wrong_coverage = m.InterpretationCoverage(
+                subjects=(wrong.subject,),
+                question_slice=wrong.question_slice,
+                evidence_scope=m.EvidenceScope(
+                    paths=(), evidence_refs=()
+                ),
+                declared_complete=True,
+                question=wrong,
+                disposition=m.SemanticQuestionDisposition.ANSWERED,
+                result_refs=(),
+                resolution_requirements=(),
+                disposition_basis="transport correction test",
+                question_evidence=(),
+            )
+            rejected = _dispatch(
+                adapter,
+                "submit_interpretation",
+                {
+                    "continuation": envelope["continuation"],
+                    "result": m.to_canonical(
+                        m.SemanticInterpretationResult(
+                            claims=(_candidate(),), relationships=(),
+                            candidate_subjects=(),
+                            candidate_conflicts=(),
+                            proposed_question_coverages=(wrong_coverage,),
+                            candidate_withdrawals=(),
+                        )
+                    ),
+                    "repository_id": REPO,
+                },
+            )
+            self.assertTrue(rejected.is_error)
+            body = json.loads(rejected.content)
+            self.assertEqual(body["error"], "validation")
+            self.assertIn(
+                "correction question is not an exact persisted "
+                "SemanticQuestionScope",
+                body["message"],
+            )
+            self.assertIn(
+                f"scope_root.repository_id={REPO}", body["message"]
+            )
+            self.assertIn(
+                "subject.canonical_locator=src/tools.py",
+                body["message"],
+            )
+            self.assertIn("question_class=CQ_09", body["message"])
+        finally:
+            context.store.close()
 
     def test_malformed_submit_preserves_continuation(self):
         """Invalid submissions never consume the continuation (G-04).
@@ -867,8 +1067,8 @@ class DispatchTest(unittest.TestCase):
             try:
                 ops.initialize_repository(
                     ops.SemanticInitializeRepositoryRequest(
-                        repository_locator=f"graft:{root}",
-                        structural_provider_config=f"graft:{root}",
+                        repository_locator=str(root),
+                        structural_provider_config=str(root),
                         authority_seeds=(),
                     ),
                     repository_id=REPO,
@@ -919,10 +1119,10 @@ class DispatchTest(unittest.TestCase):
         from span.shell import mcp_server
 
         args = mcp_server._parse_args(
-            ["--data-dir", "/tmp/span-data", "--repo", "graft:/repo"]
+            ["--data-dir", "/tmp/span-data", "--repo", "/repo"]
         )
         self.assertEqual(str(args.data_dir), "/tmp/span-data")
-        self.assertEqual(args.repo, ["graft:/repo"])
+        self.assertEqual(args.repo, ["/repo"])
 
     def test_empty_adapter_starts_nothing(self):
         """Startup without --repo provisions nothing (G-03).
@@ -952,7 +1152,7 @@ class DispatchTest(unittest.TestCase):
                 "initialize_repository",
                 {
                     "repository_locator": "x",
-                    "structural_provider_config": "graft:/x",
+                    "structural_provider_config": "/x",
                 },
             )
             self.assertTrue(init.is_error)
@@ -1162,7 +1362,7 @@ class ProvisionPathTest(unittest.TestCase):
             config = mcp_server.ServerConfig(data_dir=tmp / "data")
             request = ops.SemanticInitializeRepositoryRequest(
                 repository_locator=str(work),
-                structural_provider_config=f"graft:{work}",
+                structural_provider_config=str(work),
                 authority_seeds=(),
             )
             context, result = mcp_server.provision_repository(

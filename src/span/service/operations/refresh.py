@@ -195,6 +195,14 @@ def refresh(
             "to find the stale scope; repo-wide refresh without "
             "enumeration is rejected"
         )
+    if request.stale_only is False and not isinstance(
+        request.target, m.SubjectSelector
+    ):
+        raise RefreshScopeError(
+            "stale_only=false is an unchanged-source/current challenge "
+            "and requires an exact SubjectSelector; EvidenceScope "
+            "remains valid only for ordinary scoped stale refresh"
+        )
     subjects, ambiguity = _resolve_scope_subjects(
         request.repository_id, request.target,
         structural=structural, store=store, bounds=bounds,

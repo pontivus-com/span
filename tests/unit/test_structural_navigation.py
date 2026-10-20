@@ -6,6 +6,7 @@ Tests pin two-tier freshness, version-bound cursors, exhaustive
 traversal, the four neighbors outcomes, and strict transport mapping.
 """
 
+import json
 import unittest
 
 from span.core import model as m
@@ -599,9 +600,38 @@ class StaleContinuationEnvelopeTest(unittest.TestCase):
                 },
             )
             self.assertTrue(out.is_error)
-            self.assertIn("stale_continuation", out.content)
+            body = json.loads(out.content)
+            self.assertEqual(body["error"], "stale_continuation")
+            self.assertIn(
+                "restart the listing from page one", body["message"]
+            )
+            self.assertIn("page_token null", body["message"])
         finally:
             store.close()
+
+
+class LocateDescriptionTest(unittest.TestCase):
+    """SPMCP-06: the tool description is self-sufficient about modes."""
+
+    def test_description_names_modes_and_arguments(self):
+        from span.shell.mcp import TOOL_DESCRIPTIONS
+
+        text = TOOL_DESCRIPTIONS["locate"]
+        for token in (
+            "SYMBOL", "FILE_OUTLINE", "TARGET_MEMBERS",
+            "optional target scope", "file locator",
+            "exact target scope", "pgv:*",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, text)
+
+    def test_description_keeps_exact_and_contains_distinct(self):
+        from span.shell.mcp import TOOL_DESCRIPTIONS
+
+        text = TOOL_DESCRIPTIONS["locate"]
+        self.assertIn("never returns partial hits", text)
+        self.assertIn("provider order", text)
+        self.assertIn("never a semantic claim", text)
 
 
 if __name__ == "__main__":

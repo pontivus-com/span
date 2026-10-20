@@ -844,6 +844,10 @@ class StatusTest(unittest.TestCase):
             self.assertIs(notice.readiness, m.RepositoryReadiness.READY)
             self.assertGreater(notice.stale_count, 0)
             self.assertTrue(notice.recommended_action)
+            self.assertIn("exact SubjectSelector",
+                          notice.recommended_action)
+            self.assertIn("src/flow.py", notice.recommended_action)
+            self.assertNotIn("cont-", notice.recommended_action)
             # Read-only proof: the store still shows CURRENT (no mark).
             page = store.load_claims(
                 REPO, (_sid("src/flow.py"),), (), _bounds()

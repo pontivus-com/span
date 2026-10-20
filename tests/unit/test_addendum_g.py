@@ -314,6 +314,136 @@ class TransportDiagnosticsTest(unittest.TestCase):
             store.close()
 
 
+class RefreshTargetTypeTest(unittest.TestCase):
+    """SPMCP-03: stale refresh accepts either target; an unchanged-source
+    CURRENT challenge accepts only an exact SubjectSelector."""
+
+    # A fresh fixture has no persisted coverage, so an admitted stale
+    # refresh legitimately suspends for interpretation. These tests assert
+    # admission (no RefreshScopeError), not a particular terminal shape.
+
+    def test_stale_subject_selector_refresh_works(self):
+        from span.ports.interpretation import PendingInterpretation
+
+        structural, evidence, store = _harness()
+        try:
+            answer = ops.refresh(
+                ops.SemanticRefreshRequest(
+                    repository_id="repo-1",
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
+                    bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(
+                answer, (m.SemanticAnswer, PendingInterpretation)
+            )
+        finally:
+            store.close()
+
+    def test_stale_evidence_scope_refresh_works(self):
+        from span.ports.interpretation import PendingInterpretation
+
+        structural, evidence, store = _harness()
+        try:
+            answer = ops.refresh(
+                ops.SemanticRefreshRequest(
+                    repository_id="repo-1",
+                    target=m.EvidenceScope(
+                        paths=("src/main.py",), evidence_refs=()
+                    ),
+                    bounds=_bounds(),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(
+                answer, (m.SemanticAnswer, PendingInterpretation)
+            )
+        finally:
+            store.close()
+
+    def test_subject_selector_current_challenge_suspends(self):
+        from span.ports.interpretation import PendingInterpretation
+
+        structural, evidence, store = _harness()
+        try:
+            result = ops.refresh(
+                ops.SemanticRefreshRequest(
+                    repository_id="repo-1",
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
+                    bounds=_bounds(),
+                    stale_only=False,
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(result, PendingInterpretation)
+        finally:
+            store.close()
+
+    def test_evidence_scope_current_challenge_is_rejected(self):
+        structural, evidence, store = _harness()
+        try:
+            continuations = ContinuationStore()
+            with self.assertRaises(RefreshScopeError) as ctx:
+                ops.refresh(
+                    ops.SemanticRefreshRequest(
+                        repository_id="repo-1",
+                        target=m.EvidenceScope(
+                            paths=("src/main.py",), evidence_refs=()
+                        ),
+                        bounds=_bounds(),
+                        stale_only=False,
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                )
+            message = str(ctx.exception)
+            self.assertIn("exact SubjectSelector", message)
+            self.assertIn("EvidenceScope", message)
+            self.assertIn("ordinary scoped stale refresh", message)
+            # Rejection creates no continuation.
+            self.assertEqual(len(continuations), 0)
+        finally:
+            store.close()
+
+    def test_null_target_current_challenge_is_rejected(self):
+        structural, evidence, store = _harness()
+        try:
+            continuations = ContinuationStore()
+            with self.assertRaises(RefreshScopeError):
+                ops.refresh(
+                    ops.SemanticRefreshRequest(
+                        repository_id="repo-1",
+                        target=None,
+                        bounds=_bounds(),
+                        stale_only=False,
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=continuations,
+                )
+            self.assertEqual(len(continuations), 0)
+        finally:
+            store.close()
+
+    def test_error_envelope_document_lists_stale_continuation(self):
+        import pathlib
+
+        doc = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "docs" / "mcp.md"
+        ).read_text(encoding="utf-8")
+        for kind in (
+            "unknown_tool", "ingress", "unknown_repository",
+            "unavailable", "validation", "rejected", "transport",
+            "stale_continuation",
+        ):
+            self.assertIn(f"`{kind}`", doc)
+        self.assertIn("page one", doc)
+
+
 class StructuralDiagnosticTokensTest(unittest.TestCase):
     """G-3 §4.2a: closed token set beyond the dirty-tree happy path.
 
@@ -547,6 +677,78 @@ class EntryDecisionDescriptionTest(unittest.TestCase):
         self.assertIn("event-local", description)
         self.assertIn("never", description)
         self.assertIn("inventory", description)
+
+    def test_status_description_names_exact_next_step(self):
+        # SPMCP-05: stale/unverifiable -> scoped refresh; unassessed ->
+        # question-local explain; pending work -> only a returned
+        # continuation, never an invented token.
+        from span.shell.mcp import TOOL_DESCRIPTIONS
+
+        description = TOOL_DESCRIPTIONS["status"]
+        self.assertIn("exact SubjectSelector", description)
+        self.assertIn("question-local explain", description)
+        self.assertIn("never an invented cont-* token", description)
+
+
+class CoverageEntryGuidanceTest(unittest.TestCase):
+    """SPMCP-05: status entry requirements name the exact next step."""
+
+    def _write(self, store, coverage=None):
+        store.write_index_batch(m.CanonicalIndexBatch(
+            subjects=(m.Subject(_sid(), "main", None),),
+            coverage=() if coverage is None else (coverage,),
+        ))
+
+    def _requirements(self, structural, evidence, store):
+        answer = ops.status(
+            ops.SemanticStatusRequest(
+                repository_id="repo-1", target=None, bounds=_bounds(),
+            ),
+            structural=structural, evidence=evidence, store=store,
+            continuations=ContinuationStore(),
+        )
+        assert isinstance(answer, m.SemanticAnswer)
+        return answer.resolution_requirements
+
+    def test_unassessed_names_question_local_explain(self):
+        structural, evidence, store = _harness()
+        try:
+            self._write(store)
+            requirements = self._requirements(structural, evidence, store)
+            descriptions = " ".join(r.description for r in requirements)
+            self.assertIn("question-local explain", descriptions)
+            self.assertIn("a continuation exists only after", descriptions)
+        finally:
+            store.close()
+
+    def test_pending_names_returned_continuation_only(self):
+        structural, evidence, store = _harness()
+        try:
+            sid = _sid()
+            question = m.SemanticQuestionScope(
+                scope_root=sid, subject=sid,
+                question_class=m.SemanticQuestionClass.CQ_01,
+                question_slice="main purpose",
+                materiality_basis="test admission",
+            )
+            coverage = m.InterpretationCoverage(
+                subjects=(sid,), question_slice="main purpose",
+                evidence_scope=m.EvidenceScope(), declared_complete=False,
+                question=question,
+                disposition=m.SemanticQuestionDisposition.PENDING,
+                result_refs=(), resolution_requirements=(),
+                disposition_basis="test admission", question_evidence=(),
+            )
+            self._write(store, coverage)
+            requirements = self._requirements(structural, evidence, store)
+            descriptions = " ".join(r.description for r in requirements)
+            self.assertIn(
+                "continuation returned by the suspending operation",
+                descriptions,
+            )
+            self.assertIn("never invent a cont-* token", descriptions)
+        finally:
+            store.close()
 
 
 class RefreshAdmissionOrderTest(unittest.TestCase):

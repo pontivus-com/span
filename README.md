@@ -338,8 +338,14 @@ python3 span/scripts/install-span.py \
 Verify an existing installation:
 
 ```bash
-span-install --verify
+span-install --verify-only
 ```
+
+The doctor is read-only. It reports runtime verification, repository
+readiness, and supported host-registration observability. OpenCode is
+inspected from its JSON config when one is available; Codex registration is
+reported as `manual` because Span's read-only contract cannot deterministically
+inspect it.
 
 Check that the MCP executable is available:
 
@@ -631,6 +637,12 @@ Span exposes twelve canonical MCP operations. No semantic_* aliases exist.
 | Find files, symbols, outlines, or target members | `locate` |
 | Inspect bounded structural adjacency | `neighbors` |
 
+Every non-current `status` entry names the next exact step: stale or
+unverifiable work uses `refresh` with that entry's exact `SubjectSelector`;
+unassessed work uses a question-local `explain`; pending question work
+continues only through the continuation returned by the suspending
+operation. Never invent a `cont-*` token.
+
 See [the MCP reference](docs/mcp.md) for exact request and response contracts.
 
 ---
@@ -664,6 +676,12 @@ for bounded relationships such as:
 - callees;
 - upstream adjacency;
 - downstream adjacency.
+
+`locate` takes exactly one mode: `SYMBOL` (requires `query`, optional
+target scope; `EXACT` resolves an exact locator to its declaration/name
+with no partial matches, `CONTAINS` returns substring matches in provider
+order), `FILE_OUTLINE` (one file locator, no target scope or match mode),
+or `TARGET_MEMBERS` (exact target scope, no query).
 
 These operations answer structural questions.
 
@@ -1068,7 +1086,8 @@ Span does not:
 
 - write Span semantic state into the target repository;
 - write provider artifacts into the target repository;
-- modify the target's `graft/` tree, Markdown cards, or dotfiles.
+- modify the target's structural index artifacts, Markdown cards, or
+  dotfiles.
 
 The configured data directory holds Span's persistent state, provider
 caches, and exchange data. Provider caches are bounded (one current

@@ -30,24 +30,16 @@ __all__ = [
 def repo_root_from_config(config: str) -> _pathlib.Path:
     """Resolve a repository locator to its filesystem root.
 
-    Accepts the provider-neutral plain path (canonical) and the legacy
-    ``graft:<path>`` form (transitional). Anything else raises.
+    The locator is a plain provider-neutral repository path. Provider
+    selection stays shell-internal, so a scheme-prefixed config is never
+    part of the public surface; anything other than a plain path raises.
     """
-    scheme, _, rest = config.partition(":")
-    # A plain path may itself contain a colon only as a Windows drive
-    # letter; Span targets are Linux paths, so treat `graft:` prefix
-    # plus an absolute rest as legacy, and everything else by existence.
-    if scheme == "graft" and rest:
-        return _pathlib.Path(rest)
-    candidate = _pathlib.Path(config)
-    # Reject other opaque scheme-like configs (e.g. memory:test) here;
-    # the in-memory source is constructed directly by its owners.
-    if scheme in ("memory",) and rest:
+    if not config or ":" in config:
         raise ValueError(
             f"unsupported structural provider config: {config!r} "
             f"(pass a plain repository path)"
         )
-    return candidate
+    return _pathlib.Path(config)
 
 
 def repository_id_from_config(config: str) -> str:
@@ -62,39 +54,24 @@ def structural_source_from_config(
     """Load the configured structural source without mutating the target.
 
     Returns (source, repository_id): identity assignment (plan §8.2.1)
-    lives here, derived deterministically from the locator. Accepted
-    locators: a plain repository path (canonical) or legacy
-    ``graft:<repo-path>`` (transitional). With ``data_dir`` the graft
-    provider uses the provider-owned cache
+    lives here, derived deterministically from the locator. The only
+    accepted locator is a plain repository path; provider selection is
+    shell-internal and never named by the caller. With ``data_dir`` the
+    graft provider uses the provider-owned cache
     ``<data-dir>/structural/<repository-id>/``; without it (tests) the
     legacy in-target index is used. Construction never builds: a
     missing index yields an unavailable source that explicit
     `initialize_repository` / `refresh` may build via `ensure_current`;
     ordinary reads fail closed.
     """
-    scheme, _, rest = config.partition(":")
-    if scheme == "graft" and rest:
-        repo_path = _pathlib.Path(rest)
-        repository_id = repo_path.name
-        artifact = (
-            default_artifact_dir(data_dir, repository_id)
-            if data_dir is not None
-            else None
-        )
-        return (
-            GraftStructuralSource(
-                repository_id, repo_path, artifact_dir=artifact
-            ),
-            repository_id,
-        )
-    if scheme == "memory" and rest:
+    if config.startswith("memory:"):
         raise ValueError(
             f"unsupported structural provider config: {config!r} "
             f"(in-memory source is constructed directly by its owners)"
         )
-    # Plain provider-neutral path (canonical). Scheme-like configs other
-    # than legacy graft:/transitional are rejected; Linux target paths
-    # do not contain colons.
+    # Provider-neutral plain path only. Provider selection stays
+    # shell-internal; Linux target paths do not contain colons, so a
+    # scheme-like config is rejected rather than interpreted.
     if ":" in config:
         raise ValueError(
             f"unsupported structural provider config: {config!r} "

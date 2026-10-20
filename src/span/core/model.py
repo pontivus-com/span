@@ -2663,11 +2663,16 @@ def _decode_value(hint: object, data: object) -> object:
         if item_hint is _typing.Any:
             raise CanonicalDecodeError("untyped collection decoding refused")
         decoded: list[object] = []
+        faults: list[str] = []
         for index, item in enumerate(data):
             try:
                 decoded.append(_decode_value(item_hint, item))
             except CanonicalDecodeError as exc:
-                raise exc.with_segment(f"[{index}]") from None
+                faults.append(str(exc.with_segment(f"[{index}]")))
+        # Aggregate sibling member faults (one reported call, not one per
+        # retry); a single fault keeps its exact previous text.
+        if faults:
+            raise CanonicalDecodeError("; ".join(faults))
         if origin is tuple or hint is tuple:
             return tuple(decoded)
         return decoded
@@ -2692,24 +2697,25 @@ def _decode_dataclass(cls: type, data: dict) -> object:
         raise CanonicalDecodeError(f"cannot resolve {cls.__name__}: {exc}") from exc
     names = {f.name for f in _fields(cls)}
     unknown = sorted(key for key in data if key != "$type" and key not in names)
+    faults: list[str] = []
     if unknown:
-        raise CanonicalDecodeError(
-            f"unknown fields for {cls.__name__}: {unknown}"
-        )
+        faults.append(f"unknown fields for {cls.__name__}: {unknown}")
     kwargs: dict[str, object] = {}
     for f in _fields(cls):
         if f.name not in data:
             # Missing field is acceptable only when the dataclass supplies
             # a default; unknown fields are never accepted (strict).
             if f.default is _MISSING and f.default_factory is _MISSING:  # type: ignore[misc]
-                raise CanonicalDecodeError(
-                    f"missing field {f.name!r} for {cls.__name__}"
-                )
+                faults.append(f"missing field {f.name!r} for {cls.__name__}")
             continue
         try:
             kwargs[f.name] = _decode_value(hints[f.name], data[f.name])
         except CanonicalDecodeError as exc:
-            raise exc.with_segment(f.name) from None
+            faults.append(str(exc.with_segment(f.name)))
+    # Aggregate every fault in this object so one call reports all of
+    # them; a single fault keeps its exact previous text.
+    if faults:
+        raise CanonicalDecodeError("; ".join(faults))
     try:
         return cls(**kwargs)  # type: ignore[arg-type]
     except (ValueError, TypeError) as exc:
