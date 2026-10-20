@@ -772,14 +772,16 @@ def prepare_interpretation_task(
             submission_rules=m.TASK_BRIEF_SUBMISSION_RULES + (
                 "Mapping submissions propose exactly one TargetInventoryAccount "
                 "for the current item; no completed claim payload is required.",
-                "First admission of an area to this target requires at least "
-                "one target question in the same unit: reuse existing current "
-                "coverage via proposed_target_questions where applicable, "
-                "otherwise admit new coverage as PENDING.",
-                "Each new target question's subject must resolve in the "
-                "store at admission; mapping tasks cannot co-admit "
-                "non-area subjects under the orphan rule, so establish "
-                "the anchor first through question-local examination.",
+                "A newly admitted area receives exactly one service-owned "
+                "PENDING CQ-01 seed; do not manufacture a target question "
+                "for a new area. Use proposed_target_questions only to "
+                "reuse existing current coverage whose scope root and "
+                "subject are already persisted.",
+                "The anchor subject is discovery input, not an admitted "
+                "semantic area. If an anchor question is needed, establish "
+                "it first through question-local examination (explain), "
+                "then reuse it; mapping tasks cannot co-admit non-area "
+                "subjects under the orphan rule.",
             ) + (
                 (
                     "The anchor subject is a synthetic structural fallback "

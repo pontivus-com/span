@@ -1994,6 +1994,10 @@ class DocumentMappingTest(unittest.TestCase):
                 + task.request.brief.submission_rules
             )
             self.assertIn("subject: null", text)
+            self.assertIn("service-owned PENDING CQ-01 seed", text)
+            self.assertNotIn(
+                "requires at least one target question", text
+            )
         finally:
             store.close()
 

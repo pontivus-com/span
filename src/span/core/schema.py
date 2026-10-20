@@ -43,10 +43,6 @@ def _project_hint(
 ) -> dict:
     nullable, inner = _is_optional(hint)
     schema = _project_inner(inner, defs, seen)
-    # Single-dataclass position (including ``X | None``): the tag is not
-    # advertised and must be absent on the wire (J-8/S6.2).
-    if isinstance(inner, type) and _dataclasses.is_dataclass(inner):
-        schema = {"allOf": [schema, {"not": {"required": ["$type"]}}]}
     if nullable:
         schema = {"anyOf": [schema, {"type": "null"}]}
     return schema
@@ -112,10 +108,9 @@ def _project_inner(
                 ):
                     _ensure_def(member, defs, seen)
                     refs.append({
-                        "allOf": [
-                            {"$ref": f"#/$defs/{member.__name__}"},
-                            {"required": ["$type"]},
-                        ]
+                        "$ref": (
+                            f"#/$defs/{member.__name__}__tag"
+                        )
                     })
                 else:
                     refs.append(_project_hint(member, defs, seen))
@@ -137,6 +132,23 @@ def _project_inner(
     raise ValueError(f"unprojectable schema hint: {hint!r}")
 
 
+def _tag_names(schema: dict) -> list[str]:
+    """Canonical member names advertised by a tagged union projection."""
+    names: list[str] = []
+    ref = schema.get("$ref")
+    if isinstance(ref, str) and ref.endswith("__tag"):
+        names.append(ref.rsplit("/", 1)[-1][: -len("__tag")])
+    for key in ("anyOf", "oneOf"):
+        for branch in schema.get(key, []) or []:
+            if isinstance(branch, dict):
+                names.extend(_tag_names(branch))
+    if schema.get("type") == "array":
+        items = schema.get("items")
+        if isinstance(items, dict):
+            names.extend(_tag_names(items))
+    return list(dict.fromkeys(names))
+
+
 def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
     name = cls.__name__
     if name in defs or name in seen:
@@ -152,6 +164,14 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
         field_schema = _project_hint(
             hints.get(field.name, str), defs, seen
         )
+        tags = _tag_names(field_schema)
+        if len(tags) >= 2:
+            field_schema = {
+                **field_schema,
+                "description": (
+                    "Allowed $type values: " + ", ".join(tags) + "."
+                ),
+            }
         # Defaults advertised equal canonical decoder defaults.
         if (
             field.default is not _dataclasses.MISSING
@@ -172,10 +192,10 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
             required.append(field.name)
         properties[field.name] = field_schema
     # J-8/S6.2: the tag is a property of the field POSITION, not the
-    # definition. Each carrier keeps one shared definition advertising
-    # `$type` as an OPTIONAL constant; an unambiguous use site forbids it
-    # and a genuine dataclass-union branch requires it (see _project_*).
-    properties["$type"] = {"const": name}
+    # definition. Each carrier projects an untagged ingress form for
+    # statically unambiguous use sites and a tagged ingress form for
+    # genuine dataclass-union branches. The accepted grammar is
+    # unchanged; only the advertised representation differs.
     definition: dict[str, object] = {
         "type": "object",
         "properties": properties,
@@ -183,6 +203,14 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
         "additionalProperties": False,
     }
     defs[name] = definition
+    tagged_properties = dict(properties)
+    tagged_properties["$type"] = {"const": name}
+    defs[f"{name}__tag"] = {
+        "type": "object",
+        "properties": tagged_properties,
+        "required": sorted([*required, "$type"]),
+        "additionalProperties": False,
+    }
 
 
 def definition_closure(root: type) -> dict[str, dict]:
@@ -190,6 +218,29 @@ def definition_closure(root: type) -> dict[str, dict]:
     defs: dict[str, dict] = {}
     _ensure_def(root, defs, set())
     return defs
+
+
+def _prune_defs(schema: dict, defs: dict[str, dict]) -> dict[str, dict]:
+    """Keep only definitions reachable from the root schema."""
+    used: set[str] = set()
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                name = ref.rsplit("/", 1)[-1]
+                if name in defs and name not in used:
+                    used.add(name)
+                    walk(defs[name])
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(schema)
+    return {name: definition for name, definition in defs.items()
+            if name in used}
 
 
 def schema_for_request(
@@ -232,6 +283,7 @@ def schema_for_request(
         "required": sorted(required),
         "additionalProperties": False,
     }
+    full_defs = _prune_defs(schema, full_defs)
     if full_defs:
         schema["$defs"] = full_defs
     if not omit_type_tag:

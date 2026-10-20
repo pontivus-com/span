@@ -332,23 +332,302 @@ class S3SchemaTest(unittest.TestCase):
             self.assertIn(rule, text)
 
     def test_type_tag_is_positional_not_definitional(self):
-        # J-8/S6.2: $type is a property of the field POSITION. Every
-        # definition advertises it as an OPTIONAL const (never required);
-        # a genuine dataclass-union branch requires it and an unambiguous
-        # use site forbids it — the decoder enforces both directions.
+        # J-8: $type is a property of the field POSITION. Each carrier
+        # projects an untagged ingress form for unambiguous positions and
+        # a tagged form (required $type const) for union branches. The
+        # decoder enforces the same grammar in both directions.
         from span.shell.mcp import TOOL_SCHEMAS
 
         for tool, schema in TOOL_SCHEMAS.items():
             for name, definition in schema.get("$defs", {}).items():
                 with self.subTest(tool=tool, definition=name):
                     properties = definition.get("properties", {})
-                    if "$type" in properties:
+                    required = definition.get("required", [])
+                    if name.endswith("__tag"):
+                        base = name[: -len("__tag")]
                         self.assertEqual(
-                            properties["$type"], {"const": name}
+                            properties.get("$type"), {"const": base}
                         )
-                        self.assertNotIn(
-                            "$type", definition.get("required", [])
-                        )
+                        self.assertIn("$type", required)
+                    else:
+                        self.assertNotIn("$type", properties)
+                        self.assertNotIn("$type", required)
+
+    @staticmethod
+    def _refs(schema):
+        refs = []
+        if isinstance(schema, dict):
+            if "$ref" in schema:
+                refs.append(schema["$ref"])
+            for value in schema.values():
+                refs.extend(S3SchemaTest._refs(value))
+        elif isinstance(schema, list):
+            for value in schema:
+                refs.extend(S3SchemaTest._refs(value))
+        return refs
+
+    def test_union_positions_use_tagged_definitions(self):
+        # The ten generator-verified request-ingress unions (locality plan
+        # §15.5) must each reference tagged definitions.
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        positions = [
+            ("authority", ("properties", "target")),
+            ("impact", ("properties", "affected_assertions")),
+            ("refresh", ("properties", "target")),
+            ("status", ("properties", "target")),
+            (
+                "submit_interpretation",
+                ("$defs", "CandidateSemanticClaim", "properties", "value"),
+            ),
+            (
+                "submit_interpretation",
+                ("$defs", "CandidateSemanticWithdrawal", "properties", "target"),
+            ),
+            (
+                "submit_interpretation",
+                ("$defs", "InterpretationCoverage", "properties", "result_refs"),
+            ),
+            (
+                "submit_interpretation",
+                (
+                    "$defs",
+                    "ResolutionRequirement",
+                    "properties",
+                    "subject_or_claim",
+                ),
+            ),
+            (
+                "submit_interpretation",
+                (
+                    "$defs",
+                    "ResolutionRequirement",
+                    "properties",
+                    "supporting_context",
+                ),
+            ),
+            (
+                "submit_interpretation",
+                ("$defs", "SemanticBasis", "properties", "input_refs"),
+            ),
+        ]
+        for tool, path in positions:
+            schema = TOOL_SCHEMAS[tool]
+            node = schema
+            for key in path:
+                node = node[key]
+            with self.subTest(tool=tool, path=path):
+                refs = self._refs(node)
+                self.assertTrue(refs)
+                self.assertTrue(
+                    all(r.endswith("__tag") for r in refs),
+                    refs,
+                )
+
+    def test_sole_positions_use_untagged_definitions(self):
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        target = TOOL_SCHEMAS["initialize_target"]["properties"]["target"]
+        self.assertEqual(target["$ref"], "#/$defs/EvidenceScope")
+        self.assertNotIn("allOf", target)
+
+        locate_target = TOOL_SCHEMAS["locate"]["properties"]["target"]
+        locate_refs = self._refs(locate_target)
+        self.assertIn("#/$defs/EvidenceScope", locate_refs)
+        self.assertFalse(any(r.endswith("__tag") for r in locate_refs))
+
+        seeds = TOOL_SCHEMAS["initialize_repository"]["properties"][
+            "authority_seeds"
+        ]["items"]
+        seed_refs = self._refs(seeds)
+        self.assertIn("#/$defs/EvidenceRef", seed_refs)
+        self.assertFalse(any(r.endswith("__tag") for r in seed_refs))
+
+    def test_union_fields_advertise_allowed_tags(self):
+        # The consumer truncates deep schemas to `unknown`; the field
+        # description must still name the accepted `$type` values.
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
+        requirements = defs["ResolutionRequirement"]["properties"]
+        subject = requirements["subject_or_claim"]["description"]
+        for tag in ("SubjectId", "ClaimRef", "RelationshipRef"):
+            self.assertIn(tag, subject)
+        support = requirements["supporting_context"]["description"]
+        for tag in ("ClaimRef", "RelationshipRef", "EvidenceRef"):
+            self.assertIn(tag, support)
+        input_refs = defs["SemanticBasis"]["properties"]["input_refs"][
+            "description"
+        ]
+        for tag in ("ClaimRef", "RelationshipRef", "EvidenceRef"):
+            self.assertIn(tag, input_refs)
+
+    def test_claim_value_description_carries_kind_mapping(self):
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
+        names = [
+            n for n in ("CandidateSemanticClaim", "CandidateSemanticClaim__tag")
+            if n in defs
+        ]
+        self.assertTrue(names)
+        for claim in names:
+            value = defs[claim]["properties"]["value"]
+            self.assertIn("Allowed $type values:", value["description"])
+            self.assertIn("PURPOSE=PurposeValue", value["description"])
+            self.assertIn(
+                "CAPABILITY_MEMBERSHIP=CapabilityMembershipValue",
+                value["description"],
+            )
+
+    def test_target_question_reuse_is_described_as_persisted_only(self):
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
+        names = [
+            n for n in ("SemanticInterpretationResult",
+                        "SemanticInterpretationResult__tag")
+            if n in defs
+        ]
+        self.assertTrue(names)
+        for result in names:
+            prop = defs[result]["properties"]["proposed_target_questions"]
+            self.assertIn("Reuse only", prop["description"])
+            self.assertIn("already be persisted", prop["description"])
+            self.assertIn("PENDING CQ-01 seed", prop["description"])
+
+    def test_advertised_defaults_are_copy_paste_decodable(self):
+        # A default that contains `$type` at a sole position is a trap:
+        # the decoder rejects the value the schema tells the agent to use.
+        from span.shell.mcp import TOOL_SCHEMAS, decode_request
+
+        for tool, schema in TOOL_SCHEMAS.items():
+            bounds = schema.get("properties", {}).get("bounds")
+            if isinstance(bounds, dict) and "default" in bounds:
+                with self.subTest(tool=tool):
+                    self.assertNotIn("$type", bounds["default"])
+        decoded = decode_request(
+            "status",
+            {
+                "repository_id": "example-workspace",
+                "bounds": TOOL_SCHEMAS["status"]["properties"]["bounds"][
+                    "default"
+                ],
+            },
+        )
+        self.assertIsNotNone(decoded)
+
+    def test_initialize_repository_describes_plain_paths(self):
+        from span.shell.mcp import TOOL_DESCRIPTIONS
+
+        text = TOOL_DESCRIPTIONS["initialize_repository"]
+        self.assertIn("plain filesystem paths", text)
+        self.assertIn("not a JSON document", text)
+
+    def test_subject_selector_states_both_keys_required(self):
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        defs = TOOL_SCHEMAS["impact"]["$defs"]
+        names = [
+            n for n in ("SubjectSelector", "SubjectSelector__tag")
+            if n in defs
+        ]
+        self.assertTrue(names)
+        for selector in names:
+            prop = defs[selector]["properties"]["exact_subject_id"]
+            self.assertIn(
+                "Required along with name_or_locator",
+                prop["description"],
+            )
+            self.assertIn("exact_subject_id wins", prop["description"])
+
+    def test_candidate_claims_advertise_required_subject_and_value(self):
+        # Validation rejects an unset subject and the constructor rejects
+        # a kind/value mismatch; the advertised schema must not present
+        # either field as optional.
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
+        names = [
+            n for n in ("CandidateSemanticClaim", "CandidateSemanticClaim__tag")
+            if n in defs
+        ]
+        self.assertTrue(names)
+        for claim in names:
+            required = defs[claim]["required"]
+            self.assertIn("subject", required)
+            self.assertIn("value", required)
+            self.assertIn("assertion_nature", required)
+
+    def test_claim_value_classes_name_their_kind(self):
+        from span.core.model import CLAIM_VALUE_TYPE
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
+        found = 0
+        for kind, value_cls in CLAIM_VALUE_TYPE.items():
+            for name in (
+                value_cls.__name__,
+                f"{value_cls.__name__}__tag",
+            ):
+                if name not in defs:
+                    continue
+                found += 1
+                with self.subTest(name=name):
+                    self.assertIn(
+                        kind.value,
+                        defs[name].get("description", ""),
+                    )
+        self.assertGreater(found, 0)
+
+    def test_defs_are_reachable_and_all_refs_resolve(self):
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        for tool, schema in TOOL_SCHEMAS.items():
+            defs = schema.get("$defs", {})
+            used: set[str] = set()
+
+            def walk(node):
+                if isinstance(node, dict):
+                    ref = node.get("$ref")
+                    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                        name = ref.rsplit("/", 1)[-1]
+                        with self.subTest(tool=tool, ref=name):
+                            self.assertIn(name, defs)
+                        if name in defs and name not in used:
+                            used.add(name)
+                            walk(defs[name])
+                    for value in node.values():
+                        walk(value)
+                elif isinstance(node, list):
+                    for value in node:
+                        walk(value)
+
+            walk({k: v for k, v in schema.items() if k != "$defs"})
+            with self.subTest(tool=tool):
+                self.assertEqual(used, set(defs))
+
+    def test_initialize_target_advertises_non_empty_target(self):
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        target = TOOL_SCHEMAS["initialize_target"]["properties"]["target"]
+        self.assertEqual(target.get("minProperties"), 1)
+        locate_target = TOOL_SCHEMAS["locate"]["properties"]["target"]
+        self.assertNotIn("minProperties", locate_target)
+
+    def test_schema_size_budget(self):
+        # Guard against unreachable-definition regrowth. The current
+        # pruned size is ~22.7 KB for submit_interpretation and ~55 KB
+        # across all twelve tools. Further reduction would require a
+        # contract change, not a projection tweak.
+        import json
+
+        from span.shell.mcp import TOOL_SCHEMAS
+
+        submit = len(json.dumps(TOOL_SCHEMAS["submit_interpretation"]))
+        total = sum(len(json.dumps(schema)) for schema in TOOL_SCHEMAS.values())
+        self.assertLessEqual(submit, 25_000)
+        self.assertLessEqual(total, 60_000)
 
     def test_claim_kind_value_compatibility_advertised(self):
         # S3.1/S5.3: schemas reuse CLAIM_VALUE_TYPE so a fresh agent
@@ -376,22 +655,23 @@ class S3SchemaTest(unittest.TestCase):
                 branch["if"]["properties"]["kind"],
                 {"const": kind.value},
             )
-            ref = branch["then"]["properties"]["value"]["allOf"][0]["$ref"]
+            ref = branch["then"]["properties"]["value"]["$ref"]
             expected = (
                 "#/$defs/"
-                f"{CLAIM_VALUE_TYPE[kind].__name__}"
+                f"{CLAIM_VALUE_TYPE[kind].__name__}__tag"
             )
             self.assertEqual(ref, expected)
             self.assertIn(
-                CLAIM_VALUE_TYPE[kind].__name__, defs
+                f"{CLAIM_VALUE_TYPE[kind].__name__}__tag", defs
             )
-        if "SemanticClaim" in defs:
-            self.assertTrue(
-                any(
-                    "if" in item and "then" in item
-                    for item in defs["SemanticClaim"].get("allOf", [])
+        for tagged_claim in ("SemanticClaim", "SemanticClaim__tag"):
+            if tagged_claim in defs:
+                self.assertTrue(
+                    any(
+                        "if" in item and "then" in item
+                        for item in defs[tagged_claim].get("allOf", [])
+                    )
                 )
-            )
 
     def test_valid_candidate_decodes(self):
         # Positive round trip: a schema-conformant descriptive
