@@ -715,12 +715,14 @@ def preflight_facts(targets, seeds_path=None):
 
 
 def merge_opencode_config(config_path, span_cmd, dry_run=False):
-    """Merge the span MCP entry, removing obsolete structural-MCP entries.
+    """Normalize OpenCode to one supported V2 Span registration.
 
-    Span serves structural navigation itself, so a standalone structural
-    MCP entry left in the ``mcp`` map or the ``mcp.servers`` map is
-    deleted and counted; removal is verified from the written config,
-    not assumed. Nothing here is named in operator output.
+    The supported contract is ``mcp.servers.span`` with ``type: local``,
+    the installed command, ``codemode: false``, and ``disabled`` absent
+    or false. A legacy flat ``mcp.span`` registration is migrated and
+    removed; a duplicate pair is normalized to the nested entry.
+    Obsolete structural-MCP entries are deleted from either location and
+    counted; removal is verified from the written config, not assumed.
     """
     print(f"+ merge opencode config: {config_path}")
     if dry_run:
@@ -730,32 +732,50 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
         config = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
         raise SystemExit(f"cannot read opencode config {config_path}: {exc}")
-    entry = {
-        "type": "local",
-        "command": span_cmd,
-        "enabled": True,
-    }
     mcp = config.setdefault("mcp", {})
+    servers = mcp.get("servers")
+    if not isinstance(servers, dict):
+        servers = {}
     removed = []
     if "graft" in mcp:
         del mcp["graft"]
         removed.append("mcp")
-    for key in ("span",):
-        slot = mcp.get(key)
-        if isinstance(slot, dict):
-            slot["command"] = span_cmd
-            slot["enabled"] = True
-        else:
-            mcp[key] = dict(entry)
-    servers = mcp.get("servers")
-    if isinstance(servers, dict):
-        if "graft" in servers:
-            del servers["graft"]
-            removed.append("servers")
-        if "span" in servers:
-            slot = servers["span"]
-            if isinstance(slot, dict):
-                slot["command"] = span_cmd
+    if "graft" in servers:
+        del servers["graft"]
+        removed.append("servers")
+    nested = servers.get("span")
+    flat = mcp.get("span")
+    if isinstance(nested, dict):
+        slot = dict(nested)
+        slot.pop("enabled", None)
+        slot.update({
+            "type": "local",
+            "command": span_cmd,
+            "codemode": False,
+        })
+        if slot.get("disabled") is True:
+            slot.pop("disabled", None)
+        servers["span"] = slot
+    elif isinstance(flat, dict):
+        slot = dict(flat)
+        slot.pop("enabled", None)
+        slot.pop("disabled", None)
+        slot.update({
+            "type": "local",
+            "command": span_cmd,
+            "codemode": False,
+        })
+        servers["span"] = slot
+    else:
+        servers["span"] = {
+            "type": "local",
+            "command": list(span_cmd),
+            "codemode": False,
+        }
+    if servers:
+        mcp["servers"] = servers
+    if "span" in mcp:
+        del mcp["span"]
     path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"opencode config updated: {config_path}")
     if removed:
@@ -1113,7 +1133,7 @@ def expected_span_command(span_mcp, data_dir, repos):
 
 
 def inspect_opencode_registration(config_path, span_cmd):
-    """Read-only OpenCode ``mcp.span`` registration inspection.
+    """Read-only OpenCode ``mcp.servers.span`` registration inspection.
 
     Returns exactly one of ``matched``, ``mismatched``, ``missing``, or
     ``unreadable``. Never calls ``merge_opencode_config`` and never
@@ -1144,21 +1164,53 @@ def inspect_opencode_registration(config_path, span_cmd):
         result["reason"] = f"cannot parse OpenCode config: {exc}"
         return result
     mcp = config.get("mcp") if isinstance(config, dict) else None
-    entry = mcp.get("span") if isinstance(mcp, dict) else None
-    if not isinstance(entry, dict):
-        result["reason"] = "no mcp.span entry"
-        return result
-    result["configured_command"] = entry.get("command")
-    if entry.get("enabled") is False:
+    servers = mcp.get("servers") if isinstance(mcp, dict) else None
+    nested = (
+        servers.get("span") if isinstance(servers, dict) else None
+    )
+    flat = mcp.get("span") if isinstance(mcp, dict) else None
+    if isinstance(flat, dict) and isinstance(nested, dict):
         result["status"] = "mismatched"
-        result["reason"] = "mcp.span entry is disabled"
+        result["reason"] = (
+            "duplicate Span registrations: both mcp.span and "
+            "mcp.servers.span exist; normalize to mcp.servers.span"
+        )
         return result
-    if entry.get("command") == expected:
+    if isinstance(flat, dict):
+        result["status"] = "mismatched"
+        result["configured_command"] = flat.get("command")
+        result["reason"] = (
+            "legacy flat mcp.span registration; migrate to "
+            "mcp.servers.span"
+        )
+        return result
+    if not isinstance(nested, dict):
+        result["reason"] = "no mcp.servers.span entry"
+        return result
+    result["configured_command"] = nested.get("command")
+    if nested.get("type") != "local":
+        result["status"] = "mismatched"
+        result["reason"] = "mcp.servers.span type must be local"
+        return result
+    if nested.get("disabled") is True:
+        result["status"] = "mismatched"
+        result["reason"] = "mcp.servers.span entry is disabled"
+        return result
+    # OpenCode must expose Span's raw tool schemas; Code Mode wraps them
+    # and makes the advertised grammar unusable.
+    if nested.get("codemode") is not False:
+        result["status"] = "mismatched"
+        result["reason"] = (
+            "mcp.servers.span entry has Code Mode enabled; codemode "
+            "must be false"
+        )
+        return result
+    if nested.get("command") == expected:
         result["status"] = "matched"
         return result
     result["status"] = "mismatched"
     result["reason"] = (
-        "mcp.span command does not match the installed invocation"
+        "mcp.servers.span command does not match the installed invocation"
     )
     return result
 

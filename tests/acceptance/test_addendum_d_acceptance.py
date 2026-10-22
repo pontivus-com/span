@@ -149,7 +149,6 @@ def _harness(db_path=":memory:"):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -170,7 +169,10 @@ def _question_coverage(scope, disposition, basis="", refs=(), requirements=(),
     return m.InterpretationCoverage(
         subjects=(scope.subject,),
         question_slice=scope.question_slice,
-        evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
+        evidence_scope=m.EvidenceScope(
+            paths=(),
+            evidence_refs=tuple(_ref(p) for p in evidence_paths),
+        ),
         declared_complete=(
             disposition is m.SemanticQuestionDisposition.ANSWERED
         ),
@@ -191,17 +193,9 @@ def _question_coverage(scope, disposition, basis="", refs=(), requirements=(),
 
 def _answer_current(request, basis="examined with validated candidates"):
     q = request.question
-    return m.InterpretationCoverage(
-        subjects=(q.subject,),
-        question_slice=q.question_slice,
-        evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-        declared_complete=True,
-        question=q,
+    return m.SemanticQuestionDecision(
         disposition=m.SemanticQuestionDisposition.ANSWERED,
-        result_refs=(),
-        resolution_requirements=(),
         disposition_basis=basis,
-        question_evidence=(),
     )
 
 
@@ -309,9 +303,8 @@ class EstablishmentTest(unittest.TestCase):
                         relationships=(),
                         candidate_subjects=(),
                         candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(request),
-                        ) + tuple(coverages),
+                        question_decision=_answer_current(request),
+                        proposed_questions=_proposed(*coverages),
                         candidate_withdrawals=(),
                     )
 
@@ -337,7 +330,7 @@ class EstablishmentTest(unittest.TestCase):
                         m.SemanticInterpretationResult(
                             claims=(), relationships=(),
                             candidate_subjects=(), candidate_conflicts=(),
-                            proposed_question_coverages=(
+                            question_decision=_decision(
                                 _question_coverage(
                                     current.request.question,
                                     m.SemanticQuestionDisposition
@@ -654,18 +647,27 @@ FILES_V2["README.md"] = "# ledger-svc\n\nTracks balances and limits.\n"
 
 
 def _answer_for(request):
-    q = request.question
-    return m.InterpretationCoverage(
-        subjects=(q.subject,),
-        question_slice=q.question_slice,
-        evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-        declared_complete=True,
-        question=q,
+    return m.SemanticQuestionDecision(
         disposition=m.SemanticQuestionDisposition.ANSWERED,
-        result_refs=(),
-        resolution_requirements=(),
         disposition_basis="reassessed against changed evidence",
-        question_evidence=(),
+    )
+
+
+def _decision(coverage):
+    """Test-only: express an authored coverage as the compact decision."""
+    return m.SemanticQuestionDecision(
+        disposition=coverage.disposition,
+        evidence_scope=coverage.evidence_scope,
+        resolution_requirements=coverage.resolution_requirements,
+        disposition_basis=coverage.disposition_basis,
+    )
+
+
+def _proposed(*coverages):
+    """Test-only: express authored coverages as proposed questions."""
+    return tuple(
+        m.ProposedSemanticQuestion(coverage.question, _decision(coverage))
+        for coverage in coverages
     )
 
 
@@ -845,7 +847,7 @@ class MaintenanceTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(open_cov,),
+                        question_decision=_decision(open_cov),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence,
@@ -1162,7 +1164,7 @@ class UniformQualityTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(leg_open,),
+                        question_decision=_decision(leg_open),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence,
@@ -1193,7 +1195,6 @@ class HostLifecycleTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence,
@@ -1469,7 +1470,6 @@ class DriverDogfoodTest(unittest.TestCase):
             try:
                 seeds = (_ref("README.md"), _ref("OWNERSHIP.md"))
                 cont = ContinuationStore()
-                reissue_cont = ContinuationStore()
                 root = _sid("src/postings.py")
 
                 def _request():
@@ -1511,15 +1511,14 @@ class DriverDogfoodTest(unittest.TestCase):
                             relationships=(),
                             candidate_subjects=(),
                             candidate_conflicts=(),
-                            proposed_question_coverages=(
-                                _answer_for(request),
-                            ) + tuple(coverages),
+                            question_decision=_answer_for(request),
+                            proposed_questions=_proposed(*coverages),
                             candidate_withdrawals=(),
                         )
                     return m.SemanticInterpretationResult(
                         claims=(), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
+                        question_decision=_decision(
                             _question_coverage(
                                 request.question,
                                 m.SemanticQuestionDisposition
@@ -1542,19 +1541,12 @@ class DriverDogfoodTest(unittest.TestCase):
                         c, r, structural=structural, evidence=evidence,
                         store=store, continuations=cont,
                     ),
-                    reissue=lambda: ops.explain(
-                        _request(), structural=structural,
-                        evidence=evidence, store=store,
-                        continuations=reissue_cont,
-                        authority_seeds=seeds,
-                    ),
                     max_rounds=15,
                 )
                 self.assertIsNone(result.halt)
                 self.assertIsInstance(result.answer, m.SemanticAnswer)
                 FixtureTruth.check_claims(result.answer.content.claims)
                 self.assertGreaterEqual(result.cost.submissions, 2)
-                self.assertEqual(result.cost.reissues, 0)
                 self.assertTrue(
                     _baseline_sufficient(
                         REPO, root, store=store, evidence=evidence,
@@ -1627,7 +1619,6 @@ def _harness_for(repo_id, files, subjects, edges, db_path=":memory:"):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=repo_id,

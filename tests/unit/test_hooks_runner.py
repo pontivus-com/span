@@ -178,7 +178,7 @@ class HookNoticeTest(unittest.TestCase):
             self.assertIn("1 stale", text)
             self.assertIn("1 pending", text)
             self.assertIn("exact SubjectSelector", text)
-            self.assertIn("never invent a cont-* token", text)
+            self.assertIn("pass it unchanged", text)
 
     def test_source_changed_silent_when_unchanged(self):
         import tempfile
@@ -243,7 +243,7 @@ class HookNoticeTest(unittest.TestCase):
             self.assertIn("1 stale", text)
             self.assertIn("1 pending", text)
             self.assertIn("exact SubjectSelector", text)
-            self.assertIn("never invent a cont-* token", text)
+            self.assertIn("pass it unchanged", text)
 
     def test_session_hooks_scope_to_active_repository(self):
         import shutil

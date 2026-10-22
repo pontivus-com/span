@@ -28,6 +28,9 @@ __all__ = [
     "_select_answer_items",
     "_freshness_items_for",
     "_next_service_token",
+    "_query_digest",
+    "_bounds_key",
+    "_validate_service_token",
     "coverage_counts_for",
     "state_explanation_for",
     "verification_currencies_for",
@@ -43,6 +46,65 @@ def _answer_id(prefix: str, request_part: str, subject_part: str) -> m.AnswerId:
     return m.AnswerId(f"{prefix}-{digest}")
 
 
+def _bounds_key(bounds: m.QueryBounds) -> str:
+    """Deterministic listing-affecting bounds identity (M-06.5).
+
+    Every bounds field that can change the selected/ordered page slice
+    is part of the query digest; `page_token` is never part of it.
+    """
+    return "|".join(
+        str(value)
+        for value in (
+            bounds.max_results,
+            bounds.max_depth,
+            bounds.max_subjects,
+            bounds.max_evidence_units,
+            bounds.max_evidence_bytes,
+            bounds.max_candidate_claims,
+            bounds.max_candidate_relationships,
+        )
+    )
+
+
+def _query_digest(
+    operation: str,
+    repository_id: str,
+    target_key: str,
+    question_key: str,
+    bounds: m.QueryBounds,
+) -> str:
+    """Query digest binding a service page token to its request (M-06.5)."""
+    return _paging.question_digest(
+        operation,
+        repository_id,
+        target_key,
+        question_key,
+        _bounds_key(bounds),
+    )
+
+
+def _validate_service_token(
+    page_token: str | None, expected_digest: str,
+) -> None:
+    """Reject a page token bound to a different query (M-06.5a).
+
+    The public diagnostic names the remedy, never the internal encoding.
+    """
+    if page_token is None:
+        return
+    if not page_token.startswith("pgq:"):
+        raise ValueError(
+            "page token is invalid for this request; restart pagination "
+            "from the first page with page_token omitted"
+        )
+    digest, _, _, _ = _paging.parse_question_token(page_token)
+    if digest != expected_digest:
+        raise ValueError(
+            "page token is invalid for this request; restart pagination "
+            "from the first page with page_token omitted"
+        )
+
+
 def _next_service_token(
     page_token: str | None,
     kept_claims: tuple[m.SemanticClaim, ...],
@@ -54,6 +116,7 @@ def _next_service_token(
     questions_skip: int = 0,
     questions_remaining: int = 0,
     query_digest: str = "default",
+    expected_digest: str | None = None,
 ) -> str | None:
     """Answer-level next token from shown counts (plan I-39; I S4 pgq).
 
@@ -65,14 +128,25 @@ def _next_service_token(
     # Decode incoming offsets via pgq-aware parser (old pg: rejected).
     try:
         if page_token is not None and page_token.startswith("pgq:"):
-            _, claims_skip, rels_skip, qskip = (
+            token_digest, claims_skip, rels_skip, qskip = (
                 _paging.parse_question_token(page_token)
             )
+            if (
+                expected_digest is not None
+                and token_digest != expected_digest
+            ):
+                raise ValueError(
+                    "page token is invalid for this request; restart "
+                    "pagination from the first page with page_token omitted"
+                )
         elif page_token is None:
             claims_skip, rels_skip, qskip = 0, 0, 0
         else:
             # Old cursor: force restart diagnostic upstream.
-            raise ValueError(f"unknown page token: {page_token}")
+            raise ValueError(
+                "page token is invalid for this request; restart "
+                "pagination from the first page with page_token omitted"
+            )
     except ValueError:
         # Let caller map to typed invalid-token error; re-raise.
         raise

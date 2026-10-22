@@ -4,10 +4,8 @@ Bounded task framing for the invoking agent, strict-ingress validation
 context, candidate admission, unit materialization, and suspension.
 Span never invokes a model or provider: insufficient semantics suspend
 with PendingInterpretation; the agent submits the typed result.
-One annotation-only fix versus the monolith:
-_derive_current_question_support gains canonical parameter
-annotations (behavior-identical). Otherwise verbatim from
-span.service_operations.
+Question evidence is derived per question (Addendum L). Otherwise
+verbatim from span.service_operations.
 """
 
 from __future__ import annotations
@@ -43,7 +41,7 @@ __all__ = [
     '_validation_context_for',
     '_assign_candidate_keys',
     '_admit_cited_evidence',
-    '_derive_current_question_support',
+    '_derive_question_evidence',
     '_materialize_unit',
     '_next_baseline_pending',
     '_suspend_baseline_pending',
@@ -382,41 +380,60 @@ def _submission_template(
         return ""
     import json as _json
 
+    # Smallest strict-decodable unfinished shape (Addendum M §M-05.1).
+    # Every omitted collection is a canonical default; printing empty
+    # campaign fields only teaches protocol ceremony.
     example = {
-        "$type": "SemanticInterpretationResult",
-        "claims": [],
-        "relationships": [],
-        "governing_source_refs": [],
-        "diagnostics": [],
-        "candidate_subjects": [],
-        "candidate_conflicts": [],
-        "proposed_question_coverages": [
-            {
-                "$type": "InterpretationCoverage",
-                "subjects": [m.to_canonical(bound_question.subject)],
-                "question_slice": bound_question.question_slice,
-                "evidence_scope": {"$type": "EvidenceScope"},
-                "declared_complete": False,
-                "question": m.to_canonical(bound_question),
-                "disposition": "PENDING",
-                "result_refs": [],
-                "resolution_requirements": [],
-                "disposition_basis": "",
-                "question_evidence": [],
-            }
-        ],
-        "candidate_withdrawals": [],
-        "proposed_target_inventory_accounting": [],
-        "proposed_target_questions": [],
+        "question_decision": {
+            "disposition": "PENDING",
+        },
     }
-    compact = _schema.compact_payload(
-        m.SemanticInterpretationResult, example
-    )
     return (
-        "Minimal submission template (unfinished, PENDING with "
-        "missing-examination requirement; add validated candidates "
-        "and actual disposition; do not predeclare ANSWERED): "
-        + _json.dumps(compact, sort_keys=True)
+        "Minimal submission template (unfinished, PENDING; replace "
+        "PENDING with the actual disposition when the examination reaches "
+        "one, add claims/relationships only when supported semantic "
+        "material exists, and add optional fields only when materially "
+        "applicable): "
+        + _json.dumps(example, sort_keys=True)
+    )
+
+
+def _mapping_submission_template(
+    target_inventory_items: tuple[m.EvidenceInventoryItem, ...],
+) -> str:
+    """Valid compact command shape for a target-mapping task.
+
+    Mapping is not a semantic question: no ``question_decision`` is
+    shown because the agent is not answering a bound question. The
+    template carries exactly one accounting candidate for every bound
+    inventory member in deterministic bound order (Addendum M §M-05.2).
+    """
+    import json as _json
+
+    accounts = [
+        {
+            "evidence_id": {
+                "value": item.evidence_ref.evidence_id.value,
+            },
+            "resolution_requirements": [
+                {
+                    "kind": "MISSING_SEMANTIC_COVERAGE",
+                    "description": (
+                        "map this member to an admitted area, record an "
+                        "evidence-backed exclusion, or state the unresolved "
+                        "mapping"
+                    ),
+                }
+            ],
+        }
+        for item in target_inventory_items
+    ]
+    example = {"proposed_target_inventory_accounting": accounts}
+    return (
+        "Minimal target-mapping submission template (unfinished; submit "
+        "exactly one accounting outcome for every bound member; the "
+        "unresolved example is valid but non-progressing): "
+        + _json.dumps(example, sort_keys=True)
     )
 
 
@@ -770,8 +787,14 @@ def prepare_interpretation_task(
             open_requirements=tuple(open_requirements),
             open_handling=m.TASK_BRIEF_OPEN_HANDLING,
             submission_rules=m.TASK_BRIEF_SUBMISSION_RULES + (
-                "Mapping submissions propose exactly one TargetInventoryAccount "
-                "for the current item; no completed claim payload is required.",
+                "Submit exactly one CandidateTargetInventoryAccount for "
+                "every inventory member bound in this mapping task; every "
+                "returned bound EvidenceId must appear exactly once. The "
+                "unresolved example is valid but non-progressing: replace "
+                "it with an evidence-supported assignment or exclusion "
+                "whenever the investigation permits progress, and leaving "
+                "a member unresolved keeps target completion incomplete. "
+                "No completed claim payload is required.",
                 "A newly admitted area receives exactly one service-owned "
                 "PENDING CQ-01 seed; do not manufacture a target question "
                 "for a new area. Use proposed_target_questions only to "
@@ -798,7 +821,7 @@ def prepare_interpretation_task(
                     "the item to an admitted or newly proposed coherent area, "
                     "never to the anchor itself unless the anchor is that area.",
                 )
-            ),
+            ) + (_mapping_submission_template(target_inventory_items),),
         )
     request = m.SemanticInterpretationRequest(
         repository_id=repository_id,
@@ -937,7 +960,8 @@ def _assign_candidate_keys(
         diagnostics=result.diagnostics,
         candidate_subjects=result.candidate_subjects,
         candidate_conflicts=result.candidate_conflicts,
-        proposed_question_coverages=result.proposed_question_coverages,
+        question_decision=result.question_decision,
+        proposed_questions=result.proposed_questions,
         candidate_withdrawals=result.candidate_withdrawals,
         proposed_target_inventory_accounting=result.proposed_target_inventory_accounting,
         proposed_target_questions=result.proposed_target_questions,
@@ -1017,6 +1041,13 @@ def _admit_cited_evidence(
                 if isinstance(context_ref, m.EvidenceRef):
                     _note(context_ref)
 
+    def _note_decision(decision: m.SemanticQuestionDecision) -> None:
+        # The agent owns only its selected support scope and typed
+        # requirements; those are the only command-shaped citations.
+        for ref in decision.evidence_scope.evidence_refs:
+            _note(ref)
+        _note_nested_requirements(decision.resolution_requirements)
+
     for candidate in (*result.claims, *result.relationships):
         for ref in candidate.evidence:
             _note(ref)
@@ -1037,10 +1068,10 @@ def _admit_cited_evidence(
         if conflict.candidate_precedence is not None:
             for ref in conflict.candidate_precedence.overrides:
                 _note(ref)
-    for coverage in result.proposed_question_coverages:
-        for obs in coverage.question_evidence:
-            _note(obs.evidence_ref)
-        _note_nested_requirements(coverage.resolution_requirements)
+    if result.question_decision is not None:
+        _note_decision(result.question_decision)
+    for proposed in result.proposed_questions:
+        _note_decision(proposed.decision)
     for account in result.proposed_target_inventory_accounting:
         if account.exclusion_basis is not None:
             _note_nested_basis(account.exclusion_basis)
@@ -1226,36 +1257,27 @@ def _admit_cited_evidence(
         )
         for withdrawal in result.candidate_withdrawals
     )
-    coverages = tuple(
-        _dataclasses.replace(
-            coverage,
+
+    def _normalize_decision(
+        decision: m.SemanticQuestionDecision,
+    ) -> m.SemanticQuestionDecision:
+        return _dataclasses.replace(
+            decision,
             evidence_scope=_dataclasses.replace(
-                coverage.evidence_scope,
+                decision.evidence_scope,
                 evidence_refs=tuple(
                     _normalize(ref)
                     if ref.evidence_id.value in canonical_refs
                     else ref
-                    for ref in coverage.evidence_scope.evidence_refs
+                    for ref in decision.evidence_scope.evidence_refs
                 ),
             ),
             resolution_requirements=tuple(
                 _normalize_requirement(requirement)
-                for requirement in coverage.resolution_requirements
-            ),
-            question_evidence=tuple(
-                _dataclasses.replace(
-                    obs,
-                    evidence_ref=_normalize(obs.evidence_ref),
-                    observed_fingerprint=fingerprints.get(
-                        obs.evidence_ref.evidence_id.value,
-                        obs.observed_fingerprint,
-                    ),
-                )
-                for obs in coverage.question_evidence
+                for requirement in decision.resolution_requirements
             ),
         )
-        for coverage in result.proposed_question_coverages
-    )
+
     accounts = tuple(
         _dataclasses.replace(
             account,
@@ -1289,7 +1311,18 @@ def _admit_cited_evidence(
         diagnostics=result.diagnostics,
         candidate_subjects=subjects,
         candidate_conflicts=conflicts,
-        proposed_question_coverages=coverages,
+        question_decision=(
+            None
+            if result.question_decision is None
+            else _normalize_decision(result.question_decision)
+        ),
+        proposed_questions=tuple(
+            _dataclasses.replace(
+                proposed,
+                decision=_normalize_decision(proposed.decision),
+            )
+            for proposed in result.proposed_questions
+        ),
         candidate_withdrawals=withdrawals,
         proposed_target_inventory_accounting=accounts,
         proposed_target_questions=result.proposed_target_questions,
@@ -1304,55 +1337,174 @@ def _admit_cited_evidence(
         evidence_refs=canonical_refs,
     ), normalized, problems
 
-def _derive_current_question_support(
+
+def _material_result_refs(
     claims: tuple[m.SemanticClaim, ...],
     relationships: tuple[m.SemanticRelationship, ...],
-    task: InterpretationTask,
-    fingerprints: dict[str, str],
-    extra_refs: tuple[m.EvidenceRef, ...] = (),
-) -> tuple[
-    tuple[m.ClaimRef | m.RelationshipRef, ...],
-    tuple[m.QuestionEvidenceObservation, ...],
-]:
-    """Derive result refs and question evidence for an ANSWERED bound
-    question from validated unit material (Addendum C C-05).
-
-    Submitted empty refs are completion intent; only derived refs backed
-    by materialized candidates count as examined output. Question
-    evidence covers the union of task units and provider-admitted
-    canonical refs present in ``fingerprints`` (Addendum H §5), so
-    accepted out-of-task citations persist in both dependency rows and
-    question evidence with identical fingerprints.
-    """
-    derived_refs: tuple[
-        m.ClaimRef | m.RelationshipRef, ...
-    ] = tuple(
+) -> tuple[m.ClaimRef | m.RelationshipRef, ...]:
+    return tuple(
         m.ClaimRef(id=c.claim_id) for c in claims
     ) + tuple(
         m.RelationshipRef(id=r.relationship_id)
         for r in relationships
     )
-    seen: set[str] = set()
-    ordered_refs: list[m.EvidenceRef] = []
-    for ref in tuple(
-        unit.evidence_ref
-        for unit in task.request.evidence_units
-    ) + tuple(extra_refs):
-        if ref.evidence_id.value in seen:
-            continue
-        seen.add(ref.evidence_id.value)
-        ordered_refs.append(ref)
-    question_evidence = tuple(
-        m.QuestionEvidenceObservation(
-            evidence_ref=ref,
-            observed_fingerprint=fingerprints[
-                ref.evidence_id.value
-            ],
+
+
+def _material_evidence_refs(
+    claims: tuple[m.SemanticClaim, ...],
+    relationships: tuple[m.SemanticRelationship, ...],
+) -> tuple[m.EvidenceRef, ...]:
+    """Evidence actually cited by this unit's materialized result."""
+    refs: list[m.EvidenceRef] = []
+    for item in (*claims, *relationships):
+        refs.extend(item.evidence)
+        if item.authority is not None:
+            refs.append(item.authority.evidence_ref)
+    return tuple(refs)
+
+
+def _load_prior_question_coverage(
+    repository_id: str,
+    question: m.SemanticQuestionScope,
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> m.InterpretationCoverage | None:
+    """Load the exact persisted row for one canonical question identity."""
+    try:
+        rows = store.load_all_question_coverages(
+            repository_id, question.scope_root, (question.subject,),
         )
-        for ref in ordered_refs
-        if ref.evidence_id.value in fingerprints
+    except Exception:
+        try:
+            rows = store.load_question_coverages(
+                repository_id, question.scope_root,
+                (question.subject,), bounds,
+            )
+        except Exception:
+            rows = ()
+    for row in rows:
+        if row.question is not None and row.question == question:
+            return row
+    return None
+
+
+def _ordered_result_refs(
+    prior: tuple[m.ClaimRef | m.RelationshipRef, ...],
+    new: tuple[m.ClaimRef | m.RelationshipRef, ...],
+    withdrawn: frozenset[str],
+) -> tuple[m.ClaimRef | m.RelationshipRef, ...]:
+    """Stable prior-then-new union, minus explicitly withdrawn ids."""
+    seen: set[str] = set()
+    ordered: list[m.ClaimRef | m.RelationshipRef] = []
+    for ref in (*prior, *new):
+        rid = ref.id.value
+        if rid in withdrawn or rid in seen:
+            continue
+        seen.add(rid)
+        ordered.append(ref)
+    return tuple(ordered)
+
+
+def _derive_question_evidence(
+    decision: m.SemanticQuestionDecision,
+    *,
+    canonical_refs: dict[str, m.EvidenceRef],
+    fingerprints: dict[str, str],
+    material_evidence: tuple[m.EvidenceRef, ...] = (),
+    prior_evidence: tuple[m.QuestionEvidenceObservation, ...] = (),
+) -> tuple[m.QuestionEvidenceObservation, ...]:
+    """Derive one question's exact direct support.
+
+    Only the agent's selected ``evidence_scope`` and (for ANSWERED/OPEN)
+    evidence actually cited by this unit's materialized results are used.
+    PENDING/OPEN retain prior direct support; NOT_APPLICABLE never
+    manufactures direct evidence from task delivery.
+    """
+    disposition = decision.disposition
+    selected = decision.evidence_scope.evidence_refs
+    if disposition is m.SemanticQuestionDisposition.ANSWERED:
+        ordered_refs = tuple(material_evidence) + tuple(selected)
+        prior: tuple[m.QuestionEvidenceObservation, ...] = ()
+    elif disposition is m.SemanticQuestionDisposition.OPEN:
+        ordered_refs = tuple(selected) + tuple(material_evidence)
+        prior = prior_evidence
+    elif disposition is m.SemanticQuestionDisposition.PENDING:
+        ordered_refs = tuple(selected)
+        prior = prior_evidence
+    else:  # NOT_APPLICABLE
+        ordered_refs = tuple(selected)
+        prior = ()
+
+    seen: set[str] = set()
+    observations: list[m.QuestionEvidenceObservation] = []
+
+    def _add_ref(ref: m.EvidenceRef) -> None:
+        eid = ref.evidence_id.value
+        canonical = canonical_refs.get(eid)
+        fingerprint = fingerprints.get(eid)
+        if canonical is None or fingerprint is None or eid in seen:
+            return
+        seen.add(eid)
+        observations.append(
+            m.QuestionEvidenceObservation(
+                evidence_ref=canonical,
+                observed_fingerprint=fingerprint,
+            )
+        )
+
+    def _add_prior(observation: m.QuestionEvidenceObservation) -> None:
+        eid = observation.evidence_ref.evidence_id.value
+        if eid in seen:
+            return
+        seen.add(eid)
+        canonical = canonical_refs.get(eid)
+        fingerprint = fingerprints.get(eid)
+        if canonical is not None and fingerprint is not None:
+            observations.append(
+                m.QuestionEvidenceObservation(
+                    evidence_ref=canonical,
+                    observed_fingerprint=fingerprint,
+                )
+            )
+        else:
+            observations.append(observation)
+
+    for ref in ordered_refs:
+        _add_ref(ref)
+    for observation in prior:
+        _add_prior(observation)
+    return tuple(observations)
+
+
+def _decision_coverage(
+    question: m.SemanticQuestionScope,
+    decision: m.SemanticQuestionDecision,
+    *,
+    subjects: tuple[m.SubjectId, ...],
+) -> m.InterpretationCoverage:
+    """Project one agent decision into the canonical coverage record.
+
+    Only the agent-owned decision crosses the boundary: disposition,
+    selected support scope, typed requirements, and basis. Identity,
+    slice, completion, result refs, and evidence observations are
+    Span-owned and filled by the materializer (Addendum L).
+    """
+    return m.InterpretationCoverage(
+        subjects=subjects,
+        question_slice=question.question_slice,
+        evidence_scope=decision.evidence_scope,
+        declared_complete=(
+            decision.disposition is m.SemanticQuestionDisposition.ANSWERED
+        ),
+        question=question,
+        disposition=decision.disposition,
+        result_refs=(),
+        resolution_requirements=decision.resolution_requirements,
+        disposition_basis=decision.disposition_basis,
+        question_evidence=(),
     )
-    return derived_refs, question_evidence
+
 
 def _retire_replaced_outputs(
     repository_id: str,
@@ -1854,6 +2006,52 @@ def _materialize_unit(
     # fallback bound question neither synthesizes nor persists its own
     # coverage — only the nominated original question persists.
     bound_question = task.request.question
+    if bound_question is None and result.question_decision is not None:
+        raise _validation.InterpretationUnitRejected(
+            (
+                "question_decision requires a bound question; mapping "
+                "tasks submit additional questions through "
+                "proposed_questions",
+            )
+        )
+    if bound_question is not None:
+        for index, proposed in enumerate(result.proposed_questions):
+            if proposed.question == bound_question:
+                raise _validation.InterpretationUnitRejected(
+                    tuple(
+                        _member_diagnostics(
+                            "proposed_questions", index,
+                            bound_question.question_slice or None,
+                            (
+                                "the already-bound question must be answered "
+                                "through question_decision; "
+                                "proposed_questions is only for additional "
+                                "questions or the explicit refresh-correction "
+                                "nomination case",
+                            ),
+                        )
+                    )
+                )
+    for index, proposed in enumerate(result.proposed_questions):
+        if (
+            proposed.decision.disposition
+            is m.SemanticQuestionDisposition.ANSWERED
+            and proposed.question != correction_question
+        ):
+            raise _validation.InterpretationUnitRejected(
+                tuple(
+                    _member_diagnostics(
+                        "proposed_questions", index,
+                        proposed.question.question_slice or None,
+                        (
+                            "additional questions may be introduced as "
+                            "PENDING, OPEN, or NOT_APPLICABLE; only the "
+                            "currently bound question may be newly ANSWERED "
+                            "in this interpretation unit",
+                        ),
+                    )
+                )
+            )
     bound_is_fallback_scaffolding = False
     if correction_question is not None and bound_question is not None:
         try:
@@ -1869,13 +2067,35 @@ def _materialize_unit(
         )
     question_coverages_to_persist: list[m.InterpretationCoverage] = []
     reopened_coverages: list[m.InterpretationCoverage] = []
-    if bound_question is not None or result.proposed_question_coverages:
+    # Span derives the canonical persisted coverage from the compact
+    # command. Identity, subjects, slice, completion, result refs, and
+    # question evidence are never agent-supplied (Addendum L).
+    submitted_coverages: list[m.InterpretationCoverage] = []
+    if (
+        bound_question is not None
+        and not bound_is_fallback_scaffolding
+        and result.question_decision is not None
+    ):
+        submitted_coverages.append(
+            _decision_coverage(
+                bound_question,
+                result.question_decision,
+                subjects=tuple(s.subject_id for s in subjects),
+            )
+        )
+    for proposed in result.proposed_questions:
+        submitted_coverages.append(
+            _decision_coverage(
+                proposed.question,
+                proposed.decision,
+                subjects=(proposed.question.subject,),
+            )
+        )
+    if bound_question is not None or submitted_coverages:
         # Validate submitted coverages; derive refs/evidence from validated
         # candidates and expressly selected support refs.
         seen_qidentities: set[tuple[str, ...]] = set()
-        for qindex, submitted in enumerate(
-            result.proposed_question_coverages
-        ):
+        for qindex, submitted in enumerate(submitted_coverages):
             if submitted.question is None:
                 raise _validation.InterpretationUnitRejected(
                     tuple(
@@ -1934,10 +2154,102 @@ def _materialize_unit(
         # Addendum H §6 correction-fallback case: the fallback bound
         # question is scaffolding only — it neither adopts an explicitly
         # submitted bound coverage nor synthesizes PENDING.
+        # Span-derived support: one question's direct evidence is only its
+        # selected support plus (for ANSWERED/OPEN) evidence cited by the
+        # materialized results that question owns. Task delivery alone is
+        # never a direct question dependency.
+        material_evidence = _material_evidence_refs(claims, relationships)
+        new_result_refs = _material_result_refs(claims, relationships)
+        withdrawn_ids = frozenset(
+            withdrawal.target.id.value
+            for withdrawal in validated_withdrawals
+        )
+        prior_cache: dict[
+            m.SemanticQuestionScope, m.InterpretationCoverage | None
+        ] = {}
+
+        def _prior(
+            question: m.SemanticQuestionScope,
+        ) -> m.InterpretationCoverage | None:
+            if question not in prior_cache:
+                prior_cache[question] = _load_prior_question_coverage(
+                    task.request.repository_id, question,
+                    store=store, bounds=task.request.bounds,
+                )
+            return prior_cache[question]
+
+        def _finalize(
+            submitted: m.InterpretationCoverage,
+            *,
+            owns_material: bool,
+        ) -> m.InterpretationCoverage:
+            prior = _prior(submitted.question)
+            prior_refs = () if prior is None else prior.result_refs
+            prior_evidence = (
+                () if prior is None else prior.question_evidence
+            )
+            decision = m.SemanticQuestionDecision(
+                disposition=submitted.disposition,
+                evidence_scope=submitted.evidence_scope,
+                resolution_requirements=submitted.resolution_requirements,
+                disposition_basis=submitted.disposition_basis,
+            )
+            disposition = submitted.disposition
+            if disposition is m.SemanticQuestionDisposition.ANSWERED:
+                result_refs = new_result_refs
+                question_evidence = _derive_question_evidence(
+                    decision,
+                    canonical_refs=ctx.evidence_refs,
+                    fingerprints=fingerprints,
+                    material_evidence=(
+                        material_evidence if owns_material else ()
+                    ),
+                )
+            elif disposition is m.SemanticQuestionDisposition.OPEN:
+                result_refs = _ordered_result_refs(
+                    prior_refs,
+                    new_result_refs if owns_material else (),
+                    withdrawn_ids,
+                )
+                question_evidence = _derive_question_evidence(
+                    decision,
+                    canonical_refs=ctx.evidence_refs,
+                    fingerprints=fingerprints,
+                    material_evidence=(
+                        material_evidence if owns_material else ()
+                    ),
+                    prior_evidence=prior_evidence,
+                )
+            elif disposition is m.SemanticQuestionDisposition.PENDING:
+                result_refs = _ordered_result_refs(
+                    prior_refs, (), withdrawn_ids,
+                )
+                question_evidence = _derive_question_evidence(
+                    decision,
+                    canonical_refs=ctx.evidence_refs,
+                    fingerprints=fingerprints,
+                    prior_evidence=prior_evidence,
+                )
+            else:  # NOT_APPLICABLE never owns semantic result refs.
+                result_refs = ()
+                question_evidence = _derive_question_evidence(
+                    decision,
+                    canonical_refs=ctx.evidence_refs,
+                    fingerprints=fingerprints,
+                )
+            return _dataclasses.replace(
+                submitted,
+                result_refs=result_refs,
+                question_evidence=question_evidence,
+                declared_complete=(
+                    disposition is m.SemanticQuestionDisposition.ANSWERED
+                ),
+            )
+
         current_qcov: m.InterpretationCoverage | None = None
         if bound_question is not None and not bound_is_fallback_scaffolding:
             is_current = [
-                c for c in result.proposed_question_coverages
+                c for c in submitted_coverages
                 if c.question is not None and c.question == bound_question
             ]
             if is_current:
@@ -1945,38 +2257,30 @@ def _materialize_unit(
                 if (
                     current_qcov.disposition
                     is m.SemanticQuestionDisposition.ANSWERED
-                ):
-                    if not (claims or relationships):
-                        raise _validation.InterpretationUnitRejected(
-                            tuple(
-                                _member_diagnostics(
-                                    "question_coverages", 0,
-                                    bound_question.question_slice or None,
-                                    (
-                                        "explicit ANSWERED with zero "
-                                        "validated material; submit "
-                                        "PENDING/OPEN or add supported "
-                                        "candidates",
-                                    ),
-                                )
+                ) and not (claims or relationships):
+                    raise _validation.InterpretationUnitRejected(
+                        tuple(
+                            _member_diagnostics(
+                                "question_coverages", 0,
+                                bound_question.question_slice or None,
+                                (
+                                    "explicit ANSWERED with zero "
+                                    "validated material; submit "
+                                    "PENDING/OPEN or add supported "
+                                    "candidates",
+                                ),
                             )
                         )
-                    derived_refs, derived_qe = (
-                        _derive_current_question_support(
-                            claims, relationships, task, fingerprints,
-                            extra_refs=tuple(ctx.evidence_refs.values()),
-                        )
                     )
-                    current_qcov = _dataclasses.replace(
-                        current_qcov,
-                        result_refs=derived_refs,
-                        question_evidence=derived_qe,
-                    )
+                current_qcov = _finalize(
+                    current_qcov, owns_material=True
+                )
             else:
                 # Addendum C C-05: no explicit current coverage means no
                 # completion claim. Always synthesize PENDING (admitted but
                 # unexamined) so the unit still leaves durable question
                 # state; submitted claims persist as unassigned output.
+                prior = _prior(bound_question)
                 current_qcov = m.InterpretationCoverage(
                     subjects=tuple(s.subject_id for s in subjects),
                     question_slice=bound_question.question_slice,
@@ -1990,7 +2294,11 @@ def _materialize_unit(
                     declared_complete=False,
                     question=bound_question,
                     disposition=m.SemanticQuestionDisposition.PENDING,
-                    result_refs=(),
+                    result_refs=_ordered_result_refs(
+                        () if prior is None else prior.result_refs,
+                        (),
+                        withdrawn_ids,
+                    ),
                     resolution_requirements=(
                         m.ResolutionRequirement(
                             kind=(
@@ -2007,7 +2315,9 @@ def _materialize_unit(
                     disposition_basis=(
                         "synthesized pending: no explicit completion submitted"
                     ),
-                    question_evidence=(),
+                    question_evidence=(
+                        () if prior is None else prior.question_evidence
+                    ),
                 )
             if current_qcov is not None and (
                 current_qcov.disposition
@@ -2030,7 +2340,7 @@ def _materialize_unit(
         nominated_qcov: m.InterpretationCoverage | None = None
         if correction_question is not None:
             is_nominated = [
-                c for c in result.proposed_question_coverages
+                c for c in submitted_coverages
                 if c.question is not None
                 and c.question == correction_question
             ]
@@ -2039,33 +2349,28 @@ def _materialize_unit(
                 if (
                     nominated_qcov.disposition
                     is m.SemanticQuestionDisposition.ANSWERED
-                ):
-                    if not (claims or relationships):
-                        raise _validation.InterpretationUnitRejected(
-                            tuple(
-                                _member_diagnostics(
-                                    "question_coverages", 0,
-                                    correction_question.question_slice or None,
-                                    (
-                                        "explicit ANSWERED with zero "
-                                        "validated material; submit "
-                                        "PENDING/OPEN or add supported "
-                                        "candidates",
-                                    ),
-                                )
+                ) and not (claims or relationships):
+                    raise _validation.InterpretationUnitRejected(
+                        tuple(
+                            _member_diagnostics(
+                                "question_coverages", 0,
+                                correction_question.question_slice or None,
+                                (
+                                    "explicit ANSWERED with zero "
+                                    "validated material; submit "
+                                    "PENDING/OPEN or add supported "
+                                    "candidates",
+                                ),
                             )
                         )
-                    nominated_refs, nominated_qe = (
-                        _derive_current_question_support(
-                            claims, relationships, task, fingerprints,
-                            extra_refs=tuple(ctx.evidence_refs.values()),
-                        )
                     )
-                    nominated_qcov = _dataclasses.replace(
-                        nominated_qcov,
-                        result_refs=nominated_refs,
-                        question_evidence=nominated_qe,
-                    )
+                nominated_qcov = _finalize(
+                    nominated_qcov, owns_material=True
+                )
+                if (
+                    nominated_qcov.disposition
+                    is m.SemanticQuestionDisposition.ANSWERED
+                ):
                     _retire_replaced_outputs(
                         task.request.repository_id, correction_question,
                         {r.id.value for r in nominated_qcov.result_refs},
@@ -2082,7 +2387,8 @@ def _materialize_unit(
         # current_qcov above stays None and explicitly submitted
         # bound-matching entries are excluded from the bucket below.
         question_coverages_to_persist = [
-            c for c in result.proposed_question_coverages
+            _finalize(c, owns_material=False)
+            for c in submitted_coverages
             if c.question is None
             or (
                 (bound_question is None or c.question != bound_question)
@@ -2524,7 +2830,7 @@ def _materialize_unit(
                 )
             # Reuse is strict: each proposed question must already be
             # persisted canonically. New questions enter only through
-            # proposed_question_coverages in the same unit (which
+            # proposed_questions in the same unit (which
             # auto-contribute their scopes below), never through this
             # reuse field.
             for qq_index, qq in enumerate(
@@ -2553,7 +2859,7 @@ def _materialize_unit(
                                 (
                                     "target question does not resolve to "
                                     "persisted coverage; use "
-                                    "proposed_question_coverages to "
+                                    "proposed_questions to "
                                     "create new PENDING coverage",
                                 ),
                             )
@@ -2751,7 +3057,7 @@ def _next_baseline_pending(
 
     Deterministic order (CQ class, subject, slice). Used both when a
     baseline resumes after submit and when the baseline operation is
-    reissued after a lost continuation: persisted coverage — never
+    re-entered after a lost continuation: persisted coverage — never
     prompt wording — determines remaining work, so the audit is never
     restarted while admitted work exists.
     """

@@ -22,6 +22,8 @@ from span.service.answers import (
     _conflicts_for,
     _freshness_items_for,
     _next_service_token,
+    _query_digest,
+    _validate_service_token,
     _select_answer_items,
     coverage_counts_for,
     state_explanation_for,
@@ -409,7 +411,7 @@ def _repository_coverage_entry(
                         "subject work is incomplete; continue the pending "
                         f"questions for '{locator}' within bounds through "
                         "the continuation returned by the suspending "
-                        "operation; never invent a cont-* token"
+                        "operation; pass the returned continuation unchanged"
                     ),
                     supporting_context=(),
                 )
@@ -613,8 +615,14 @@ def _compose_repository_status_answer(
     bounds: m.QueryBounds,
     state: m.RepositoryState,
     subject_offset: int = 0,
+    mode: str = "NORMAL",
+    page_token: str | None = None,
 ) -> m.SemanticAnswer:
     """Report persisted semantic coverage without structural enumeration."""
+    _digest = _query_digest(
+        "STATUS", repository_id, "repository", f"mode:{mode}", bounds
+    )
+    _validate_service_token(page_token, _digest)
     subject_page = store.load_repository_subjects(
         repository_id, bounds, subject_offset
     )
@@ -680,7 +688,8 @@ def _compose_repository_status_answer(
     next_token = None
     if subject_page.bound_info.truncated:
         next_token = _paging.format_service_token(
-            subject_offset + len(entries), None, 0
+            subject_offset + len(entries), None, 0,
+            query_digest=_digest,
         )
     category = (
         subject_page.bound_info.truncated_category
@@ -723,14 +732,24 @@ def _repository_status_page(
 ) -> m.SemanticAnswer:
     """Resolve the normal no-target repository report page."""
     try:
-        subject_skip, rel_skip, question_skip = (
-            _paging.parse_service_token(request.page_token)
+        token_digest, subject_skip, rel_skip, question_skip = (
+            _paging.parse_service_token_bound(request.page_token)
         )
     except ValueError as exc:
         raise StatusTargetError(str(exc)) from None
     if rel_skip or question_skip:
         raise StatusTargetError(
-            "repository status page tokens use the subject offset only"
+            "page token is invalid for this request; restart pagination "
+            "from the first page with page_token omitted"
+        )
+    expected = _query_digest(
+        "STATUS", request.repository_id, "repository",
+        f"mode:{request.mode.value}", bounds,
+    )
+    if request.page_token is not None and token_digest != expected:
+        raise StatusTargetError(
+            "page token is invalid for this request; restart pagination "
+            "from the first page with page_token omitted"
         )
     return _compose_repository_status_answer(
         request.repository_id,
@@ -739,6 +758,8 @@ def _repository_status_page(
         bounds=bounds,
         state=state,
         subject_offset=subject_skip,
+        mode=request.mode.value,
+        page_token=request.page_token,
     )
 
 def _target_status_answer(
@@ -1030,6 +1051,23 @@ def _compose_status_answer(
     state: m.RepositoryState,
     page_token: str | None = None,
 ) -> m.SemanticAnswer:
+    if len(subjects) == 1:
+        _sid = subjects[0].subject_id
+        _target_key = (
+            f"{_sid.subject_kind.value}:{_sid.canonical_locator}"
+        )
+    else:
+        _target_key = "scope:" + ",".join(
+            sorted(
+                f"{s.subject_id.subject_kind.value}:"
+                f"{s.subject_id.canonical_locator}"
+                for s in subjects
+            )
+        )
+    _digest = _query_digest(
+        "STATUS", repository_id, _target_key, "", bounds
+    )
+    _validate_service_token(page_token, _digest)
     all_claims: list[m.SemanticClaim] = []
     all_rels: list[m.SemanticRelationship] = []
     first_claims_token: str | None = None
@@ -1157,6 +1195,7 @@ def _compose_status_answer(
             first_claims_token, first_rels_token,
             questions_skip=qshown,
             questions_remaining=qremaining,
+            query_digest=_digest,
         )
     else:
         views, _, qremaining = _paged_question_views(

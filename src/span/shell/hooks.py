@@ -173,7 +173,7 @@ def _attention_hint(counts):
     """Name the exact next operation without inventing a continuation.
 
     Hooks stay read-only and SQL-only: they never allocate or echo a
-    ``cont-*`` token. Stale work points at a scoped refresh; pending/open
+    returned continuation. Stale work points at a scoped refresh; pending/open
     question work points at the continuation returned by the operation
     that suspended.
     """
@@ -186,7 +186,7 @@ def _attention_hint(counts):
     if counts.get("open") or counts.get("pending"):
         hints.append(
             "continue pending work through the continuation returned by "
-            "the suspending operation; never invent a cont-* token"
+            "the suspending operation; pass it unchanged"
         )
     if not hints:
         return ""

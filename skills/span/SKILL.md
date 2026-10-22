@@ -17,14 +17,16 @@ Use this path for every non-trivial Span interaction:
 1. Discover the exact registered `repository_id` from MCP `tools/list` (or
    from a successful `initialize_repository` result). A filesystem path is
    never a repository ID; preserve the registered ID unchanged.
-2. Check readiness with normal `status` when the repository is registered.
-   `READY` means operational storage readiness, not semantic coverage.
+2. Semantic operations check readiness and return canonical
+   uninitialized/unavailable results themselves. Call normal `status` only
+   when readiness, coverage, or freshness is the actual objective. `READY`
+   means operational storage readiness, not semantic coverage.
 3. If readiness is `UNINITIALIZED`, run `initialize_repository` once in its
    dedicated setup workflow. If the repository is already initialized, do not initialize it again just to orient a session.
 4. For an exact user-supplied directory plus objective, call
    `initialize_target` with that complete exact boundary. For ordinary
-   orientation, call `status` with no target and then question-local
-   `explain`; use `explain(establish_baseline=True)` only for an ordinary
+   orientation, call question-local `explain` directly; use
+   `explain(establish_baseline=True)` only for an ordinary
    selected root, never as a substitute for exact-target onboarding.
 5. When a call returns `PendingInterpretation`, inspect that one bounded
    request, use admissible canonical evidence, submit the typed
@@ -61,10 +63,9 @@ Use this path for every non-trivial Span interaction:
 | Explore structural adjacency | `neighbors` | You need bounded callers, callees, or related structural edges | Use adjacency as evidence only; it is not semantic causality |
 | Investigate established execution relationships | `trace` | You need producers, carriers, consumers, boundaries, or lifecycle | Retrieve or interpret that established relationship question; do not use it for raw structural enumeration |
 | Identify governing sources | `authority` | You need normative sources, applicability, precedence, or conflicts | Retrieve or interpret authority evidence; never infer authority from adjacency |
-| Assess a proposed change | `impact` | A material change has a target, `change_kind`, description, and affected assertions where known | Read the bounded pre-change brief and blockers; it never authorizes implementation |
+| Assess a proposed change | `impact` | A material change has a target and `change_kind`; description and affected assertions are optional | Read the bounded pre-change brief and blockers; it never authorizes implementation |
 | Re-examine stale or explicitly challenged understanding | `refresh` | A scoped answer is stale, or an exact persisted question is explicitly challenged | Reinterpret only the supplied scope; examine, submit, and read back the corrected result |
 | Submit a pending interpretation | `submit_interpretation` | You hold a live continuation and a typed result for its exact request | Correct validation/evidence problems and resubmit under the same continuation; success consumes it and returns an answer or next unit |
-| Reissue an identical interpretation task | `reissue_interpretation` | The original interpretation task failed at eligible MCP ingress | Use at most once; submit the identical returned task under its new continuation |
 
 `initialize_repository` is not routine session orientation. `status` is
 read-only and differs in `NORMAL` and `HOOK_FAST`: `NORMAL` `status` reports a
@@ -72,17 +73,11 @@ bounded persisted coverage inventory, while `HOOK_FAST` reports only the
 event-local notice. `HOOK_FAST` sees event-local scope only; it never means the repository is clean. A `HOOK_FAST` `0/0 READY` notice does not describe
 the repository inventory.
 
-The twelve public operations are exactly the operations in the table. There are no semantic aliases. `locate` and `neighbors` return structural
-navigation evidence, not semantic claims. `page_token` is an opaque token
-returned by the operation being paged: service answer pages use `pgq:*`,
-structural `locate` pages use `pgv:*`, `neighbors` uses `pgn:*`, and normal
-repository `status(target=null)` uses `pgq:` with the subject offset in its
-first numeric position. Store-level `pg:*` cursors are internal and are not
-agent input.
-Continuation tokens (`cont-*`) resume one pending interpretation; these
-mechanisms cannot be interchanged. Never invent or reuse a `cont-*`
-token: the only valid value is the one returned by the operation that
-suspended.
+The eleven public operations are exactly the operations in the table. There are no semantic aliases. `locate` and `neighbors` return structural
+navigation evidence, not semantic claims. Pagination is opaque: pass a returned page token unchanged to the same
+operation with the same request arguments. Interpretation is opaque: pass
+the returned `continuation` unchanged to `submit_interpretation`. Never
+decode, edit, increment, or synthesize either value.
 
 `locate` takes exactly one mode. `SYMBOL` requires `query` and accepts an
 optional `target` scope; `EXACT` resolves an exact locator to its
@@ -95,8 +90,10 @@ requires the exact `target` scope and takes no query.
 
 Pick one branch before making a semantic call:
 
-1. **Ordinary orientation:** normal `status` with no target, then `explain` on
-   the chosen target. Never `refresh` on first contact.
+1. **Ordinary orientation:** `explain` on the chosen target. Use `status`
+   only when status or freshness is the actual objective; no status preflight
+   is required because semantic operations check initialization themselves.
+   Never `refresh` on first contact.
 2. **Exact user-supplied directory plus objective:** preserve the complete
    exact boundary and call `initialize_target` once with the exact
    `EvidenceScope` and objective. Process every returned unit.
@@ -152,14 +149,15 @@ The three related result components have different jobs:
 
 - `proposed_target_inventory_accounting` accounts for target inventory
   members;
-- `proposed_question_coverages` admits or updates semantic-question
-  coverage; first admission of a material area requires `PENDING` coverage;
+- `proposed_questions` admits or updates genuinely additional semantic
+  questions; Span creates the first-admission CQ-01 seed for a newly
+  admitted area itself;
 - `proposed_target_questions` associates an identical already-persisted
   `SemanticQuestionScope` with the target.
 
 For example, during exact-target onboarding, a newly discovered material
-area is admitted with an evidence-backed subject and a `PENDING`
-`proposed_question_coverages` entry. If another area already has the exact same persisted question scope, reuse that scope in
+area is admitted with an evidence-backed subject; Span creates the
+first-admission `PENDING` CQ-01. If another area already has the exact same persisted question scope, reuse that scope in
 `proposed_target_questions`; do not manufacture a duplicate question. If an
 inventory member cannot yet be assigned or excluded with evidence, submit
 its current `evidence_ref` with an explicit mapping requirement. A question's
@@ -201,7 +199,7 @@ Build an admissible submission as follows:
    previously persisted by Span. Submitted fingerprints are not authority.
 5. Construct the existing typed `SemanticInterpretationResult` with its
    candidate claims/relationships/subjects as applicable, and include the
-   explicit question coverage or target-accounting outcome required by this
+   explicit `question_decision` or target-accounting outcome required by this
    unit. Authority claims require qualifying authority evidence; source code
    evidence supports observed behavior but does not become normative merely
    by being nearby.
@@ -219,14 +217,14 @@ Build an admissible submission as follows:
 This is adapted from the accepted Addendum H exchange test for a semantic
 question unit, not a target-inventory mapping unit. The evidence identity is
 taken from the pending request, the claim cites that evidence, and the
-coverage binds the result to the request's exact question. The submission
-boundary is the typed `SemanticInterpretationResult` passed to
-`submit_interpretation`:
+decision binds the result to the request's exact question. Identity,
+completion, result refs, and question evidence are Span-owned; the agent
+supplies only the disposition and basis. The submission boundary is the typed
+`SemanticInterpretationResult` passed to `submit_interpretation`:
 
 ```python
 request = pending.request
 evidence_ref = request.evidence_units[0].evidence_ref
-question = request.question
 subject = request.subjects[0].subject_id
 
 claim = m.CandidateSemanticClaim(
@@ -240,24 +238,16 @@ claim = m.CandidateSemanticClaim(
         "seed module states the seed purpose",
     ),
 )
-coverage = m.InterpretationCoverage(
-    subjects=(question.subject,),
-    question_slice=question.question_slice,
-    evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-    declared_complete=True,
-    question=question,
+decision = m.SemanticQuestionDecision(
     disposition=m.SemanticQuestionDisposition.ANSWERED,
-    result_refs=(),
-    resolution_requirements=(),
-    disposition_basis="test explicit completion",
-    question_evidence=(),
+    disposition_basis="examined the admitted seed module",
 )
 result = m.SemanticInterpretationResult(
     claims=(claim,),
     relationships=(),
     candidate_subjects=(),
     candidate_conflicts=(),
-    proposed_question_coverages=(coverage,),
+    question_decision=decision,
     candidate_withdrawals=(),
 )
 answer = ops.submit_interpretation(
@@ -276,9 +266,10 @@ question binding, and disposition before persistence and derives persisted
 result references at the commit boundary.
 
 Claims alone do not complete a question. An answering submission needs an
-explicit `ANSWERED` coverage for the exact bound question with its declared
-completion; unresolved work remains visibly `OPEN` or `PENDING` with
-requirements. Do not reinterpret `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`,
+explicit `ANSWERED` `question_decision` for the exact bound question; Span
+derives `declared_complete`, result refs, question evidence, and the persisted
+`InterpretationCoverage`. Unresolved work remains visibly `OPEN` or `PENDING`
+with requirements. Do not reinterpret `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`,
 `UNRESOLVED`, `STALE`, or `UNVERIFIABLE` as certainty.
 
 ## Continuation recovery
@@ -293,22 +284,15 @@ failure; do not blindly retry.
 | Unreadable or unverifiable evidence rejection | Live, subject to normal expiry | Correct the evidence or submit an appropriate unresolved disposition under the same continuation |
 | In-process persistence failure before successful commit | Retained if the transaction fails | Investigate the error; retry only when safe, under the same continuation |
 | Successful commit | Consumed | Process the returned answer or next pending unit; never replay the consumed continuation |
-| Eligible one-time interpretation-task ingress failure, explicitly reported before the pending task is admitted for semantic submission | Reissue permitted once | Call `reissue_interpretation`; use the identical returned task under its new continuation |
 | Unknown, expired, lost, or already consumed continuation | Not reusable | Re-enter through the original idempotent operation |
 | Post-commit response loss | Already consumed; semantic state may be durable | Re-enter through the original idempotent operation and inspect persisted progress |
 | Process crash with uncertain commit | In-memory continuation lost | Re-enter through the original operation; rely on canonical persisted state |
-| Concurrent submission or in-flight token | Ownership unavailable | Do not submit a competitor or force reissue; resolve the in-flight result/state |
+| Concurrent submission or in-flight token | Ownership unavailable | Do not submit a competitor; resolve the in-flight result/state |
 
-`reissue_interpretation` is not the remedy for a malformed MCP payload, a
-returned `ingress` or `validation` error from `submit_interpretation`, expiry,
-timeout, process interruption, or uncertain commit. Those cases use the same
-continuation when the response says it remains live, or re-enter the original
-operation when the continuation is unavailable. Reissue is allowed only when
-the transport/host explicitly identifies the separate eligible
-interpretation-task ingress failure before semantic submission was admitted;
-do not infer it from a generic timeout or from a malformed-payload diagnostic.
-It returns the identical bounded task once; a second reissue abandons that
-path. A continuation token and a listing page token are separate mechanisms.
+There is no reissue operation. A malformed payload or semantic rejection
+reuses the same continuation after correction; an unknown, expired, lost, or
+already-consumed continuation is recovered by re-entering the original
+idempotent operation. Persisted canonical state determines remaining work.
 
 ## Freshness, authority, and closeout
 

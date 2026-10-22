@@ -3,7 +3,7 @@
 The host-side driver runs the canonical submit loop without touching
 semantic content. Service-backed cases prove driven exchanges validate
 identically to the manual loop across all result fields; stub cases
-prove halt, reissue, budget, and cost behavior.
+prove halt, budget, and cost behavior.
 """
 
 import datetime
@@ -14,7 +14,6 @@ from span.core.validation import (
     InterpretationUnitRejected as _InterpretationUnitRejected,
 )
 from span.ports.interpretation import (
-    InterpretationIngressFailure,
     InterpretationUnavailable,
     PendingInterpretation,
 )
@@ -119,7 +118,6 @@ def _harness():
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -157,11 +155,6 @@ class DriverServiceTest(unittest.TestCase):
                     c, r, structural=structural, evidence=evidence,
                     store=store, continuations=cont,
                 ),
-                reissue=lambda: ops.explain(
-                    _explain_request(), structural=structural,
-                    evidence=evidence, store=store,
-                    continuations=cont, authority_seeds=seeds,
-                ),
                 max_rounds=8,
             )
             self.assertIsNone(driven.halt)
@@ -196,7 +189,6 @@ class DriverServiceTest(unittest.TestCase):
                 manual.resolution_requirements,
             )
             self.assertEqual(driven.cost.submissions, 1)
-            self.assertEqual(driven.cost.reissues, 0)
             self.assertGreaterEqual(driven.cost.elapsed_ms, 0)
         finally:
             store.close()
@@ -233,7 +225,6 @@ class DriverServiceTest(unittest.TestCase):
                     relationships=(),
                     candidate_subjects=(),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(),
                     candidate_withdrawals=(),
                 )
 
@@ -259,11 +250,6 @@ class DriverServiceTest(unittest.TestCase):
                 submit=lambda c, r: ops.submit_interpretation(
                     c, r, structural=structural, evidence=evidence,
                     store=store, continuations=cont2,
-                ),
-                reissue=lambda: ops.explain(
-                    _explain_request(), structural=structural,
-                    evidence=evidence, store=store,
-                    continuations=cont2, authority_seeds=seeds,
                 ),
                 max_rounds=8,
             )
@@ -295,26 +281,21 @@ class DriverMechanicsTest(unittest.TestCase):
         store.close()
         return pending, answer
 
-    def test_expired_continuation_reissues_once(self):
-        pending, answer = self._stubs()
-        calls = {"submit": 0}
+    def test_unavailable_continuation_halts(self):
+        pending, _ = self._stubs()
 
-        def _flaky_submit(_continuation, _result):
-            calls["submit"] += 1
-            if calls["submit"] == 1:
-                raise InterpretationUnavailable("expired: cont-9")
-            return answer
+        def _expired_submit(_continuation, _result):
+            raise InterpretationUnavailable("expired: cont-9")
 
         result = drive(
             lambda: pending,
             lambda _request: _agent().perform(_request),
-            submit=_flaky_submit,
-            reissue=lambda: answer,
+            submit=_expired_submit,
             max_rounds=8,
         )
-        self.assertIsNone(result.halt)
-        self.assertIs(result.answer, answer)
-        self.assertEqual(result.cost.reissues, 1)
+        self.assertIsNone(result.answer)
+        self.assertIsNotNone(result.halt)
+        self.assertEqual(result.halt.kind, "unavailable")
         self.assertEqual(result.cost.submissions, 0)
 
     def test_round_budget_halts(self):
@@ -326,7 +307,6 @@ class DriverMechanicsTest(unittest.TestCase):
             lambda: pending,
             lambda _request: _agent().perform(_request),
             submit=lambda _c, _r: other,
-            reissue=lambda: other,
             max_rounds=3,
         )
         self.assertIsNone(result.answer)
@@ -338,7 +318,7 @@ class DriverMechanicsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             drive(
                 lambda: answer, lambda _r: _agent().perform(pending.request),
-                submit=lambda _c, _r: answer, reissue=lambda: answer,
+                submit=lambda _c, _r: answer,
                 max_rounds=0,
             )
 
@@ -346,20 +326,19 @@ class DriverMechanicsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             DriveResult(answer=None, halt=None, cost=None)  # type: ignore[arg-type]
 
-    def test_ingress_halt(self):
+    def test_unexpected_exception_propagates(self):
         pending, _ = self._stubs()
 
-        def _bad_submit(_c, _r):
-            raise InterpretationIngressFailure("bad shape")
+        def _broken_submit(_c, _r):
+            raise RuntimeError("transport failure")
 
-        result = drive(
-            lambda: pending,
-            lambda _request: _agent().perform(_request),
-            submit=_bad_submit,
-            reissue=lambda: pending,
-            max_rounds=8,
-        )
-        self.assertEqual(result.halt.kind, "ingress")
+        with self.assertRaises(RuntimeError):
+            drive(
+                lambda: pending,
+                lambda _request: _agent().perform(_request),
+                submit=_broken_submit,
+                max_rounds=8,
+            )
 
 
 if __name__ == "__main__":

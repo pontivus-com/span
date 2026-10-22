@@ -10,7 +10,6 @@ import unittest
 
 from span.core import model as m
 from span.ports.interpretation import (
-    InterpretationIngressFailure,
     InterpretationUnavailable,
     PendingInterpretation,
 )
@@ -137,7 +136,6 @@ def _harness(files=None):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id="repo-1",
@@ -173,6 +171,36 @@ def _run_exchange(explain_request, structural, evidence, store, agent,
 
 
 class ExchangeTest(unittest.TestCase):
+    def test_unfinished_pending_submission_stays_outstanding(self):
+        structural, evidence, store = _harness()
+        try:
+            continuations = ContinuationStore()
+            pending = ops.explain(
+                _explain_request(), structural=structural, evidence=evidence,
+                store=store, continuations=continuations,
+                authority_seeds=(_ref("README.md"),),
+            )
+            self.assertIsInstance(pending, PendingInterpretation)
+            answer = ops.submit_interpretation(
+                pending.continuation,
+                m.SemanticInterpretationResult(
+                    question_decision=m.SemanticQuestionDecision(
+                        m.SemanticQuestionDisposition.PENDING
+                    ),
+                ),
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            second = ops.explain(
+                _explain_request(), structural=structural, evidence=evidence,
+                store=store, continuations=continuations,
+                authority_seeds=(_ref("README.md"),),
+            )
+            self.assertIsInstance(second, PendingInterpretation)
+        finally:
+            store.close()
+
     def test_suspend_then_submit_answers(self):
         structural, evidence, store = _harness()
         try:
@@ -233,57 +261,9 @@ class ExchangeTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_reissue_once_then_abandoned(self):
-        structural, evidence, store = _harness()
-        try:
-            continuations = ContinuationStore()
-            pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
-                authority_seeds=(_ref("README.md"),),
-            )
-            reissued = ops.reissue_interpretation(
-                pending.continuation, continuations=continuations
-            )
-            self.assertIsInstance(reissued, PendingInterpretation)
-            self.assertNotEqual(
-                reissued.continuation, pending.continuation
-            )
-            self.assertEqual(
-                reissued.request, pending.request
-            )
-            with self.assertRaises(InterpretationIngressFailure):
-                ops.reissue_interpretation(
-                    reissued.continuation, continuations=continuations
-                )
-            with self.assertRaises(InterpretationUnavailable):
-                ops.reissue_interpretation(
-                    "cont-999", continuations=continuations
-                )
-        finally:
-            store.close()
-
-    def test_reissued_continuation_submits_normally(self):
-        structural, evidence, store = _harness()
-        try:
-            continuations = ContinuationStore()
-            pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
-                authority_seeds=(_ref("README.md"),),
-            )
-            reissued = ops.reissue_interpretation(
-                pending.continuation, continuations=continuations
-            )
-            answer = ops.submit_interpretation(
-                reissued.continuation, _agent().perform(reissued.request),
-                structural=structural, evidence=evidence, store=store,
-                continuations=continuations,
-            )
-            self.assertIsInstance(answer, m.SemanticAnswer)
-            self.assertEqual(len(answer.content.claims), 1)
-        finally:
-            store.close()
+    def test_reissue_operation_removed(self):
+        self.assertFalse(hasattr(ops, "reissue_interpretation"))
+        self.assertFalse(hasattr(ops, "SemanticReissueInterpretationRequest"))
 
     def test_naive_clock_abandons(self):
         from span.shell.agent_exchange.continuations import SuspendedOperation
@@ -428,7 +408,6 @@ class MappingDiagnosticsTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",
@@ -499,7 +478,6 @@ class MappingDiagnosticsTest(unittest.TestCase):
                 ),
             ),
             candidate_conflicts=(),
-            proposed_question_coverages=(),
             candidate_withdrawals=(),
             proposed_target_inventory_accounting=(
                 m.CandidateTargetInventoryAccount(
@@ -533,7 +511,7 @@ class MappingDiagnosticsTest(unittest.TestCase):
                 )
             self.assertTrue(
                 any(
-                    "proposed_question_coverages to create new PENDING "
+                    "proposed_questions to create new PENDING "
                     "coverage" in diagnostic
                     for diagnostic in ctx.exception.diagnostics
                 ),
@@ -669,27 +647,14 @@ class RefreshExchangeTest(unittest.TestCase):
                         claims=(), relationships=(),
                         governing_source_refs=(), diagnostics=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            m.InterpretationCoverage(
-                                subjects=(unit.request.question.subject,),
-                                question_slice=(
-                                    unit.request.question.question_slice
-                                ),
-                                evidence_scope=m.EvidenceScope(),
-                                declared_complete=False,
-                                question=unit.request.question,
-                                disposition=(
-                                    m.SemanticQuestionDisposition
-                                    .NOT_APPLICABLE
-                                ),
-                                result_refs=(), resolution_requirements=(),
-                                disposition_basis="drain test",
-                                question_evidence=(
-                                    m.QuestionEvidenceObservation(
-                                        evidence_ref=_ref("src/main.py"),
-                                        observed_fingerprint=observed,
-                                    ),
-                                )),
+                        question_decision=m.SemanticQuestionDecision(
+                            disposition=(
+                                m.SemanticQuestionDisposition.NOT_APPLICABLE
+                            ),
+                            evidence_scope=m.EvidenceScope(
+                                evidence_refs=(_ref("src/main.py"),)
+                            ),
+                            disposition_basis="drain test",
                         ),
                         candidate_withdrawals=(),
                         proposed_target_inventory_accounting=(),
@@ -800,18 +765,15 @@ class RefreshExchangeTest(unittest.TestCase):
             store.close()
 
     def test_none_target_rejected(self):
-        structural, evidence, store, continuations, _ = self._indexed()
-        try:
-            with self.assertRaises(ops.RefreshScopeError):
-                ops.refresh(
-                    ops.SemanticRefreshRequest(
-                        repository_id="repo-1", target=None, bounds=_bounds()
-                    ),
-                    structural=structural, evidence=evidence, store=store,
-                    continuations=continuations,
-                )
-        finally:
-            store.close()
+        # A repository-wide refresh has no execution path: the canonical
+        # request makes target required and the generated schema stops
+        # advertising a null alternative (Addendum L §13).
+        from span.shell.mcp import TOOL_SCHEMAS, decode_request
+
+        schema = TOOL_SCHEMAS["refresh"]
+        self.assertIn("target", schema["required"])
+        with self.assertRaises(ValueError):
+            decode_request("refresh", {"repository_id": "repo-1"})
 
     def test_dirty_tree_uses_content_fingerprints(self):
         files = dict(FILES)
@@ -827,7 +789,6 @@ class RefreshExchangeTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",
@@ -856,7 +817,6 @@ class InitializeTest(unittest.TestCase):
             result = ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="/tmp/svc",
-                    structural_provider_config="memory:spec",
                     authority_seeds=(_ref("README.md"),),
                 ),
                 repository_id="repo-1",
@@ -899,7 +859,6 @@ class InitializeTest(unittest.TestCase):
                 ops.initialize_repository(
                     ops.SemanticInitializeRepositoryRequest(
                         repository_locator="",
-                        structural_provider_config="x",
                     ),
                     repository_id="repo-1",
                     structural=structural,
@@ -922,7 +881,6 @@ class InitializeTest(unittest.TestCase):
             result = ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="/tmp/svc",
-                    structural_provider_config="memory:spec",
                 ),
                 repository_id="repo-1",
                 structural=structural,
@@ -1137,7 +1095,6 @@ class StoreResolutionTest(unittest.TestCase):
             ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="fixture",
-                    structural_provider_config="memory:test",
                     authority_seeds=(),
                 ),
                 repository_id="repo-1",
@@ -1635,7 +1592,6 @@ class CrossUnitCitationTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",
@@ -1860,7 +1816,6 @@ class SemanticOutcomeTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",
@@ -1908,23 +1863,9 @@ class SemanticOutcomeTest(unittest.TestCase):
                 diagnostics=result.diagnostics,
                 candidate_subjects=result.candidate_subjects,
                 candidate_conflicts=result.candidate_conflicts,
-                proposed_question_coverages=(
-                    m.InterpretationCoverage(
-                        subjects=(question.subject,),
-                        question_slice=question.question_slice,
-                        evidence_scope=m.EvidenceScope(
-                            paths=(), evidence_refs=()
-                        ),
-                        declared_complete=True,
-                        question=question,
-                        disposition=(
-                            m.SemanticQuestionDisposition.ANSWERED
-                        ),
-                        result_refs=(),
-                        resolution_requirements=(),
-                        disposition_basis="test explicit completion",
-                        question_evidence=(),
-                    ),
+                question_decision=m.SemanticQuestionDecision(
+                    disposition=m.SemanticQuestionDisposition.ANSWERED,
+                    disposition_basis="test explicit completion",
                 ),
                 candidate_withdrawals=result.candidate_withdrawals,
             )
@@ -2048,27 +1989,9 @@ class SemanticOutcomeTest(unittest.TestCase):
                     diagnostics=(),
                     candidate_subjects=(),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        m.InterpretationCoverage(
-                            subjects=(
-                                pending.request.question.subject,
-                            ),
-                            question_slice=(
-                                pending.request.question.question_slice
-                            ),
-                            evidence_scope=m.EvidenceScope(
-                                paths=(), evidence_refs=()
-                            ),
-                            declared_complete=True,
-                            question=pending.request.question,
-                            disposition=(
-                                m.SemanticQuestionDisposition.ANSWERED
-                            ),
-                            result_refs=(),
-                            resolution_requirements=(),
-                            disposition_basis="test explicit completion",
-                            question_evidence=(),
-                        ),
+                    question_decision=m.SemanticQuestionDecision(
+                        disposition=m.SemanticQuestionDisposition.ANSWERED,
+                        disposition_basis="test explicit completion",
                     ),
                     candidate_withdrawals=(),
                 ),
@@ -2131,7 +2054,6 @@ class ContextualResolutionTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id=repo,

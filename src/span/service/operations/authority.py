@@ -19,6 +19,8 @@ from span.service.answers import (
     _bound_info,
     _conflicts_for,
     _next_service_token,
+    _query_digest,
+    _validate_service_token,
     coverage_counts_for,
     state_explanation_for,
 )
@@ -65,8 +67,17 @@ def _compose_authority_answer(
     bounds: m.QueryBounds,
     state: m.RepositoryState,
     page_token: str | None = None,
+    question_key: str = "",
+    target_key: str | None = None,
 ) -> m.SemanticAnswer:
     sid = subject.subject_id
+    _target = target_key or (
+        f"{sid.subject_kind.value}:{sid.canonical_locator}"
+    )
+    _digest = _query_digest(
+        "AUTHORITY", repository_id, _target, question_key, bounds,
+    )
+    _validate_service_token(page_token, _digest)
     claims, relationships, claims_token, rels_token = _load_subject_state(
         repository_id, sid, store=store, bounds=bounds,
         page_token=page_token,
@@ -153,7 +164,8 @@ def _compose_authority_answer(
                 claims_token, rels_token,
                 questions_skip=qshown,
                 questions_remaining=qremaining,
-            ) or token,
+                query_digest=_digest,
+            ),
         ),
         state_explanation=state_explanation_for(
             tuple(claims), tuple(relationships),
@@ -204,6 +216,7 @@ def authority(
             request.repository_id, subjects[0], None,
             structural=structural, evidence=evidence, store=store,
             bounds=bounds, state=state,
+            target_key=f"claim:{request.target.id.value}",
         )
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
@@ -300,6 +313,10 @@ def authority(
             request.repository_id, subject, resolution,
             structural=structural, evidence=evidence, store=store,
             bounds=bounds, state=state, page_token=request.page_token,
+            question_key=(
+                f"{_sel_scope.question_class.value}:"
+                f"{_sel_scope.question_slice}"
+            ),
         )
         _filtered = _filter_views(
             _ans.content.question_coverage, _sel_scope

@@ -44,8 +44,21 @@ workflows, or originates authority).
   completeness), service-owned derivation (default question slices, candidate
   target accounts, first-admission seed, bounded mapping batches), the
   one-grammar compact MCP wire codec, and the interpretation profile
+- `semantic-governance-addendum-m-agent-facing-mcp-friction-and-release-closure.md`
+  — governing closeout for the public MCP friction/release boundaries:
+  eleven-operation roster, continuation recovery, one setup locator,
+  minimal task templates, batch-complete mapping accounting, opaque
+  tokens, one OpenCode V2 registration, provider-owned structural
+  currency, synchronized managed guidance, and the external-client gate
+- `semantic-governance-addendum-l-agent-command-boundary.md` — adopted
+  command/persistence ownership correction: the agent decides meaning through
+  `question_decision` / `proposed_questions`; Span derives and persists the
+  canonical `InterpretationCoverage`; wire-ceremony and installer corrections
+  ship in the same change
 
 Governing authority: `.context/requirements/`, the v0.6 implementation plan,
-and Addendum E for the corrective boundaries named there. If any historical
+and Addendum E for the corrective boundaries named there; Addendum L governs
+the agent command boundary, and Addendum M governs the public
+friction/release boundaries it names. If any historical
 guide or Addenda B–D passage disagrees with E on those boundaries, E wins.
 Guides describe; they never define semantics.

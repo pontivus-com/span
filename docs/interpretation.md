@@ -60,6 +60,9 @@ Exact user-supplied directory targets use `initialize_target` per
 Typed candidate claims/relationships (unique keys), candidate
 subjects, candidate conflicts, governing-source refs, target-inventory
 accounting proposals for target-mode tasks, and diagnostics.
+Question semantics travel in `question_decision` for the already-bound
+question and `proposed_questions` for questions the agent introduces or
+explicitly nominates; `InterpretationCoverage` is never the agent command.
 No new kinds. Authority arrives as `CandidateAuthority`: binding plus
 `AuthoritySupport` (verbatim quote + locating sections) — the core
 checks the account mechanically (resolves, belongs, quote substring,
@@ -69,11 +72,12 @@ verifies prose truth. Empty basis summaries fail the unit.
 ## Explicit completion (Addendum C C-05)
 
 Claims alone never complete a question. A submission answers its
-bound question only with an explicit `ANSWERED` coverage for that
-exact question (`declared_complete` set; the service derives result
-refs from validated candidates). Without explicit coverage the unit
-persists `PENDING` and its claims stay unassigned output. Explicit
-`ANSWERED` with zero validated material rejects the whole unit.
+bound question only with an explicit `ANSWERED` `question_decision`
+(the service derives `declared_complete`, result refs, and question
+evidence from validated candidates and admitted evidence). Without
+explicit decision the unit persists `PENDING` and its claims stay
+unassigned output. Explicit `ANSWERED` with zero validated material
+rejects the whole unit.
 Only complete replacement retires unshared prior outputs;
 `PENDING`/`OPEN`/`NOT_APPLICABLE` never retire by omission, and the
 store refuses `ANSWERED` rows with empty result refs. A semantic question's
@@ -85,9 +89,9 @@ evidence basis.
 
 `InterpretationSuccess` · `InterpretationUnavailable` (unknown/expired
 continuation; re-issue the idempotent original op) ·
-`InterpretationIngressFailure` (identical task reissued at most once;
-second failure abandons) · `SemanticValidationFailure` (whole unit
-rejected, no salvage, continuation abandoned). Provider transports,
+`SemanticValidationFailure` (whole unit rejected, no salvage; the live
+continuation remains usable for a corrected submission). There is no
+reissue operation and no ingress-failure exchange class. Provider transports,
 HTTP statuses, and model errors belong to the agent's environment and
 never enter Span's failure model. Continuations are single-use,
 TTL-bounded (30 min default), never persisted, never authoritative.

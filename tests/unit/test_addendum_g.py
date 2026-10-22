@@ -58,7 +58,6 @@ def _harness(files=None):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id="repo-1",
@@ -219,8 +218,8 @@ class TransportDiagnosticsTest(unittest.TestCase):
         self.assertTrue(result.is_error)
         body = json.loads(result.content)
         self.assertEqual(body["error"], "ingress")
-        self.assertIn("continuation presented as page_token", body["message"])
-        self.assertIn("submit_interpretation", body["message"])
+        self.assertIn("continuation was supplied where a page token was expected", body["message"])
+        self.assertIn("operation being paged", body["message"])
 
     def test_null_edge_kinds_decodes_as_all(self):
         import json
@@ -262,7 +261,7 @@ class TransportDiagnosticsTest(unittest.TestCase):
         self.assertTrue(result.is_error)
         body = json.loads(result.content)
         self.assertEqual(body["error"], "ingress")
-        self.assertIn("page_token presented as continuation", body["message"])
+        self.assertIn("page token was supplied where an interpretation continuation was expected", body["message"])
 
     def test_bounds_over_maximum_names_received_max_default(self):
         with self.assertRaises(BoundsRejectedError) as ctx:
@@ -295,23 +294,13 @@ class TransportDiagnosticsTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_null_refresh_names_scoped_recovery(self):
-        structural, evidence, store = _harness()
-        try:
-            request = ops.SemanticRefreshRequest(
-                repository_id="repo-1", target=None, bounds=_bounds(),
-            )
-            with self.assertRaises(RefreshScopeError) as ctx:
-                ops.refresh(
-                    request, structural=structural, evidence=evidence,
-                    store=store, continuations=ContinuationStore(),
-                )
-            message = str(ctx.exception)
-            self.assertIn("SubjectSelector", message)
-            self.assertIn("status", message)
-            self.assertNotIn("Phase 3", message)
-        finally:
-            store.close()
+    def test_refresh_target_is_required_at_ingress(self):
+        from span.shell.mcp import TOOL_SCHEMAS, decode_request
+
+        schema = TOOL_SCHEMAS["refresh"]
+        self.assertIn("target", schema["required"])
+        with self.assertRaises(ValueError):
+            decode_request("refresh", {"repository_id": "repo-1"})
 
 
 class RefreshTargetTypeTest(unittest.TestCase):
@@ -687,7 +676,7 @@ class EntryDecisionDescriptionTest(unittest.TestCase):
         description = TOOL_DESCRIPTIONS["status"]
         self.assertIn("exact SubjectSelector", description)
         self.assertIn("question-local explain", description)
-        self.assertIn("never an invented cont-* token", description)
+        self.assertIn("returned by the suspending operation", description)
 
 
 class CoverageEntryGuidanceTest(unittest.TestCase):
@@ -746,7 +735,7 @@ class CoverageEntryGuidanceTest(unittest.TestCase):
                 "continuation returned by the suspending operation",
                 descriptions,
             )
-            self.assertIn("never invent a cont-* token", descriptions)
+            self.assertIn("pass the returned continuation unchanged", descriptions)
         finally:
             store.close()
 
@@ -795,26 +784,16 @@ class RefreshAdmissionOrderTest(unittest.TestCase):
             m.SemanticInterpretationResult(
                 claims=(), relationships=(), governing_source_refs=(),
                 diagnostics=(), candidate_subjects=(),
-                candidate_conflicts=(), proposed_question_coverages=(
-                    m.InterpretationCoverage(
-                        subjects=(pending.request.question.subject,),
-                        question_slice=(
-                            pending.request.question.question_slice
-                        ),
-                        evidence_scope=m.EvidenceScope(),
-                        declared_complete=False,
-                        question=pending.request.question,
-                        disposition=(
-                            m.SemanticQuestionDisposition.NOT_APPLICABLE
-                        ),
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="rotation test",
-                        question_evidence=(
-                            m.QuestionEvidenceObservation(
-                                evidence_ref=_ref("src/main.py"),
-                                observed_fingerprint=observed,
-                            ),
-                        )),),
+                candidate_conflicts=(),
+                question_decision=m.SemanticQuestionDecision(
+                    disposition=(
+                        m.SemanticQuestionDisposition.NOT_APPLICABLE
+                    ),
+                    evidence_scope=m.EvidenceScope(
+                        evidence_refs=(_ref("src/main.py"),)
+                    ),
+                    disposition_basis="rotation test",
+                ),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(),
                 proposed_target_questions=(),
@@ -1014,7 +993,7 @@ class StructuralCurrentTest(unittest.TestCase):
     `refresh` calls `ensure_current` exactly once per call; provider
     failure degrades to an UNVERIFIABLE note, never raises; the graft
     adapter answers currency from its own wiring-vs-HEAD computation
-    and never builds during describe. No MCP surface change (twelve
+    and never builds during describe. No MCP surface change (eleven
     operations; TOOL_NAMES freeze covered in test_mcp_transport)."""
 
     def _refresh_harness(self, structural):
@@ -1024,7 +1003,6 @@ class StructuralCurrentTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",
@@ -1187,7 +1165,6 @@ class StructuralCurrentTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",

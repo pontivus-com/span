@@ -30,7 +30,7 @@ sessions; the agent follows the skill-driven lifecycle instead.
 
 | Duty | Agent action |
 |---|---|
-| orient | normal `status` (no target), then `explain` |
+| orient | call the semantic operation the task needs; `explain` for ordinary orientation, `status` only when freshness/coverage is the objective |
 | material change | `impact` before editing; scoped `status` → tests → scoped `refresh` → scoped `status` after |
 
 Prior live plugin arrival evidence (`hook_arrivals_opencode.json`) is

@@ -31,9 +31,9 @@ target repo they govern; unknown seed locators fail closed.
 Discover the exact registered canonical `repository_id` through MCP
 `tools/list`. If the repository is `UNINITIALIZED`, call
 `initialize_repository` once for the repository root with
-a plain `repository_locator`, `structural_provider_config` (plain path
-canonical), and only user-supplied
-`authority_seeds` (unknown seeds fail closed). Provisioning runs the one
+one plain `repository_locator` and only user-supplied
+`authority_seeds` (unknown seeds fail closed); provider selection stays
+shell-owned. Provisioning runs the one
 bounded provider build when the cache is missing or stale; a failed
 build is an actionable setup failure. Reuse the returned canonical
 ID unchanged. If it is already initialized, do not initialize it again for a
@@ -81,11 +81,14 @@ coverage contract records it.
 Recording convention: submit typed target-inventory accounting for every
 current inventory member: assign it to one or more admitted area
 subjects, provide an evidence-backed target exclusion (`SemanticBasis`), or record an explicit
-unresolved mapping requirement. First admission of an area to this target
-requires a `PENDING` question or reuse of persisted coverage via
-`proposed_target_questions`. This is separate from admitting one question
-per coherent area with the area anchor as `scope_root` and the area's complete
-evidence in that question's `evidence_scope`. `NOT_APPLICABLE` answers a
+unresolved mapping requirement. Submit exactly one accounting decision for
+every inventory member bound in the mapping task. Span creates the
+first-admission `PENDING` CQ-01 itself for a newly admitted area; reuse
+persisted coverage via `proposed_target_questions` when an identical scope
+already exists. This is
+separate from admitting one question per coherent area with the area anchor as
+`scope_root` and the area's complete evidence in that question's
+`SemanticQuestionDecision.evidence_scope`. `NOT_APPLICABLE` answers a
 semantic question; it does not exclude that area's inventory from the target.
 Admitted area subjects stay queryable by exact id. `status(TargetId)` (`NORMAL`
 only) then reports target accounting and semantic coverage separately; unresolved or
@@ -155,13 +158,10 @@ For target-mode work, the result may include bounded target-inventory
 accounting proposals; ordinary question-local results leave that component
 empty. Span validates and writes accepted accounting, subjects, semantic
 results, and target-bound coverage atomically through the canonical batch.
-Use `reissue_interpretation` once and only when the transport/host explicitly
-reports an eligible interpretation-task ingress failure before semantic
-submission is admitted, then submit the returned identical task. A malformed
-payload or returned `ingress`/`validation` error keeps the existing
-continuation: correct and resubmit it under that same continuation.
-An unknown or expired continuation is never reissued: re-issue the
-idempotent original operation instead. Continue until no
+A malformed payload or returned `validation` error keeps the existing
+continuation: correct and resubmit it under that same continuation. An
+unknown, expired, or lost continuation is recovered by re-running the
+idempotent original operation; there is no reissue operation. Continue until no
 unprocessed target work remains. One representative answer is never
 completion. Each submission persists canonical results plus the next task
 or a truthful terminal result.
@@ -184,7 +184,7 @@ To challenge a `CURRENT` explanation without a source change, resolve
 the exact persisted question from `status`/`explain` question coverage,
 then call `refresh` with the exact `SubjectSelector` and explicit
 `stale_only=False`. Nominate exactly one already-persisted original
-question in the submission, with evidence-grounded withdrawals and
+question through `proposed_questions`, with evidence-grounded withdrawals and
 replacements; a second distinct correction question in the same unit
 is rejected.
 

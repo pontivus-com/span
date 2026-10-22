@@ -210,7 +210,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                         ServerConfig(data_dir=data),
                         ops.SemanticInitializeRepositoryRequest(
                             repository_locator=str(repo),
-                            structural_provider_config=str(repo),
                             authority_seeds=(),
                         ),
                     )
@@ -402,7 +401,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                     ServerConfig(data_dir=data),
                     ops.SemanticInitializeRepositoryRequest(
                         repository_locator=str(repo),
-                        structural_provider_config=str(repo),
                         authority_seeds=(),
                     ),
                 )
@@ -415,7 +413,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                     ServerConfig(data_dir=data),
                     ops.SemanticInitializeRepositoryRequest(
                         repository_locator=f"graft:{repo}",
-                        structural_provider_config=f"graft:{repo}",
                         authority_seeds=(),
                     ),
                 )
@@ -501,7 +498,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                         _ServerConfig(data_dir=_pl.Path(_tmp) / "data"),
                         _ops.SemanticInitializeRepositoryRequest(
                             repository_locator=str(_repo),
-                            structural_provider_config=str(_repo),
                             authority_seeds=(),
                         ),
                     )

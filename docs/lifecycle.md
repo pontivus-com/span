@@ -5,7 +5,7 @@ OFFLINE (dedicated setup session)
   initialize_repository → READY (no interpretation happens here)
 
 NORMAL CODING SESSION (enter anywhere)
-  ORIENT        status (no target) → explain
+  ORIENT        explain (status only when status/freshness is the goal)
   PREPARE       impact  (material changes: always before editing)
   INVESTIGATE   trace / authority (where required)
   IMPLEMENT     external editing tools
@@ -47,8 +47,8 @@ Normal `status` names the next exact step in each non-current entry:
   on that subject. A continuation exists only after that operation
   suspends.
 - Pending or open question work → continue through the continuation
-  returned by the operation that suspended. Never invent or reuse a
-  `cont-*` token.
+  returned by the operation that suspended. Pass it unchanged; never
+  decode or synthesize it.
 
 Hooks report the same distinction in compact form and never allocate a
 continuation.
@@ -85,9 +85,10 @@ Each pending task exposes that boundary separately from its current
 structural anchor. The active agent uses structural and filesystem discovery
 to partition that boundary into material areas, then drives the returned
 typed units through investigation and `submit_interpretation` serially,
-using `reissue_interpretation` once only for an ingress-failed
-continuation (expired or lost continuations never reissue: re-run the
-idempotent original operation instead). `explain(establish_baseline=True)` remains for an ordinary
+using the returned continuation; a malformed or validation-rejected unit
+reuses the same continuation after correction, while an unknown, expired,
+or lost continuation is recovered by re-running the idempotent original
+operation (there is no reissue operation). `explain(establish_baseline=True)` remains for an ordinary
 selected root without an exact target directory; it is not the exact-target
 path. Every material area must end with persisted coverage or an explicit
 `NOT_APPLICABLE`, `OPEN`, or `PENDING` disposition with its requirement; a

@@ -424,7 +424,7 @@ def _compose_trace_answer(
         resolution_requirements=tuple(requirements),
         bound_info=_bound_info(
             bounds, returned, truncated or truncated_walk,
-            category or ("walk" if truncated_walk else None), token,
+            category or ("walk" if truncated_walk else None), None,
         ),
         state_explanation=state_explanation_for(
             tuple(kept_claims), tuple(kept_rels),

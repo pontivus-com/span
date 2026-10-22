@@ -43,6 +43,16 @@ try:
 except Exception:
     _HAS_MCP_SDK = False
 
+
+def _decision(coverage):
+    """Test-only: express an authored coverage as the compact decision."""
+    return m.SemanticQuestionDecision(
+        disposition=coverage.disposition,
+        evidence_scope=coverage.evidence_scope,
+        resolution_requirements=coverage.resolution_requirements,
+        disposition_basis=coverage.disposition_basis,
+    )
+
 REPO = "mcp-svc"
 
 FILES = {
@@ -108,7 +118,6 @@ def _harness():
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -146,7 +155,7 @@ def _selector_args(locator="src/tools.py"):
 class SchemaSyncTest(unittest.TestCase):
     """Tool schemas stay a mechanical projection of the contracts."""
 
-    def test_twelve_canonical_tools(self):
+    def test_eleven_canonical_tools(self):
         self.assertEqual(
             TOOL_NAMES,
             (
@@ -159,7 +168,6 @@ class SchemaSyncTest(unittest.TestCase):
                 "status",
                 "refresh",
                 "submit_interpretation",
-                "reissue_interpretation",
                 "locate",
                 "neighbors",
             ),
@@ -199,8 +207,9 @@ class SchemaSyncTest(unittest.TestCase):
     def test_nullable_targets_advertise_null(self):
         # J-8/S6.2: a single-dataclass (or X|None) position forbids the
         # tag; a nullable contract target advertises an explicit null
-        # alternative, and a non-null target does not.
-        for tool in ("status", "refresh", "locate"):
+        # alternative, and a non-null target does not. Refresh's target
+        # is required (Addendum L §13): no impossible null is advertised.
+        for tool in ("status", "locate"):
             with self.subTest(tool=tool):
                 target_schema = TOOL_SCHEMAS[tool]["properties"]["target"]
                 alternatives = target_schema.get("anyOf", [])
@@ -208,6 +217,14 @@ class SchemaSyncTest(unittest.TestCase):
                     any(a == {"type": "null"} for a in alternatives),
                     target_schema,
                 )
+        refresh_schema = TOOL_SCHEMAS["refresh"]["properties"]["target"]
+        self.assertFalse(
+            any(
+                branch == {"type": "null"}
+                for branch in refresh_schema.get("anyOf", [])
+            ),
+            refresh_schema,
+        )
         for tool in (
             "explain", "impact", "trace", "authority",
             "initialize_target", "neighbors",
@@ -229,8 +246,16 @@ class SchemaSyncTest(unittest.TestCase):
         init = TOOL_SCHEMAS["initialize_repository"]
         self.assertEqual(
             set(init["required"]),
-            {"repository_locator", "structural_provider_config"},
+            {"repository_locator"},
         )
+        self.assertNotIn(
+            "structural_provider_config", init["properties"]
+        )
+        impact = TOOL_SCHEMAS["impact"]
+        self.assertNotIn("change_description", impact["required"])
+        trace = TOOL_SCHEMAS["trace"]
+        self.assertNotIn("relationship_filter", trace["required"])
+        self.assertNotIn("boundary_only", trace["required"])
 
 
 class IngressTest(unittest.TestCase):
@@ -368,7 +393,11 @@ class DispatchTest(unittest.TestCase):
                                 ),
                             ),
                             candidate_conflicts=(),
-                            proposed_question_coverages=(map_cov,),
+                            proposed_questions=(
+                                m.ProposedSemanticQuestion(
+                                    map_cov.question, _decision(map_cov)
+                                ),
+                            ),
                             candidate_withdrawals=(),
                             proposed_target_inventory_accounting=(
                                 m.CandidateTargetInventoryAccount(
@@ -443,7 +472,6 @@ class DispatchTest(unittest.TestCase):
                                 diagnostics=("mapping",),
                                 candidate_subjects=(),
                                 candidate_conflicts=(),
-                                proposed_question_coverages=(),
                                 candidate_withdrawals=(),
                                 proposed_target_inventory_accounting=(
                                     account,
@@ -509,43 +537,6 @@ class DispatchTest(unittest.TestCase):
                     self.assertIn(
                         conflict[side]["id"]["value"], carried
                     )
-        finally:
-            adapter.contexts[REPO].store.close()
-
-    def test_reissue_is_available_over_wire(self):
-        adapter, agent = _harness()
-        try:
-            pending = _dispatch(adapter, 
-                "explain",
-                {
-                    "repository_id": REPO,
-                    "target": _selector_args(),
-                },
-            )
-            envelope = json.loads(pending.content)
-            reissued = _dispatch(adapter, 
-                "reissue_interpretation",
-                {
-                    "continuation": envelope["continuation"],
-                    "repository_id": REPO,
-                },
-            )
-            self.assertFalse(reissued.is_error)
-            replacement = json.loads(reissued.content)
-            self.assertEqual(replacement["$type"], "PendingInterpretation")
-            task = _schema.from_wire(
-                m.SemanticInterpretationRequest,
-                replacement["request"],
-            )
-            answered = _dispatch(adapter, 
-                "submit_interpretation",
-                {
-                    "continuation": replacement["continuation"],
-                    "result": m.to_canonical(agent.perform(task)),
-                    "repository_id": REPO,
-                },
-            )
-            self.assertFalse(answered.is_error)
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -670,7 +661,6 @@ class DispatchTest(unittest.TestCase):
                 ),
                 relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(),
                 candidate_withdrawals=(),
             )
             rejected = _dispatch(adapter, 
@@ -735,7 +725,7 @@ class DispatchTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_candidate(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(coverage,),
+                    question_decision=_decision(coverage),
                     candidate_withdrawals=(),
                 ),
                 structural=context.structural, evidence=context.evidence,
@@ -785,7 +775,11 @@ class DispatchTest(unittest.TestCase):
                             claims=(_candidate(),), relationships=(),
                             candidate_subjects=(),
                             candidate_conflicts=(),
-                            proposed_question_coverages=(wrong_coverage,),
+                            proposed_questions=(
+                                m.ProposedSemanticQuestion(
+                                    wrong, _decision(wrong_coverage)
+                                ),
+                            ),
                             candidate_withdrawals=(),
                         )
                     ),
@@ -901,7 +895,7 @@ class DispatchTest(unittest.TestCase):
             self.assertTrue(result.is_error)
             body = json.loads(result.content)
             self.assertEqual(body["error"], "ingress")
-            self.assertIn("page_token", body["message"])
+            self.assertIn("page token", body["message"])
             self.assertIn("continuation", body["message"])
         finally:
             adapter.contexts[REPO].store.close()
@@ -920,7 +914,7 @@ class DispatchTest(unittest.TestCase):
             self.assertTrue(result.is_error)
             body = json.loads(result.content)
             self.assertEqual(body["error"], "ingress")
-            self.assertIn("page_token", body["message"])
+            self.assertIn("page token", body["message"])
             self.assertIn("continuation", body["message"])
         finally:
             adapter.contexts[REPO].store.close()
@@ -1068,7 +1062,6 @@ class DispatchTest(unittest.TestCase):
                 ops.initialize_repository(
                     ops.SemanticInitializeRepositoryRequest(
                         repository_locator=str(root),
-                        structural_provider_config=str(root),
                         authority_seeds=(),
                     ),
                     repository_id=REPO,
@@ -1151,8 +1144,7 @@ class DispatchTest(unittest.TestCase):
             init = _dispatch(adapter, 
                 "initialize_repository",
                 {
-                    "repository_locator": "x",
-                    "structural_provider_config": "/x",
+                    "repository_locator": "/x",
                 },
             )
             self.assertTrue(init.is_error)
@@ -1179,7 +1171,7 @@ class ListTimeDiscoveryTest(unittest.TestCase):
             for name in (
                 "initialize_target", "explain", "impact", "trace",
                 "authority", "status", "refresh",
-                "submit_interpretation", "reissue_interpretation",
+                "submit_interpretation",
                 "locate", "neighbors",
             ):
                 self.assertIn(REPO, by_name[name])
@@ -1200,13 +1192,13 @@ class ListTimeDiscoveryTest(unittest.TestCase):
 
 @unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")
 class ServerWiringTest(unittest.TestCase):
-    def test_build_server_registers_twelve_tools(self):
+    def test_build_server_registers_eleven_tools(self):
         from span.shell import mcp_server
 
         adapter, _ = _harness()
         try:
             listed = mcp_server.handle_list_tools(adapter)
-            self.assertEqual(len(listed), 12)
+            self.assertEqual(len(listed), 11)
             self.assertEqual(
                 [spec["name"] for spec in listed], list(TOOL_NAMES)
             )
@@ -1241,7 +1233,7 @@ class ServerWiringTest(unittest.TestCase):
                 entry.handler(None, _types.PaginatedRequestParams())
             )
             self.assertIsInstance(result, _types.ListToolsResult)
-            self.assertEqual(len(result.tools), 12)
+            self.assertEqual(len(result.tools), 11)
             json.loads(result.model_dump_json(by_alias=True))
         finally:
             adapter.contexts[REPO].store.close()
@@ -1337,10 +1329,12 @@ class ProvisionPathTest(unittest.TestCase):
                 ),
                 check=True, timeout=60,
             )
-            # The server never builds the structural index (F §4.0, G
-            # §2): write the minimal explicitly-built wiring the test
-            # owns. The graft/ tree is git-ignored above, so the tree
-            # stays clean and the index postdates HEAD.
+            # This in-process service fixture uses the legacy in-target
+            # wiring path directly, so it supplies the minimal wiring it
+            # owns. The installed product path builds the provider index
+            # into Span's data directory during setup/refresh (M-08).
+            # The graft/ tree is git-ignored above, so the tree stays
+            # clean and the index postdates HEAD.
             graph_dir = work / "graft" / ".graph"
             graph_dir.mkdir(parents=True, exist_ok=True)
             nodes = []
@@ -1362,7 +1356,6 @@ class ProvisionPathTest(unittest.TestCase):
             config = mcp_server.ServerConfig(data_dir=tmp / "data")
             request = ops.SemanticInitializeRepositoryRequest(
                 repository_locator=str(work),
-                structural_provider_config=str(work),
                 authority_seeds=(),
             )
             context, result = mcp_server.provision_repository(
@@ -1403,8 +1396,8 @@ class ProvisionPathTest(unittest.TestCase):
 class ContextualPathSmokeTest(unittest.TestCase):
     """Unchanged SubjectSelector schema reaches contextual resolution."""
 
-    def test_twelve_tools_and_path_explain(self):
-        self.assertEqual(len(TOOL_NAMES), 12)
+    def test_eleven_tools_and_path_explain(self):
+        self.assertEqual(len(TOOL_NAMES), 11)
         decoded = _decode_request(
             "explain",
             {

@@ -24,7 +24,6 @@ __all__ = [
     "SemanticRefreshRequest",
     "SemanticInitializeTargetRequest",
     "SemanticSubmitInterpretationRequest",
-    "SemanticReissueInterpretationRequest",
     "SemanticInitializeRepositoryRequest",
     "SemanticInitializeRepositoryResult",
     "AuthorityTargetError",
@@ -81,7 +80,7 @@ class SemanticImpactRequest:
     repository_id: str
     target: m.SubjectSelector
     change_kind: ChangeKind
-    change_description: str | None
+    change_description: str | None = None
     bounds: m.QueryBounds | None = None
     affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
     page_token: str | None = None
@@ -93,8 +92,8 @@ class SemanticTraceRequest:
     repository_id: str
     target: m.SubjectSelector
     direction: StructuralDirection
-    relationship_filter: tuple[m.RelationshipKind, ...] | None
-    boundary_only: bool
+    relationship_filter: tuple[m.RelationshipKind, ...] | None = None
+    boundary_only: bool = False
     bounds: m.QueryBounds | None = None
     page_token: str | None = None
     question_selection: m.SemanticQuestionSelection | None = None
@@ -128,7 +127,7 @@ class SemanticStatusRequest:
 @_dataclass(frozen=True)
 class SemanticRefreshRequest:
     repository_id: str
-    target: m.SubjectSelector | m.EvidenceScope | None
+    target: m.SubjectSelector | m.EvidenceScope
     bounds: m.QueryBounds | None = None
     stale_only: bool = True
     page_token: str | None = None
@@ -151,14 +150,8 @@ class SemanticSubmitInterpretationRequest:
 
 
 @_dataclass(frozen=True)
-class SemanticReissueInterpretationRequest:
-    continuation: str
-
-
-@_dataclass(frozen=True)
 class SemanticInitializeRepositoryRequest:
     repository_locator: str
-    structural_provider_config: str
     authority_seeds: tuple[m.EvidenceRef, ...] = ()
 
 

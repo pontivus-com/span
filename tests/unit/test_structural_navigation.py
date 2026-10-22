@@ -62,7 +62,6 @@ def _memory_harness(files=None, subjects=None, edges=()):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO, structural=structural, evidence=evidence,
@@ -551,7 +550,6 @@ class NeighborsServiceTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id=REPO, structural=structural, evidence=evidence,
@@ -620,7 +618,7 @@ class LocateDescriptionTest(unittest.TestCase):
         for token in (
             "SYMBOL", "FILE_OUTLINE", "TARGET_MEMBERS",
             "optional target scope", "file locator",
-            "exact target scope", "pgv:*",
+            "exact target scope", "page token",
         ):
             with self.subTest(token=token):
                 self.assertIn(token, text)

@@ -227,7 +227,6 @@ def _harness(files=None):
     initialize_repository(
         SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -573,7 +572,6 @@ class FreshSessionPathReuseTest(unittest.TestCase):
             ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="fixture",
-                    structural_provider_config="memory:test",
                     authority_seeds=(),
                 ),
                 repository_id=repo, structural=structural,

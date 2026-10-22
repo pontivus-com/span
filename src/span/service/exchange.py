@@ -1,16 +1,15 @@
 """Span service agent-exchange coordination (plan §11.12; v0.6 §14 Amendment A-01).
 
-Interpretation submission, reissue, and resume dispatch across the
-owning operation modules. Owns no semantic predicate: validates via
-``core`` and rebuilds answers via the owning op composers. Verbatim
-from ``span.service_operations``; only the module path changed.
+Interpretation submission and resume dispatch across the owning
+operation modules. Owns no semantic predicate: validates via ``core``
+and rebuilds answers via the owning op composers. Verbatim from
+``span.service_operations``; only the module path changed.
 """
 
 from __future__ import annotations
 
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
-from span.ports.interpretation import InterpretationIngressFailure
 from span.ports.interpretation import InterpretationUnavailable
 from span.ports.interpretation import PendingInterpretation
 from span.ports.store import SemanticStore
@@ -59,7 +58,6 @@ from span.service.resolution import (
 
 __all__ = [
     'submit_interpretation',
-    'reissue_interpretation',
 ]
 
 
@@ -100,11 +98,11 @@ def submit_interpretation(
 
     Unknown or expired continuations yield InterpretationUnavailable
     at peek (the agent re-issues the original operation,
-    idempotently); a token taken by a concurrent submitter or reissuer
-    yields it at acquire. Preparation runs on peeked state without
+    idempotently); a token taken by a concurrent submitter yields it at
+    acquire. Preparation runs on peeked state without
     holding ownership; single-commit ownership is acquired only for
     the commit-critical section (materialize + claim). Validation
-    failure retains the live continuation with no reissue; only a
+    failure retains the live continuation; only a
     successful ``write_index_batch`` consumes it. Refresh resumes
     across remaining subjects, suspending again while affected work
     remains.
@@ -187,9 +185,7 @@ def submit_interpretation(
             )
 
         nominated_by_identity: dict[tuple[str, ...], m.SemanticQuestionScope] = {}
-        for submitted in result.proposed_question_coverages:
-            if submitted.question is None:
-                continue
+        for submitted in result.proposed_questions:
             if (
                 request_question is not None
                 and submitted.question == request_question
@@ -431,17 +427,31 @@ def submit_interpretation(
                     resolution=record.resolution,
                     continuations=continuations,
                 )
+        _qkey = ""
+        if record.request.question is not None:
+            _qkey = (
+                f"{record.request.question.question_class.value}:"
+                f"{record.request.question.question_slice}"
+            )
         return _compose_explain_answer(
             record.repository_id, record.subject, record.resolution,
             structural=structural, evidence=evidence, store=store,
             bounds=bounds, state=state,
             scope_root=record.subject.subject_id,
+            question_key=_qkey,
         )
     if record.op == "authority":
+        _qkey = ""
+        if record.request.question is not None:
+            _qkey = (
+                f"{record.request.question.question_class.value}:"
+                f"{record.request.question.question_slice}"
+            )
         return _compose_authority_answer(
             record.repository_id, record.subject, record.resolution,
             structural=structural, evidence=evidence, store=store,
             bounds=bounds, state=state,
+            question_key=_qkey,
         )
     if record.op == "trace":
         return _resume_trace(
@@ -475,66 +485,4 @@ def submit_interpretation(
         structural=structural, evidence=evidence, store=store,
         bounds=bounds, state=state,
         changed=record.changed,
-    )
-
-def reissue_interpretation(
-    continuation: str,
-    *,
-    continuations: ContinuationStore,
-) -> PendingInterpretation:
-    """Reissue the identical bounded task once on ingress failure (§7.4;
-    Addendum H §4).
-
-    Participates in the same single-commit ownership protocol as
-    submit: if a submission currently owns the token (in-flight),
-    reissue fails unavailable, and vice versa. Consumes the
-    continuation (abandoning it on the second failure via
-    InterpretationIngressFailure). Semantic validation failure never
-    reaches here — it rejects the unit via submit, retaining the token.
-    Expired or lost continuations never reissue: the agent re-runs the
-    idempotent original operation instead.
-    """
-    record = continuations.acquire(continuation)
-    if record is None:
-        raise InterpretationUnavailable(
-            f"unknown, expired, or in-flight continuation: {continuation}. Re-run the original operation; this token cannot be recovered."
-        )
-    if record.reissues >= 1:
-        continuations.claim(continuation)
-        raise InterpretationIngressFailure(
-            "interpretation task reissue exhausted; continuation abandoned"
-        )
-    try:
-        token = continuations.pend(
-            SuspendedOperation(
-                op=record.op,
-                repository_id=record.repository_id,
-                subject=record.subject,
-                scope=record.scope,
-                remaining=record.remaining,
-                changed=record.changed,
-                resolution=record.resolution,
-                request=record.request,
-                fingerprints=record.fingerprints,
-                known_subject_ids=record.known_subject_ids,
-                seeds=record.seeds,
-                bounds=record.bounds,
-                state=record.state,
-                reissues=record.reissues + 1,
-                affected_assertions=record.affected_assertions,
-                operation_intent=record.operation_intent,
-                objective=record.objective,
-                question_slice=record.question_slice,
-                declared_complete=record.declared_complete,
-                establish_baseline=record.establish_baseline,
-                target_scope=record.target_scope,
-                target_id=record.target_id,
-            )
-        )
-    except BaseException:
-        continuations.release(continuation)
-        raise
-    continuations.claim(continuation)
-    return PendingInterpretation(
-        continuation=token, request=record.request
     )

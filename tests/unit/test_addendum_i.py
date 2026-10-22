@@ -82,7 +82,6 @@ def _harness():
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id="repo-1",
@@ -235,24 +234,18 @@ class S3SchemaTest(unittest.TestCase):
         # fault keeps its exact previous text.
         from span.shell.mcp import decode_request
 
-        coverage = {
-            "$type": "InterpretationCoverage",
-            "subjects": [],
-            "evidence_scope": {"paths": [], "evidence_refs": []},
-        }
+        claim = {"kind": "PURPOSE"}
         with self.assertRaises(ValueError) as ctx:
             decode_request("submit_interpretation", {
                 "repository_id": "r",
                 "continuation": "cont-1",
                 "result": {
-                    "proposed_question_coverages": [
-                        dict(coverage), dict(coverage)
-                    ],
+                    "claims": [dict(claim), dict(claim)],
                 },
             })
         text = str(ctx.exception)
-        self.assertIn("result.proposed_question_coverages[0]", text)
-        self.assertIn("result.proposed_question_coverages[1]", text)
+        self.assertIn("result.claims[0]", text)
+        self.assertIn("result.claims[1]", text)
 
     def test_ingress_reports_cross_pass_faults_together(self):
         # The tagging pass runs first; it must also report the unknown and
@@ -287,34 +280,33 @@ class S3SchemaTest(unittest.TestCase):
         cases = (
             (
                 "unknown field",
+                "status",
                 {
-                    "$type": "SubjectSelector",
-                    "exact_subject_id": None,
-                    "name_or_locator": None,
-                    "expected_kinds": [],
-                    "bogus": 1,
+                    "repository_id": "r",
+                    "target": {
+                        "$type": "SubjectSelector",
+                        "exact_subject_id": None,
+                        "name_or_locator": None,
+                        "expected_kinds": [],
+                        "bogus": 1,
+                    },
                 },
                 "target: unknown fields for SubjectSelector: ['bogus']",
             ),
             (
                 "missing field",
-                {
-                    "$type": "SubjectSelector",
-                    "exact_subject_id": None,
-                    "expected_kinds": [],
-                },
-                "target: missing field 'name_or_locator' for SubjectSelector",
+                "refresh",
+                {"repository_id": "r"},
+                "missing field 'target' for SemanticRefreshRequest",
             ),
         )
-        for label, target, expected in cases:
+        for label, tool, arguments, expected in cases:
             with self.subTest(label=label):
                 with self.assertRaises(ValueError) as ctx:
-                    decode_request(
-                        "status", {"repository_id": "r", "target": target}
-                    )
+                    decode_request(tool, arguments)
                 self.assertEqual(
                     str(ctx.exception),
-                    f"invalid status arguments: {expected}",
+                    f"invalid {tool} arguments: {expected}",
                 )
 
     def test_submit_description_states_shape_invariants(self):
@@ -325,9 +317,9 @@ class S3SchemaTest(unittest.TestCase):
         text = TOOL_DESCRIPTIONS["submit_interpretation"]
         for rule in (
             "exactly one outcome",
-            "OPEN carries resolution_requirements",
-            "ANSWERED sets declared_complete",
-            "NOT_APPLICABLE carries empty result_refs",
+            "OPEN question_decision carries resolution_requirements",
+            "ANSWERED requires validated material",
+            "NOT_APPLICABLE carries a basis and no result refs",
         ):
             self.assertIn(rule, text)
 
@@ -367,7 +359,7 @@ class S3SchemaTest(unittest.TestCase):
         return refs
 
     def test_union_positions_use_tagged_definitions(self):
-        # The ten generator-verified request-ingress unions (locality plan
+        # The generator-verified request-ingress unions (locality plan
         # §15.5) must each reference tagged definitions.
         from span.shell.mcp import TOOL_SCHEMAS
 
@@ -383,10 +375,6 @@ class S3SchemaTest(unittest.TestCase):
             (
                 "submit_interpretation",
                 ("$defs", "CandidateSemanticWithdrawal", "properties", "target"),
-            ),
-            (
-                "submit_interpretation",
-                ("$defs", "InterpretationCoverage", "properties", "result_refs"),
             ),
             (
                 "submit_interpretation",
@@ -521,10 +509,11 @@ class S3SchemaTest(unittest.TestCase):
         from span.shell.mcp import TOOL_DESCRIPTIONS
 
         text = TOOL_DESCRIPTIONS["initialize_repository"]
-        self.assertIn("plain filesystem paths", text)
-        self.assertIn("not a JSON document", text)
+        self.assertIn("repository_locator", text)
+        self.assertIn("authority_seeds", text)
+        self.assertNotIn("structural_provider_config", text)
 
-    def test_subject_selector_states_both_keys_required(self):
+    def test_subject_selector_omits_both_optional_keys(self):
         from span.shell.mcp import TOOL_SCHEMAS
 
         defs = TOOL_SCHEMAS["impact"]["$defs"]
@@ -534,12 +523,14 @@ class S3SchemaTest(unittest.TestCase):
         ]
         self.assertTrue(names)
         for selector in names:
+            required = defs[selector]["required"]
+            self.assertNotIn("exact_subject_id", required)
+            self.assertNotIn("name_or_locator", required)
             prop = defs[selector]["properties"]["exact_subject_id"]
-            self.assertIn(
+            self.assertNotIn(
                 "Required along with name_or_locator",
-                prop["description"],
+                prop.get("description", ""),
             )
-            self.assertIn("exact_subject_id wins", prop["description"])
 
     def test_candidate_claims_advertise_required_subject_and_value(self):
         # Validation rejects an unset subject and the constructor rejects
@@ -618,7 +609,7 @@ class S3SchemaTest(unittest.TestCase):
     def test_schema_size_budget(self):
         # Guard against unreachable-definition regrowth. The current
         # pruned size is ~22.7 KB for submit_interpretation and ~55 KB
-        # across all twelve tools. Further reduction would require a
+        # across all eleven tools. Further reduction would require a
         # contract change, not a projection tweak.
         import json
 
@@ -815,7 +806,6 @@ class S4QuestionSelectionTest(unittest.TestCase):
             ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="fixture",
-                    structural_provider_config="memory:test",
                     authority_seeds=(),
                 ),
                 repository_id="repo-1",
@@ -1125,7 +1115,6 @@ class S4QuestionSelectionTest(unittest.TestCase):
             ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="fixture",
-                    structural_provider_config="memory:test",
                     authority_seeds=(),
                 ),
                 repository_id="repo-1",
@@ -1241,7 +1230,6 @@ class S5ExecutionPathTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",
@@ -2256,7 +2244,6 @@ class S7ExcerptTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id="repo-1",
@@ -2803,23 +2790,9 @@ class S8ExplanationTest(unittest.TestCase):
                     ),
                     relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        m.InterpretationCoverage(
-                            subjects=(_sid(),),
-                            question_slice=(
-                                pending.request.question.question_slice
-                            ),
-                            evidence_scope=m.EvidenceScope(),
-                            declared_complete=True,
-                            question=pending.request.question,
-                            disposition=(
-                                m.SemanticQuestionDisposition.ANSWERED
-                            ),
-                            result_refs=(),
-                            resolution_requirements=(),
-                            disposition_basis="test bound answer",
-                            question_evidence=(),
-                        ),
+                    question_decision=m.SemanticQuestionDecision(
+                        disposition=m.SemanticQuestionDisposition.ANSWERED,
+                        disposition_basis="test bound answer",
                     ),
                     candidate_withdrawals=(
                         m.CandidateSemanticWithdrawal(

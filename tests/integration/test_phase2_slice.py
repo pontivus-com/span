@@ -166,7 +166,6 @@ class Phase2SliceTest(unittest.TestCase):
             init = ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator=str(WORK_DIR),
-                    structural_provider_config=str(WORK_DIR),
                     authority_seeds=(
                         _ref(repo_id, "README.md", files),
                         _ref(repo_id, "OWNERSHIP.md", files),

@@ -622,10 +622,7 @@ def _paged_question_views(
     """Return (kept views, shown count, remaining count) for paging."""
     from span.shell import paging as _paging
 
-    try:
-        _, _, qskip = _paging.parse_service_token(page_token)
-    except ValueError:
-        qskip = 0
+    _, _, qskip = _paging.parse_service_token(page_token)
     all_views = _question_views_for_scope(
         repository_id, scope_root, subject_ids,
         store=store, bounds=bounds, evidence=evidence,
