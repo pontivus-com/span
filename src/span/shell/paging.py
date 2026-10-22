@@ -72,9 +72,8 @@ def parse_service_token(page_token: str | None) -> tuple[int, int, int]:
         return (c, r, q)
     # Old service cursors rejected atomically.
     raise ValueError(
-        f"unknown page token: {page_token}; service cursors use "
-        "pgq:<query_digest>:<claims>:<relationships>:<questions>; "
-        "restart the listing from page one with page_token null"
+        "page token is invalid for this request; restart pagination from "
+        "the first page with page_token omitted"
     )
 
 
@@ -151,9 +150,25 @@ def parse_question_token(
     return digest, c, r, q
 
 
+def parse_service_token_bound(
+    page_token: str | None,
+) -> tuple[str, int, int, int]:
+    """Decode a bound service token, preserving its query digest.
+
+    `None` starts a listing at zero with an empty digest marker. Callers
+    that require query binding compare the returned digest with the
+    request-derived digest; callers that only need offsets use
+    ``parse_service_token``.
+    """
+    if page_token is None:
+        return ("", 0, 0, 0)
+    return parse_question_token(page_token)
+
+
 def format_service_token(
     claims_next: int | None, rels_next: int | None,
     questions_next: int | None = 0,
+    query_digest: str = "default",
 ) -> str | None:
     """Encode per-list offsets (I S4 §5.4 cutover: pgq only).
 
@@ -176,7 +191,7 @@ def format_service_token(
         claims_next is None and rels_next is None
     ):
         return None
-    return format_question_token("default", left, right, qskip)
+    return format_question_token(query_digest, left, right, qskip)
 
 
 def format_versioned_token(version: str, offset: int) -> str:

@@ -177,6 +177,8 @@ __all__ = [
     "CandidateSemanticRelationship",
     "CandidateSubject",
     "CandidateSemanticConflict",
+    "SemanticQuestionDecision",
+    "ProposedSemanticQuestion",
     "SemanticInterpretationRequest",
     "SemanticInterpretationResult",
     "SA_ANALYSIS_OBLIGATIONS",
@@ -301,8 +303,8 @@ class Subject:
 
 @_dataclass(frozen=True)
 class SubjectSelector:
-    exact_subject_id: SubjectId | None
-    name_or_locator: str | None
+    exact_subject_id: SubjectId | None = None
+    name_or_locator: str | None = None
     expected_kinds: tuple[SubjectKind, ...] = ()
     retrieval_scope_hint: str | None = None
 
@@ -2034,6 +2036,36 @@ class EvidenceSelection:
 
 
 @_dataclass(frozen=True)
+class SemanticQuestionDecision:
+    """Agent-owned decision about one already-bound question.
+
+    Carries only the semantics the interpreting agent owns: disposition,
+    selected support scope, typed requirements, and the explicit basis.
+    Question identity, subjects, slice, completion, result refs, and
+    evidence observations are Span-owned and derived at materialization.
+    """
+
+    disposition: SemanticQuestionDisposition
+    evidence_scope: EvidenceScope = _field(default_factory=EvidenceScope)
+    resolution_requirements: tuple[ResolutionRequirement, ...] = ()
+    disposition_basis: str = ""
+
+
+@_dataclass(frozen=True)
+class ProposedSemanticQuestion:
+    """Agent nomination of another material semantic question.
+
+    The canonical scope expresses the identity/materiality the agent is
+    introducing; the decision carries its disposition. Used only when the
+    agent admits a new question or explicitly selects one already
+    persisted. Not a persisted coverage type.
+    """
+
+    question: SemanticQuestionScope
+    decision: SemanticQuestionDecision
+
+
+@_dataclass(frozen=True)
 class CandidateSubject:
     """Agent-proposed semantic-only subject (plan §4.11)."""
 
@@ -2371,7 +2403,8 @@ class SemanticInterpretationResult:
     diagnostics: tuple[str, ...] = ()
     candidate_subjects: tuple[CandidateSubject, ...] = ()
     candidate_conflicts: tuple[CandidateSemanticConflict, ...] = ()
-    proposed_question_coverages: tuple[InterpretationCoverage, ...] = ()
+    question_decision: SemanticQuestionDecision | None = None
+    proposed_questions: tuple[ProposedSemanticQuestion, ...] = ()
     candidate_withdrawals: tuple[CandidateSemanticWithdrawal, ...] = ()
     proposed_target_inventory_accounting: tuple[CandidateTargetInventoryAccount, ...] = ()
     proposed_target_questions: tuple[SemanticQuestionScope, ...] = ()

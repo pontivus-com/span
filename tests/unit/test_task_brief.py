@@ -95,7 +95,6 @@ def _harness():
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -165,10 +164,11 @@ class TaskBriefTest(unittest.TestCase):
         payload = json.loads(template_rule.split(": ", 1)[1])
 
         self.assertNotIn("$type", payload)
+        self.assertEqual(set(payload), {"question_decision"})
         decoded = schema.from_wire(m.SemanticInterpretationResult, payload)
         self.assertIsInstance(decoded, m.SemanticInterpretationResult)
         self.assertEqual(
-            decoded.proposed_question_coverages[0].disposition,
+            decoded.question_decision.disposition,
             m.SemanticQuestionDisposition.PENDING,
         )
 
@@ -331,33 +331,20 @@ class TaskBriefTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        m.InterpretationCoverage(
-                            subjects=(question.subject,),
-                            question_slice=question.question_slice,
-                            evidence_scope=m.EvidenceScope(
-                                paths=(), evidence_refs=()
-                            ),
-                            declared_complete=False,
-                            question=question,
-                            disposition=(
-                                m.SemanticQuestionDisposition.OPEN
-                            ),
-                            result_refs=(),
-                            resolution_requirements=(
-                                m.ResolutionRequirement(
-                                    kind=(
-                                        m.ResolutionKind
-                                        .MISSING_SEMANTIC_COVERAGE
-                                    ),
-                                    subject_or_claim=_sid(),
-                                    description="main purpose unexamined",
-                                    supporting_context=(),
+                    question_decision=m.SemanticQuestionDecision(
+                        disposition=m.SemanticQuestionDisposition.OPEN,
+                        resolution_requirements=(
+                            m.ResolutionRequirement(
+                                kind=(
+                                    m.ResolutionKind
+                                    .MISSING_SEMANTIC_COVERAGE
                                 ),
+                                subject_or_claim=_sid(),
+                                description="main purpose unexamined",
+                                supporting_context=(),
                             ),
-                            disposition_basis="scope left open",
-                            question_evidence=(),
                         ),
+                        disposition_basis="scope left open",
                     ),
                     candidate_withdrawals=(),
                 ),
@@ -415,32 +402,26 @@ class TaskBriefTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        m.InterpretationCoverage(
-                            subjects=(_sid(),),
-                            question_slice="unrelated-slice",
-                            evidence_scope=m.EvidenceScope(
-                                paths=(), evidence_refs=()
-                            ),
-                            declared_complete=False,
-                            question=other,
-                            disposition=(
-                                m.SemanticQuestionDisposition.OPEN
-                            ),
-                            result_refs=(),
-                            resolution_requirements=(
-                                m.ResolutionRequirement(
-                                    kind=(
-                                        m.ResolutionKind
-                                        .MISSING_SEMANTIC_COVERAGE
-                                    ),
-                                    subject_or_claim=_sid(),
-                                    description="sibling slice req",
-                                    supporting_context=(),
+                    proposed_questions=(
+                        m.ProposedSemanticQuestion(
+                            other,
+                            m.SemanticQuestionDecision(
+                                disposition=(
+                                    m.SemanticQuestionDisposition.OPEN
                                 ),
+                                resolution_requirements=(
+                                    m.ResolutionRequirement(
+                                        kind=(
+                                            m.ResolutionKind
+                                            .MISSING_SEMANTIC_COVERAGE
+                                        ),
+                                        subject_or_claim=_sid(),
+                                        description="sibling slice req",
+                                        supporting_context=(),
+                                    ),
+                                ),
+                                disposition_basis="sibling open",
                             ),
-                            disposition_basis="sibling open",
-                            question_evidence=(),
                         ),
                     ),
                     candidate_withdrawals=(),

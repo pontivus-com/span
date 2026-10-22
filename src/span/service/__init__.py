@@ -2,7 +2,7 @@
 
 Coordinates ports/core. Owns no semantic rules. Package surface for
 the service boundary: bounds policy (§5.1), frozen request contracts
-(§11.10), and the eight public operations plus their query helpers.
+(§11.10), and the eleven public operations plus their query helpers.
 
 Internal service modules import each other by defining-module path
 (``span.service.<module>``), never through this surface. External
@@ -24,7 +24,6 @@ from span.service.bounds import (
 )
 from span.service.discovery import discover_evidence
 from span.service.exchange import (
-    reissue_interpretation,
     submit_interpretation,
 )
 from span.service.freshness import (
@@ -58,7 +57,6 @@ from span.service.requests import (
     SemanticInitializeRepositoryResult,
     SemanticInitializeTargetRequest,
     SemanticRefreshRequest,
-    SemanticReissueInterpretationRequest,
     SemanticStatusRequest,
     SemanticStructuralLocateRequest,
     SemanticStructuralNeighborsRequest,
@@ -79,7 +77,6 @@ __all__ = [
     "SemanticAuthorityRequest",
     "SemanticStatusRequest",
     "SemanticRefreshRequest",
-    "SemanticReissueInterpretationRequest",
     "SemanticSubmitInterpretationRequest",
     "SemanticStructuralLocateRequest",
     "SemanticStructuralNeighborsRequest",
@@ -97,7 +94,6 @@ __all__ = [
     "discover_evidence",
     "prepare_interpretation_task",
     "submit_interpretation",
-    "reissue_interpretation",
     "explain",
     "authority",
     "refresh",

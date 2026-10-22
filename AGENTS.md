@@ -78,11 +78,11 @@ ownership and boundaries; they are not advisory style guidance.
   system class or internal architecture is meant.
 - Public MCP operations are exactly `initialize_repository`,
   `initialize_target`, `explain`, `impact`, `trace`, `authority`,
-  `status`, `refresh`, `submit_interpretation`,
-  `reissue_interpretation`, `locate`, `neighbors`. No `semantic_*`
-  public aliases exist. Where Addenda B–C historical text says eight,
-  Addendum E governs the ten semantic operations and Addendum F adds
-  the two read-only structural-navigation operations (twelve total).
+  `status`, `refresh`, `submit_interpretation`, `locate`, `neighbors`.
+  No `semantic_*` public aliases exist. Where Addenda B–C historical text
+  says eight, Addendum E governs the semantic operations, Addendum F adds
+  the two read-only structural-navigation operations, and Addendum M
+  removes the dead reissue operation (eleven current operations).
 - Semantic interpretation is executed by the invoking LLM-connected agent;
   Span owns the task contract, strict ingress, validation, authority, trust,
   freshness, persistence, and answers — never model selection, endpoints,

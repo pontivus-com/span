@@ -1,7 +1,7 @@
 """Agent Skill non-authority tests (plan Phase 4.7).
 
 Skills are optional lifecycle guidance only. They may orchestrate the
-twelve canonical operations but cannot establish or reinterpret
+eleven canonical operations but cannot establish or reinterpret
 semantic claims, ownership, authority, precedence, trust, or
 freshness. These tests pin that boundary mechanically:
 
@@ -33,7 +33,6 @@ CANONICAL_OPS = {
     "status",
     "refresh",
     "submit_interpretation",
-    "reissue_interpretation",
     "locate",
     "neighbors",
 }
@@ -130,16 +129,14 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "Unreadable or unverifiable evidence rejection",
             "In-process persistence failure",
             "Successful commit",
-            "Eligible one-time interpretation-task ingress failure",
             "Unknown, expired, lost, or already consumed continuation",
             "Post-commit response loss",
             "Process crash with uncertain commit",
             "Concurrent submission or in-flight token",
-            "reissue_interpretation` is not the remedy",
-            "explicitly reported before the pending task is admitted",
-            "returned `ingress` or `validation` error",
-            "generic timeout",
-            "listing page token",
+            "There is no reissue operation",
+            "same continuation after correction",
+            "original",
+            "idempotent operation",
         ):
             self.assertIn(required, matrix)
 
@@ -149,9 +146,9 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "Worked typed submission excerpt",
             "request.evidence_units[0].evidence_ref",
             "CandidateSemanticClaim",
-            "InterpretationCoverage",
+            "SemanticQuestionDecision",
             "SemanticInterpretationResult",
-            "proposed_question_coverages",
+            "question_decision",
             "ops.submit_interpretation",
             "same typed result is the MCP submit payload",
         ):
@@ -171,7 +168,7 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "provider-backed evidence",
             "SemanticInterpretationResult",
             "proposed_target_inventory_accounting",
-            "proposed_question_coverages",
+            "proposed_questions",
             "proposed_target_questions",
             "exact same persisted question scope",
             "explicit mapping requirement",
@@ -218,7 +215,7 @@ class SkillNonAuthorityTest(unittest.TestCase):
 
     def test_entry_decision_comes_first(self):
         # One canonical three-branch entry decision follows the quick
-        # reference. Ordinary orientation is status-then-explain;
+        # reference. Ordinary orientation starts with the needed operation;
         # refresh is never routine first-contact.
         text = _text(SKILLS[0])
         quick_ref_at = text.index("## Agent quick reference")
@@ -226,12 +223,12 @@ class SkillNonAuthorityTest(unittest.TestCase):
         self.assertLess(quick_ref_at, entry_at)
         for required in (
             "Ordinary orientation",
-            "`status` with no target, then `explain`",
+            "`explain` on the chosen target",
+            "no status preflight",
             "Exact user-supplied directory plus objective",
             "`initialize_target`",
             "Post-change closeout",
             "Never `refresh` on first contact",
-            "normal `status` with no target",
         ):
             self.assertIn(required, text)
 

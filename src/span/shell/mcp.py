@@ -29,7 +29,6 @@ from span.core import model as m
 from span.core import schema as _schema
 from span.ports.evidence import EvidenceSource
 from span.ports.interpretation import (
-    InterpretationIngressFailure,
     InterpretationUnavailable,
 )
 from span.ports.store import SemanticStore
@@ -100,9 +99,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "initialize_repository": (
         "Prepare a repository for semantic queries in a dedicated "
         "setup session (operational storage readiness only). No semantic "
-        "interpretation happens here. `repository_locator` and "
-        "`structural_provider_config` are plain filesystem paths; the "
-        "latter is the structural provider root, not a JSON document."
+        "interpretation happens here. Pass the plain `repository_locator` "
+        "and, optionally, `authority_seeds`; provider selection stays "
+        "shell-owned."
     ),
     "initialize_target": (
         "Establish the semantic campaign for an exact directory or "
@@ -133,8 +132,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "stale or unverifiable work uses refresh with an exact "
         "SubjectSelector; unassessed work uses a question-local explain; "
         "pending question work continues only through the continuation "
-        "returned by the suspending operation, never an invented cont-* "
-        "token. Exact targets report detailed freshness; HOOK_FAST "
+        "returned by the suspending operation. Exact targets report "
+        "detailed freshness; HOOK_FAST "
         "returns a compact notice only: event-local scope, never "
         "repository inventory, so READY 0/0 never means clean."
     ),
@@ -153,9 +152,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "scope, typed-disposition, adversarial, and fresh-readback "
         "obligations before submitting. Each target inventory account "
         "carries exactly one outcome: assigned_area_subjects, "
-        "exclusion_basis, or resolution_requirements. A coverage marked "
-        "OPEN carries resolution_requirements, ANSWERED sets "
-        "declared_complete, and NOT_APPLICABLE carries empty result_refs."
+        "exclusion_basis, or resolution_requirements. An OPEN "
+        "question_decision carries resolution_requirements; ANSWERED "
+        "requires validated material and Span derives completion; "
+        "NOT_APPLICABLE carries a basis and no result refs."
     ),
     "locate": (
         "Read-only structural find, file outline, or target member "
@@ -166,7 +166,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "FILE_OUTLINE requires one file locator and takes no target scope "
         "or match mode. TARGET_MEMBERS requires the exact target scope and "
         "takes no query; it lists the same members the target frontier "
-        "reconciles against. Resume a page with the returned pgv:* token. "
+        "reconciles against. Resume a page by passing the returned page "
+        "token unchanged to the same operation with the same arguments. "
         "Navigation evidence only — never a semantic claim. Procedure "
         "lives in the skill/runbook."
     ),
@@ -174,12 +175,6 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Read-only bounded structural adjacency, upstream/downstream/"
         "both, with resumable traversal (Addendum F). Navigation "
         "evidence only — never a semantic claim."
-    ),
-    "reissue_interpretation": (
-        "Reissue the identical bounded task once on ingress failure. "
-        "The original typed task is returned unchanged. Expired or "
-        "lost continuations never reissue: re-run the idempotent "
-        "original operation instead."
     ),
 }
 
@@ -193,8 +188,8 @@ def _generated_tool_schemas() -> dict[str, dict]:
     transport requests omit the carrier tag; nested carriers retain
     theirs. Only the reachable definition closure per operation.
     Defaults advertised equal canonical decoder defaults, including
-    omitted bounds. repository_id for submit/reissue remains a
-    transport routing field.
+    omitted bounds. repository_id for submit remains a transport
+    routing field.
     """
     from span.core import schema as _schema
 
@@ -208,7 +203,6 @@ def _generated_tool_schemas() -> dict[str, dict]:
         "status": ops.SemanticStatusRequest,
         "refresh": ops.SemanticRefreshRequest,
         "submit_interpretation": ops.SemanticSubmitInterpretationRequest,
-        "reissue_interpretation": ops.SemanticReissueInterpretationRequest,
         "locate": ops.SemanticStructuralLocateRequest,
         "neighbors": ops.SemanticStructuralNeighborsRequest,
     }
@@ -221,9 +215,9 @@ def _generated_tool_schemas() -> dict[str, dict]:
             cls, description=TOOL_DESCRIPTIONS[tool]
         )
         # Transport-owned routing fields explicitly without duplicating
-        # semantic request types: submit/reissue carry repository_id as
-        # routing only (their canonical carriers lack it).
-        if tool in ("submit_interpretation", "reissue_interpretation"):
+        # semantic request types: submit carries repository_id as
+        # routing only (its canonical carrier lacks it).
+        if tool == "submit_interpretation":
             props = dict(generated.get("properties", {}))
             props["repository_id"] = {"type": "string"}
             generated["properties"] = props
@@ -382,27 +376,6 @@ def _generated_tool_schemas() -> dict[str, dict]:
                 _definition = dict(_definition)
                 _definition["properties"] = _props
                 _defs[_result_def] = _definition
-            for _selector_def in (
-                "SubjectSelector",
-                "SubjectSelector__tag",
-            ):
-                _definition = _defs.get(_selector_def)
-                if not isinstance(_definition, dict):
-                    continue
-                _props = dict(_definition.get("properties", {}))
-                _exact = _props.get("exact_subject_id")
-                if not isinstance(_exact, dict):
-                    continue
-                _exact = dict(_exact)
-                _exact["description"] = (
-                    "Required along with name_or_locator; supply null "
-                    "when unused. If both are supplied, exact_subject_id "
-                    "wins."
-                )
-                _props["exact_subject_id"] = _exact
-                _definition = dict(_definition)
-                _definition["properties"] = _props
-                _defs[_selector_def] = _definition
             generated["$defs"] = _defs
         out[tool] = generated
     return out
@@ -420,7 +393,6 @@ TOOL_NAMES: tuple[str, ...] = (
     "status",
     "refresh",
     "submit_interpretation",
-    "reissue_interpretation",
     "locate",
     "neighbors",
 )
@@ -434,7 +406,6 @@ _REQUEST_CLASS: dict[str, type] = {
     "status": ops.SemanticStatusRequest,
     "refresh": ops.SemanticRefreshRequest,
     "submit_interpretation": ops.SemanticSubmitInterpretationRequest,
-    "reissue_interpretation": ops.SemanticReissueInterpretationRequest,
     "locate": ops.SemanticStructuralLocateRequest,
     "neighbors": ops.SemanticStructuralNeighborsRequest,
 }
@@ -456,7 +427,7 @@ def decode_request(tool_name: str, arguments: dict) -> object:
     if not isinstance(arguments, dict):
         raise ValueError(f"arguments for {tool_name} must be an object")
     payload = dict(arguments)
-    if tool_name in ("submit_interpretation", "reissue_interpretation"):
+    if tool_name == "submit_interpretation":
         # Transport-level routing key, not part of the canonical
         # submit contract: consumed here, never parsed as semantics.
         payload.pop("repository_id", None)
@@ -620,35 +591,29 @@ class McpAdapter:
             request = decode_request(tool_name, arguments)
         except ValueError as exc:
             return _error("ingress", str(exc))
-        if tool_name in ("submit_interpretation", "reissue_interpretation"):
+        if tool_name == "submit_interpretation":
             repository_id = arguments.get("repository_id")
             continuation = arguments.get("continuation")
-            if isinstance(continuation, str) and (
-                continuation.startswith("pg:")
-                or continuation.startswith("pgv:")
-                or continuation.startswith("pgn:")
+            if isinstance(continuation, str) and continuation.startswith(
+                ("pg:", "pgq:", "pgv:", "pgn:")
             ):
                 return _error(
                     "ingress",
-                    "page_token presented as continuation: page_token "
-                    "pages one truncated listing while continuation resumes "
-                    "one suspended interpretation; pass the cont-* "
-                    "continuation to submit/reissue and the page_token "
-                    "returned by the listing operation",
+                    "a page token was supplied where an interpretation "
+                    "continuation was expected; pass the continuation "
+                    "returned by the operation that suspended",
                 )
         else:
             repository_id = request.repository_id  # type: ignore[union-attr]
             page_token = arguments.get("page_token")
             if isinstance(page_token, str) and page_token.startswith(
-                "cont-"
+                ("cont-", "cont")
             ):
                 return _error(
                     "ingress",
-                    "continuation presented as page_token: continuation "
-                    "resumes one suspended interpretation while page_token "
-                    "pages one truncated listing; pass cont-* to "
-                    "submit_interpretation and the returned page_token to "
-                    "the listing operation",
+                    "an interpretation continuation was supplied where a "
+                    "page token was expected; pass the page token returned "
+                    "by the operation being paged",
                 )
         if not isinstance(repository_id, str) or not repository_id:
             return _error("ingress", "repository_id must be non-empty")
@@ -726,17 +691,10 @@ class McpAdapter:
                     structural=context.structural,
                     store=context.store,
                 )
-            elif tool_name == "reissue_interpretation":
-                result = ops.reissue_interpretation(
-                    request.continuation,  # type: ignore[union-attr]
-                    continuations=context.continuations,
-                )
             else:  # Unreachable: guarded above.
                 return _error("unknown_tool", f"unknown tool: {tool_name}")
         except InterpretationUnavailable as exc:
             return _error("unavailable", str(exc))
-        except InterpretationIngressFailure as exc:
-            return _error("ingress", str(exc))
         except StaleContinuationError as exc:
             return _error(
                 "stale_continuation",

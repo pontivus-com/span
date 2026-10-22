@@ -177,7 +177,6 @@ def _harness(files=None, db_path=":memory:"):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -263,6 +262,24 @@ def _question_coverage(
     )
 
 
+def _decision(coverage):
+    """Test-only: express an authored coverage as the compact decision."""
+    return m.SemanticQuestionDecision(
+        disposition=coverage.disposition,
+        evidence_scope=coverage.evidence_scope,
+        resolution_requirements=coverage.resolution_requirements,
+        disposition_basis=coverage.disposition_basis,
+    )
+
+
+def _proposed(*coverages):
+    """Test-only: express authored coverages as proposed questions."""
+    return tuple(
+        m.ProposedSemanticQuestion(coverage.question, _decision(coverage))
+        for coverage in coverages
+    )
+
+
 def _scope(root, subject, cls, slic, basis="test material"):
     return m.SemanticQuestionScope(
         scope_root=_sid(root) if isinstance(root, str) else root,
@@ -274,24 +291,14 @@ def _scope(root, subject, cls, slic, basis="test material"):
 
 
 def _answer_current(request, basis="examined with validated candidates"):
-    """Explicit ANSWERED completion intent for the bound question.
+    """Explicit ANSWERED completion decision for the bound question.
 
-    Addendum C C-05 cutover: claims alone never complete a question.
-    The service derives result refs from validated candidates; the
-    submission carries only the explicit disposition.
+    Identity, completion, result refs, and question evidence are
+    Span-owned; the agent supplies only the disposition and basis.
     """
-    q = request.question
-    return m.InterpretationCoverage(
-        subjects=(q.subject,),
-        question_slice=q.question_slice,
-        evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-        declared_complete=True,
-        question=q,
+    return m.SemanticQuestionDecision(
         disposition=m.SemanticQuestionDisposition.ANSWERED,
-        result_refs=(),
-        resolution_requirements=(),
         disposition_basis=basis,
-        question_evidence=(),
     )
 
 
@@ -383,9 +390,8 @@ class FirstContactTest(unittest.TestCase):
                         relationships=(),
                         candidate_subjects=(),
                         candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(request),
-                        ) + tuple(coverages),
+                        question_decision=_answer_current(request),
+                        proposed_questions=_proposed(*coverages),
                         candidate_withdrawals=(),
                     )
 
@@ -419,7 +425,7 @@ class FirstContactTest(unittest.TestCase):
                         m.SemanticInterpretationResult(
                             claims=(), relationships=(),
                             candidate_subjects=(), candidate_conflicts=(),
-                            proposed_question_coverages=(
+                            question_decision=_decision(
                                 _question_coverage(
                                     current.request.question,
                                     m.SemanticQuestionDisposition
@@ -479,9 +485,7 @@ def _drain2(request, op, structural, evidence, store):
             m.SemanticInterpretationResult(
                 claims=(_purpose_claim(),), relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(
-                    _answer_current(current.request),
-                ),
+                question_decision=_answer_current(current.request),
                 candidate_withdrawals=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -597,9 +601,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
                     claims=(_purpose_claim(), _ownership_claim()),
                     relationships=(), candidate_subjects=(),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(req),
-                    ),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=seeds,
@@ -628,9 +630,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
                     claims=(_purpose_claim(), _ownership_claim()),
                     relationships=(), candidate_subjects=(),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(suspended.request),
-                    ),
+                    question_decision=_answer_current(suspended.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -683,9 +683,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(replacement,), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(suspended.request),
-                    ),
+                    question_decision=_answer_current(suspended.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence_v2, store=store,
@@ -739,9 +737,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
                     ),
                     relationships=(), candidate_subjects=(),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(req),
-                    ),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=seeds,
@@ -807,7 +803,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
                 suspended.continuation,
                 m.SemanticInterpretationResult(
                     claims=(), relationships=(), candidate_subjects=(),
-                    candidate_conflicts=(), proposed_question_coverages=(),
+                    candidate_conflicts=(),
                     candidate_withdrawals=(
                         m.CandidateSemanticWithdrawal(
                             target=xref,
@@ -987,9 +983,7 @@ class QuestionIsolationTest(unittest.TestCase):
                 lambda req: m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(req),
-                    ),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=seeds,
@@ -1047,7 +1041,8 @@ class QuestionIsolationTest(unittest.TestCase):
                         ),
                     ),
                     relationships=(), candidate_subjects=(),
-                    candidate_conflicts=(), proposed_question_coverages=(),
+                    candidate_conflicts=(),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=seeds,
@@ -1153,9 +1148,7 @@ class SemanticPremiseTest(unittest.TestCase):
                     ),
                     relationships=(), candidate_subjects=(),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(suspended.request),
-                    ),
+                    question_decision=_answer_current(suspended.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -1245,9 +1238,7 @@ class SemanticPremiseTest(unittest.TestCase):
         return m.SemanticInterpretationResult(
             claims=(consumer,), relationships=(),
             candidate_subjects=(), candidate_conflicts=(),
-            proposed_question_coverages=(
-                _answer_current(request),
-            ),
+            question_decision=_answer_current(request),
             candidate_withdrawals=(),
         )
 
@@ -1272,9 +1263,7 @@ class SemanticPremiseTest(unittest.TestCase):
         return m.SemanticInterpretationResult(
             claims=(premise,), relationships=(),
             candidate_subjects=(), candidate_conflicts=(),
-            proposed_question_coverages=(
-                _answer_current(request),
-            ),
+            question_decision=_answer_current(request),
             candidate_withdrawals=(),
         )
 
@@ -1329,7 +1318,6 @@ class CyclesBoundsTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(leaf, head), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -1405,9 +1393,7 @@ class ReconcileFailureTest(unittest.TestCase):
                 lambda req: m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(req),
-                    ),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=seeds,
@@ -1444,7 +1430,6 @@ class ReconcileFailureTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(bad,), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -1502,7 +1487,7 @@ class AuthorityConflictTest(unittest.TestCase):
                         ),
                     ),
                     relationships=(), candidate_subjects=(),
-                    candidate_conflicts=(), proposed_question_coverages=(),
+                    candidate_conflicts=(),
                     candidate_withdrawals=(),
                 ),
                 seeds=(_ref("OWNERSHIP.md"), _ref("CONTRACT.md")),
@@ -1567,7 +1552,6 @@ class AuthorityConflictTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(bad,), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -1604,9 +1588,7 @@ class PaginationContinuationTest(unittest.TestCase):
                     ),
                     relationships=(), candidate_subjects=(),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(req),
-                    ),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=(_ref("README.md"),),
@@ -1681,9 +1663,7 @@ class BenignChangeTest(unittest.TestCase):
                 lambda req: m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(req),
-                    ),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=(_ref("README.md"),),
@@ -1946,7 +1926,7 @@ class SubstantiveOracleMustFailTest(unittest.TestCase):
                         ),
                     ),
                     relationships=(), candidate_subjects=(),
-                    candidate_conflicts=(), proposed_question_coverages=(),
+                    candidate_conflicts=(),
                     candidate_withdrawals=(),
                 ),
                 seeds=(_ref("OWNERSHIP.md"),),
@@ -1969,9 +1949,7 @@ class SubstantiveOracleMustFailTest(unittest.TestCase):
                 lambda req: m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(req),
-                    ),
+                    question_decision=_answer_current(req),
                     candidate_withdrawals=(),
                 ),
                 seeds=(_ref("README.md"),),

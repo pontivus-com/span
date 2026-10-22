@@ -74,7 +74,6 @@ def _harness(tmp, files, wiring=None):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator=str(tmp),
-            structural_provider_config=str(tmp),
             authority_seeds=(),
         ),
         repository_id=REPO, structural=structural, evidence=evidence,

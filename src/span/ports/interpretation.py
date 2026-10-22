@@ -19,7 +19,6 @@ from span.core import model as m
 __all__ = [
     "PendingInterpretation",
     "InterpretationUnavailable",
-    "InterpretationIngressFailure",
 ]
 
 
@@ -45,13 +44,4 @@ class InterpretationUnavailable(Exception):
 
     Raised for unknown or expired continuations. The agent re-issues
     the original operation, which is idempotent.
-    """
-
-
-class InterpretationIngressFailure(Exception):
-    """A submitted result violates the exchange contract (§7.3).
-
-    Raised when submitted content cannot be admitted (schema violation
-    at the transport layer, or reissue exhausted). Never repaired
-    deterministically; never relabeled as semantic knowledge.
     """

@@ -91,7 +91,6 @@ def _harness(files=None):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -101,18 +100,21 @@ def _harness(files=None):
 
 
 def _answer_current(request):
-    q = request.question
-    return m.InterpretationCoverage(
-        subjects=(q.subject,),
-        question_slice=q.question_slice,
-        evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-        declared_complete=True,
-        question=q,
+    return m.SemanticQuestionDecision(
         disposition=m.SemanticQuestionDisposition.ANSWERED,
-        result_refs=(),
-        resolution_requirements=(),
         disposition_basis="test explicit completion",
-        question_evidence=(),
+    )
+
+
+def _proposed(scope, disposition, *, requirements=(), basis=""):
+    """Test-only: express an authored question+decision as a proposal."""
+    return m.ProposedSemanticQuestion(
+        scope,
+        m.SemanticQuestionDecision(
+            disposition=disposition,
+            resolution_requirements=tuple(requirements),
+            disposition_basis=basis,
+        ),
     )
 
 
@@ -160,7 +162,6 @@ def _crash_during_commit(db_path):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -179,7 +180,7 @@ def _crash_during_commit(db_path):
         m.SemanticInterpretationResult(
             claims=(_purpose_claim(),), relationships=(),
             candidate_subjects=(), candidate_conflicts=(),
-            proposed_question_coverages=(_answer_current(pending.request),),
+            question_decision=_answer_current(pending.request),
             candidate_withdrawals=(),
         ),
         structural=structural, evidence=evidence, store=store,
@@ -208,9 +209,7 @@ def _recover_after_commit_crash(db_path):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(fresh.request),
-                    ),
+                    question_decision=_answer_current(fresh.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -285,9 +284,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(pending.request),
-                    ),
+                    question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -300,9 +297,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim(),), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(pending.request),
-                        ),
+                        question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -313,38 +308,32 @@ class ContinuationOwnershipTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_reissue_loses_to_inflight_submit(self):
+    def test_inflight_continuation_is_unavailable_to_second_submitter(self):
         structural, evidence, store = _harness()
         try:
             continuations = ContinuationStore()
             pending = _suspend(structural, evidence, store, continuations)
             owned = continuations.acquire(pending.continuation)
             self.assertIsNotNone(owned)
-            # A concurrent reissue must not steal submit's token.
-            with self.assertRaises(InterpretationUnavailable):
-                ops.reissue_interpretation(
-                    pending.continuation, continuations=continuations
-                )
-            continuations.release(pending.continuation)
-            # After release, reissue succeeds and consumes the old token.
-            reissued = ops.reissue_interpretation(
-                pending.continuation, continuations=continuations
+            result = m.SemanticInterpretationResult(
+                claims=(_purpose_claim(),), relationships=(),
+                candidate_subjects=(), candidate_conflicts=(),
+                question_decision=_answer_current(pending.request),
+                candidate_withdrawals=(),
             )
-            self.assertIsInstance(reissued, PendingInterpretation)
             with self.assertRaises(InterpretationUnavailable):
                 ops.submit_interpretation(
-                    pending.continuation,
-                    m.SemanticInterpretationResult(
-                        claims=(_purpose_claim(),), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(pending.request),
-                        ),
-                        candidate_withdrawals=(),
-                    ),
+                    pending.continuation, result,
                     structural=structural, evidence=evidence, store=store,
                     continuations=continuations,
                 )
+            continuations.release(pending.continuation)
+            answer = ops.submit_interpretation(
+                pending.continuation, result,
+                structural=structural, evidence=evidence, store=store,
+                continuations=continuations,
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
         finally:
             store.close()
 
@@ -404,9 +393,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim(),), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(pending.request),
-                        ),
+                        question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -426,9 +413,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
             result = m.SemanticInterpretationResult(
                 claims=(_purpose_claim(),), relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(
-                    _answer_current(pending.request),
-                ),
+                question_decision=_answer_current(pending.request),
                 candidate_withdrawals=(),
             )
             original = store.write_index_batch
@@ -487,9 +472,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
                         m.SemanticInterpretationResult(
                             claims=(_purpose_claim(),), relationships=(),
                             candidate_subjects=(), candidate_conflicts=(),
-                            proposed_question_coverages=(
-                                _answer_current(pending.request),
-                            ),
+                            question_decision=_answer_current(pending.request),
                             candidate_withdrawals=(),
                         ),
                         structural=structural, evidence=evidence,
@@ -553,9 +536,7 @@ class EvidenceProvenanceTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(claim,), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(pending.request),
-                        ),
+                        question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -597,9 +578,7 @@ class EvidenceProvenanceTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(claim,), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(pending.request),
-                    ),
+                    question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -648,9 +627,7 @@ class EvidenceProvenanceTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(forged,), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(pending.request),
-                    ),
+                    question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -688,9 +665,7 @@ class CorrectionBindingTest(unittest.TestCase):
             m.SemanticInterpretationResult(
                 claims=(_purpose_claim("Sorts seeds"),), relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(
-                    _answer_current(pending.request),
-                ),
+                question_decision=_answer_current(pending.request),
                 candidate_withdrawals=(),
             ),
             structural=structural, evidence=evidence, store=store,
@@ -715,17 +690,10 @@ class CorrectionBindingTest(unittest.TestCase):
 
     @staticmethod
     def _coverage(scope):
-        return m.InterpretationCoverage(
-            subjects=(scope.subject,),
-            question_slice=scope.question_slice,
-            evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-            declared_complete=True,
-            question=scope,
-            disposition=m.SemanticQuestionDisposition.ANSWERED,
-            result_refs=(),
-            resolution_requirements=(),
-            disposition_basis="test correction identity",
-            question_evidence=(),
+        return _proposed(
+            scope,
+            m.SemanticQuestionDisposition.ANSWERED,
+            basis="test correction identity",
         )
 
     def test_same_slice_different_subject_is_rejected(self):
@@ -804,7 +772,7 @@ class CorrectionBindingTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(self._coverage(wrong),),
+                    proposed_questions=(self._coverage(wrong),),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -826,7 +794,7 @@ class CorrectionBindingTest(unittest.TestCase):
                 claims=(_purpose_claim("Sorts seeds reliably"),),
                 relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(
+                proposed_questions=(
                     self._coverage(original_scope),
                 ),
                 candidate_withdrawals=(),
@@ -861,17 +829,10 @@ class CorrectionBindingTest(unittest.TestCase):
                 )
             )
             seed_ref = challenged.request.evidence_units[0].evidence_ref
-            nominated = m.InterpretationCoverage(
-                subjects=(_sid(),),
-                question_slice=original_scope.question_slice,
-                evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-                declared_complete=True,
-                question=original_scope,
-                disposition=m.SemanticQuestionDisposition.ANSWERED,
-                result_refs=(),
-                resolution_requirements=(),
-                disposition_basis="corrected reading",
-                question_evidence=(),
+            nominated = _proposed(
+                original_scope,
+                m.SemanticQuestionDisposition.ANSWERED,
+                basis="corrected reading",
             )
             corrected = ops.submit_interpretation(
                 challenged.continuation,
@@ -879,7 +840,7 @@ class CorrectionBindingTest(unittest.TestCase):
                     claims=(_purpose_claim("Sorts seeds reliably"),),
                     relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(nominated,),
+                    proposed_questions=(nominated,),
                     candidate_withdrawals=(
                         m.CandidateSemanticWithdrawal(
                             target=m.ClaimRef(id=old_claim.claim_id),
@@ -949,22 +910,15 @@ class CorrectionBindingTest(unittest.TestCase):
                     claims=(_purpose_claim("Sorts seeds reliably"),),
                     relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        m.InterpretationCoverage(
-                            subjects=(_sid(),),
-                            question_slice=original_scope.question_slice,
-                            evidence_scope=m.EvidenceScope(
-                                paths=(), evidence_refs=()
+                    proposed_questions=(
+                        m.ProposedSemanticQuestion(
+                            original_scope,
+                            m.SemanticQuestionDecision(
+                                disposition=(
+                                    m.SemanticQuestionDisposition.ANSWERED
+                                ),
+                                disposition_basis="corrected reading",
                             ),
-                            declared_complete=True,
-                            question=original_scope,
-                            disposition=(
-                                m.SemanticQuestionDisposition.ANSWERED
-                            ),
-                            result_refs=(),
-                            resolution_requirements=(),
-                            disposition_basis="corrected reading",
-                            question_evidence=(),
                         ),
                     ),
                     candidate_withdrawals=(),
@@ -1036,17 +990,10 @@ class CorrectionBindingTest(unittest.TestCase):
             )
 
             def _coverage(scope):
-                return m.InterpretationCoverage(
-                    subjects=(_sid(),),
-                    question_slice=scope.question_slice,
-                    evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-                    declared_complete=True,
-                    question=scope,
-                    disposition=m.SemanticQuestionDisposition.ANSWERED,
-                    result_refs=(),
-                    resolution_requirements=(),
-                    disposition_basis="test",
-                    question_evidence=(),
+                return _proposed(
+                    scope,
+                    m.SemanticQuestionDisposition.ANSWERED,
+                    basis="test",
                 )
 
             with self.assertRaises(InterpretationUnitRejected) as cm:
@@ -1055,7 +1002,7 @@ class CorrectionBindingTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim(),), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
+                        proposed_questions=(
                             _coverage(original_scope),
                             _coverage(other_scope),
                         ),
@@ -1081,7 +1028,7 @@ class CorrectionBindingTest(unittest.TestCase):
                     claims=(_purpose_claim("Sorts seeds reliably"),),
                     relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
+                    proposed_questions=(
                         _coverage(original_scope),
                     ),
                     candidate_withdrawals=(),
@@ -1313,9 +1260,7 @@ class UnsupportedChallengeTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim("Sorts seeds"),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(pending.request),
-                    ),
+                    question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -1338,34 +1283,29 @@ class UnsupportedChallengeTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        m.InterpretationCoverage(
-                            subjects=(_sid(),),
-                            question_slice=original_scope.question_slice,
-                            evidence_scope=m.EvidenceScope(
-                                paths=(), evidence_refs=()
-                            ),
-                            declared_complete=False,
-                            question=original_scope,
-                            disposition=(
-                                m.SemanticQuestionDisposition.OPEN
-                            ),
-                            result_refs=(),
-                            resolution_requirements=(
-                                m.ResolutionRequirement(
-                                    kind=(
-                                        m.ResolutionKind
-                                        .MISSING_SEMANTIC_COVERAGE
-                                    ),
-                                    subject_or_claim=_sid(),
-                                    description=(
-                                        "challenge lacks supporting evidence"
-                                    ),
-                                    supporting_context=(),
+                    proposed_questions=(
+                        m.ProposedSemanticQuestion(
+                            original_scope,
+                            m.SemanticQuestionDecision(
+                                disposition=(
+                                    m.SemanticQuestionDisposition.OPEN
                                 ),
+                                resolution_requirements=(
+                                    m.ResolutionRequirement(
+                                        kind=(
+                                            m.ResolutionKind
+                                            .MISSING_SEMANTIC_COVERAGE
+                                        ),
+                                        subject_or_claim=_sid(),
+                                        description=(
+                                            "challenge lacks supporting "
+                                            "evidence"
+                                        ),
+                                        supporting_context=(),
+                                    ),
+                                ),
+                                disposition_basis="unsupported challenge",
                             ),
-                            disposition_basis="unsupported challenge",
-                            question_evidence=(),
                         ),
                     ),
                     candidate_withdrawals=(),
@@ -1431,7 +1371,6 @@ class CrashRecoveryTest(unittest.TestCase):
             ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="fixture",
-                    structural_provider_config="memory:test",
                     authority_seeds=(),
                 ),
                 repository_id=REPO,
@@ -1445,9 +1384,7 @@ class CrashRecoveryTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim(),), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(pending.request),
-                        ),
+                        question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -1504,9 +1441,7 @@ class QuestionEvidenceUnionTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(claim,), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(pending.request),
-                    ),
+                    question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -1548,7 +1483,6 @@ class FreshSessionTest(unittest.TestCase):
             ops.initialize_repository(
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator="fixture",
-                    structural_provider_config="memory:test",
                     authority_seeds=(),
                 ),
                 repository_id=REPO,
@@ -1564,9 +1498,7 @@ class FreshSessionTest(unittest.TestCase):
                         claims=(_purpose_claim("Sorts seeds"),),
                         relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(pending.request),
-                        ),
+                        question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -1592,24 +1524,15 @@ class FreshSessionTest(unittest.TestCase):
                         claims=(_purpose_claim("Sorts seeds reliably"),),
                         relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            m.InterpretationCoverage(
-                                subjects=(_sid(),),
-                                question_slice=(
-                                    original_scope.question_slice
+                        proposed_questions=(
+                            m.ProposedSemanticQuestion(
+                                original_scope,
+                                m.SemanticQuestionDecision(
+                                    disposition=(
+                                        m.SemanticQuestionDisposition.ANSWERED
+                                    ),
+                                    disposition_basis="corrected reading",
                                 ),
-                                evidence_scope=m.EvidenceScope(
-                                    paths=(), evidence_refs=()
-                                ),
-                                declared_complete=True,
-                                question=original_scope,
-                                disposition=(
-                                    m.SemanticQuestionDisposition.ANSWERED
-                                ),
-                                result_refs=(),
-                                resolution_requirements=(),
-                                disposition_basis="corrected reading",
-                                question_evidence=(),
                             ),
                         ),
                         candidate_withdrawals=(
@@ -1685,7 +1608,6 @@ class DocumentMappingTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id=REPO,
@@ -1750,22 +1672,15 @@ class DocumentMappingTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(
-                    m.InterpretationCoverage(
-                        subjects=(area,),
-                        question_slice="contract purpose",
-                        evidence_scope=m.EvidenceScope(
-                            paths=(), evidence_refs=()
+                proposed_questions=(
+                    m.ProposedSemanticQuestion(
+                        self._doc_question(),
+                        m.SemanticQuestionDecision(
+                            disposition=(
+                                m.SemanticQuestionDisposition.PENDING
+                            ),
+                            disposition_basis="admitted on mapping",
                         ),
-                        declared_complete=False,
-                        question=self._doc_question(),
-                        disposition=(
-                            m.SemanticQuestionDisposition.PENDING
-                        ),
-                        result_refs=(),
-                        resolution_requirements=(),
-                        disposition_basis="admitted on mapping",
-                        question_evidence=(),
                     ),
                 ),
                 candidate_withdrawals=(),
@@ -1781,7 +1696,6 @@ class DocumentMappingTest(unittest.TestCase):
             result = m.SemanticInterpretationResult(
                 claims=(), relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(
@@ -1805,7 +1719,6 @@ class DocumentMappingTest(unittest.TestCase):
             result = m.SemanticInterpretationResult(
                 claims=(), relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(
@@ -1865,7 +1778,6 @@ class DocumentMappingTest(unittest.TestCase):
             partial = m.SemanticInterpretationResult(
                 claims=(), relationships=(),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(

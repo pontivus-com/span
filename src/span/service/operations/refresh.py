@@ -188,13 +188,6 @@ def refresh(
         return _uninitialized_answer(
             m.SemanticIntent.STATUS, request.repository_id, bounds, state
         )
-    if request.target is None:
-        raise RefreshScopeError(
-            "refresh needs an exact scope: pass a SubjectSelector for "
-            "the stale subject or a known EvidenceScope, and use status "
-            "to find the stale scope; repo-wide refresh without "
-            "enumeration is rejected"
-        )
     if request.stale_only is False and not isinstance(
         request.target, m.SubjectSelector
     ):
@@ -444,7 +437,7 @@ def refresh(
                         "Correction mode: nominate exactly one "
                         "already-persisted original question from the "
                         "challenged-question candidates via one "
-                        "proposed_question_coverages entry carrying that "
+                        "proposed_questions entry carrying that "
                         "exact scope; a second distinct non-bound "
                         "correction question rejects the unit.",
                     ),

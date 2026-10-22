@@ -304,7 +304,6 @@ def _harness(files=None):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -378,6 +377,20 @@ def _impact_request(kind=ops.ChangeKind.BEHAVIOR, description=None,
 
 
 class TraceTest(unittest.TestCase):
+    def test_truncated_trace_returns_no_dead_token(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            answer = _exchange(
+                _trace_request(bounds=_bounds(max_results=1)),
+                ops.trace, structural, evidence, store, agent,
+            )
+            self.assertTrue(answer.bound_info.truncated)
+            # A truncated trace is signposted, never handed a token its
+            # own operation cannot redeem (Addendum M §M-06).
+            self.assertIsNone(answer.bound_info.continuation_token)
+        finally:
+            store.close()
+
     def test_frontier_rels_edges_context(self):
         structural, evidence, store, agent = _harness()
         try:
@@ -460,6 +473,48 @@ def _status_request(**overrides):
 
 
 class StatusTest(unittest.TestCase):
+
+    def test_page_token_rejects_changed_listing_arguments(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(
+                        None, "contract/api", (), None
+                    ),
+                    bounds=_bounds(),
+                ),
+                ops.explain, structural, evidence, store, agent,
+            )
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                ops.explain, structural, evidence, store, agent,
+            )
+            first = ops.status(
+                _status_request(target=None, bounds=_bounds(max_subjects=1)),
+                structural=structural, evidence=evidence, store=store,
+                continuations=ContinuationStore(),
+            )
+            token = first.bound_info.continuation_token
+            self.assertIsNotNone(token)
+            with self.assertRaises(ValueError):
+                ops.status(
+                    _status_request(
+                        target=None,
+                        bounds=_bounds(max_subjects=2),
+                        page_token=token,
+                    ),
+                    structural=structural, evidence=evidence, store=store,
+                    continuations=ContinuationStore(),
+                )
+        finally:
+            store.close()
+
     def test_normal_full_answer(self):
         structural, evidence, store, agent = _harness()
         try:
@@ -677,10 +732,9 @@ class StatusTest(unittest.TestCase):
             self.assertTrue(first.bound_info.truncated)
             token = first.bound_info.continuation_token
             self.assertIsNotNone(token)
-            self.assertEqual(
-                _paging.parse_question_token(token),
-                ("default", 1, 0, 0),
-            )
+            _digest, _c, _r, _q = _paging.parse_question_token(token)
+            self.assertNotEqual(_digest, "default")
+            self.assertEqual((_c, _r, _q), (1, 0, 0))
             second = ops.status(
                 _status_request(
                     target=None,
@@ -1188,7 +1242,7 @@ class ImpactTest(unittest.TestCase):
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
                     target=m.SubjectSelector(None, "src/flow.py", (), None),
-                    bounds=_bounds(max_results=50),
+                    bounds=_bounds(max_results=4),
                     page_token=token,
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -1239,7 +1293,6 @@ class ContextualTraceTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id=repo,

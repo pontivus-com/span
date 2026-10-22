@@ -44,7 +44,6 @@ class SuspendedOperation:
     fingerprints: tuple[tuple[str, str], ...] = ()
     known_subject_ids: tuple[m.SubjectId, ...] = ()
     seeds: tuple[m.EvidenceRef, ...] = ()
-    reissues: int = 0
     # Frontier subjects already suspended, as full canonical identities:
     # two distinct SubjectIds never suppress each other even when they
     # share a locator string.
@@ -72,8 +71,6 @@ class SuspendedOperation:
             "initialize_target",
         ):
             raise ValueError(f"unknown suspended op: {self.op}")
-        if self.reissues < 0:
-            raise ValueError("reissues must be non-negative")
 
 
 @_dataclass
@@ -189,9 +186,7 @@ class ContinuationStore:
         (abandoned, per §11.12).
 
         Sole consuming transition. ``submit_interpretation`` calls it
-        only after a successful ``write_index_batch``;
-        ``reissue_interpretation`` acquires first (losing to an
-        in-flight submit) and claims only its owned token.
+        only after a successful ``write_index_batch``.
         """
         with self._lock:
             now = self._now()

@@ -62,7 +62,7 @@ class PlatformTableTest(unittest.TestCase):
 
 
 class OpencodeMergeTest(unittest.TestCase):
-    def test_merge_updates_span_entry(self):
+    def test_merge_migrates_flat_span_entry(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,6 +73,8 @@ class OpencodeMergeTest(unittest.TestCase):
                         "type": "local",
                         "command": ["old-binary"],
                         "enabled": True,
+                        "cwd": "/work",
+                        "environment": {"A": "1"},
                     },
                     "graft": {"type": "local", "command": ["graft"]},
                 },
@@ -83,10 +85,16 @@ class OpencodeMergeTest(unittest.TestCase):
                 dry_run=False,
             )
             config = json.loads(config_path.read_text())
+            self.assertNotIn("span", config["mcp"])
+            nested = config["mcp"]["servers"]["span"]
             self.assertEqual(
-                config["mcp"]["span"]["command"],
-                ["span-mcp", "--data-dir", "/d"],
+                nested["command"], ["span-mcp", "--data-dir", "/d"]
             )
+            self.assertEqual(nested["type"], "local")
+            self.assertIs(nested["codemode"], False)
+            self.assertNotIn("enabled", nested)
+            self.assertEqual(nested["cwd"], "/work")
+            self.assertEqual(nested["environment"], {"A": "1"})
             # An obsolete structural-MCP registration is removed, not preserved.
             self.assertNotIn("graft", config["mcp"])
             self.assertEqual(result["removed_obsolete_entries"], 1)
@@ -126,7 +134,7 @@ class OpencodeMergeTest(unittest.TestCase):
             )
             self.assertEqual(result["removed_obsolete_entries"], 0)
 
-    def test_merge_creates_missing_entry(self):
+    def test_merge_creates_missing_nested_entry(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -136,7 +144,79 @@ class OpencodeMergeTest(unittest.TestCase):
                 str(config_path), ["span-mcp"], dry_run=False
             )
             config = json.loads(config_path.read_text())
-            self.assertTrue(config["mcp"]["span"]["enabled"])
+            self.assertNotIn("span", config["mcp"])
+            nested = config["mcp"]["servers"]["span"]
+            self.assertEqual(nested["type"], "local")
+            self.assertEqual(nested["command"], ["span-mcp"])
+            self.assertIs(nested["codemode"], False)
+            self.assertNotIn("enabled", nested)
+            self.assertNotIn("disabled", nested)
+
+    def test_merge_keeps_correct_nested_entry(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = pathlib.Path(tmp) / "opencode.json"
+            config_path.write_text(json.dumps({
+                "mcp": {"servers": {"span": {
+                    "type": "local",
+                    "command": ["span-mcp"],
+                    "codemode": False,
+                }}},
+            }))
+            install.merge_opencode_config(
+                str(config_path), ["span-mcp"], dry_run=False
+            )
+            nested = json.loads(config_path.read_text())["mcp"]["servers"]["span"]
+            self.assertEqual(nested["command"], ["span-mcp"])
+            self.assertNotIn("enabled", nested)
+
+    def test_merge_reenables_disabled_nested_entry(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = pathlib.Path(tmp) / "opencode.json"
+            config_path.write_text(json.dumps({
+                "mcp": {"servers": {"span": {
+                    "type": "local",
+                    "command": ["span-mcp"],
+                    "codemode": False,
+                    "disabled": True,
+                }}},
+            }))
+            install.merge_opencode_config(
+                str(config_path), ["span-mcp"], dry_run=False
+            )
+            nested = json.loads(config_path.read_text())["mcp"]["servers"]["span"]
+            self.assertNotIn("disabled", nested)
+
+    def test_merge_normalizes_duplicate_to_nested(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = pathlib.Path(tmp) / "opencode.json"
+            config_path.write_text(json.dumps({
+                "mcp": {
+                    "span": {
+                        "type": "local",
+                        "command": ["old"],
+                        "enabled": True,
+                    },
+                    "servers": {"span": {
+                        "type": "local",
+                        "command": ["nested"],
+                        "codemode": False,
+                    }},
+                },
+            }))
+            install.merge_opencode_config(
+                str(config_path), ["span-mcp"], dry_run=False
+            )
+            config = json.loads(config_path.read_text())
+            self.assertNotIn("span", config["mcp"])
+            self.assertEqual(
+                config["mcp"]["servers"]["span"]["command"], ["span-mcp"]
+            )
 
     def test_dry_run_writes_nothing(self):
         import tempfile
@@ -815,16 +895,17 @@ class SkillDeployTest(unittest.TestCase):
 class HostRegistrationInspectionTest(unittest.TestCase):
     """SPMCP-01: read-only, truthful host-registration discovery."""
 
-    def _config(self, tmp, command, enabled=True):
+    def _config(self, tmp, command, enabled=True, codemode=False):
+        entry = {
+            "type": "local",
+            "command": command,
+            "codemode": codemode,
+        }
+        if not enabled:
+            entry["disabled"] = True
         path = pathlib.Path(tmp) / "opencode.json"
         path.write_text(json.dumps({
-            "mcp": {
-                "span": {
-                    "type": "local",
-                    "command": command,
-                    "enabled": enabled,
-                },
-            },
+            "mcp": {"servers": {"span": entry}},
         }))
         return path
 
@@ -849,6 +930,17 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             result = install.inspect_opencode_registration(
                 str(path), expected)
         self.assertEqual(result["status"], "mismatched")
+
+    def test_codemode_entry_is_mismatched(self):
+        import tempfile
+
+        expected = ["/bin/span-mcp", "--data-dir", "/d"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._config(tmp, expected, codemode=True)
+            result = install.inspect_opencode_registration(
+                str(path), expected)
+        self.assertEqual(result["status"], "mismatched")
+        self.assertIn("Code Mode", result["reason"])
 
     def test_wrong_or_missing_repo_is_mismatched(self):
         import tempfile
@@ -888,6 +980,49 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             result = install.inspect_opencode_registration(
                 str(path), ["/bin/span-mcp"])
         self.assertEqual(result["status"], "missing")
+
+    def test_legacy_flat_entry_is_mismatched(self):
+        import tempfile
+
+        expected = ["/bin/span-mcp"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "opencode.json"
+            path.write_text(json.dumps({
+                "mcp": {"span": {
+                    "type": "local",
+                    "command": expected,
+                    "enabled": True,
+                }},
+            }))
+            result = install.inspect_opencode_registration(
+                str(path), expected)
+        self.assertEqual(result["status"], "mismatched")
+        self.assertIn("legacy flat", result["reason"])
+
+    def test_duplicate_registrations_are_mismatched(self):
+        import tempfile
+
+        expected = ["/bin/span-mcp"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "opencode.json"
+            path.write_text(json.dumps({
+                "mcp": {
+                    "span": {
+                        "type": "local",
+                        "command": expected,
+                        "enabled": True,
+                    },
+                    "servers": {"span": {
+                        "type": "local",
+                        "command": expected,
+                        "codemode": False,
+                    }},
+                },
+            }))
+            result = install.inspect_opencode_registration(
+                str(path), expected)
+        self.assertEqual(result["status"], "mismatched")
+        self.assertIn("duplicate", result["reason"])
 
     def test_no_config_available_is_missing(self):
         result = install.inspect_opencode_registration(

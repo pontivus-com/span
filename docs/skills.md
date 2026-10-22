@@ -2,7 +2,7 @@
 
 Skills (`skills/span/SKILL.md`, `skills/span-change-context/SKILL.md`,
 `skills/span-document/SKILL.md`)
-are optional lifecycle/orchestration guidance over the twelve canonical
+are optional lifecycle/orchestration guidance over the eleven canonical
 operations. They sit outside the semantic core and the service
 contract: semantic correctness never depends on them.
 

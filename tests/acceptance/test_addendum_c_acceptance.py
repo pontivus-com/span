@@ -69,7 +69,6 @@ def _harness():
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -93,18 +92,9 @@ def _purpose_claim():
 
 
 def _answer_current(request):
-    q = request.question
-    return m.InterpretationCoverage(
-        subjects=(q.subject,),
-        question_slice=q.question_slice,
-        evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-        declared_complete=True,
-        question=q,
+    return m.SemanticQuestionDecision(
         disposition=m.SemanticQuestionDisposition.ANSWERED,
-        result_refs=(),
-        resolution_requirements=(),
         disposition_basis="test explicit completion",
-        question_evidence=(),
     )
 
 
@@ -139,7 +129,6 @@ class ExplicitDispositionTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -182,9 +171,7 @@ class ExplicitDispositionTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(current.request),
-                    ),
+                    question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -230,9 +217,7 @@ class ExplicitDispositionTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(current.request),
-                        ),
+                        question_decision=_answer_current(current.request),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence, store=store,
@@ -297,9 +282,7 @@ class ExplicitDispositionTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(current.request),
-                    ),
+                    question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -329,7 +312,6 @@ class ExplicitDispositionTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence_v2, store=store,
@@ -405,9 +387,7 @@ class CampaignIntegrityTest(unittest.TestCase):
                     claims=tuple(built[i] for i in sorted(built)),
                     relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(request),
-                    ),
+                    question_decision=_answer_current(request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -445,7 +425,6 @@ class BootstrapValueTest(unittest.TestCase):
                 ops.initialize_repository(
                     ops.SemanticInitializeRepositoryRequest(
                         repository_locator="fixture",
-                        structural_provider_config="memory:test",
                         authority_seeds=(),
                     ),
                     repository_id=REPO,
@@ -469,9 +448,7 @@ class BootstrapValueTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim(),), relationships=(),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(
-                            _answer_current(current.request),
-                        ),
+                        question_decision=_answer_current(current.request),
                         candidate_withdrawals=(),
                     ),
                     structural=structural, evidence=evidence,
@@ -543,9 +520,7 @@ class MechanicalLimitsTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(wrong,), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(current.request),
-                    ),
+                    question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -577,9 +552,7 @@ class PostcommitCorrectionTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(current.request),
-                    ),
+                    question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -633,9 +606,7 @@ class PostcommitCorrectionTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(corrected,), relationships=(),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(suspended.request),
-                    ),
+                    question_decision=_answer_current(suspended.request),
                     candidate_withdrawals=(
                         m.CandidateSemanticWithdrawal(
                             target=old_ref,
@@ -710,9 +681,7 @@ class DocumentSubjectTest(unittest.TestCase):
                     claims=(_purpose_claim(),), relationships=(),
                     candidate_subjects=(doc,),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(
-                        _answer_current(current.request),
-                    ),
+                    question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,

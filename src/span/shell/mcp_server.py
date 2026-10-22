@@ -79,9 +79,9 @@ def provision_repository(
     UNVERIFIABLE). Ordinary reads never build.
     """
     structural, repository_id = structural_source_from_config(
-        request.structural_provider_config, data_dir=config.data_dir
+        request.repository_locator, data_dir=config.data_dir
     )
-    root = _repo_root_from_config(request.structural_provider_config)
+    root = _repo_root_from_config(request.repository_locator)
     # Explicit setup hook: bring the provider index current before any
     # evidence/store work. One bounded attempt inside the provider.
     currency = structural.ensure_current(repository_id)
@@ -152,7 +152,6 @@ _REPO_SCOPED_TOOLS = frozenset({
     "status",
     "refresh",
     "submit_interpretation",
-    "reissue_interpretation",
     "locate",
     "neighbors",
 })
@@ -292,7 +291,6 @@ def main(argv: list[str] | None = None) -> None:
             config,
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator=provider_config,
-                structural_provider_config=provider_config,
                 authority_seeds=(),
             ),
         )

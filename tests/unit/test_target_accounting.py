@@ -37,6 +37,24 @@ FOLLOW_SLICE = "Establish the postings root purpose from direct evidence."
 
 
 
+def _decision(coverage):
+    """Test-only: express an authored coverage as the compact decision."""
+    return m.SemanticQuestionDecision(
+        disposition=coverage.disposition,
+        evidence_scope=coverage.evidence_scope,
+        resolution_requirements=coverage.resolution_requirements,
+        disposition_basis=coverage.disposition_basis,
+    )
+
+
+def _proposed(*coverages):
+    """Test-only: express authored coverages as proposed questions."""
+    return tuple(
+        m.ProposedSemanticQuestion(coverage.question, _decision(coverage))
+        for coverage in coverages
+    )
+
+
 def _fill_batch(pending, accounts):
     """S5/J-6 test helper: account for every bound inventory item.
 
@@ -91,7 +109,6 @@ def _harness():
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -163,7 +180,8 @@ def _submit_audit_open(pending, structural, evidence, store, continuations):
             claims=(), relationships=(), governing_source_refs=(),
             diagnostics=("test audit",),
             candidate_subjects=(), candidate_conflicts=(),
-            proposed_question_coverages=(open_cov, follow_cov),
+            question_decision=_decision(open_cov),
+            proposed_questions=_proposed(follow_cov),
             candidate_withdrawals=(),
         ),
         structural=structural, evidence=evidence, store=store,
@@ -219,7 +237,7 @@ class TargetAccountingTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(pend,),
+                proposed_questions=_proposed(pend),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(first, (
                     m.CandidateTargetInventoryAccount(
@@ -298,7 +316,7 @@ class TargetAccountingTest(unittest.TestCase):
                         ),
                     ),
                     candidate_conflicts=(),
-                    proposed_question_coverages=(pend,),
+                    proposed_questions=_proposed(pend),
                     candidate_withdrawals=(),
                     proposed_target_inventory_accounting=_fill_batch(pending, (
                         m.CandidateTargetInventoryAccount(
@@ -359,6 +377,36 @@ class MappingBatchIdentityTest(unittest.TestCase):
     continuation.
     """
 
+    def test_mapping_template_matches_every_bound_member(self):
+        import json
+
+        structural, evidence, store = _harness()
+        live = ContinuationStore()
+        try:
+            pending = _admit(structural, evidence, store, live)
+            bound = [
+                item.evidence_ref.evidence_id.value
+                for item in pending.request.target_inventory_items
+            ]
+            self.assertGreaterEqual(len(bound), 2)
+            text = pending.request.brief.submission_rules[-1]
+            self.assertIn("every inventory member", " ".join(
+                pending.request.brief.submission_rules
+            ))
+            payload = json.loads(text.split(": ", 1)[1])
+            self.assertNotIn("question_decision", payload)
+            self.assertEqual(
+                [
+                    account["evidence_id"]["value"]
+                    for account in payload[
+                        "proposed_target_inventory_accounting"
+                    ]
+                ],
+                bound,
+            )
+        finally:
+            store.close()
+
     def test_batch_accounts_by_evidence_id_regardless_of_order(self):
         structural, evidence, store = _harness()
         live = ContinuationStore()
@@ -374,7 +422,6 @@ class MappingBatchIdentityTest(unittest.TestCase):
                     claims=(), relationships=(), governing_source_refs=(),
                     diagnostics=("mapping in reverse order",),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(),
                     candidate_withdrawals=(),
                     proposed_target_inventory_accounting=tuple(
                         _unresolved_account(item) for item in reversed_items
@@ -409,7 +456,6 @@ class MappingBatchIdentityTest(unittest.TestCase):
                         claims=(), relationships=(), governing_source_refs=(),
                         diagnostics=("partial mapping",),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(),
                         candidate_withdrawals=(),
                         proposed_target_inventory_accounting=(
                             _unresolved_account(items[0]),
@@ -472,7 +518,6 @@ class MappingBatchIdentityTest(unittest.TestCase):
                         claims=(), relationships=(), governing_source_refs=(),
                         diagnostics=("extra mapping",),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(),
                         candidate_withdrawals=(),
                         proposed_target_inventory_accounting=(
                             _unresolved_account(
@@ -514,7 +559,6 @@ class MappingBatchIdentityTest(unittest.TestCase):
                         claims=(), relationships=(), governing_source_refs=(),
                         diagnostics=("duplicate mapping",),
                         candidate_subjects=(), candidate_conflicts=(),
-                        proposed_question_coverages=(),
                         candidate_withdrawals=(),
                         proposed_target_inventory_accounting=duplicated,
                         proposed_target_questions=(),

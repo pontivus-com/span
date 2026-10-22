@@ -11,7 +11,6 @@ import unittest
 from span.core import model as m
 from span.ports import (
     EvidenceSource,
-    InterpretationIngressFailure,
     InterpretationUnavailable,
     PendingInterpretation,
     SemanticStore,
@@ -85,7 +84,7 @@ class PortShapeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             PendingInterpretation(continuation="", request=pending.request)
         self.assertTrue(issubclass(InterpretationUnavailable, Exception))
-        self.assertTrue(issubclass(InterpretationIngressFailure, Exception))
+        self.assertFalse(hasattr(svc, "reissue_interpretation"))
 
     def _bounds(self):
         return m.QueryBounds(

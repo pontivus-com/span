@@ -699,13 +699,13 @@ class IngressFaultAggregationTest(unittest.TestCase):
 
     def test_sibling_missing_fields_reported_together(self):
         try:
-            m.from_canonical(m.SubjectSelector, {"$type": "SubjectSelector"})
+            m.from_canonical(m.SubjectId, {"$type": "SubjectId"})
         except m.CanonicalDecodeError as exc:
             text = str(exc)
         else:
             self.fail("expected CanonicalDecodeError")
-        self.assertIn("missing field 'exact_subject_id'", text)
-        self.assertIn("missing field 'name_or_locator'", text)
+        self.assertIn("missing field 'repository_id'", text)
+        self.assertIn("missing field 'subject_kind'", text)
 
     def test_sibling_collection_members_reported_together(self):
         coverage = {
@@ -740,13 +740,17 @@ class IngressFaultAggregationTest(unittest.TestCase):
     def test_single_fault_text_is_unchanged(self):
         try:
             m.from_canonical(
-                m.SubjectSelector,
-                {"$type": "SubjectSelector", "exact_subject_id": None},
+                m.EvidenceLineRange,
+                {
+                    "$type": "EvidenceLineRange",
+                    "start_line": 1,
+                    "end_line": 2,
+                },
             )
         except m.CanonicalDecodeError as exc:
             self.assertEqual(
                 str(exc),
-                "missing field 'name_or_locator' for SubjectSelector",
+                "missing field 'total_lines' for EvidenceLineRange",
             )
         else:
             self.fail("expected CanonicalDecodeError")

@@ -34,7 +34,7 @@ adds only the documentation-area procedure.
    assign, evidence-back exclude, or record an unresolved mapping requirement.
    Do not drop it because it lacks an anchor.
 5. Admit each new material area with a `PENDING`
-   `proposed_question_coverages` entry, or reuse an identical persisted
+   `proposed_questions` entry, or reuse an identical persisted
    `SemanticQuestionScope` through `proposed_target_questions`. A semantic
    question's `NOT_APPLICABLE` disposition never excludes its inventory
    member. Use the primary skill's canonical submission and recovery path.

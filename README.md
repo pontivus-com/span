@@ -398,7 +398,8 @@ The equivalent manual `opencode.json` entry is:
         "--repo",
         "<TARGET_REPO>"
       ],
-      "enabled": true
+      "enabled": true,
+      "codemode": false
     }
   }
 }
@@ -412,13 +413,12 @@ Reload OpenCode after changing its MCP configuration.
 
 Once Span is connected:
 
-1. Call `status` with no target.
-2. Call `explain` on a known subsystem, component, symbol, or other bounded target.
-3. If current understanding already exists, Span can return it with its supporting state.
-4. If the required understanding has not yet been established, Span returns a bounded interpretation task.
-5. Your coding agent investigates that task with its normal tools and model.
-6. The result is submitted with `submit_interpretation`.
-7. Continue until the original question resolves or an explicit unresolved requirement remains.
+1. Call the operation you need: `explain` for explanation, `trace` for execution path, `impact` for change risk, `authority` for governance, or `status` when coverage/freshness is the objective.
+2. If current understanding already exists, Span can return it with its supporting state.
+3. If the required understanding has not yet been established, Span returns a bounded interpretation task.
+4. Your coding agent investigates that task with its normal tools and model.
+5. The result is submitted with `submit_interpretation`.
+6. Continue until the original question resolves or an explicit unresolved requirement remains.
 
 The interaction can therefore be immediate:
 
@@ -620,7 +620,7 @@ See [the lifecycle documentation](docs/lifecycle.md).
 
 ## MCP operations
 
-Span exposes twelve canonical MCP operations. No semantic_* aliases exist.
+Span exposes eleven canonical MCP operations. No semantic_* aliases exist.
 
 | Need | Operation |
 | --- | --- |
@@ -633,7 +633,6 @@ Span exposes twelve canonical MCP operations. No semantic_* aliases exist.
 | Inspect readiness, coverage, and currency | `status` |
 | Re-check established understanding | `refresh` |
 | Submit agent interpretation | `submit_interpretation` |
-| Recover one eligible failed interpretation exchange | `reissue_interpretation` |
 | Find files, symbols, outlines, or target members | `locate` |
 | Inspect bounded structural adjacency | `neighbors` |
 
@@ -641,7 +640,8 @@ Every non-current `status` entry names the next exact step: stale or
 unverifiable work uses `refresh` with that entry's exact `SubjectSelector`;
 unassessed work uses a question-local `explain`; pending question work
 continues only through the continuation returned by the suspending
-operation. Never invent a `cont-*` token.
+operation. Pass every returned page token or continuation unchanged; never
+decode, edit, or synthesize either opaque value.
 
 See [the MCP reference](docs/mcp.md) for exact request and response contracts.
 

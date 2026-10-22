@@ -108,33 +108,16 @@ class FixtureAgent:
                 if r.candidate_authority is not None
             }
         )
-        coverages: list[m.InterpretationCoverage] = []
+        question_decision: m.SemanticQuestionDecision | None = None
         if self._complete_questions and request.question is not None:
-            question = request.question
-            coverages.append(
-                m.InterpretationCoverage(
-                    subjects=(question.subject,),
-                    question_slice=question.question_slice,
-                    evidence_scope=m.EvidenceScope(
-                        paths=(), evidence_refs=()
-                    ),
-                    declared_complete=True,
-                    question=question,
-                    disposition=(
-                        m.SemanticQuestionDisposition.ANSWERED
-                    ),
-                    result_refs=(),
-                    resolution_requirements=(),
-                    disposition_basis=(
-                        "fixture explicit completion intent"
-                    ),
-                    question_evidence=(),
-                )
+            question_decision = m.SemanticQuestionDecision(
+                disposition=m.SemanticQuestionDisposition.ANSWERED,
+                disposition_basis="fixture explicit completion intent",
             )
         return m.SemanticInterpretationResult(
             claims=tuple(claims),
             relationships=tuple(relationships),
-            proposed_question_coverages=tuple(coverages),
+            question_decision=question_decision,
             governing_source_refs=tuple(
                 by_id[eid] for eid in governing if eid in by_id
             ),

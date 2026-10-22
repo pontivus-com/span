@@ -8,14 +8,14 @@ transport by construction: this module contains no transformation of
 claims, evidence, dispositions, or answers). All semantic decisions
 remain in Span's service/core; all strict ingress stays server-side.
 
-Loop mechanics (D §6, C-08.6–7):
+Loop mechanics (D §6, C-08.6–7; Addendum M §M-02):
 
 - serial submission only (no threads, no concurrent submits);
 - validation rejection (``InterpretationUnitRejected``) halts with
   the exact diagnostics — reported, never retried, nothing written;
-- ingress failure halts; unknown/expired continuations reissue the
-  idempotent original operation (the authorized resume path, counted
-  in cost — not a hidden retry);
+- an unavailable continuation halts truthfully; the owning host
+  recovers by re-entering the original idempotent operation outside
+  this terminated exchange;
 - unexpected exceptions propagate: real failures stay visible;
 - ``max_rounds`` is an explicit caller-stated liveness budget, not a
   semantic threshold; exhaustion halts with ``round_budget``.
@@ -24,9 +24,9 @@ Cost (``ExchangeCost``) is non-persisted operational telemetry —
 counts plus wall-clock milliseconds, returned with the result. It is
 never written to any store, never resumed from (resume uses persisted
 canonical coverage only), and therefore is not a progress ledger.
-Repository routing is bound by the caller: ``invoke``/``submit``/
-``reissue`` thunks close over the repository's context (as
-``McpAdapter._context`` does); one drive covers one repository scope.
+Repository routing is bound by the caller: ``invoke``/``submit`` thunks
+close over the repository's context (as ``McpAdapter._context`` does);
+one drive covers one repository scope.
 """
 
 from __future__ import annotations
@@ -41,7 +41,6 @@ from span.core.validation import (
     InterpretationUnitRejected as _InterpretationUnitRejected,
 )
 from span.ports.interpretation import (
-    InterpretationIngressFailure,
     InterpretationUnavailable,
     PendingInterpretation,
 )
@@ -53,10 +52,10 @@ __all__ = [
     "drive",
 ]
 
-#: Terminal halt classes. ``validation``/``ingress``/``unavailable``
-#: mirror the service failure taxonomy; ``round_budget`` is liveness
-#: exhaustion. None is a semantic verdict.
-HaltKind = _Literal["validation", "ingress", "unavailable", "round_budget"]
+#: Terminal halt classes. ``validation``/``unavailable`` mirror the
+#: service failure taxonomy; ``round_budget`` is liveness exhaustion.
+#: None is a semantic verdict.
+HaltKind = _Literal["validation", "unavailable", "round_budget"]
 
 
 @_dataclass(frozen=True)
@@ -64,7 +63,6 @@ class ExchangeCost:
     """Measured operational cost of one drive (telemetry, not a ledger)."""
 
     submissions: int
-    reissues: int
     elapsed_ms: int
 
 
@@ -102,27 +100,23 @@ def drive(
         [str, m.SemanticInterpretationResult],
         m.SemanticAnswer | PendingInterpretation,
     ],
-    reissue: _Callable[[], m.SemanticAnswer | PendingInterpretation],
     max_rounds: int,
 ) -> DriveResult:
     """Drive one canonical exchange to a terminal answer or a halt.
 
     ``invoke`` performs the initial operation call; ``investigate`` is
     the host agent's bounded interpretation of a pending task;
-    ``submit``/``reissue`` are bound to the same repository context.
-    ``max_rounds`` bounds submissions plus reissues; it must be
-    positive.
+    ``submit`` is bound to the same repository context.
+    ``max_rounds`` bounds submissions; it must be positive.
     """
     if max_rounds <= 0:
         raise ValueError("max_rounds must be positive")
     started = _time.monotonic_ns()
     submissions = 0
-    reissues = 0
 
     def _cost() -> ExchangeCost:
         return ExchangeCost(
             submissions=submissions,
-            reissues=reissues,
             elapsed_ms=(_time.monotonic_ns() - started) // 1_000_000,
         )
 
@@ -136,13 +130,11 @@ def drive(
         current = invoke()
     except _InterpretationUnitRejected as exc:
         return _halt("validation", str(exc), exc.diagnostics)
-    except InterpretationIngressFailure as exc:
-        return _halt("ingress", str(exc))
     except InterpretationUnavailable as exc:
         return _halt("unavailable", str(exc))
 
     while isinstance(current, PendingInterpretation):
-        if submissions + reissues >= max_rounds:
+        if submissions >= max_rounds:
             return _halt(
                 "round_budget",
                 f"round budget exhausted ({max_rounds}); "
@@ -154,22 +146,6 @@ def drive(
             submissions += 1
         except _InterpretationUnitRejected as exc:
             return _halt("validation", str(exc), exc.diagnostics)
-        except InterpretationIngressFailure as exc:
-            return _halt("ingress", str(exc))
-        except InterpretationUnavailable:
-            if submissions + reissues >= max_rounds:
-                return _halt(
-                    "round_budget",
-                    f"round budget exhausted ({max_rounds}); "
-                    "continuation unavailable with no budget to reissue",
-                )
-            try:
-                current = reissue()
-                reissues += 1
-            except _InterpretationUnitRejected as exc:
-                return _halt("validation", str(exc), exc.diagnostics)
-            except InterpretationIngressFailure as exc:
-                return _halt("ingress", str(exc))
-            except InterpretationUnavailable as exc:
-                return _halt("unavailable", str(exc))
+        except InterpretationUnavailable as exc:
+            return _halt("unavailable", str(exc))
     return DriveResult(answer=current, halt=None, cost=_cost())

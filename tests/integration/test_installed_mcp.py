@@ -29,20 +29,6 @@ import sys as _sys
 import tempfile as _tempfile
 import unittest as _unittest
 
-_TOOL_NAMES = (
-    "initialize_repository",
-    "initialize_target",
-    "explain",
-    "impact",
-    "trace",
-    "authority",
-    "status",
-    "refresh",
-    "submit_interpretation",
-    "reissue_interpretation",
-    "locate",
-    "neighbors",
-)
 
 _REPO_FILES = {
     "README.md": "# synth\n\nSynthetic repository.\n",
@@ -168,718 +154,8 @@ def _write_repo(work):
             ("git", "-C", str(work), *args),
             check=True, timeout=60,
         )
-    # Minimal explicitly-built wiring the test owns: the server never
-    # builds the structural index.
-    graph_dir = work / "graft" / ".graph"
-    graph_dir.mkdir(parents=True, exist_ok=True)
-    nodes = []
-    for rel in ("README.md", "src/alpha.py", "src/beta.py"):
-        body = (work / rel).read_text(encoding="utf-8")
-        nodes.append({
-            "id": rel,
-            "name": _pathlib.Path(rel).name,
-            "kind": "file",
-            "path": rel,
-            "body_hash": _hashlib.sha256(body.encode("utf-8")).hexdigest(),
-        })
-    (graph_dir / "wiring.json").write_text(
-        _json.dumps({"nodes": nodes, "edges": []}), encoding="utf-8"
-    )
-
-
-def _selector(path):
-    return {
-        "$type": "SubjectSelector",
-        "exact_subject_id": None,
-        "name_or_locator": path,
-        "expected_kinds": [],
-        "retrieval_scope_hint": None,
-    }
-
-
-def _claim_for(subject, summary, ref):
-    return {
-        "$type": "CandidateSemanticClaim",
-        "candidate_key": "wire-1",
-        "subject": subject,
-        "kind": "PURPOSE",
-        "value": {
-            "$type": "PurposeValue",
-            "summary": summary,
-            "capability_refs": [],
-        },
-        "assertion_nature": "DESCRIPTIVE",
-        "evidence": [ref],
-        "candidate_authority": None,
-        "basis": {
-            "$type": "SemanticBasis",
-            "derivation": "SEMANTIC_INTERPRETATION",
-            "summary": "wire acceptance observes the file",
-        },
-    }
-
-
-def _covering_result(pending, claim):
-    question = pending["request"]["question"]
-    coverage = {
-        "$type": "InterpretationCoverage",
-        "subjects": [question["subject"]],
-        "question_slice": question["question_slice"],
-        "evidence_scope": {
-            "$type": "EvidenceScope", "paths": [], "evidence_refs": [],
-        },
-        "declared_complete": True,
-        "question": question,
-        "disposition": "ANSWERED",
-        "result_refs": [],
-        "resolution_requirements": [],
-        "disposition_basis": "installed wire acceptance",
-        "question_evidence": [],
-    }
-    return {
-        "$type": "SemanticInterpretationResult",
-        "claims": [claim],
-        "relationships": [],
-        "candidate_subjects": [],
-        "candidate_conflicts": [],
-        "proposed_question_coverages": [coverage],
-        "candidate_withdrawals": [],
-        "governing_source_refs": [],
-        "diagnostics": [],
-        "proposed_target_inventory_accounting": [],
-        "proposed_target_questions": [],
-    }
-
-
-class _Wire:
-    """Thin stdio client wrapper with a JSONL transcript."""
-
-    def __init__(self, session, transcript):
-        self._session = session
-        self._transcript = transcript
-
-    async def call(self, tool, args):
-        # S6 migration: project the payload to the compact wire grammar.
-        from span.core import schema as _schema
-        from span.shell.mcp import _REQUEST_CLASS
-
-        if isinstance(args, dict):
-            cls = _REQUEST_CLASS.get(tool)
-            if cls is not None:
-                args = _schema.compact_payload(cls, args)
-        result = await self._session.call_tool(tool, args)
-        texts = [
-            block.text for block in result.content
-            if getattr(block, "type", "") == "text"
-        ]
-        text = "".join(texts)
-        try:
-            payload = _json.loads(text)
-        except ValueError:
-            raise AssertionError(
-                f"tool {tool} returned non-JSON payload: {text[:500]!r}"
-            )
-        # Full input/output transcript (S9.5): request arguments and
-        # the complete returned JSON, not summaries.
-        self._transcript.append({
-            "tool": tool,
-            "arguments": args,
-            "error": bool(result.is_error),
-            "response": payload,
-        })
-        return payload, bool(result.is_error)
-
-
-async def _lane(exe, work, data_dir, transcript):
-    from mcp.client.stdio import StdioServerParameters, stdio_client
-    from mcp import ClientSession
-
-    env = {
-        key: value for key, value in _os.environ.items()
-        if key != "PYTHONPATH"
-    }
-
-    async def _session():
-        params = StdioServerParameters(
-            command=exe, args=["--data-dir", str(data_dir),
-                               "--repo", str(work)], env=env,
-        )
-        stack = _contextlib.AsyncExitStack()
-        read, write = await stack.enter_async_context(stdio_client(params))
-        session = await stack.enter_async_context(
-            ClientSession(read, write)
-        )
-        initialized = await session.initialize()
-        return stack, session, initialized
-
-    # -- phase 1: provisioned server ------------------------------------
-    stack, session, initialized = await _session()
-    try:
-        server_version = initialized.server_info.version
-        transcript.append({"server_version": server_version})
-        wire = _Wire(session, transcript)
-        listed = await session.list_tools()
-        names = [tool.name for tool in listed.tools]
-        assert set(names) == set(_TOOL_NAMES), names
-        import hashlib as _hashlib
-
-        transcript.append({
-            "schema_digest": _hashlib.sha256(
-                _json.dumps(
-                    {tool.name: tool.input_schema
-                     for tool in listed.tools},
-                    sort_keys=True,
-                ).encode("utf-8")
-            ).hexdigest(),
-        })
-        by_name = {tool.name: tool for tool in listed.tools}
-        assert "Registered repositories: synth." in (
-            by_name["status"].description
-        ), by_name["status"].description
-        submit_schema = by_name["submit_interpretation"].input_schema
-        assert "$defs" in submit_schema
-        assert "SemanticInterpretationResult" in submit_schema["$defs"]
-        assert set(submit_schema["required"]) >= {
-            "continuation", "result", "repository_id",
-        }
-
-        async def _submit_covering(pending, locator, summary):
-            subject = pending["request"]["subjects"][0]["subject_id"]
-            assert subject["canonical_locator"] == locator
-            ref = pending["request"]["evidence_units"][0]["evidence_ref"]
-            claim = _claim_for(subject, summary, ref)
-            result = _covering_result(pending, claim)
-            payload, is_error = await wire.call(
-                "submit_interpretation",
-                {
-                    "continuation": pending["continuation"],
-                    "result": result,
-                    "repository_id": "synth",
-                },
-            )
-            assert not is_error, payload
-            return payload, claim, result
-
-        payload, is_error = await wire.call(
-            "status", {"repository_id": "synth", "target": None}
-        )
-        assert not is_error, payload
-        assert payload["content"].get("readiness") == "READY", payload
-
-        # Exact-path explain -> pending -> schema-built submit -> answer.
-        payload, is_error = await wire.call(
-            "explain",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py")},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        answer, alpha_claim_full, _ = await _submit_covering(
-            payload, "src/alpha.py", "alpha computes the value"
-        )
-        alpha_claim = answer["content"]["claims"][0]["claim_id"]["value"]
-        alpha_subject = alpha_claim_full["subject"]
-
-        # Fresh readback recovers the same claim without resubmission.
-        payload, is_error = await wire.call(
-            "explain",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py")},
-        )
-        assert not is_error, payload
-        assert "continuation" not in payload, payload
-        assert [
-            c["claim_id"]["value"]
-            for c in payload["content"]["claims"]
-        ] == [alpha_claim]
-
-        # Question-specific trace suspends, then answers after submit.
-        payload, is_error = await wire.call(
-            "trace",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py"),
-             "direction": "BOTH", "relationship_filter": None,
-             "boundary_only": False},
-        )
-        assert not is_error, payload
-        if "continuation" in payload:
-            answer, _, _ = await _submit_covering(
-                payload, "src/alpha.py", "alpha computes the value"
-            )
-        else:
-            answer = payload
-        assert "content" in answer, answer
-
-        # Authority separates normative ownership from observation:
-        # the source-only claim stays unresolved without authority.
-        payload, is_error = await wire.call(
-            "authority",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py")},
-        )
-        assert not is_error, payload
-        if "continuation" in payload:
-            answer, _, _ = await _submit_covering(
-                payload, "src/alpha.py", "alpha computes the value"
-            )
-        else:
-            answer = payload
-        assert "UNRESOLVED" in _json.dumps(answer), answer
-
-        # Discriminated impact: the pending slice carries kind and
-        # description digest; submit then answers with conditions.
-        payload, is_error = await wire.call(
-            "impact",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py"),
-             "change_kind": "BEHAVIOR",
-             "change_description": "double the value",
-             "affected_assertions": []},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        pending_slice = payload["request"]["question"]["question_slice"]
-        assert "|kind=BEHAVIOR|desc=" in pending_slice, pending_slice
-        answer, _, _ = await _submit_covering(
-            payload, "src/alpha.py", "alpha computes the value"
-        )
-        assert "change_conditions" in answer["content"], answer
-
-        # Establish the second subject for the isolation check.
-        payload, is_error = await wire.call(
-            "explain",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py")},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        answer, beta_full, _ = await _submit_covering(
-            payload, "src/beta.py", "beta holds the other value"
-        )
-        beta_claim = answer["content"]["claims"][0]["claim_id"]["value"]
-        beta_subject = beta_full["subject"]
-
-        # Freshness: mutate the source, then read back stale.
-        (work / "src" / "alpha.py").write_text(
-            "VALUE = 1\n# touched\n", encoding="utf-8"
-        )
-        payload, is_error = await wire.call(
-            "status",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py")},
-        )
-        assert not is_error, payload
-        assert "STALE" in _json.dumps(payload), payload
-
-        # Refresh correction on alpha only.
-        payload, is_error = await wire.call(
-            "refresh",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py")},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        answer, _, _ = await _submit_covering(
-            payload, "src/alpha.py", "alpha computes the value"
-        )
-        assert "content" in answer, answer
-
-        # Correction isolation: beta's coverage is still answered.
-        payload, is_error = await wire.call(
-            "status",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py")},
-        )
-        assert not is_error, payload
-        beta_views = payload["content"].get("question_coverage", [])
-        assert any(
-            view.get("effective_disposition") == "ANSWERED"
-            for view in beta_views
-        ), payload
-        assert beta_claim in _json.dumps(payload), payload
-
-        # Second OPEN question on the same subject: correcting one
-        # question preserves the other's explicit gap reason (S8.2).
-        # Asked through a pending trace task so the coverage lands in
-        # the task's own subject scope.
-        payload, is_error = await wire.call(
-            "trace",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py"),
-             "direction": "BOTH", "relationship_filter": None,
-             "boundary_only": False},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        open_coverage = {
-            "$type": "InterpretationCoverage",
-            "subjects": [beta_subject],
-            "question_slice": "beta second question",
-            "evidence_scope": {
-                "$type": "EvidenceScope", "paths": [],
-                "evidence_refs": [],
-            },
-            "declared_complete": False,
-            "question": {
-                "$type": "SemanticQuestionScope",
-                "scope_root": beta_subject,
-                "subject": beta_subject,
-                "question_class": "CQ_01",
-                "question_slice": "beta second question",
-                "materiality_basis": "wire acceptance second question",
-            },
-            "disposition": "OPEN",
-            "result_refs": [],
-            "resolution_requirements": [{
-                "$type": "ResolutionRequirement",
-                "kind": "MISSING_SEMANTIC_COVERAGE",
-                "subject_or_claim": {"$type": "SubjectId", **beta_subject},
-                "description": "second gap stays open",
-                "supporting_context": [],
-            }],
-            "disposition_basis": "wire acceptance open question",
-            "question_evidence": [],
-        }
-        trace_question = payload["request"]["question"]
-        trace_subject = payload["request"]["subjects"][0]["subject_id"]
-        trace_ref = payload["request"]["evidence_units"][0]["evidence_ref"]
-        answer, is_error = await wire.call(
-            "submit_interpretation",
-            {"continuation": payload["continuation"],
-             "result": {
-                 "$type": "SemanticInterpretationResult",
-                 "claims": [_claim_for(
-                     trace_subject, "beta trace look", trace_ref
-                 )],
-                 "relationships": [],
-                 "candidate_subjects": [],
-                 "candidate_conflicts": [],
-                 "proposed_question_coverages": [
-                     {
-                         "$type": "InterpretationCoverage",
-                         "subjects": [trace_question["subject"]],
-                         "question_slice":
-                             trace_question["question_slice"],
-                         "evidence_scope": {
-                             "$type": "EvidenceScope", "paths": [],
-                             "evidence_refs": [],
-                         },
-                         "declared_complete": True,
-                         "question": trace_question,
-                         "disposition": "ANSWERED",
-                         "result_refs": [],
-                         "resolution_requirements": [],
-                         "disposition_basis": "wire acceptance",
-                         "question_evidence": [],
-                     },
-                     open_coverage,
-                 ],
-                 "candidate_withdrawals": [],
-                 "governing_source_refs": [],
-                 "diagnostics": [],
-                 "proposed_target_inventory_accounting": [],
-                 "proposed_target_questions": [],
-             },
-             "repository_id": "synth"},
-        )
-        assert not is_error, answer
-        payload, is_error = await wire.call(
-            "status",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py")},
-        )
-        assert not is_error, payload
-        assert "second gap stays open" in _json.dumps(payload), payload
-
-        # Unchanged-source challenge: explicit refresh on unmutated
-        # scope still suspends, submits, and answers; the consumed
-        # continuation cannot be reused.
-        payload, is_error = await wire.call(
-            "refresh",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py"),
-             "stale_only": False},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        refresh_token = payload["continuation"]
-        answer, _, refresh_result = await _submit_covering(
-            payload, "src/beta.py", "beta holds the other value"
-        )
-        assert "content" in answer, answer
-        payload, is_error = await wire.call(
-            "submit_interpretation",
-            {"continuation": refresh_token,
-             "result": refresh_result,
-             "repository_id": "synth"},
-        )
-        assert is_error, payload
-        assert payload.get("error") == "unavailable", payload
-
-        # Installed no-fallback case (S8.5): correcting beta's refreshed
-        # question must not replace the second question's explicit gap
-        # explanation with generic pending scaffolding.
-        payload, is_error = await wire.call(
-            "refresh",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py"),
-             "stale_only": False},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        answer, _, _ = await _submit_covering(
-            payload, "src/beta.py", "beta holds the other value"
-        )
-        assert "content" in answer, answer
-        payload, is_error = await wire.call(
-            "status",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py")},
-        )
-        assert not is_error, payload
-        second_views = [
-            view for view in payload["content"].get("question_coverage", [])
-            if view.get("question", {}).get("question_slice")
-            == "beta second question"
-        ]
-        assert len(second_views) == 1, payload
-        assert (
-            second_views[0].get("effective_disposition") == "OPEN"
-        ), payload
-        assert [
-            req.get("description")
-            for req in second_views[0].get("resolution_requirements", [])
-        ] == ["second gap stays open"], payload
-
-        # Installed shared-withdrawal case (S8.5/S8.3): a dependent
-        # coverage explicitly referencing beta's claim reopens with the
-        # actual withdrawal reason when that claim is withdrawn. The
-        # extra coverage rides a fresh impact task (refresh admits no
-        # brand-new questions, only corrections of persisted ones).
-        beta_ref = {
-            "$type": "ClaimRef", "kind": "CLAIM",
-            "id": {"$type": "ClaimId", "value": beta_claim},
-        }
-        payload, is_error = await wire.call(
-            "impact",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py"),
-             "change_kind": "BEHAVIOR",
-             "change_description": "wire test shared output",
-             "affected_assertions": []},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        refresh_question = payload["request"]["question"]
-        refresh_subject = payload["request"]["subjects"][0]["subject_id"]
-        refresh_ref = payload["request"]["evidence_units"][0]["evidence_ref"]
-        shared_coverage = {
-            "$type": "InterpretationCoverage",
-            "subjects": [refresh_subject],
-            "question_slice": "beta depends on shared",
-            "evidence_scope": {
-                "$type": "EvidenceScope", "paths": [],
-                "evidence_refs": [],
-            },
-            "declared_complete": True,
-            "question": {
-                "$type": "SemanticQuestionScope",
-                "scope_root": refresh_subject,
-                "subject": refresh_subject,
-                "question_class": "CQ_01",
-                "question_slice": "beta depends on shared",
-                "materiality_basis": "wire acceptance shared output",
-            },
-            "disposition": "ANSWERED",
-            "result_refs": [beta_ref],
-            "resolution_requirements": [{
-                "$type": "ResolutionRequirement",
-                "kind": "MISSING_AUTHORITY",
-                "subject_or_claim": {"$type": "SubjectId", **refresh_subject},
-                "description": "shared dependent original gap",
-                "supporting_context": [],
-            }],
-            "disposition_basis": "wire acceptance shared output",
-            "question_evidence": [],
-        }
-        answer, is_error = await wire.call(
-            "submit_interpretation",
-            {"continuation": payload["continuation"],
-             "result": {
-                 "$type": "SemanticInterpretationResult",
-                 "claims": [_claim_for(
-                     refresh_subject, "beta refresh look", refresh_ref
-                 )],
-                 "relationships": [],
-                 "candidate_subjects": [],
-                 "candidate_conflicts": [],
-                 "proposed_question_coverages": [
-                     {
-                         "$type": "InterpretationCoverage",
-                         "subjects": [refresh_question["subject"]],
-                         "question_slice":
-                             refresh_question["question_slice"],
-                         "evidence_scope": {
-                             "$type": "EvidenceScope", "paths": [],
-                             "evidence_refs": [],
-                         },
-                         "declared_complete": True,
-                         "question": refresh_question,
-                         "disposition": "ANSWERED",
-                         "result_refs": [],
-                         "resolution_requirements": [],
-                         "disposition_basis": "wire acceptance",
-                         "question_evidence": [],
-                     },
-                     shared_coverage,
-                 ],
-                 "candidate_withdrawals": [],
-                 "governing_source_refs": [],
-                 "diagnostics": [],
-                 "proposed_target_inventory_accounting": [],
-                 "proposed_target_questions": [],
-             },
-             "repository_id": "synth"},
-        )
-        assert not is_error, answer
-        payload, is_error = await wire.call(
-            "refresh",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py"),
-             "stale_only": False},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        withdraw_ref = payload["request"]["evidence_units"][0][
-            "evidence_ref"]
-        answer, is_error = await wire.call(
-            "submit_interpretation",
-            {"continuation": payload["continuation"],
-             "result": {
-                 "$type": "SemanticInterpretationResult",
-                 "claims": [_claim_for(
-                     payload["request"]["subjects"][0]["subject_id"],
-                     "beta withdraw look", withdraw_ref
-                 )],
-                 "relationships": [],
-                 "candidate_subjects": [],
-                 "candidate_conflicts": [],
-                 "proposed_question_coverages": [
-                     {
-                         "$type": "InterpretationCoverage",
-                         "subjects": [payload["request"]["subjects"][0][
-                             "subject_id"]],
-                         "question_slice": payload["request"][
-                             "question"]["question_slice"],
-                         "evidence_scope": {
-                             "$type": "EvidenceScope", "paths": [],
-                             "evidence_refs": [],
-                         },
-                         "declared_complete": True,
-                         "question": payload["request"]["question"],
-                         "disposition": "ANSWERED",
-                         "result_refs": [],
-                         "resolution_requirements": [],
-                         "disposition_basis": "wire acceptance",
-                         "question_evidence": [],
-                     },
-                 ],
-                 "candidate_withdrawals": [{
-                     "$type": "CandidateSemanticWithdrawal",
-                     "target": beta_ref,
-                     "basis": {
-                         "$type": "SemanticBasis",
-                         "derivation": "SEMANTIC_INTERPRETATION",
-                         "summary": (
-                             "retracted: wire test withdraws "
-                             "shared beta basis"
-                         ),
-                     },
-                     "evidence": [withdraw_ref],
-                 }],
-                 "governing_source_refs": [],
-                 "diagnostics": [],
-                 "proposed_target_inventory_accounting": [],
-                 "proposed_target_questions": [],
-             },
-             "repository_id": "synth"},
-        )
-        assert not is_error, answer
-        payload, is_error = await wire.call(
-            "status",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py")},
-        )
-        assert not is_error, payload
-        shared_views = [
-            view for view in payload["content"].get("question_coverage", [])
-            if view.get("question", {}).get("question_slice")
-            == "beta depends on shared"
-        ]
-        assert len(shared_views) == 1, payload
-        assert (
-            shared_views[0].get("effective_disposition") == "PENDING"
-        ), payload
-        shared_reasons = [
-            req.get("description")
-            for req in shared_views[0].get("resolution_requirements", [])
-        ]
-        assert any(
-            "retracted: wire test withdraws shared beta basis" in text
-            for text in shared_reasons
-        ), payload
-        assert "shared dependent original gap" in shared_reasons, payload
-
-        # Installed malformed-ingress case (S9.6): a submission
-        # missing its required result is a deterministic ingress
-        # error that retains the live continuation for correction.
-        payload, is_error = await wire.call(
-            "refresh",
-            {"repository_id": "synth",
-             "target": _selector("src/beta.py"),
-             "stale_only": False},
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        malformed_pending = payload
-        malformed_token = payload["continuation"]
-        payload, is_error = await wire.call(
-            "submit_interpretation",
-            {"continuation": malformed_token,
-             "repository_id": "synth"},
-        )
-        assert is_error, payload
-        assert payload.get("error") == "ingress", payload
-        assert "result" in payload.get("message", ""), payload
-        answer, _, _ = await _submit_covering(
-            malformed_pending, "src/beta.py", "beta holds the other value"
-        )
-        assert "content" in answer, answer
-    finally:
-        await stack.aclose()
-
-    # -- phase 2: new server process, same store -------------------------
-    stack, session, _ = await _session()
-    try:
-        wire = _Wire(session, transcript)
-        payload, is_error = await wire.call(
-            "explain",
-            {"repository_id": "synth",
-             "target": _selector("src/alpha.py")},
-        )
-        assert not is_error, payload
-        assert "continuation" not in payload, payload
-        # Fresh-session reuse: the original claim still resolves. The
-        # refresh correction may have added a superseding claim citing
-        # current evidence, so this asserts membership, not equality.
-        assert alpha_claim in [
-            c["claim_id"]["value"]
-            for c in payload["content"]["claims"]
-        ], payload
-        transcript.append({"phase": "reuse-across-restart", "ok": True})
-    finally:
-        await stack.aclose()
-    return alpha_claim, beta_claim
+    # No target structural artifacts: the installed provider must build
+    # the index into Span's data directory during provisioning.
 
 
 class InstalledMcpDriverTest(_unittest.TestCase):
@@ -954,9 +230,46 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         data_dir = self.tmp / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         transcript = []
-        alpha_claim, beta_claim = _asyncio.run(
-            _lane(self.exe, work, data_dir, transcript)
+        from span.shell import install
+
+        config_path = self.tmp / "opencode.json"
+        config_path.write_text(
+            _json.dumps({"mcp": {}}), encoding="utf-8"
         )
+        install.merge_opencode_config(
+            str(config_path),
+            [self.exe, "--data-dir", str(data_dir), "--repo", str(work)],
+            dry_run=False,
+        )
+        guidance = self.tmp / "guidance"
+        guidance.mkdir(parents=True, exist_ok=True)
+        install.ensure_agents_rule(
+            _pathlib.Path(__file__).resolve().parents[2],
+            guidance,
+            dry_run=False,
+        )
+        runner = _pathlib.Path(__file__).with_name(
+            "external_client_runner.py"
+        )
+        proc = _subprocess.run(
+            [
+                self.isolated_python, str(runner),
+                str(self.exe), str(work), str(data_dir),
+                str(config_path), str(guidance / "AGENTS.md"),
+            ],
+            cwd=str(self.tmp),
+            capture_output=True, text=True, timeout=300,
+            env={k: v for k, v in _os.environ.items()
+                 if k != "PYTHONPATH"},
+        )
+        self.assertEqual(
+            proc.returncode, 0,
+            (proc.stderr or proc.stdout)[-4000:],
+        )
+        external = _json.loads(proc.stdout.strip().splitlines()[-1])
+        self.assertEqual(external["span_imports"], [])
+        transcript = external["transcript"]
+        alpha_claim, beta_claim = external["claims"]
         self.assertTrue(alpha_claim)
         self.assertTrue(beta_claim)
         self.assertNotEqual(alpha_claim, beta_claim)
@@ -964,10 +277,11 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             print(f"stdio: {_json.dumps(entry, sort_keys=True)}")
         print(f"installed MCP claims: {alpha_claim} {beta_claim}")
         record = {
-            "program": "span-mcp-agent-usability (Addendum I, S0-S9)",
+            "program": "span-mcp-agent-usability (Addendum M friction closure)",
             "runner": (
-                "local isolated virtualenv with a non-editable "
-                "install; installed span-mcp driven over MCP stdio"
+                "separate black-box client process with no Span imports; "
+                "local isolated virtualenv with a non-editable install; "
+                "installed span-mcp driven over MCP stdio"
             ),
             "command": [
                 self.exe, "--data-dir", "<tmp>/data",
@@ -988,6 +302,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
                 if "schema_digest" in entry
             ),
             "exit_code": 0,
+            "span_imports": external["span_imports"],
             "transcript_path": (
                 "span/.context/verification/stdio-transcript.jsonl"
             ),

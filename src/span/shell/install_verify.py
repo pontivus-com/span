@@ -122,7 +122,6 @@ def main(argv=None):
                 config,
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator=provider_config,
-                    structural_provider_config=provider_config,
                     authority_seeds=(),
                 ),
             )

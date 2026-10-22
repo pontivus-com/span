@@ -19,6 +19,8 @@ from span.service.answers import (
     _bound_info,
     _conflicts_for,
     _next_service_token,
+    _query_digest,
+    _validate_service_token,
     _select_answer_items,
     coverage_counts_for,
     state_explanation_for,
@@ -203,8 +205,17 @@ def _compose_explain_answer(
     state: m.RepositoryState,
     page_token: str | None = None,
     scope_root: m.SubjectId | None = None,
+    question_key: str = "",
 ) -> m.SemanticAnswer:
     sid = subject.subject_id
+    _digest = _query_digest(
+        "EXPLAIN",
+        repository_id,
+        f"{sid.subject_kind.value}:{sid.canonical_locator}",
+        question_key,
+        bounds,
+    )
+    _validate_service_token(page_token, _digest)
     claims, relationships, claims_token, rels_token = _load_subject_state(
         repository_id, sid, store=store, bounds=bounds,
         page_token=page_token,
@@ -309,6 +320,7 @@ def _compose_explain_answer(
                 claims_token, rels_token,
                 questions_skip=qshown,
                 questions_remaining=qremaining,
+                query_digest=_digest,
             ),
         ),
         state_explanation=state_explanation_for(
@@ -431,29 +443,6 @@ def explain(
             ],
             default_basis="EXPLAIN question-local",
         )
-        # Page-token digest binding: reject mismatched question pages.
-        if request.page_token is not None:
-            from span.shell import paging as _pg
-
-            try:
-                _tok_digest, _, _, _ = _pg.parse_question_token(
-                    request.page_token
-                )
-            except ValueError as exc:
-                raise ValueError(str(exc)) from None
-            from span.shell.paging import question_digest as _qd
-
-            _expected = _qd(
-                "EXPLAIN", request.repository_id,
-                subject.subject_id.canonical_locator,
-                _selected_scope.question_slice,
-                _selected_scope.question_class.value,
-            )
-            if _tok_digest not in ("default", _expected):
-                raise ValueError(
-                    "page token does not match current question; restart "
-                    "the listing from page one with page_token null"
-                )
     if request.establish_baseline:
         if _baseline_sufficient(
             request.repository_id, subject.subject_id,
@@ -585,6 +574,10 @@ def explain(
             structural=structural, evidence=evidence, store=store,
             bounds=bounds, state=state, page_token=request.page_token,
             scope_root=subject.subject_id,
+            question_key=(
+                f"{_selected_scope.question_class.value}:"
+                f"{_selected_scope.question_slice}"
+            ),
         )
         _filtered = _filter_views(
             _ans.content.question_coverage, _selected_scope

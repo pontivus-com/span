@@ -80,7 +80,6 @@ def _harness(files=None):
     ops.initialize_repository(
         ops.SemanticInitializeRepositoryRequest(
             repository_locator="fixture",
-            structural_provider_config="memory:test",
             authority_seeds=(),
         ),
         repository_id=REPO,
@@ -101,6 +100,24 @@ def _basis(summary, refs):
         derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
         summary=summary,
         input_refs=tuple(refs),
+    )
+
+
+def _decision(coverage):
+    """Test-only: express an authored coverage as the compact decision."""
+    return m.SemanticQuestionDecision(
+        disposition=coverage.disposition,
+        evidence_scope=coverage.evidence_scope,
+        resolution_requirements=coverage.resolution_requirements,
+        disposition_basis=coverage.disposition_basis,
+    )
+
+
+def _proposed(*coverages):
+    """Test-only: express authored coverages as proposed questions."""
+    return tuple(
+        m.ProposedSemanticQuestion(coverage.question, _decision(coverage))
+        for coverage in coverages
     )
 
 
@@ -125,7 +142,6 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         _ops.initialize_repository(
             _ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id=REPO, structural=structural, evidence=evidence, store=store,
@@ -252,7 +268,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                     claims=(), relationships=(), governing_source_refs=(),
                     diagnostics=("mapping",),
                     candidate_subjects=tuple(cands),
-                    candidate_conflicts=(), proposed_question_coverages=tuple(cov_list),
+                    candidate_conflicts=(), proposed_questions=_proposed(*cov_list),
                     candidate_withdrawals=(),
                     proposed_target_inventory_accounting=_fill_batch(pending, tuple(accs)),
                     proposed_target_questions=(),
@@ -327,7 +343,8 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                     claims=tuple(claims), relationships=tuple(rels),
                     governing_source_refs=(), diagnostics=("semantic",),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=tuple(coverages),
+                    question_decision=_decision(coverages[0]),
+                    proposed_questions=_proposed(*coverages[1:]),
                     candidate_withdrawals=(),
                     proposed_target_inventory_accounting=_fill_batch(pending, tuple(extra_accounts)),
                     proposed_target_questions=tuple(extra_qs),
@@ -350,26 +367,31 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             if not refs:
                 raise AssertionError("semantic task without evidence")
             ref = refs[0]
+            billing_ref = next(
+                (r for r in refs if r.locator.startswith("billing")), ref
+            )
             if q.question_slice == "billing purpose":
                 claim = m.CandidateSemanticClaim(
                     candidate_key="billing-purpose",
                     subject=billing, kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(summary="billing computes charges"),
-                    evidence=(ref,),
+                    evidence=(billing_ref,),
                     basis=m.SemanticBasis(
                         derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
-                        summary="billing purpose observed", input_refs=(ref,),
+                        summary="billing purpose observed",
+                        input_refs=(billing_ref,),
                     ),
                 )
                 rel = m.CandidateSemanticRelationship(
                     candidate_key="billing-depends-shipping",
                     source=billing, kind=m.RelationshipKind.DEPENDS_ON,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                    target=shipping, evidence=(ref,),
+                    target=shipping, evidence=(billing_ref,),
                     basis=m.SemanticBasis(
                         derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
-                        summary="billing feeds shipping", input_refs=(ref,),
+                        summary="billing feeds shipping",
+                        input_refs=(billing_ref,),
                     ),
                 )
                 cov = m.InterpretationCoverage(
@@ -395,7 +417,13 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 )
                 na_cov = m.InterpretationCoverage(
                     subjects=(billing,), question_slice="billing components na",
-                    evidence_scope=m.EvidenceScope(), declared_complete=True,
+                    evidence_scope=m.EvidenceScope(
+                        paths=(),
+                        evidence_refs=tuple(
+                            obs.evidence_ref for obs in na_qe
+                        ),
+                    ),
+                    declared_complete=True,
                     question=na_q,
                     disposition=m.SemanticQuestionDisposition.NOT_APPLICABLE,
                     result_refs=(), resolution_requirements=(),
@@ -502,22 +530,18 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 assoc2.inventory_accounting[0].evidence_ref,
             )
             if rq_cov.question_slice == "billing components na":
-                rqe = tuple(
-                    m.QuestionEvidenceObservation(
-                        evidence_ref=u.evidence_ref,
-                        observed_fingerprint=u.content_fingerprint,
-                    )
-                    for u in rq.evidence_units[:1]
-                )
                 rclaim_set, rrel_set = (), ()
                 rcov = m.InterpretationCoverage(
                     subjects=(billing,), question_slice=rq_cov.question_slice,
-                    evidence_scope=m.EvidenceScope(), declared_complete=True,
+                    evidence_scope=m.EvidenceScope(
+                        paths=(), evidence_refs=runits[:1]
+                    ),
+                    declared_complete=True,
                     question=rq_cov,
                     disposition=m.SemanticQuestionDisposition.NOT_APPLICABLE,
                     result_refs=(), resolution_requirements=(),
                     disposition_basis="still no subcomponents",
-                    question_evidence=rqe,
+                    question_evidence=(),
                 )
             else:
                 rclaim = m.CandidateSemanticClaim(
@@ -546,7 +570,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                     claims=rclaim_set, relationships=rrel_set,
                     governing_source_refs=(),
                     diagnostics=("refresh",), candidate_subjects=(),
-                    candidate_conflicts=(), proposed_question_coverages=(rcov,),
+                    candidate_conflicts=(), question_decision=_decision(rcov),
                     candidate_withdrawals=(),
                 ),
                 structural=structural, evidence=evidence, store=store,
@@ -636,7 +660,6 @@ class TargetReuseTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test", authority_seeds=(),
             ),
             repository_id=repo, structural=structural, evidence=evidence,
             store=store,
@@ -692,14 +715,15 @@ class TargetReuseTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(
-                    m.InterpretationCoverage(
-                        subjects=(area,), question_slice="area purpose",
-                        evidence_scope=m.EvidenceScope(), declared_complete=False,
-                        question=question,
-                        disposition=m.SemanticQuestionDisposition.PENDING,
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="admitted", question_evidence=(),
+                proposed_questions=(
+                    m.ProposedSemanticQuestion(
+                        question,
+                        m.SemanticQuestionDecision(
+                            disposition=(
+                                m.SemanticQuestionDisposition.PENDING
+                            ),
+                            disposition_basis="admitted",
+                        ),
                     ),
                 ),
                 candidate_withdrawals=(),
@@ -794,7 +818,6 @@ class TargetReuseTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test", authority_seeds=(),
             ),
             repository_id=repo, structural=structural, evidence=evidence,
             store=store,
@@ -845,14 +868,15 @@ class TargetReuseTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(
-                    m.InterpretationCoverage(
-                        subjects=(area,), question_slice="area purpose",
-                        evidence_scope=m.EvidenceScope(), declared_complete=False,
-                        question=question,
-                        disposition=m.SemanticQuestionDisposition.PENDING,
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="admitted", question_evidence=(),
+                proposed_questions=(
+                    m.ProposedSemanticQuestion(
+                        question,
+                        m.SemanticQuestionDecision(
+                            disposition=(
+                                m.SemanticQuestionDisposition.PENDING
+                            ),
+                            disposition_basis="admitted",
+                        ),
                     ),
                 ),
                 candidate_withdrawals=(),
@@ -899,7 +923,7 @@ class TargetReuseTest(unittest.TestCase):
                 claims=(), relationships=(), governing_source_refs=(),
                 diagnostics=("campaign-b first admission via reuse",),
                 candidate_subjects=(), candidate_conflicts=(),
-                proposed_question_coverages=(), candidate_withdrawals=(),
+                candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(first_b, (
                     m.CandidateTargetInventoryAccount(
                          evidence_id=item_b.evidence_ref.evidence_id,
@@ -954,7 +978,6 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id=self.NAV_REPO,
@@ -1025,7 +1048,6 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(suspended, ()),
                 proposed_target_questions=(),
@@ -1068,7 +1090,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(pending_cov,),
+                proposed_questions=_proposed(pending_cov),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(first, (
                     m.CandidateTargetInventoryAccount(
@@ -1104,7 +1126,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 claims=(claim,), relationships=(), governing_source_refs=(),
                 diagnostics=("semantic",), candidate_subjects=(),
                 candidate_conflicts=(),
-                proposed_question_coverages=(
+                question_decision=_decision(
                     m.InterpretationCoverage(
                         subjects=(file_a,),
                         question_slice=question.question_slice,
@@ -1168,15 +1190,15 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(
-                    m.InterpretationCoverage(
-                        subjects=(question.subject,),
-                        question_slice=question.question_slice,
-                        evidence_scope=m.EvidenceScope(),
-                        declared_complete=False, question=question,
-                        disposition=m.SemanticQuestionDisposition.PENDING,
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="admitted", question_evidence=(),
+                proposed_questions=(
+                    m.ProposedSemanticQuestion(
+                        question,
+                        m.SemanticQuestionDecision(
+                            disposition=(
+                                m.SemanticQuestionDisposition.PENDING
+                            ),
+                            disposition_basis="admitted",
+                        ),
                     ),
                 ),
                 candidate_withdrawals=(),
@@ -1246,7 +1268,6 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
-                structural_provider_config="memory:test",
                 authority_seeds=(),
             ),
             repository_id=self.NAV_REPO,
@@ -1297,7 +1318,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     ),
                 ),
                 candidate_conflicts=(),
-                proposed_question_coverages=(), candidate_withdrawals=(),
+                candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(suspended, ()),
                 proposed_target_questions=(),
             ),
@@ -1348,7 +1369,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     claims=(), relationships=(), governing_source_refs=(),
                     diagnostics=("mapping",), candidate_subjects=cands,
                     candidate_conflicts=(),
-                    proposed_question_coverages=covs, candidate_withdrawals=(),
+                    proposed_questions=_proposed(*covs), candidate_withdrawals=(),
                     proposed_target_inventory_accounting=_fill_batch(pending, (
                         m.CandidateTargetInventoryAccount(
                              evidence_id=item.evidence_ref.evidence_id,
@@ -1382,7 +1403,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 relationships=(), governing_source_refs=(),
                 diagnostics=("semantic",), candidate_subjects=(),
                 candidate_conflicts=(),
-                proposed_question_coverages=(
+                question_decision=_decision(
                     m.InterpretationCoverage(
                         subjects=(file_a,),
                         question_slice=pending.request.question.question_slice,
@@ -1433,7 +1454,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 relationships=(), governing_source_refs=(),
                 diagnostics=("re-examination",), candidate_subjects=(),
                 candidate_conflicts=(),
-                proposed_question_coverages=(
+                question_decision=_decision(
                     m.InterpretationCoverage(
                         subjects=(file_a,),
                         question_slice=rreq.question.question_slice,
@@ -1569,7 +1590,6 @@ class MappingBatchOrderAcceptanceTest(unittest.TestCase):
                     claims=(), relationships=(), governing_source_refs=(),
                     diagnostics=("reverse batch",),
                     candidate_subjects=(), candidate_conflicts=(),
-                    proposed_question_coverages=(),
                     candidate_withdrawals=(),
                     proposed_target_inventory_accounting=accounts,
                     proposed_target_questions=(),

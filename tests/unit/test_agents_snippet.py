@@ -1,7 +1,7 @@
 """AGENTS.md lifecycle-block governance tests (plan §3.5).
 
 The lifecycle block is orchestration guidance only. It may tell an
-agent when/how to invoke the twelve canonical operations but defines
+agent when/how to invoke the eleven canonical operations but defines
 no semantic rules. The single canonical source is
 docs/agents-snippet.md; the installer copies it verbatim between
 span markers and never parses it for decisions.
@@ -29,7 +29,6 @@ CANONICAL_OPS = {
     "status",
     "refresh",
     "submit_interpretation",
-    "reissue_interpretation",
     "locate",
     "neighbors",
 }
@@ -61,7 +60,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertTrue(SNIPPET.is_file(), SNIPPET)
         self.assertIn("## Span lifecycle", _text(SNIPPET))
 
-    def test_lists_all_twelve_operations(self):
+    def test_lists_all_eleven_operations(self):
         text = _text(SNIPPET)
         for op in CANONICAL_OPS:
             self.assertIn(op, text, op)
@@ -114,6 +113,35 @@ class AgentsSnippetTest(unittest.TestCase):
         ):
             self.assertIn(required, text, required)
 
+    def test_entry_guidance_uses_direct_operation(self):
+        text = _text(SNIPPET)
+        self.assertIn("No status preflight is required", text)
+        self.assertIn("`explain` for explanation", text)
+        self.assertNotIn("status` with no target", text)
+
+    def test_managed_block_carries_m_lifecycle(self):
+        text = _text(SNIPPET)
+        for required in (
+            "No status preflight is required",
+            "every inventory member",
+            "first-admission CQ-01 seed",
+            "There is no separate reissue operation",
+            "pass a returned page token unchanged",
+            "Ordinary Span reads and hooks never rebuild structural state",
+            "explicit `refresh` may invoke",
+        ):
+            self.assertIn(required, text)
+        for forbidden in (
+            "reissue_interpretation",
+            "pgq:",
+            "pgv:",
+            "pgn:",
+            "cont-*",
+            "rebuilds the structural index",
+            "normal `status` with no target",
+        ):
+            self.assertNotIn(forbidden, text)
+
     def test_implementation_ignores_snippet(self):
         for path in (REPO_ROOT / "src").rglob("*.py"):
             if path.name == "install.py":
@@ -144,6 +172,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
                 install.AGENTS_END
             )[0].strip("\n")
             self.assertEqual(inner, _text(SNIPPET).rstrip("\n"))
+            self.assertIn("No status preflight is required", inner)
             self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
             second = self._run(REPO_ROOT, target)
             self.assertEqual(second["status"], "converged")
