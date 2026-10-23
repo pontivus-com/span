@@ -1,6 +1,10 @@
 # Span
 
-Establish. Maintain. Expand. Span is evidence-grounded semantic memory: retained meaning with provenance, reusable while its supporting evidence stays current.
+**Re-check only what the change may have affected.**
+
+Span is maintained codebase understanding for coding agents: conclusions kept together with the evidence behind them, reusable while that evidence stays current.
+
+**Establish. Maintain. Expand.** Establish understanding once. Maintain it as its supporting evidence changes. Expand it as the agent moves into new areas.
 
 ## Documentation that can't go stale silently.
 
@@ -9,7 +13,7 @@ Establish. Maintain. Expand. Span is evidence-grounded semantic memory: retained
 ![Platform: Linux verified](https://img.shields.io/badge/platform-Linux%20verified-lightgrey)
 ![Status: Beta](https://img.shields.io/badge/status-beta-orange)
 
-**Span lets coding agents reuse what is still current about a codebase and re-check only what changed, instead of repeatedly rebuilding their understanding from source.**
+**Span lets coding agents reuse what is still current and re-check only what a change may have affected, instead of rebuilding the same understanding from source every session.**
 
 Code changes. Documentation and agent memory usually do not.
 
@@ -200,12 +204,13 @@ Span is not intended to replace code search, structural analysis, documentation,
 
 It fills the gap between them.
 
-| Approach | Persists interpreted understanding | Tracks whether that understanding is still supported | Supports scoped semantic re-check |
-| --- | --- | --- | --- |
-| Traditional or generated documentation | Yes | Not inherently | No |
-| General agent memory | Yes | Not inherently | Not inherently |
-| Code search / structural graph | Different purpose | Can keep source or structure current | Not semantic reassessment |
-| **Span** | **Yes** | **Yes** | **Yes** |
+| Approach | Persists interpreted understanding | Tracks whether it is still supported | Surfaces what changed, with its scope | Supports scoped semantic re-check |
+| --- | --- | --- | --- | --- |
+| Traditional or generated documentation | Yes | Not inherently | No | No |
+| General agent memory | Yes | Not inherently | No | Not inherently |
+| Citation-validated agent memory | Yes | Yes, per fact | No — unverified items are withheld | No |
+| Code search / structural graph | Different purpose | Source or structure only | Structural only | Not semantic reassessment |
+| **Span** | **Yes** | **Yes, per item, premise, and discovery scope** | **Yes, with the reason** | **Yes** |
 
 ### Documentation records an answer
 
@@ -214,6 +219,16 @@ Span also records whether the evidence underneath that answer has changed.
 ### Agent memory remembers
 
 Span separates remembering something from knowing whether it is still safe to treat as current.
+
+### Validated memory still hides the work
+
+Citation validation answers a narrow question: does this fact still match the code it points at? When it does not, the fact is withheld.
+
+That protects the agent from a wrong answer. It does not tell the agent what became doubtful, which other conclusions rested on the same evidence, how far the change reaches, or what still needs checking. The work of reassessment stays invisible.
+
+Span returns the affected item as stale with the changed evidence and the scope to re-check, keeps unverifiable and never-assessed state explicit, and leaves unaffected understanding in place.
+
+Hiding a doubt and scoping a doubt are different products.
 
 ### Search helps an agent investigate
 
@@ -256,7 +271,7 @@ Span is a Model Context Protocol (MCP) server.
 
 It is designed to work with the coding agent you already use.
 
-Current documented host integrations include Codex and OpenCode.
+Span works with any MCP-capable agent. Managed setup — registration, skills, and lifecycle hooks — is implemented for Codex and OpenCode today; other hosts connect manually.
 
 Span does **not**:
 
@@ -272,7 +287,7 @@ The coding agent performs the investigation and implementation.
 
 Span provides the persistent semantic state, evidence relationships, freshness checks, bounded investigation tasks, and retrieval surface that make the resulting understanding reusable.
 
-Span data lives outside the repositories it analyzes.
+Span runs locally over stdio. There is no hosted service, no model call, and no provider credential, and its state lives in a data directory outside the repositories it analyzes. The understanding travels with the agent you already use, not with a vendor.
 
 ---
 
@@ -904,7 +919,7 @@ Those rendered artifacts do not become independent authority merely because Span
 
 ---
 
-## Span is not agent conversation memory
+## Span is not agent memory, validated or otherwise
 
 Conversation memory can preserve:
 
@@ -930,9 +945,15 @@ Can this still be treated as current?
 If not, what needs to be re-checked?
 ```
 
-Persistence alone is not the product.
+Memory products now cite the code behind a fact and check those citations before use. That is a real improvement over blind recall, and it is still a narrower guarantee than Span makes.
 
-The relationship between persisted understanding and the current repository is.
+Validation answers whether a fact still matches the code it points at. When it does not, the fact is withheld: the agent is protected from a wrong answer, but it is not told what became doubtful, which conclusions shared the same evidence, or how far the change reaches. The reassessment work stays invisible.
+
+Span preserves the conclusion, its evidence, its authority, the premises that depend on it, and the coverage of the scope that was examined. When support changes it returns the item as stale with the changed evidence and the scope to re-check. When it cannot decide, it says unverifiable. When a scope was never examined, it says so.
+
+Persistence alone is not the product. Validation alone is not either.
+
+Knowing what is still supported, what is not, and what nobody has checked yet is.
 
 ---
 

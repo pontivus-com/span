@@ -55,10 +55,19 @@ workflows, or originates authority).
   `question_decision` / `proposed_questions`; Span derives and persists the
   canonical `InterpretationCoverage`; wire-ceremony and installer corrections
   ship in the same change
+- `semantic-governance-addendum-n-marketing-positioning-authority.md` —
+  adopted marketing authority: the canonical brief governs public-facing text,
+  supersedes the Addendum D §10 opening proposition, and fixes the register
+  boundary between marketing lead and architecture category
+- `marketing-brief.md` — canonical marketing brief: audience, positioning,
+  message hierarchy, capability ledger with explicit concessions, proof rules,
+  ten differentiation tests, terminology, and public-surface conformance
 
 Governing authority: `.context/requirements/`, the v0.6 implementation plan,
 and Addendum E for the corrective boundaries named there; Addendum L governs
 the agent command boundary, and Addendum M governs the public
-friction/release boundaries it names. If any historical
+friction/release boundaries it names. Addendum N governs public-facing
+positioning and supersedes the Addendum D §10 opening proposition; its
+canonical instrument is `marketing-brief.md`. If any historical
 guide or Addenda B–D passage disagrees with E on those boundaries, E wins.
 Guides describe; they never define semantics.
