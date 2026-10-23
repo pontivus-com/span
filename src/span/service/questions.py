@@ -466,7 +466,7 @@ def _question_local_missing(
                 )
         return None
     if not mine:
-        # Nothing examined (legacy claims or not): examine primary.
+        # Nothing examined yet: examine primary.
         return m.SemanticQuestionScope(
             scope_root=sid,
             subject=sid,

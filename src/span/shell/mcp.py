@@ -545,10 +545,15 @@ def _error(kind: str, message: str) -> ToolResult:
 class McpAdapter:
     """Thin tool-to-service projection (plan §4.2–4.4).
 
-    Holds wired per-repository service contexts. Owns no semantic
-    rules: every call parses into a canonical contract, invokes exactly
-    one service operation, and serializes its result.
+    Holds wired per-repository service contexts plus a lightweight
+    locator registry for repositories whose context has not been opened
+    yet. Owns no semantic rules: every call parses into a canonical
+    contract, invokes exactly one service operation, and serializes its
+    result.
 
+    Registration and provisioning are separate: registering a locator
+    only advertises repository identity, while a repository-scoped call
+    opens its context once through the injected `context_loader`.
     Initialization provisions a new context (structural source,
     evidence, store) and therefore arrives through the injected
     `provisioner`, supplied by the server runtime that owns the data
@@ -562,6 +567,8 @@ class McpAdapter:
             ServiceContext, ops.SemanticInitializeRepositoryResult
         ],
     ] | None = None
+    repository_locators: dict[str, str] = _field(default_factory=dict)
+    context_loader: _Callable[[str], ServiceContext] | None = None
 
     def register(
         self, repository_id: str, context: ServiceContext
@@ -569,15 +576,47 @@ class McpAdapter:
         """Record one repository's wired context (explicit admin path)."""
         self.contexts[repository_id] = context
 
-    def _context(self, repository_id: str) -> ServiceContext:
-        try:
-            return self.contexts[repository_id]
-        except KeyError:
-            registered = sorted(self.contexts)
+    def register_repository_locator(
+        self, repository_id: str, repository_locator: str
+    ) -> None:
+        """Record repository identity for discovery only.
+
+        Registration is transport metadata: it performs no structural
+        build, no semantic-store open, no authority-seed resolution, and
+        no target work. A full context registered through `register`
+        always takes precedence over this lazy locator.
+        """
+        if not repository_id or not repository_locator:
             raise ValueError(
-                f"unknown repository: {repository_id!r}; "
-                f"registered: {registered}"
-            ) from None
+                "repository identity and locator must be non-empty"
+            )
+        self.repository_locators[repository_id] = repository_locator
+
+    def registered_repository_ids(self) -> tuple[str, ...]:
+        """Canonical discovery set: opened contexts plus locators."""
+        return tuple(
+            sorted(set(self.contexts) | set(self.repository_locators))
+        )
+
+    def _context(self, repository_id: str) -> ServiceContext:
+        context = self.contexts.get(repository_id)
+        if context is not None:
+            return context
+        locator = self.repository_locators.get(repository_id)
+        if locator is not None:
+            if self.context_loader is None:
+                raise ValueError(
+                    f"repository not opened and no context loader is "
+                    f"configured: {repository_id!r}"
+                )
+            context = self.context_loader(locator)
+            self.contexts[repository_id] = context
+            return context
+        registered = list(self.registered_repository_ids())
+        raise ValueError(
+            f"unknown repository: {repository_id!r}; "
+            f"registered: {registered}"
+        )
 
     def dispatch(
         self, tool_name: str, arguments: dict

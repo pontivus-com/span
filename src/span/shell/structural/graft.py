@@ -245,22 +245,14 @@ def _data_dir_from_artifact_dir(
 
 
 def wiring_path_for(
-    repo_path: _pathlib.Path,
-    artifact_dir: str | _pathlib.Path | None = None,
+    artifact_dir: str | _pathlib.Path,
 ) -> _pathlib.Path:
     """Location of the built Graft structural index for a repository.
 
-    With a provider-owned ``artifact_dir`` (normal path): the cache
-    ``<artifact>/.graph/wiring.json`` outside the target. Without it
-    (legacy/test path): the in-target ``graft/.graph/wiring.json``.
+    The only location is the provider-owned cache
+    ``<artifact>/.graph/wiring.json`` outside the target.
     """
-    if artifact_dir is not None:
-        return _pathlib.Path(artifact_dir) / ".graph" / "wiring.json"
-    return repo_path / "graft" / ".graph" / "wiring.json"
-
-
-def _legacy_wiring_path_for(repo_path: _pathlib.Path) -> _pathlib.Path:
-    return repo_path / "graft" / ".graph" / "wiring.json"
+    return _pathlib.Path(artifact_dir) / ".graph" / "wiring.json"
 
 
 def artifact_snapshot(repo_path: str | _pathlib.Path) -> dict[str, object]:
@@ -274,7 +266,7 @@ def artifact_snapshot(repo_path: str | _pathlib.Path) -> dict[str, object]:
     """
     root = _pathlib.Path(repo_path)
     graph_dir = root / "graft"
-    wiring = _legacy_wiring_path_for(root)
+    wiring = root / "graft" / ".graph" / "wiring.json"
     try:
         stat = wiring.stat()
         wiring_info: dict[str, object] = {
@@ -464,13 +456,11 @@ def _git_scope_dirty(
 
 def _run_index_build(
     repo_path: _pathlib.Path,
-    artifact_dir: str | _pathlib.Path | None = None,
-    data_dir: str | _pathlib.Path | None = None,
+    artifact_dir: str | _pathlib.Path,
 ) -> tuple[bool, str]:
     """Run one provider-owned index build (lifecycle contract).
 
-    Builds into the provider cache (indexer ``--dir <cache> build``)
-    when ``artifact_dir`` is given, else the legacy in-target location.
+    Builds into the provider cache (indexer ``--dir <cache> build``).
     Flags: ``--no-gitignore --no-ignore`` (never write target
     dotfiles), never ``--deep`` (wiring only, no LLM), never provider /
     model / API-key flags (no credentials). Bounded 600s timeout.
@@ -478,25 +468,21 @@ def _run_index_build(
     pointer, then ``PATH`` fallback). Returns (ok, detail) with
     provider-neutral details; never raises.
     """
-    if data_dir is None and artifact_dir is not None:
-        data_dir = _data_dir_from_artifact_dir(artifact_dir)
+    data_dir = _data_dir_from_artifact_dir(artifact_dir)
     binary = resolve_indexer_binary(data_dir)
     if binary is None:
         return False, (
             "structural indexer unavailable: rerun installation to "
             "provision it"
         )
-    if artifact_dir is not None:
-        try:
-            _pathlib.Path(artifact_dir).mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            return False, f"cannot create provider cache: {exc}"
-        cmd = [
-            binary, "--dir", str(artifact_dir),
-            "build", "--no-gitignore", "--no-ignore", str(repo_path),
-        ]
-    else:
-        cmd = [binary, "build", str(repo_path)]
+    try:
+        _pathlib.Path(artifact_dir).mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return False, f"cannot create provider cache: {exc}"
+    cmd = [
+        binary, "--dir", str(artifact_dir),
+        "build", "--no-gitignore", "--no-ignore", str(repo_path),
+    ]
     env = {
         k: v for k, v in _os.environ.items() if k != "GRAFT_API_KEY"
     }
@@ -536,6 +522,10 @@ class GraftStructuralSource:
     ) -> None:
         self._repository_id = repository_id
         self._repo_path = _pathlib.Path(repo_path)
+        if wiring is None and artifact_dir is None:
+            raise ValueError(
+                "file-backed structural source requires artifact_dir"
+            )
         self._artifact_dir = (
             _pathlib.Path(artifact_dir) if artifact_dir is not None else None
         )
@@ -551,62 +541,52 @@ class GraftStructuralSource:
             self._file_hashes = self._rebuild_file_hashes()
             self._loaded = True
         else:
-            # File-backed: prefer the provider cache, fall back to the
-            # legacy in-target index for pre-migration installs (read
-            # only; future builds always target the cache).
-            candidates: list[_pathlib.Path] = []
-            if self._artifact_dir is not None:
-                candidates.append(wiring_path_for(
-                    self._repo_path, self._artifact_dir
-                ))
-                candidates.append(_legacy_wiring_path_for(self._repo_path))
-            else:
-                candidates.append(_legacy_wiring_path_for(self._repo_path))
-            loaded = False
-            for path in candidates:
-                try:
-                    if not path.is_file():
-                        continue
-                except OSError:
-                    continue
+            # File-backed: the provider cache is the only index
+            # location. Construction never reads the target repository.
+            assert self._artifact_dir is not None
+            path = wiring_path_for(self._artifact_dir)
+            try:
+                is_file = path.is_file()
+            except OSError:
+                is_file = False
+            if is_file:
                 try:
                     raw = _json.loads(path.read_text(encoding="utf-8"))
                 except (OSError, ValueError) as exc:
                     self._load_error = GraftShapeError(
                         f"cannot read wiring.json: {exc}"
                     )
-                    continue
-                try:
-                    nodes = self._parse_nodes(raw)
-                    # _parse_edges needs self._nodes for the file map.
-                    self._nodes = nodes
-                    edges = self._parse_edges(raw)
-                except (GraftShapeError, GraftVocabularyError) as exc:
-                    self._load_error = exc
-                    continue
-                self._edges = edges
-                self._file_hashes = self._rebuild_file_hashes()
-                self._wiring_path = path
-                try:
-                    stat = path.stat()
-                except OSError:
-                    stat = None
-                if stat is not None:
-                    self._wiring_mtime_ns = stat.st_mtime_ns
-                    self._wiring_size = stat.st_size
-                self._loaded = True
-                self._load_error = None
-                loaded = True
-                break
-            if not loaded:
+                    raw = None
+                if raw is not None:
+                    try:
+                        nodes = self._parse_nodes(raw)
+                        # _parse_edges needs self._nodes for the file map.
+                        self._nodes = nodes
+                        edges = self._parse_edges(raw)
+                    except (GraftShapeError, GraftVocabularyError) as exc:
+                        self._load_error = exc
+                    else:
+                        self._edges = edges
+                        self._file_hashes = self._rebuild_file_hashes()
+                        self._wiring_path = path
+                        try:
+                            stat = path.stat()
+                        except OSError:
+                            stat = None
+                        if stat is not None:
+                            self._wiring_mtime_ns = stat.st_mtime_ns
+                            self._wiring_size = stat.st_size
+                        self._loaded = True
+                        self._load_error = None
+            if not self._loaded:
                 # No usable index yet: construction succeeds so explicit
                 # setup can run `ensure_current`. Reads fail closed via
                 # _require_index; describe reports UNVERIFIABLE.
                 self._nodes = {}
                 self._edges = []
                 self._file_hashes = {}
-                # Watch the preferred location so a later build is seen.
-                self._wiring_path = candidates[0]
+                # Watch the cache location so a later build is seen.
+                self._wiring_path = path
         # Fingerprint memo: the node set derives byte-for-byte from the
         # wiring file, so (mtime, size) keys the cached digest exactly.
         # Must precede _compute_index_version, which reads it. Never
@@ -639,44 +619,36 @@ class GraftStructuralSource:
         """
         if self._wiring_path is None:
             return self._loaded
-        # Prefer the cache; if it is absent but a legacy in-target index
-        # exists, read the legacy one (migration read path).
-        paths = [self._wiring_path]
-        legacy = _legacy_wiring_path_for(self._repo_path)
-        if paths[0] != legacy:
-            paths.append(legacy)
-        for path in paths:
-            try:
-                if not path.is_file():
-                    continue
-                raw = _json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            try:
-                nodes = self._parse_nodes(raw)
-                self._nodes = nodes
-                edges = self._parse_edges(raw)
-            except (GraftShapeError, GraftVocabularyError):
-                continue
-            self._edges = edges
-            self._file_hashes = self._rebuild_file_hashes()
-            self._wiring_path = path
-            try:
-                stat = path.stat()
-            except OSError:
-                stat = None
-            if stat is not None:
-                self._wiring_mtime_ns = stat.st_mtime_ns
-                self._wiring_size = stat.st_size
-            else:
-                self._wiring_mtime_ns = None
-                self._wiring_size = None
-            self._state_fingerprint_memo = None
-            self._index_version = self._compute_index_version()
-            self._loaded = True
-            self._load_error = None
-            return True
-        return self._loaded
+        path = self._wiring_path
+        try:
+            if not path.is_file():
+                return self._loaded
+            raw = _json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return self._loaded
+        try:
+            nodes = self._parse_nodes(raw)
+            self._nodes = nodes
+            edges = self._parse_edges(raw)
+        except (GraftShapeError, GraftVocabularyError):
+            return self._loaded
+        self._edges = edges
+        self._file_hashes = self._rebuild_file_hashes()
+        try:
+            stat = path.stat()
+        except OSError:
+            stat = None
+        if stat is not None:
+            self._wiring_mtime_ns = stat.st_mtime_ns
+            self._wiring_size = stat.st_size
+        else:
+            self._wiring_mtime_ns = None
+            self._wiring_size = None
+        self._state_fingerprint_memo = None
+        self._index_version = self._compute_index_version()
+        self._loaded = True
+        self._load_error = None
+        return True
 
     def _rebuild_file_hashes(self) -> dict[str, str | None]:
         """Recorded whole-file hashes by path (Addendum F §4.0).
@@ -706,32 +678,17 @@ class GraftStructuralSource:
         (tests) has no path to watch. A previously missing index is
         picked up when a build lands. Unreadable/malformed new bytes
         keep serving the last good index rather than failing on a torn
-        write. When on the legacy in-target index but a provider cache
-        has since appeared, prefer the cache.
+        write.
         """
         if self._wiring_path is None:
             return
         if not self._loaded:
             self._load_from_disk()
             return
-        # Migration: a cache that appeared after legacy load wins.
-        legacy = _legacy_wiring_path_for(self._repo_path)
-        if self._wiring_path == legacy and self._artifact_dir is not None:
-            cache_wiring = wiring_path_for(
-                self._repo_path, self._artifact_dir
-            )
-            try:
-                if cache_wiring.is_file():
-                    if self._load_from_disk():
-                        return
-            except OSError:
-                pass
         try:
             stat = self._wiring_path.stat()
         except OSError:
-            # Current file vanished: try alternatives (legacy/cache),
-            # else keep serving the loaded one.
-            self._load_from_disk()
+            # Current file vanished: keep serving the loaded index.
             return
         if (
             stat.st_mtime_ns == self._wiring_mtime_ns
@@ -1482,20 +1439,26 @@ class GraftStructuralSource:
         )
 
     def _index_missing_or_stale(self) -> bool:
-        """Whether the lifecycle contract warrants one bounded build.
+        """Whether an explicit setup/refresh call warrants one bounded build.
 
-        The contract builds only when the index is *missing or stale*
-        (README / `docs/mcp.md` / `docs/lifecycle.md`). Missing means
-        nothing usable is loaded, or there is no provable build time;
-        stale means the index predates HEAD. A present index at least
-        as new as HEAD is never rebuildable: `describe_current` may
-        still report UNVERIFIABLE for a dirty or non-git tree, but a
-        rebuild cannot make such a tree CURRENT, so provisioning must
-        not pay rebuild cost on every startup registration for it.
+        Missing means nothing usable is loaded or there is no provable
+        build time. Stale means the index predates HEAD. A dirty working
+        tree also warrants one bounded build when the caller explicitly
+        asked for currency (`initialize_repository`, `refresh`): the
+        build indexes the current working tree instead of leaving a
+        graph that still represents pre-edit topology. The resulting
+        freshness stays UNVERIFIABLE because a dirty tree cannot prove
+        completeness; that limit must not be used to keep serving an
+        intentionally old graph. Ordinary reads never reach this method.
         """
         if not self._loaded:
             return True
         if self._wiring_mtime_ns is None:
+            return True
+        revision, dirty = _git_revision(self._repo_path)
+        if revision is None:
+            return False
+        if dirty:
             return True
         head_time = _git_head_time(self._repo_path)
         if head_time is None:
@@ -1511,7 +1474,8 @@ class GraftStructuralSource:
         Provider-owned execution (lifecycle contract): one bounded
         ``graft --dir <cache> build`` for this adapter's repo root — no
         ``--deep`` pass, no credentials, no target writes — and only
-        when the index is missing or stale (``_index_missing_or_stale``).
+        when the index is missing, stale, or the working tree is dirty
+        (``_index_missing_or_stale``).
         At most one build attempt, guarded by a provider-local lock per
         cache location; concurrent callers serialize on the lock.
         Reloads and validates after a successful build. Build failures
@@ -1539,6 +1503,7 @@ class GraftStructuralSource:
                 return current
             if not self._index_missing_or_stale():
                 return current
+            assert self._artifact_dir is not None
             ok, detail = _run_index_build(
                 self._repo_path, self._artifact_dir
             )

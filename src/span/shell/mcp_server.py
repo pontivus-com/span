@@ -23,6 +23,9 @@ from dataclasses import dataclass as _dataclass
 from span.core import model as m
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.agent_exchange.continuations import ContinuationStore
+from span.shell.context import (
+    open_repository_context as _open_context,
+)
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import (
     TOOL_DESCRIPTIONS,
@@ -34,6 +37,7 @@ from span.shell.mcp import (
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural import (
     repo_root_from_config,
+    repository_id_from_config,
     structural_source_from_config,
 )
 from span.shell.structural.graft import GraftStructuralSource
@@ -42,6 +46,7 @@ from span import service as ops
 __all__ = [
     "ServerConfig",
     "provision_repository",
+    "open_repository_context",
     "handle_list_tools",
     "handle_call_tool",
     "build_server",
@@ -97,8 +102,11 @@ def provision_repository(
     store = SqliteSemanticStore(
         str(config.data_dir / f"{repository_id}.db")
     )
-    resolved_seeds: list[m.EvidenceRef] = []
+    resolved_request = request
     if request.authority_seeds:
+        # Only an explicit non-empty tuple needs locator resolution.
+        # ``None`` preserves and ``()`` clears without a resolution
+        # round-trip.
         inventory = evidence.inventory_evidence(
             repository_id,
             m.EvidenceScope(
@@ -111,6 +119,7 @@ def provision_repository(
             item.evidence_ref.locator: item.evidence_ref
             for item in inventory.items
         }
+        resolved_seeds: list[m.EvidenceRef] = []
         for seed in request.authority_seeds:
             try:
                 resolved_seeds.append(by_locator[seed.locator])
@@ -119,10 +128,9 @@ def provision_repository(
                     "unknown authority seed locator: "
                     f"{seed.locator}"
                 ) from None
-
-    resolved_request = _dataclasses.replace(
-        request, authority_seeds=tuple(resolved_seeds)
-    )
+        resolved_request = _dataclasses.replace(
+            request, authority_seeds=tuple(resolved_seeds)
+        )
     result = ops.initialize_repository(
         resolved_request,
         repository_id=repository_id,
@@ -135,9 +143,29 @@ def provision_repository(
         evidence=evidence,
         store=store,
         continuations=ContinuationStore(),
-        authority_seeds=tuple(resolved_seeds),
+        authority_seeds=store.load_repository_authority_seeds(
+            repository_id
+        ),
     )
     return context, result
+
+
+def open_repository_context(
+    config: ServerConfig,
+    repository_locator: str,
+) -> tuple[str, ServiceContext]:
+    """Open an already-provisioned repository context without setup.
+
+    Repository registration at MCP process startup is transport-only.
+    The first repository-scoped call opens the working context through
+    the canonical shell opener: structural source, filesystem evidence,
+    the existing schema-7 semantic store with its persisted authority
+    seeds, and continuation state. This never
+    calls `ensure_current`, `initialize_repository`, or
+    `provision_repository`, and it does not create a store or schema
+    for a repository explicit initialization has not provisioned.
+    """
+    return _open_context(config.data_dir, repository_locator)
 
 
 #: Repository-scoped tools (Addendum H §7): their descriptions carry
@@ -165,7 +193,7 @@ def handle_list_tools(adapter: McpAdapter) -> list[dict]:
     appended here so pre-call discovery needs no repository-scoped
     request and no filesystem-path guessing.
     """
-    registered = sorted(adapter.contexts)
+    registered = list(adapter.registered_repository_ids())
     if registered:
         scope_note = (
             " Registered repositories: " + ", ".join(registered) + "."
@@ -284,17 +312,21 @@ def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
     config = ServerConfig(data_dir=_pathlib.Path(args.data_dir))
     adapter = McpAdapter(
-        provisioner=lambda request: provision_repository(config, request)
+        provisioner=lambda request: provision_repository(config, request),
+        context_loader=lambda locator: open_repository_context(
+            config, locator
+        )[1],
     )
-    for provider_config in args.repo:
-        context, result = provision_repository(
-            config,
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator=provider_config,
-                authority_seeds=(),
-            ),
+    # Startup registration is transport-only: it advertises canonical
+    # repository identity before serving MCP and performs no provider
+    # build, semantic-store open, or target work. Provisioning remains
+    # explicit through `initialize_repository` and installer verification.
+    for repository_locator in args.repo:
+        repository_id = repository_id_from_config(repository_locator)
+        adapter.register_repository_locator(
+            repository_id,
+            repository_locator,
         )
-        adapter.register(result.repository_id, context)
     _asyncio.run(_serve(adapter))
 
 

@@ -490,8 +490,9 @@ def _coverage_entries_for_subjects(
 ) -> tuple[m.SemanticCoverageEntry, ...]:
     """One coverage entry per frontier subject from persisted state only."""
     # J-1/S1.5: group loaded dependencies by exact recorded discovery
-    # scope. Each distinct scope receives one fresh membership walk; the
-    # empty scope remains the legacy-global path only for migrated rows.
+    # scope. Each distinct scope receives one fresh membership walk.
+    # Current persisted coverage always records a non-empty discovery
+    # scope; an empty scope means whole-repository inventory only.
     # Snapshots are scoped to this status call and never shared across
     # operations.
     try:

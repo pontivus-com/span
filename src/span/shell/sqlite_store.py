@@ -5,12 +5,12 @@ plus query columns; no second semantic model is introduced (§10.2/§10.3,
 I-15). Table decomposition is physical only and carries no semantic
 authority. Stdlib ``sqlite3``; no third-party binding (ledger).
 
-Schema version is 6 (``SCHEMA_VERSION``): assertion-nature modality
-(Addendum I S6), target-association accounting (Addendum E E-13A),
-question coverage (Addendum B), and scoped coverage discovery metadata
-(Addendum J S1). v2/v3/v4/v5 stores migrate
-non-destructively; legacy items remain unassessed without invented
-question ownership and preserve history without inferred nature.
+Schema version 7 is the only supported schema (``SCHEMA_VERSION``):
+assertion-nature modality (Addendum I S6), target-association accounting
+(Addendum E E-13A), question coverage (Addendum B), scoped coverage
+discovery metadata (Addendum J S1), and persisted repository
+initialization state including canonical authority seeds. Stores at any
+other version fail closed; this build performs no schema migration.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from span.shell import paging as _paging
 
 __all__ = ["SCHEMA_VERSION", "TARGET_RETENTION_DAYS", "SqliteSemanticStore"]
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 TARGET_RETENTION_DAYS = 90
 
@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS repositories(
   revision_id TEXT,
   dirty INTEGER NOT NULL,
   state_fingerprint TEXT NOT NULL,
-  observed_at TEXT NOT NULL
+  observed_at TEXT NOT NULL,
+  authority_seeds_json TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS subjects(
   repository_id TEXT NOT NULL,
@@ -206,32 +207,6 @@ def _decode_conflict(payload: str) -> m.RecordedConflict:
     return value
 
 
-def _strip_retired_target_account_fields(data: object) -> object:
-    """Persistence-boundary transition for one retired field (E-13A/D).
-
-    Rows persisted before the membership-only correction contain
-    `observed_content_fingerprint` inside `TargetInventoryAccount`
-    entries. Remove exactly that field, only inside dicts tagged
-    `$type == "TargetInventoryAccount"`, before strict canonical
-    decoding. Every other unknown field still fails closed in the
-    decoder, and writes never re-encode the retired field.
-    """
-    if isinstance(data, list):
-        return [_strip_retired_target_account_fields(item) for item in data]
-    if isinstance(data, dict):
-        if data.get("$type") == "TargetInventoryAccount":
-            data = {
-                key: value
-                for key, value in data.items()
-                if key != "observed_content_fingerprint"
-            }
-        return {
-            key: _strip_retired_target_account_fields(value)
-            for key, value in data.items()
-        }
-    return data
-
-
 def _ref_id(ref: m.ClaimRef | m.RelationshipRef) -> str:
     return ref.id.value
 
@@ -256,265 +231,39 @@ class SqliteSemanticStore:
         self._utc_now = utc_now or (
             lambda: _datetime.datetime.now(_datetime.timezone.utc)
         )
-        # Inspect on-disk version before mutating; fresh DB has no meta row.
-        try:
-            row = self._db.execute(
-                "SELECT value FROM meta WHERE key='schema_version'"
-            ).fetchone()
-        except _sqlite3.OperationalError:
-            row = None
-        on_disk = int(row[0]) if row is not None else 0
-        if on_disk not in (0, 2, 3, 4, 5, 6):
-            raise ValueError(f"unsupported schema version: {on_disk}")
-        if on_disk == 0:
-            # Fresh database: create the full v5 schema at once.
-            self._db.executescript(_SCHEMA)
-            self._db.execute(
-                "INSERT OR REPLACE INTO meta(key, value) "
-                "VALUES('schema_version', ?)",
-                (str(SCHEMA_VERSION),),
-            )
-            self._db.commit()
-            self._reap_expired_target_associations()
-            return
-        if on_disk in (5, 6):
-            # v5→v6: additive discovery-scope metadata rides inside
-            # coverage_dependencies.canonical_json with a dataclass
-            # default, so no ALTER and no payload rewrite are required;
-            # idempotent schema re-create plus the version stamp.
-            self._db.executescript(_SCHEMA)
-            self._db.execute(
-                "INSERT OR REPLACE INTO meta(key, value) "
-                "VALUES('schema_version', ?)",
-                (str(SCHEMA_VERSION),),
-            )
-            self._db.commit()
-            self._reap_expired_target_associations()
-            return
-        if on_disk == 4:
-            # v4→v5 atomic: rewrite active and retired payloads with
-            # LEGACY_UNCLASSIFIED, preserve IDs/trust/evidence/history,
-            # publish v5 only after success. No decoder fallback remains
-            # after migration except this single-version step.
+        tables = {
+            row[0]
+            for row in self._db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        row = None
+        if "meta" in tables:
             try:
-                with self._db:
-                    self._db.executescript(_SCHEMA)
-                    self._migrate_v4_payloads_to_v5()
-                    self._db.execute(
-                        "INSERT OR REPLACE INTO meta(key, value) "
-                        "VALUES('schema_version', ?)",
-                        (str(SCHEMA_VERSION),),
-                    )
-            except Exception:
-                raise
-            self._reap_expired_target_associations()
-            return
-        if on_disk == 3:
-            # v3→v4 tables then v4→v5 payloads, atomically; publish v5.
-            try:
-                with self._db:
-                    self._db.execute(
-                        "CREATE TABLE IF NOT EXISTS target_associations("
-                        "  repository_id TEXT NOT NULL,"
-                        "  target_id TEXT NOT NULL,"
-                        "  last_touched_at TEXT NOT NULL,"
-                        "  expires_at TEXT NOT NULL,"
-                        "  canonical_json TEXT NOT NULL,"
-                        "  PRIMARY KEY(repository_id, target_id))"
-                    )
-                    self._db.execute(
-                        "CREATE INDEX IF NOT EXISTS "
-                        "idx_target_associations_repo "
-                        "ON target_associations(repository_id)"
-                    )
-                    tables = {
-                        r[0]
-                        for r in self._db.execute(
-                            "SELECT name FROM sqlite_master WHERE type='table'"
-                        ).fetchall()
-                    }
-                    if "target_associations" not in tables:
-                        raise RuntimeError("v3→v4 migration incomplete")
-                    self._migrate_v4_payloads_to_v5()
-                    self._db.execute(
-                        "INSERT OR REPLACE INTO meta(key, value) "
-                        "VALUES('schema_version', ?)",
-                        (str(SCHEMA_VERSION),),
-                    )
-            except Exception:
-                raise
-            self._reap_expired_target_associations()
-            return
-        # v2→v3: one explicit atomic migration transaction. New
-        # question-coverage/indexing tables are created and the version
-        # is published in the SAME transaction; an interruption rolls
-        # back without partial semantic state, leaving a valid v2
-        # database behind (Addendum B B.8). No invented question
-        # ownership: absence of coverage means unassessed.
-        try:
-            with self._db:
-                self._db.execute(
-                    "CREATE TABLE IF NOT EXISTS question_coverages("
-                    "  repository_id TEXT NOT NULL,"
-                    "  scope_root_locator TEXT NOT NULL,"
-                    "  scope_root_kind TEXT NOT NULL,"
-                    "  subject_locator TEXT NOT NULL,"
-                    "  subject_kind TEXT NOT NULL,"
-                    "  question_class TEXT NOT NULL,"
-                    "  question_slice TEXT NOT NULL,"
-                    "  disposition TEXT NOT NULL,"
-                    "  observed_at TEXT NOT NULL,"
-                    "  canonical_json TEXT NOT NULL,"
-                    "  PRIMARY KEY("
-                    "    repository_id, scope_root_locator, scope_root_kind,"
-                    "    subject_locator, subject_kind, question_class,"
-                    "    question_slice"
-                    "  ))"
-                )
-                self._db.execute(
-                    "CREATE TABLE IF NOT EXISTS premise_dependents("
-                    "  repository_id TEXT NOT NULL,"
-                    "  premise_id TEXT NOT NULL,"
-                    "  premise_kind TEXT NOT NULL,"
-                    "  dependent_id TEXT NOT NULL,"
-                    "  dependent_kind TEXT NOT NULL,"
-                    "  canonical_json TEXT NOT NULL,"
-                    "  PRIMARY KEY(repository_id, premise_id, dependent_id))"
-                )
-                self._db.execute(
-                    "CREATE TABLE IF NOT EXISTS question_result_refs("
-                    "  repository_id TEXT NOT NULL,"
-                    "  scope_root_locator TEXT NOT NULL,"
-                    "  scope_root_kind TEXT NOT NULL,"
-                    "  subject_locator TEXT NOT NULL,"
-                    "  subject_kind TEXT NOT NULL,"
-                    "  question_class TEXT NOT NULL,"
-                    "  question_slice TEXT NOT NULL,"
-                    "  result_id TEXT NOT NULL,"
-                    "  result_kind TEXT NOT NULL,"
-                    "  PRIMARY KEY("
-                    "    repository_id, scope_root_locator, scope_root_kind,"
-                    "    subject_locator, subject_kind, question_class,"
-                    "    question_slice, result_id"
-                    "  ))"
-                )
-                # Verify the new tables exist before publishing v3.
-                tables = {
-                    r[0]
-                    for r in self._db.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    ).fetchall()
-                }
-                missing = {
-                    "question_coverages",
-                    "premise_dependents",
-                    "question_result_refs",
-                } - tables
-                if missing:
-                    raise RuntimeError(
-                        f"v2→v3 migration incomplete, missing: {sorted(missing)}"
-                    )
-                # v3→v4 tables chained in the same atomic migration,
-                # then v4→v5 payloads; publish v6 only after success.
-                self._db.execute(
-                    "CREATE TABLE IF NOT EXISTS target_associations("
-                    "  repository_id TEXT NOT NULL,"
-                    "  target_id TEXT NOT NULL,"
-                    "  last_touched_at TEXT NOT NULL,"
-                    "  expires_at TEXT NOT NULL,"
-                    "  canonical_json TEXT NOT NULL,"
-                    "  PRIMARY KEY(repository_id, target_id))"
-                )
-                self._db.execute(
-                    "CREATE INDEX IF NOT EXISTS "
-                    "idx_target_associations_repo "
-                    "ON target_associations(repository_id)"
-                )
-                self._migrate_v4_payloads_to_v5()
-                self._db.execute(
-                    "INSERT OR REPLACE INTO meta(key, value) "
-                    "VALUES('schema_version', ?)",
-                    (str(SCHEMA_VERSION),),
-                )
-        except Exception:
-            # Context manager rolled back: on-disk state is still v2.
-            # Re-check nothing was published before surfacing.
-            raise
-        self._reap_expired_target_associations()
-
-    def _migrate_v4_payloads_to_v5(self) -> None:
-        """Rewrite v4 claim/relationship payloads with LEGACY nature (S6).
-
-        In one transaction, adds assertion_nature=LEGACY_UNCLASSIFIED to
-        existing active and retired payloads, preserving old universal-
-        authority trust outcome without classifying prose. Preserves
-        original IDs, references, trust, evidence, retirement history,
-        and question dispositions. New IDs include nature; old IDs are
-        not recomputed. Malformed payloads rollback the transaction.
-        Idempotent: rows already carrying nature are left untouched.
-        Caller holds the migration transaction; version is published
-        only after this succeeds.
-        """
-        for table, id_col in (
-            ("claims", "claim_id"),
-            ("relationships", "relationship_id"),
-            ("retired_claims", "claim_id"),
-            ("retired_relationships", "relationship_id"),
-        ):
-            try:
-                rows = self._db.execute(
-                    f"SELECT {id_col}, canonical_json FROM {table}"
-                ).fetchall()
+                row = self._db.execute(
+                    "SELECT value FROM meta WHERE key='schema_version'"
+                ).fetchone()
             except _sqlite3.OperationalError:
-                continue
-            for row_id, payload in rows:
-                try:
-                    data = _json.loads(payload)
-                except ValueError as exc:
-                    raise RuntimeError(
-                        f"v4→v5 migration malformed payload in {table}: "
-                        f"{row_id}: {exc}"
-                    ) from exc
-                if not isinstance(data, dict):
-                    raise RuntimeError(
-                        f"v4→v5 migration malformed payload in {table}: "
-                        f"{row_id}"
-                    )
-                if "assertion_nature" in data:
-                    continue
-                data["assertion_nature"] = "LEGACY_UNCLASSIFIED"
-                # Validate the rewritten payload decodes under v5 before
-                # writing: preserves trust/evidence/history, rejects
-                # malformed without partial state (transaction rolls back).
-                try:
-                    if table in ("claims", "retired_claims"):
-                        decoded = m.from_canonical(m.SemanticClaim, data)
-                        assert isinstance(decoded, m.SemanticClaim)
-                        assert (
-                            decoded.assertion_nature
-                            is m.AssertionNature.LEGACY_UNCLASSIFIED
-                        )
-                    else:
-                        decoded = m.from_canonical(
-                            m.SemanticRelationship, data
-                        )
-                        assert isinstance(
-                            decoded, m.SemanticRelationship
-                        )
-                        assert (
-                            decoded.assertion_nature
-                            is m.AssertionNature.LEGACY_UNCLASSIFIED
-                        )
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"v4→v5 migration validation failed in {table}: "
-                        f"{row_id}: {exc}"
-                    ) from exc
-                self._db.execute(
-                    f"UPDATE {table} SET canonical_json=? "
-                    f"WHERE {id_col}=?",
-                    (_encode(m.to_canonical(decoded)), row_id),
-                )
+                row = None
+        on_disk = int(row[0]) if row is not None else 0
+        if not tables:
+            # Fresh database: create schema 7 directly.
+            self._db.executescript(_SCHEMA)
+            self._db.execute(
+                "INSERT OR REPLACE INTO meta(key, value) "
+                "VALUES('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            self._db.commit()
+            self._reap_expired_target_associations()
+            return
+        if on_disk != SCHEMA_VERSION:
+            raise ValueError(
+                "unsupported Span store schema version "
+                f"{on_disk}; migrate this store to schema "
+                f"{SCHEMA_VERSION} before using this Span build"
+            )
+        self._reap_expired_target_associations()
 
     def _now(self) -> _datetime.datetime:
         result = self._utc_now()
@@ -555,14 +304,6 @@ class SqliteSemanticStore:
         if expires_at <= self._now().isoformat():
             return None
         data = _json.loads(payload)
-        # Persistence-boundary transition (Addendum E E-13A/D): rows
-        # written before the membership-only correction carry the retired
-        # `observed_content_fingerprint` inside TargetInventoryAccount
-        # entries. Strip it here, at the explicitly governed store
-        # boundary, before strict canonical decoding. The general decoder
-        # stays strict: every other unknown field still fails closed, and
-        # this retired field is never re-encoded on write.
-        data = _strip_retired_target_account_fields(data)
         value = m.from_canonical(m.TargetAssociation, data)
         assert isinstance(value, m.TargetAssociation)
         return value
@@ -733,7 +474,7 @@ class SqliteSemanticStore:
         ).fetchall()
         associations: list[m.TargetAssociation] = []
         for (payload,) in rows:
-            data = _strip_retired_target_account_fields(_json.loads(payload))
+            data = _json.loads(payload)
             value = m.from_canonical(m.TargetAssociation, data)
             assert isinstance(value, m.TargetAssociation)
             associations.append(value)
@@ -1443,20 +1184,72 @@ class SqliteSemanticStore:
         ).fetchone()
         return m.SchemaVersion(value=int(row[0]) if row else 0)
 
-    def record_repository_state(self, state: m.RepositoryState) -> None:
+    def record_repository_initialization(
+        self,
+        state: m.RepositoryState,
+        authority_seeds: tuple[m.EvidenceRef, ...],
+    ) -> None:
+        """Write one repository row holding state and authority seeds.
+
+        One atomic INSERT OR REPLACE: initialization never leaves the
+        state record and its configured authority seeds out of step.
+        """
         with self._db:
             self._db.execute(
                 "INSERT OR REPLACE INTO repositories"
                 "(repository_id, revision_id, dirty, state_fingerprint, "
-                "observed_at) VALUES(?, ?, ?, ?, ?)",
+                "observed_at, authority_seeds_json) "
+                "VALUES(?, ?, ?, ?, ?, ?)",
                 (
                     state.repository_id,
                     state.revision_id,
                     int(state.dirty),
                     state.state_fingerprint,
                     state.observed_at.isoformat(),
+                    _encode(m.to_canonical(authority_seeds)),
                 ),
             )
+
+    def load_repository_authority_seeds(
+        self, repository_id: str
+    ) -> tuple[m.EvidenceRef, ...]:
+        """Persisted canonical authority seeds for a repository.
+
+        No row means the repository was never initialized and yields
+        ``()``. A row whose stored seeds are not canonical JSON (or not
+        exactly ``EvidenceRef`` items) fails closed; configured data is
+        never silently replaced by an empty tuple.
+        """
+        row = self._db.execute(
+            "SELECT authority_seeds_json FROM repositories "
+            "WHERE repository_id=?",
+            (repository_id,),
+        ).fetchone()
+        if row is None:
+            return ()
+        try:
+            decoded = m.from_canonical(
+                tuple[m.EvidenceRef, ...], _json.loads(row[0])
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"repository {repository_id!r} authority seeds are not "
+                f"canonical: {exc}"
+            ) from None
+        if not isinstance(decoded, tuple) or not all(
+            isinstance(seed, m.EvidenceRef) for seed in decoded
+        ):
+            raise ValueError(
+                f"repository {repository_id!r} authority seeds are not "
+                "canonical"
+            )
+        for seed in decoded:
+            if seed.repository_id != repository_id:
+                raise ValueError(
+                    f"repository {repository_id!r} authority seeds contain "
+                    f"a seed for repository {seed.repository_id!r}"
+                )
+        return decoded
 
     def load_repository_state(
         self, repository_id: str

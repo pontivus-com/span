@@ -1,300 +1,294 @@
-"""Unit tests for the host hook runner (read-only notices).
+"""Unit tests for the host hook runner (canonical HOOK_FAST notices).
 
-Builds a real store through the canonical write path, then drives
-the stdlib-only hook module against it. Hooks must never write,
-never break the session, and report staleness without classifying
-beyond observed-vs-current bytes.
+The runner is a transport over one canonical policy: every automatic
+hook maps to exactly one ``status(..., mode=HOOK_FAST)`` call through
+the shared shell context opener, and prints only what that notice
+reports. These tests pin that boundary — no second status policy, no
+SQL, no store bootstrap — and the exception-oriented output rules.
+
+Fixture providers replace the context opener so the canonical call can
+run without a built structural index.
 """
 
 import io
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from span import service as ops
+from span.core import model as m
 from span.shell import hooks
+from span.shell.agent_exchange.continuations import ContinuationStore
+from span.shell.evidence import FixtureEvidenceSource
+from span.shell.mcp import ServiceContext
+from span.shell.sqlite_store import SqliteSemanticStore
+from span.shell.structural.memory import (
+    InMemoryFile,
+    InMemoryStructuralSource,
+    InMemorySubject,
+    fingerprint_content,
+)
+
+REPO_ID = "repo"
+SUBJECT = m.SubjectId(
+    repository_id=REPO_ID,
+    subject_kind=m.SubjectKind.COMPONENT,
+    canonical_locator="src/a.py",
+)
+CONTENT_V1 = "VALUE = 1\n"
+CONTENT_V2 = "VALUE = 2\n"
 
 
 def _receipt(data_dir, repos):
-    (pathlib.Path(data_dir) / "install.json").write_text(json.dumps({
-        "repos": repos,
-        "verify": {"repos": []},
-    }))
+    (pathlib.Path(data_dir) / "install.json").write_text(
+        json.dumps({"repos": repos}),
+        encoding="utf-8",
+    )
 
 
-class HookNoticeTest(unittest.TestCase):
-    def _seeded(self, tmp, freshness_state="CURRENT"):
-        from span.core import model as m
-        from span.shell.sqlite_store import SqliteSemanticStore
+def _context(content):
+    """Fixture-backed canonical context over one file version."""
+    structural = InMemoryStructuralSource(
+        REPO_ID,
+        (InMemoryFile("src/a.py", content),),
+        (InMemorySubject("src/a.py", m.SubjectKind.COMPONENT, "a"),),
+    )
+    evidence = FixtureEvidenceSource(REPO_ID, {"src/a.py": content})
+    store = SqliteSemanticStore(":memory:")
+    return structural, evidence, store
 
-        root = str(pathlib.Path(tmp) / "repo")
-        target = pathlib.Path(root) / "src" / "a.py"
-        target.parent.mkdir(parents=True)
-        target.write_text("VALUE = 1\n")
-        data_dir = str(pathlib.Path(tmp) / "data")
-        pathlib.Path(data_dir).mkdir()
-        _receipt(data_dir, [root])
-        db = str(pathlib.Path(data_dir) / "repo.db")
-        store = SqliteSemanticStore(db)
-        sid = m.SubjectId(
-            repository_id="repo", subject_kind=m.SubjectKind.COMPONENT,
-            canonical_locator="src/a.py",
-        )
-        import hashlib
 
-        fp = hashlib.sha256(b"VALUE = 1\n").hexdigest()
-        ref = m.EvidenceRef(
-            evidence_id=m.EvidenceId("ev-src/a.py"),
-            repository_id="repo",
-            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-            locator="src/a.py",
-            revision_or_fingerprint=fp,
-        )
-        claim = m.SemanticClaim(
-            claim_id=m.ClaimId("clm-1"), subject=sid,
-            kind=m.ClaimKind.PURPOSE,
-            assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            value=m.PurposeValue("does things", ()),
-            evidence=(ref,),
-            trust=m.TrustState.PARTIAL,
-            freshness=m.Freshness(
-                m.FreshnessState(freshness_state), reason="t"
-            ),
-            basis=m.SemanticBasis(
-                m.DerivationKind.SEMANTIC_INTERPRETATION, "t"
-            ),
-        )
-        store.write_index_batch(
-            m.CanonicalIndexBatch(
-                subjects=(m.Subject(sid, "a", None),),
-                claims=(claim,),
-                evidence_dependencies=(
-                    m.EvidenceDependency(
-                        semantic_id=m.ClaimRef(id=m.ClaimId("clm-1")),
-                        evidence_ref=ref,
-                        observed_fingerprint=fp,
-                    ),
+def _seed(data_dir, content):
+    """Provision the store through the canonical write path."""
+    structural, evidence, _ = _context(content)
+    store = SqliteSemanticStore(str(pathlib.Path(data_dir) / f"{REPO_ID}.db"))
+    ops.initialize_repository(
+        ops.SemanticInitializeRepositoryRequest(
+            repository_locator="fixture",
+            authority_seeds=(),
+        ),
+        repository_id=REPO_ID,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+    )
+    fingerprint = fingerprint_content(content)
+    ref = m.EvidenceRef(
+        evidence_id=m.EvidenceId("ev-src/a.py"),
+        repository_id=REPO_ID,
+        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        locator="src/a.py",
+        revision_or_fingerprint=fingerprint,
+    )
+    claim = m.SemanticClaim(
+        claim_id=m.ClaimId("clm-1"),
+        subject=SUBJECT,
+        kind=m.ClaimKind.PURPOSE,
+        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+        value=m.PurposeValue("does things", ()),
+        evidence=(ref,),
+        trust=m.TrustState.PARTIAL,
+        freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+        basis=m.SemanticBasis(
+            m.DerivationKind.SEMANTIC_INTERPRETATION, "t"
+        ),
+    )
+    store.write_index_batch(
+        m.CanonicalIndexBatch(
+            subjects=(m.Subject(SUBJECT, "a", None),),
+            claims=(claim,),
+            evidence_dependencies=(
+                m.EvidenceDependency(
+                    semantic_id=m.ClaimRef(id=m.ClaimId("clm-1")),
+                    evidence_ref=ref,
+                    observed_fingerprint=fingerprint,
                 ),
+            ),
+        )
+    )
+    store.close()
+
+
+class HookRunnerTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        base = pathlib.Path(self._tmp.name)
+        self.root = base / "repo"
+        (self.root / "src").mkdir(parents=True)
+        (self.root / "src" / "a.py").write_text(CONTENT_V1, encoding="utf-8")
+        self.data_dir = base / "data"
+        self.data_dir.mkdir()
+        _receipt(self.data_dir, [str(self.root)])
+
+    def _with_context(self, content):
+        """Patch the opener with fixture providers over ``content``."""
+        db = self.data_dir / f"{REPO_ID}.db"
+
+        def factory(data_dir, repo_root):
+            structural, evidence, _ = _context(content)
+            store = SqliteSemanticStore(str(db))
+            return REPO_ID, ServiceContext(
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
             )
-        )
-        store.close()
-        return root, data_dir, str(target)
 
-    def _seed_coverage(self, data_dir, disposition="ANSWERED"):
-        from span.core import model as m
-        from span.shell.sqlite_store import SqliteSemanticStore
+        return patch.object(hooks, "_context_for", side_effect=factory)
 
-        db = str(pathlib.Path(data_dir) / "repo.db")
-        store = SqliteSemanticStore(db)
-        sid = m.SubjectId(
-            repository_id="repo", subject_kind=m.SubjectKind.COMPONENT,
-            canonical_locator="src/a.py",
-        )
-        scope = m.SemanticQuestionScope(
-            scope_root=sid, subject=sid,
-            question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="hook coverage",
-            materiality_basis="hook test",
-        )
-        store.write_index_batch(
-            m.CanonicalIndexBatch(
-                subjects=(m.Subject(sid, "a", None),),
-                coverage=(
-                    m.InterpretationCoverage(
-                        subjects=(sid,),
-                        question_slice="hook coverage",
-                        evidence_scope=m.EvidenceScope(
-                            paths=(), evidence_refs=()
-                        ),
-                        declared_complete=(
-                            disposition == "ANSWERED"
-                        ),
-                        question=scope,
-                        disposition=m.SemanticQuestionDisposition(
-                            disposition
-                        ),
-                        result_refs=(
-                            (
-                                m.ClaimRef(id=m.ClaimId("clm-1")),
-                            )
-                            if disposition == "ANSWERED"
-                            else ()
-                        ),
-                        resolution_requirements=(),
-                        disposition_basis="hook test",
-                        question_evidence=(),
-                    ),
+    def _run(self, function, *args):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            function(*args)
+        return out.getvalue()
+
+    def test_ready_session_start_is_silent(self):
+        _seed(self.data_dir, CONTENT_V1)
+        with self._with_context(CONTENT_V1):
+            self.assertEqual(
+                self._run(
+                    hooks.cmd_session_start, self.data_dir, str(self.root)
                 ),
+                "",
             )
+
+    def test_uninitialized_notice_creates_no_store(self):
+        # The real opener, not a fixture: an ordinary hook on a
+        # repository explicit initialization never provisioned must not
+        # create `<data-dir>/<id>.db` or its schema.
+        out = self._run(
+            hooks.cmd_session_start, self.data_dir, str(self.root)
         )
-        store.close()
+        self.assertIn("UNINITIALIZED", out)
+        self.assertIn("initialize_repository", out)
+        self.assertFalse((self.data_dir / f"{self.root.name}.db").exists())
+        self.assertEqual(
+            sorted(p.name for p in self.data_dir.iterdir()),
+            ["install.json"],
+        )
 
-    def test_session_start_prompts_orientation_without_coverage(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, _ = self._seeded(tmp)
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_session_start(data_dir, root)
-            text = out.getvalue()
-            self.assertIn("repo", text)
-            self.assertIn("no established coverage", text)
-            self.assertIn("orient", text)
-            self.assertIn("question-local explain", text)
-            self.assertIn("no continuation token exists yet", text)
-
-    def test_session_start_silent_when_established_current(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, _ = self._seeded(tmp)
-            self._seed_coverage(data_dir)
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_session_start(data_dir, root)
-            self.assertEqual(out.getvalue(), "")
-
-    def test_session_start_reports_noncurrent_scope(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, _ = self._seeded(
-                tmp, freshness_state="STALE"
+    def test_stale_change_reports_canonical_notice(self):
+        _seed(self.data_dir, CONTENT_V1)
+        target = str(self.root / "src" / "a.py")
+        with self._with_context(CONTENT_V2):
+            out = self._run(
+                hooks.cmd_source_changed, self.data_dir, [target]
             )
-            self._seed_coverage(
-                data_dir, disposition="PENDING"
+        self.assertIn(f"span: {REPO_ID} needs attention (1 stale)", out)
+        self.assertIn("run refresh with an exact SubjectSelector", out)
+        self.assertIn("src/a.py", out)
+
+    def test_unchanged_change_is_silent(self):
+        _seed(self.data_dir, CONTENT_V1)
+        target = str(self.root / "src" / "a.py")
+        with self._with_context(CONTENT_V1):
+            self.assertEqual(
+                self._run(
+                    hooks.cmd_source_changed, self.data_dir, [target]
+                ),
+                "",
             )
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_session_start(data_dir, root)
-            text = out.getvalue()
-            self.assertIn("repo", text)
-            self.assertIn("needs attention", text)
-            self.assertIn("1 stale", text)
-            self.assertIn("1 pending", text)
-            self.assertIn("exact SubjectSelector", text)
-            self.assertIn("pass it unchanged", text)
 
-    def test_source_changed_silent_when_unchanged(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, target = self._seeded(tmp)
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_source_changed(data_dir, [target])
-            self.assertEqual(out.getvalue(), "")
-
-    def test_source_changed_reports_moved(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, target = self._seeded(tmp)
-            # Move the bytes: dependents now need status/refresh.
-            pathlib.Path(target).write_text("VALUE = 2\n")
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_source_changed(data_dir, [target])
-            text = out.getvalue()
-            self.assertIn("moved", text)
-            self.assertIn("clm-1", text)
-
-    def test_source_changed_ignores_untracked_paths(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, _ = self._seeded(tmp)
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_source_changed(
-                    data_dir, [str(pathlib.Path(root) / "other.py")]
-                )
-            self.assertEqual(out.getvalue(), "")
-
-    def test_session_stop_silent_on_clean_close(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, _ = self._seeded(tmp)
-            self._seed_coverage(data_dir)
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_session_stop(data_dir, root)
-            self.assertEqual(out.getvalue(), "")
-
-    def test_session_stop_reports_actionable_scope(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, _ = self._seeded(
-                tmp, freshness_state="STALE"
+    def test_change_outside_registered_repository_is_silent(self):
+        _seed(self.data_dir, CONTENT_V1)
+        with self._with_context(CONTENT_V2):
+            self.assertEqual(
+                self._run(
+                    hooks.cmd_source_changed,
+                    self.data_dir,
+                    [str(self.data_dir / "elsewhere.py")],
+                ),
+                "",
             )
-            self._seed_coverage(data_dir, disposition="PENDING")
-            out = io.StringIO()
-            with redirect_stdout(out):
-                hooks.cmd_session_stop(data_dir, root)
-            text = out.getvalue()
-            self.assertIn("close:", text)
-            self.assertIn("1 stale", text)
-            self.assertIn("1 pending", text)
-            self.assertIn("exact SubjectSelector", text)
-            self.assertIn("pass it unchanged", text)
 
-    def test_session_hooks_scope_to_active_repository(self):
-        import shutil
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root, data_dir, _ = self._seeded(
-                tmp, freshness_state="STALE"
+    def test_session_stop_reports_host_supplied_scope(self):
+        _seed(self.data_dir, CONTENT_V1)
+        target = str(self.root / "src" / "a.py")
+        stream = io.StringIO(
+            json.dumps({"tool_input": {"file_path": target}})
+        )
+        with self._with_context(CONTENT_V2), patch.object(
+            sys, "stdin", stream
+        ):
+            out = self._run(
+                hooks.cmd_session_stop, self.data_dir, str(self.root)
             )
-            self._seed_coverage(data_dir, disposition="PENDING")
-            other_root = pathlib.Path(tmp) / "other"
-            other_root.mkdir()
-            shutil.copyfile(
-                pathlib.Path(data_dir) / "repo.db",
-                pathlib.Path(data_dir) / "other.db",
+        self.assertIn(f"span: {REPO_ID} close: 1 stale", out)
+
+    def test_session_stop_without_paths_is_silent(self):
+        _seed(self.data_dir, CONTENT_V1)
+        with self._with_context(CONTENT_V1), patch.object(
+            sys, "stdin", io.StringIO("")
+        ):
+            self.assertEqual(
+                self._run(
+                    hooks.cmd_session_stop, self.data_dir, str(self.root)
+                ),
+                "",
             )
-            _receipt(data_dir, [root, str(other_root)])
 
-            start_out = io.StringIO()
-            with redirect_stdout(start_out):
-                with patch.object(
-                    hooks, "default_data_dir", return_value=data_dir
-                ):
-                    hooks.main([
-                        "--repo-root", str(other_root), "session-start"
-                    ])
-            self.assertIn("other", start_out.getvalue())
-            self.assertNotIn("repo", start_out.getvalue())
+    def test_session_start_only_reports_the_active_repository(self):
+        nested = self.root / "nested"
+        nested.mkdir()
+        _receipt(self.data_dir, [str(self.root), str(nested)])
+        seen = []
 
-            stop_out = io.StringIO()
-            with redirect_stdout(stop_out):
-                with patch.object(
-                    hooks, "default_data_dir", return_value=data_dir
-                ), patch.object(
-                    hooks.os, "getcwd", return_value=str(other_root)
-                ):
-                    hooks.main(["session-stop"])
-            self.assertIn("other close:", stop_out.getvalue())
-            self.assertNotIn("repo close:", stop_out.getvalue())
+        def factory(data_dir, repo_root):
+            seen.append(repo_root)
+            structural, evidence, _ = _context(CONTENT_V1)
+            return REPO_ID, ServiceContext(
+                structural=structural,
+                evidence=evidence,
+                store=SqliteSemanticStore(":memory:"),
+                continuations=ContinuationStore(),
+            )
 
-    def test_missing_receipt_is_silent_success(self):
-        import tempfile
+        with patch.object(hooks, "_context_for", side_effect=factory):
+            self._run(hooks.cmd_session_start, self.data_dir, str(nested))
+        self.assertEqual(seen, [str(nested)])
 
-        with tempfile.TemporaryDirectory() as tmp:
-            out = io.StringIO()
-            with redirect_stdout(out):
-                with self.assertRaises(SystemExit) as ctx:
-                    hooks.cmd_session_start(
-                        str(pathlib.Path(tmp) / "nodir")
-                    )
-            self.assertEqual(ctx.exception.code, 0)
+    def test_missing_receipt_exits_zero(self):
+        empty = pathlib.Path(self._tmp.name) / "empty"
+        empty.mkdir()
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit) as raised:
+            hooks.main(["--data-dir", str(empty), "session-start"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("install receipt", err.getvalue())
+
+    def test_every_command_uses_the_canonical_hook_fast_call(self):
+        notice = m.HookStatusNotice(readiness=m.RepositoryReadiness.READY)
+        seen = []
+
+        def fake_status(request, **kwargs):
+            seen.append(request)
+            return notice
+
+        with patch.object(hooks.ops, "status", side_effect=fake_status), \
+                self._with_context(CONTENT_V1):
+            self._run(
+                hooks.cmd_session_start, self.data_dir, str(self.root)
+            )
+        self.assertEqual(len(seen), 1)
+        request = seen[0]
+        self.assertIsInstance(request, ops.SemanticStatusRequest)
+        self.assertIs(request.mode, m.StatusMode.HOOK_FAST)
+        self.assertIsNone(request.target)
+
+    def test_runner_carries_no_second_status_policy(self):
+        source = pathlib.Path(hooks.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("sqlite3", source)
+        self.assertNotIn("SELECT", source)
+        self.assertNotIn("load_evidence_dependencies", source)
+        self.assertIs(hooks.ops.status, ops.status)
 
 
 if __name__ == "__main__":

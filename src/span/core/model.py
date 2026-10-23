@@ -360,22 +360,17 @@ class AssertionNature(_enum.Enum):
     """Descriptive vs normative modality (Addendum I S6 §5.6).
 
     DESCRIPTIVE observes behavior; NORMATIVE asserts assigned custody,
-    contracts, or governance. LEGACY_UNCLASSIFIED exists only for
-    pre-v5 migrated records whose nature was never asserted; it is
-    store-read-only and never appears in candidate schemas. Trust
-    derivation is unchanged for both natures (MI-05).
+    contracts, or governance. Trust derivation is unchanged for both
+    natures (MI-05).
     """
 
     DESCRIPTIVE = "DESCRIPTIVE"
     NORMATIVE = "NORMATIVE"
-    LEGACY_UNCLASSIFIED = "LEGACY_UNCLASSIFIED"
 
 
 #: Narrowed candidate ingress over the same canonical enum values —
 #: there is no second candidate assertion-nature enum. Generated MCP
-#: schemas advertise exactly the two submittable values; the canonical
-#: decoder rejects LEGACY_UNCLASSIFIED at candidate ingress while the
-#: store reader accepts it for migrated records only.
+#: schemas advertise exactly the two submittable values.
 CandidateAssertionNature = _typing.Literal[
     AssertionNature.DESCRIPTIVE, AssertionNature.NORMATIVE
 ]
@@ -1351,35 +1346,18 @@ class SemanticAnswer:
                     if getattr(i, "assertion_nature", None)
                     is AssertionNature.NORMATIVE
                 )
-                legacy = len(items) - descriptive - normative
-                if descriptive and not normative and not legacy:
+                if descriptive and not normative:
                     distribution = "descriptive-only"
-                elif normative and not descriptive and not legacy:
+                elif normative and not descriptive:
                     distribution = "normative-only"
                 else:
                     distribution = "mixed"
-                if legacy and not descriptive and not normative:
-                    sentence = (
-                        f"returned assertions: {distribution} "
-                        f"(0 descriptive, 0 normative, {legacy} "
-                        "legacy-unclassified); authority-unresolved "
-                        "items stay qualified regardless of nature"
-                    )
-                elif legacy:
-                    sentence = (
-                        f"returned assertions: {distribution} "
-                        f"({descriptive} descriptive, {normative} "
-                        f"normative, {legacy} legacy-unclassified); "
-                        "authority-unresolved items stay qualified "
-                        "regardless of nature"
-                    )
-                else:
-                    sentence = (
-                        f"returned assertions: {distribution} "
-                        f"({descriptive} descriptive, {normative} "
-                        "normative); authority-unresolved items stay "
-                        "qualified regardless of nature"
-                    )
+                sentence = (
+                    f"returned assertions: {distribution} "
+                    f"({descriptive} descriptive, {normative} "
+                    "normative); authority-unresolved items stay "
+                    "qualified regardless of nature"
+                )
                 object.__setattr__(
                     self, "state_explanation", (sentence,),
                 )
@@ -2339,7 +2317,7 @@ class SemanticInterpretationRequest:
     structural_observations: tuple[StructuralObservation, ...]
     identity_bindings: tuple[SubjectId, ...]
     # Required, never defaulted: every interpretation task carries its
-    # slice-derived brief (no brief-less legacy path, no dual semantics).
+    # slice-derived brief (no brief-less path, no dual semantics).
     brief: TaskBrief
     # The exact user-directed boundary, when this task belongs to target
     # establishment. This is separate from ``subjects``: a structural
@@ -2568,8 +2546,7 @@ class CanonicalDecodeError(ValueError):
     a tuple of dotted field names with collection indices (for example
     `("target", "exact_subject_id", "canonical_locator")` or
     `("claims", "[3]")`). `reason` is the original failure text.
-    `str()` renders `path: reason` when a path is present, preserving
-    all existing reason substrings for backward compatibility.
+    `str()` renders `path: reason` when a path is present.
     """
 
     def __init__(

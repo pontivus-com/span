@@ -14,6 +14,7 @@ from span.core.model import (
     ClaimRef,
     CoverageDependency,
     EvidenceDependency,
+    EvidenceRef,
     FreshnessUpdate,
     InterpretationCoverage,
     QueryBounds,
@@ -223,12 +224,26 @@ class SemanticStore(_typing.Protocol):
     def schema_version(self) -> SchemaVersion:
         ...
 
-    def record_repository_state(self, state: RepositoryState) -> None:
-        """Persist repository identity/state metadata (plan §10.2).
+    def record_repository_initialization(
+        self,
+        state: RepositoryState,
+        authority_seeds: tuple[EvidenceRef, ...],
+    ) -> None:
+        """Persist repository identity/state and configured authority seeds.
 
-        Written by explicit initialization; read by status/hook paths
-        to distinguish UNINITIALIZED from READY without implicit
-        bootstrap (I-27).
+        One atomic row write by explicit initialization; read by status
+        and hook paths to distinguish UNINITIALIZED from READY without
+        implicit bootstrap (I-27), and by every later context open to
+        rehydrate the repository's canonical authority seeds.
+        """
+        ...
+
+    def load_repository_authority_seeds(
+        self, repository_id: str
+    ) -> tuple[EvidenceRef, ...]:
+        """Persisted canonical authority seeds, or ``()`` when uninitialized.
+
+        Malformed stored data fails closed; it never reads as empty.
         """
         ...
 

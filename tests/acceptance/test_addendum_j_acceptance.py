@@ -62,14 +62,19 @@ class DiscoveryScopeLocalityTest(unittest.TestCase):
             m.FreshnessState.STALE,
         )
 
-    def test_empty_scope_is_repository_global_legacy(self):
-        # J-A4: the empty scope preserves legacy repository-global
-        # membership semantics for migrated rows.
-        legacy = m.EvidenceScope()
-        before, _ = _inventory_snapshot(REPO, legacy, evidence=_evidence())
+    def test_empty_scope_is_repository_inventory(self):
+        # An empty scope enumerates the repository inventory; that
+        # remains meaningful for initialization and inventory
+        # operations, never for persisted task coverage.
+        inventory_scope = m.EvidenceScope()
+        before, _ = _inventory_snapshot(
+            REPO, inventory_scope, evidence=_evidence()
+        )
         grown = dict(FILES)
         grown["other/z.py"] = "Z = 9\n"
-        after, _ = _inventory_snapshot(REPO, legacy, evidence=_evidence(grown))
+        after, _ = _inventory_snapshot(
+            REPO, inventory_scope, evidence=_evidence(grown)
+        )
         self.assertNotEqual(before, after)
 
     def test_post_adoption_coverage_carries_its_scope(self):

@@ -33,11 +33,14 @@ adds only the documentation-area procedure.
    subject may have `subject: null`; keep it as a full inventory member and
    assign, evidence-back exclude, or record an unresolved mapping requirement.
    Do not drop it because it lacks an anchor.
-5. Admit each new material area with a `PENDING`
-   `proposed_questions` entry, or reuse an identical persisted
-   `SemanticQuestionScope` through `proposed_target_questions`. A semantic
-   question's `NOT_APPLICABLE` disposition never excludes its inventory
-   member. Use the primary skill's canonical submission and recovery path.
+5. Admit a new material area through target inventory accounting only.
+   Span creates the area's first-admission `PENDING` CQ-01 seed itself; do
+   not manufacture it. Use `proposed_questions` only for genuinely
+   additional material questions the agent discovers, and
+   `proposed_target_questions` only to reuse an identical persisted
+   `SemanticQuestionScope`. A semantic question's `NOT_APPLICABLE`
+   disposition never excludes its inventory member. Use the primary
+   skill's canonical submission and recovery path.
 6. Interpret one bounded area at a time. Explain purpose, participants,
    material paths, authority boundaries, lifecycle, contracts, failures, and
    verification only from admissible evidence. Missing authority,
@@ -71,7 +74,7 @@ authority question outside the current area, establish that precise question
 and submit it through the same canonical mechanism. Do not broaden the target
 silently or create a second store, ledger, or quality policy.
 
-After external verification, use the primary closeout sequence: scoped
-`status`, scoped `refresh` with substantive re-submission where required, and
-scoped `status` again. Report incomplete coverage honestly. Span never edits
-code, runs tests, or selects a model.
+Close out in the primary order: scoped `status` on the exact affected scope,
+external tests/review, scoped `refresh` with substantive re-submission where
+required, then scoped `status` again. Report incomplete coverage honestly.
+Span never edits code, runs tests, or selects a model.

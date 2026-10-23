@@ -18,7 +18,7 @@ from span.service.questions import effective_impact_slice, effective_trace_slice
 from span.shell import paging as _paging
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.evidence import FixtureEvidenceSource
-from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
+from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
@@ -426,8 +426,13 @@ class S3SchemaTest(unittest.TestCase):
 
         seeds = TOOL_SCHEMAS["initialize_repository"]["properties"][
             "authority_seeds"
-        ]["items"]
-        seed_refs = self._refs(seeds)
+        ]
+        array_branch = next(
+            branch
+            for branch in seeds["anyOf"]
+            if branch.get("type") == "array"
+        )
+        seed_refs = self._refs(array_branch["items"])
         self.assertIn("#/$defs/EvidenceRef", seed_refs)
         self.assertFalse(any(r.endswith("__tag") for r in seed_refs))
 
@@ -688,9 +693,9 @@ class S3SchemaTest(unittest.TestCase):
             decoded.assertion_nature, m.AssertionNature.DESCRIPTIVE
         )
 
-    def test_legacy_candidate_rejected(self):
-        # LEGACY_UNCLASSIFIED is store-read-only for migrated records;
-        # it can never enter through candidate ingress.
+    def test_removed_legacy_nature_rejected(self):
+        # The retired classification is not part of the current nature
+        # vocabulary, so it can never enter through candidate ingress.
         payload = {
             "$type": "CandidateSemanticClaim",
             "candidate_key": "k",
@@ -706,8 +711,7 @@ class S3SchemaTest(unittest.TestCase):
             "candidate_authority": None,
             "basis": {"$type": "SemanticBasis", "derivation": "SEMANTIC_INTERPRETATION"},
         }
-        # Plan §5.6: the canonical decoder rejects LEGACY_UNCLASSIFIED
-        # at candidate ingress (store-read-only for migrated records).
+        # Only DESCRIPTIVE and NORMATIVE decode.
         with self.assertRaises(m.CanonicalDecodeError):
             m.from_canonical(m.CandidateSemanticClaim, payload)
 
@@ -1685,14 +1689,11 @@ class S6NatureTest(unittest.TestCase):
         validation = _v.validate_candidate_claim(candidate, ctx)
         self.assertFalse(validation.ok)
 
-    def test_migration_preserves_trust(self):
-        self.assertEqual(SCHEMA_VERSION, 6)
-
-    def _legacy_candidate(self, summary="does things"):
+    def _validated_candidate(self, summary="does things"):
         from span.core import validation as _v
 
         candidate = m.CandidateSemanticClaim(
-            candidate_key="legacy-purpose",
+            candidate_key="purpose",
             subject=_sid(), kind=m.ClaimKind.PURPOSE,
             value=m.PurposeValue(summary, ()),
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
@@ -1713,313 +1714,15 @@ class S6NatureTest(unittest.TestCase):
         self.assertTrue(validation.ok)
         return candidate, validation.trust
 
-    def _seed_legacy_store(self, path):
-        # Seed through the real candidate pipeline so stored IDs are
-        # content-derived; the downgrade then simulates a pre-v5 store.
-        from span.core import validation as _v
-
-        candidate, trust = self._legacy_candidate()
-        cid = _v.deterministic_claim_id(candidate, trust)
-        stored = m.SemanticClaim(
-            claim_id=cid, subject=candidate.subject,
-            kind=candidate.kind, value=candidate.value,
-            assertion_nature=candidate.assertion_nature,
-            evidence=candidate.evidence, trust=trust,
-            basis=candidate.basis,
-        )
-        retired_candidate, retired_trust = self._legacy_candidate(
-            summary="did things"
-        )
-        retired_id = _v.deterministic_claim_id(
-            retired_candidate, retired_trust
-        )
-        retired = m.SemanticClaim(
-            claim_id=retired_id, subject=retired_candidate.subject,
-            kind=retired_candidate.kind, value=retired_candidate.value,
-            assertion_nature=retired_candidate.assertion_nature,
-            evidence=retired_candidate.evidence, trust=retired_trust,
-            basis=retired_candidate.basis,
-        )
-        rel = m.SemanticRelationship(
-            relationship_id=m.RelationshipId("rel-legacy"),
-            source=_sid(), kind=m.RelationshipKind.CROSSES_BOUNDARY,
-            target=_sid(), assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            evidence=(_ref("src/main.py"),), trust=m.TrustState.UNRESOLVED,
-        )
-        store = SqliteSemanticStore(path)
-        try:
-            store.write_index_batch(
-                m.CanonicalIndexBatch(
-                    subjects=(m.Subject(_sid(), "main", None),),
-                    claims=(stored, retired),
-                    relationships=(rel,),
-                )
-            )
-            store.write_index_batch(
-                m.CanonicalIndexBatch(
-                    subjects=(m.Subject(_sid(), "main", None),),
-                    retires_claims=(
-                        m.ClaimRef(id=retired.claim_id),
-                    ),
-                    retires_relationships=(
-                        m.RelationshipRef(id=rel.relationship_id),
-                    ),
-                )
-            )
-        finally:
-            store.close()
-        return stored, retired, rel
-
-    def _downgrade(self, path, version, drop=()):
-        import json as _json
-        import sqlite3 as _sqlite3
-
-        conn = _sqlite3.connect(path)
-        try:
-            for table in drop:
-                conn.execute(f"DROP TABLE IF EXISTS {table}")
-            for table, id_col in (
-                ("claims", "claim_id"),
-                ("relationships", "relationship_id"),
-                ("retired_claims", "claim_id"),
-                ("retired_relationships", "relationship_id"),
-            ):
-                try:
-                    rows = conn.execute(
-                        f"SELECT rowid, canonical_json FROM {table}"
-                    ).fetchall()
-                except _sqlite3.OperationalError:
-                    continue
-                for rowid, payload in rows:
-                    data = _json.loads(payload)
-                    data.pop("assertion_nature", None)
-                    conn.execute(
-                        f"UPDATE {table} SET canonical_json=? "
-                        "WHERE rowid=?",
-                        (_json.dumps(data, sort_keys=True), rowid),
-                    )
-            conn.execute(
-                "UPDATE meta SET value=? WHERE key='schema_version'",
-                (str(version),),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-    def _disk_version(self, path):
-        import sqlite3 as _sqlite3
-
-        conn = _sqlite3.connect(path)
-        try:
-            row = conn.execute(
-                "SELECT value FROM meta WHERE key='schema_version'"
-            ).fetchone()
-            return row[0] if row else None
-        finally:
-            conn.close()
-
-    def _payload_natures(self, path):
-        import json as _json
-        import sqlite3 as _sqlite3
-
-        found = {}
-        conn = _sqlite3.connect(path)
-        try:
-            for table, id_col in (
-                ("claims", "claim_id"),
-                ("relationships", "relationship_id"),
-                ("retired_claims", "claim_id"),
-                ("retired_relationships", "relationship_id"),
-            ):
-                try:
-                    rows = conn.execute(
-                        f"SELECT {id_col}, canonical_json FROM {table}"
-                    ).fetchall()
-                except _sqlite3.OperationalError:
-                    continue
-                for row_id, payload in rows:
-                    try:
-                        found[(table, row_id)] = _json.loads(
-                            payload
-                        ).get("assertion_nature")
-                    except ValueError:
-                        found[(table, row_id)] = "<malformed>"
-        finally:
-            conn.close()
-        return found
-
-    def test_v4_migration_adds_legacy_preserving_ids_trust(self):
-        import tempfile as _tempfile
-
-        with _tempfile.TemporaryDirectory() as tmp:
-            path = f"{tmp}/legacy.db"
-            stored, retired, rel = self._seed_legacy_store(path)
-            self._downgrade(path, 4)
-            self.assertEqual(self._disk_version(path), "4")
-            store = SqliteSemanticStore(path)
-            try:
-                self.assertEqual(self._disk_version(path), "6")
-                page = store.load_claims(
-                    "repo-1", (_sid(),), (), _bounds()
-                )
-                by_id = {c.claim_id.value: c for c in page.items}
-                self.assertIn(stored.claim_id.value, by_id)
-                migrated = by_id[stored.claim_id.value]
-                self.assertIs(
-                    migrated.assertion_nature,
-                    m.AssertionNature.LEGACY_UNCLASSIFIED,
-                )
-                self.assertEqual(migrated.trust, stored.trust)
-                natures = self._payload_natures(path)
-                self.assertEqual(
-                    natures[("claims", stored.claim_id.value)],
-                    "LEGACY_UNCLASSIFIED",
-                )
-                self.assertEqual(
-                    natures[("retired_claims", retired.claim_id.value)],
-                    "LEGACY_UNCLASSIFIED",
-                )
-                self.assertEqual(
-                    natures[
-                        ("retired_relationships",
-                         rel.relationship_id.value)
-                    ],
-                    "LEGACY_UNCLASSIFIED",
-                )
-            finally:
-                store.close()
-            # Repeated open is idempotent.
-            reopened = SqliteSemanticStore(path)
-            try:
-                page = reopened.load_claims(
-                    "repo-1", (_sid(),), (), _bounds()
-                )
-                self.assertEqual(
-                    {
-                        c.claim_id.value
-                        for c in page.items
-                    },
-                    {stored.claim_id.value},
-                )
-            finally:
-                reopened.close()
-
-    def test_v2_v3_chain_migrates_to_current(self):
-        import tempfile as _tempfile
-
-        layouts = {
-            3: ("target_associations",),
-            2: (
-                "question_coverages",
-                "premise_dependents",
-                "question_result_refs",
-                "target_associations",
-            ),
-        }
-        for version, drop in layouts.items():
-            with self.subTest(version=version):
-                with _tempfile.TemporaryDirectory() as tmp:
-                    path = f"{tmp}/legacy-v{version}.db"
-                    stored, _, _ = self._seed_legacy_store(path)
-                    self._downgrade(path, version, drop=drop)
-                    store = SqliteSemanticStore(path)
-                    try:
-                        self.assertEqual(self._disk_version(path), "6")
-                        page = store.load_claims(
-                            "repo-1", (_sid(),), (), _bounds()
-                        )
-                        by_id = {
-                            c.claim_id.value for c in page.items
-                        }
-                        self.assertIn(stored.claim_id.value, by_id)
-                        natures = self._payload_natures(path)
-                        self.assertEqual(
-                            natures[("claims", stored.claim_id.value)],
-                            "LEGACY_UNCLASSIFIED",
-                        )
-                    finally:
-                        store.close()
-
-    def test_malformed_payload_rolls_back_and_recovers(self):
-        import tempfile as _tempfile
-
-        with _tempfile.TemporaryDirectory() as tmp:
-            path = f"{tmp}/broken.db"
-            stored, _, _ = self._seed_legacy_store(path)
-            self._downgrade(path, 4)
-            import sqlite3 as _sqlite3
-
-            conn = _sqlite3.connect(path)
-            try:
-                conn.execute(
-                    "UPDATE claims SET canonical_json='{bad' "
-                    "WHERE claim_id=?",
-                    (stored.claim_id.value,),
-                )
-                conn.commit()
-            finally:
-                conn.close()
-            with self.assertRaises(Exception):
-                SqliteSemanticStore(path)
-            # Failed migration leaves a valid v4 database: version
-            # unpublished and no partial rewrite.
-            self.assertEqual(self._disk_version(path), "4")
-            natures = self._payload_natures(path)
-            self.assertEqual(
-                natures[("claims", stored.claim_id.value)], "<malformed>"
-            )
-            for (table, _), nature in natures.items():
-                if table != "claims":
-                    self.assertIsNone(nature)
-            # Repairing the payload lets the migration complete, which
-            # is the interrupted-migration recovery path: a failed run
-            # leaves a valid old database that a later open migrates.
-            conn = _sqlite3.connect(path)
-            try:
-                import json as _json
-
-                candidate, _ = self._legacy_candidate()
-                payload = m.to_canonical(
-                    m.SemanticClaim(
-                        claim_id=stored.claim_id,
-                        subject=candidate.subject,
-                        kind=candidate.kind, value=candidate.value,
-                        assertion_nature=candidate.assertion_nature,
-                        evidence=candidate.evidence,
-                        trust=stored.trust, basis=candidate.basis,
-                    )
-                )
-                payload.pop("assertion_nature", None)
-                conn.execute(
-                    "UPDATE claims SET canonical_json=? WHERE claim_id=?",
-                    (_json.dumps(payload, sort_keys=True),
-                     stored.claim_id.value),
-                )
-                conn.commit()
-            finally:
-                conn.close()
-            recovered = SqliteSemanticStore(path)
-            try:
-                self.assertEqual(self._disk_version(path), "6")
-                page = recovered.load_claims(
-                    "repo-1", (_sid(),), (), _bounds()
-                )
-                self.assertEqual(
-                    {c.claim_id.value for c in page.items},
-                    {stored.claim_id.value},
-                )
-            finally:
-                recovered.close()
-
     def test_reassertion_yields_distinct_id(self):
-        # Nature is identity-bearing for v5+ records: reclassifying an
-        # already-v5 assertion requires withdrawal/replacement of the
-        # old ref, never silent reclassification.
+        # Nature is identity-bearing: reclassifying an assertion requires
+        # withdrawal/replacement of the old ref, never silent
+        # reclassification.
         import dataclasses as _dataclasses
 
         from span.core import validation as _v
 
-        candidate, trust = self._legacy_candidate()
+        candidate, trust = self._validated_candidate()
         descriptive_id = _v.deterministic_claim_id(candidate, trust)
         normative = _dataclasses.replace(
             candidate, assertion_nature=m.AssertionNature.NORMATIVE

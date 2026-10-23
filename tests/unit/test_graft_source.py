@@ -196,7 +196,11 @@ class GraftMappingTest(unittest.TestCase):
         # Lifecycle contract: construction never builds and never fails
         # for a missing index so explicit setup can run ensure_current.
         # Ordinary reads fail closed as unavailable.
-        src = g.GraftStructuralSource("repo-1", "/nonexistent-path-xyz")
+        src = g.GraftStructuralSource(
+            "repo-1",
+            "/nonexistent-path-xyz",
+            artifact_dir="/nonexistent-artifact-path-xyz",
+        )
         self.assertFalse(src.has_index())
         with self.assertRaises(g.GraftUnavailableError):
             src.resolve_subject(
@@ -435,10 +439,11 @@ class GraftPortBehaviorTest(unittest.TestCase):
         from span.shell.structural import structural_source_from_config
 
         with self.assertRaises(ValueError):
-            structural_source_from_config("nope:xyz")
+            structural_source_from_config("nope:xyz", "/tmp/span-data")
 
         with tempfile.TemporaryDirectory() as tmp:
-            src, rid = structural_source_from_config(tmp)
+            data_dir = pathlib.Path(tmp) / "data"
+            src, rid = structural_source_from_config(tmp, data_dir)
             self.assertEqual(rid, pathlib.Path(tmp).name)
             # Missing index defers to setup: construction succeeds,
             # reads fail closed, no target artifacts created.
@@ -446,7 +451,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
             self.assertFalse((pathlib.Path(tmp) / "graft").exists())
             # Provider prefixes never reach the public locator surface.
             with self.assertRaises(ValueError):
-                structural_source_from_config(f"graft:{tmp}")
+                structural_source_from_config(f"graft:{tmp}", data_dir)
 
     def test_dirty_tree_reported_from_git(self):
         import subprocess
@@ -551,14 +556,20 @@ class GraftPortBehaviorTest(unittest.TestCase):
                 ),
                 check=True, timeout=60,
             )
-            (root / "graft" / ".graph").mkdir(parents=True)
+            (root / "structural" / "repo-1" / ".graph").mkdir(
+                parents=True
+            )
             import json
 
-            (root / "graft" / ".graph" / "wiring.json").write_text(
+            (
+                root / "structural" / "repo-1" / ".graph" / "wiring.json"
+            ).write_text(
                 json.dumps({"nodes": nodes, "edges": []}),
                 encoding="utf-8",
             )
-            src = g.GraftStructuralSource("repo-1", root)
+            src = g.GraftStructuralSource(
+                "repo-1", root, artifact_dir=root / "structural" / "repo-1"
+            )
             real_run = subprocess.run
             calls = []
 

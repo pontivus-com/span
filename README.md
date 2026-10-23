@@ -303,9 +303,15 @@ Span currently requires:
 - Linux for the currently verified installation path.
 
 Span uses a managed structural wiring graph as structural evidence.
-Provisioning (`initialize_repository`, including server startup
-registration and installer verification) builds the provider-owned
-index into Span's data directory when it is missing or stale:
+Explicit `initialize_repository` and installer verification may build the
+provider-owned structural index when it is missing, stale, or the working
+tree is dirty (the build then reflects the current tree and freshness stays
+`UNVERIFIABLE`). MCP process startup
+registration is read-only: it registers repository identity for discovery
+and performs no structural build. Explicit `refresh` remains the other
+provider-owned rebuild path.
+
+The index lives at:
 
 ```text
 <DATA_DIR>/structural/<repository-id>/.graph/wiring.json
@@ -399,26 +405,30 @@ Use the absolute path to `span-mcp` if it is not on Codex's `PATH`.
 
 The installer can configure OpenCode automatically.
 
-The equivalent manual `opencode.json` entry is:
+The supported manual `opencode.json` entry is:
 
 ```json
 {
   "mcp": {
-    "span": {
-      "type": "local",
-      "command": [
-        "span-mcp",
-        "--data-dir",
-        "<DATA_DIR>",
-        "--repo",
-        "<TARGET_REPO>"
-      ],
-      "enabled": true,
-      "codemode": false
+    "servers": {
+      "span": {
+        "type": "local",
+        "command": [
+          "span-mcp",
+          "--data-dir",
+          "<DATA_DIR>",
+          "--repo",
+          "<TARGET_REPO>"
+        ],
+        "codemode": false
+      }
     }
   }
 }
 ```
+
+`disabled` may be omitted or set to `false`. Do not use the legacy
+flat `mcp.span` registration.
 
 Reload OpenCode after changing its MCP configuration.
 
@@ -1063,11 +1073,12 @@ Hooks are report-only.
 They can surface conditions such as:
 
 - uninitialized state;
-- stale understanding;
-- missing coverage;
-- moved dependents;
-- open work;
-- pending work.
+- unavailable repository;
+- stale or unverifiable understanding in the changed scope;
+- moved dependents whose recorded evidence no longer matches.
+
+They do not report coverage inventories, open questions, or pending work:
+those belong to normal `status`. An automatic notice is event-local.
 
 They do not:
 
@@ -1087,6 +1098,14 @@ See [`integrations/hosts/triggers.md`](integrations/hosts/triggers.md).
 ## Storage and repository isolation
 
 Span stores its state outside every target repository.
+
+The semantic store supports schema 7 only. A fresh store is created at
+schema 7, an existing schema-7 store opens normally, and any other store
+version fails closed; Span performs no runtime schema migration. Repository
+state and the configured authority seeds persist together in one atomic
+row, and persisted seeds are rehydrated after a process or host restart.
+Omitting `authority_seeds` preserves configured seeds, an explicit empty
+tuple clears them, and a non-empty tuple replaces them.
 
 The target repository is evidence.
 

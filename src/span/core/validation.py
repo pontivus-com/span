@@ -237,20 +237,9 @@ def validate_candidate_claim(
             requirements=(),
             diagnostics=(f"claim kind not allowed: {candidate.kind.value}",),
         )
-    # S6 §5.6: LEGACY_UNCLASSIFIED is store-read-only, never in
-    # candidate ingress. Required explicit DESCRIPTIVE or NORMATIVE;
-    # no default to descriptive (missing fails at decode).
+    # S6 §5.6: candidate ingress requires an explicit DESCRIPTIVE or
+    # NORMATIVE nature; there is no default (missing fails at decode).
     nature = candidate.assertion_nature
-    if nature is m.AssertionNature.LEGACY_UNCLASSIFIED:
-        return CandidateValidation(
-            ok=False,
-            trust=m.TrustState.UNRESOLVED,
-            requirements=(),
-            diagnostics=(
-                "claim assertion_nature LEGACY_UNCLASSIFIED is "
-                "store-read-only; submit DESCRIPTIVE or NORMATIVE",
-            ),
-        )
     # Normative-only kinds assert assigned custody, contracts, or
     # governance: they cannot bypass authority by choosing descriptive.
     if (
@@ -316,16 +305,6 @@ def validate_candidate_relationship(
             ),
         )
     nature = candidate.assertion_nature
-    if nature is m.AssertionNature.LEGACY_UNCLASSIFIED:
-        return CandidateValidation(
-            ok=False,
-            trust=m.TrustState.UNRESOLVED,
-            requirements=(),
-            diagnostics=(
-                "relationship assertion_nature LEGACY_UNCLASSIFIED is "
-                "store-read-only; submit DESCRIPTIVE or NORMATIVE",
-            ),
-        )
     if (
         candidate.kind.value in m.NORMATIVE_ONLY_RELATIONSHIP_KINDS
         and nature is not m.AssertionNature.NORMATIVE

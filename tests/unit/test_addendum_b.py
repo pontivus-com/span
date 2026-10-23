@@ -3,8 +3,8 @@
 Covers: baseline vs question-local entry, stable content IDs on
 reorder, shared-output retirement safety, explicit withdrawal fanout,
 premise staleness with unchanged consumer bytes, three-stream paging,
-effective vs recorded disposition, v2→v3 migration preserving legacy
-as unassessed, and legacy missing-coverage qualification.
+effective vs recorded disposition, schema-7-only opening, and the
+stored-assertions-without-question-coverage invariant.
 """
 
 import unittest
@@ -282,12 +282,12 @@ class EffectiveDispositionTest(unittest.TestCase):
             store.close()
 
 
-class MigrationTest(unittest.TestCase):
-    def test_schema_v3_and_legacy_unassessed(self):
-        self.assertEqual(SCHEMA_VERSION, 6)
+class CurrentSchemaTest(unittest.TestCase):
+    def test_schema_7_and_absent_coverage(self):
+        self.assertEqual(SCHEMA_VERSION, 7)
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(6))
+            self.assertEqual(store.schema_version(), m.SchemaVersion(7))
             sid = _sid()
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("leg-1"), subject=sid,

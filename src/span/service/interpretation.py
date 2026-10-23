@@ -1606,16 +1606,12 @@ def _materialize_unit(
     target_association: m.TargetAssociation | None = None,
     current_inventory_ids: frozenset[str] = frozenset(),
     current_inventory_snapshot: dict[str, m.EvidenceRef] | None = None,
-    # Retained for call compatibility; ignored by the membership-only
-    # target-accounting correction (§§4C.6B/4C.6E): content fingerprints
-    # never enter TargetInventoryAccount.
-    current_inventory_fingerprints: dict[str, str] | None = None,
     correction_question: m.SemanticQuestionScope | None = None,
 ) -> None:
     """Validate and atomically materialize one submitted unit (§7.5, I-37).
 
     Addendum B: exact-question completion/retirement with shared-output
-    safety, legacy-unassigned preservation, explicit withdrawals and
+    safety, unassigned-output preservation, explicit withdrawals and
     entire-unit atomicity. Subject-wide omission is truncation, never
     withdrawal, for question-scoped writes.
 
@@ -1994,9 +1990,7 @@ def _materialize_unit(
         else:
             retires_relationships.append(withdrawal.target)
     # Question-scoped retirement: only exact bound question outputs retire,
-    # and only when unshared. Legacy path (no bound question and no
-    # submitted coverages) retains v0.6 subject-wide behavior for backward
-    # compatibility. A bound question with no submitted coverages
+    # and only when unshared. A bound question with no submitted coverages
     # synthesizes its own current-question coverage below so that every
     # materialization leaves durable question state (no silent unassessed
     # writes); PENDING-only synthesis claims no completion. Addendum H §6
@@ -2494,25 +2488,6 @@ def _materialize_unit(
                 raise _validation.InterpretationUnitRejected(
                     ("withdrawal fanout exceeds bounds; deferred",)
                 )
-    else:
-        if declared_complete and retire_scope:
-            prior_claims: list[m.SemanticClaim] = []
-            prior_rels: list[m.SemanticRelationship] = []
-            for sid in retire_scope:
-                loaded_c, loaded_r, _, _ = _load_subject_state(
-                    task.request.repository_id, sid, store=store,
-                    bounds=task.request.bounds,
-                )
-                prior_claims.extend(loaded_c)
-                prior_rels.extend(loaded_r)
-            for prior in prior_claims:
-                if prior.claim_id.value not in known_ids:
-                    retires_claims.append(m.ClaimRef(id=prior.claim_id))
-            for prior in prior_rels:
-                if prior.relationship_id.value not in known_ids:
-                    retires_relationships.append(
-                        m.RelationshipRef(id=prior.relationship_id)
-                    )
     dependencies = tuple(
         m.EvidenceDependency(
             semantic_id=_item_ref(item),

@@ -21,7 +21,11 @@ no notice; uninitialized repositories produce a setup notice.
 The `span-hooks` CLI runner (`src/span/shell/hooks.py`) is
 exception-oriented on top of this contract: it prints only scopes
 needing action and stays silent when everything is current. Silence
-is the all-current statement. Session-start and session-stop select the
+is the all-current statement. It keeps no status policy of its own:
+each command opens the canonical shell context (never provisioning,
+never creating a store or schema) and makes exactly one
+`status(..., mode=HOOK_FAST)` call, then renders only the returned
+notice. Session-start and session-stop select the
 registered repository containing the active working directory; callers
 may override it with `--repo-root`. A working directory outside every
 registered repository is a silent no-op. Per-host trigger support

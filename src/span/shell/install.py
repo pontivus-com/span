@@ -255,11 +255,6 @@ def parse_args(argv=None):
         help="Skip skill deployment even when hosts are detected.",
     )
     parser.add_argument(
-        "--no-agents", action="store_true",
-        help="Retained for compatibility; AGENTS.md deployment into target "
-        "repos is removed by Addendum E §3/E-02 and is always skipped.",
-    )
-    parser.add_argument(
         "--authority-seeds-file", default=None,
         help="JSON file with canonical EvidenceRef items for init. "
         "Absent means no seeds; seeds are never invented.",
@@ -715,14 +710,14 @@ def preflight_facts(targets, seeds_path=None):
 
 
 def merge_opencode_config(config_path, span_cmd, dry_run=False):
-    """Normalize OpenCode to one supported V2 Span registration.
+    """Write the one supported OpenCode V2 Span registration.
 
-    The supported contract is ``mcp.servers.span`` with ``type: local``,
-    the installed command, ``codemode: false``, and ``disabled`` absent
-    or false. A legacy flat ``mcp.span`` registration is migrated and
-    removed; a duplicate pair is normalized to the nested entry.
-    Obsolete structural-MCP entries are deleted from either location and
-    counted; removal is verified from the written config, not assumed.
+    The only supported contract is ``mcp.servers.span`` with
+    ``type: local``, the installed command, ``codemode: false``, and
+    ``disabled`` absent or false. An unsupported flat ``mcp.span``
+    registration is rejected, never migrated; the operator removes it
+    and reruns. Unknown MCP entries are left untouched: Span owns only
+    its own registration and performs no cross-server cleanup.
     """
     print(f"+ merge opencode config: {config_path}")
     if dry_run:
@@ -736,54 +731,22 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
     servers = mcp.get("servers")
     if not isinstance(servers, dict):
         servers = {}
-    removed = []
-    if "graft" in mcp:
-        del mcp["graft"]
-        removed.append("mcp")
-    if "graft" in servers:
-        del servers["graft"]
-        removed.append("servers")
-    nested = servers.get("span")
-    flat = mcp.get("span")
-    if isinstance(nested, dict):
-        slot = dict(nested)
-        slot.pop("enabled", None)
-        slot.update({
-            "type": "local",
-            "command": span_cmd,
-            "codemode": False,
-        })
-        if slot.get("disabled") is True:
-            slot.pop("disabled", None)
-        servers["span"] = slot
-    elif isinstance(flat, dict):
-        slot = dict(flat)
-        slot.pop("enabled", None)
-        slot.pop("disabled", None)
-        slot.update({
-            "type": "local",
-            "command": span_cmd,
-            "codemode": False,
-        })
-        servers["span"] = slot
-    else:
-        servers["span"] = {
-            "type": "local",
-            "command": list(span_cmd),
-            "codemode": False,
-        }
-    if servers:
-        mcp["servers"] = servers
-    if "span" in mcp:
-        del mcp["span"]
+    if isinstance(mcp.get("span"), dict):
+        raise SystemExit(
+            f"unsupported flat mcp.span registration in {config_path}; "
+            "remove it and register Span under mcp.servers.span"
+        )
+    servers["span"] = {
+        "type": "local",
+        "command": list(span_cmd),
+        "codemode": False,
+    }
+    mcp["servers"] = servers
     path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"opencode config updated: {config_path}")
-    if removed:
-        print(f"removed obsolete MCP entries: {len(removed)}")
     return {
         "status": "merged",
         "config": str(config_path),
-        "removed_obsolete_entries": len(removed),
     }
 
 
@@ -804,37 +767,6 @@ def register_codex(span_cmd, dry_run=False):
         print(f"codex registration failed, continuing: {exc}")
         return {"status": "failed", "error": str(exc)}
     return {"status": "registered"}
-
-
-def deregister_obsolete_codex_mcp(dry_run=False):
-    """Remove an obsolete structural MCP registration from codex.
-
-    Best effort: a missing codex CLI skips, a failed removal reports
-    ``manual`` so the operator finishes it by hand. Removing
-    configuration never stops an already-running server; the operator
-    stops such processes out of band (see docs/mcp.md). The provider
-    name never appears in operator output.
-    """
-    if shutil.which("codex") is None:
-        print("codex CLI absent; skipping obsolete MCP deregistration.")
-        return {"status": "skipped", "reason": "codex CLI absent"}
-    if dry_run:
-        print("+ deregister obsolete codex MCP entry (dry-run, skipped)")
-        return {"status": "skipped", "reason": "dry-run"}
-    try:
-        _run(
-            ["codex", "mcp", "remove", "graft"],
-            dry_run=dry_run,
-            label="remove obsolete codex MCP entry",
-        )
-    except SystemExit as exc:
-        # An obsolete entry the CLI cannot remove (or no such entry) is
-        # operator work, not an install failure. Warn and continue.
-        detail = str(exc).replace("graft", "obsolete entry")
-        print(f"codex MCP cleanup needs operator action: {detail}")
-        return {"status": "manual", "error": detail}
-    print("obsolete codex MCP entry removed.")
-    return {"status": "removed"}
 
 
 def _hook_bin(venv_dir, bin_dir):
@@ -927,8 +859,8 @@ def ensure_agents_rule(span_repo, target, dry_run=False):
 
     The block is copied verbatim from ``docs/agents-snippet.md`` between
     Span-owned markers. The installer never parses it for decisions and
-    preserves all content outside the managed block. Existing files receive
-    one backup before their managed block is replaced.
+    preserves all content outside the managed block. No other target
+    artifact is created or modified.
     """
     dst = Path(target) / "AGENTS.md"
     print(f"+ ensure agents rule: {dst}")
@@ -949,7 +881,6 @@ def ensure_agents_rule(span_repo, target, dry_run=False):
         print(f"agents rule created: {dst}")
         return {"status": "wired", "path": str(dst)}
     existing = dst.read_text()
-    backup = dst.with_name("AGENTS.md.bak-span")
     if existing.count(AGENTS_START) > 1 or existing.count(AGENTS_END) > 1:
         raise SystemExit(
             f"agents block markers duplicated in {dst}; "
@@ -975,9 +906,6 @@ def ensure_agents_rule(span_repo, target, dry_run=False):
         new_text = block + "\n"
     if new_text == existing:
         return {"status": "converged", "path": str(dst)}
-    if not backup.exists():
-        shutil.copy2(dst, backup)
-        print(f"agents rule backed up: {backup}")
     dst.write_text(new_text)
     print(f"agents rule deployed: {dst}")
     return {"status": "wired", "path": str(dst)}
@@ -1180,7 +1108,7 @@ def inspect_opencode_registration(config_path, span_cmd):
         result["status"] = "mismatched"
         result["configured_command"] = flat.get("command")
         result["reason"] = (
-            "legacy flat mcp.span registration; migrate to "
+            "unsupported flat mcp.span registration; use "
             "mcp.servers.span"
         )
         return result
@@ -1424,12 +1352,6 @@ def main(argv=None):
         args.with_hooks = not args.no_hooks
     if args.with_codex:
         host_registration["codex"] = register_codex(span_cmd, dry_run=dry)
-        # Addendum F F-4: retire the standalone graft MCP alongside
-        # span registration. Reported in the receipt; a `manual` status
-        # means the operator finishes the removal by hand.
-        host_registration["codex_obsolete_mcp_removal"] = (
-            deregister_obsolete_codex_mcp(dry_run=dry)
-        )
     else:
         if args.no_codex:
             _codex_reason = "codex disabled (--no-codex)"
@@ -1479,16 +1401,9 @@ def main(argv=None):
     else:
         print("skipping skill deployment (--no-skills).")
         host_registration["skills"] = []
-    if not args.no_agents:
-        host_registration["agents"] = deploy_agents_rules(
-            span_repo, targets, dry_run=dry
-        )
-    else:
-        print("skipping AGENTS.md rule deployment (--no-agents).")
-        host_registration["agents"] = {
-            "status": "skipped",
-            "reason": "agents disabled (--no-agents)",
-        }
+    host_registration["agents"] = deploy_agents_rules(
+        span_repo, targets, dry_run=dry
+    )
 
     report = verify_installation(venv_python, data_dir, targets, dry)
     receipt = {

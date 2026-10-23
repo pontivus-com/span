@@ -294,8 +294,8 @@ class SqliteStoreTest(unittest.TestCase):
     def test_schema_version(self):
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(6))
-            self.assertEqual(SCHEMA_VERSION, 6)
+            self.assertEqual(store.schema_version(), m.SchemaVersion(7))
+            self.assertEqual(SCHEMA_VERSION, 7)
         finally:
             store.close()
 

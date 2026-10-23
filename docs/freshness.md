@@ -46,8 +46,8 @@ conclusions.
   joins the direct per-evidence fingerprints as the question's freshness
   inputs. A change outside the scope does not invalidate the question; a
   change inside it does.
-- An empty scope is reserved for migrated legacy coverage (repository-global
-  semantics) until the question is explicitly refreshed or reinterpreted.
-  Post-adoption coverage always carries a non-empty scope; when no defensible
-  scope can be derived the write fails closed with
+- Persisted task coverage always carries a non-empty discovery scope. An
+  empty scope enumerates the repository inventory for initialization and
+  inventory operations only; it is never persisted as question coverage, and
+  a task-coverage write with an empty scope fails closed with
   `INCOMPLETE_SEMANTIC_SCOPE`.

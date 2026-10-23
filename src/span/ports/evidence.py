@@ -71,8 +71,8 @@ class EvidenceSource(_typing.Protocol):
         Returns ((locator, evidence_id value) pairs in deterministic
         order, {locator: content fingerprint} for the requested
         locators present). Membership is restricted to ``scope``; an
-        empty ``scope`` (no paths and no refs) preserves repository-wide
-        membership (migrated legacy coverage). Requested fingerprints
+        empty ``scope`` (no paths and no refs) enumerates repository-wide
+        inventory. Requested fingerprints
         may resolve outside the scope for explicit authority seeds and
         never enlarge membership. Non-requested content is neither read
         nor hashed. Retrieval mechanics only — never authority.

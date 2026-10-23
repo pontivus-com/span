@@ -84,9 +84,11 @@ def _inventory_snapshot(
 ) -> tuple[str, dict[str, str]]:
     """Inventory snapshot plus per-seed map (plan §8.5, J-1).
 
-    Membership is enumerated over ``discovery_scope`` only (an empty
-    scope preserves the legacy repository-wide behaviour for migrated
-    rows). The combined fingerprint covers FROM-THAT-SCOPE membership,
+    Membership is enumerated over ``discovery_scope`` only. An empty
+    scope enumerates the repository inventory, which is meaningful for
+    initialization and inventory operations; persisted task coverage
+    requires a non-empty scope. The combined fingerprint covers
+    FROM-THAT-SCOPE membership,
     not content: newly added in-scope sources are visible even with no
     existing dependants, while content changes to known sources stay
     per-item through direct dependencies (MI-07 partial staleness).
@@ -267,17 +269,22 @@ def _coverage_for_task(
     evidence: EvidenceSource,
     seeds: tuple[m.EvidenceRef, ...],
     question: m.SemanticQuestionScope | None = None,
-    discovery_scope: m.EvidenceScope = m.EvidenceScope(),
+    discovery_scope: m.EvidenceScope,
 ) -> m.CoverageDependency:
     """Build the discovery-coverage record for one unit (plan §8.5, J-1).
 
     ``discovery_scope`` is the exact scope used to construct the pending
     unit; the write path passes it verbatim and never re-derives it from
-    final agent output. An empty scope is reserved for migrated legacy
-    coverage (repository-global semantics).
+    final agent output. Current task coverage always carries the actual
+    non-empty discovery scope; an empty scope is rejected rather than
+    interpreted as repository-global coverage.
     """
     import datetime as _datetime
 
+    if not discovery_scope.paths and not discovery_scope.evidence_refs:
+        raise ValueError(
+            "task discovery scope must be non-empty for current coverage"
+        )
     inventory_fp, seed_map = _inventory_snapshot(
         repository_id,
         discovery_scope,

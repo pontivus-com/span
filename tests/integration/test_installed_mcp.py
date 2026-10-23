@@ -202,6 +202,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         cls.pkg_identity = identity
         cls.pkg_interpreter = interpreter
         cls.pkg_interpreter_path = cls.isolated_python
+        cls._ec31_result = None
 
     def test_installed_entrypoint_resolved(self):
         proc = _subprocess.run(
@@ -221,6 +222,131 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertEqual(
             self.pkg_identity["source_revision"],
             self.identity["source_revision"],
+        )
+
+    def test_cold_start_handshake_before_setup(self):
+        """CS-07/CS-08: MCP handshake precedes every setup side effect.
+
+        A fresh installed process, fresh repository, and fresh data
+        directory expose the registered repository ID through
+        ``tools/list`` with no structural artifact and no semantic
+        database. The explicit ``initialize_repository`` call in that
+        same process then builds the provider index into Span's data
+        directory and writes nothing to the target.
+        """
+        work = self.tmp / "cold"
+        work.mkdir(parents=True, exist_ok=True)
+        _write_repo(work)
+        data_dir = self.tmp / "cold-data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        probe = _pathlib.Path(__file__).with_name("cold_start_probe.py")
+        proc = _subprocess.run(
+            [
+                self.isolated_python, str(probe),
+                str(self.exe), str(work), str(data_dir),
+            ],
+            cwd=str(self.tmp),
+            capture_output=True, text=True, timeout=300,
+            env={k: v for k, v in _os.environ.items()
+                 if k != "PYTHONPATH"},
+        )
+        self.assertEqual(
+            proc.returncode, 0,
+            (proc.stderr or proc.stdout)[-4000:],
+        )
+        observed = _json.loads(proc.stdout.strip().splitlines()[-1])
+
+        self.assertEqual(len(observed["tools"]), 11)
+        self.assertEqual(observed["registered"], ["cold"])
+        self.assertFalse(
+            observed["before_initialize"]["wiring"],
+            "structural build ran before the MCP handshake",
+        )
+        self.assertFalse(
+            observed["before_initialize"]["database"],
+            "semantic initialization ran merely by process startup",
+        )
+        self.assertFalse(observed["initialize_error"])
+        self.assertEqual(observed["initialize"]["readiness"], "READY")
+        self.assertEqual(
+            observed["initialize"]["repository_id"], "cold"
+        )
+        self.assertTrue(
+            observed["after_initialize"]["wiring"],
+            "explicit initialize_repository did not build the index",
+        )
+        self.assertTrue(observed["after_initialize"]["database"])
+
+        # The target repository stays free of provider artifacts.
+        self.assertFalse((work / "graft").exists())
+        self.assertFalse((work / ".graph").exists())
+        self.assertFalse(
+            any(
+                path.name == "wiring.json"
+                for path in work.rglob("wiring.json")
+            )
+        )
+        self.assertTrue(
+            (
+                data_dir / "structural" / "cold" / ".graph"
+                / "wiring.json"
+            ).is_file()
+        )
+
+    def _run_authority_restart(self):
+        """Run the EC-31 black-box probe once per installed lane."""
+        if type(self)._ec31_result is None:
+            work = self.tmp / "restart"
+            work.mkdir(parents=True, exist_ok=True)
+            _write_repo(work)
+            data_dir = self.tmp / "restart-data"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            probe = _pathlib.Path(__file__).with_name(
+                "authority_restart_probe.py"
+            )
+            proc = _subprocess.run(
+                [
+                    self.isolated_python, str(probe),
+                    str(self.exe), str(work), str(data_dir),
+                ],
+                cwd=str(self.tmp),
+                capture_output=True, text=True, timeout=300,
+                env={k: v for k, v in _os.environ.items()
+                     if k != "PYTHONPATH"},
+            )
+            self.assertEqual(
+                proc.returncode, 0,
+                (proc.stderr or proc.stdout)[-4000:],
+            )
+            type(self)._ec31_result = _json.loads(
+                proc.stdout.strip().splitlines()[-1]
+            )
+        return type(self)._ec31_result
+
+    def test_installed_authority_restart(self):
+        """EC-31: fresh process, no re-init, new question keeps seeds.
+
+        Process A initializes once with an explicit authority seed.
+        Process B starts fresh over the same data directory, performs no
+        ``initialize_repository``, asks a previously unestablished
+        question, and receives ``PendingInterpretation`` whose brief
+        carries the restored seed.
+        """
+        observed = self._run_authority_restart()
+        self.assertEqual(observed["phase"], "EC-31")
+        self.assertTrue(observed["ok"])
+        self.assertEqual(observed["first_ready"], "READY")
+        self.assertFalse(observed["restart_called_initialize"])
+        self.assertTrue(observed["pending"])
+        self.assertEqual(
+            observed["authority_seed_locator"], "README.md"
+        )
+        self.assertTrue(
+            any(
+                "README.md" in line
+                for line in observed["brief_evidence_authority"]
+            ),
+            observed["brief_evidence_authority"],
         )
 
     def test_installed_mcp_acceptance(self):
@@ -268,7 +394,15 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         )
         external = _json.loads(proc.stdout.strip().splitlines()[-1])
         self.assertEqual(external["span_imports"], [])
-        transcript = external["transcript"]
+        self.assertEqual(external["forbidden_reads"], [])
+        ec31 = self._run_authority_restart()
+        ec_results = dict(external["ec_results"])
+        ec_results["EC-31"] = bool(ec31.get("ok"))
+        expected_ec = {f"EC-{index:02d}" for index in range(1, 32)}
+        self.assertEqual(set(ec_results), expected_ec)
+        self.assertTrue(all(ec_results.values()))
+        transcript = list(external["transcript"])
+        transcript.append(ec31)
         alpha_claim, beta_claim = external["claims"]
         self.assertTrue(alpha_claim)
         self.assertTrue(beta_claim)
@@ -303,6 +437,8 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             ),
             "exit_code": 0,
             "span_imports": external["span_imports"],
+            "forbidden_reads": external["forbidden_reads"],
+            "ec_results": ec_results,
             "transcript_path": (
                 "span/.context/verification/stdio-transcript.jsonl"
             ),

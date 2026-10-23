@@ -37,8 +37,8 @@ workflows, or originates authority).
   census diff, backup on install, seeds convention)
 - `semantic-governance-addendum-f.md` — adopted single-MCP direction:
   Span absorbs read-only structural navigation (`locate`, `neighbors`),
-  graft MCP deregistered, E-14 scan deleted; implementation pending
-  authorization (E governs until F-7 passes)
+  graft MCP deregistered, E-14 scan deleted; implemented and verified
+  (`locate`/`neighbors` are live; E governs where F does not)
 - `semantic-governance-addendum-j-locality-derivation-and-wire-projection.md`
   — adopted locality (scoped discovery freshness, operation-local structural
   completeness), service-owned derivation (default question slices, candidate

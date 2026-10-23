@@ -27,7 +27,7 @@ from span.service.operations.explain import _baseline_sufficient
 from span.service.resolution import _load_all_coverages_or_defer
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.evidence import FixtureEvidenceSource
-from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
+from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
     InMemoryFile,
@@ -547,6 +547,9 @@ class NegativeEmptyResultsTest(unittest.TestCase):
                         _coverage_for_task(
                             REPO, (root,), evidence=evidence, seeds=(),
                             question=scope,
+                            discovery_scope=m.EvidenceScope(
+                                paths=("src",)
+                            ),
                         )
                         for scope in (na_scope, open_scope)
                     ),
@@ -575,9 +578,12 @@ class NegativeEmptyResultsTest(unittest.TestCase):
             )
             covs = store.load_all_question_coverages(REPO, root, (root,))
             self.assertEqual(len(covs), 2)
-            # A new governing source moves discovery: both reopen.
+            # A new governing source inside the recorded discovery scope
+            # moves discovery: both reopen.
             grown = dict(FILES)
-            grown["GOVERNANCE.md"] = "# Governance\n\nParcel council decides.\n"
+            grown["src/governance.py"] = (
+                "# Governance\n\nParcel council decides.\n"
+            )
             evidence_v2 = FixtureEvidenceSource(REPO, grown)
             stale = ops.question_coverage_check(
                 REPO, covs, evidence=evidence_v2, store=store
@@ -998,6 +1004,9 @@ class QuestionIsolationTest(unittest.TestCase):
                         _coverage_for_task(
                             REPO, (root,), evidence=evidence, seeds=(),
                             question=q_cq06,
+                            discovery_scope=m.EvidenceScope(
+                                paths=("src",)
+                            ),
                         ),
                     ),
                     coverage=(
@@ -1011,6 +1020,7 @@ class QuestionIsolationTest(unittest.TestCase):
             )
             grown = dict(FILES)
             grown["README.md"] = "# parcel-svc\n\nSorts parcels daily.\n"
+            grown["src/new_source.py"] = "NEW = 1\n"
             evidence_v2 = FixtureEvidenceSource(REPO, grown)
             # Refresh heals the CQ_01 question (resubmits same meaning).
             refreshed, _ = _drain(
@@ -1772,56 +1782,20 @@ CREATE TABLE meta(
 """
 
 
-class LegacyUpgradeTest(unittest.TestCase):
-    """B.11 K: v2 snapshot migrates atomically; legacy stays unassessed."""
+class CurrentSchemaOnlyTest(unittest.TestCase):
+    """B.11 K: only schema 7 is served; older stores fail closed."""
 
-    def test_v2_migrates_with_history_and_no_invented_ownership(self):
+    def test_v2_store_rejected_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
-            db = str(pathlib.Path(tmp) / "legacy.db")
-            sid = _sid("src/parcel.py")
-            claim = m.SemanticClaim(
-                claim_id=m.ClaimId("leg-1"), subject=sid,
-                kind=m.ClaimKind.PURPOSE,
-                assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                value=m.PurposeValue("Sorts parcels", ()),
-                evidence=(_ref("README.md"),),
-                trust=m.TrustState.UNRESOLVED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE, "b"
-                ),
-            )
-            subject = m.Subject(sid, "parcel", None)
+            db = str(pathlib.Path(tmp) / "old.db")
             con = sqlite3.connect(db)
             try:
                 con.executescript(_V2_DDL)
                 con.execute(
-                    "INSERT INTO subjects VALUES(?, ?, ?, ?)",
-                    (
-                        REPO, sid.canonical_locator,
-                        sid.subject_kind.value,
-                        json.dumps(m.to_canonical(subject), sort_keys=True),
-                    ),
-                )
-                con.execute(
                     "INSERT INTO claims VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        "leg-1", REPO, sid.canonical_locator,
-                        sid.subject_kind.value, "PURPOSE", "UNRESOLVED",
-                        "CURRENT",
-                        json.dumps(m.to_canonical(claim), sort_keys=True),
-                    ),
-                )
-                con.execute(
-                    "INSERT INTO retired_claims VALUES(?, ?, ?, ?)",
-                    (
-                        "leg-old", REPO,
-                        datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
-                        json.dumps(m.to_canonical(claim), sort_keys=True),
+                        "leg-1", REPO, "src/parcel.py", "COMPONENT",
+                        "PURPOSE", "UNRESOLVED", "CURRENT", "{}",
                     ),
                 )
                 con.execute(
@@ -1830,25 +1804,63 @@ class LegacyUpgradeTest(unittest.TestCase):
                 con.commit()
             finally:
                 con.close()
-            store = SqliteSemanticStore(db)
+            with self.assertRaisesRegex(
+                ValueError,
+                "unsupported Span store schema version 2; migrate this "
+                "store to schema 7",
+            ):
+                SqliteSemanticStore(db)
+            con = sqlite3.connect(db)
             try:
-                self.assertEqual(store.schema_version(), m.SchemaVersion(6))
-                self.assertEqual(SCHEMA_VERSION, 6)
-                page = store.load_claims(REPO, (sid,), (), _bounds())
-                self.assertEqual(
-                    [c.claim_id.value for c in page.items], ["leg-1"]
-                )
-                # No invented question ownership: absence is unassessed.
-                self.assertEqual(
-                    store.load_all_question_coverages(REPO, None, (sid,)),
-                    (),
-                )
-                rows = store._db.execute(
-                    "SELECT claim_id FROM retired_claims"
-                ).fetchall()
-                self.assertEqual([r[0] for r in rows], ["leg-old"])
+                row = con.execute(
+                    "SELECT value FROM meta WHERE key='schema_version'"
+                ).fetchone()
+                self.assertEqual(row[0], "2")
+                claim_ids = [
+                    r[0] for r in con.execute(
+                        "SELECT claim_id FROM claims"
+                    ).fetchall()
+                ]
+                self.assertEqual(claim_ids, ["leg-1"])
             finally:
-                store.close()
+                con.close()
+
+    def test_schema_6_store_rejected_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(pathlib.Path(tmp) / "v6.db")
+            con = sqlite3.connect(db)
+            try:
+                con.execute(
+                    "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)"
+                )
+                con.execute(
+                    "INSERT INTO meta VALUES('schema_version', '6')"
+                )
+                con.commit()
+            finally:
+                con.close()
+            with self.assertRaisesRegex(
+                ValueError,
+                "unsupported Span store schema version 6",
+            ):
+                SqliteSemanticStore(db)
+
+    def test_unversioned_nonempty_store_rejected_not_adopted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(pathlib.Path(tmp) / "unversioned.db")
+            con = sqlite3.connect(db)
+            try:
+                con.execute(
+                    "CREATE TABLE subjects(locator TEXT PRIMARY KEY)"
+                )
+                con.commit()
+            finally:
+                con.close()
+            with self.assertRaisesRegex(
+                ValueError,
+                "unsupported Span store schema version 0",
+            ):
+                SqliteSemanticStore(db)
 
     def test_unsupported_version_rejected_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:

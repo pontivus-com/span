@@ -109,7 +109,9 @@ class PortShapeTest(unittest.TestCase):
                 "count_question_coverages", "load_premise_dependents",
                 "load_conflicts",
                 "write_index_batch", "mark_freshness", "schema_version",
-                "record_repository_state", "load_repository_state",
+                "record_repository_initialization",
+                "load_repository_authority_seeds",
+                "load_repository_state",
                 "load_target_association",
             },
         )

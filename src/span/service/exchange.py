@@ -280,18 +280,12 @@ def submit_interpretation(
                 item.evidence_ref.evidence_id.value: item.evidence_ref
                 for item in inv_items
             }
-            inventory_fingerprints = {
-                item.evidence_ref.evidence_id.value: item.content_fingerprint
-                for item in inv_items
-            }
         except ValueError:
             inventory_ids = frozenset()
             inventory_snapshot = {}
-            inventory_fingerprints = {}
         except Exception:
             inventory_ids = frozenset()
             inventory_snapshot = {}
-            inventory_fingerprints = {}
         if target_assoc is not None:
             # §4C.6D amendment (answerability, 2026-10-11): admitted areas
             # join unit scope on target-bound submits, exactly like
@@ -331,7 +325,6 @@ def submit_interpretation(
             target_association=target_assoc,
             current_inventory_ids=inventory_ids,
             current_inventory_snapshot=inventory_snapshot,
-            current_inventory_fingerprints=inventory_fingerprints,
             correction_question=correction_question,
         )
     except BaseException:

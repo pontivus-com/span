@@ -61,78 +61,89 @@ class PlatformTableTest(unittest.TestCase):
                 self.assertIn(name, entry, f"{key}.{name}")
 
 
+class OpencodeReadmeGuidanceTest(unittest.TestCase):
+    """README must document only the supported nested OpenCode V2 form."""
+
+    def test_readme_documents_nested_v2_registration_only(self):
+        readme = (
+            pathlib.Path(__file__).resolve().parents[2] / "README.md"
+        ).read_text(encoding="utf-8")
+        start = readme.index("### OpenCode")
+        end = readme.index("## First use", start)
+        block = readme[start:end]
+        self.assertIn('"servers"', block)
+        self.assertIn('"codemode": false', block)
+        self.assertNotIn('"enabled"', block)
+        self.assertIn("Do not use the legacy", block)
+        json_start = block.index("```json") + len("```json")
+        json_end = block.index("```", json_start)
+        example = json.loads(block[json_start:json_end])
+        self.assertIn("servers", example["mcp"])
+        self.assertNotIn("span", example["mcp"])
+        nested = example["mcp"]["servers"]["span"]
+        self.assertEqual(nested["type"], "local")
+        self.assertIs(nested["codemode"], False)
+        self.assertNotIn("enabled", nested)
+        self.assertNotIn("disabled", nested)
+
+
 class OpencodeMergeTest(unittest.TestCase):
-    def test_merge_migrates_flat_span_entry(self):
+    def test_merge_rejects_flat_span_entry(self):
+        import tempfile
+
+        original = {
+            "mcp": {
+                "span": {
+                    "type": "local",
+                    "command": ["old-binary"],
+                    "enabled": True,
+                    "cwd": "/work",
+                    "environment": {"A": "1"},
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = pathlib.Path(tmp) / "opencode.json"
+            config_path.write_text(json.dumps(original))
+            with self.assertRaises(SystemExit) as ctx:
+                install.merge_opencode_config(
+                    str(config_path),
+                    ["span-mcp", "--data-dir", "/d"],
+                    dry_run=False,
+                )
+            self.assertIn("unsupported flat mcp.span", str(ctx.exception))
+            # Rejected, never migrated: the config is left untouched.
+            self.assertEqual(
+                json.loads(config_path.read_text()), original
+            )
+
+    def test_merge_preserves_unrelated_entries(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             config_path = pathlib.Path(tmp) / "opencode.json"
             config_path.write_text(json.dumps({
                 "mcp": {
-                    "span": {
-                        "type": "local",
-                        "command": ["old-binary"],
-                        "enabled": True,
-                        "cwd": "/work",
-                        "environment": {"A": "1"},
-                    },
-                    "graft": {"type": "local", "command": ["graft"]},
-                },
-            }))
-            result = install.merge_opencode_config(
-                str(config_path),
-                ["span-mcp", "--data-dir", "/d"],
-                dry_run=False,
-            )
-            config = json.loads(config_path.read_text())
-            self.assertNotIn("span", config["mcp"])
-            nested = config["mcp"]["servers"]["span"]
-            self.assertEqual(
-                nested["command"], ["span-mcp", "--data-dir", "/d"]
-            )
-            self.assertEqual(nested["type"], "local")
-            self.assertIs(nested["codemode"], False)
-            self.assertNotIn("enabled", nested)
-            self.assertEqual(nested["cwd"], "/work")
-            self.assertEqual(nested["environment"], {"A": "1"})
-            # An obsolete structural-MCP registration is removed, not preserved.
-            self.assertNotIn("graft", config["mcp"])
-            self.assertEqual(result["removed_obsolete_entries"], 1)
-
-    def test_merge_removes_obsolete_server_entries(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            config_path = pathlib.Path(tmp) / "opencode.json"
-            config_path.write_text(json.dumps({
-                "mcp": {
-                    "servers": {
-                        "span": {"command": ["old"]},
-                        "graft": {"command": ["graft"]},
-                    },
+                    "servers": {"other": {"command": ["other"]}},
+                    "other": {"command": ["top-level"]},
                 },
             }))
             result = install.merge_opencode_config(
                 str(config_path), ["span-mcp"], dry_run=False
             )
             config = json.loads(config_path.read_text())
-            self.assertNotIn("graft", config["mcp"]["servers"])
             self.assertEqual(
-                config["mcp"]["servers"]["span"]["command"], ["span-mcp"]
+                config["mcp"]["servers"]["other"],
+                {"command": ["other"]},
             )
             self.assertEqual(
-                result["removed_obsolete_entries"], 1)
-
-    def test_merge_reports_no_removal_when_absent(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            config_path = pathlib.Path(tmp) / "opencode.json"
-            config_path.write_text(json.dumps({"mcp": {}}))
-            result = install.merge_opencode_config(
-                str(config_path), ["span-mcp"], dry_run=False
+                config["mcp"]["other"], {"command": ["top-level"]}
             )
-            self.assertEqual(result["removed_obsolete_entries"], 0)
+            self.assertEqual(
+                config["mcp"]["servers"]["span"]["command"],
+                ["span-mcp"],
+            )
+            self.assertNotIn("removed_obsolete_entries", result)
 
     def test_merge_creates_missing_nested_entry(self):
         import tempfile
@@ -190,7 +201,7 @@ class OpencodeMergeTest(unittest.TestCase):
             nested = json.loads(config_path.read_text())["mcp"]["servers"]["span"]
             self.assertNotIn("disabled", nested)
 
-    def test_merge_normalizes_duplicate_to_nested(self):
+    def test_merge_rejects_flat_and_nested_duplicate(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -209,14 +220,10 @@ class OpencodeMergeTest(unittest.TestCase):
                     }},
                 },
             }))
-            install.merge_opencode_config(
-                str(config_path), ["span-mcp"], dry_run=False
-            )
-            config = json.loads(config_path.read_text())
-            self.assertNotIn("span", config["mcp"])
-            self.assertEqual(
-                config["mcp"]["servers"]["span"]["command"], ["span-mcp"]
-            )
+            with self.assertRaises(SystemExit):
+                install.merge_opencode_config(
+                    str(config_path), ["span-mcp"], dry_run=False
+                )
 
     def test_dry_run_writes_nothing(self):
         import tempfile
@@ -232,48 +239,43 @@ class OpencodeMergeTest(unittest.TestCase):
             )
 
 
-class CodexObsoleteMcpDeregistrationTest(unittest.TestCase):
-    """Obsolete structural-MCP cleanup on codex."""
+class AgentsRuleIsolationTest(unittest.TestCase):
+    def test_deploy_changes_only_the_managed_agents_block(self):
+        import tempfile
 
-    def test_removed_on_success(self):
-        from unittest.mock import patch
-
-        with patch.object(install.shutil, "which", return_value="/codex"), \
-                patch.object(install, "_run", return_value="") as run:
-            result = install.deregister_obsolete_codex_mcp(dry_run=False)
-        run.assert_called_once_with(
-            ["codex", "mcp", "remove", "graft"],
-            dry_run=False,
-            label="remove obsolete codex MCP entry",
-        )
-        self.assertEqual(result["status"], "removed")
-
-    def test_failure_reports_manual_not_fatal(self):
-        from unittest.mock import patch
-
-        with patch.object(install.shutil, "which", return_value="/codex"), \
-                patch.object(
-                    install, "_run",
-                    side_effect=SystemExit("no such entry"),
-                ):
-            result = install.deregister_obsolete_codex_mcp(dry_run=False)
-        self.assertEqual(result["status"], "manual")
-
-    def test_absent_cli_skips(self):
-        from unittest.mock import patch
-
-        with patch.object(install.shutil, "which", return_value=None):
-            result = install.deregister_obsolete_codex_mcp(dry_run=False)
-        self.assertEqual(result["status"], "skipped")
-
-    def test_dry_run_runs_nothing(self):
-        from unittest.mock import patch
-
-        with patch.object(install.shutil, "which", return_value="/codex"), \
-                patch.object(install, "_run") as run:
-            result = install.deregister_obsolete_codex_mcp(dry_run=True)
-        run.assert_not_called()
-        self.assertEqual(result["status"], "skipped")
+        root = pathlib.Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "proj"
+            target.mkdir()
+            (target / "AGENTS.md").write_text(
+                "# Existing\n", encoding="utf-8"
+            )
+            (target / "keep.txt").write_text(
+                "unchanged\n", encoding="utf-8"
+            )
+            before = {
+                path.relative_to(target): path.read_bytes()
+                for path in target.rglob("*")
+                if path.is_file()
+            }
+            result = install.deploy_agents_rules(root, [target])
+            after = {
+                path.relative_to(target): path.read_bytes()
+                for path in target.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(set(after), set(before))
+            self.assertEqual(
+                after[pathlib.Path("keep.txt")],
+                before[pathlib.Path("keep.txt")],
+            )
+            self.assertIn(
+                b"## Span lifecycle", after[pathlib.Path("AGENTS.md")]
+            )
+            self.assertFalse(
+                (target / "AGENTS.md.bak-span").exists()
+            )
+            self.assertEqual(result[str(target)]["status"], "wired")
 
 
 class ReceiptScopeTest(unittest.TestCase):
@@ -535,6 +537,9 @@ class PlanningTest(unittest.TestCase):
             "coexistence_accepted",
             "verified_isolated",
             "mcp list",
+            "deregister_obsolete_codex_mcp",
+            "codex_obsolete_mcp_removal",
+            "removed_obsolete_entries",
             '"ps"',
             "'ps'",
         ):
@@ -981,7 +986,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                 str(path), ["/bin/span-mcp"])
         self.assertEqual(result["status"], "missing")
 
-    def test_legacy_flat_entry_is_mismatched(self):
+    def test_flat_entry_is_mismatched(self):
         import tempfile
 
         expected = ["/bin/span-mcp"]
@@ -997,7 +1002,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             result = install.inspect_opencode_registration(
                 str(path), expected)
         self.assertEqual(result["status"], "mismatched")
-        self.assertIn("legacy flat", result["reason"])
+        self.assertIn("unsupported flat mcp.span", result["reason"])
 
     def test_duplicate_registrations_are_mismatched(self):
         import tempfile

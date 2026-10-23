@@ -152,7 +152,10 @@ class SemanticSubmitInterpretationRequest:
 @_dataclass(frozen=True)
 class SemanticInitializeRepositoryRequest:
     repository_locator: str
-    authority_seeds: tuple[m.EvidenceRef, ...] = ()
+    #: ``None`` preserves already configured seeds (empty when the
+    #: repository was never initialized); ``()`` clears them; a
+    #: non-empty tuple replaces them.
+    authority_seeds: tuple[m.EvidenceRef, ...] | None = None
 
 
 @_dataclass(frozen=True)

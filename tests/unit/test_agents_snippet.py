@@ -96,14 +96,19 @@ class AgentsSnippetTest(unittest.TestCase):
         ):
             self.assertIn(required, text, required)
 
-    def test_readiness_gap_present(self):
+    def test_readiness_only_output_is_treated_as_unexpected(self):
+        # Readiness-only output is event-local by design (HOOK_FAST).
+        # A normal call returning readiness only where coverage is
+        # expected is unexpected, not a tolerated inventory gap.
         text = _text(SNIPPET)
         for required in (
             "readiness only",
-            "gap",
+            "unexpected",
             "exact-target",
+            "event-local by design",
         ):
             self.assertIn(required, text, required)
+        self.assertNotIn("coverage-inventory gap", text)
 
     def test_docs_pointer_present(self):
         text = _text(SNIPPET)
@@ -178,7 +183,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
             self.assertEqual(second["status"], "converged")
             self.assertEqual(dst.read_text(encoding="utf-8"), content)
 
-    def test_appends_to_existing_file_and_backs_up_once(self):
+    def test_appends_to_existing_file_without_extra_artifacts(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,11 +191,37 @@ class AgentsRuleDeployTest(unittest.TestCase):
             target.mkdir()
             dst = target / "AGENTS.md"
             dst.write_text("# Existing\n", encoding="utf-8")
+            other = target / "other.txt"
+            other.write_text("unchanged\n", encoding="utf-8")
+            before = {
+                path.relative_to(target): path.read_bytes()
+                for path in target.rglob("*")
+                if path.is_file()
+            }
             self._run(REPO_ROOT, target)
+            after = {
+                path.relative_to(target): path.read_bytes()
+                for path in target.rglob("*")
+                if path.is_file()
+            }
+            # No target artifact other than the managed AGENTS.md block.
+            self.assertEqual(set(after), set(before))
+            self.assertEqual(
+                after[pathlib.Path("other.txt")],
+                before[pathlib.Path("other.txt")],
+            )
             content = dst.read_text(encoding="utf-8")
             self.assertTrue(content.startswith("# Existing\n"))
             self.assertIn("## Span lifecycle", content)
-            self.assertTrue(dst.with_name("AGENTS.md.bak-span").is_file())
+            self.assertFalse(
+                dst.with_name("AGENTS.md.bak-span").exists()
+            )
+            self.assertEqual(
+                sorted(
+                    path.name for path in target.iterdir()
+                ),
+                ["AGENTS.md", "other.txt"],
+            )
 
     def test_replaces_stale_block_and_preserves_surrounding_content(self):
         import tempfile
@@ -211,7 +242,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
             self.assertTrue(content.startswith("# Top\n\n"))
             self.assertTrue(content.endswith("\n\n## Next\n"))
 
-    def test_duplicate_markers_fail_closed_without_backup(self):
+    def test_duplicate_markers_fail_closed_without_artifacts(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -225,10 +256,18 @@ class AgentsRuleDeployTest(unittest.TestCase):
                 + install.AGENTS_END + "\n"
             )
             dst.write_text(original, encoding="utf-8")
+            before = sorted(
+                path.name for path in target.iterdir()
+            )
             with self.assertRaises(SystemExit):
                 self._run(REPO_ROOT, target)
             self.assertEqual(dst.read_text(encoding="utf-8"), original)
-            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
+            self.assertEqual(
+                sorted(path.name for path in target.iterdir()), before
+            )
+            self.assertFalse(
+                dst.with_name("AGENTS.md.bak-span").exists()
+            )
 
     def test_malformed_markers_fail_closed_without_writing(self):
         import tempfile
@@ -239,10 +278,18 @@ class AgentsRuleDeployTest(unittest.TestCase):
             dst = target / "AGENTS.md"
             original = "# Existing\n" + install.AGENTS_START + "\n"
             dst.write_text(original, encoding="utf-8")
+            before = sorted(
+                path.name for path in target.iterdir()
+            )
             with self.assertRaises(SystemExit):
                 self._run(REPO_ROOT, target)
             self.assertEqual(dst.read_text(encoding="utf-8"), original)
-            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
+            self.assertEqual(
+                sorted(path.name for path in target.iterdir()), before
+            )
+            self.assertFalse(
+                dst.with_name("AGENTS.md.bak-span").exists()
+            )
 
     def test_dry_run_writes_nothing(self):
         import tempfile
@@ -269,9 +316,9 @@ class AgentsRuleDeployTest(unittest.TestCase):
                     empty_repo, target, dry_run=False
                 )
 
-    def test_no_agents_flag_exists(self):
-        args = install.parse_args(["--no-agents"])
-        self.assertTrue(args.no_agents)
+    def test_no_agents_flag_rejected(self):
+        with self.assertRaises(SystemExit):
+            install.parse_args(["--no-agents"])
 
 
 if __name__ == "__main__":

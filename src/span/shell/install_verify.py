@@ -122,7 +122,6 @@ def main(argv=None):
                 config,
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator=provider_config,
-                    authority_seeds=(),
                 ),
             )
         except ValueError as exc:
@@ -145,7 +144,7 @@ def main(argv=None):
             evidence=context.evidence,
             store=context.store,
             continuations=ContinuationStore(),
-            authority_seeds=(),
+            authority_seeds=context.authority_seeds,
         )
         repos.append(
             {

@@ -49,18 +49,17 @@ def repository_id_from_config(config: str) -> str:
 
 def structural_source_from_config(
     config: str,
-    data_dir: str | _pathlib.Path | None = None,
+    data_dir: str | _pathlib.Path,
 ) -> tuple[GraftStructuralSource | InMemoryStructuralSource, str]:
     """Load the configured structural source without mutating the target.
 
     Returns (source, repository_id): identity assignment (plan §8.2.1)
     lives here, derived deterministically from the locator. The only
     accepted locator is a plain repository path; provider selection is
-    shell-internal and never named by the caller. With ``data_dir`` the
-    graft provider uses the provider-owned cache
-    ``<data-dir>/structural/<repository-id>/``; without it (tests) the
-    legacy in-target index is used. Construction never builds: a
-    missing index yields an unavailable source that explicit
+    shell-internal and never named by the caller. The graft provider
+    uses only the provider-owned cache
+    ``<data-dir>/structural/<repository-id>/``. Construction never
+    builds: a missing index yields an unavailable source that explicit
     `initialize_repository` / `refresh` may build via `ensure_current`;
     ordinary reads fail closed.
     """
@@ -84,11 +83,7 @@ def structural_source_from_config(
             f"(pass a plain repository path)"
         )
     repository_id = repo_path.name
-    artifact = (
-        default_artifact_dir(data_dir, repository_id)
-        if data_dir is not None
-        else None
-    )
+    artifact = default_artifact_dir(data_dir, repository_id)
     return (
         GraftStructuralSource(repository_id, repo_path, artifact_dir=artifact),
         repository_id,
