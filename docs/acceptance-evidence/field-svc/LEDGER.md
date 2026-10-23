@@ -70,7 +70,7 @@ A second server process correctly rejected the stale `cont-1`
    text appears as `CURRENT`, and the stale predecessor is labeled,
    not deleted.
 4. Record verdict + effort (~16 tool calls, 2 sessions) in the
-   adoption ledger (`.context/plans/`, pending).
+   verification record.
 
 ## Host-path verification (2026-10-08, same session)
 

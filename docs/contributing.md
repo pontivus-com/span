@@ -1,39 +1,69 @@
-# Contributing, testing, publication
+# Contributing
 
-## Testing
+Span is a small, standalone Python project. Contributions are welcome, but
+the semantic contracts are deliberate: a change to what Span means needs a
+contract change, not a local guess.
 
-`PYTHONPATH=src:. python3 -m pytest tests` (span-local config keeps
-runs independent of any enclosing workspace). All tests are
-`unittest.TestCase` style and also run under
-`python3 -m unittest discover -s tests`. In-cluster/serial rules of
-any enclosing workspace do not apply here: Span is standalone and has
-no cluster path.
+## Development setup
 
-Coverage expectations: unit (core rules, carriers, serialization,
-ports, shells, paging, skills scan, init contract, isolation gate),
-integration (slices, MCP transport incl. SDK round-trip, hooks),
-acceptance (vertical slice, S-01/S-02, v0.6 contract paths). New
-carriers require construction/serialization tests; new behavior
-requires the owning phase's tests; contract changes update the plan
-doc in the same change (workers never invent semantics — open
-questions need a contract amendment, not inference).
+```bash
+git clone https://github.com/pontivus-com/span.git
+cd span
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e '.[test]'
+```
 
-## Dependencies and licenses
+Run the suite from the repository root:
 
-`DEPENDENCY_LEDGER.md` is binding: no runtime dependency without a
-verified identity/license row (MI-13). Current: Python ≥3.12 stdlib,
-`setuptools` (build), MCP SDK `mcp==2.3.0` (MIT) + permissive closure,
-managed structural indexer `@nanonets/graft@0.23.0` (MIT, provisioned by
-the installer into Span's tools dir — never a user prerequisite),
-`pytest` (MIT, test runner).
+```bash
+pytest
+```
 
-## Publication and provenance (MI-13)
+Or with the standard-library runner:
 
-No proprietary Pontivus material in build, test fixtures, schemas,
-docs, or runtime deps; no public schema encodes proprietary concepts;
-no test requires a proprietary repo or service. Each public
-source/fixture has project-authored or verified redistributable
-provenance. **Resolved 2026-10-23**: Apache-2.0 selected by explicit
-product-owner decision, superseding the earlier GPL-3.0-only choice before
-publication; verbatim license text at repository root (`LICENSE`) with
-`NOTICE`, declared in `pyproject.toml`.
+```bash
+PYTHONPATH=src python3 -m unittest discover -s tests
+```
+
+Node and npm are needed for the installer's structural-indexer
+provisioning and for the installed-MCP integration lane.
+
+## What to test
+
+- **Unit** — core rules, carriers, serialization, ports, shells, paging,
+  skills scan, initialization contract, isolation gate.
+- **Integration** — vertical slices, MCP transport including the SDK
+  round-trip, hooks.
+- **Acceptance** — the public fixture model and the end-to-end contract paths.
+
+A new carrier needs construction and serialization tests. New behavior needs
+tests in the layer that owns it. A contract change updates the relevant public
+document in the same change.
+
+## Pull requests
+
+- Keep the change focused. Unrelated refactors make review harder.
+- Add or update tests for behavior you change.
+- Update the affected public document when a contract changes.
+- Sign off your commits with the Developer Certificate of Origin:
+
+```bash
+git commit -s
+```
+
+The sign-off is a statement that you wrote the change or have the right to
+submit it under the project licence. There is no separate CLA.
+
+## Dependencies and licences
+
+`DEPENDENCY_LEDGER.md` is authoritative. Do not add a runtime dependency
+without a verified identity, a compatible licence, and a ledger entry.
+
+## Publication and provenance
+
+No proprietary material belongs in the build, test fixtures, schemas, docs,
+or runtime dependencies. Each public source and fixture must be
+project-authored or have verified redistributable provenance.
+
+Span is released under Apache-2.0. See `LICENSE` and `NOTICE`.

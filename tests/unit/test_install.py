@@ -61,15 +61,16 @@ class PlatformTableTest(unittest.TestCase):
                 self.assertIn(name, entry, f"{key}.{name}")
 
 
-class OpencodeReadmeGuidanceTest(unittest.TestCase):
-    """README must document only the supported nested OpenCode V2 form."""
+class OpencodeInstallGuidanceTest(unittest.TestCase):
+    """Install docs must document only the supported nested OpenCode V2 form."""
 
-    def test_readme_documents_nested_v2_registration_only(self):
+    def test_install_docs_document_nested_v2_registration_only(self):
         readme = (
-            pathlib.Path(__file__).resolve().parents[2] / "README.md"
+            pathlib.Path(__file__).resolve().parents[2]
+            / "docs" / "install.md"
         ).read_text(encoding="utf-8")
         start = readme.index("### OpenCode")
-        end = readme.index("## First use", start)
+        end = readme.index("## Verify the installation", start)
         block = readme[start:end]
         self.assertIn('"servers"', block)
         self.assertIn('"codemode": false', block)

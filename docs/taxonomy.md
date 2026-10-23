@@ -1,4 +1,4 @@
-# Canonical taxonomy (plan §4)
+# Canonical taxonomy
 
 Closed vocabularies — workers never invent kinds without a contract
 amendment.

@@ -16,4 +16,6 @@ When work touches unfamiliar code, cross-boundary effects, or saved meaning: use
 - Hooks only call `status` in `HOOK_FAST` (compact notice only). They never initialize, explain, impact, trace, authority-check, refresh, interpret, or rebuild.
 - Keep `PARTIAL`/`AMBIGUOUS`/`CONFLICTED`/`UNRESOLVED`/`STALE`/`UNVERIFIABLE` verbatim. Missing authority stays missing.
 
-Detail: `span/docs/lifecycle.md`, `span/docs/onboarding-runbook.md`, `span/skills/span/SKILL.md`.
+Detail: [lifecycle](https://github.com/pontivus-com/span/blob/master/docs/lifecycle.md),
+[onboarding runbook](https://github.com/pontivus-com/span/blob/master/docs/onboarding-runbook.md),
+[Span skill](https://github.com/pontivus-com/span/blob/master/skills/span/SKILL.md).

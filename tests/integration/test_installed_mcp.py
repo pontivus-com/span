@@ -439,14 +439,12 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             "span_imports": external["span_imports"],
             "forbidden_reads": external["forbidden_reads"],
             "ec_results": ec_results,
-            "transcript_path": (
-                "span/.context/verification/stdio-transcript.jsonl"
-            ),
+            "transcript_path": "tests/.artifacts/stdio-transcript.jsonl",
             "transcript": transcript,
         }
         record_path = (
             _pathlib.Path(__file__).resolve().parents[2]
-            / ".context" / "verification" / "record.json"
+            / "tests" / ".artifacts" / "record.json"
         )
         record_path.parent.mkdir(parents=True, exist_ok=True)
         record_path.write_text(

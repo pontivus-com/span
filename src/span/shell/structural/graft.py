@@ -13,7 +13,7 @@ Suitability record (plan Phase 2.1, license MIT verified Phase 0.4):
 - generic-port fit: all five §5.2 operations served from wiring.json
   plus git (revision/dirty) plus target-repo file reads (fallback
   fingerprints);
-- independence: separately installable npm package, no Pontivus code;
+- independence: separately installable npm package, no private code;
 - build policy (lifecycle contract): `ensure_current` alone may run a
   provider-owned build into Span's data directory
   (``<data-dir>/structural/<repository-id>/`` via ``graft --dir``,

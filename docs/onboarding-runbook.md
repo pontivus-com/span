@@ -1,10 +1,9 @@
-# Span onboarding runbook — new-user semantic extraction (Addendum E E-12)
+# Span onboarding runbook — new-user semantic extraction
 
-Canonical path for an exact user-supplied target. Steps and stopping
-conditions are copied from `docs/semantic-governance-addendum-e.md` §§4A
-and 6. Guides describe; they never define semantics. No new operation,
-store, writer, score, or background process is introduced here; target
-accounting uses the canonical target-association/result contract.
+Canonical path for an exact user-supplied target. Guides describe; they never
+define semantics. No new operation, store, writer, score, or background
+process is introduced here; target accounting uses the canonical
+target-association/result contract.
 
 ## 0. Preflight (host, fail closed)
 
@@ -12,8 +11,8 @@ Confirm and record: installed Span source revision, registered host, data
 directory outside every target repo, and the exact repository root.
 Installation provisions the managed structural indexer, so no separate
 indexer download is needed — no separate structural server is
-registered; structural navigation is served by Span itself under
-Addendum F. Missing prerequisites stop the run. Record the
+registered; structural navigation is served by Span itself. Missing
+prerequisites stop the run. Record the
 preflight in the receipt and acceptance evidence with a target artifact
 snapshot proving the target tree is unchanged.
 
@@ -49,7 +48,7 @@ identity. This proves storage readiness only; it is not semantic completion.
 Pass the exact user target and objective to `initialize_target` with the
 exact `EvidenceScope` and a non-empty objective. Expected: the deterministic
 `TargetId` campaign handle plus the next typed task. Record the exact semantic
-boundary, canonicalized per Addendum E §4C.6A (not verbatim text).
+boundary, canonicalized to the exact user boundary (not verbatim text).
 `initialize_target` creates or resumes the deterministic
 `TargetAssociation`. Mapping tasks carry `question=None` with a bounded
 `target_inventory_items` batch. The provider-enriched items are orientation
@@ -102,7 +101,7 @@ progress model exists.
 ### Worked structural orientation (`locate` → `neighbors` → admit)
 
 After `initialize_target` returns the campaign handle, orient with
-structure before grouping areas (Addendum F §3 rows 3b/4/7b):
+structure before grouping areas:
 
 1. `locate` with `TARGET_MEMBERS` and the exact `EvidenceScope` → the
    full member list (the same enumeration the frontier reconciles
@@ -146,7 +145,7 @@ still needs interpretation.
 No fixed file count, claim count, score, representative-root shortcut, or
 populated-store check satisfies this.
 
-Evidence quality (Addendum G): prefer function or block spans over
+Evidence quality: prefer function or block spans over
 whole-file citation where `span_text` and `signature_text` exist; cite
 tests, contracts, and docs alongside code with existing
 `EvidenceSourceKind` values. Link `VERIFIED_BY` only on executed

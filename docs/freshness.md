@@ -1,4 +1,4 @@
-# Freshness and refresh (plan §9; Addendum B)
+# Freshness and refresh
 
 ## Preflight (before anything is presented as CURRENT)
 
@@ -26,7 +26,7 @@ declarations in scope) → reinterpret affected units → validate and
 materialize atomically per unit → preserve failures as
 stale/unverifiable → leave current items untouched.
 
-## Reconciliation (I-37; Addendum B)
+## Reconciliation
 
 One successful unit applies atomically: writes, coverage records,
 question coverages, conflict record, premise index, and exactly the
@@ -39,7 +39,7 @@ Retired history is preserved, never discarded. Latest coverage per
 question scope wins so old rows never re-invalidate refreshed
 conclusions.
 
-## Addendum J delta — scoped discovery freshness
+## Scoped discovery freshness
 
 - `CoverageDependency.discovery_scope` records the exact bounded scope used
   for discovery. Membership of that scope (plus authority-seed fingerprints)

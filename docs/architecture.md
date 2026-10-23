@@ -1,4 +1,4 @@
-# Architecture (plan §3, §14, §17)
+# Architecture
 
 ## Functional Core / Isolated Shell
 
@@ -39,3 +39,118 @@ decision, no parallel shapes, no DTO/mapping layers, no compatibility
 shims, no fallback parsing. External input parses once at ingress
 into canonical contracts. `Any`, untyped semantic dicts, dual-key
 aliases, and legacy fallbacks are forbidden inside semantic logic.
+
+---
+
+## Responsibility boundaries
+
+Span is implemented as a standalone semantic repository-intelligence system with a functional core and isolated effects.
+
+At a high level:
+
+```text
+repository
+   +
+structural evidence
+   +
+governing sources
+        ↓
+bounded evidence selection
+        ↓
+agent interpretation task
+        ↓
+coding agent investigates
+        ↓
+typed semantic submission
+        ↓
+validation + reconciliation
+        ↓
+persistent semantic state
+        ↓
+freshness / premise checks
+        ↓
+future agent retrieval
+```
+
+Responsibilities remain deliberately separated.
+
+### The target repository owns
+
+- implementation;
+- tests;
+- contracts;
+- configuration;
+- governing documentation;
+- authority.
+
+### The coding agent owns
+
+- semantic investigation;
+- model reasoning;
+- implementation work;
+- external verification.
+
+### Span owns
+
+- canonical semantic contracts;
+- bounded task exchange;
+- validation;
+- persistence;
+- relationships;
+- semantic dependencies;
+- evidence references;
+- authority bindings;
+- freshness;
+- reconciliation;
+- query responses;
+- MCP exposure.
+
+Span does not become another implementation or authority source.
+
+---
+
+## Design principles
+
+### Current is earned, not assumed
+
+Persisted understanding is history until its required support is known to remain current.
+
+### Preserve uncertainty
+
+Missing, ambiguous, conflicting, partial, stale, and unverifiable knowledge remain visible.
+
+### Evidence is not authority
+
+Finding a source does not make it governing.
+
+### Authority is not inference
+
+Span does not create project authority because an AI interpretation sounds plausible.
+
+### Structural facts are evidence
+
+A call graph or symbol index can support reasoning without being semantic truth.
+
+### Invalidate narrowly
+
+Relevant changes should affect dependent understanding, not unrelated knowledge.
+
+### Reassess instead of pretending to repair
+
+Stale semantics require interpretation.
+
+They are not deterministically patched from changed filenames or call edges.
+
+### Reading does not write
+
+A query does not silently manufacture durable semantic knowledge.
+
+### History remains history
+
+Corrections and supersession do not erase the fact that earlier understanding existed.
+
+### The agent does the thinking
+
+Span deliberately owns no LLM provider, prompt execution service, or autonomous semantic-maintenance process.
+
+---

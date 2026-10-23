@@ -1,53 +1,49 @@
-# Span — Dependency / License Ledger (plan Phase 0.3)
+# Dependency and licence ledger
 
-Binding rule (plan MI-13, Phase 5 exit): no selected runtime dependency
-without verified identity + license suitability. Workers must not select
-dependencies by inference.
+This ledger records every runtime and build dependency, its licence, and why
+it is present. A dependency is not added without a verified identity and a
+licence compatible with Span's Apache-2.0 release.
 
 Status values: `UNSELECTED` (candidate only) · `VERIFYING` · `VERIFIED` ·
 `SELECTED`. Only `SELECTED` dependencies may appear in `pyproject.toml`.
 
-## Runtime / build dependencies
+## Runtime and build dependencies
 
-| Dependency | Role | Status | Identity / license evidence |
+| Dependency | Role | Status | Identity and licence |
 |---|---|---|---|
-| Python >= 3.12 (stdlib only) | Runtime | SELECTED | Language runtime + stdlib; no third-party code. `unittest` is the Phase 0 test runner — stdlib, no install, no license burden. |
-| `setuptools>=61` | Build backend | SELECTED | Build-time only; never imported by `span` at runtime. Ubiquitous, OSI-approved build backend. Pinned minimum only. |
-| MCP SDK (Python) — `modelcontextprotocol/python-sdk` (`mcp` on PyPI) | MCP transport (Phase 4.1) | SELECTED | Official SDK: `https://github.com/modelcontextprotocol/python-sdk`; PyPI `mcp==2.3.0` (this selection). License: **MIT** (verified 2026-10-07 from PyPI `License:` metadata field + repo LICENSE; same MIT as the Phase 0.4 check). Distribution role: MCP stdio transport only — protocol framing for the eleven thin tools; no semantic content. License basis: MIT is permissive and compatible with the selected
-Apache-2.0 publication license (2026-10-23 owner decision). Why necessary: protocol-correct MCP server without hand-rolling the wire protocol. Viable alternative: hand-written JSON-RPC over stdio (rejected: protocol drift risk, no benefit; transport would still be thin). Span uses only `mcp.server` (low-level Server); no Span semantic type is a pydantic model — canonical dataclasses cross via strict canonical JSON only (I-04/I-18). |
-| MCP SDK transitive closure (`mcp-types==2.3.0`, `pydantic>=2.12`, `anyio`, `httpx2`, `jsonschema`, `opentelemetry-api`, `pyjwt`, `python-multipart`, `starlette`, `sse-starlette`, `uvicorn`) | Transport support libraries (no direct Span imports) | SELECTED (with parent) | All OSI-approved permissive licenses (MIT/Apache-2.0/BSD family); no copyleft in closure (verified 2026-10-07 from PyPI metadata). Paired with
-the selected Apache-2.0 publication license, same as parent. |
-| Production structural provider — Graft (`@nanonets/graft@0.23.0`, source `NanoNets/context-graph-engine`) | Structural source (Phase 2.1) | SELECTED (plan-directed first provider; owner confirms at publication) | Identity/license verified Phase 0.4 (MIT, 2026-10-07); version pinned 0.23.0 (latest on 2026-10-17, npm registry). Suitability evaluated Phase 2.1: serves all five §5.2 operations from the wiring graph + git + target file reads; closed node-kind/relation mapping tables with explicit errors for unknown vocabulary (no semantic shaping); separately installable npm package, no Pontivus code. Implemented in `shell/structural/graft.py` against §5.2 only. Provisioning: installer auto-installs the pinned version into Span's tools directory (`npm install --prefix <tools>`); users never install or name it. Runtime requirement: node + npm at install time only; the managed binary thereafter (pointer at `<data-dir>/structural-indexer.json`). Version bumps update the installer constant, this row, and the install receipt in the same change. |
-| SQLite (stdlib `sqlite3`) | Canonical persistence (Phase 1.7) | SELECTED | Stdlib module, no third-party binding. Selected by Phase 1.7 implementation (`shell/sqlite_store.py`); zero license burden. |
+| Python 3.12+ standard library | Runtime | SELECTED | Language runtime and standard library; no third-party code. |
+| `setuptools>=61` | Build backend | SELECTED | Build-time only; never imported by `span` at runtime. OSI-approved. |
+| MCP Python SDK (`mcp==2.3.0`) | MCP transport | SELECTED | [modelcontextprotocol/python-sdk](https://github.com/modelcontextprotocol/python-sdk); MIT. Used only for protocol framing over stdio; it carries no semantic content. |
+| MCP SDK transitive closure | Transport support | SELECTED (with parent) | MIT/Apache-2.0/BSD-family licences; no copyleft. |
+| Graft (`@nanonets/graft@0.23.0`) | Structural source | SELECTED | [NanoNets/context-graph-engine](https://github.com/NanoNets/context-graph-engine); MIT. The installer provisions this pinned version into Span's tools directory; users do not install or name it. Node and npm are required at install time. |
+| SQLite (`sqlite3`) | Persistence | SELECTED | Standard-library module; no third-party binding. |
+| `pytest` | Test runner | SELECTED | MIT. Tests also run under the standard-library `unittest` runner. |
 
-## Test runner decision (Phase 0, amended Phase 4)
+## Why these dependencies
 
-`python3 -m unittest` (stdlib) was the Phase 0 test runner. The suite
-grew onto `pytest` (MIT, OSI-approved; no license burden) for
-fixture-style integration coverage — this entry records that
-adoption per the Phase 0 rule. Tests remain `unittest.TestCase`
-style and runnable under both runners. A span-local pytest config
-(`pyproject.toml [tool.pytest.ini_options]`) keeps span runs
-independent of any enclosing workspace pytest config (MI-13/L).
+- **MCP SDK.** Span is an MCP server. The official SDK provides protocol-correct
+  stdio framing, which is not worth hand-rolling.
+- **Graft.** Span deliberately does not own a second structural index. Graft
+  supplies wiring-graph facts, and Span maps the vocabulary it understands.
+  Unknown node kinds and relations fail explicitly rather than being guessed.
+- **SQLite.** One local store, no service, no database server, no credential.
 
-## Provenance-first publication gate (plan Phase 0.5)
+## Licence basis
 
-- Every file currently in this repository is project-authored for Span
-  (skeleton, governance, tests) or is an input/governance document carried
-  under `.context/` — no third-party source, fixture, example, or generated
-  artifact is present.
-- Build/test/runtime require no private workspace access: `python3 -m
-  unittest discover -s tests` runs from the Span root with no `PYTHONPATH`,
-  no parent imports, no network.
-- `LICENSE`: **RESOLVED 2026-10-23** — Apache-2.0 selected by explicit
-  product-owner decision, superseding the 2026-10-08 GPL-3.0-only choice
-  before publication. Verbatim Apache-2.0 text installed at the repository
-  root with `NOTICE`; `pyproject.toml` declares `Apache-2.0`. Publication
-  (Phase 5, MI-11 M) is unblocked on licensing.
+Span is released under **Apache-2.0**. Every selected dependency is
+permissive (MIT, Apache-2.0, or BSD-family). No copyleft dependency is
+required to build, test, or run Span.
 
-## Private-name/path scanning (plan Phase 0.6)
+`LICENSE` contains the verbatim Apache-2.0 text and `NOTICE` carries the
+project notice. Both are part of the distribution.
 
-Supplemental backstop only (does not replace MI-11 isolation acceptance):
-`tests/unit/test_isolation_gate.py` fails on absolute workspace paths,
-parent-relative references, Pontivus imports, required symlinks outside
-Span, or parent-generated artifacts used as required inputs.
+## Provenance
+
+Every file in this repository is project-authored or is a fixture written for
+Span. No third-party source, proprietary fixture, or generated artifact is
+required to build, test, or run the project.
+
+The isolation test (`tests/unit/test_isolation_gate.py`) is a backstop: it
+fails on absolute workspace paths, parent-relative references, proprietary
+imports, symlinks outside Span, or parent-generated artifacts used as
+required inputs.

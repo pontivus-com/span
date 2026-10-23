@@ -1,11 +1,12 @@
-# MCP reference (plan Phase 4.2–4.4; Addendum E correction over B–D)
+# MCP reference
 
 Thin transport over stdio (`span-mcp --data-dir DIR
 [--repo /path ...]`). Exactly eleven tools, one per canonical
 operation: `initialize_repository`, `initialize_target`, `explain`,
 `impact`, `trace`, `authority`, `status`,
-`refresh`, `submit_interpretation`, `locate`, and `neighbors` (Addendum F: read-only structural navigation
-served by Span itself; no separate structural MCP exists).
+`refresh`, `submit_interpretation`, `locate`, and `neighbors`. Read-only
+structural navigation (`locate`, `neighbors`) is served by Span itself; no
+separate structural MCP exists.
 `initialize_target` accepts an exact `EvidenceScope` and user objective,
 then returns the next typed interpretation unit with the exact boundary and
 its current structural anchor carried separately. Each submission advances
@@ -40,7 +41,7 @@ resubmit the corrected result under the same continuation. A semantic
 validation rejection (`validation`) likewise retains the live
 continuation: correct and resubmit under the same continuation. Only a
 successful commit consumes it; repeating a successful submission is
-rejected without duplicates (Addendum H §4).
+rejected without duplicates.
 
 ## Repository discovery
 
@@ -63,14 +64,14 @@ unassessed semantic items in the returned frontier, and explicit bounds,
 pagination, or outstanding scope. It does not enumerate structural
 subjects, invoke interpretation, write state, or claim repository
 completeness. Status never initiates interpretation, allocates
-continuations, or persists freshness (Addendum I S2 observational).
+continuations, or persists freshness.
 
 Normal `status` with an exact target returns the same coverage semantics
 narrowed to that target with live freshness qualifications and
 next-operation guidance. `HOOK_FAST` remains a compact readiness/event
 notice and does not return the repository inventory.
 
-## Question selection, schemas, excerpts, and state explanation (Addendum I)
+## Question selection, schemas, excerpts, and state explanation
 
 - `explain`, `trace`, `authority` (SubjectSelector only), and `impact`
   accept narrowed `question_selection` (slice/basis/anchors only). The
@@ -125,7 +126,7 @@ One complete target campaign over the eleven tools (exact carriers in
 6. Fresh session, no host memory: `status` with `target=TargetId`, then
    exact-area `explain`/`trace`/`authority` on the returned `SubjectId`s.
 
-## Correction (Addendum H §6)
+## Correction
 
 A challenged but `CURRENT` explanation is reassessed through `refresh`
 with an exact `SubjectSelector` and explicit `stale_only=False` (the
@@ -174,13 +175,12 @@ semantic store supports schema 7 only: a fresh store is created at
 schema 7, an existing schema-7 store opens normally, and any other store
 version fails closed with no runtime migration. There is no separate structural MCP server:
 structural navigation (`locate` for find/ outline/member listing,
-`neighbors` for bounded adjacency) is served by Span itself under
-Addendum F, with two-tier freshness (entry verification plus scope
-coverage) and version-bound pagination. The onboarding preflight is the
-read-only structural-artifact census (the managed `AGENTS.md` guidance
-block is the intentional installer exception) recorded in the receipt
-and acceptance evidence. Exact onboarding path:
-`docs/onboarding-runbook.md` and Addendum E §4A.
+`neighbors` for bounded adjacency) is served by Span itself, with two-tier
+freshness (entry verification plus scope coverage) and version-bound
+pagination. The onboarding preflight is the read-only structural-artifact
+census (the managed `AGENTS.md` guidance block is the intentional installer
+exception) recorded in the receipt and acceptance evidence. Exact onboarding
+path: `docs/onboarding-runbook.md`.
 
 The only Span-owned structural-index writer is the bounded
 managed-indexer build on explicit `initialize_repository` provisioning
@@ -190,7 +190,7 @@ provisioning builds when needed and fails with an actionable setup
 error when the indexer cannot build. (Contributor note: the adapter
 module documents the indexer invocation.)
 
-## Operation intents and selection (Addendum G §4.7)
+## Operation intents and selection
 
 Eleven operations, retained because their contracts differ. Grouped by
 agent intent; setup is separate from ordinary queries:
@@ -236,7 +236,7 @@ locator to its declaration/name and never returns partial hits, while
 match mode. `TARGET_MEMBERS` requires the exact `target` scope and takes
 no query. Pages resume by passing the returned page token unchanged.
 
-## Error recovery (Addendum G §4.1)
+## Error recovery
 
 `unknown_repository` lists the sorted registered ids. Bounds rejection
 names the received value, the maximum, and the omission default.
@@ -253,7 +253,7 @@ page one. Canonical decode failures carry dotted field paths with
 indices. Validation failures name `collection[index] (key=...)` and keep
 whole-unit atomic rejection.
 
-## Freshness transparency (Addendum G §4.2)
+## Freshness transparency
 
 Structural pages carry `coverage` plus `coverage_detail` (closed tokens:
 `non-git-tree`, `injected-index`, `dirty-tree`, `touched-file-mismatch`,
@@ -272,7 +272,7 @@ capability-oriented; skill/hook guidance lives outside the server.
 Filesystem skill distribution is canonical; MCP Skills-extension
 exposure is deferred until a proven consumer exists.
 
-## Compact wire grammar and interpretation profile (Addendum J, S6–S9)
+## Compact wire grammar and interpretation profile
 
 - The agent-facing request grammar is a deterministic projection of the
   canonical carriers. `$type` is a property of the field **position**: it is
@@ -295,3 +295,90 @@ exposure is deferred until a proven consumer exists.
   `resolution_requirements`, `ANSWERED` requires validated material and
   Span derives `declared_complete`, `result_refs`, and `question_evidence`,
   and `NOT_APPLICABLE` carries a basis and no result refs.
+
+---
+
+## Operation map
+
+Span exposes eleven canonical MCP operations. No semantic_* aliases exist.
+
+| Need | Operation |
+| --- | --- |
+| Set up repository storage and identity | `initialize_repository` |
+| Establish an exact bounded target | `initialize_target` |
+| Understand what something is, does, or means | `explain` |
+| Assess what a proposed change may affect | `impact` |
+| Follow established producer → transformation → consumer semantics | `trace` |
+| Determine what governs something | `authority` |
+| Inspect readiness, coverage, and currency | `status` |
+| Re-check established understanding | `refresh` |
+| Submit agent interpretation | `submit_interpretation` |
+| Find files, symbols, outlines, or target members | `locate` |
+| Inspect bounded structural adjacency | `neighbors` |
+
+Every non-current `status` entry names the next exact step: stale or
+unverifiable work uses `refresh` with that entry's exact `SubjectSelector`;
+unassessed work uses a question-local `explain`; pending question work
+continues only through the continuation returned by the suspending
+operation. Pass every returned page token or continuation unchanged; never
+decode, edit, or synthesize either opaque value.
+
+
+---
+
+## Structural navigation
+
+Span includes structural navigation because structural information is useful evidence.
+
+Use:
+
+```text
+locate
+```
+
+for:
+
+- files;
+- symbols;
+- file outlines;
+- target members.
+
+Use:
+
+```text
+neighbors
+```
+
+for bounded relationships such as:
+
+- callers;
+- callees;
+- upstream adjacency;
+- downstream adjacency.
+
+`locate` takes exactly one mode: `SYMBOL` (requires `query`, optional
+target scope; `EXACT` resolves an exact locator to its declaration/name
+with no partial matches, `CONTAINS` returns substring matches in provider
+order), `FILE_OUTLINE` (one file locator, no target scope or match mode),
+or `TARGET_MEMBERS` (exact target scope, no query).
+
+These operations answer structural questions.
+
+They do not establish semantic truth by themselves.
+
+For semantic questions, use:
+
+```text
+explain
+trace
+authority
+impact
+```
+
+The distinction matters.
+
+A call edge can be mechanically observed.
+
+Ownership, purpose, responsibility, governance, and lifecycle meaning still require interpretation against the relevant evidence and authority.
+
+---

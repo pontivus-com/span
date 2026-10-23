@@ -1,92 +1,66 @@
-# Span — Agent Operating Rules
+# Span — agent operating rules
 
-This repository is the standalone **Span** project: semantic repository
-intelligence for coding agents.
+Span is a standalone MCP server that gives coding agents maintained
+understanding of a codebase: what a subsystem is for, who owns it, what
+depends on it, and whether that understanding is still current.
 
-## 1. Governing authority
+## Layout
 
-The finalized v0.6 implementation plan and its generalized FACT /
-pre-implementation documents govern product semantics and scope:
+- `src/span/core/` — deterministic semantic core.
+- `src/span/ports/` — typed interfaces.
+- `src/span/service/` — operation composition.
+- `src/span/shell/` — effects, strict ingress/egress, MCP transport.
+- `tests/` — unit, integration, and acceptance coverage.
+- `docs/` — public architecture, contracts, and operating guides.
+- `skills/` and `integrations/` — agent-side lifecycle guidance.
 
-- `.context/requirements/`
-- `.context/plans/span-standalone-semantic-repository-implementation-plan-v0.6.md`
-  (v0.5 retained byte-identical as the reviewed record; v0.6 governs)
+## Independence
 
-If this file conflicts with those documents on product semantics, the
-requirements package and plan win.
+Span is independent. No required implementation may import, load, execute,
+or depend on a parent workspace, a private service, or a proprietary schema.
+Required paths resolve from the Span repository root, an explicitly supplied
+target repository, or explicit user configuration.
 
-The v0.6 plan remains subordinate to MI-01..MI-13 where the plan explicitly
-establishes that precedence.
+## Working rules
 
-## 2. Standalone independence
+- Code is the source of truth for what the software does. Documents describe
+  contracts; they do not replace code evidence.
+- Normative claims (ownership, governance, policy) need a cited record or
+  must remain explicitly unresolved. Do not infer authority from structure.
+- Keep missing, ambiguous, conflicted, stale, or unverifiable knowledge
+  explicit. Never coerce it into certainty.
+- One canonical typed carrier per boundary. Do not add ad-hoc DTOs,
+  compatibility bridges, fallback parsing, or parallel semantic writers.
+- Do not edit generated artifacts or `BUILD_IDENTITY`.
 
-Span is independent of Pontivus, Pontivus Legal, and Pontivus Graph.
+## Testing
 
-The enclosing workspace (`<workspace>`) may be used as private
-development/reference context only. It is a development enclosure, not an
-architectural dependency.
+From the repository root:
 
-No required Span implementation may import from, load from, execute from, or
-depend on parent-workspace files. All required paths resolve from the Span
-repository root, an explicitly supplied target-repository path, or explicit
-external configuration.
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e '.[test]'
+pytest
+```
 
-## 3. Engineering standards (binding)
+The installed-MCP lane also needs `uv`, Node, and npm. It builds a
+non-editable install in a temporary virtual environment and drives the
+installed `span-mcp` over stdio.
 
-FCIS, SoC, DRY, and strict typing are binding. They determine implementation
-ownership and boundaries; they are not advisory style guidance.
+## Public surface
 
-- One canonical typed carrier exists per semantic boundary.
-- No ad-hoc DTOs, duplicate semantic representations, compatibility bridges,
-  fallback parsing, or parallel semantic writers are permitted.
+The public MCP operations are exactly:
 
-## 4. Authority rules
+`initialize_repository`, `initialize_target`, `explain`, `impact`, `trace`,
+`authority`, `status`, `refresh`, `submit_interpretation`, `locate`, and
+`neighbors`.
 
-- Code first: what code does, contains, consumes, produces, and how it
-  flows is established from code evidence plus bounded interpretation
-  alone. No document is required, and reliability never depends on
-  documentation for these claims.
-- Authority precedes inference — for normative claims only (who owns,
-  what governs, what must not be reconstructed). Such claims require
-  a cited record or stay explicitly unresolved; they are never
-  inferred from structure.
-- Structural evidence does not establish semantic authority or ownership.
-- Missing, ambiguous, conflicted, stale, or unverifiable knowledge remains
-  explicit. It is never coerced into certainty.
+There are no `semantic_*` aliases. Span never selects a model, calls a
+provider, edits a target repository, or runs tests on the user's behalf.
 
-## 5. Working-tree and version-control rules
+## Contributions
 
-- The parent Pontivus working tree must not be modified unless a separate
-  task explicitly authorizes it.
-- Git commits require separate explicit authorization. A request to
-  implement, edit, test, or report does not by itself authorize a commit.
-
-## 6. Semantic decisions
-
-- Implementation workers must not invent unresolved semantic or product
-  decisions. Physical-design questions resolved in the v0.6 plan are binding;
-  anything the plan leaves open requires a contract amendment, not worker
-  inference.
-- The v0.5 phase order (Phase 0 → 1 → 2 → 3 → 4 → 5) and acceptance gates
-  are binding.
-
-## 7. Product identity
-
-- **Span** is the concrete product, repository, package (`span`), and MCP
-  server identity.
-- **semantic repository** is the architectural category and is used where the
-  system class or internal architecture is meant.
-- Public MCP operations are exactly `initialize_repository`,
-  `initialize_target`, `explain`, `impact`, `trace`, `authority`,
-  `status`, `refresh`, `submit_interpretation`, `locate`, `neighbors`.
-  No `semantic_*` public aliases exist. Where Addenda B–C historical text
-  says eight, Addendum E governs the semantic operations, Addendum F adds
-  the two read-only structural-navigation operations, and Addendum M
-  removes the dead reissue operation (eleven current operations).
-- Semantic interpretation is executed by the invoking LLM-connected agent;
-  Span owns the task contract, strict ingress, validation, authority, trust,
-  freshness, persistence, and answers — never model selection, endpoints,
-  credentials, or provider invocation.
-- Canonical `Semantic*` domain types (e.g. `SemanticClaim`,
-  `SemanticAnswer`, `SemanticExplainRequest`) are domain concepts and retain
-  their names.
+Sign off commits with the Developer Certificate of Origin (`git commit -s`).
+Update the affected public document when a contract changes. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md).

@@ -1,17 +1,15 @@
-"""Span canonical service coordination (plan §14, Amendment A-01).
+"""Span canonical service coordination.
 
 Coordinates ports/core. Owns no semantic rules. Package surface for
-the service boundary: bounds policy (§5.1), frozen request contracts
-(§11.10), and the eleven public operations plus their query helpers.
+the service boundary: bounds policy, frozen request contracts, and the
+eleven public operations plus their query helpers.
 
 Internal service modules import each other by defining-module path
 (``span.service.<module>``), never through this surface. External
 consumers (shell, integrations, tests) import public names from here.
 
-Stage-2 surface: complete (established at the final flip of
-``.context/plans/service-operations-refactor.md`` once every operation
-lives in its canonical module and the ``service_operations`` monolith
-is deleted).
+Every operation lives in its canonical module; the former
+``service_operations`` monolith is deleted.
 """
 
 from span.core.validation import (

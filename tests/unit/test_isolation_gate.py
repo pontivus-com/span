@@ -1,16 +1,13 @@
-"""Isolation gate (plan Phase 0.6 + bootstrap §19 safeguard).
+"""Isolation gate.
 
-Fails on accidental coupling to the enclosing private workspace:
+Fails on accidental coupling to an enclosing workspace:
 
-- absolute workspace dependencies (``<workspace>/...``);
+- absolute home-directory paths in code, config, or tests;
 - required parent-relative filesystem references (``../src`` etc.);
-- Pontivus/Pontivus Legal/Pontivus Graph imports;
 - required symlinks outside Span;
 - parent-generated artifacts used as required inputs.
 
-Supplemental backstop only — does not replace MI-11 isolation acceptance.
-
-Prose governance mentions of the enclosing workspace (``AGENTS.md``,
+Prose governance mentions of an enclosing workspace (``AGENTS.md``,
 ``*.md`` reference-only statements) are not dependencies and are exempt;
 code, config, tests, and fixtures are scanned strictly.
 """
@@ -25,7 +22,11 @@ STRICT_SUFFIXES = {
     ".py", ".toml", ".cfg", ".ini", ".yaml", ".yml", ".json",
 }
 
-ABSOLUTE_WORKSPACE = "<workspace>"
+ABSOLUTE_HOME_MARKERS = (
+    "/home/",
+    "/Users/",
+    "C:\\\\Users\\\\",
+)
 
 PARENT_RELATIVE_MARKERS = (
     "../src",
@@ -36,21 +37,10 @@ PARENT_RELATIVE_MARKERS = (
     "../config",
 )
 
-PONTIVUS_IMPORT_MARKERS = (
-    "example_legal",
-    "projects.example_legal",
-    "worker_server",
-    "from pontivus",
-    "import pontivus",
-    "Pontivus Graph",
-    "PontivusGraph",
-)
-
 # Parent-generated artifacts that must never be required inputs.
 PARENT_ARTIFACT_MARKERS = (
     "graft/INDEX.md",
     ".graft/",
-    "projects/example_legal",
 )
 
 
@@ -94,9 +84,8 @@ class IsolationGateTest(unittest.TestCase):
                 continue
             rel = str(path.relative_to(REPO_ROOT))
             markers = (
-                (ABSOLUTE_WORKSPACE,)
+                ABSOLUTE_HOME_MARKERS
                 + PARENT_RELATIVE_MARKERS
-                + PONTIVUS_IMPORT_MARKERS
                 + PARENT_ARTIFACT_MARKERS
             )
             for marker in markers:

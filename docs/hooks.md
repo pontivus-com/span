@@ -1,4 +1,4 @@
-# Lifecycle-hook integration (plan §11.11, Phase 4.9–4.10)
+# Lifecycle-hook integration
 
 ## Contract
 
@@ -51,3 +51,42 @@ unknown hooks, malformed events) → silence (`None`). `run_automatic_hook`
 executes the HOOK_FAST status call and asserts the notice type.
 `tests/integration/test_hooks.py` pins mapping, safety, silence, and
 the adapter's operation allowlist structurally.
+
+---
+
+## What hooks surface
+
+Span can integrate with host lifecycle events such as:
+
+```text
+session-start
+source-changed
+session-stop
+```
+
+Hooks are report-only.
+
+They can surface conditions such as:
+
+- uninitialized state;
+- unavailable repository;
+- stale or unverifiable understanding in the changed scope;
+- moved dependents whose recorded evidence no longer matches.
+
+They do not report coverage inventories, open questions, or pending work:
+those belong to normal `status`. An automatic notice is event-local.
+
+They do not:
+
+- initialize semantic knowledge;
+- interpret repository meaning;
+- invoke a model;
+- run a semantic refresh;
+- rebuild the structural index;
+- make implementation decisions.
+
+When nothing relevant needs attention, hooks stay quiet.
+
+See [`integrations/hosts/triggers.md`](../integrations/hosts/triggers.md).
+
+---
