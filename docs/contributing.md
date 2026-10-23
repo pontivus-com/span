@@ -33,6 +33,7 @@ No proprietary Pontivus material in build, test fixtures, schemas,
 docs, or runtime deps; no public schema encodes proprietary concepts;
 no test requires a proprietary repo or service. Each public
 source/fixture has project-authored or verified redistributable
-provenance. **Resolved 2026-10-08**: GPL-3.0-only selected by explicit
-product-owner decision; verbatim license text at repository root
-(`LICENSE`), declared in `pyproject.toml`.
+provenance. **Resolved 2026-10-23**: Apache-2.0 selected by explicit
+product-owner decision, superseding the earlier GPL-3.0-only choice before
+publication; verbatim license text at repository root (`LICENSE`) with
+`NOTICE`, declared in `pyproject.toml`.

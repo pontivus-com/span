@@ -52,7 +52,7 @@ lane: 4 passed (isolated venv install verified separately). Case → evidence:
 | J staleness/refresh | partial staleness, coverage invalidation, withdrawal + history |
 | K portability | hermetic held-out graft run, no repo-specific code |
 | L isolation | import/path/artifact gate, venv install + suite |
-| M publication boundary | provenance ledger, no proprietary material, GPL-3.0-only `LICENSE` at root |
+| M publication boundary | provenance ledger, no proprietary material, Apache-2.0 `LICENSE` at root |
 | S-01 / S-02 | terminology authority; publication custody + violation |
 | v0.6 paths | multi-unit chains, second-page retrieval, supersession, withdrawal, doc-only subjects |
 | Addendum B A–L | `tests/acceptance/test_addendum_b_acceptance.py` (binding B.11: First-contact held-out baseline + restart, question-local vs baseline, negative/empty reopen, shared replace/withdraw + fanout + overflow-defer, premise cascade, cycle/truncation, reconcile/failure, authority conflict, paging/restart, benign change, schema cutover rejection, isolation, cited-but-wrong + omitted-participant oracle must-fails, sibling-question isolation) plus `tests/unit/test_addendum_b.py` (seeding, stable IDs, shared storage, premise walk, paging grammar, effective disposition, schema-7 opening, coverage invariant) |
