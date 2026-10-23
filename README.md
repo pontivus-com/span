@@ -8,7 +8,7 @@ Span stores what your agent learned about your repo, and flags the parts a code 
 
 ## Documentation that can't go stale silently.
 
-[![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Platform: Linux verified](https://img.shields.io/badge/platform-Linux%20verified-lightgrey)
 ![Status: Beta](https://img.shields.io/badge/status-beta-orange)
@@ -1521,7 +1521,7 @@ In particular, changes should not introduce:
 
 ## License
 
-Span is licensed under **GNU General Public License v3.0 only (`GPL-3.0-only`)**.
+Span is licensed under the **Apache License 2.0 (`Apache-2.0`)**.
 
 See [LICENSE](LICENSE) for the full license text.
 
