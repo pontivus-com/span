@@ -66,7 +66,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
 
             def fake_build(repo_path, artifact_dir=None):
-                wp = g.wiring_path_for(repo_path, artifact_dir)
+                wp = g.wiring_path_for(artifact_dir)
                 _write_wiring(wp)
                 return True, "rebuilt"
 
@@ -79,7 +79,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 self.assertIsNotNone(freshness)
             # Wiring lives in the cache, not the target.
             self.assertTrue(
-                g.wiring_path_for(repo, artifact).is_file()
+                g.wiring_path_for(artifact).is_file()
             )
             self.assertFalse((repo / "graft").exists())
 
@@ -92,7 +92,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             from span.shell.structural import default_artifact_dir
             artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
                                             repo.name)
-            wp = g.wiring_path_for(repo, artifact)
+            wp = g.wiring_path_for(artifact)
             _write_wiring(wp)
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             # Make the cache newer than HEAD so describe is CURRENT.
@@ -118,13 +118,13 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             from span.shell.structural import default_artifact_dir
             artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
                                             repo.name)
-            _write_wiring(g.wiring_path_for(repo, artifact))
+            _write_wiring(g.wiring_path_for(artifact))
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             calls = []
 
             def fake_build(repo_path, artifact_dir=None):
                 calls.append(1)
-                wp = g.wiring_path_for(repo_path, artifact_dir)
+                wp = g.wiring_path_for(artifact_dir)
                 import time
                 time.sleep(1.05)
                 _write_wiring(wp)
@@ -225,7 +225,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                                             repo.name)
 
             def fake_bad_build(repo_path, artifact_dir=None):
-                wp = g.wiring_path_for(repo_path, artifact_dir)
+                wp = g.wiring_path_for(artifact_dir)
                 wp.parent.mkdir(parents=True, exist_ok=True)
                 wp.write_text("not json", encoding="utf-8")
                 return True, "rebuilt"
@@ -254,7 +254,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                                             repo.name)
 
             def fake_build(repo_path, artifact_dir=None):
-                _write_wiring(g.wiring_path_for(repo_path, artifact_dir))
+                _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
@@ -264,11 +264,12 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             self.assertTrue(src.has_index())
             self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
 
-    def test_dirty_tree_with_current_cache_skips_build(self):
-        # Lifecycle contract: one bounded build only when the index is
-        # missing or stale. A present index at least as new as HEAD on
-        # a dirty tree is UNVERIFIABLE, not stale, so provisioning must
-        # not rebuild (this is the startup-registration rebuild loop).
+    def test_dirty_tree_with_current_cache_rebuilds_once(self):
+        # Lifecycle contract: an explicit setup/refresh call on a dirty
+        # working tree performs one bounded build against the current
+        # tree. Freshness remains UNVERIFIABLE because a dirty tree
+        # cannot prove completeness, but the graph must not keep
+        # representing pre-edit topology after an explicit refresh.
         with tempfile.TemporaryDirectory() as tmp:
             repo = pathlib.Path(tmp) / "repo"
             repo.mkdir()
@@ -277,7 +278,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             from span.shell.structural import default_artifact_dir
             artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
                                             repo.name)
-            wp = g.wiring_path_for(repo, artifact)
+            wp = g.wiring_path_for(artifact)
             _write_wiring(wp)
             # Cache newer than HEAD, then dirty the working tree.
             import time
@@ -289,15 +290,47 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 src.describe_current("repo").state,
                 m.FreshnessState.UNVERIFIABLE,
             )
+            calls = []
+
+            def fake_build(repo_path, artifact_dir=None):
+                calls.append(1)
+                _write_wiring(g.wiring_path_for(artifact_dir))
+                return True, "rebuilt"
+
+            with mock.patch.object(g, "_run_index_build",
+                                   side_effect=fake_build):
+                freshness = src.ensure_current("repo")
+            self.assertEqual(calls, [1])
+            self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
+            self.assertTrue(src.has_index())
+
+    def test_clean_tree_with_current_cache_skips_build(self):
+        # The complement: an explicit call on a clean tree with an
+        # index at least as new as HEAD stays a no-op. This is what
+        # keeps ordinary setup/refresh from paying a rebuild cost when
+        # nothing moved.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp) / "repo"
+            repo.mkdir()
+            (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+            _git_init(repo)
+            from span.shell.structural import default_artifact_dir
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
+                                            repo.name)
+            wp = g.wiring_path_for(artifact)
+            _write_wiring(wp)
+            import time
+            time.sleep(1.05)
+            wp.touch()
+            src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             with mock.patch.object(
                 g, "_run_index_build",
                 side_effect=AssertionError(
-                    "dirty tree with a current cache must not rebuild"
+                    "clean tree with a current cache must not rebuild"
                 ),
             ):
                 freshness = src.ensure_current("repo")
-            self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
-            self.assertTrue(src.has_index())
+            self.assertIs(freshness.state, m.FreshnessState.CURRENT)
 
     def test_concurrent_setup_does_not_corrupt_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -311,7 +344,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             def fake_slow_build(repo_path, artifact_dir=None):
                 import time
                 time.sleep(0.05)
-                _write_wiring(g.wiring_path_for(repo_path, artifact_dir))
+                _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
@@ -328,7 +361,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 for t in threads:
                     t.join()
             payload = json.loads(
-                g.wiring_path_for(repo, artifact).read_text(
+                g.wiring_path_for(artifact).read_text(
                     encoding="utf-8")
             )
             self.assertIn("nodes", payload)
@@ -345,7 +378,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                                             repo.name)
 
             def fake_build(repo_path, artifact_dir=None):
-                _write_wiring(g.wiring_path_for(repo_path, artifact_dir))
+                _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
@@ -354,7 +387,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 src.ensure_current("repo")
             after = g.artifact_snapshot(repo)
             self.assertEqual(before, after)
-            wiring = g.wiring_path_for(repo, artifact)
+            wiring = g.wiring_path_for(artifact)
             self.assertTrue(str(wiring).startswith(
                 str(pathlib.Path(tmp) / "data")))
             self.assertFalse(str(wiring).startswith(str(repo)))
@@ -367,7 +400,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             from span.shell.structural import default_artifact_dir
             artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
                                             repo.name)
-            _write_wiring(g.wiring_path_for(repo, artifact))
+            _write_wiring(g.wiring_path_for(artifact))
             first = g.GraftStructuralSource("repo", repo,
                                             artifact_dir=artifact)
             self.assertTrue(first.has_index())
@@ -392,7 +425,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             from span import service as ops
 
             def fake_build(repo_path, artifact_dir=None):
-                _write_wiring(g.wiring_path_for(repo_path, artifact_dir))
+                _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             with mock.patch.object(g, "_run_index_build",
@@ -446,15 +479,18 @@ class ProvisioningLifecycleTest(unittest.TestCase):
         # Provider vocabulary failures reach clients without the name.
         with _tempfile.TemporaryDirectory() as _tmp_kind:
             _root_kind = _pl.Path(_tmp_kind) / "repo"
-            (_root_kind / "graft" / ".graph").mkdir(parents=True)
-            (_root_kind / "graft" / ".graph" / "wiring.json").write_text(
+            _artifact_kind = _root_kind / "structural" / "repo"
+            (_artifact_kind / ".graph").mkdir(parents=True)
+            (_artifact_kind / ".graph" / "wiring.json").write_text(
                 _json.dumps({
                     "nodes": [{"id": "x", "name": "x",
                                "kind": "NOT_A_KIND", "path": "a.py"}],
                     "edges": [],
                 })
             )
-            _bad = g.GraftStructuralSource("repo", _root_kind)
+            _bad = g.GraftStructuralSource(
+                "repo", _root_kind, artifact_dir=_artifact_kind
+            )
             self.assertFalse(_bad.has_index())
             with self.assertRaises(Exception) as _kind_ctx:
                 _bad._require_index()
@@ -464,21 +500,11 @@ class ProvisioningLifecycleTest(unittest.TestCase):
         import io as _io
         with _tempfile.TemporaryDirectory() as _tmp_out:
             _cfg = _pl.Path(_tmp_out) / "opencode.json"
-            _cfg.write_text(_json.dumps({
-                "mcp": {"graft": {"command": ["obsolete"]}},
-            }))
+            _cfg.write_text(_json.dumps({"mcp": {}}))
             _buf = _io.StringIO()
             with _contextlib.redirect_stdout(_buf):
                 install.merge_opencode_config(str(_cfg), ["span-mcp"])
             self.assertNotIn("graft", _buf.getvalue().lower())
-            self.assertIn("removed obsolete MCP entries", _buf.getvalue())
-            _dry = _io.StringIO()
-            with _contextlib.redirect_stdout(_dry):
-                with mock.patch.object(
-                    install.shutil, "which", return_value="/codex"
-                ):
-                    install.deregister_obsolete_codex_mcp(dry_run=True)
-            self.assertNotIn("graft", _dry.getvalue().lower())
         # User-facing setup failure must not name the indexer: trigger
         # a real provisioning failure with no binary anywhere.
         from span.shell.mcp_server import (

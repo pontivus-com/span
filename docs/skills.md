@@ -11,9 +11,11 @@ composition, preserving `PARTIAL`/`AMBIGUOUS`/`CONFLICTED`/
 `UNRESOLVED`/`STALE`/`UNVERIFIABLE` states verbatim, directing
 normal repository-level `status` orientation and exact-target
 `status`/`refresh` around verification. The repository status inventory is
-bounded persisted coverage, not structural enumeration; if the current
-runtime returns readiness only, the skill reports the Point 4 activation
-gap rather than inferring empty semantic state.
+bounded persisted coverage, not structural enumeration. An automatic
+`HOOK_FAST` notice is event-local by design; if a normal `status` or
+semantic operation returns readiness only where coverage is expected, that
+is unexpected — the skill records it and does not infer empty semantic
+state or cleanliness.
 
 All three skills use the same compact pending-task card: objective; exact
 scope and exclusions; evidence and authority; material input-to-terminal

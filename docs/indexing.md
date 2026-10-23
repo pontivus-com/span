@@ -48,5 +48,7 @@ silently absent.
 
 `CoverageDependency` carries `discovery_scope` (the exact bounded search
 universe) alongside `scope_subjects`, `inventory_fingerprint`, and
-`seed_fingerprints`. Rows sharing a scope share one membership walk. The
-empty scope denotes migrated legacy coverage only.
+`seed_fingerprints`. Rows sharing a scope share one membership walk. An
+empty scope enumerates the repository inventory for initialization and
+inventory operations; persisted task coverage always carries a non-empty
+scope.

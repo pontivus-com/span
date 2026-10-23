@@ -24,7 +24,10 @@ Span or the installer. Repositories carry their seeds in a checked-in
 JSON file (a list of canonical `EvidenceRef` items); the operator passes
 it via `span-install --authority-seeds-file PATH`, and a setup-session
 `initialize_repository` call provisions them. Seed files live with the
-target repo they govern; unknown seed locators fail closed.
+target repo they govern; unknown seed locators fail closed. Seeds
+persist with repository state and are rehydrated after restart.
+Omitting `authority_seeds` preserves the configured seeds, an explicit
+empty tuple clears them, and a non-empty tuple replaces them.
 
 ## 1. Operational setup
 
@@ -34,7 +37,8 @@ Discover the exact registered canonical `repository_id` through MCP
 one plain `repository_locator` and only user-supplied
 `authority_seeds` (unknown seeds fail closed); provider selection stays
 shell-owned. Provisioning runs the one
-bounded provider build when the cache is missing or stale; a failed
+bounded provider build when the cache is missing, stale, or the working
+tree is dirty; a failed
 build is an actionable setup failure. Reuse the returned canonical
 ID unchanged. If it is already initialized, do not initialize it again for a
 new target session. Expected: `READY` operational status and schema/store

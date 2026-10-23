@@ -50,6 +50,8 @@ def _wiring(files, edges=()):
 
 def _write_repo(files):
     tmp = tempfile.mkdtemp(prefix="f-nav-")
+    with open(os.path.join(tmp, ".gitignore"), "w", encoding="utf-8") as handle:
+        handle.write(".span-cache/\n")
     for path, content in files.items():
         full = os.path.join(tmp, path)
         os.makedirs(os.path.dirname(full) or tmp, exist_ok=True)
@@ -58,8 +60,12 @@ def _write_repo(files):
     return tmp
 
 
+def _repo_cache(tmp):
+    return os.path.join(tmp, ".span-cache", "structural", REPO)
+
+
 def _write_wiring(tmp, wiring):
-    graph = os.path.join(tmp, "graft", ".graph")
+    graph = os.path.join(_repo_cache(tmp), ".graph")
     os.makedirs(graph, exist_ok=True)
     path = os.path.join(graph, "wiring.json")
     with open(path, "w", encoding="utf-8") as handle:
@@ -68,7 +74,11 @@ def _write_wiring(tmp, wiring):
 
 
 def _harness(tmp, files, wiring=None):
-    structural = GraftStructuralSource(REPO, tmp, wiring=wiring)
+    if wiring is not None:
+        _write_wiring(tmp, wiring)
+    structural = GraftStructuralSource(
+        REPO, tmp, artifact_dir=_repo_cache(tmp)
+    )
     evidence = FixtureEvidenceSource(REPO, dict(files))
     store = SqliteSemanticStore(":memory:")
     ops.initialize_repository(

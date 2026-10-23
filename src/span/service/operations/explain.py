@@ -82,7 +82,7 @@ def _baseline_sufficient(
     applicability disposition; (b) every admitted material root/member
     question is ANSWERED or genuinely NOT_APPLICABLE with *current*
     (effective) dependencies; (c) no unresolved requirements, conflicts,
-    or unassessed legacy items remain in scope; (d) no outstanding
+    or unassessed items remain in scope; (d) no outstanding
     pages, unexamined questions, unprocessed premise frontier, or
     stale/unverifiable items; (e) synthesis rests on established,
     currently supported member evidence. Recorded dispositions alone
@@ -267,19 +267,14 @@ def _compose_explain_answer(
             )
         )
     elif not views and (kept_claims or kept_rels):
-        # B.8: legacy items without adopted question coverage stay
-        # readable but explicitly unassessed for question sufficiency;
-        # byte-current evidence never proves semantic sufficiency.
-        requirements.append(
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                subject_or_claim=sid,
-                description=(
-                    "stored semantics predate question coverage; "
-                    "unassessed for question sufficiency"
-                ),
-                supporting_context=(),
-            )
+        # Every current semantic item is written with its owning
+        # question coverage in the same atomic batch. Stored assertions
+        # with no coverage at all mean the store violates that
+        # invariant; exposed current data is never downgraded to
+        # unassessed content.
+        raise RuntimeError(
+            "semantic store invariant violation: stored assertions "
+            f"without question coverage for subject {sid.canonical_locator}"
         )
     if qremaining > 0:
         truncated = True

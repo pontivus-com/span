@@ -422,11 +422,9 @@ def state_explanation_for(
     At most one bounded nature sentence with precise conditional syntax:
     `returned assertions: none` when no assertions are returned; otherwise
     `returned assertions: <distribution> (<d> descriptive, <n> normative)`
-    with <distribution> one of descriptive-only, normative-only, or mixed,
-    appending `, <q> legacy-unclassified` inside the parentheses only when
-    <q> is greater than zero; authority-unresolved items stay qualified
-    regardless of nature. Counts are non-negative integers over the
-    returned page.
+    with <distribution> one of descriptive-only, normative-only, or mixed;
+    authority-unresolved items stay qualified regardless of nature.
+    Counts are non-negative integers over the returned page.
 
     Further deterministic sentences cover trust (returned items'
     authority states), freshness (returned items' currency states),
@@ -460,52 +458,23 @@ def state_explanation_for(
                 f"of {total} questions"
             )
         return tuple(empty)
-    descriptive = 0
-    normative = 0
-    legacy = 0
-    for item in items:
-        nature = item.assertion_nature
-        if nature is m.AssertionNature.DESCRIPTIVE:
-            descriptive += 1
-        elif nature is m.AssertionNature.NORMATIVE:
-            normative += 1
-        else:
-            legacy += 1
-    if descriptive and not normative and not legacy:
+    descriptive = sum(
+        1
+        for item in items
+        if item.assertion_nature is m.AssertionNature.DESCRIPTIVE
+    )
+    normative = len(items) - descriptive
+    if descriptive and not normative:
         distribution = "descriptive-only"
-    elif normative and not descriptive and not legacy:
+    elif normative and not descriptive:
         distribution = "normative-only"
-    elif legacy and not descriptive and not normative:
-        distribution = "mixed"
-    elif descriptive and normative:
-        distribution = "mixed"
-    elif descriptive and legacy:
-        distribution = "mixed"
-    elif normative and legacy:
-        distribution = "mixed"
     else:
         distribution = "mixed"
-    # When only legacy remains, still report as mixed with zero
-    # descriptive/normative to preserve exact syntax.
-    if legacy and not descriptive and not normative:
-        nature_sentence = (
-            f"returned assertions: {distribution} "
-            f"(0 descriptive, 0 normative, {legacy} legacy-unclassified); "
-            "authority-unresolved items stay qualified regardless of nature"
-        )
-    elif legacy:
-        nature_sentence = (
-            f"returned assertions: {distribution} "
-            f"({descriptive} descriptive, {normative} normative, "
-            f"{legacy} legacy-unclassified); authority-unresolved items "
-            "stay qualified regardless of nature"
-        )
-    else:
-        nature_sentence = (
-            f"returned assertions: {distribution} "
-            f"({descriptive} descriptive, {normative} normative); "
-            "authority-unresolved items stay qualified regardless of nature"
-        )
+    nature_sentence = (
+        f"returned assertions: {distribution} "
+        f"({descriptive} descriptive, {normative} normative); "
+        "authority-unresolved items stay qualified regardless of nature"
+    )
     trust_counts: dict[m.TrustState, int] = {}
     freshness_counts: dict[m.FreshnessState, int] = {}
     for item in items:

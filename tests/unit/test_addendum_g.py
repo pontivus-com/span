@@ -448,7 +448,8 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
         import pathlib
         import subprocess
 
-        root = pathlib.Path(tmp)
+        root = pathlib.Path(tmp) / "repo"
+        root.mkdir(parents=True, exist_ok=True)
         for rel, body in files.items():
             path = root / rel
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -475,13 +476,12 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
             )
         return root
 
-    def _write_wiring(self, root, bodies):
+    def _write_wiring(self, artifact_dir, bodies):
         import hashlib
         import json
         import pathlib
 
-        root = pathlib.Path(root)
-        graph_dir = root / "graft" / ".graph"
+        graph_dir = pathlib.Path(artifact_dir) / ".graph"
         graph_dir.mkdir(parents=True, exist_ok=True)
         nodes = [
             {
@@ -511,13 +511,20 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
         try:
             files = {"src/a.py": "VALUE = 1\n"}
             root = self._write_repo(tmp, files)
-            self._write_wiring(root, files)
+            import pathlib
+
+            artifact_dir = (
+                pathlib.Path(tmp) / "data" / "structural" / "old-idx"
+            )
+            self._write_wiring(artifact_dir, files)
             # Age the wiring before HEAD: HEAD time is now, so backdate
             # the wiring file by two minutes.
-            wiring = root / "graft" / ".graph" / "wiring.json"
+            wiring = artifact_dir / ".graph" / "wiring.json"
             old = time.time() - 120
             os.utime(wiring, (old, old))
-            source = GraftStructuralSource("old-idx", root)
+            source = GraftStructuralSource(
+                "old-idx", root, artifact_dir=artifact_dir
+            )
             report = source.verify_files("old-idx", ("src/a.py",))
             self.assertIs(
                 report.coverage, m.ScopeCoverage.UNVERIFIED
@@ -540,8 +547,15 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
         try:
             files = {"src/a.py": "VALUE = 1\n"}
             root = self._write_repo(tmp, files)
-            self._write_wiring(root, files)
-            source = GraftStructuralSource("unver", root)
+            import pathlib
+
+            artifact_dir = (
+                pathlib.Path(tmp) / "data" / "structural" / "unver"
+            )
+            self._write_wiring(artifact_dir, files)
+            source = GraftStructuralSource(
+                "unver", root, artifact_dir=artifact_dir
+            )
             report = source.verify_files("unver", ("src/ghost.py",))
             self.assertEqual(
                 report.coverage_detail, "unverifiable-file"
@@ -590,16 +604,21 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
 
         tmp = tempfile.mkdtemp(prefix="span-g8-nogit-")
         try:
-            root = pathlib.Path(tmp)
+            root = pathlib.Path(tmp) / "repo"
             (root / "src").mkdir(parents=True, exist_ok=True)
             (root / "src" / "a.py").write_text(
                 "VALUE = 1\n", encoding="utf-8"
             )
-            self._write_wiring(root, {"src/a.py": "VALUE = 1\n"})
+            artifact_dir = (
+                pathlib.Path(tmp) / "data" / "structural" / "nogit"
+            )
+            self._write_wiring(artifact_dir, {"src/a.py": "VALUE = 1\n"})
             # Deliberately no git init: scope currency cannot be
             # established, but the touched file verifies, so the
             # scope token stands alone.
-            source = GraftStructuralSource("nogit", root)
+            source = GraftStructuralSource(
+                "nogit", root, artifact_dir=artifact_dir
+            )
             report = source.verify_files("nogit", ("src/a.py",))
             self.assertEqual(report.coverage_detail, "non-git-tree")
         finally:
@@ -615,13 +634,18 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
 
         tmp = tempfile.mkdtemp(prefix="span-g8-join-")
         try:
-            root = pathlib.Path(tmp)
+            root = pathlib.Path(tmp) / "repo"
             (root / "src").mkdir(parents=True, exist_ok=True)
             (root / "src" / "a.py").write_text(
                 "VALUE = 2\n", encoding="utf-8"
             )
-            self._write_wiring(root, {"src/a.py": "VALUE = 1\n"})
-            source = GraftStructuralSource("join", root)
+            artifact_dir = (
+                pathlib.Path(tmp) / "data" / "structural" / "join"
+            )
+            self._write_wiring(artifact_dir, {"src/a.py": "VALUE = 1\n"})
+            source = GraftStructuralSource(
+                "join", root, artifact_dir=artifact_dir
+            )
             report = source.verify_files("join", ("src/a.py",))
             self.assertEqual(
                 report.coverage_detail,
@@ -1123,6 +1147,7 @@ class StructuralCurrentTest(unittest.TestCase):
             root = pathlib.Path(tmp)
             src = g.GraftStructuralSource(
                 "repo-1", root, wiring=wiring,
+                artifact_dir=root / "data",
             )
             calls = []
             real = g._run_index_build

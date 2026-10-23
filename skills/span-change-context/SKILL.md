@@ -50,10 +50,10 @@ policy.
 
 ## After editing and expansion
 
-After external tests/review, close the exact affected scope with the primary
-sequence: scoped `status`, explicit scoped `refresh` with a substantive
-re-submission where required, then scoped `status` again. A bare `refresh`
-does not prove correctness or currency.
+Close the exact affected scope with the primary sequence: scoped `status`
+on the exact mutated scope, external tests/review, explicit scoped `refresh`
+with a substantive re-submission where required, then scoped `status` again.
+A bare `refresh` does not prove correctness or currency.
 
 If the proposal surfaces an unknown participant, contract, dependency, or
 authority question, establish that precise question before relying on it and

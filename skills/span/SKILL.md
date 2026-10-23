@@ -46,10 +46,11 @@ Use this path for every non-trivial Span interaction:
    questions accept `question_selection` (slice/basis/anchors only);
    anchors are literal substrings. Excerpts carry ranges and omissions;
    answers carry `state_explanation` with descriptive/normative counts.
-7. For material edits, call `impact` before editing; after external
-   verification, perform scoped `status` → explicit `refresh` and re-submit
-   where required → scoped `status` again. `impact` is preparation, not
-   approval; `refresh` alone proves nothing.
+7. For material edits, call `impact` before editing. Close out in one
+   order: scoped `status` on the exact mutated scope, external tests/review,
+   explicit scoped `refresh` and re-submit where required, then scoped
+   `status` again. `impact` is preparation, not approval; `refresh` alone
+   proves nothing.
 
 ### Operation selection
 
@@ -102,9 +103,11 @@ Pick one branch before making a semantic call:
    scoped `status` again.
 
 If the MCP runtime returns `UNINITIALIZED`, stop normal work and use the
-dedicated repository setup workflow first. If it returns readiness only,
-report the known runtime coverage-inventory gap; do not infer that semantic
-knowledge is absent.
+dedicated repository setup workflow first. An automatic `HOOK_FAST` notice
+is event-local by design. A normal `status` or semantic operation that
+returns readiness only where coverage is expected is unexpected: record it,
+do not infer that semantic knowledge is absent, and do not treat it as
+cleanliness.
 
 ## Repository identity and readiness
 
@@ -266,11 +269,11 @@ question binding, and disposition before persistence and derives persisted
 result references at the commit boundary.
 
 Claims alone do not complete a question. An answering submission needs an
-explicit `ANSWERED` `question_decision` for the exact bound question; Span
-derives `declared_complete`, result refs, question evidence, and the persisted
-`InterpretationCoverage`. Unresolved work remains visibly `OPEN` or `PENDING`
-with requirements. Do not reinterpret `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`,
-`UNRESOLVED`, `STALE`, or `UNVERIFIABLE` as certainty.
+explicit `ANSWERED` `question_decision` for the exact bound question. Span
+derives completion, canonical result references, question evidence, and the
+persisted canonical question state. Unresolved work remains visibly `OPEN` or
+`PENDING` with requirements. Do not reinterpret `PARTIAL`, `AMBIGUOUS`,
+`CONFLICTED`, `UNRESOLVED`, `STALE`, or `UNVERIFIABLE` as certainty.
 
 ## Continuation recovery
 
@@ -319,8 +322,9 @@ The full lifecycle is:
 
 `orientation → readiness → establishment or question-local investigation →
 evidence interpretation → canonical submission → validation/recovery →
-persisted readback → material-change assessment when applicable → external
-implementation/verification → explicit refresh and closeout`.
+persisted readback → material-change assessment when applicable → scoped
+`status` → external implementation/verification → explicit refresh and
+closeout`.
 
 For material edits, the editing agent owns closeout in the same change:
 scoped `status`, external tests/review, scoped `refresh` with a substantive

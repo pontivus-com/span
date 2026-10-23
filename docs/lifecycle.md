@@ -117,7 +117,16 @@ Initialization is explicit and administrative: identity, repository
 state, provider-owned structural build when needed
 (`ensure_current` into `<data-dir>/structural/<id>/`, wiring-only, no
 target writes), evidence inventory, authority seeds, store
-schema — then a readiness report. Uninitialized repositories answer
+schema — then a readiness report. Repository state and the configured
+authority seeds persist together in one atomic row. Omitted
+`authority_seeds` preserves the seeds already configured for the
+repository; an explicit empty tuple clears them; a non-empty tuple
+replaces them. Persisted seeds are rehydrated by the shared context
+opener after a process or host restart, so later operations do not need
+the setup call repeated. The semantic store supports schema 7 only:
+a fresh store is created at schema 7, an existing schema-7 store opens
+normally, and any other store version fails closed with no runtime
+migration. Uninitialized repositories answer
 `UNINITIALIZED` plus a setup requirement on every path; hooks and
 queries never bootstrap implicitly. A failed provider build is an
 actionable setup failure, never a usable provider; a dirty tree after a
@@ -129,9 +138,9 @@ semantic-coverage inventory (covered/current, incomplete, stale or
 unverifiable, unassessed, and explicit bounds), without a structural crawl
 or interpretation. This inventory is distinct from readiness. The
 ACT-D-10 installed-runtime gate was verified in the 2026-10-17 closeout
-run against the installed MCP process; the remaining status-path and
-documentation synchronization work is tracked in the current closeout
-report.
+run against the installed MCP process; the status-path and documentation
+synchronization work is closed in the Addendum M verification record
+(`.context/verification/addendum-m-2026-10-22.md`).
 
 ## Workflow examples
 

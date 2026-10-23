@@ -49,6 +49,9 @@ repository-scoped tool descriptions at list time, so agents discover
 identity before the first repository-scoped call. `initialize_repository`
 also returns the canonical ID. Unknown IDs fail closed with the
 registered list. Filesystem paths are never accepted as IDs.
+`--repo` startup registration is identity-only; `tools/list` opens no
+repository context, and the working context opens once on the first
+repository-scoped call.
 
 ## Status reporting modes
 
@@ -144,11 +147,14 @@ provider. The provider-owned index lives outside every target:
 <DATA_DIR>/structural/<repository-id>/.graph/wiring.json
 ```
 
-`initialize_repository` provisioning (including server startup
-registration and installer verification) runs at most one bounded
-provider-owned build into the cache when it is missing or stale
-(wiring-only, no credentials, no target writes), then reloads and
-validates. A failed or malformed build is an actionable setup failure,
+`initialize_repository` provisioning and installer verification run at
+most one bounded provider-owned build into the cache when it is missing
+or stale (wiring-only, no credentials, no target writes), then reload and
+validate. `--repo` at MCP process startup registers repository identity
+only: it does not initialize semantic state and does not call
+`ensure_current`. Explicit `initialize_repository`, installer
+verification, and explicit `refresh` are the only provider-currency
+owners. A failed or malformed build is an actionable setup failure,
 never a usable provider. A dirty tree after a successful build still
 provisions: the provider is available but freshness is UNVERIFIABLE.
 Explicit `refresh` performs the same single bounded rebuild for its
@@ -159,7 +165,14 @@ update only the managed Span lifecycle block in the target `AGENTS.md`;
 per-target plugins and all other target artifacts are not written.
 `initialize_repository` takes one plain `repository_locator` and optional
 `authority_seeds`; provider selection stays shell-internal and the core
-never interprets provider paths or commands. There is no separate structural MCP server:
+never interprets provider paths or commands. The configured authority
+seeds persist with repository state in one atomic row and are rehydrated
+after a process or host restart. Omitting `authority_seeds` preserves
+the seeds already configured; an explicit empty tuple clears them; a
+non-empty tuple replaces them. Unknown seed locators fail closed. The
+semantic store supports schema 7 only: a fresh store is created at
+schema 7, an existing schema-7 store opens normally, and any other store
+version fails closed with no runtime migration. There is no separate structural MCP server:
 structural navigation (`locate` for find/ outline/member listing,
 `neighbors` for bounded adjacency) is served by Span itself under
 Addendum F, with two-tier freshness (entry verification plus scope
@@ -169,13 +182,7 @@ block is the intentional installer exception) recorded in the receipt
 and acceptance evidence. Exact onboarding path:
 `docs/onboarding-runbook.md` and Addendum E §4A.
 
-Migration from a pre-F install (one time, operator): the installer
-removes an obsolete structural MCP registration from opencode host
-configs and attempts the equivalent Codex cleanup, both reported in the
-receipt (a `manual` codex status means the operator finishes that
-removal by hand). Removing configuration never stops an already-running
-server: stop any such process out of band before relying on sole-MCP
-operation. The only Span-owned structural-index writer is the bounded
+The only Span-owned structural-index writer is the bounded
 managed-indexer build on explicit `initialize_repository` provisioning
 and explicit `refresh` (cache under the data directory, never target
 writes); no manual offline index preparation is required —

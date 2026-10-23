@@ -280,11 +280,85 @@ class SkillNonAuthorityTest(unittest.TestCase):
         ):
             self.assertIn(required, text)
 
+    def test_primary_avoids_persistence_internal_vocabulary(self):
+        # Addendum M M-09/M-12: persisted coverage bookkeeping is
+        # Span-owned. Ordinary agent guidance names the public
+        # question_decision and the recovery rules, never internal
+        # storage carriers, token grammars, or a reissue operation.
+        text = _text(SKILLS[0])
+        self.assertIn("question_decision", text)
+        for forbidden in (
+            "InterpretationCoverage",
+            "question-result join",
+            "coverage dependency storage",
+            "SQLite",
+            "result-ID materialization",
+            "pgq:",
+            "pgv:",
+            "pgn:",
+            "cont-",
+            "reissue_interpretation",
+        ):
+            self.assertNotIn(forbidden, text, forbidden)
+
     def test_implementation_ignores_skills(self):
         for path in (REPO_ROOT / "src").rglob("*.py"):
             content = path.read_text(encoding="utf-8")
             self.assertNotIn("skills/", content, path)
             self.assertNotIn("SKILL.md", content, path)
+
+
+class SkillLifecycleConsistencyTest(unittest.TestCase):
+    """One lifecycle protocol, stated the same way in every skill."""
+
+    def _normalized(self, path):
+        return " ".join(_text(path).split())
+
+    def test_target_admission_is_service_owned_in_all_skills(self):
+        # A new material area is admitted through target inventory
+        # accounting; Span creates the first-admission CQ-01 seed. No
+        # skill may send the agent back to manufacturing that question.
+        for path in SKILLS:
+            text = self._normalized(path)
+            with self.subTest(skill=path.name):
+                self.assertNotIn("Admit each new material area with", text)
+                self.assertNotIn(
+                    "proposed_questions` entry for a new area", text
+                )
+        for path in (SKILLS[0], SKILLS[2]):
+            text = self._normalized(path)
+            with self.subTest(skill=path.name):
+                self.assertIn("Span creates the", text)
+                self.assertIn("first-admission", text)
+        self.assertIn(
+            "do not manufacture it", self._normalized(SKILLS[2])
+        )
+
+    def test_closeout_order_is_consistent_in_all_skills(self):
+        # edit -> scoped status -> external tests/review -> scoped
+        # refresh and submit -> scoped status again.
+        for path in SKILLS:
+            text = self._normalized(path)
+            with self.subTest(skill=path.name):
+                tests_at = text.index("external tests/review")
+                refresh_at = text.index("`refresh`", tests_at)
+                final_at = text.rindex("scoped `status` again")
+                self.assertIn("scoped `status`", text[:tests_at])
+                self.assertLess(tests_at, refresh_at)
+                self.assertLess(refresh_at, final_at)
+
+    def test_no_obsolete_coverage_inventory_gap_tolerance(self):
+        # Readiness-only output is event-local by design (HOOK_FAST),
+        # never a tolerated coverage-inventory gap on normal calls.
+        for path in (
+            SKILLS[0],
+            REPO_ROOT / "docs" / "skills.md",
+            REPO_ROOT / "docs" / "agents-snippet.md",
+        ):
+            text = _text(path)
+            with self.subTest(document=path.name):
+                self.assertNotIn("coverage-inventory gap", text)
+                self.assertNotIn("Point 4 activation gap", text)
 
 
 if __name__ == "__main__":

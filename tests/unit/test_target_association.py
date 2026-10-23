@@ -109,12 +109,12 @@ class RetiredFieldTransitionTest(unittest.TestCase):
             )
         )
         assert isinstance(clean, dict)
-        legacy = dict(clean)
-        legacy["observed_content_fingerprint"] = "deadbeef"
+        tampered = dict(clean)
+        tampered["observed_content_fingerprint"] = "deadbeef"
         with self.assertRaises(CanonicalDecodeError):
-            m.from_canonical(m.TargetInventoryAccount, legacy)
+            m.from_canonical(m.TargetInventoryAccount, tampered)
 
-    def test_store_loads_legacy_row_at_persistence_boundary(self):
+    def test_store_rejects_retired_row_field(self):
         import json
 
         store = SqliteSemanticStore(":memory:")
@@ -151,20 +151,8 @@ class RetiredFieldTransitionTest(unittest.TestCase):
                 (json.dumps(data, sort_keys=True), "r1", tid.value),
             )
             store._db.commit()
-            loaded = store.load_target_association("r1", tid)
-            self.assertIsNotNone(loaded)
-            assert loaded is not None
-            self.assertEqual(len(loaded.inventory_accounting), 1)
-            self.assertEqual(
-                loaded.inventory_accounting[0].assigned_area_subjects,
-                (_sid(),),
-            )
-            self.assertFalse(
-                hasattr(
-                    loaded.inventory_accounting[0],
-                    "observed_content_fingerprint",
-                )
-            )
+            with self.assertRaises(m.CanonicalDecodeError):
+                store.load_target_association("r1", tid)
         finally:
             store.close()
 

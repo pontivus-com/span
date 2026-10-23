@@ -506,7 +506,7 @@ def _compact_dataclass(cls: type, value: object, *, keep_tag: bool) -> object:
 def compact_payload(root: type, payload: dict) -> dict:
     """Compact a fully-tagged transport payload to the agent-facing grammar.
 
-    Migration/utility projection mirroring ``from_wire``: a single-dataclass
+    Wire projection mirroring ``from_wire``: a single-dataclass
     field drops ``$type``; a genuine dataclass union keeps it. Unknown
     transport-only keys pass through unchanged.
     """

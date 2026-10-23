@@ -103,18 +103,24 @@ def initialize_repository(
 
     Assigns identity (caller-held, derived at source construction),
     establishes current repository state, verifies the structural
-    source, builds the evidence inventory/fingerprint index, records
-    authority seeds (caller-held session config — the §10.2 schema
-    carries no config table), persists the repository state record,
-    and initializes the semantic store schema. Performs NO agent
+    source, builds the evidence inventory/fingerprint index, resolves
+    the repository's configured authority seeds, and persists state and
+    seeds in one atomic row. Seed semantics: omitted (``None``)
+    preserves already configured seeds, an explicit empty tuple clears
+    them, and a non-empty tuple replaces them. Performs NO agent
     semantic interpretation: there is no interpretation input by
     construction.
     """
     if not request.repository_locator:
         raise ValueError("repository_locator must be non-empty")
     policy_bounds = bounds or DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds
+    effective_seeds = (
+        store.load_repository_authority_seeds(repository_id)
+        if request.authority_seeds is None
+        else request.authority_seeds
+    )
     state = structural.repository_state(repository_id)
-    store.record_repository_state(state)
+    store.record_repository_initialization(state, effective_seeds)
     inventory = evidence.inventory_evidence(
         repository_id,
         m.EvidenceScope(paths=(), evidence_refs=()),

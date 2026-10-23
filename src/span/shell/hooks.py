@@ -1,44 +1,52 @@
 """Host hook runner for Span lifecycle notices (read-only, fast).
 
-Stdlib only. Imports no Span code so any host ``python3`` can run it.
-All commands are read-only SQLite SELECTs plus file hashing; they
-never write semantic state, interpret, refresh, or initialize. Any
-internal failure exits 0 silently (a hook must never break a host
-session); diagnostics go to stderr.
+One canonical policy: every automatic hook maps to exactly one
+``status(..., mode=HOOK_FAST)`` call through the same shell opener the
+MCP runtime uses, and prints only what that notice reports. This module
+holds no semantic policy of its own — no SQL, no fingerprint
+classification, no readiness interpretation, no next-action wording
+beyond the notice's own ``recommended_action``.
 
-Resolution order per repository root comes from the install receipt
-(``<data-dir>/install.json``: ``repos`` plus ``data_dir``). Database
-file is ``<data-dir>/<repository_id>.db`` where the id is derived
-from the receipt's verify record when present, else the root's base
-name. Only current-schema (6) stores are read; anything else is reported as
-needing attention, never migrated or touched.
+Automatic hooks never initialize, explain, impact, trace,
+authority-check, refresh, interpret, rebuild, or run repository-size
+work. Any internal failure exits 0 silently (a hook must never break a
+host session); diagnostics go to stderr.
 
-Commands (exception-oriented per addendum D §9: routine current
-state prints nothing — silence is the all-current statement; every
-printed line names its repository scope and states only what needs
-action):
-  session-start      one line for the active repo when it needs action
-                     (uninitialized, needs attention, no established
-                     coverage, or noncurrent/open work); silent when
-                     the active repo has established, current coverage
-  source-changed     read absolute paths from argv or stdin JSON;
-                      report only paths whose dependents moved since
-                      observation; silence otherwise
-  session-stop       active-repo currents/stale counts only when stale,
-                     unverifiable, open, or pending work remains;
-                     silent on a clean close
+Repository roots come from the install receipt
+(``<data-dir>/install.json``: ``repos``). The canonical repository ID is
+derived from the locator by the same rule explicit initialization uses;
+storage is ``<data-dir>/<repository_id>.db`` and is opened only when it
+already exists.
+
+Commands (exception-oriented per addendum D §9: routine current state
+prints nothing — silence is the all-current statement):
+  session-start      readiness notice for the active repo only when it
+                     needs action (unavailable or uninitialized)
+  source-changed     read absolute paths from argv or stdin JSON and
+                     report the canonical notice for that evidence scope
+  session-stop       same canonical notice for the session's changed
+                     paths when the host supplies them
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
-import sqlite3
 import sys
 
-EXPECTED_SCHEMA = "6"
+from span import service as ops
+from span.core import model as m
+from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.shell.context import open_repository_context
+
+__all__ = [
+    "cmd_session_start",
+    "cmd_source_changed",
+    "cmd_session_stop",
+    "default_data_dir",
+    "main",
+]
 
 
 def _fail_silent(message):
@@ -57,44 +65,14 @@ def load_receipt(data_dir):
 
 
 def repo_map(data_dir):
-    """Map absolute repo roots to (repository_id, db path)."""
+    """Map absolute repository roots to their canonical locator."""
     receipt = load_receipt(data_dir)
     repos = receipt.get("repos", []) if isinstance(receipt, dict) else []
-    verify = {}
-    if isinstance(receipt, dict) and isinstance(receipt.get("verify"), dict):
-        for entry in receipt["verify"].get("repos", []) or []:
-            if isinstance(entry, dict) and "locator" in entry:
-                verify[entry["locator"]] = entry.get("repository_id")
-    mapping = {}
-    for root in repos:
-        if not isinstance(root, str):
-            continue
-        root = os.path.abspath(root)
-        repo_id = verify.get(root) or os.path.basename(root.rstrip(os.sep))
-        mapping[root] = (
-            repo_id,
-            os.path.join(data_dir, f"{repo_id}.db"),
-        )
-    return mapping
-
-
-def open_db(path):
-    try:
-        connection = sqlite3.connect(path)
-    except sqlite3.Error as exc:
-        return None, f"cannot open store: {exc}"
-    try:
-        row = connection.execute(
-            "SELECT value FROM meta WHERE key='schema_version'"
-        ).fetchone()
-    except sqlite3.Error as exc:
-        connection.close()
-        return None, f"cannot read schema: {exc}"
-    version = row[0] if row else None
-    if version != EXPECTED_SCHEMA:
-        connection.close()
-        return None, f"schema {version} (expected {EXPECTED_SCHEMA})"
-    return connection, None
+    return {
+        os.path.abspath(root): os.path.abspath(root)
+        for root in repos
+        if isinstance(root, str)
+    }
 
 
 def repo_for_path(path, mapping):
@@ -110,7 +88,7 @@ def repo_for_path(path, mapping):
 def scoped_repo_map(mapping, repo_root):
     """Select the registered repository containing ``repo_root``.
 
-    Lifecycle hooks run in a host's active project directory.  Selecting
+    Lifecycle hooks run in a host's active project directory. Selecting
     the longest registered root keeps nested repositories deterministic and
     prevents a session in one repository from reporting every installation
     in the shared Span data directory.
@@ -121,76 +99,79 @@ def scoped_repo_map(mapping, repo_root):
     return {active_root: mapping[active_root]}
 
 
-def _scope_counts(connection):
-    """Current/stale/unverifiable claims + open/pending questions.
+def _context_for(data_dir, root):
+    """Open the canonical working context for one registered repository.
 
-    Returns None when the scope needs no action (established and
-    fully current); otherwise a concise mapping with nonzero
-    categories only. Silence-when-clean is the all-current statement.
+    The single seam every command uses; tests replace it with fixture
+    providers. Production always goes through the shell opener.
     """
+    return open_repository_context(data_dir, root)
+
+
+def _notice(data_dir, root, scope_paths=None, close_prefix=False):
+    """Run the canonical HOOK_FAST status call and render its notice.
+
+    ``scope_paths is None`` maps to the no-target readiness intent;
+    a tuple maps to the changed-evidence scope intent, with an empty
+    tuple left explicitly empty (the service treats it as no subjects).
+    """
+    repository_id, context = _context_for(data_dir, root)
     try:
-        current = connection.execute(
-            "SELECT COUNT(*) FROM claims WHERE freshness_state='CURRENT'"
-        ).fetchone()[0]
-        stale = connection.execute(
-            "SELECT COUNT(*) FROM claims WHERE freshness_state='STALE'"
-        ).fetchone()[0]
-        unverifiable = connection.execute(
-            "SELECT COUNT(*) FROM claims "
-            "WHERE freshness_state='UNVERIFIABLE'"
-        ).fetchone()[0]
-        questions = connection.execute(
-            "SELECT COUNT(*) FROM question_coverages"
-        ).fetchone()[0]
-        pending = connection.execute(
-            "SELECT COUNT(*) FROM question_coverages "
-            "WHERE disposition='PENDING'"
-        ).fetchone()[0]
-        open_ = connection.execute(
-            "SELECT COUNT(*) FROM question_coverages "
-            "WHERE disposition='OPEN'"
-        ).fetchone()[0]
-    except sqlite3.Error:
-        return None
-    if questions == 0:
-        return {"established": False}
-    action = {}
-    if stale:
-        action["stale"] = stale
-    if unverifiable:
-        action["unverifiable"] = unverifiable
-    if open_:
-        action["open"] = open_
-    if pending:
-        action["pending"] = pending
-    if not action:
-        return None
-    action["current"] = current
-    return action
-
-
-def _attention_hint(counts):
-    """Name the exact next operation without inventing a continuation.
-
-    Hooks stay read-only and SQL-only: they never allocate or echo a
-    returned continuation. Stale work points at a scoped refresh; pending/open
-    question work points at the continuation returned by the operation
-    that suspended.
-    """
-    hints = []
-    if counts.get("stale") or counts.get("unverifiable"):
-        hints.append(
-            "run status, then refresh each stale scope with an exact "
-            "SubjectSelector"
+        target = (
+            None
+            if scope_paths is None
+            else m.EvidenceScope(
+                paths=tuple(scope_paths), evidence_refs=()
+            )
         )
-    if counts.get("open") or counts.get("pending"):
-        hints.append(
-            "continue pending work through the continuation returned by "
-            "the suspending operation; pass it unchanged"
+        notice = ops.status(
+            ops.SemanticStatusRequest(
+                repository_id=repository_id,
+                target=target,
+                bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
+                mode=m.StatusMode.HOOK_FAST,
+            ),
+            structural=context.structural,
+            evidence=context.evidence,
+            store=context.store,
+            continuations=context.continuations,
+            authority_seeds=context.authority_seeds,
         )
-    if not hints:
-        return ""
-    return " " + "; ".join(hints) + "."
+    finally:
+        context.store.close()
+    return _render(repository_id, notice, close_prefix=close_prefix)
+
+
+def _render(repository_id, notice, close_prefix=False):
+    if notice.readiness is m.RepositoryReadiness.UNAVAILABLE:
+        return (
+            f"span: {repository_id} needs attention "
+            f"(repository unavailable)."
+        )
+    if notice.readiness is m.RepositoryReadiness.UNINITIALIZED:
+        action = (
+            notice.recommended_action
+            or "run initialize_repository in a dedicated setup session"
+        )
+        return f"span: {repository_id} UNINITIALIZED ({action})."
+    if not (
+        notice.affected_count
+        or notice.stale_count
+        or notice.unverifiable_count
+    ):
+        return None
+    parts = []
+    if notice.stale_count:
+        parts.append(f"{notice.stale_count} stale")
+    if notice.unverifiable_count:
+        parts.append(f"{notice.unverifiable_count} unverifiable")
+    if not parts:
+        parts.append(f"{notice.affected_count} affected")
+    counts = ", ".join(parts)
+    action = f" {notice.recommended_action}" if notice.recommended_action else ""
+    if close_prefix:
+        return f"span: {repository_id} close: {counts}.{action}"
+    return f"span: {repository_id} needs attention ({counts}).{action}"
 
 
 def cmd_session_start(data_dir, repo_root=None):
@@ -199,33 +180,10 @@ def cmd_session_start(data_dir, repo_root=None):
         print("span: no repositories registered (run span-install).")
         return
     mapping = scoped_repo_map(mapping, repo_root)
-    if not mapping:
-        return
     for root in sorted(mapping):
-        repo_id, db_path = mapping[root]
-        if not os.path.exists(db_path):
-            print(f"span: {repo_id} UNINITIALIZED (no store at {db_path}).")
-            continue
-        connection, problem = open_db(db_path)
-        if problem is not None:
-            print(f"span: {repo_id} needs attention ({problem}).")
-            continue
-        counts = _scope_counts(connection)
-        connection.close()
-        if counts is None:
-            continue
-        if not counts.get("established", True):
-            print(
-                f"span: {repo_id} READY with no established coverage — "
-                f"orient with a question-local explain on a bounded "
-                f"scope; no continuation token exists yet."
-            )
-            continue
-        parts = ", ".join(f"{v} {k}" for k, v in counts.items())
-        print(
-            f"span: {repo_id} needs attention ({parts})."
-            + _attention_hint(counts)
-        )
+        line = _notice(data_dir, root)
+        if line:
+            print(line)
 
 
 def _stdin_paths():
@@ -261,17 +219,6 @@ def _stdin_paths():
     return found
 
 
-def _sha256_file(path):
-    digest = hashlib.sha256()
-    try:
-        with open(path, "rb") as handle:
-            for chunk in iter(lambda: handle.read(65536), b""):
-                digest.update(chunk)
-    except OSError:
-        return None
-    return digest.hexdigest()
-
-
 def cmd_source_changed(data_dir, paths):
     if not paths:
         paths = _stdin_paths()
@@ -281,77 +228,41 @@ def cmd_source_changed(data_dir, paths):
     mapping = repo_map(data_dir)
     if not mapping:
         return
-    notices = []
+    scoped = {}
     for path in paths:
         root = repo_for_path(path, mapping)
         if root is None:
             continue
-        repo_id, db_path = mapping[root]
-        if not os.path.exists(db_path):
-            continue
-        connection, problem = open_db(db_path)
-        if problem is not None:
-            connection.close() if connection else None
-            continue
-        try:
-            relative = os.path.relpath(os.path.abspath(path), root)
-            rows = connection.execute(
-                "SELECT DISTINCT semantic_id, semantic_kind, "
-                "observed_fingerprint FROM evidence_dependencies "
-                "WHERE repository_id=? AND locator=?",
-                (repo_id, relative),
-            ).fetchall()
-        except sqlite3.Error:
-            connection.close()
-            continue
-        connection.close()
-        if not rows:
-            continue
-        current = _sha256_file(path)
-        moved = [
-            semantic_id for semantic_id, _, observed in rows
-            if current is None or observed != current
-        ]
-        if moved:
-            notices.append(
-                f"span: {repo_id}: {relative} moved; "
-                f"{len(moved)} dependent semantic item(s) need "
-                f"status/refresh ({', '.join(moved[:5])}"
-                f"{'…' if len(moved) > 5 else ''})."
-            )
-        else:
-            # Unchanged dependents print nothing (exception-oriented):
-            # silence is the all-current statement.
-            pass
-    for notice in notices:
-        print(notice)
+        scoped.setdefault(root, []).append(
+            os.path.relpath(os.path.abspath(path), root)
+        )
+    for root in sorted(scoped):
+        line = _notice(data_dir, root, scope_paths=tuple(scoped[root]))
+        if line:
+            print(line)
 
 
 def cmd_session_stop(data_dir, repo_root=None):
     mapping = repo_map(data_dir)
     if not mapping:
         return
-    mapping = scoped_repo_map(mapping, repo_root)
-    if not mapping:
+    active = scoped_repo_map(mapping, repo_root)
+    if not active:
         return
-    for root in sorted(mapping):
-        repo_id, db_path = mapping[root]
-        if not os.path.exists(db_path):
+    root = next(iter(active))
+    # A host may supply the session's changed paths on stdin. Without
+    # them the close carries an empty event scope, which the canonical
+    # HOOK_FAST path reports as no affected subjects (silence).
+    rel_paths = []
+    for path in _stdin_paths():
+        if repo_for_path(path, {root: root}) is None:
             continue
-        connection, problem = open_db(db_path)
-        if problem is not None:
-            continue
-        counts = _scope_counts(connection)
-        connection.close()
-        if counts is None or not counts.get("established", True):
-            # Clean close — or nothing established yet — prints nothing:
-            # session-start already prompts orientation where needed.
-            continue
-        parts = ", ".join(f"{v} {k}" for k, v in counts.items())
-        print(
-            f"span: {repo_id} close: {parts}."
-            + _attention_hint(counts)
-        )
+        rel_paths.append(os.path.relpath(os.path.abspath(path), root))
+    line = _notice(
+        data_dir, root, scope_paths=tuple(rel_paths), close_prefix=True
+    )
+    if line:
+        print(line)
 
 
 def parse_args(argv=None):

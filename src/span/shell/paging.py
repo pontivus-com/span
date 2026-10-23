@@ -53,7 +53,7 @@ def parse_service_token(page_token: str | None) -> tuple[int, int, int]:
     Addendum I S4 §5.4 cutover: service answer cursors use the single
     grammar `pgq:<query_digest>:<claims_offset>:<relationships_offset>:
     <questions_offset>`. Old `pg:` service cursors are rejected with a
-    restart-listing diagnostic; no legacy fallback. Plain single-offset
+    restart-listing diagnostic; no alternative fallback. Plain single-offset
     store cursors (`pg:<offset>`) and structural `pgv` cursors retain
     their distinct contracts and are never interchanged here.
     """

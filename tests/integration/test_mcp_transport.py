@@ -1008,7 +1008,7 @@ class DispatchTest(unittest.TestCase):
             (root / "src" / "b.py").write_text(
                 "VALUE = 1\n", encoding="utf-8"
             )
-            graph = root / "graft" / ".graph"
+            graph = root / "structural" / REPO / ".graph"
             graph.mkdir(parents=True)
             (root / ".gitignore").write_text("graft/\n", encoding="utf-8")
             wiring = {
@@ -1049,7 +1049,9 @@ class DispatchTest(unittest.TestCase):
                     "GIT_COMMITTER_DATE": "2030-01-01T00:00:00Z",
                 },
             )
-            structural = GraftStructuralSource(REPO, root)
+            structural = GraftStructuralSource(
+                REPO, root, artifact_dir=root / "structural" / REPO
+            )
             evidence = FixtureEvidenceSource(
                 REPO,
                 {
@@ -1329,13 +1331,13 @@ class ProvisionPathTest(unittest.TestCase):
                 ),
                 check=True, timeout=60,
             )
-            # This in-process service fixture uses the legacy in-target
-            # wiring path directly, so it supplies the minimal wiring it
-            # owns. The installed product path builds the provider index
-            # into Span's data directory during setup/refresh (M-08).
+            # The provider index lives in Span's data directory; this
+            # in-process fixture supplies the minimal wiring it owns.
             # The graft/ tree is git-ignored above, so the tree stays
             # clean and the index postdates HEAD.
-            graph_dir = work / "graft" / ".graph"
+            graph_dir = (
+                tmp / "data" / "structural" / "order-svc" / ".graph"
+            )
             graph_dir.mkdir(parents=True, exist_ok=True)
             nodes = []
             for rel in ("src/orders.js", "src/inventory.js"):

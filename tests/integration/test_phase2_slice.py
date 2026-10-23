@@ -89,7 +89,10 @@ class Phase2SliceTest(unittest.TestCase):
             "-c", "user.name=span-test",
             "commit", "-qm", "held-out fixture",
         ))
-        graph_dir = WORK_DIR / "graft" / ".graph"
+        graph_dir = (
+            WORK_DIR.parent / "span-data" / "structural" / "order-svc"
+            / ".graph"
+        )
         graph_dir.mkdir(parents=True)
         (graph_dir / "wiring.json").write_text(
             json.dumps({
@@ -155,7 +158,7 @@ class Phase2SliceTest(unittest.TestCase):
         store = None
         try:
             structural, repo_id = structural_source_from_config(
-                str(WORK_DIR)
+                str(WORK_DIR), WORK_DIR.parent / "span-data"
             )
             self.assertEqual(repo_id, "order-svc")
             files = _files(WORK_DIR)
