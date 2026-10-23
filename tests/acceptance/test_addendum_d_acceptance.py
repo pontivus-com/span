@@ -1396,8 +1396,8 @@ class DocsCheckTest(unittest.TestCase):
         # D-ACCEPT-07: §10-required elements present.
         readme = self._read("README.md")
         for required in (
-            "Re-check only what the change may have affected.",
-            "maintained codebase understanding",
+            "Keep your agent's notes on your code from going stale.",
+            "flags the parts a code change made unreliable",
             "Establish. Maintain. Expand.",
             "reconstruct",
             "withheld",

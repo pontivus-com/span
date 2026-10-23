@@ -1,8 +1,8 @@
 # Span
 
-**Re-check only what the change may have affected.**
+**Keep your agent's notes on your code from going stale.**
 
-Span is maintained codebase understanding for coding agents: conclusions kept together with the evidence behind them, reusable while that evidence stays current.
+Span stores what your agent learned about your repo, and flags the parts a code change made unreliable.
 
 **Establish. Maintain. Expand.** Establish understanding once. Maintain it as its supporting evidence changes. Expand it as the agent moves into new areas.
 
