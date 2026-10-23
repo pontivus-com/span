@@ -1,4 +1,4 @@
-# Demand-driven indexing (plan §8; Addendum B)
+# Demand-driven indexing
 
 No unrequested whole-repository structural or semantic-interpretation crawl.
 When the user supplies an exact directory or repository target, the host may
@@ -44,7 +44,7 @@ items, and must disclose page/truncation/outstanding scope. Missing items
 outside the returned frontier remain unknown, not silently current or
 silently absent.
 
-## Addendum J delta — scoped coverage dependency
+## Scoped coverage dependency
 
 `CoverageDependency` carries `discovery_scope` (the exact bounded search
 universe) alongside `scope_subjects`, `inventory_fingerprint`, and

@@ -502,7 +502,7 @@ class S3SchemaTest(unittest.TestCase):
         decoded = decode_request(
             "status",
             {
-                "repository_id": "example-workspace",
+                "repository_id": "example-repo",
                 "bounds": TOOL_SCHEMAS["status"]["properties"]["bounds"][
                     "default"
                 ],

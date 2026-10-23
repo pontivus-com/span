@@ -1889,13 +1889,15 @@ class CurrentSchemaOnlyTest(unittest.TestCase):
 
 
 class PortabilityIsolationTest(unittest.TestCase):
-    """B.11 L: held-out repo, no proprietary coupling, no provider in Span."""
+    """B.11 L: held-out repo, no parent-workspace coupling, no provider in Span."""
 
-    def test_no_proprietary_imports(self):
+    def test_no_parent_workspace_imports(self):
         import re
 
         root = pathlib.Path(__file__).resolve().parents[2] / "src" / "span"
-        pattern = re.compile(r"^\s*(import|from)\s+pontivus[^.\s]*(\s|$|\.)")
+        pattern = re.compile(
+            r"^\s*(import|from)\s+(projects|packages|worker_server)(\.|\s|$)"
+        )
         offenders = []
         for path in sorted(root.rglob("*.py")):
             for n, line in enumerate(

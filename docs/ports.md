@@ -1,4 +1,4 @@
-# Port contracts (plan §5)
+# Port contracts
 
 ## Structural source (§5.2)
 

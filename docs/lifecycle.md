@@ -53,7 +53,7 @@ Normal `status` names the next exact step in each non-current entry:
 Hooks report the same distinction in compact form and never allocate a
 continuation.
 
-## Refresh ownership (Addendum C C-11)
+## Refresh ownership
 
 The agent that changes implementation or governing semantic evidence
 owns the close-out sequence for the scope it affected (edit → scoped
@@ -73,7 +73,7 @@ typed result; adversarial check; explicit disposition with requirements; and
 fresh readback. The card is projected through the canonical `TaskBrief` and
 does not add a second semantic state or quality model.
 
-## Explicit target semantic establishment (Addendum E)
+## Explicit target semantic establishment
 
 After the repository is identified and confirmed ready (initializing it only
 when readiness is `UNINITIALIZED`), an exact
@@ -105,11 +105,10 @@ coverage, and typed target-inventory accounting in the single
 exclusion, or unresolved mapping is distinct from question-level
 `NOT_APPLICABLE`. No second progress store, ledger, or writer exists.
 `target_scope` alone does not prove grouping or completeness. The accounting
-carrier and atomic result/store contract are defined in Addendum E §4C.2 and
-remain implementation-gated under E-13.
+carrier and atomic result/store contract are defined by the interpretation
+exchange.
 
-Exact onboarding path: `docs/onboarding-runbook.md` (copied from Addendum E
-§§4A and 6).
+Exact onboarding path: `docs/onboarding-runbook.md`.
 
 ## Initialization and readiness
 
@@ -136,11 +135,8 @@ never semantic truth. After initialization, normal repository-level
 `status(target=None)` is required to expose the bounded persisted
 semantic-coverage inventory (covered/current, incomplete, stale or
 unverifiable, unassessed, and explicit bounds), without a structural crawl
-or interpretation. This inventory is distinct from readiness. The
-ACT-D-10 installed-runtime gate was verified in the 2026-10-17 closeout
-run against the installed MCP process; the status-path and documentation
-synchronization work is closed in the Addendum M verification record
-(`.context/verification/addendum-m-2026-10-22.md`).
+or interpretation. This inventory is distinct from readiness. The installed-runtime gate is covered by the installed-MCP acceptance lane in
+`tests/integration/test_installed_mcp.py`.
 
 ## Workflow examples
 
@@ -167,7 +163,7 @@ semantic coverage and reports its bounded frontier; it never enumerates
 structural subjects or interprets them. Skills are guidance only, never
 semantic authority.
 
-## Addendum J delta — target mapping
+## Target mapping
 
 `initialize_target` binds a bounded, deterministic batch of unaccounted
 inventory members per mapping unit; every bound member receives exactly one

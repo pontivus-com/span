@@ -1393,11 +1393,24 @@ class DocsCheckTest(unittest.TestCase):
         return (root.joinpath(*parts)).read_text(encoding="utf-8")
 
     def test_readme_carries_product_opening(self):
-        # D-ACCEPT-07: §10-required elements present.
+        # D-ACCEPT-07: §10-required elements present in the public
+        # landing page or the documentation it links to.
         readme = self._read("README.md")
+        public = readme + "\n" + "\n".join(
+            self._read(*parts)
+            for parts in (
+                ("docs", "install.md"),
+                ("docs", "usage.md"),
+                ("docs", "scope.md"),
+                ("docs", "mcp.md"),
+                ("docs", "hooks.md"),
+                ("docs", "README.md"),
+            )
+        )
+        public = " ".join(public.split())
         for required in (
-            "Keep your agent's notes on your code from going stale.",
-            "flags the parts a code change made unreliable",
+            "Persistent codebase understanding for coding agents.",
+            "marks it stale when the supporting evidence changes",
             "Establish. Maintain. Expand.",
             "reconstruct",
             "withheld",
@@ -1414,7 +1427,7 @@ class DocsCheckTest(unittest.TestCase):
             "Onboarding",
             "triggers.md",
         ):
-            self.assertIn(required, readme)
+            self.assertIn(required, public)
 
     def test_readme_retires_superseded_opening(self):
         # Addendum N supersedes the Addendum D §10 opening proposition.
@@ -1433,12 +1446,14 @@ class DocsCheckTest(unittest.TestCase):
 
         root = _pl.Path(__file__).resolve().parents[2]
         readme = (root / "README.md").read_text(encoding="utf-8")
+        scope = (root / "docs" / "scope.md").read_text(encoding="utf-8")
         self.assertIn(
             "No claim of infallible interpretation, universal coverage, or",
-            readme,
+            readme + "\n" + scope,
         )
         texts = [
             readme,
+            scope,
             (root / "skills" / "span" / "SKILL.md").read_text(
                 encoding="utf-8"
             ),
@@ -1459,12 +1474,16 @@ class DocsCheckTest(unittest.TestCase):
 
     def test_readme_ops_claim_matches_contract(self):
         readme = self._read("README.md")
+        contract = " ".join(
+            (readme + "\n" + self._read("docs", "mcp.md")).split()
+        )
         for op in (
             "initialize_repository", "explain", "impact", "trace",
             "authority", "status", "refresh", "submit_interpretation",
         ):
-            self.assertIn(op, readme)
-        self.assertIn("No semantic_* aliases", readme)
+            self.assertIn(op, contract)
+        self.assertIn("No semantic_* aliases", contract)
+        self.assertIn("eleven MCP operations", readme)
 
 
 class DriverDogfoodTest(unittest.TestCase):

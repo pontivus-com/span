@@ -1,4 +1,4 @@
-# Invariant audit matrix (G-09, plan §17)
+# Invariant audit matrix
 
 Method: each invariant traced from canonical ingress through
 storage, service composition, and MCP output to its tests. Verdict

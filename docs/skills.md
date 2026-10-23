@@ -40,7 +40,7 @@ uncertainty into certainty; referencing non-canonical operations.
 allowlist, rule-vocabulary scan, uncertainty-preservation presence,
 implementation-independence).
 
-Per-skill ownership (Addendum G): `span` owns the full lifecycle plus
+Per-skill ownership: `span` owns the full lifecycle plus
 operation selection rules, evidence and authority quality, and the
 OpenCode submit-until-answer loop; `span-change-context` owns
 change-scoped `impact` before editing plus refresh closeout;

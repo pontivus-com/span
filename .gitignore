@@ -10,5 +10,11 @@ dist/
 .venv/
 .pypirc
 
+# Test artifacts (installed-MCP acceptance record; never public input).
+tests/.artifacts/
+
+# Generated packaging identity; release builds create it before building.
+src/span/BUILD_IDENTITY
+
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/

@@ -1,4 +1,4 @@
-# Agent interpretation exchange (plan §5.4, §7, §11.12; Addendum B)
+# Agent interpretation exchange
 
 Span never selects, configures, authenticates to, or invokes a model.
 When stored/current semantics are insufficient, the operation
@@ -13,14 +13,14 @@ the next `PendingInterpretation` while frontiers remain.
 Repository id, target subjects, bounded evidence units, bounded
 structural observations, allowed kinds, live identity bindings,
 operation intent, question slice, optional typed proposal, output
-cardinality limits. Addendum B adds the immutable
+cardinality limits. The exchange adds the immutable
 `question: SemanticQuestionScope`, bounded `prior_claims` /
 `prior_relationships` context, and service-owned
-`analysis_obligations` (SA-1–SA-7). Addendum D adds the service-built
+`analysis_obligations` (SA-1–SA-7). It also adds the service-built
 `brief` (`TaskBrief`): the compact objective, exact scope, evidence/authority,
 material-path, typed-result, adversarial-check, disposition, and fresh-readback
 guidance, plus C-04 material aspects and recorded OPEN/PENDING requirements.
-Addendum E carries the exact user-directed `target_scope` separately from the
+The exact user-directed `target_scope` is carried separately from the
 current structural anchor, so a bounded candidate is never mistaken for the
 whole semantic target. Target-mode work also carries typed target-inventory
 accounting proposals through the existing result exchange; these account for
@@ -69,7 +69,7 @@ checks the account mechanically (resolves, belongs, quote substring,
 sections resolve, no structural/confidence promotion) and never
 verifies prose truth. Empty basis summaries fail the unit.
 
-## Explicit completion (Addendum C C-05)
+## Explicit completion
 
 Claims alone never complete a question. A submission answers its
 bound question only with an explicit `ANSWERED` `question_decision`
@@ -96,7 +96,7 @@ HTTP statuses, and model errors belong to the agent's environment and
 never enter Span's failure model. Continuations are single-use,
 TTL-bounded (30 min default), never persisted, never authoritative.
 
-## Addendum J delta
+## Interpretation profile
 
 - A pending unit carries an `interpretation_profile` (`SA_1_7_V1`); the
   static SA obligations live in the tool contract, not in every unit.
