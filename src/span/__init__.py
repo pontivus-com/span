@@ -1,4 +1,4 @@
-"""Span — semantic repository intelligence for coding agents.
+"""Span — maintained codebase understanding for coding agents.
 
 Package layout follows plan §14 (core/ports/shell):
 

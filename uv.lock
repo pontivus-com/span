@@ -684,7 +684,7 @@ wheels = [
 ]
 
 [[package]]
-name = "span"
+name = "span-mcp"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },

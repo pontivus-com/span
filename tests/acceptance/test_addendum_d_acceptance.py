@@ -1396,15 +1396,17 @@ class DocsCheckTest(unittest.TestCase):
         # D-ACCEPT-07: §10-required elements present.
         readme = self._read("README.md")
         for required in (
+            "Re-check only what the change may have affected.",
+            "maintained codebase understanding",
             "Establish. Maintain. Expand.",
-            "evidence-grounded semantic memory",
             "reconstruct",
-            "retained meaning with provenance",
+            "withheld",
             "uncertainty",
             "explicit",
             "Establish",
             "Maintain",
             "Expand",
+            "runs locally",
             "initialize_repository",
             "submit_interpretation",
             "report-only",
@@ -1413,6 +1415,14 @@ class DocsCheckTest(unittest.TestCase):
             "triggers.md",
         ):
             self.assertIn(required, readme)
+
+    def test_readme_retires_superseded_opening(self):
+        # Addendum N supersedes the Addendum D §10 opening proposition.
+        readme = self._read("README.md")
+        self.assertNotIn(
+            "Establish. Maintain. Expand. Span is evidence-grounded semantic memory",
+            readme,
+        )
 
     def test_no_proposed_as_built_or_overclaims(self):
         # D-ACCEPT-07: the protective disclaimers are present, and no
