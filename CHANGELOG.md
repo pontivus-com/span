@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 — 2026-10-24
+
+- README images and documentation links are absolute. The relative logo path
+  rendered as an empty image on the PyPI project page, which cannot fetch
+  repository-relative URLs.
+- Carries the 0.6.0 work: canonical structured MCP results with advertised
+  output schemas, a 16,000-byte ceiling on evidence delivered to the model,
+  live pending work reported by `status` without exposing continuation
+  tokens, the corrected `refresh` lifecycle, and status reads that fail
+  rather than borrow a semantic state.
+
 ## 0.6.0 — 2026-10-23
 
 First public release.
