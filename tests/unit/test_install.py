@@ -452,6 +452,21 @@ class PlanningTest(unittest.TestCase):
             )
             self.assertFalse(dst.exists())
 
+    def test_expose_binary_links_all_console_scripts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            venv = pathlib.Path(tmp) / "venv" / "bin"
+            venv.mkdir(parents=True)
+            for name in ("span-mcp", "span-install", "span-hooks"):
+                (venv / name).write_text("#!/bin/sh\n")
+            bin_dir = pathlib.Path(tmp) / "bin"
+            install.expose_binary(str(venv.parent), str(bin_dir), dry_run=False)
+            for name in ("span-mcp", "span-install", "span-hooks"):
+                link = bin_dir / name
+                self.assertTrue(link.is_symlink(), name)
+                self.assertEqual(link.resolve(), (venv / name).resolve())
+
     def test_structural_indexer_constants_pinned(self):
         from span.shell.structural import graft as g
 

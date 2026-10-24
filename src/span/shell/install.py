@@ -668,7 +668,10 @@ def verify_installed(span_repo, venv_python):
 
 
 def expose_binary(venv_dir, bin_dir, dry_run=False):
-    for name in ("span-mcp", "span-hooks"):
+    # span-install is linked too: a checkout install is verified with
+    # `span-install --verify-only`, so the command has to be on PATH
+    # afterwards, exactly as it is after a package install.
+    for name in ("span-mcp", "span-install", "span-hooks"):
         src = Path(venv_dir) / "bin" / name
         dst = Path(bin_dir) / name
         print(f"+ link {dst} -> {src}")
