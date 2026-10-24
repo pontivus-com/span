@@ -39,9 +39,7 @@ FILES = {
 
 
 def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(
-        repository_id=REPO, subject_kind=kind, canonical_locator=locator
-    )
+    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
 
 
 def _ref(path, files=None):
@@ -49,9 +47,11 @@ def _ref(path, files=None):
     return m.EvidenceRef(
         evidence_id=m.EvidenceId(f"ev-{path}"),
         repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.DOCUMENTATION
-        if path.endswith(".md")
-        else m.EvidenceSourceKind.SOURCE_CODE,
+        source_kind=(
+            m.EvidenceSourceKind.DOCUMENTATION
+            if path.endswith(".md")
+            else m.EvidenceSourceKind.SOURCE_CODE
+        ),
         locator=path,
         revision_or_fingerprint=fingerprint_content(files[path]),
     )
@@ -78,45 +78,39 @@ def _billing_claims(with_ownership=True):
     claims = [
         m.CandidateSemanticClaim(
             candidate_key="purpose",
-            subject=sid, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+            subject=sid,
+            kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("billing capability", ()),
             evidence=(_ref("README.md"),),
-            candidate_authority=_authority(
-                "README.md", "Billing capability"
-            ),
-            basis=m.SemanticBasis(
-                interp, "README states the billing purpose"
-            ),
+            candidate_authority=_authority("README.md", "Billing capability"),
+            basis=m.SemanticBasis(interp, "README states the billing purpose"),
         ),
         m.CandidateSemanticClaim(
             candidate_key="invariant",
-            subject=sid, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+            subject=sid,
+            kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+            assertion_nature=m.AssertionNature.NORMATIVE,
             value=m.InvariantConstraintValue("no partial capture"),
             evidence=(_ref("README.md"),),
-            candidate_authority=_authority(
-                "README.md", "Billing capability"
-            ),
-            basis=m.SemanticBasis(
-                interp, "README states the capture invariant"
-            ),
+            candidate_authority=_authority("README.md", "Billing capability"),
+            basis=m.SemanticBasis(interp, "README states the capture invariant"),
         ),
     ]
     if with_ownership:
         claims.append(
             m.CandidateSemanticClaim(
                 candidate_key="ownership",
-                subject=sid, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                subject=sid,
+                kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.OwnershipCustodyValue(
-                    _sid("team/ledger"), m.OwnershipRole.OWNER,
+                    _sid("team/ledger"),
+                    m.OwnershipRole.OWNER,
                     m.OwnershipExclusivity.EXCLUSIVE,
                 ),
                 evidence=(_ref("OWNERSHIP.md"),),
-                candidate_authority=_authority(
-                    "OWNERSHIP.md", "Team ledger owns"
-                ),
+                candidate_authority=_authority("OWNERSHIP.md", "Team ledger owns"),
                 basis=m.SemanticBasis(
                     interp, "ownership record names the ledger owner"
                 ),
@@ -147,10 +141,7 @@ def _harness(files=None, claims=None, complete_questions=True):
     agent = FixtureAgent(
         {
             "src/billing.py": FixtureCandidates(
-                claims=(
-                    _billing_claims()
-                    if claims is None else claims
-                ),
+                claims=(_billing_claims() if claims is None else claims),
                 relationships=(),
             )
         },
@@ -167,20 +158,27 @@ def _bounds():
     return DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
 
 
-def _exchange(request, op, structural, evidence, store, agent,
-              seeds=(), rounds=0):
+def _exchange(request, op, structural, evidence, store, agent, seeds=(), rounds=0):
     continuations = ContinuationStore()
     current = op(
-        request, structural=structural, evidence=evidence,
-        store=store, continuations=continuations, authority_seeds=seeds,
+        request,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+        authority_seeds=seeds,
     )
     while not isinstance(current, m.SemanticAnswer):
         assert isinstance(current, PendingInterpretation), type(current)
         rounds += 1
         result = agent.perform(current.request)
         current = ops.submit_interpretation(
-            current.continuation, result, structural=structural,
-            evidence=evidence, store=store, continuations=continuations,
+            current.continuation,
+            result,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=continuations,
         )
     return current, rounds
 
@@ -211,16 +209,19 @@ class WithdrawalTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             first, _ = _exchange(
-                _explain_request(), ops.explain,
-                structural, evidence, store, agent,
+                _explain_request(),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             kinds = {c.kind for c in first.content.claims}
             self.assertIn(m.ClaimKind.OWNERSHIP_CUSTODY, kinds)
             # The ownership declaration disappears from the source.
             changed = dict(FILES)
             changed["OWNERSHIP.md"] = (
-                "# Ownership\n\nTeam ledger owns billing.\n"
-                "Steward on call.\n"
+                "# Ownership\n\nTeam ledger owns billing.\n" "Steward on call.\n"
             )
             evidence_v2 = FixtureEvidenceSource(REPO, changed)
             lean_agent = FixtureAgent(
@@ -235,27 +236,29 @@ class WithdrawalTest(unittest.TestCase):
             refreshed, _ = _exchange(
                 ops.SemanticRefreshRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/billing.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/billing.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.refresh, structural, evidence_v2, store, lean_agent,
+                ops.refresh,
+                structural,
+                evidence_v2,
+                store,
+                lean_agent,
             )
-            self.assertIsInstance(
-                refreshed.content, m.StatusContent
-            )
+            self.assertIsInstance(refreshed.content, m.StatusContent)
             second, _ = _exchange(
-                _explain_request(), ops.explain,
-                structural, evidence_v2, store, lean_agent,
+                _explain_request(),
+                ops.explain,
+                structural,
+                evidence_v2,
+                store,
+                lean_agent,
             )
             kinds = {c.kind for c in second.content.claims}
             self.assertNotIn(m.ClaimKind.OWNERSHIP_CUSTODY, kinds)
             self.assertIn(m.ClaimKind.PURPOSE, kinds)
             # Retired history is preserved, never silently discarded.
-            rows = store._db.execute(
-                "SELECT claim_id FROM retired_claims"
-            ).fetchall()
+            rows = store._db.execute("SELECT claim_id FROM retired_claims").fetchall()
             self.assertEqual(len(rows), 1)
         finally:
             store.close()
@@ -270,8 +273,12 @@ class SupersedingEvidenceTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             first, _ = _exchange(
-                _explain_request(), ops.explain,
-                structural, evidence, store, agent,
+                _explain_request(),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertTrue(
                 all(
@@ -283,19 +290,19 @@ class SupersedingEvidenceTest(unittest.TestCase):
             # discovery scope; no existing bytes change. Coverage stays
             # current (J-A1).
             grown = dict(FILES)
-            grown["docs/charter.md"] = (
-                "# Charter\n\nLedger governs billing.\n"
-            )
+            grown["docs/charter.md"] = "# Charter\n\nLedger governs billing.\n"
             evidence_v2 = FixtureEvidenceSource(REPO, grown)
             still_current, _ = _exchange(
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/billing.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/billing.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.status, structural, evidence_v2, store, agent,
+                ops.status,
+                structural,
+                evidence_v2,
+                store,
+                agent,
             )
             out_of_scope_states = {
                 item.item.id.value: item.freshness.state
@@ -304,8 +311,7 @@ class SupersedingEvidenceTest(unittest.TestCase):
             self.assertTrue(out_of_scope_states)
             self.assertTrue(
                 all(
-                    s is m.FreshnessState.CURRENT
-                    for s in out_of_scope_states.values()
+                    s is m.FreshnessState.CURRENT for s in out_of_scope_states.values()
                 ),
                 "out-of-scope membership change must not invalidate",
             )
@@ -313,19 +319,19 @@ class SupersedingEvidenceTest(unittest.TestCase):
             # dependency, not discovery membership) still stales exactly
             # its dependents and leaves unrelated ones current (J-A3).
             changed = dict(grown)
-            changed["README.md"] = (
-                "# v06-svc\n\nBilling capability changed.\n"
-            )
+            changed["README.md"] = "# v06-svc\n\nBilling capability changed.\n"
             evidence_v3 = FixtureEvidenceSource(REPO, changed)
             stale_answer, _ = _exchange(
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/billing.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/billing.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.status, structural, evidence_v3, store, agent,
+                ops.status,
+                structural,
+                evidence_v3,
+                store,
+                agent,
             )
             states = {
                 item.item.id.value: item.freshness.state
@@ -333,39 +339,37 @@ class SupersedingEvidenceTest(unittest.TestCase):
             }
             self.assertTrue(states)
             self.assertTrue(
-                any(
-                    s is not m.FreshnessState.CURRENT
-                    for s in states.values()
-                ),
+                any(s is not m.FreshnessState.CURRENT for s in states.values()),
                 "a changed cited source must stale its dependents",
             )
             self.assertTrue(
-                any(
-                    s is m.FreshnessState.CURRENT
-                    for s in states.values()
-                ),
+                any(s is m.FreshnessState.CURRENT for s in states.values()),
                 "unrelated dependents stay current (MI-07)",
             )
             # Explicit refresh re-resolves and recovers.
             _exchange(
                 ops.SemanticRefreshRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/billing.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/billing.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.refresh, structural, evidence_v3, store, agent,
+                ops.refresh,
+                structural,
+                evidence_v3,
+                store,
+                agent,
             )
             recovered, _ = _exchange(
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/billing.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/billing.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.status, structural, evidence_v3, store, agent,
+                ops.status,
+                structural,
+                evidence_v3,
+                store,
+                agent,
             )
             self.assertTrue(
                 all(
@@ -380,7 +384,6 @@ class SupersedingEvidenceTest(unittest.TestCase):
 class DocumentationOnlySubjectTest(unittest.TestCase):
     def test_register_and_query_doc_only_capability(self):
         structural, evidence, store, _ = _harness()
-        billing = _sid("src/billing.py")
         cap_subject = m.CandidateSubject(
             provisional_locator="cap/billing",
             kind=m.SubjectKind.CAPABILITY,
@@ -402,9 +405,7 @@ class DocumentationOnlySubjectTest(unittest.TestCase):
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("billing capability", ()),
             evidence=(_ref("README.md"),),
-            candidate_authority=_authority(
-                "README.md", "Billing capability"
-            ),
+            candidate_authority=_authority("README.md", "Billing capability"),
             basis=m.SemanticBasis(
                 m.DerivationKind.SEMANTIC_INTERPRETATION,
                 "README states the billing capability purpose",
@@ -422,9 +423,12 @@ class DocumentationOnlySubjectTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             pending = ops.explain(
-                _explain_request(), structural=structural,
-                evidence=evidence, store=store,
-                continuations=continuations, authority_seeds=(),
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+                authority_seeds=(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             result = agent.perform(pending.request)
@@ -439,8 +443,11 @@ class DocumentationOnlySubjectTest(unittest.TestCase):
                 candidate_conflicts=result.candidate_conflicts,
             )
             answer = ops.submit_interpretation(
-                pending.continuation, result, structural=structural,
-                evidence=evidence, store=store,
+                pending.continuation,
+                result,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -462,7 +469,9 @@ class DocumentationOnlySubjectTest(unittest.TestCase):
                     target=m.ClaimRef(id=claims.items[0].claim_id),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(auth, m.SemanticAnswer)
@@ -478,15 +487,12 @@ class MultiUnitChainTest(unittest.TestCase):
             InMemorySubject as _S,
         )
         from span.ports.structural import StructuralDirection
-        from span.ports.structural import StructuralDirection
 
         structural = InMemoryStructuralSource(
             REPO,
             tuple(InMemoryFile(p, c) for p, c in FILES.items()),
             (
-                InMemorySubject(
-                    "src/billing.py", m.SubjectKind.COMPONENT, "b"
-                ),
+                InMemorySubject("src/billing.py", m.SubjectKind.COMPONENT, "b"),
                 _S("src/ledger.py", m.SubjectKind.COMPONENT, "ledger"),
             ),
             (
@@ -520,15 +526,17 @@ class MultiUnitChainTest(unittest.TestCase):
             answer, rounds = _exchange(
                 ops.SemanticTraceRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/billing.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/billing.py", (), None),
                     direction=StructuralDirection.BOTH,
                     relationship_filter=None,
                     boundary_only=False,
                     bounds=_bounds(),
                 ),
-                ops.trace, structural, evidence, store, agent,
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             # Target unit plus at least one frontier unit: successions
@@ -557,9 +565,7 @@ class MultiUnitChainTest(unittest.TestCase):
             REPO,
             tuple(InMemoryFile(p, c) for p, c in FILES.items()),
             (
-                InMemorySubject(
-                    "src/billing.py", m.SubjectKind.COMPONENT, "b"
-                ),
+                InMemorySubject("src/billing.py", m.SubjectKind.COMPONENT, "b"),
                 _S("src/ledger.py", m.SubjectKind.COMPONENT, "ledger"),
             ),
             (
@@ -591,36 +597,40 @@ class MultiUnitChainTest(unittest.TestCase):
         )
         try:
             doomed_times = [
-                datetime.datetime(
-                    2026, 1, 1, tzinfo=datetime.timezone.utc
-                ),
-                datetime.datetime(
-                    2026, 1, 1, 1, tzinfo=datetime.timezone.utc
-                ),
+                datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+                datetime.datetime(2026, 1, 1, 1, tzinfo=datetime.timezone.utc),
             ]
             doomed = ContinuationStore(now=lambda: doomed_times.pop(0))
             first = ops.trace(
-                _trace_request(), structural=structural,
-                evidence=evidence, store=store,
-                continuations=doomed, authority_seeds=(),
+                _trace_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=doomed,
+                authority_seeds=(),
             )
             self.assertIsInstance(first, PendingInterpretation)
             result = agent.perform(first.request)
             with self.assertRaises(InterpretationUnavailable):
                 ops.submit_interpretation(
-                    first.continuation, result, structural=structural,
-                    evidence=evidence, store=store,
+                    first.continuation,
+                    result,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=doomed,
                 )
             # Nothing materialized from the abandoned step.
-            page = store.load_claims(
-                REPO, (_sid("src/billing.py"),), (), _bounds()
-            )
+            page = store.load_claims(REPO, (_sid("src/billing.py"),), (), _bounds())
             self.assertEqual(page.items, ())
             # Re-issue the original operation; the chain settles.
             answer, _ = _exchange(
-                _trace_request(), ops.trace,
-                structural, evidence, store, agent,
+                _trace_request(),
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
         finally:
@@ -639,8 +649,12 @@ class RetiredOwnerTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             first, _ = _exchange(
-                _explain_request(), ops.explain,
-                structural, evidence, store, agent,
+                _explain_request(),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             owners = {
                 c.value.owner.canonical_locator
@@ -658,10 +672,12 @@ class RetiredOwnerTest(unittest.TestCase):
             new_owner = _sid("team/billing")
             successor = m.CandidateSemanticClaim(
                 candidate_key="ownership",
-                subject=sid, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                subject=sid,
+                kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.OwnershipCustodyValue(
-                    new_owner, m.OwnershipRole.OWNER,
+                    new_owner,
+                    m.OwnershipRole.OWNER,
                     m.OwnershipExclusivity.EXCLUSIVE,
                 ),
                 evidence=(_ref("OWNERSHIP.md", changed),),
@@ -686,9 +702,11 @@ class RetiredOwnerTest(unittest.TestCase):
                 {
                     "src/billing.py": FixtureCandidates(
                         claims=tuple(
-                            c for c in _billing_claims()
+                            c
+                            for c in _billing_claims()
                             if c.kind is not m.ClaimKind.OWNERSHIP_CUSTODY
-                        ) + (successor,),
+                        )
+                        + (successor,),
                         relationships=(),
                     )
                 },
@@ -697,17 +715,22 @@ class RetiredOwnerTest(unittest.TestCase):
             _exchange(
                 ops.SemanticRefreshRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/billing.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/billing.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.refresh, structural, evidence_v2, store,
+                ops.refresh,
+                structural,
+                evidence_v2,
+                store,
                 successor_agent,
             )
             second, _ = _exchange(
-                _explain_request(), ops.explain,
-                structural, evidence_v2, store, successor_agent,
+                _explain_request(),
+                ops.explain,
+                structural,
+                evidence_v2,
+                store,
+                successor_agent,
             )
             live_owners = set()
             for claim in second.content.claims:
@@ -717,9 +740,7 @@ class RetiredOwnerTest(unittest.TestCase):
                 if isinstance(value, m.TransformationOwnershipValue):
                     live_owners.add(value.transformer.canonical_locator)
             self.assertEqual(live_owners, {"team/billing"})
-            rows = store._db.execute(
-                "SELECT claim_id FROM retired_claims"
-            ).fetchall()
+            rows = store._db.execute("SELECT claim_id FROM retired_claims").fetchall()
             self.assertEqual(len(rows), 1)
         finally:
             store.close()

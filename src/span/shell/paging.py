@@ -34,7 +34,7 @@ def parse_page_token(page_token: str | None) -> int:
     if not page_token.startswith(_PREFIX):
         raise ValueError(f"unknown page token: {page_token}")
     try:
-        offset = int(page_token[len(_PREFIX):])
+        offset = int(page_token[len(_PREFIX) :])
     except ValueError:
         raise ValueError(f"unknown page token: {page_token}") from None
     if offset < 0:
@@ -99,7 +99,8 @@ def format_question_token(
 ) -> str | None:
     """Encode per-list offsets bound to a question digest (S4 §5.4)."""
     if (
-        claims_next is None and rels_next is None
+        claims_next is None
+        and rels_next is None
         and (questions_next is None or questions_next == 0)
     ):
         if questions_next in (None, 0):
@@ -107,8 +108,11 @@ def format_question_token(
     left = claims_next if claims_next is not None else 0
     right = rels_next if rels_next is not None else 0
     qskip = questions_next if questions_next is not None else 0
-    if qskip == 0 and left == 0 and right == 0 and (
-        claims_next is None and rels_next is None
+    if (
+        qskip == 0
+        and left == 0
+        and right == 0
+        and (claims_next is None and rels_next is None)
     ):
         return None
     if not digest or ":" in digest:
@@ -127,7 +131,7 @@ def parse_question_token(
             f"unknown page token: {page_token}; restart the listing "
             "from page one with page_token null"
         )
-    body = page_token[len(_QUESTION_PREFIX):]
+    body = page_token[len(_QUESTION_PREFIX) :]
     parts = body.split(":")
     if len(parts) != 4:
         raise ValueError(
@@ -166,7 +170,8 @@ def parse_service_token_bound(
 
 
 def format_service_token(
-    claims_next: int | None, rels_next: int | None,
+    claims_next: int | None,
+    rels_next: int | None,
     questions_next: int | None = 0,
     query_digest: str = "default",
 ) -> str | None:
@@ -179,7 +184,8 @@ def format_service_token(
     use format_question_token with the real digest.
     """
     if (
-        claims_next is None and rels_next is None
+        claims_next is None
+        and rels_next is None
         and (questions_next is None or questions_next == 0)
     ):
         if questions_next in (None, 0):
@@ -187,8 +193,11 @@ def format_service_token(
     left = claims_next if claims_next is not None else 0
     right = rels_next if rels_next is not None else 0
     qskip = questions_next if questions_next is not None else 0
-    if qskip == 0 and left == 0 and right == 0 and (
-        claims_next is None and rels_next is None
+    if (
+        qskip == 0
+        and left == 0
+        and right == 0
+        and (claims_next is None and rels_next is None)
     ):
         return None
     return format_question_token(query_digest, left, right, qskip)
@@ -209,7 +218,9 @@ def format_versioned_token(version: str, offset: int) -> str:
 
 
 def parse_versioned_token(
-    page_token: str | None, *, version: str,
+    page_token: str | None,
+    *,
+    version: str,
 ) -> int:
     """Decode a version-bound cursor, failing closed on version drift.
 
@@ -222,7 +233,7 @@ def parse_versioned_token(
         return 0
     if not page_token.startswith(_VERSIONED_PREFIX):
         raise ValueError(f"unknown page token: {page_token}")
-    body = page_token[len(_VERSIONED_PREFIX):]
+    body = page_token[len(_VERSIONED_PREFIX) :]
     token_version, _, offset_text = body.rpartition(":")
     try:
         offset = int(offset_text)
@@ -247,7 +258,7 @@ def paginate(
 ) -> tuple[tuple[object, ...], m.BoundInfo]:
     """Slice one listing page and describe it deterministically."""
     offset = parse_page_token(page_token)
-    kept = items[offset:offset + max_results]
+    kept = items[offset : offset + max_results]
     remaining = len(items) - (offset + len(kept))
     truncated = remaining > 0
     return tuple(kept), m.BoundInfo(
@@ -256,7 +267,5 @@ def paginate(
         returned_results=len(kept),
         truncated=truncated,
         truncated_category=category if truncated else None,
-        continuation_token=(
-            next_page_token(offset + len(kept)) if truncated else None
-        ),
+        continuation_token=(next_page_token(offset + len(kept)) if truncated else None),
     )

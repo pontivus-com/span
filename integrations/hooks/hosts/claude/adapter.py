@@ -61,18 +61,14 @@ def adapt_event(event: dict) -> MappedEvent | None:
         paths = event.get("paths", ())
         if not isinstance(paths, (list, tuple)):
             return None
-        return map_to_intent(
-            HookIntent.SESSION_STOP, tuple(str(p) for p in paths)
-        )
+        return map_to_intent(HookIntent.SESSION_STOP, tuple(str(p) for p in paths))
     if hook == "PostToolUse":
         if event.get("tool") not in EDIT_TOOLS:
             return None
         paths = event.get("paths", ())
         if not isinstance(paths, (list, tuple)):
             return None
-        return map_to_intent(
-            HookIntent.SOURCE_CHANGED, tuple(str(p) for p in paths)
-        )
+        return map_to_intent(HookIntent.SOURCE_CHANGED, tuple(str(p) for p in paths))
     return None
 
 

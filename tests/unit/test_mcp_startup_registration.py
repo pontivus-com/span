@@ -35,11 +35,7 @@ def _context() -> ServiceContext:
     structural = InMemoryStructuralSource(
         REPO,
         tuple(InMemoryFile(path, body) for path, body in FILES.items()),
-        (
-            InMemorySubject(
-                "src/tools.py", m.SubjectKind.COMPONENT, "tools"
-            ),
-        ),
+        (InMemorySubject("src/tools.py", m.SubjectKind.COMPONENT, "tools"),),
     )
     evidence = FixtureEvidenceSource(REPO, dict(FILES))
     store = SqliteSemanticStore(":memory:")
@@ -86,11 +82,10 @@ class StartupRegistrationTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = pathlib.Path(tmp) / "data"
-            with mock.patch.object(
-                mcp_server, "_serve", side_effect=_fake_serve
-            ), mock.patch.object(
-                mcp_server, "provision_repository"
-            ) as provision:
+            with (
+                mock.patch.object(mcp_server, "_serve", side_effect=_fake_serve),
+                mock.patch.object(mcp_server, "provision_repository") as provision,
+            ):
                 mcp_server.main(
                     [
                         "--data-dir",
@@ -102,9 +97,7 @@ class StartupRegistrationTest(unittest.TestCase):
             provision.assert_not_called()
             adapter = captured["adapter"]
             self.assertEqual(adapter.contexts, {})
-            self.assertEqual(
-                adapter.registered_repository_ids(), (REPO,)
-            )
+            self.assertEqual(adapter.registered_repository_ids(), (REPO,))
             # Registration touched no filesystem state.
             self.assertFalse(data_dir.exists())
 
@@ -119,9 +112,7 @@ class StartupRegistrationTest(unittest.TestCase):
         listed = mcp_server.handle_list_tools(adapter)
         loader.assert_not_called()
         self.assertEqual(adapter.contexts, {})
-        descriptions = {
-            spec["name"]: spec["description"] for spec in listed
-        }
+        descriptions = {spec["name"]: spec["description"] for spec in listed}
         self.assertIn(REPO, descriptions["explain"])
         self.assertIn(REPO, descriptions["neighbors"])
 
@@ -217,17 +208,22 @@ class StartupRegistrationTest(unittest.TestCase):
         adapter = McpAdapter()
         adapter.register_repository_locator(REPO, "/tmp/startup-svc")
         forbidden = AssertionError("tools/list must not touch a repository")
-        with mock.patch.object(
-            mcp_server, "provision_repository", side_effect=forbidden
-        ) as provision, mock.patch.object(
-            mcp_server,
-            "structural_source_from_config",
-            side_effect=forbidden,
-        ) as structural, mock.patch.object(
-            mcp_server, "FilesystemEvidenceSource", side_effect=forbidden
-        ) as evidence, mock.patch.object(
-            mcp_server, "SqliteSemanticStore", side_effect=forbidden
-        ) as store:
+        with (
+            mock.patch.object(
+                mcp_server, "provision_repository", side_effect=forbidden
+            ) as provision,
+            mock.patch.object(
+                mcp_server,
+                "structural_source_from_config",
+                side_effect=forbidden,
+            ) as structural,
+            mock.patch.object(
+                mcp_server, "FilesystemEvidenceSource", side_effect=forbidden
+            ) as evidence,
+            mock.patch.object(
+                mcp_server, "SqliteSemanticStore", side_effect=forbidden
+            ) as store,
+        ):
             listed = mcp_server.handle_list_tools(adapter)
 
         self.assertEqual(len(listed), 11)
@@ -236,7 +232,6 @@ class StartupRegistrationTest(unittest.TestCase):
         evidence.assert_not_called()
         store.assert_not_called()
         self.assertEqual(adapter.contexts, {})
-
 
     def test_cs07_uninitialized_read_creates_no_store(self):
         # Opening the lazy context is not setup: a repository explicit
@@ -260,10 +255,7 @@ class StartupRegistrationTest(unittest.TestCase):
                     ops.SemanticStatusRequest(
                         repository_id=repository_id,
                         target=None,
-                        bounds=(
-                            ops.DEFAULT_SERVICE_BOUNDS_POLICY
-                            .hook_fast_bounds
-                        ),
+                        bounds=(ops.DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds),
                         mode=m.StatusMode.HOOK_FAST,
                     ),
                     structural=context.structural,
@@ -273,9 +265,7 @@ class StartupRegistrationTest(unittest.TestCase):
                 )
             finally:
                 context.store.close()
-            self.assertIs(
-                notice.readiness, m.RepositoryReadiness.UNINITIALIZED
-            )
+            self.assertIs(notice.readiness, m.RepositoryReadiness.UNINITIALIZED)
             self.assertEqual(list(data_dir.iterdir()), [])
             self.assertFalse((data_dir / f"{repository_id}.db").exists())
 

@@ -19,7 +19,9 @@ __all__ = [
 ]
 
 
-def requirements_for_claim(claim: m.SemanticClaim) -> tuple[m.ResolutionRequirement, ...]:
+def requirements_for_claim(
+    claim: m.SemanticClaim,
+) -> tuple[m.ResolutionRequirement, ...]:
     """Derive deterministic requirements for one materialized claim.
 
     All applicable states are reported (§4.9 lists PARTIAL, AMBIGUOUS,
@@ -29,10 +31,7 @@ def requirements_for_claim(claim: m.SemanticClaim) -> tuple[m.ResolutionRequirem
     is invented (§4.9).
     """
     requirements: list[m.ResolutionRequirement] = []
-    if (
-        claim.trust is m.TrustState.UNRESOLVED
-        and claim.authority is None
-    ):
+    if claim.trust is m.TrustState.UNRESOLVED and claim.authority is None:
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.MISSING_AUTHORITY,
@@ -81,10 +80,7 @@ def requirements_for_relationship(
     partial states carry no invented resolver.
     """
     requirements: list[m.ResolutionRequirement] = []
-    if (
-        rel.trust is m.TrustState.UNRESOLVED
-        and rel.authority is None
-    ):
+    if rel.trust is m.TrustState.UNRESOLVED and rel.authority is None:
         requirements.append(
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.MISSING_AUTHORITY,
@@ -156,11 +152,7 @@ def requirements_for_resolution(
             if name_or_locator
             else "no indexed subject matched"
         )
-        scope = (
-            f" in repository {repository_id!r}"
-            if repository_id
-            else ""
-        )
+        scope = f" in repository {repository_id!r}" if repository_id else ""
         return (
             m.ResolutionRequirement(
                 kind=m.ResolutionKind.MISSING_EVIDENCE,

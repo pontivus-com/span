@@ -84,7 +84,8 @@ def _query_digest(
 
 
 def _validate_service_token(
-    page_token: str | None, expected_digest: str,
+    page_token: str | None,
+    expected_digest: str,
 ) -> None:
     """Reject a page token bound to a different query (M-06.5a).
 
@@ -128,13 +129,10 @@ def _next_service_token(
     # Decode incoming offsets via pgq-aware parser (old pg: rejected).
     try:
         if page_token is not None and page_token.startswith("pgq:"):
-            token_digest, claims_skip, rels_skip, qskip = (
-                _paging.parse_question_token(page_token)
+            token_digest, claims_skip, rels_skip, qskip = _paging.parse_question_token(
+                page_token
             )
-            if (
-                expected_digest is not None
-                and token_digest != expected_digest
-            ):
+            if expected_digest is not None and token_digest != expected_digest:
                 raise ValueError(
                     "page token is invalid for this request; restart "
                     "pagination from the first page with page_token omitted"
@@ -150,12 +148,8 @@ def _next_service_token(
     except ValueError:
         # Let caller map to typed invalid-token error; re-raise.
         raise
-    claims_exhausted = (
-        claims_token is None and len(kept_claims) >= len(loaded_claims)
-    )
-    rels_exhausted = (
-        rels_token is None and len(kept_rels) >= len(loaded_rels)
-    )
+    claims_exhausted = claims_token is None and len(kept_claims) >= len(loaded_claims)
+    rels_exhausted = rels_token is None and len(kept_rels) >= len(loaded_rels)
     questions_exhausted = questions_remaining <= 0
     if claims_exhausted and rels_exhausted and questions_exhausted:
         return None
@@ -236,15 +230,10 @@ def _conflicts_for(
 ) -> tuple[m.SemanticConflict, ...]:
     """All visible conflicts: core-derived plus recorded proposals."""
     derived = _validation.find_conflicts(claims, relationships)
-    recorded = _recorded_conflicts(
-        repository_id, claims, relationships, store=store
-    )
-    seen = {
-        (_ref_value(c.left), _ref_value(c.right)) for c in derived
-    }
+    recorded = _recorded_conflicts(repository_id, claims, relationships, store=store)
+    seen = {(_ref_value(c.left), _ref_value(c.right)) for c in derived}
     extra = tuple(
-        c for c in recorded
-        if (_ref_value(c.left), _ref_value(c.right)) not in seen
+        c for c in recorded if (_ref_value(c.left), _ref_value(c.right)) not in seen
     )
     return derived + extra
 
@@ -284,10 +273,14 @@ def _select_answer_items(
 
     while kept_conf and (
         len(kept_conf)
-        + len(set(_mandatory(kept_conf)) & (
-            {c.claim_id.value for c in claims}
-            | {r.relationship_id.value for r in relationships}
-        )) > max_results
+        + len(
+            set(_mandatory(kept_conf))
+            & (
+                {c.claim_id.value for c in claims}
+                | {r.relationship_id.value for r in relationships}
+            )
+        )
+        > max_results
     ):
         kept_conf.pop()
         truncated = True
@@ -296,20 +289,14 @@ def _select_answer_items(
     mandatory = set(_mandatory(kept_conf))
     budget = max_results - len(kept_conf)
     mand_claims = [c for c in claims if c.claim_id.value in mandatory]
-    mand_rels = [
-        r for r in relationships if r.relationship_id.value in mandatory
-    ]
+    mand_rels = [r for r in relationships if r.relationship_id.value in mandatory]
     rest_claims = [c for c in claims if c.claim_id.value not in mandatory]
-    rest_rels = [
-        r for r in relationships if r.relationship_id.value not in mandatory
-    ]
+    rest_rels = [r for r in relationships if r.relationship_id.value not in mandatory]
     kept_claims = list(mand_claims)
     kept_rels = list(mand_rels)
     # Fair round-robin fill in stable order: each side advances only
     # past shown items, so per-list page offsets stay exact (I-39).
-    while len(kept_claims) + len(kept_rels) < budget and (
-        rest_claims or rest_rels
-    ):
+    while len(kept_claims) + len(kept_rels) < budget and (rest_claims or rest_rels):
         if rest_claims:
             kept_claims.append(rest_claims.pop(0))
             if len(kept_claims) + len(kept_rels) >= budget:
@@ -324,9 +311,9 @@ def _select_answer_items(
         r.relationship_id.value for r in kept_rels
     }
     kept_conf = [
-        pair for pair in kept_conf
-        if _ref_value(pair.left) in kept_ids
-        and _ref_value(pair.right) in kept_ids
+        pair
+        for pair in kept_conf
+        if _ref_value(pair.left) in kept_ids and _ref_value(pair.right) in kept_ids
     ]
     return tuple(kept_claims), tuple(kept_rels), tuple(kept_conf), truncated, category
 
@@ -337,10 +324,14 @@ def _freshness_items_for(
 ) -> tuple[m.FreshnessItem, ...]:
     """Per-item freshness records for exactly the carried items (I-36)."""
     return tuple(
-        [m.FreshnessItem(_claim_ref(c), c.subject, c.freshness, c.trust)
-         for c in claims]
-        + [m.FreshnessItem(_relationship_ref(r), r.source, r.freshness, r.trust)
-           for r in relationships]
+        [
+            m.FreshnessItem(_claim_ref(c), c.subject, c.freshness, c.trust)
+            for c in claims
+        ]
+        + [
+            m.FreshnessItem(_relationship_ref(r), r.source, r.freshness, r.trust)
+            for r in relationships
+        ]
     )
 
 
@@ -363,13 +354,10 @@ def verification_currencies_for(
     values, sorted. Empty when the page carries no verification."""
     found: set[str] = set()
     for claim in claims:
-        if (
-            claim.kind is m.ClaimKind.VERIFICATION
-            and isinstance(claim.value, m.VerificationValue)
+        if claim.kind is m.ClaimKind.VERIFICATION and isinstance(
+            claim.value, m.VerificationValue
         ):
-            found.add(
-                _CURRENCY_LITERAL.get(claim.value.currency, "unknown")
-            )
+            found.add(_CURRENCY_LITERAL.get(claim.value.currency, "unknown"))
     return tuple(sorted(found))
 
 
@@ -382,12 +370,13 @@ def coverage_counts_for(
     Deterministic; page-scoped like every explanation sentence.
     """
     answered = sum(
-        1 for v in views
-        if v.effective_disposition
-        is m.SemanticQuestionDisposition.ANSWERED
+        1
+        for v in views
+        if v.effective_disposition is m.SemanticQuestionDisposition.ANSWERED
     )
     open_ = sum(
-        1 for v in views
+        1
+        for v in views
         if v.effective_disposition
         in (
             m.SemanticQuestionDisposition.OPEN,
@@ -454,14 +443,11 @@ def state_explanation_for(
         if coverage is not None:
             answered, open_, total = coverage
             empty.append(
-                f"coverage: {answered} answered, {open_} open "
-                f"of {total} questions"
+                f"coverage: {answered} answered, {open_} open " f"of {total} questions"
             )
         return tuple(empty)
     descriptive = sum(
-        1
-        for item in items
-        if item.assertion_nature is m.AssertionNature.DESCRIPTIVE
+        1 for item in items if item.assertion_nature is m.AssertionNature.DESCRIPTIVE
     )
     normative = len(items) - descriptive
     if descriptive and not normative:
@@ -501,15 +487,11 @@ def state_explanation_for(
     ]
     currencies = verification_currencies_for(tuple(claims))
     if not currencies:
-        sentences.append(
-            "no current passing verification carried for this scope"
-        )
+        sentences.append("no current passing verification carried for this scope")
     elif len(currencies) == 1:
         sentences.append(f"verification: {currencies[0]}")
     else:
-        sentences.append(
-            f"verification: mixed ({', '.join(currencies)})"
-        )
+        sentences.append(f"verification: mixed ({', '.join(currencies)})")
     if bounds is not None:
         max_results, truncated = bounds
         sentences.append(
@@ -519,7 +501,6 @@ def state_explanation_for(
     if coverage is not None:
         answered, open_, total = coverage
         sentences.append(
-            f"coverage: {answered} answered, {open_} open "
-            f"of {total} questions"
+            f"coverage: {answered} answered, {open_} open " f"of {total} questions"
         )
     return tuple(sentences)

@@ -24,8 +24,12 @@ from span.shell.structural.memory import (
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -43,9 +47,7 @@ def _repo():
         InMemorySubject(
             "src/payments.py:Handler", m.SubjectKind.CODE_SYMBOL, "Handler"
         ),
-        InMemorySubject(
-            "src/refunds.py:Handler", m.SubjectKind.CODE_SYMBOL, "Handler"
-        ),
+        InMemorySubject("src/refunds.py:Handler", m.SubjectKind.CODE_SYMBOL, "Handler"),
     )
     edges = (
         InMemoryEdge(
@@ -77,9 +79,7 @@ class MemorySourceTest(unittest.TestCase):
         )
         self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED)
         candidate = resolution.candidates[0]
-        self.assertIs(
-            candidate.rank_basis, m.CandidateRankBasis.EXACT_LOCATOR
-        )
+        self.assertIs(candidate.rank_basis, m.CandidateRankBasis.EXACT_LOCATOR)
 
     def test_shared_name_is_ambiguous(self):
         resolution = _repo().resolve_subject(
@@ -118,9 +118,7 @@ class MemorySourceTest(unittest.TestCase):
             "repo-1", sid, (), StructuralDirection.DOWNSTREAM, _bounds()
         )
         self.assertEqual(len(down.items), 1)
-        up = _repo().edges(
-            "repo-1", sid, (), StructuralDirection.UPSTREAM, _bounds()
-        )
+        up = _repo().edges("repo-1", sid, (), StructuralDirection.UPSTREAM, _bounds())
         self.assertEqual(up.items, ())
 
     def test_reach_bounded(self):
@@ -129,14 +127,10 @@ class MemorySourceTest(unittest.TestCase):
             subject_kind=m.SubjectKind.CODE_SYMBOL,
             canonical_locator="src/payments.py:Handler",
         )
-        page = _repo().reach(
-            "repo-1", sid, (), StructuralDirection.BOTH, 3, _bounds()
-        )
+        page = _repo().reach("repo-1", sid, (), StructuralDirection.BOTH, 3, _bounds())
         self.assertEqual(len(page.items), 1)
         self.assertEqual(page.items[0].depth, 1)
-        empty = _repo().reach(
-            "repo-1", sid, (), StructuralDirection.BOTH, 0, _bounds()
-        )
+        empty = _repo().reach("repo-1", sid, (), StructuralDirection.BOTH, 0, _bounds())
         self.assertEqual(empty.items, ())
 
 
@@ -189,9 +183,7 @@ class FixtureEvidenceTest(unittest.TestCase):
             (_ref("README.md"),),
             _bounds(),
         )
-        self.assertEqual(
-            [r.locator for r in selection.selected_refs], ["README.md"]
-        )
+        self.assertEqual([r.locator for r in selection.selected_refs], ["README.md"])
 
 
 class FixtureAgentTest(unittest.TestCase):
@@ -230,12 +222,12 @@ class FixtureAgentTest(unittest.TestCase):
                 "README states the payment purpose",
             ),
         )
-        interp = FixtureAgent(
-            {"src/payments.py": FixtureCandidates((candidate,), ())}
-        )
+        interp = FixtureAgent({"src/payments.py": FixtureCandidates((candidate,), ())})
         result = interp.perform(self._request())
         self.assertEqual(len(result.claims), 1)
-        self.assertEqual(result.diagnostics, ("fixture: 1 subjects, 1 claims, 0 relationships",))
+        self.assertEqual(
+            result.diagnostics, ("fixture: 1 subjects, 1 claims, 0 relationships",)
+        )
 
     def test_disallowed_kinds_filtered(self):
         base = self._request()
@@ -251,9 +243,7 @@ class FixtureAgentTest(unittest.TestCase):
                 "README states the payment purpose",
             ),
         )
-        interp = FixtureAgent(
-            {"src/payments.py": FixtureCandidates((candidate,), ())}
-        )
+        interp = FixtureAgent({"src/payments.py": FixtureCandidates((candidate,), ())})
         narrow = m.SemanticInterpretationRequest(
             repository_id=base.repository_id,
             subjects=base.subjects,
@@ -270,7 +260,6 @@ class FixtureAgentTest(unittest.TestCase):
 
 
 def _claim(cid="c-9", locator="src/payments.py"):
-    import datetime as dt
 
     sid = m.SubjectId(
         repository_id="repo-1",
@@ -304,9 +293,7 @@ class SqliteStoreTest(unittest.TestCase):
         try:
             claim = _claim()
             batch = m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(claim.subject, "payments", None),
-                ),
+                subjects=(m.Subject(claim.subject, "payments", None),),
                 claims=(claim,),
                 relationships=(),
                 evidence_dependencies=(
@@ -325,9 +312,7 @@ class SqliteStoreTest(unittest.TestCase):
             )
             result = store.write_index_batch(batch)
             self.assertGreater(result.written_count, 0)
-            page = store.load_claims(
-                "repo-1", (claim.subject,), (), _bounds()
-            )
+            page = store.load_claims("repo-1", (claim.subject,), (), _bounds())
             self.assertEqual(len(page.items), 1)
             self.assertEqual(page.items[0], claim)
             subjects = store.load_subjects("repo-1", (claim.subject,))
@@ -347,7 +332,9 @@ class SqliteStoreTest(unittest.TestCase):
             store.write_index_batch(
                 m.CanonicalIndexBatch(
                     (m.Subject(claim.subject, "payments", None),),
-                    (claim,), (), (),
+                    (claim,),
+                    (),
+                    (),
                 )
             )
             update = m.FreshnessUpdate(
@@ -356,12 +343,8 @@ class SqliteStoreTest(unittest.TestCase):
             )
             result = store.mark_freshness((update,))
             self.assertEqual(result.written_count, 1)
-            page = store.load_claims(
-                "repo-1", (claim.subject,), (), _bounds()
-            )
-            self.assertIs(
-                page.items[0].freshness.state, m.FreshnessState.STALE
-            )
+            page = store.load_claims("repo-1", (claim.subject,), (), _bounds())
+            self.assertIs(page.items[0].freshness.state, m.FreshnessState.STALE)
         finally:
             store.close()
 
@@ -371,7 +354,9 @@ class SqliteStoreTest(unittest.TestCase):
             store.write_index_batch(
                 m.CanonicalIndexBatch(
                     (m.Subject(_claim().subject, "payments", None),),
-                    (_claim(),), (), (),
+                    (_claim(),),
+                    (),
+                    (),
                 )
             )
             page = store.load_claims(
@@ -388,14 +373,11 @@ class SqliteStoreTest(unittest.TestCase):
         store = SqliteSemanticStore(":memory:")
         try:
             with self.assertRaises(ValueError):
-                store.load_by_refs(
-                    "repo-1", (m.ClaimRef(id=m.ClaimId("c-nope")),)
-                )
+                store.load_by_refs("repo-1", (m.ClaimRef(id=m.ClaimId("c-nope")),))
         finally:
             store.close()
 
     def test_retire_moves_history(self):
-        import sqlite3
 
         store = SqliteSemanticStore(":memory:")
         try:
@@ -403,7 +385,10 @@ class SqliteStoreTest(unittest.TestCase):
             subject = m.Subject(claim.subject, "payments", None)
             store.write_index_batch(
                 m.CanonicalIndexBatch(
-                    (subject,), (claim,), (), (),
+                    (subject,),
+                    (claim,),
+                    (),
+                    (),
                 )
             )
             replacement = m.SemanticClaim(
@@ -421,28 +406,18 @@ class SqliteStoreTest(unittest.TestCase):
                 m.CanonicalIndexBatch(
                     subjects=(subject,),
                     claims=(replacement,),
-                    retires_claims=(
-                        m.ClaimRef(id=claim.claim_id),
-                    ),
+                    retires_claims=(m.ClaimRef(id=claim.claim_id),),
                 )
             )
-            page = store.load_claims(
-                "repo-1", (claim.subject,), (), _bounds()
-            )
-            self.assertEqual(
-                [c.claim_id.value for c in page.items], ["c-10"]
-            )
-            rows = store._db.execute(
-                "SELECT claim_id FROM retired_claims"
-            ).fetchall()
+            page = store.load_claims("repo-1", (claim.subject,), (), _bounds())
+            self.assertEqual([c.claim_id.value for c in page.items], ["c-10"])
+            rows = store._db.execute("SELECT claim_id FROM retired_claims").fetchall()
             self.assertEqual([r[0] for r in rows], ["c-9"])
             with self.assertRaises(ValueError):
                 store.write_index_batch(
                     m.CanonicalIndexBatch(
                         subjects=(subject,),
-                        retires_claims=(
-                            m.ClaimRef(id=m.ClaimId("c-gone")),
-                        ),
+                        retires_claims=(m.ClaimRef(id=m.ClaimId("c-gone")),),
                     )
                 )
         finally:
@@ -460,36 +435,34 @@ class SqliteStoreTest(unittest.TestCase):
                     assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(f"s{n}", ()),
                     evidence=(),
-                    basis=m.SemanticBasis(
-                        m.DerivationKind.EXPLICIT_EVIDENCE
-                    ),
+                    basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
                 )
                 for n in range(5)
             )
             store.write_index_batch(
                 m.CanonicalIndexBatch(
                     (m.Subject(subject, "payments", None),),
-                    claims, (), (),
+                    claims,
+                    (),
+                    (),
                 )
             )
             bounds = _bounds()
-            first = store.load_claims(
-                "repo-1", (subject,), (), bounds
-            )
             # Default test bounds exceed 5 items: force paging.
             import dataclasses
 
             small = dataclasses.replace(bounds, max_results=2)
-            page1 = store.load_claims(
-                "repo-1", (subject,), (), small
-            )
+            page1 = store.load_claims("repo-1", (subject,), (), small)
             self.assertTrue(page1.bound_info.truncated)
             token = page1.bound_info.continuation_token
             self.assertTrue(token.startswith("pg:"))
             seen = [c.claim_id.value for c in page1.items]
             while token is not None:
                 page = store.load_claims(
-                    "repo-1", (subject,), (), small,
+                    "repo-1",
+                    (subject,),
+                    (),
+                    small,
                     page_token=token,
                 )
                 seen.extend(c.claim_id.value for c in page.items)
@@ -498,12 +471,14 @@ class SqliteStoreTest(unittest.TestCase):
             self.assertEqual(len(set(seen)), 5)
             with self.assertRaises(ValueError):
                 store.load_claims(
-                    "repo-1", (subject,), (), small,
+                    "repo-1",
+                    (subject,),
+                    (),
+                    small,
                     page_token="bogus",
                 )
         finally:
             store.close()
-
 
     def test_filesystem_evidence_round_trip(self):
         import tempfile
@@ -512,21 +487,13 @@ class SqliteStoreTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            (root / "README.md").write_text(
-                "# svc\n\nServes.\n", encoding="utf-8"
-            )
+            (root / "README.md").write_text("# svc\n\nServes.\n", encoding="utf-8")
             (root / "src").mkdir()
-            (root / "src" / "a.py").write_text(
-                "X = 1\n", encoding="utf-8"
-            )
+            (root / "src" / "a.py").write_text("X = 1\n", encoding="utf-8")
             (root / "bin.dat").write_bytes(b"\x00\x01\x02binary")
             source = FilesystemEvidenceSource("repo-fs", root)
-            page = source.inventory_evidence(
-                "repo-fs", m.EvidenceScope(), _bounds()
-            )
-            locators = sorted(
-                item.evidence_ref.locator for item in page.items
-            )
+            page = source.inventory_evidence("repo-fs", m.EvidenceScope(), _bounds())
+            locators = sorted(item.evidence_ref.locator for item in page.items)
             self.assertEqual(locators, ["README.md", "src/a.py"])
             first = {
                 item.evidence_ref.locator: item.content_fingerprint
@@ -541,16 +508,12 @@ class SqliteStoreTest(unittest.TestCase):
             )
             self.assertEqual(selection.selected_refs, ())
             units = source.read_evidence(
-                tuple(
-                    item.evidence_ref for item in page.items
-                ),
+                tuple(item.evidence_ref for item in page.items),
                 _bounds(),
             )
             self.assertEqual(len(units), 2)
             # Fingerprints are stable across reads.
-            page2 = source.inventory_evidence(
-                "repo-fs", m.EvidenceScope(), _bounds()
-            )
+            page2 = source.inventory_evidence("repo-fs", m.EvidenceScope(), _bounds())
             self.assertEqual(
                 {
                     item.evidence_ref.locator: item.content_fingerprint
@@ -564,9 +527,7 @@ class SqliteStoreTest(unittest.TestCase):
                         m.EvidenceRef(
                             evidence_id=m.EvidenceId("ev-nope"),
                             repository_id="repo-fs",
-                            source_kind=(
-                                m.EvidenceSourceKind.SOURCE_CODE
-                            ),
+                            source_kind=(m.EvidenceSourceKind.SOURCE_CODE),
                             locator="../escape.md",
                         ),
                     ),
@@ -592,7 +553,8 @@ class PrefixExpansionTest(unittest.TestCase):
             (root / "top.py").write_text("T = 1\n", encoding="utf-8")
             source = FilesystemEvidenceSource("repo-fs", root)
             page = source.inventory_evidence(
-                "repo-fs", m.EvidenceScope(paths=("wf",), evidence_refs=()),
+                "repo-fs",
+                m.EvidenceScope(paths=("wf",), evidence_refs=()),
                 _bounds(),
             )
             self.assertEqual(
@@ -606,7 +568,8 @@ class PrefixExpansionTest(unittest.TestCase):
             {"wf/b.py": "B", "wf/a.py": "A", "top.py": "T"},
         )
         page = src.inventory_evidence(
-            "repo-1", m.EvidenceScope(paths=("wf",), evidence_refs=()),
+            "repo-1",
+            m.EvidenceScope(paths=("wf",), evidence_refs=()),
             _bounds(),
         )
         self.assertEqual(
@@ -623,17 +586,25 @@ class PrefixExpansionTest(unittest.TestCase):
             "repo-1", {"wf/b.py": "B = 1\n", "wf/a.py": "A = 1\n"}
         )
         sid = m.SubjectId(
-            repository_id="repo-1", subject_kind=m.SubjectKind.SUBSYSTEM,
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.SUBSYSTEM,
             canonical_locator="wf",
         )
         subject = m.Subject(sid, "W", None)
         selection = ops.discover_evidence(
-            "repo-1", subject, structural=structural, evidence=src,
-            bounds=_bounds(), state=m.RepositoryState(
-                repository_id="repo-1", revision_id=None, dirty=False,
+            "repo-1",
+            subject,
+            structural=structural,
+            evidence=src,
+            bounds=_bounds(),
+            state=m.RepositoryState(
+                repository_id="repo-1",
+                revision_id=None,
+                dirty=False,
                 state_fingerprint="fp",
                 observed_at=__import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc),
+                    __import__("datetime").timezone.utc
+                ),
             ),
         )
         self.assertEqual(

@@ -78,8 +78,12 @@ class FixtureTruth:
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -87,9 +91,7 @@ def _bounds(**overrides):
 
 
 def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(
-        repository_id=REPO, subject_kind=kind, canonical_locator=locator
-    )
+    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
 
 
 def _ref(path):
@@ -131,15 +133,18 @@ def _harness(db_path=":memory:"):
         ),
         (
             InMemoryEdge(
-                "src/postings.py", m.StructuralEdgeKind.DEPENDS_ON,
+                "src/postings.py",
+                m.StructuralEdgeKind.DEPENDS_ON,
                 "src/inventory.py",
             ),
             InMemoryEdge(
-                "src/postings.py", m.StructuralEdgeKind.CALLS,
+                "src/postings.py",
+                m.StructuralEdgeKind.CALLS,
                 "src/settle.py",
             ),
             InMemoryEdge(
-                "src/postings.py", m.StructuralEdgeKind.REFERENCES,
+                "src/postings.py",
+                m.StructuralEdgeKind.REFERENCES,
                 "src/failures.py",
             ),
         ),
@@ -152,20 +157,26 @@ def _harness(db_path=":memory:"):
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
 
 def _scope(root, subject, cls, slic, basis="test material"):
     return m.SemanticQuestionScope(
-        scope_root=root, subject=subject, question_class=cls,
-        question_slice=slic, materiality_basis=basis,
+        scope_root=root,
+        subject=subject,
+        question_class=cls,
+        question_slice=slic,
+        materiality_basis=basis,
     )
 
 
-def _question_coverage(scope, disposition, basis="", refs=(), requirements=(),
-                       evidence_paths=()):
+def _question_coverage(
+    scope, disposition, basis="", refs=(), requirements=(), evidence_paths=()
+):
     return m.InterpretationCoverage(
         subjects=(scope.subject,),
         question_slice=scope.question_slice,
@@ -173,9 +184,7 @@ def _question_coverage(scope, disposition, basis="", refs=(), requirements=(),
             paths=(),
             evidence_refs=tuple(_ref(p) for p in evidence_paths),
         ),
-        declared_complete=(
-            disposition is m.SemanticQuestionDisposition.ANSWERED
-        ),
+        declared_complete=(disposition is m.SemanticQuestionDisposition.ANSWERED),
         question=scope,
         disposition=disposition,
         result_refs=tuple(refs),
@@ -192,7 +201,6 @@ def _question_coverage(scope, disposition, basis="", refs=(), requirements=(),
 
 
 def _answer_current(request, basis="examined with validated candidates"):
-    q = request.question
     return m.SemanticQuestionDecision(
         disposition=m.SemanticQuestionDisposition.ANSWERED,
         disposition_basis=basis,
@@ -202,7 +210,8 @@ def _answer_current(request, basis="examined with validated candidates"):
 def _purpose_claim():
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
-        subject=_sid("src/postings.py"), kind=m.ClaimKind.PURPOSE,
+        subject=_sid("src/postings.py"),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Tracks balances", ()),
         evidence=(_ref("README.md"),),
@@ -221,7 +230,8 @@ def _ownership_claim():
         kind=m.ClaimKind.OWNERSHIP_CUSTODY,
         assertion_nature=m.AssertionNature.NORMATIVE,
         value=m.OwnershipCustodyValue(
-            _sid("team/ledger"), m.OwnershipRole.OWNER,
+            _sid("team/ledger"),
+            m.OwnershipRole.OWNER,
             m.OwnershipExclusivity.EXCLUSIVE,
         ),
         evidence=(_ref("OWNERSHIP.md"),),
@@ -245,7 +255,9 @@ class EstablishmentTest(unittest.TestCase):
                     ops.SemanticStatusRequest(
                         repository_id=REPO, target=None, bounds=_bounds()
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
                 self.assertIs(
@@ -259,15 +271,17 @@ class EstablishmentTest(unittest.TestCase):
                 current = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
-                        bounds=_bounds(), establish_baseline=True,
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
+                        bounds=_bounds(),
+                        establish_baseline=True,
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                     authority_seeds=(
-                        _ref("README.md"), _ref("OWNERSHIP.md"),
+                        _ref("README.md"),
+                        _ref("OWNERSHIP.md"),
                     ),
                 )
                 self.assertIsInstance(current, PendingInterpretation)
@@ -280,16 +294,11 @@ class EstablishmentTest(unittest.TestCase):
                 def _audit(request):
                     coverages = [
                         _question_coverage(
-                            _scope(
-                                root, root, cls, f"audit-{cls.value}"
-                            ),
+                            _scope(root, root, cls, f"audit-{cls.value}"),
                             m.SemanticQuestionDisposition.PENDING,
                             requirements=(
                                 m.ResolutionRequirement(
-                                    kind=(
-                                        m.ResolutionKind
-                                        .MISSING_SEMANTIC_COVERAGE
-                                    ),
+                                    kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
                                     subject_or_claim=root,
                                     description=f"admitted {cls.value}",
                                     supporting_context=(),
@@ -309,9 +318,12 @@ class EstablishmentTest(unittest.TestCase):
                     )
 
                 current = ops.submit_interpretation(
-                    current.continuation, _audit(current.request),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=continuations,
+                    current.continuation,
+                    _audit(current.request),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=continuations,
                 )
                 effort["submissions"] += 1
                 self.assertIsInstance(current, PendingInterpretation)
@@ -328,13 +340,14 @@ class EstablishmentTest(unittest.TestCase):
                     current = ops.submit_interpretation(
                         current.continuation,
                         m.SemanticInterpretationResult(
-                            claims=(), relationships=(),
-                            candidate_subjects=(), candidate_conflicts=(),
+                            claims=(),
+                            relationships=(),
+                            candidate_subjects=(),
+                            candidate_conflicts=(),
                             question_decision=_decision(
                                 _question_coverage(
                                     current.request.question,
-                                    m.SemanticQuestionDisposition
-                                    .NOT_APPLICABLE,
+                                    m.SemanticQuestionDisposition.NOT_APPLICABLE,
                                     basis=(
                                         "examined bounded scope; no "
                                         "supporting source for this class"
@@ -344,8 +357,10 @@ class EstablishmentTest(unittest.TestCase):
                             ),
                             candidate_withdrawals=(),
                         ),
-                        structural=structural, evidence=evidence,
-                        store=store, continuations=continuations,
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=continuations,
                     )
                     effort["submissions"] += 1
                 effort["rounds"] = rounds
@@ -353,7 +368,10 @@ class EstablishmentTest(unittest.TestCase):
                 FixtureTruth.check_claims(current.content.claims)
                 self.assertTrue(
                     _baseline_sufficient(
-                        REPO, root, store=store, evidence=evidence,
+                        REPO,
+                        root,
+                        store=store,
+                        evidence=evidence,
                         bounds=_bounds(),
                     )
                 )
@@ -364,12 +382,12 @@ class EstablishmentTest(unittest.TestCase):
                 readback = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=fresh,
                     authority_seeds=(_ref("README.md"),),
                 )
@@ -384,12 +402,12 @@ class EstablishmentTest(unittest.TestCase):
                 member = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/inventory.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/inventory.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                     authority_seeds=(_ref("README.md"),),
                 )
@@ -408,7 +426,8 @@ class EstablishmentTest(unittest.TestCase):
 def _inventory_claim():
     return m.CandidateSemanticClaim(
         candidate_key="inventory-purpose",
-        subject=_sid("src/inventory.py"), kind=m.ClaimKind.PURPOSE,
+        subject=_sid("src/inventory.py"),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("holds stock", ()),
         evidence=(_ref("src/inventory.py"),),
@@ -423,7 +442,8 @@ def _inventory_claim():
 def _failures_claim():
     return m.CandidateSemanticClaim(
         candidate_key="failures-purpose",
-        subject=_sid("src/failures.py"), kind=m.ClaimKind.PURPOSE,
+        subject=_sid("src/failures.py"),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("dead-letters failed postings", ()),
         evidence=(_ref("src/failures.py"),),
@@ -438,9 +458,12 @@ def _failures_claim():
 def _submit_answered(test_case, pending, agent, ctx, seeds):
     structural, evidence, store, continuations = ctx
     return ops.submit_interpretation(
-        pending.continuation, agent.perform(pending.request),
-        structural=structural, evidence=evidence,
-        store=store, continuations=continuations,
+        pending.continuation,
+        agent.perform(pending.request),
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
     )
 
 
@@ -461,28 +484,22 @@ class ExpansionTest(unittest.TestCase):
                 pending = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, locator, (), None
-                        ),
+                        target=m.SubjectSelector(None, locator, (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=continuations,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=continuations,
                     authority_seeds=seeds,
                 )
                 return pending
 
             agent = FixtureAgent(
                 {
-                    "src/postings.py": FixtureCandidates(
-                        (_purpose_claim(),), ()
-                    ),
-                    "src/inventory.py": FixtureCandidates(
-                        (_inventory_claim(),), ()
-                    ),
-                    "src/failures.py": FixtureCandidates(
-                        (_failures_claim(),), ()
-                    ),
+                    "src/postings.py": FixtureCandidates((_purpose_claim(),), ()),
+                    "src/inventory.py": FixtureCandidates((_inventory_claim(),), ()),
+                    "src/failures.py": FixtureCandidates((_failures_claim(),), ()),
                 },
                 complete_questions=True,
             )
@@ -491,9 +508,7 @@ class ExpansionTest(unittest.TestCase):
             for locator in ("src/postings.py", "src/inventory.py"):
                 pending = _ask(locator)
                 self.assertIsInstance(pending, PendingInterpretation)
-                answer = _submit_answered(
-                    self, pending, agent, ctx, seeds
-                )
+                answer = _submit_answered(self, pending, agent, ctx, seeds)
                 self.assertIsInstance(answer, m.SemanticAnswer)
             # Closeout surfaces the unknown consumer; admit by asking.
             pending = _ask("src/failures.py")
@@ -504,18 +519,19 @@ class ExpansionTest(unittest.TestCase):
             retrieved = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/failures.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/failures.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
                 authority_seeds=seeds,
             )
             self.assertIsInstance(retrieved, m.SemanticAnswer)
             summaries = [
-                c.value.summary for c in retrieved.content.claims
+                c.value.summary
+                for c in retrieved.content.claims
                 if c.kind is m.ClaimKind.PURPOSE
             ]
             self.assertIn("dead-letters failed postings", summaries)
@@ -524,15 +540,14 @@ class ExpansionTest(unittest.TestCase):
             # the three admitted scopes.
             covered = {
                 cov.question.subject.canonical_locator
-                for cov in store.load_all_question_coverages(
-                    REPO, None, ()
-                )
+                for cov in store.load_all_question_coverages(REPO, None, ())
                 if cov.question is not None
             }
             self.assertEqual(
                 covered,
                 {
-                    "src/postings.py", "src/inventory.py",
+                    "src/postings.py",
+                    "src/inventory.py",
                     "src/failures.py",
                 },
             )
@@ -561,19 +576,22 @@ class ReuseComparisonTest(unittest.TestCase):
                     return ops.explain(
                         ops.SemanticExplainRequest(
                             repository_id=REPO,
-                            target=m.SubjectSelector(
-                                None, locator, (), None
-                            ),
+                            target=m.SubjectSelector(None, locator, (), None),
                             bounds=_bounds(),
                         ),
-                        structural=structural, evidence=evidence,
-                        store=store, continuations=cont,
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=cont,
                         authority_seeds=seeds,
                     )
 
                 # (a) no knowledge: must suspend for investigation.
                 first_a = _ask(
-                    struct_a, ev_a, store_a, ContinuationStore(),
+                    struct_a,
+                    ev_a,
+                    store_a,
+                    ContinuationStore(),
                     "src/postings.py",
                 )
                 self.assertIsInstance(first_a, PendingInterpretation)
@@ -592,19 +610,22 @@ class ReuseComparisonTest(unittest.TestCase):
                 pending_b2 = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct_b, evidence=ev_b, store=store_b,
-                    continuations=cont_b, authority_seeds=seeds,
+                    structural=struct_b,
+                    evidence=ev_b,
+                    store=store_b,
+                    continuations=cont_b,
+                    authority_seeds=seeds,
                 )
                 answer_b = ops.submit_interpretation(
                     pending_b2.continuation,
                     agent.perform(pending_b2.request),
-                    structural=struct_b, evidence=ev_b,
-                    store=store_b, continuations=cont_b,
+                    structural=struct_b,
+                    evidence=ev_b,
+                    store=store_b,
+                    continuations=cont_b,
                 )
                 self.assertIsInstance(answer_b, m.SemanticAnswer)
                 FixtureTruth.check_claims(answer_b.content.claims)
@@ -620,12 +641,12 @@ class ReuseComparisonTest(unittest.TestCase):
                 reused = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct_c, evidence=ev_c, store=store_c,
+                    structural=struct_c,
+                    evidence=ev_c,
+                    store=store_c,
                     continuations=ContinuationStore(),
                     authority_seeds=(_ref("README.md"),),
                 )
@@ -674,13 +695,12 @@ def _proposed(*coverages):
 def _corrected_purpose_claim():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-v2",
-        subject=_sid("src/postings.py"), kind=m.ClaimKind.PURPOSE,
+        subject=_sid("src/postings.py"),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Tracks balances and limits", ()),
         evidence=(_ref_v2("README.md"),),
-        candidate_authority=_authority_v2(
-            "README.md", "Tracks balances and limits"
-        ),
+        candidate_authority=_authority_v2("README.md", "Tracks balances and limits"),
         basis=m.SemanticBasis(
             m.DerivationKind.SEMANTIC_INTERPRETATION,
             "README now states balances and limits",
@@ -718,22 +738,15 @@ def _harness_v2(db_path):
         REPO,
         tuple(InMemoryFile(p, c) for p, c in FILES_V2.items()),
         (
-            InMemorySubject(
-                "src/postings.py", m.SubjectKind.COMPONENT, "postings"
-            ),
-            InMemorySubject(
-                "src/inventory.py", m.SubjectKind.COMPONENT, "inventory"
-            ),
-            InMemorySubject(
-                "src/settle.py", m.SubjectKind.COMPONENT, "settle"
-            ),
-            InMemorySubject(
-                "src/failures.py", m.SubjectKind.COMPONENT, "failures"
-            ),
+            InMemorySubject("src/postings.py", m.SubjectKind.COMPONENT, "postings"),
+            InMemorySubject("src/inventory.py", m.SubjectKind.COMPONENT, "inventory"),
+            InMemorySubject("src/settle.py", m.SubjectKind.COMPONENT, "settle"),
+            InMemorySubject("src/failures.py", m.SubjectKind.COMPONENT, "failures"),
         ),
         (
             InMemoryEdge(
-                "src/postings.py", m.StructuralEdgeKind.DEPENDS_ON,
+                "src/postings.py",
+                m.StructuralEdgeKind.DEPENDS_ON,
                 "src/inventory.py",
             ),
         ),
@@ -766,20 +779,23 @@ class MaintenanceTest(unittest.TestCase):
                 pending = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=cont,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont,
                     authority_seeds=seeds,
                 )
                 self.assertIsInstance(pending, PendingInterpretation)
                 answer = ops.submit_interpretation(
-                    pending.continuation, agent.perform(pending.request),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=cont,
+                    pending.continuation,
+                    agent.perform(pending.request),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont,
                 )
                 self.assertIsInstance(answer, m.SemanticAnswer)
                 # Establish inventory under its own seeds, so the
@@ -797,21 +813,23 @@ class MaintenanceTest(unittest.TestCase):
                 inv_pending = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/inventory.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/inventory.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=inv_cont,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=inv_cont,
                     authority_seeds=inv_seeds,
                 )
                 self.assertIsInstance(inv_pending, PendingInterpretation)
                 inv_answer = ops.submit_interpretation(
                     inv_pending.continuation,
                     inv_agent.perform(inv_pending.request),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=inv_cont,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=inv_cont,
                 )
                 self.assertIsInstance(inv_answer, m.SemanticAnswer)
                 # Leave one question visibly OPEN.
@@ -819,13 +837,13 @@ class MaintenanceTest(unittest.TestCase):
                 pending_open = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/failures.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/failures.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=cont_open,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont_open,
                     authority_seeds=(_ref("src/failures.py"),),
                 )
                 self.assertIsInstance(pending_open, PendingInterpretation)
@@ -845,13 +863,17 @@ class MaintenanceTest(unittest.TestCase):
                 opened = ops.submit_interpretation(
                     pending_open.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_decision(open_cov),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=cont_open,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont_open,
                 )
                 self.assertIsInstance(opened, m.SemanticAnswer)
             finally:
@@ -864,25 +886,22 @@ class MaintenanceTest(unittest.TestCase):
                 staled = ops.status(
                     ops.SemanticStatusRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=ContinuationStore(),
                 )
                 states = {
-                    (c.claim_id.value, c.freshness.state)
-                    for c in staled.content.claims
+                    (c.claim_id.value, c.freshness.state) for c in staled.content.claims
                 }
                 # Exact stale scope: both postings claims explicitly
                 # relied on the moved README seed.
                 self.assertTrue(states)
                 self.assertTrue(
-                    all(
-                        s is m.FreshnessState.STALE for _, s in states
-                    ),
+                    all(s is m.FreshnessState.STALE for _, s in states),
                     states,
                 )
                 # Genuinely unaffected scope: inventory relied only on
@@ -890,30 +909,28 @@ class MaintenanceTest(unittest.TestCase):
                 inv_state = ops.status(
                     ops.SemanticStatusRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/inventory.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/inventory.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=ContinuationStore(),
                 )
                 for c in inv_state.content.claims:
-                    self.assertIs(
-                        c.freshness.state, m.FreshnessState.CURRENT, c
-                    )
+                    self.assertIs(c.freshness.state, m.FreshnessState.CURRENT, c)
                 # Scoped refresh suspends each stale question for
                 # reassessment — never silently expands scope.
                 re_cont = ContinuationStore()
                 reassess = ops.refresh(
                     ops.SemanticRefreshRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=re_cont,
                     authority_seeds=seeds2,
                 )
@@ -938,7 +955,9 @@ class MaintenanceTest(unittest.TestCase):
                     current = ops.submit_interpretation(
                         current.continuation,
                         re_agent.perform(current.request),
-                        structural=struct2, evidence=ev2, store=store2,
+                        structural=struct2,
+                        evidence=ev2,
+                        store=store2,
                         continuations=re_cont,
                     )
                 self.assertIsInstance(current, m.SemanticAnswer)
@@ -949,18 +968,19 @@ class MaintenanceTest(unittest.TestCase):
                 reread = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=ContinuationStore(),
                     authority_seeds=seeds2,
                 )
                 self.assertIsInstance(reread, m.SemanticAnswer)
                 purposes = [
-                    c.value.summary for c in reread.content.claims
+                    c.value.summary
+                    for c in reread.content.claims
                     if c.kind is m.ClaimKind.PURPOSE
                 ]
                 self.assertIn("Tracks balances and limits", purposes)
@@ -971,33 +991,27 @@ class MaintenanceTest(unittest.TestCase):
                 ]
                 self.assertIn("team/ledger", owners)
                 for c in reread.content.claims:
-                    self.assertIs(
-                        c.freshness.state, m.FreshnessState.CURRENT, c
-                    )
+                    self.assertIs(c.freshness.state, m.FreshnessState.CURRENT, c)
                 # Inventory untouched by the whole maintenance cycle.
                 reread_inv = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/inventory.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/inventory.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=ContinuationStore(),
                     authority_seeds=(_ref_v2("src/inventory.py"),),
                 )
                 self.assertIsInstance(reread_inv, m.SemanticAnswer)
                 for c in reread_inv.content.claims:
-                    self.assertIs(
-                        c.freshness.state, m.FreshnessState.CURRENT, c
-                    )
+                    self.assertIs(c.freshness.state, m.FreshnessState.CURRENT, c)
                 open_rows = [
-                    cov for cov in store2.load_all_question_coverages(
-                        REPO, None, ()
-                    )
-                    if cov.disposition
-                    is m.SemanticQuestionDisposition.OPEN
+                    cov
+                    for cov in store2.load_all_question_coverages(REPO, None, ())
+                    if cov.disposition is m.SemanticQuestionDisposition.OPEN
                 ]
                 self.assertTrue(open_rows)
             finally:
@@ -1012,13 +1026,15 @@ class UniformQualityTest(unittest.TestCase):
         # wrong claim fails the oracle.
         wrong = m.CandidateSemanticClaim(
             candidate_key="wrong",
-            subject=_sid("src/postings.py"), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+            subject=_sid("src/postings.py"),
+            kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue("Moves parcels", ()),
             evidence=(_ref("README.md"),),
             candidate_authority=_authority("README.md", "Tracks balances"),
             basis=m.SemanticBasis(
-                m.DerivationKind.SEMANTIC_INTERPRETATION, "miscited",
+                m.DerivationKind.SEMANTIC_INTERPRETATION,
+                "miscited",
             ),
         )
         with self.assertRaises(AssertionError):
@@ -1033,9 +1049,7 @@ class UniformQualityTest(unittest.TestCase):
                         evidence=wrong.evidence,
                         authority=None,
                         trust=m.TrustState.UNRESOLVED,
-                        freshness=m.Freshness(
-                            m.FreshnessState.CURRENT, reason="t"
-                        ),
+                        freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
                         basis=wrong.basis,
                     )
                 ]
@@ -1046,27 +1060,30 @@ class UniformQualityTest(unittest.TestCase):
         try:
             seeds = (_ref("README.md"),)
             agent = FixtureAgent(
-                {"src/postings.py": FixtureCandidates(
-                    (_purpose_claim(),), ())},
+                {"src/postings.py": FixtureCandidates((_purpose_claim(),), ())},
                 complete_questions=True,
             )
             cont = ContinuationStore()
             pending = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/postings.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/postings.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont, authority_seeds=seeds,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
+                authority_seeds=seeds,
             )
             self.assertIsInstance(pending, PendingInterpretation)
             ops.submit_interpretation(
-                pending.continuation, agent.perform(pending.request),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                pending.continuation,
+                agent.perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
             )
         finally:
             store.close()
@@ -1077,12 +1094,12 @@ class UniformQualityTest(unittest.TestCase):
             fresh = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/settle.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/settle.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=struct2, evidence=ev2, store=store2,
+                structural=struct2,
+                evidence=ev2,
+                store=store2,
                 continuations=ContinuationStore(),
                 authority_seeds=(_ref("README.md"),),
             )
@@ -1104,28 +1121,30 @@ class UniformQualityTest(unittest.TestCase):
         try:
             seeds = (_ref("README.md"), _ref("OWNERSHIP.md"))
             agent = FixtureAgent(
-                {"src/postings.py": FixtureCandidates(
-                    (_purpose_claim(),), ())},
+                {"src/postings.py": FixtureCandidates((_purpose_claim(),), ())},
                 complete_questions=True,
             )
             cont = ContinuationStore()
             pending = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/postings.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/postings.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
                 authority_seeds=seeds,
             )
             self.assertIsInstance(pending, PendingInterpretation)
             answer = ops.submit_interpretation(
-                pending.continuation, agent.perform(pending.request),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                pending.continuation,
+                agent.perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             kinds = {c.kind for c in answer.content.claims}
@@ -1136,13 +1155,13 @@ class UniformQualityTest(unittest.TestCase):
             leg_pending = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/postings.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/postings.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=leg_cont,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=leg_cont,
                 authority_seeds=seeds,
             )
             if isinstance(leg_pending, PendingInterpretation):
@@ -1162,20 +1181,27 @@ class UniformQualityTest(unittest.TestCase):
                 legged = ops.submit_interpretation(
                     leg_pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_decision(leg_open),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=leg_cont,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=leg_cont,
                 )
                 self.assertIsInstance(legged, m.SemanticAnswer)
             # Sufficiency withheld while the leg stays open.
             self.assertFalse(
                 _baseline_sufficient(
-                    REPO, _sid("src/postings.py"), store=store,
-                    evidence=evidence, bounds=_bounds(),
+                    REPO,
+                    _sid("src/postings.py"),
+                    store=store,
+                    evidence=evidence,
+                    bounds=_bounds(),
                 )
             )
         finally:
@@ -1193,29 +1219,28 @@ class HostLifecycleTest(unittest.TestCase):
                 ops.submit_interpretation(
                     "cont-nope",
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=ContinuationStore(),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=ContinuationStore(),
                 )
             seeds = (_ref("README.md"),)
-            agent = FixtureAgent(
-                {"src/postings.py": FixtureCandidates(
-                    (_purpose_claim(),), ())},
-                complete_questions=True,
-            )
             first = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/postings.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/postings.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=ContinuationStore(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
                 authority_seeds=seeds,
             )
             self.assertIsInstance(first, PendingInterpretation)
@@ -1235,9 +1260,7 @@ class HostLifecycleTest(unittest.TestCase):
         import ast as _ast
         import pathlib as _pl
 
-        tree = _ast.parse(
-            _pl.Path(__file__).read_text(encoding="utf-8")
-        )
+        tree = _ast.parse(_pl.Path(__file__).read_text(encoding="utf-8"))
         hooked = [
             n.names[0].name
             for n in _ast.walk(tree)
@@ -1252,29 +1275,30 @@ class HostLifecycleTest(unittest.TestCase):
             try:
                 seeds = (_ref("README.md"),)
                 agent = FixtureAgent(
-                    {"src/postings.py": FixtureCandidates(
-                        (_purpose_claim(),), ())},
+                    {"src/postings.py": FixtureCandidates((_purpose_claim(),), ())},
                     complete_questions=True,
                 )
                 cont = ContinuationStore()
                 pending = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=cont,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont,
                     authority_seeds=seeds,
                 )
                 self.assertIsInstance(pending, PendingInterpretation)
                 established = ops.submit_interpretation(
                     pending.continuation,
                     agent.perform(pending.request),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=cont,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont,
                 )
                 self.assertIsInstance(established, m.SemanticAnswer)
             finally:
@@ -1285,12 +1309,12 @@ class HostLifecycleTest(unittest.TestCase):
                 staled = ops.status(
                     ops.SemanticStatusRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=ContinuationStore(),
                 )
                 self.assertTrue(
@@ -1303,19 +1327,22 @@ class HostLifecycleTest(unittest.TestCase):
                 reassess = ops.refresh(
                     ops.SemanticRefreshRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=re_cont,
                     authority_seeds=(_ref_v2("README.md"),),
                 )
                 self.assertIsInstance(reassess, PendingInterpretation)
                 re_agent = FixtureAgent(
-                    {"src/postings.py": FixtureCandidates(
-                        (_corrected_purpose_claim(),), ())},
+                    {
+                        "src/postings.py": FixtureCandidates(
+                            (_corrected_purpose_claim(),), ()
+                        )
+                    },
                     complete_questions=True,
                 )
                 current = reassess
@@ -1326,27 +1353,28 @@ class HostLifecycleTest(unittest.TestCase):
                     current = ops.submit_interpretation(
                         current.continuation,
                         re_agent.perform(current.request),
-                        structural=struct2, evidence=ev2,
-                        store=store2, continuations=re_cont,
+                        structural=struct2,
+                        evidence=ev2,
+                        store=store2,
+                        continuations=re_cont,
                     )
                 self.assertIsInstance(current, m.SemanticAnswer)
                 # Expansion without hooks: admit, examine, submit,
                 # and retrieve the unknown consumer.
                 exp_agent = FixtureAgent(
-                    {"src/failures.py": FixtureCandidates(
-                        (_failures_claim(),), ())},
+                    {"src/failures.py": FixtureCandidates((_failures_claim(),), ())},
                     complete_questions=True,
                 )
                 exp_cont = ContinuationStore()
                 exp_pending = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/failures.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/failures.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=exp_cont,
                     authority_seeds=(_ref_v2("src/failures.py"),),
                 )
@@ -1354,19 +1382,21 @@ class HostLifecycleTest(unittest.TestCase):
                 expanded = ops.submit_interpretation(
                     exp_pending.continuation,
                     exp_agent.perform(exp_pending.request),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=exp_cont,
                 )
                 self.assertIsInstance(expanded, m.SemanticAnswer)
                 retrieved = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/failures.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/failures.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=struct2, evidence=ev2, store=store2,
+                    structural=struct2,
+                    evidence=ev2,
+                    store=store2,
                     continuations=ContinuationStore(),
                     authority_seeds=(_ref_v2("src/failures.py"),),
                 )
@@ -1396,15 +1426,19 @@ class DocsCheckTest(unittest.TestCase):
         # D-ACCEPT-07: §10-required elements present in the public
         # landing page or the documentation it links to.
         readme = self._read("README.md")
-        public = readme + "\n" + "\n".join(
-            self._read(*parts)
-            for parts in (
-                ("docs", "install.md"),
-                ("docs", "usage.md"),
-                ("docs", "scope.md"),
-                ("docs", "mcp.md"),
-                ("docs", "hooks.md"),
-                ("docs", "README.md"),
+        public = (
+            readme
+            + "\n"
+            + "\n".join(
+                self._read(*parts)
+                for parts in (
+                    ("docs", "install.md"),
+                    ("docs", "usage.md"),
+                    ("docs", "scope.md"),
+                    ("docs", "mcp.md"),
+                    ("docs", "hooks.md"),
+                    ("docs", "README.md"),
+                )
             )
         )
         public = " ".join(public.split())
@@ -1454,9 +1488,7 @@ class DocsCheckTest(unittest.TestCase):
         texts = [
             readme,
             scope,
-            (root / "skills" / "span" / "SKILL.md").read_text(
-                encoding="utf-8"
-            ),
+            (root / "skills" / "span" / "SKILL.md").read_text(encoding="utf-8"),
             (root / "integrations" / "hosts" / "triggers.md").read_text(
                 encoding="utf-8"
             ),
@@ -1474,12 +1506,16 @@ class DocsCheckTest(unittest.TestCase):
 
     def test_readme_ops_claim_matches_contract(self):
         readme = self._read("README.md")
-        contract = " ".join(
-            (readme + "\n" + self._read("docs", "mcp.md")).split()
-        )
+        contract = " ".join((readme + "\n" + self._read("docs", "mcp.md")).split())
         for op in (
-            "initialize_repository", "explain", "impact", "trace",
-            "authority", "status", "refresh", "submit_interpretation",
+            "initialize_repository",
+            "explain",
+            "impact",
+            "trace",
+            "authority",
+            "status",
+            "refresh",
+            "submit_interpretation",
         ):
             self.assertIn(op, contract)
         self.assertIn("No semantic_* aliases", contract)
@@ -1504,10 +1540,9 @@ class DriverDogfoodTest(unittest.TestCase):
                 def _request():
                     return ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/postings.py", (), None
-                        ),
-                        bounds=_bounds(), establish_baseline=True,
+                        target=m.SubjectSelector(None, "src/postings.py", (), None),
+                        bounds=_bounds(),
+                        establish_baseline=True,
                     )
 
                 state = {"audit_done": False}
@@ -1517,15 +1552,12 @@ class DriverDogfoodTest(unittest.TestCase):
                         state["audit_done"] = True
                         coverages = [
                             _question_coverage(
-                                _scope(
-                                    root, root, cls, f"audit-{cls.value}"
-                                ),
+                                _scope(root, root, cls, f"audit-{cls.value}"),
                                 m.SemanticQuestionDisposition.PENDING,
                                 requirements=(
                                     m.ResolutionRequirement(
                                         kind=(
-                                            m.ResolutionKind
-                                            .MISSING_SEMANTIC_COVERAGE
+                                            m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
                                         ),
                                         subject_or_claim=root,
                                         description=f"admitted {cls.value}",
@@ -1545,13 +1577,14 @@ class DriverDogfoodTest(unittest.TestCase):
                             candidate_withdrawals=(),
                         )
                     return m.SemanticInterpretationResult(
-                        claims=(), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_decision(
                             _question_coverage(
                                 request.question,
-                                m.SemanticQuestionDisposition
-                                .NOT_APPLICABLE,
+                                m.SemanticQuestionDisposition.NOT_APPLICABLE,
                                 basis="examined; no supporting source",
                                 evidence_paths=("README.md",),
                             ),
@@ -1561,14 +1594,21 @@ class DriverDogfoodTest(unittest.TestCase):
 
                 result = drive(
                     lambda: ops.explain(
-                        _request(), structural=structural,
-                        evidence=evidence, store=store,
-                        continuations=cont, authority_seeds=seeds,
+                        _request(),
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=cont,
+                        authority_seeds=seeds,
                     ),
                     _investigate,
                     submit=lambda c, r: ops.submit_interpretation(
-                        c, r, structural=structural, evidence=evidence,
-                        store=store, continuations=cont,
+                        c,
+                        r,
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=cont,
                     ),
                     max_rounds=15,
                 )
@@ -1578,7 +1618,10 @@ class DriverDogfoodTest(unittest.TestCase):
                 self.assertGreaterEqual(result.cost.submissions, 2)
                 self.assertTrue(
                     _baseline_sufficient(
-                        REPO, root, store=store, evidence=evidence,
+                        REPO,
+                        root,
+                        store=store,
+                        evidence=evidence,
                         bounds=_bounds(),
                     )
                 )
@@ -1596,9 +1639,7 @@ def _ledger_variant(repo_id, purpose, owner_name, owner_locator):
     """
     files = {
         "README.md": f"# {repo_id}\n\n{purpose}.\n",
-        "OWNERSHIP.md": (
-            f"# Ownership\n\n{owner_name} owns {repo_id}.\n"
-        ),
+        "OWNERSHIP.md": (f"# Ownership\n\n{owner_name} owns {repo_id}.\n"),
         "CONTRACT.md": "# Contract\n\nPosting schema v2.\n",
         "src/postings.py": "POSTING = 1\n",
         "src/inventory.py": "STOCK = {}\n",
@@ -1606,30 +1647,25 @@ def _ledger_variant(repo_id, purpose, owner_name, owner_locator):
         "src/failures.py": "def dead_letter(p):\n    pass\n",
     }
     subjects = (
-        InMemorySubject(
-            "src/postings.py", m.SubjectKind.COMPONENT, "postings"
-        ),
-        InMemorySubject(
-            "src/inventory.py", m.SubjectKind.COMPONENT, "inventory"
-        ),
-        InMemorySubject(
-            "src/settle.py", m.SubjectKind.COMPONENT, "settle"
-        ),
-        InMemorySubject(
-            "src/failures.py", m.SubjectKind.COMPONENT, "failures"
-        ),
+        InMemorySubject("src/postings.py", m.SubjectKind.COMPONENT, "postings"),
+        InMemorySubject("src/inventory.py", m.SubjectKind.COMPONENT, "inventory"),
+        InMemorySubject("src/settle.py", m.SubjectKind.COMPONENT, "settle"),
+        InMemorySubject("src/failures.py", m.SubjectKind.COMPONENT, "failures"),
     )
     edges = (
         InMemoryEdge(
-            "src/postings.py", m.StructuralEdgeKind.DEPENDS_ON,
+            "src/postings.py",
+            m.StructuralEdgeKind.DEPENDS_ON,
             "src/inventory.py",
         ),
         InMemoryEdge(
-            "src/postings.py", m.StructuralEdgeKind.CALLS,
+            "src/postings.py",
+            m.StructuralEdgeKind.CALLS,
             "src/settle.py",
         ),
         InMemoryEdge(
-            "src/postings.py", m.StructuralEdgeKind.REFERENCES,
+            "src/postings.py",
+            m.StructuralEdgeKind.REFERENCES,
             "src/failures.py",
         ),
     )
@@ -1651,7 +1687,9 @@ def _harness_for(repo_id, files, subjects, edges, db_path=":memory:"):
             authority_seeds=(),
         ),
         repository_id=repo_id,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
@@ -1668,7 +1706,8 @@ def _variant_ref(repo_id, files, path):
 
 def _variant_sid(repo_id, locator, kind=m.SubjectKind.COMPONENT):
     return m.SubjectId(
-        repository_id=repo_id, subject_kind=kind,
+        repository_id=repo_id,
+        subject_kind=kind,
         canonical_locator=locator,
     )
 
@@ -1688,9 +1727,7 @@ class UndisclosedInstanceTest(unittest.TestCase):
         files, subjects, edges, truth = _ledger_variant(
             repo_id, purpose, owner_name, owner_loc
         )
-        structural, evidence, store = _harness_for(
-            repo_id, files, subjects, edges
-        )
+        structural, evidence, store = _harness_for(repo_id, files, subjects, edges)
         try:
             vsid = lambda loc: _variant_sid(repo_id, loc)  # noqa: E731
             vref = lambda p: _variant_ref(repo_id, files, p)  # noqa: E731
@@ -1716,9 +1753,7 @@ class UndisclosedInstanceTest(unittest.TestCase):
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Grinds grain", ()),
                 evidence=(vref("README.md"),),
-                candidate_authority=_vauthority(
-                    "README.md", "Grinds grain"
-                ),
+                candidate_authority=_vauthority("README.md", "Grinds grain"),
                 basis=m.SemanticBasis(
                     m.DerivationKind.SEMANTIC_INTERPRETATION,
                     "README states the mill purpose",
@@ -1732,37 +1767,41 @@ class UndisclosedInstanceTest(unittest.TestCase):
             pending = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=repo_id,
-                    target=m.SubjectSelector(
-                        None, "src/postings.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/postings.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
                 authority_seeds=(vref("README.md"),),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             answer = ops.submit_interpretation(
-                pending.continuation, agent.perform(pending.request),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                pending.continuation,
+                agent.perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             reread = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=repo_id,
-                    target=m.SubjectSelector(
-                        None, "src/postings.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/postings.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=ContinuationStore(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
                 authority_seeds=(vref("README.md"),),
             )
             self.assertIsInstance(reread, m.SemanticAnswer)
             summaries = [
-                c.value.summary for c in reread.content.claims
+                c.value.summary
+                for c in reread.content.claims
                 if c.kind is m.ClaimKind.PURPOSE
             ]
             # Independent truth, independently judged.

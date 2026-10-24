@@ -120,9 +120,7 @@ def _notice(data_dir, root, scope_paths=None, close_prefix=False):
         target = (
             None
             if scope_paths is None
-            else m.EvidenceScope(
-                paths=tuple(scope_paths), evidence_refs=()
-            )
+            else m.EvidenceScope(paths=tuple(scope_paths), evidence_refs=())
         )
         notice = ops.status(
             ops.SemanticStatusRequest(
@@ -144,21 +142,14 @@ def _notice(data_dir, root, scope_paths=None, close_prefix=False):
 
 def _render(repository_id, notice, close_prefix=False):
     if notice.readiness is m.RepositoryReadiness.UNAVAILABLE:
-        return (
-            f"span: {repository_id} needs attention "
-            f"(repository unavailable)."
-        )
+        return f"span: {repository_id} needs attention " f"(repository unavailable)."
     if notice.readiness is m.RepositoryReadiness.UNINITIALIZED:
         action = (
             notice.recommended_action
             or "run initialize_repository in a dedicated setup session"
         )
         return f"span: {repository_id} UNINITIALIZED ({action})."
-    if not (
-        notice.affected_count
-        or notice.stale_count
-        or notice.unverifiable_count
-    ):
+    if not (notice.affected_count or notice.stale_count or notice.unverifiable_count):
         return None
     parts = []
     if notice.stale_count:
@@ -205,8 +196,12 @@ def _stdin_paths():
         if isinstance(node, dict):
             for key, value in node.items():
                 if key in (
-                    "file_path", "filePath", "path", "filename",
-                    "file", "absolute_path",
+                    "file_path",
+                    "filePath",
+                    "path",
+                    "filename",
+                    "file",
+                    "absolute_path",
                 ) and isinstance(value, str):
                     found.append(value)
                 else:
@@ -233,9 +228,7 @@ def cmd_source_changed(data_dir, paths):
         root = repo_for_path(path, mapping)
         if root is None:
             continue
-        scoped.setdefault(root, []).append(
-            os.path.relpath(os.path.abspath(path), root)
-        )
+        scoped.setdefault(root, []).append(os.path.relpath(os.path.abspath(path), root))
     for root in sorted(scoped):
         line = _notice(data_dir, root, scope_paths=tuple(scoped[root]))
         if line:
@@ -258,9 +251,7 @@ def cmd_session_stop(data_dir, repo_root=None):
         if repo_for_path(path, {root: root}) is None:
             continue
         rel_paths.append(os.path.relpath(os.path.abspath(path), root))
-    line = _notice(
-        data_dir, root, scope_paths=tuple(rel_paths), close_prefix=True
-    )
+    line = _notice(data_dir, root, scope_paths=tuple(rel_paths), close_prefix=True)
     if line:
         print(line)
 
@@ -268,19 +259,26 @@ def cmd_session_stop(data_dir, repo_root=None):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(prog="span-hooks")
     parser.add_argument(
-        "--data-dir", default=None,
+        "--data-dir",
+        default=None,
         help="Store directory (default: platform data dir).",
     )
     parser.add_argument(
-        "--repo-root", default=None,
+        "--repo-root",
+        default=None,
         help=(
             "Active repository root for session lifecycle commands "
             "(default: current working directory)."
         ),
     )
-    parser.add_argument("command", choices=(
-        "session-start", "source-changed", "session-stop",
-    ))
+    parser.add_argument(
+        "command",
+        choices=(
+            "session-start",
+            "source-changed",
+            "session-stop",
+        ),
+    )
     parser.add_argument("paths", nargs="*")
     return parser.parse_args(argv)
 

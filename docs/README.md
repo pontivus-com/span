@@ -6,6 +6,8 @@ orchestrates workflows, or originates authority.
 
 ## Start here
 
+- [Repository overview](overview.md) — a map of the code and the request path for
+  a first-time reader.
 - [Install and connect](install.md) — prerequisites, installer, Codex and
   OpenCode setup, verification.
 - [Using Span](usage.md) — first use, establishment, freshness, scoped
@@ -39,6 +41,7 @@ orchestrates workflows, or originates authority.
 - [Invariants](invariants.md) — the invariant audit matrix and test
   evidence.
 - [Acceptance](acceptance.md) — fixtures and the public acceptance model.
+- [Glossary](glossary.md) — terms used across the docs.
 
 ## Integration
 

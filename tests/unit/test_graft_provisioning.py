@@ -21,8 +21,12 @@ from span.shell.structural import structural_source_from_config
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -38,14 +42,23 @@ def _write_wiring(wiring_path, nodes=(), edges=()):
 
 
 def _git_init(root):
-    subprocess.run(("git", "-C", str(root), "init", "-q"), check=True,
-                   timeout=60)
-    subprocess.run(("git", "-C", str(root), "add", "-A"), check=True,
-                   timeout=60)
+    subprocess.run(("git", "-C", str(root), "init", "-q"), check=True, timeout=60)
+    subprocess.run(("git", "-C", str(root), "add", "-A"), check=True, timeout=60)
     subprocess.run(
-        ("git", "-C", str(root), "-c", "user.email=t@t",
-         "-c", "user.name=t", "commit", "-qm", "x"),
-        check=True, timeout=60,
+        (
+            "git",
+            "-C",
+            str(root),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "x",
+        ),
+        check=True,
+        timeout=60,
     )
 
 
@@ -55,14 +68,15 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             repo = pathlib.Path(tmp) / "repo"
             repo.mkdir()
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
-            cache = pathlib.Path(tmp) / "cache"
-            src, _ = structural_source_from_config(
-                str(repo), data_dir=tmp + "/data"
-            ) if False else (None, None)
+            src, _ = (
+                structural_source_from_config(str(repo), data_dir=tmp + "/data")
+                if False
+                else (None, None)
+            )
             # Build via explicit artifact dir (factory with data_dir).
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
 
             def fake_build(repo_path, artifact_dir=None):
@@ -70,17 +84,16 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 _write_wiring(wp)
                 return True, "rebuilt"
 
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_build) as run:
+            with mock.patch.object(
+                g, "_run_index_build", side_effect=fake_build
+            ) as run:
                 self.assertFalse(src.has_index())
                 freshness = src.ensure_current("repo")
                 self.assertTrue(src.has_index())
                 self.assertEqual(run.call_count, 1)
                 self.assertIsNotNone(freshness)
             # Wiring lives in the cache, not the target.
-            self.assertTrue(
-                g.wiring_path_for(artifact).is_file()
-            )
+            self.assertTrue(g.wiring_path_for(artifact).is_file())
             self.assertFalse((repo / "graft").exists())
 
     def test_current_cache_skips_build(self):
@@ -90,20 +103,22 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             _git_init(repo)
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
             wp = g.wiring_path_for(artifact)
             _write_wiring(wp)
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             # Make the cache newer than HEAD so describe is CURRENT.
             import time
+
             time.sleep(1.05)
             wp.touch()
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             if src.describe_current("repo").state is not m.FreshnessState.CURRENT:
                 self.skipTest("filesystem timestamp granularity")
             with mock.patch.object(
-                g, "_run_index_build",
+                g,
+                "_run_index_build",
                 side_effect=AssertionError("must not build"),
             ):
                 freshness = src.ensure_current("repo")
@@ -116,8 +131,8 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             _git_init(repo)
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
             _write_wiring(g.wiring_path_for(artifact))
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             calls = []
@@ -126,21 +141,33 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 calls.append(1)
                 wp = g.wiring_path_for(artifact_dir)
                 import time
+
                 time.sleep(1.05)
                 _write_wiring(wp)
                 return True, "rebuilt"
 
             # Force STALE by making HEAD newer than the cache.
             (repo / "b.py").write_text("y = 2\n", encoding="utf-8")
-            subprocess.run(("git", "-C", str(repo), "add", "-A"), check=True,
-                           timeout=60)
             subprocess.run(
-                ("git", "-C", str(repo), "-c", "user.email=t@t",
-                 "-c", "user.name=t", "commit", "-qm", "y"),
-                check=True, timeout=60,
+                ("git", "-C", str(repo), "add", "-A"), check=True, timeout=60
             )
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_build):
+            subprocess.run(
+                (
+                    "git",
+                    "-C",
+                    str(repo),
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-qm",
+                    "y",
+                ),
+                check=True,
+                timeout=60,
+            )
+            with mock.patch.object(g, "_run_index_build", side_effect=fake_build):
                 first = src.ensure_current("repo")
                 second = src.ensure_current("repo")
             # At most two attempts across two calls (one per call), and
@@ -157,15 +184,14 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             repo.mkdir()
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
 
             def no_build(*a, **k):
                 raise AssertionError("ordinary read must not build")
 
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=no_build):
+            with mock.patch.object(g, "_run_index_build", side_effect=no_build):
                 with self.assertRaises(g.GraftUnavailableError):
                     src.resolve_subject(
                         "repo",
@@ -191,6 +217,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
         import inspect
 
         from span.service.operations import status as status_op
+
         source = inspect.getsource(status_op._hook_fast)
         self.assertNotIn("ensure_current", source)
 
@@ -201,9 +228,11 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             data = pathlib.Path(tmp) / "data"
             from span.shell.mcp_server import (
-                ServerConfig, provision_repository,
+                ServerConfig,
+                provision_repository,
             )
             from span import service as ops
+
             with mock.patch.object(g._shutil, "which", return_value=None):
                 with self.assertRaises(ValueError) as ctx:
                     provision_repository(
@@ -221,8 +250,8 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             repo.mkdir()
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
 
             def fake_bad_build(repo_path, artifact_dir=None):
                 wp = g.wiring_path_for(artifact_dir)
@@ -231,14 +260,14 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 return True, "rebuilt"
 
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_bad_build):
+            with mock.patch.object(g, "_run_index_build", side_effect=fake_bad_build):
                 freshness = src.ensure_current("repo")
             self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
             self.assertFalse(src.has_index())
             with self.assertRaises(g.GraftUnavailableError):
                 src.resolve_subject(
-                    "repo", m.SubjectSelector(None, "x", (), None),
+                    "repo",
+                    m.SubjectSelector(None, "x", (), None),
                     _bounds(),
                 )
 
@@ -250,16 +279,15 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             _git_init(repo)
             (repo / "a.py").write_text("x = 2\n", encoding="utf-8")
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
 
             def fake_build(repo_path, artifact_dir=None):
                 _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_build):
+            with mock.patch.object(g, "_run_index_build", side_effect=fake_build):
                 freshness = src.ensure_current("repo")
             self.assertTrue(src.has_index())
             self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
@@ -276,12 +304,13 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             _git_init(repo)
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
             wp = g.wiring_path_for(artifact)
             _write_wiring(wp)
             # Cache newer than HEAD, then dirty the working tree.
             import time
+
             time.sleep(1.05)
             wp.touch()
             (repo / "a.py").write_text("x = 2\n", encoding="utf-8")
@@ -297,8 +326,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_build):
+            with mock.patch.object(g, "_run_index_build", side_effect=fake_build):
                 freshness = src.ensure_current("repo")
             self.assertEqual(calls, [1])
             self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
@@ -315,16 +343,18 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             _git_init(repo)
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
             wp = g.wiring_path_for(artifact)
             _write_wiring(wp)
             import time
+
             time.sleep(1.05)
             wp.touch()
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             with mock.patch.object(
-                g, "_run_index_build",
+                g,
+                "_run_index_build",
                 side_effect=AssertionError(
                     "clean tree with a current cache must not rebuild"
                 ),
@@ -338,22 +368,20 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             repo.mkdir()
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
 
             def fake_slow_build(repo_path, artifact_dir=None):
                 import time
+
                 time.sleep(0.05)
                 _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_slow_build):
+            with mock.patch.object(g, "_run_index_build", side_effect=fake_slow_build):
                 threads = [
-                    threading.Thread(
-                        target=lambda: src.ensure_current("repo")
-                    )
+                    threading.Thread(target=lambda: src.ensure_current("repo"))
                     for _ in range(5)
                 ]
                 for t in threads:
@@ -361,8 +389,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 for t in threads:
                     t.join()
             payload = json.loads(
-                g.wiring_path_for(artifact).read_text(
-                    encoding="utf-8")
+                g.wiring_path_for(artifact).read_text(encoding="utf-8")
             )
             self.assertIn("nodes", payload)
             self.assertTrue(src.has_index())
@@ -374,22 +401,20 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             before = g.artifact_snapshot(repo)
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
 
             def fake_build(repo_path, artifact_dir=None):
                 _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             src = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_build):
+            with mock.patch.object(g, "_run_index_build", side_effect=fake_build):
                 src.ensure_current("repo")
             after = g.artifact_snapshot(repo)
             self.assertEqual(before, after)
             wiring = g.wiring_path_for(artifact)
-            self.assertTrue(str(wiring).startswith(
-                str(pathlib.Path(tmp) / "data")))
+            self.assertTrue(str(wiring).startswith(str(pathlib.Path(tmp) / "data")))
             self.assertFalse(str(wiring).startswith(str(repo)))
 
     def test_restart_reuses_cache_without_build(self):
@@ -398,16 +423,15 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             repo.mkdir()
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             from span.shell.structural import default_artifact_dir
-            artifact = default_artifact_dir(pathlib.Path(tmp) / "data",
-                                            repo.name)
+
+            artifact = default_artifact_dir(pathlib.Path(tmp) / "data", repo.name)
             _write_wiring(g.wiring_path_for(artifact))
-            first = g.GraftStructuralSource("repo", repo,
-                                            artifact_dir=artifact)
+            first = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             self.assertTrue(first.has_index())
-            second = g.GraftStructuralSource("repo", repo,
-                                             artifact_dir=artifact)
+            second = g.GraftStructuralSource("repo", repo, artifact_dir=artifact)
             with mock.patch.object(
-                g, "_run_index_build",
+                g,
+                "_run_index_build",
                 side_effect=AssertionError("restart must reuse cache"),
             ):
                 second.describe_current("repo")
@@ -420,7 +444,8 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             data = pathlib.Path(tmp) / "data"
             from span.shell.mcp_server import (
-                ServerConfig, provision_repository,
+                ServerConfig,
+                provision_repository,
             )
             from span import service as ops
 
@@ -428,8 +453,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
-            with mock.patch.object(g, "_run_index_build",
-                                   side_effect=fake_build):
+            with mock.patch.object(g, "_run_index_build", side_effect=fake_build):
                 context, result = provision_repository(
                     ServerConfig(data_dir=data),
                     ops.SemanticInitializeRepositoryRequest(
@@ -456,21 +480,24 @@ class ProvisioningLifecycleTest(unittest.TestCase):
         from span.shell.mcp import TOOL_DESCRIPTIONS, TOOL_SCHEMAS
         import json as _json
         import tempfile as _tempfile
-        args = mcp_server._parse_args(
-            ["--data-dir", "/tmp/d", "--repo", "/tmp/repo"])
+
+        args = mcp_server._parse_args(["--data-dir", "/tmp/d", "--repo", "/tmp/repo"])
         self.assertEqual(args.repo, ["/tmp/repo"])
         iargs = install.parse_args(["--repo", "/tmp/repo"])
         self.assertEqual(iargs.repo, ["/tmp/repo"])
         import pathlib as _pl
-        readme = (_pl.Path(__file__).resolve().parents[2]
-                  / "README.md").read_text(encoding="utf-8")
+
+        readme = (_pl.Path(__file__).resolve().parents[2] / "README.md").read_text(
+            encoding="utf-8"
+        )
         self.assertNotIn("--repo graft:", readme)
         self.assertNotIn('"graft:<TARGET_REPO>"', readme)
         self.assertNotIn("graft` on `PATH", readme)
         # Active user-facing docs name no provider.
         self.assertNotIn("graft", readme.lower())
-        mcp_doc = (_pl.Path(__file__).resolve().parents[2]
-                   / "docs" / "mcp.md").read_text(encoding="utf-8")
+        mcp_doc = (
+            _pl.Path(__file__).resolve().parents[2] / "docs" / "mcp.md"
+        ).read_text(encoding="utf-8")
         self.assertNotIn("graft", mcp_doc.lower())
         for name, description in TOOL_DESCRIPTIONS.items():
             self.assertNotIn("graft", description.lower(), name)
@@ -482,11 +509,19 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             _artifact_kind = _root_kind / "structural" / "repo"
             (_artifact_kind / ".graph").mkdir(parents=True)
             (_artifact_kind / ".graph" / "wiring.json").write_text(
-                _json.dumps({
-                    "nodes": [{"id": "x", "name": "x",
-                               "kind": "NOT_A_KIND", "path": "a.py"}],
-                    "edges": [],
-                })
+                _json.dumps(
+                    {
+                        "nodes": [
+                            {
+                                "id": "x",
+                                "name": "x",
+                                "kind": "NOT_A_KIND",
+                                "path": "a.py",
+                            }
+                        ],
+                        "edges": [],
+                    }
+                )
             )
             _bad = g.GraftStructuralSource(
                 "repo", _root_kind, artifact_dir=_artifact_kind
@@ -498,6 +533,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
         # Installer output never names the provider either.
         import contextlib as _contextlib
         import io as _io
+
         with _tempfile.TemporaryDirectory() as _tmp_out:
             _cfg = _pl.Path(_tmp_out) / "opencode.json"
             _cfg.write_text(_json.dumps({"mcp": {}}))
@@ -512,13 +548,12 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             provision_repository as _provision,
         )
         from span import service as _ops
+
         with _tempfile.TemporaryDirectory() as _tmp:
             _repo = _pl.Path(_tmp) / "repo"
             _repo.mkdir()
             (_repo / "a.py").write_text("x = 1\n", encoding="utf-8")
-            with mock.patch.object(
-                g, "resolve_indexer_binary", return_value=None
-            ):
+            with mock.patch.object(g, "resolve_indexer_binary", return_value=None):
                 with self.assertRaises(ValueError) as _ctx:
                     _provision(
                         _ServerConfig(data_dir=_pl.Path(_tmp) / "data"),

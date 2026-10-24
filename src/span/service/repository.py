@@ -41,9 +41,7 @@ def _setup_requirement(repository_id: str) -> m.ResolutionRequirement:
     )
 
 
-def _is_initialized(
-    repository_id: str, *, store: SemanticStore
-) -> bool:
+def _is_initialized(repository_id: str, *, store: SemanticStore) -> bool:
     """Whether explicit initialization recorded this repository.
 
     Read-only: checking never initializes (I-27).
@@ -64,9 +62,7 @@ def _uninitialized_answer(
     """
     content: m.SemanticContent
     if intent is m.SemanticIntent.STATUS:
-        content = m.StatusContent(
-            readiness=m.RepositoryReadiness.UNINITIALIZED
-        )
+        content = m.StatusContent(readiness=m.RepositoryReadiness.UNINITIALIZED)
     elif intent is m.SemanticIntent.EXPLAIN:
         content = m.ExplainContent()
     elif intent is m.SemanticIntent.TRACE:
@@ -76,9 +72,7 @@ def _uninitialized_answer(
     else:
         content = m.AuthorityContent()
     return m.SemanticAnswer(
-        answer_id=_answer_id(
-            "uninit", repository_id, intent.value
-        ),
+        answer_id=_answer_id("uninit", repository_id, intent.value),
         intent=intent,
         repository_state=state,
         subject_resolution=None,
@@ -133,9 +127,7 @@ def initialize_repository(
             "remaining sources discovered on demand"
         )
     if state.dirty:
-        warnings.append(
-            "working tree dirty; fingerprints track actual content read"
-        )
+        warnings.append("working tree dirty; fingerprints track actual content read")
     version = store.schema_version()
     # §4.8/I-31: readiness is operational — whether the repository can
     # service semantic operations — never inventory completeness.

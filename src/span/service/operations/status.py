@@ -63,10 +63,11 @@ from span.service.resolution import (
 from span.shell import paging as _paging
 
 __all__ = [
-    '_hook_fast',
-    '_compose_status_answer',
-    'status',
+    "_hook_fast",
+    "_compose_status_answer",
+    "status",
 ]
+
 
 def _hook_fast(
     repository_id: str,
@@ -94,14 +95,11 @@ def _hook_fast(
         return m.HookStatusNotice(
             readiness=m.RepositoryReadiness.UNINITIALIZED,
             recommended_action=(
-                "run initialize_repository in a dedicated "
-                "setup session"
+                "run initialize_repository in a dedicated " "setup session"
             ),
         )
     if target is None:
-        return m.HookStatusNotice(
-            readiness=m.RepositoryReadiness.READY
-        )
+        return m.HookStatusNotice(readiness=m.RepositoryReadiness.READY)
     if (
         isinstance(target, m.EvidenceScope)
         and not target.paths
@@ -112,8 +110,12 @@ def _hook_fast(
         subjects: tuple[m.Subject, ...] = ()
     else:
         subjects, _ = _resolve_scope_subjects(
-            repository_id, target, structural=structural, store=store,
-            bounds=bounds, evidence=evidence,
+            repository_id,
+            target,
+            structural=structural,
+            store=store,
+            bounds=bounds,
+            evidence=evidence,
         )
     affected: list[m.SubjectId] = []
     stale = 0
@@ -189,9 +191,7 @@ def _hook_fast(
     if stale or unverifiable:
         # SPMCP-05: name the exact resolution path and scope. A refresh
         # never accepts a bare count or an invented scope.
-        locators = ", ".join(
-            sorted(sid.canonical_locator for sid in affected)
-        )
+        locators = ", ".join(sorted(sid.canonical_locator for sid in affected))
         action = (
             f"run refresh with an exact SubjectSelector for: {locators} "
             f"({stale} stale, {unverifiable} unverifiable items)"
@@ -213,9 +213,9 @@ def _repository_coverage_entry(
     evidence: EvidenceSource,
     store: SemanticStore,
     bounds: m.QueryBounds,
-    precomputed_snapshots: Mapping[
-        m.EvidenceScope, tuple[str, dict[str, str]]
-    ] | None = None,
+    precomputed_snapshots: (
+        Mapping[m.EvidenceScope, tuple[str, dict[str, str]]] | None
+    ) = None,
 ) -> m.SemanticCoverageEntry:
     """Build one report entry from persisted semantic state only.
 
@@ -230,32 +230,27 @@ def _repository_coverage_entry(
         _claim_ref(claim) for claim in claims
     ) + tuple(_relationship_ref(rel) for rel in relationships)
     updates, _ = _classify_current(
-        repository_id, semantic_ids, evidence=evidence, store=store,
+        repository_id,
+        semantic_ids,
+        evidence=evidence,
+        store=store,
         bounds=bounds,
     )
-    freshness_by_id = {
-        claim.claim_id.value: claim.freshness.state for claim in claims
-    }
+    freshness_by_id = {claim.claim_id.value: claim.freshness.state for claim in claims}
     freshness_by_id.update(
-        {
-            rel.relationship_id.value: rel.freshness.state
-            for rel in relationships
-        }
+        {rel.relationship_id.value: rel.freshness.state for rel in relationships}
     )
     freshness_by_id.update(
         {update.semantic_id.id.value: update.freshness.state for update in updates}
     )
     current_count = sum(
-        state is m.FreshnessState.CURRENT
-        for state in freshness_by_id.values()
+        state is m.FreshnessState.CURRENT for state in freshness_by_id.values()
     )
     stale_count = sum(
-        state is m.FreshnessState.STALE
-        for state in freshness_by_id.values()
+        state is m.FreshnessState.STALE for state in freshness_by_id.values()
     )
     unverifiable_count = sum(
-        state is m.FreshnessState.UNVERIFIABLE
-        for state in freshness_by_id.values()
+        state is m.FreshnessState.UNVERIFIABLE for state in freshness_by_id.values()
     )
 
     question_views: list[m.SemanticQuestionCoverageView] = []
@@ -270,7 +265,9 @@ def _repository_coverage_entry(
             continue
         question_views.append(
             effective_question_view(
-                coverage, evidence=evidence, store=store,
+                coverage,
+                evidence=evidence,
+                store=store,
                 repository_id=repository_id,
                 precomputed_snapshots=precomputed_snapshots,
             )
@@ -296,17 +293,14 @@ def _repository_coverage_entry(
         for view in question_views
     )
     not_applicable_count = sum(
-        view.effective_disposition
-        is m.SemanticQuestionDisposition.NOT_APPLICABLE
+        view.effective_disposition is m.SemanticQuestionDisposition.NOT_APPLICABLE
         for view in question_views
     )
     stale_effective_question_count = sum(
-        view.freshness.state is m.FreshnessState.STALE
-        for view in question_views
+        view.freshness.state is m.FreshnessState.STALE for view in question_views
     )
     question_unverifiable = any(
-        view.freshness.state is m.FreshnessState.UNVERIFIABLE
-        for view in question_views
+        view.freshness.state is m.FreshnessState.UNVERIFIABLE for view in question_views
     )
     requirements: list[m.ResolutionRequirement] = [
         requirement
@@ -342,9 +336,7 @@ def _repository_coverage_entry(
             )
         )
     requirements = list(dict.fromkeys(requirements))
-    incomplete = bool(
-        pending_count or open_count or question_remaining or truncated
-    )
+    incomplete = bool(pending_count or open_count or question_remaining or truncated)
     if question_unverifiable or unverifiable_count:
         disposition = m.SemanticCoverageDisposition.UNVERIFIABLE
     elif stale_effective_question_count or stale_count:
@@ -355,9 +347,7 @@ def _repository_coverage_entry(
         disposition = m.SemanticCoverageDisposition.UNASSESSED
     else:
         disposition = m.SemanticCoverageDisposition.CURRENT
-    if not requirements and disposition is not (
-        m.SemanticCoverageDisposition.CURRENT
-    ):
+    if not requirements and disposition is not (m.SemanticCoverageDisposition.CURRENT):
         # Addendum G §4.2c fallback: every non-current repository entry
         # carries one actionable canonical requirement. Read-time
         # projection only; never persisted; never invents an objective.
@@ -441,8 +431,7 @@ def _repository_coverage_entry(
                 bounds,
             )
             ghost = not any(
-                item.evidence_ref.locator == file_part
-                for item in present.items
+                item.evidence_ref.locator == file_part for item in present.items
             )
         except Exception:
             ghost = False
@@ -475,7 +464,7 @@ def _repository_coverage_entry(
         open_question_count=open_count,
         not_applicable_question_count=not_applicable_count,
         stale_effective_question_count=stale_effective_question_count,
-        resolution_requirements=tuple(requirements[:bounds.max_results]),
+        resolution_requirements=tuple(requirements[: bounds.max_results]),
         truncated=truncated,
     )
 
@@ -510,8 +499,12 @@ def _coverage_entries_for_subjects(
         scope_snapshots = {}
     return tuple(
         _repository_coverage_entry(
-            repository_id, subject, evidence=evidence, store=store,
-            bounds=bounds, precomputed_snapshots=scope_snapshots,
+            repository_id,
+            subject,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            precomputed_snapshots=scope_snapshots,
         )
         for subject in subjects
     )
@@ -533,9 +526,7 @@ def _coverage_report(
         bounded_live_target_unaccounted_count,
     ) = target_counts
     counts = {
-        disposition: sum(
-            entry.disposition is disposition for entry in entries
-        )
+        disposition: sum(entry.disposition is disposition for entry in entries)
         for disposition in m.SemanticCoverageDisposition
     }
     return m.SemanticCoverageReport(
@@ -543,16 +534,10 @@ def _coverage_report(
         persisted_subject_count=persisted_subject_count,
         returned_subject_count=returned_subject_count,
         current_subject_count=counts[m.SemanticCoverageDisposition.CURRENT],
-        incomplete_subject_count=counts[
-            m.SemanticCoverageDisposition.INCOMPLETE
-        ],
+        incomplete_subject_count=counts[m.SemanticCoverageDisposition.INCOMPLETE],
         stale_subject_count=counts[m.SemanticCoverageDisposition.STALE],
-        unverifiable_subject_count=counts[
-            m.SemanticCoverageDisposition.UNVERIFIABLE
-        ],
-        unassessed_subject_count=counts[
-            m.SemanticCoverageDisposition.UNASSESSED
-        ],
+        unverifiable_subject_count=counts[m.SemanticCoverageDisposition.UNVERIFIABLE],
+        unassessed_subject_count=counts[m.SemanticCoverageDisposition.UNASSESSED],
         pending_question_count=pending_question_count,
         open_question_count=open_question_count,
         stale_effective_question_count=sum(
@@ -561,9 +546,7 @@ def _coverage_report(
         active_target_association_count=active_target_association_count,
         persisted_target_accounted_count=persisted_target_accounted_count,
         persisted_target_unresolved_count=persisted_target_unresolved_count,
-        bounded_live_target_unaccounted_count=(
-            bounded_live_target_unaccounted_count
-        ),
+        bounded_live_target_unaccounted_count=(bounded_live_target_unaccounted_count),
         target_burden_live_scope=(
             m.SemanticCoverageAggregateScope.BOUNDED_LIVE
             if bounded_live_target_unaccounted_count is not None
@@ -580,9 +563,7 @@ def _target_burden_aggregates(
     bounds: m.QueryBounds,
 ) -> tuple[int, int, int | None]:
     """Read persisted target burden and bounded live unaccounted members."""
-    accounted, unresolved = store.count_target_inventory_outcomes(
-        repository_id
-    )
+    accounted, unresolved = store.count_target_inventory_outcomes(repository_id)
     associations = store.load_active_target_associations(repository_id)
     live_unaccounted = 0
     try:
@@ -624,11 +605,12 @@ def _compose_repository_status_answer(
         "STATUS", repository_id, "repository", f"mode:{mode}", bounds
     )
     _validate_service_token(page_token, _digest)
-    subject_page = store.load_repository_subjects(
-        repository_id, bounds, subject_offset
-    )
+    subject_page = store.load_repository_subjects(repository_id, bounds, subject_offset)
     entries = _coverage_entries_for_subjects(
-        repository_id, subject_page.items, evidence=evidence, store=store,
+        repository_id,
+        subject_page.items,
+        evidence=evidence,
+        store=store,
         bounds=bounds,
     )
     # Addendum G §4.2b within-page display order only: deterministic by
@@ -663,9 +645,7 @@ def _compose_repository_status_answer(
     )
     report = _coverage_report(
         entries,
-        persisted_subject_count=store.count_repository_subjects(
-            repository_id
-        ),
+        persisted_subject_count=store.count_repository_subjects(repository_id),
         returned_subject_count=len(entries),
         question_counts=(
             _qdisp.get("PENDING", 0),
@@ -682,14 +662,16 @@ def _compose_repository_status_answer(
         requirement
         for entry in entries
         for requirement in entry.resolution_requirements
-    )[:bounds.max_results]
+    )[: bounds.max_results]
     truncated = subject_page.bound_info.truncated or any(
         entry.truncated for entry in entries
     )
     next_token = None
     if subject_page.bound_info.truncated:
         next_token = _paging.format_service_token(
-            subject_offset + len(entries), None, 0,
+            subject_offset + len(entries),
+            None,
+            0,
             query_digest=_digest,
         )
     category = (
@@ -700,7 +682,8 @@ def _compose_repository_status_answer(
     returned = len(entries) + len(requirements)
     return m.SemanticAnswer(
         answer_id=_answer_id(
-            "stt", repository_id,
+            "stt",
+            repository_id,
             f"repository-coverage:{subject_offset}",
         ),
         intent=m.SemanticIntent.STATUS,
@@ -713,11 +696,10 @@ def _compose_repository_status_answer(
         ),
         evidence=(),
         resolution_requirements=requirements,
-        bound_info=_bound_info(
-            bounds, returned, truncated, category, next_token
-        ),
+        bound_info=_bound_info(bounds, returned, truncated, category, next_token),
         state_explanation=state_explanation_for(
-            (), (),
+            (),
+            (),
             bounds=(bounds.max_results, truncated),
         ),
     )
@@ -744,8 +726,11 @@ def _repository_status_page(
             "from the first page with page_token omitted"
         )
     expected = _query_digest(
-        "STATUS", request.repository_id, "repository",
-        f"mode:{request.mode.value}", bounds,
+        "STATUS",
+        request.repository_id,
+        "repository",
+        f"mode:{request.mode.value}",
+        bounds,
     )
     if request.page_token is not None and token_digest != expected:
         raise StatusTargetError(
@@ -762,6 +747,7 @@ def _repository_status_page(
         mode=request.mode.value,
         page_token=request.page_token,
     )
+
 
 def _target_status_answer(
     repository_id: str,
@@ -818,7 +804,9 @@ def _target_status_answer(
         from span.service.discovery import enumerate_target_inventory
 
         inv_items = enumerate_target_inventory(
-            repository_id, assoc.target_scope, evidence=evidence,
+            repository_id,
+            assoc.target_scope,
+            evidence=evidence,
             bounds=bounds,
         )
     except (ValueError, Exception):
@@ -862,11 +850,10 @@ def _target_status_answer(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     if current_fp != assoc.inventory_fingerprint:
-        current_ids = {
-            item.evidence_ref.evidence_id.value for item in inv_items
-        }
+        current_ids = {item.evidence_ref.evidence_id.value for item in inv_items}
         accounted_now = sum(
-            1 for acc in assoc.inventory_accounting
+            1
+            for acc in assoc.inventory_accounting
             if acc.evidence_ref.evidence_id.value in current_ids
         )
         content = m.StatusContent(
@@ -900,8 +887,7 @@ def _target_status_answer(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     accounted = {
-        acc.evidence_ref.evidence_id.value: acc
-        for acc in assoc.inventory_accounting
+        acc.evidence_ref.evidence_id.value: acc for acc in assoc.inventory_accounting
     }
     # Global precedence: evaluate the whole campaign, then apply
     # UNVERIFIABLE -> STALE -> INCOMPLETE -> CURRENT. Everything below
@@ -951,7 +937,9 @@ def _target_status_answer(
             )
         try:
             coverages = store.load_all_question_coverages(
-                repository_id, q.scope_root, (q.subject,),
+                repository_id,
+                q.scope_root,
+                (q.subject,),
             )
         except Exception:
             saw_unverifiable = True
@@ -976,7 +964,9 @@ def _target_status_answer(
         # Canonical freshness: effective disposition + dependency state.
         try:
             view = effective_question_view(
-                match, evidence=evidence, store=store,
+                match,
+                evidence=evidence,
+                store=store,
                 repository_id=repository_id,
             )
         except Exception:
@@ -1010,13 +1000,9 @@ def _target_status_answer(
     if disposition is m.SemanticCoverageDisposition.UNVERIFIABLE:
         total_count = accounted_count = unaccounted_count = None
     else:
-        current_ids = {
-            item.evidence_ref.evidence_id.value for item in inv_items
-        }
+        current_ids = {item.evidence_ref.evidence_id.value for item in inv_items}
         total_count = len(inv_items)
-        accounted_count = sum(
-            1 for eid in accounted if eid in current_ids
-        )
+        accounted_count = sum(1 for eid in accounted if eid in current_ids)
         unaccounted_count = total_count - accounted_count
     content = m.StatusContent(
         target_association=assoc,
@@ -1054,9 +1040,7 @@ def _compose_status_answer(
 ) -> m.SemanticAnswer:
     if len(subjects) == 1:
         _sid = subjects[0].subject_id
-        _target_key = (
-            f"{_sid.subject_kind.value}:{_sid.canonical_locator}"
-        )
+        _target_key = f"{_sid.subject_kind.value}:{_sid.canonical_locator}"
     else:
         _target_key = "scope:" + ",".join(
             sorted(
@@ -1065,9 +1049,7 @@ def _compose_status_answer(
                 for s in subjects
             )
         )
-    _digest = _query_digest(
-        "STATUS", repository_id, _target_key, "", bounds
-    )
+    _digest = _query_digest("STATUS", repository_id, _target_key, "", bounds)
     _validate_service_token(page_token, _digest)
     all_claims: list[m.SemanticClaim] = []
     all_rels: list[m.SemanticRelationship] = []
@@ -1075,7 +1057,10 @@ def _compose_status_answer(
     first_rels_token: str | None = None
     for position, subject in enumerate(subjects):
         claims, relationships, tok_c, tok_r = _load_subject_state(
-            repository_id, subject.subject_id, store=store, bounds=bounds,
+            repository_id,
+            subject.subject_id,
+            store=store,
+            bounds=bounds,
             page_token=page_token if len(subjects) == 1 else None,
         )
         all_claims.extend(claims)
@@ -1091,8 +1076,12 @@ def _compose_status_answer(
     ) + tuple(_relationship_ref(r) for r in all_rels)
     all_items = tuple(all_claims) + tuple(all_rels)
     updates, dependencies = _evaluate_current(
-        repository_id, pre_ids, all_items, evidence=evidence,
-        store=store, bounds=bounds,
+        repository_id,
+        pre_ids,
+        all_items,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
     live_states: dict[str, m.FreshnessState] = {
         u.semantic_id.id.value: u.freshness.state for u in updates
@@ -1116,12 +1105,16 @@ def _compose_status_answer(
         if freshness is None:
             return claim
         return m.SemanticClaim(
-            claim_id=claim.claim_id, subject=claim.subject,
-            kind=claim.kind, value=claim.value,
+            claim_id=claim.claim_id,
+            subject=claim.subject,
+            kind=claim.kind,
+            value=claim.value,
             assertion_nature=claim.assertion_nature,
             evidence=claim.evidence,
-            authority=claim.authority, trust=claim.trust,
-            freshness=freshness, basis=claim.basis,
+            authority=claim.authority,
+            trust=claim.trust,
+            freshness=freshness,
+            basis=claim.basis,
         )
 
     def _with_live_rel(
@@ -1131,12 +1124,16 @@ def _compose_status_answer(
         if freshness is None:
             return rel
         return m.SemanticRelationship(
-            relationship_id=rel.relationship_id, source=rel.source,
-            kind=rel.kind, target=rel.target,
+            relationship_id=rel.relationship_id,
+            source=rel.source,
+            kind=rel.kind,
+            target=rel.target,
             assertion_nature=rel.assertion_nature,
             evidence=rel.evidence,
-            authority=rel.authority, trust=rel.trust,
-            freshness=freshness, basis=rel.basis,
+            authority=rel.authority,
+            trust=rel.trust,
+            freshness=freshness,
+            basis=rel.basis,
         )
 
     claims_t = tuple(_with_live_claim(c) for c in all_claims)
@@ -1151,17 +1148,12 @@ def _compose_status_answer(
         repository_id, tuple(claims_t), tuple(rels_t), store=store
     )
     kept_claims, kept_rels, kept_conf, items_truncated, items_category = (
-        _select_answer_items(
-            claims_t, rels_t, conflicts_all, bounds.max_results
-        )
+        _select_answer_items(claims_t, rels_t, conflicts_all, bounds.max_results)
     )
     kept_ids = {c.claim_id.value for c in kept_claims} | {
         r.relationship_id.value for r in kept_rels
     }
-    changed_kept = tuple(
-        dep for dep in changed
-        if dep.semantic_id.id.value in kept_ids
-    )
+    changed_kept = tuple(dep for dep in changed if dep.semantic_id.id.value in kept_ids)
     unresolved: list[m.ResolutionRequirement] = []
     for claim in kept_claims:
         unresolved.extend(_answers.requirements_for_claim(claim))
@@ -1169,9 +1161,7 @@ def _compose_status_answer(
         unresolved.extend(_answers.requirements_for_relationship(rel))
     # Non-ref lists (evidence pointers and values, never semantic refs)
     # take the remaining budget deterministically.
-    rest_budget = max(
-        0, bounds.max_results - len(kept_conf) - len(kept_claims)
-    )
+    rest_budget = max(0, bounds.max_results - len(kept_conf) - len(kept_claims))
     kept_unresolved = tuple(unresolved[:rest_budget])
     kept_changed = changed_kept[: max(0, rest_budget - len(kept_unresolved))]
     kept_ver = verification_all[
@@ -1186,24 +1176,37 @@ def _compose_status_answer(
         category = "unresolved"
     if len(subjects) == 1:
         views, qshown, qremaining = _paged_question_views(
-            repository_id, subjects[0].subject_id,
+            repository_id,
+            subjects[0].subject_id,
             tuple(s.subject_id for s in subjects),
-            store=store, bounds=bounds, page_token=page_token,
-            evidence=evidence, live_states=live_states,
+            store=store,
+            bounds=bounds,
+            page_token=page_token,
+            evidence=evidence,
+            live_states=live_states,
         )
         token: str | None = _next_service_token(
-            page_token, kept_claims, kept_rels, claims_t, rels_t,
-            first_claims_token, first_rels_token,
+            page_token,
+            kept_claims,
+            kept_rels,
+            claims_t,
+            rels_t,
+            first_claims_token,
+            first_rels_token,
             questions_skip=qshown,
             questions_remaining=qremaining,
             query_digest=_digest,
         )
     else:
         views, _, qremaining = _paged_question_views(
-            repository_id, None,
+            repository_id,
+            None,
             tuple(s.subject_id for s in subjects),
-            store=store, bounds=bounds, page_token=None,
-            evidence=evidence, live_states=live_states,
+            store=store,
+            bounds=bounds,
+            page_token=None,
+            evidence=evidence,
+            live_states=live_states,
         )
         token = None
     if qremaining > 0:
@@ -1215,7 +1218,10 @@ def _compose_status_answer(
     # no new store, no second writer. Answer-level unresolved/truncation
     # math below is unchanged.
     frontier_entries = _coverage_entries_for_subjects(
-        repository_id, subjects, evidence=evidence, store=store,
+        repository_id,
+        subjects,
+        evidence=evidence,
+        store=store,
         bounds=bounds,
     )
     (
@@ -1229,7 +1235,8 @@ def _compose_status_answer(
     frontier_report = _coverage_report(
         frontier_entries,
         persisted_subject_count=sum(
-            1 for entry in frontier_entries
+            1
+            for entry in frontier_entries
             if entry.semantic_item_count or entry.question_count
         ),
         returned_subject_count=len(frontier_entries),
@@ -1260,15 +1267,17 @@ def _compose_status_answer(
         coverage_report=frontier_report,
     )
     returned = (
-        len(kept_conf) + len(unresolved) + len(kept_claims)
-        + len(kept_changed) + len(kept_ver)
+        len(kept_conf)
+        + len(unresolved)
+        + len(kept_claims)
+        + len(kept_changed)
+        + len(kept_ver)
     )
     return m.SemanticAnswer(
         answer_id=_answer_id(
-            "stt", repository_id,
-            ",".join(
-                s.subject_id.canonical_locator for s in subjects
-            ) or "scope",
+            "stt",
+            repository_id,
+            ",".join(s.subject_id.canonical_locator for s in subjects) or "scope",
         ),
         intent=m.SemanticIntent.STATUS,
         repository_state=state,
@@ -1278,11 +1287,13 @@ def _compose_status_answer(
         resolution_requirements=tuple(unresolved),
         bound_info=_bound_info(bounds, returned, truncated, category, token),
         state_explanation=state_explanation_for(
-            tuple(kept_claims), tuple(kept_rels),
+            tuple(kept_claims),
+            tuple(kept_rels),
             coverage=coverage_counts_for(views),
             bounds=(bounds.max_results, truncated),
         ),
     )
+
 
 def status(
     request: SemanticStatusRequest,
@@ -1317,49 +1328,57 @@ def status(
     bounds = _resolve_bounds(request.bounds, hook=False)
     if isinstance(request.target, m.TargetId):
         if request.mode is m.StatusMode.HOOK_FAST:
-            raise StatusTargetError(
-                "campaign status requires StatusMode.NORMAL"
-            )
+            raise StatusTargetError("campaign status requires StatusMode.NORMAL")
         state = structural.repository_state(request.repository_id)
         if not _is_initialized(request.repository_id, store=store):
             return _uninitialized_answer(
-                m.SemanticIntent.STATUS, request.repository_id,
-                bounds, state,
+                m.SemanticIntent.STATUS,
+                request.repository_id,
+                bounds,
+                state,
             )
         return _target_status_answer(
-            request.repository_id, request.target,
-            evidence=evidence, store=store, bounds=bounds, state=state,
+            request.repository_id,
+            request.target,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
         )
     if request.mode is m.StatusMode.HOOK_FAST:
         return _hook_fast(
-            request.repository_id, request.target,
-            structural=structural, evidence=evidence, store=store,
+            request.repository_id,
+            request.target,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             bounds=bounds,
         )
     if isinstance(request.target, (m.ClaimRef, m.RelationshipRef)):
         try:
-            (item,) = store.load_by_refs(
-                request.repository_id, (request.target,)
-            )
+            (item,) = store.load_by_refs(request.repository_id, (request.target,))
         except ValueError as exc:
             raise StatusTargetError(str(exc)) from None
         state = structural.repository_state(request.repository_id)
         if not _is_initialized(request.repository_id, store=store):
             return _uninitialized_answer(
-                m.SemanticIntent.STATUS, request.repository_id,
-                bounds, state,
+                m.SemanticIntent.STATUS,
+                request.repository_id,
+                bounds,
+                state,
             )
-        sid = (
-            item.subject
-            if isinstance(item, m.SemanticClaim)
-            else item.source
-        )
+        sid = item.subject if isinstance(item, m.SemanticClaim) else item.source
         subjects = store.load_subjects(request.repository_id, (sid,))
         if not subjects:
             raise StatusTargetError("referenced subject is not indexed")
         return _compose_status_answer(
-            request.repository_id, subjects, structural=structural,
-            evidence=evidence, store=store, bounds=bounds, state=state,
+            request.repository_id,
+            subjects,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
             page_token=request.page_token,
         )
     state = structural.repository_state(request.repository_id)
@@ -1376,8 +1395,11 @@ def status(
             state=state,
         )
     subjects, ambiguity = _resolve_scope_subjects(
-        request.repository_id, request.target,
-        structural=structural, store=store, bounds=bounds,
+        request.repository_id,
+        request.target,
+        structural=structural,
+        store=store,
+        bounds=bounds,
         evidence=evidence,
     )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
@@ -1392,9 +1414,7 @@ def status(
                 ),
             )
         return m.SemanticAnswer(
-            answer_id=_answer_id(
-                "stt", request.repository_id, "scope"
-            ),
+            answer_id=_answer_id("stt", request.repository_id, "scope"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
             subject_resolution=None,
@@ -1408,7 +1428,12 @@ def status(
     # next-operation guidance from _compose_status_answer; absent,
     # ambiguous, unexamined, stale, and unverifiable stay distinct.
     return _compose_status_answer(
-        request.repository_id, subjects, structural=structural,
-        evidence=evidence, store=store, bounds=bounds, state=state,
+        request.repository_id,
+        subjects,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
         page_token=request.page_token,
     )

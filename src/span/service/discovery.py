@@ -12,13 +12,13 @@ from span.ports.evidence import EvidenceSource
 from span.ports.structural import StructuralDirection, StructuralSource
 
 __all__ = [
-    '_inventory_snapshot',
-    'discover_evidence',
-    '_coverage_for_task',
-    '_coverage_scope_snapshots',
-    '_read_units_within_bytes',
-    'enumerate_target_inventory',
-    'check_inventory_identity',
+    "_inventory_snapshot",
+    "discover_evidence",
+    "_coverage_for_task",
+    "_coverage_scope_snapshots",
+    "_read_units_within_bytes",
+    "enumerate_target_inventory",
+    "check_inventory_identity",
 ]
 
 
@@ -33,9 +33,7 @@ def check_inventory_identity(
         if key in by_id:
             prev = by_id[key].evidence_ref
             if prev.locator != ref.locator or prev.source_kind != ref.source_kind:
-                raise ValueError(
-                    f"conflicting provider identity for {key!r}"
-                )
+                raise ValueError(f"conflicting provider identity for {key!r}")
             continue
         by_id[key] = item
     return tuple(by_id[k] for k in sorted(by_id))
@@ -57,20 +55,17 @@ def enumerate_target_inventory(
     seen_tokens: set[str | None] = set()
     page_token: str | None = None
     while True:
-        page = evidence.inventory_evidence(
-            repository_id, scope, bounds, page_token
-        )
+        page = evidence.inventory_evidence(repository_id, scope, bounds, page_token)
         items.extend(page.items)
         if not page.bound_info.truncated:
             break
         nxt = page.bound_info.continuation_token
         if nxt is None or nxt in seen_tokens:
-            raise ValueError(
-                "target inventory truncated without continuation progress"
-            )
+            raise ValueError("target inventory truncated without continuation progress")
         seen_tokens.add(page_token)
         page_token = nxt
     return check_inventory_identity(tuple(items))
+
 
 def _inventory_snapshot(
     repository_id: str,
@@ -78,9 +73,7 @@ def _inventory_snapshot(
     *,
     evidence: EvidenceSource,
     seeds: tuple[tuple[str, str], ...] = (),
-    precomputed: tuple[
-        tuple[tuple[str, str], ...], dict[str, str]
-    ] | None = None,
+    precomputed: tuple[tuple[tuple[str, str], ...], dict[str, str]] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Inventory snapshot plus per-seed map (plan §8.5, J-1).
 
@@ -112,9 +105,8 @@ def _inventory_snapshot(
         )
     pairs = sorted(eid for _, eid in entries)
     membership = _hashlib.sha256(repr(pairs).encode("utf-8")).hexdigest()
-    return membership, {
-        eid: fingerprints.get(loc, "") for loc, eid in seeds
-    }
+    return membership, {eid: fingerprints.get(loc, "") for loc, eid in seeds}
+
 
 def discover_evidence(
     repository_id: str,
@@ -137,9 +129,7 @@ def discover_evidence(
     validation in the core).
     """
     sid = subject.subject_id
-    edges = structural.edges(
-        repository_id, sid, (), StructuralDirection.BOTH, bounds
-    )
+    edges = structural.edges(repository_id, sid, (), StructuralDirection.BOTH, bounds)
     observations = [
         m.StructuralObservation(
             source_subject=edge.source,
@@ -164,9 +154,7 @@ def discover_evidence(
         edge.evidence.locator for edge in edges.items if edge.evidence is not None
     }
     scope_refs: tuple[m.EvidenceRef, ...] = ()
-    if target_scope is not None and (
-        target_scope.paths or target_scope.evidence_refs
-    ):
+    if target_scope is not None and (target_scope.paths or target_scope.evidence_refs):
         # D-03 rule 1: target-mode discovery intersects the exact declared
         # target boundary. When the admitted area has no in-target
         # structural location, the declared (host-bounded) boundary is
@@ -207,9 +195,7 @@ def discover_evidence(
             bound_info=selection.bound_info,
             discovery_scope=discovery_scope,
         )
-    inventory = evidence.inventory_evidence(
-        repository_id, discovery_scope, bounds
-    )
+    inventory = evidence.inventory_evidence(repository_id, discovery_scope, bounds)
     selected = list(selection.selected_refs)
     seen = {ref.evidence_id.value for ref in selected}
     for item in inventory.items:
@@ -236,9 +222,7 @@ def discover_evidence(
     if not observations and len(kept) < bounds.max_evidence_units:
         prefix_page = evidence.inventory_evidence(
             repository_id,
-            m.EvidenceScope(
-                paths=(sid.canonical_locator,), evidence_refs=()
-            ),
+            m.EvidenceScope(paths=(sid.canonical_locator,), evidence_refs=()),
             bounds,
         )
         for item in prefix_page.items:
@@ -262,6 +246,7 @@ def discover_evidence(
         ),
     )
 
+
 def _coverage_for_task(
     repository_id: str,
     subjects: tuple[m.SubjectId, ...],
@@ -282,16 +267,12 @@ def _coverage_for_task(
     import datetime as _datetime
 
     if not discovery_scope.paths and not discovery_scope.evidence_refs:
-        raise ValueError(
-            "task discovery scope must be non-empty for current coverage"
-        )
+        raise ValueError("task discovery scope must be non-empty for current coverage")
     inventory_fp, seed_map = _inventory_snapshot(
         repository_id,
         discovery_scope,
         evidence=evidence,
-        seeds=tuple(
-            (seed.locator, seed.evidence_id.value) for seed in seeds
-        ),
+        seeds=tuple((seed.locator, seed.evidence_id.value) for seed in seeds),
     )
     return m.CoverageDependency(
         scope_subjects=subjects,
@@ -335,6 +316,7 @@ def _coverage_scope_snapshots(
         )
         for scope, seeds in seeds_by_scope.items()
     }
+
 
 def _read_units_within_bytes(
     evidence: EvidenceSource,

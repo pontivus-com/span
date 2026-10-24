@@ -11,7 +11,7 @@ git clone https://github.com/pontivus-com/span.git
 cd span
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e '.[test]'
+pip install -e '.[test,dev]'
 ```
 
 Run the suite from the repository root:
@@ -20,6 +20,15 @@ Run the suite from the repository root:
 pytest
 ```
 
+Lint and format gates:
+
+```bash
+ruff check .
+black --check .
+```
+
+Apply formatting with `black .` before opening a pull request.
+
 Or with the standard-library runner:
 
 ```bash
@@ -27,7 +36,11 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
 Node and npm are needed for the installer's structural-indexer
-provisioning and for the installed-MCP integration lane.
+provisioning and for the installed-MCP integration lane. The managed indexer
+version is a constant, not a lockfile entry, so
+`python3 scripts/check_indexer_pin.py` compares it with npm; a scheduled
+workflow runs the same check weekly. Bump the pin only after verifying the
+upstream release against the structural fixtures.
 
 ## What to test
 

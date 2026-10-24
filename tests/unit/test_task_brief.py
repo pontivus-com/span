@@ -26,15 +26,17 @@ FILES = {
     "src/main.py": "VALUE = 1\n",
 }
 
-SUBJECTS = (
-    InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),
-)
+SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -43,7 +45,8 @@ def _bounds(**overrides):
 
 def _sid():
     return m.SubjectId(
-        repository_id=REPO, subject_kind=m.SubjectKind.COMPONENT,
+        repository_id=REPO,
+        subject_kind=m.SubjectKind.COMPONENT,
         canonical_locator="src/main.py",
     )
 
@@ -61,7 +64,8 @@ def _ref(path):
 def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-main",
-        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        subject=_sid(),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=(_ref("README.md"), _ref("src/main.py")),
@@ -98,7 +102,9 @@ def _harness():
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
@@ -113,8 +119,13 @@ class TaskBriefTest(unittest.TestCase):
         self.addCleanup(store.close)
         state = structural.repository_state(REPO)
         return prepare_interpretation_task(
-            REPO, _subject(), structural=structural, evidence=evidence,
-            bounds=_bounds(), state=state, operation_intent=intent,
+            REPO,
+            _subject(),
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(),
+            state=state,
+            operation_intent=intent,
         )
 
     def test_brief_carries_c04_aspects_for_class(self):
@@ -181,17 +192,15 @@ class TaskBriefTest(unittest.TestCase):
             brief.objective,
         )
         self.assertEqual(brief.material_path, m.TASK_BRIEF_MATERIAL_PATH)
-        self.assertEqual(
-            brief.semantic_result, m.TASK_BRIEF_SEMANTIC_RESULT
-        )
-        self.assertEqual(
-            brief.adversarial_checks, m.TASK_BRIEF_ADVERSARIAL_CHECKS
-        )
+        self.assertEqual(brief.semantic_result, m.TASK_BRIEF_SEMANTIC_RESULT)
+        self.assertEqual(brief.adversarial_checks, m.TASK_BRIEF_ADVERSARIAL_CHECKS)
         self.assertEqual(brief.readback, m.TASK_BRIEF_READBACK)
-        self.assertTrue(any("Evidence examined:" in item
-                            for item in brief.evidence_authority))
-        self.assertTrue(any("Governing authority:" in item
-                            for item in brief.evidence_authority))
+        self.assertTrue(
+            any("Evidence examined:" in item for item in brief.evidence_authority)
+        )
+        self.assertTrue(
+            any("Governing authority:" in item for item in brief.evidence_authority)
+        )
         self.assertEqual(
             task.request.analysis_obligations,
             m.SA_ANALYSIS_OBLIGATIONS,
@@ -250,8 +259,12 @@ class TaskBriefTest(unittest.TestCase):
         try:
             state = structural.repository_state(REPO)
             task = prepare_interpretation_task(
-                REPO, _subject(), structural=structural,
-                evidence=evidence, bounds=_bounds(), state=state,
+                REPO,
+                _subject(),
+                structural=structural,
+                evidence=evidence,
+                bounds=_bounds(),
+                state=state,
             )
             wrong = dataclasses.replace(
                 task.request,
@@ -273,15 +286,23 @@ class TaskBriefTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=cont, authority_seeds=(_ref("README.md"),),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
+                authority_seeds=(_ref("README.md"),),
             )
             from span.ports.interpretation import PendingInterpretation
+
             self.assertIsInstance(pending, PendingInterpretation)
             result = agent.perform(wrong)
             answer = ops.submit_interpretation(
-                pending.continuation, result, structural=structural,
-                evidence=evidence, store=store, continuations=cont,
+                pending.continuation,
+                result,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             self.assertEqual(len(answer.content.claims), 1)
@@ -315,30 +336,28 @@ class TaskBriefTest(unittest.TestCase):
             pending = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/main.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
                 authority_seeds=(_ref("README.md"),),
             )
             self.assertIsInstance(pending, PendingInterpretation)
-            question = pending.request.question
             submitted = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=m.SemanticQuestionDecision(
                         disposition=m.SemanticQuestionDisposition.OPEN,
                         resolution_requirements=(
                             m.ResolutionRequirement(
-                                kind=(
-                                    m.ResolutionKind
-                                    .MISSING_SEMANTIC_COVERAGE
-                                ),
+                                kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
                                 subject_or_claim=_sid(),
                                 description="main purpose unexamined",
                                 supporting_context=(),
@@ -348,19 +367,24 @@ class TaskBriefTest(unittest.TestCase):
                     ),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
             )
             self.assertIsInstance(submitted, m.SemanticAnswer)
             state = structural.repository_state(REPO)
             retasked = prepare_interpretation_task(
-                REPO, _subject(), structural=structural,
-                evidence=evidence, bounds=_bounds(), state=state,
+                REPO,
+                _subject(),
+                structural=structural,
+                evidence=evidence,
+                bounds=_bounds(),
+                state=state,
                 store=store,
             )
             descriptions = [
-                req.description
-                for req in retasked.request.brief.open_requirements
+                req.description for req in retasked.request.brief.open_requirements
             ]
             self.assertIn("main purpose unexamined", descriptions)
         finally:
@@ -378,42 +402,39 @@ class TaskBriefTest(unittest.TestCase):
             pending = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/main.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
                 authority_seeds=(_ref("README.md"),),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             other = m.SemanticQuestionScope(
                 scope_root=_sid(),
                 subject=_sid(),
-                question_class=(
-                    pending.request.question.question_class
-                ),
+                question_class=(pending.request.question.question_class),
                 question_slice="unrelated-slice",
                 materiality_basis="sibling",
             )
             submitted = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     proposed_questions=(
                         m.ProposedSemanticQuestion(
                             other,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.OPEN
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.OPEN),
                                 resolution_requirements=(
                                     m.ResolutionRequirement(
                                         kind=(
-                                            m.ResolutionKind
-                                            .MISSING_SEMANTIC_COVERAGE
+                                            m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
                                         ),
                                         subject_or_claim=_sid(),
                                         description="sibling slice req",
@@ -426,19 +447,24 @@ class TaskBriefTest(unittest.TestCase):
                     ),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=cont,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
             )
             self.assertIsInstance(submitted, m.SemanticAnswer)
             state = structural.repository_state(REPO)
             retasked = prepare_interpretation_task(
-                REPO, _subject(), structural=structural,
-                evidence=evidence, bounds=_bounds(), state=state,
+                REPO,
+                _subject(),
+                structural=structural,
+                evidence=evidence,
+                bounds=_bounds(),
+                state=state,
                 store=store,
             )
             descriptions = [
-                req.description
-                for req in retasked.request.brief.open_requirements
+                req.description for req in retasked.request.brief.open_requirements
             ]
             self.assertNotIn("sibling slice req", descriptions)
         finally:

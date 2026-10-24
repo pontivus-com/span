@@ -178,6 +178,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
+
 def _generated_tool_schemas() -> dict[str, dict]:
     """Generate input schemas from canonical dataclasses (Addendum I S3).
 
@@ -211,9 +212,7 @@ def _generated_tool_schemas() -> dict[str, dict]:
         # Fail fast: schema projection is the advertised ingress
         # contract. A generation failure is a programming defect and
         # must break the build, never serve a degraded schema.
-        generated = _schema.schema_for_request(
-            cls, description=TOOL_DESCRIPTIONS[tool]
-        )
+        generated = _schema.schema_for_request(cls, description=TOOL_DESCRIPTIONS[tool])
         # Transport-owned routing fields explicitly without duplicating
         # semantic request types: submit carries repository_id as
         # routing only (its canonical carrier lacks it).
@@ -237,9 +236,7 @@ def _generated_tool_schemas() -> dict[str, dict]:
             if isinstance(bound_default, dict):
                 # Ingress forbids the tag at a sole QueryBounds position.
                 # The advertised default must be copy-paste valid.
-                bound_default = {
-                    k: v for k, v in bound_default.items() if k != "$type"
-                }
+                bound_default = {k: v for k, v in bound_default.items() if k != "$type"}
             bound_prop["default"] = bound_default
             props["bounds"] = bound_prop
             generated["properties"] = props
@@ -277,34 +274,29 @@ def _generated_tool_schemas() -> dict[str, dict]:
                 if not isinstance(_definition, dict):
                     continue
                 _branches = []
-                for _kind in sorted(
-                    m.CLAIM_VALUE_TYPE, key=lambda k: k.value
-                ):
+                for _kind in sorted(m.CLAIM_VALUE_TYPE, key=lambda k: k.value):
                     _value_cls = m.CLAIM_VALUE_TYPE[_kind]
-                    _branches.append({
-                        "if": {
-                            "properties": {
-                                "kind": {"const": _kind.value}
+                    _branches.append(
+                        {
+                            "if": {
+                                "properties": {"kind": {"const": _kind.value}},
+                                "required": ["kind"],
                             },
-                            "required": ["kind"],
-                        },
-                        "then": {
-                            "properties": {
-                                "value": {
-                                    "$ref": (
-                                        "#/$defs/"
-                                        f"{_value_cls.__name__}__tag"
-                                    )
-                                }
+                            "then": {
+                                "properties": {
+                                    "value": {
+                                        "$ref": (
+                                            "#/$defs/" f"{_value_cls.__name__}__tag"
+                                        )
+                                    }
+                                },
                             },
-                        },
-                    })
+                        }
+                    )
                 _definition = dict(_definition)
                 _existing_allof = _definition.get("allOf")
                 _definition["allOf"] = (
-                    list(_existing_allof)
-                    if isinstance(_existing_allof, list)
-                    else []
+                    list(_existing_allof) if isinstance(_existing_allof, list) else []
                 ) + _branches
                 _defs[_claim_def] = _definition
             _kind_map = "; ".join(
@@ -351,9 +343,7 @@ def _generated_tool_schemas() -> dict[str, dict]:
                     if not isinstance(_value_def, dict):
                         continue
                     _value_def = dict(_value_def)
-                    _value_def["description"] = (
-                        f"Claim value for kind {_kind.value}."
-                    )
+                    _value_def["description"] = f"Claim value for kind {_kind.value}."
                     _defs[_value_name] = _value_def
             for _result_def in (
                 "SemanticInterpretationResult",
@@ -445,13 +435,9 @@ def _decode_init(arguments: dict) -> ops.SemanticInitializeRepositoryRequest:
     if not isinstance(arguments, dict):
         raise ValueError("initialize_repository needs an object")
     try:
-        return _schema.from_wire(
-            ops.SemanticInitializeRepositoryRequest, arguments
-        )
+        return _schema.from_wire(ops.SemanticInitializeRepositoryRequest, arguments)
     except (m.CanonicalDecodeError, ValueError) as exc:
-        raise ValueError(
-            f"invalid initialize_repository arguments: {exc}"
-        ) from None
+        raise ValueError(f"invalid initialize_repository arguments: {exc}") from None
 
 
 def encode_result(result: object) -> str:
@@ -463,9 +449,7 @@ def encode_result(result: object) -> str:
     when they equal the profile defaults.
     """
     compact = _schema.to_wire_root(type(result), m.to_canonical(result))
-    if isinstance(compact, dict) and compact.get("$type") == (
-        "PendingInterpretation"
-    ):
+    if isinstance(compact, dict) and compact.get("$type") == ("PendingInterpretation"):
         compact = _omit_static_profile(compact)
     return _json.dumps(compact, sort_keys=True)
 
@@ -488,9 +472,7 @@ def _omit_static_profile(compact: dict) -> dict:
     ):
         request.pop("allowed_relationship_kinds", None)
     default_bounds = _schema.to_wire(
-        m.to_canonical(
-            DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
-        ),
+        m.to_canonical(DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds),
         m.QueryBounds,
     )
     if request.get("bounds") == default_bounds:
@@ -524,7 +506,7 @@ def _omit_static_brief(brief: object) -> object:
         isinstance(submission_rules, list)
         and submission_rules[: len(base_rules)] == base_rules
     ):
-        dynamic_rules = submission_rules[len(base_rules):]
+        dynamic_rules = submission_rules[len(base_rules) :]
         if dynamic_rules:
             brief["submission_rules"] = dynamic_rules
         else:
@@ -534,9 +516,7 @@ def _omit_static_brief(brief: object) -> object:
 
 def _error(kind: str, message: str) -> ToolResult:
     return ToolResult(
-        content=_json.dumps(
-            {"error": kind, "message": message}, sort_keys=True
-        ),
+        content=_json.dumps({"error": kind, "message": message}, sort_keys=True),
         is_error=True,
     )
 
@@ -561,18 +541,17 @@ class McpAdapter:
     """
 
     contexts: dict[str, ServiceContext] = _field(default_factory=dict)
-    provisioner: _Callable[
-        [ops.SemanticInitializeRepositoryRequest],
-        tuple[
-            ServiceContext, ops.SemanticInitializeRepositoryResult
-        ],
-    ] | None = None
+    provisioner: (
+        _Callable[
+            [ops.SemanticInitializeRepositoryRequest],
+            tuple[ServiceContext, ops.SemanticInitializeRepositoryResult],
+        ]
+        | None
+    ) = None
     repository_locators: dict[str, str] = _field(default_factory=dict)
     context_loader: _Callable[[str], ServiceContext] | None = None
 
-    def register(
-        self, repository_id: str, context: ServiceContext
-    ) -> None:
+    def register(self, repository_id: str, context: ServiceContext) -> None:
         """Record one repository's wired context (explicit admin path)."""
         self.contexts[repository_id] = context
 
@@ -587,16 +566,12 @@ class McpAdapter:
         always takes precedence over this lazy locator.
         """
         if not repository_id or not repository_locator:
-            raise ValueError(
-                "repository identity and locator must be non-empty"
-            )
+            raise ValueError("repository identity and locator must be non-empty")
         self.repository_locators[repository_id] = repository_locator
 
     def registered_repository_ids(self) -> tuple[str, ...]:
         """Canonical discovery set: opened contexts plus locators."""
-        return tuple(
-            sorted(set(self.contexts) | set(self.repository_locators))
-        )
+        return tuple(sorted(set(self.contexts) | set(self.repository_locators)))
 
     def _context(self, repository_id: str) -> ServiceContext:
         context = self.contexts.get(repository_id)
@@ -614,13 +589,10 @@ class McpAdapter:
             return context
         registered = list(self.registered_repository_ids())
         raise ValueError(
-            f"unknown repository: {repository_id!r}; "
-            f"registered: {registered}"
+            f"unknown repository: {repository_id!r}; " f"registered: {registered}"
         )
 
-    def dispatch(
-        self, tool_name: str, arguments: dict
-    ) -> ToolResult:
+    def dispatch(self, tool_name: str, arguments: dict) -> ToolResult:
         """Invoke one canonical operation; transport errors stay typed."""
         if tool_name == "initialize_repository":
             return self._dispatch_init(arguments)
@@ -645,9 +617,7 @@ class McpAdapter:
         else:
             repository_id = request.repository_id  # type: ignore[union-attr]
             page_token = arguments.get("page_token")
-            if isinstance(page_token, str) and page_token.startswith(
-                ("cont-", "cont")
-            ):
+            if isinstance(page_token, str) and page_token.startswith(("cont-", "cont")):
                 return _error(
                     "ingress",
                     "an interpretation continuation was supplied where a "
@@ -663,50 +633,64 @@ class McpAdapter:
         try:
             if tool_name == "explain":
                 result = ops.explain(
-                    request, structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    request,
+                    structural=context.structural,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
             elif tool_name == "initialize_target":
                 result = ops.initialize_target(
-                    request, structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    request,
+                    structural=context.structural,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
             elif tool_name == "impact":
                 result = ops.impact(
-                    request, structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    request,
+                    structural=context.structural,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
             elif tool_name == "trace":
                 result = ops.trace(
-                    request, structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    request,
+                    structural=context.structural,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
             elif tool_name == "authority":
                 result = ops.authority(
-                    request, structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    request,
+                    structural=context.structural,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
             elif tool_name == "status":
                 result = ops.status(
-                    request, structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    request,
+                    structural=context.structural,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
             elif tool_name == "refresh":
                 result = ops.refresh(
-                    request, structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    request,
+                    structural=context.structural,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                     authority_seeds=context.authority_seeds,
                 )
@@ -715,14 +699,16 @@ class McpAdapter:
                     request.continuation,  # type: ignore[union-attr]
                     request.result,  # type: ignore[union-attr]
                     structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    evidence=context.evidence,
+                    store=context.store,
                     continuations=context.continuations,
                 )
             elif tool_name == "locate":
                 result = ops.locate(
                     request,  # type: ignore[arg-type]
                     structural=context.structural,
-                    evidence=context.evidence, store=context.store,
+                    evidence=context.evidence,
+                    store=context.store,
                 )
             elif tool_name == "neighbors":
                 result = ops.neighbors(
@@ -737,13 +723,20 @@ class McpAdapter:
         except StaleContinuationError as exc:
             return _error(
                 "stale_continuation",
-                f"{exc}; restart the listing from page one with "
-                f"page_token null",
+                f"{exc}; restart the listing from page one with " f"page_token null",
             )
         except ops.InterpretationUnitRejected as exc:
-            return _error("validation", "; ".join(exc.diagnostics) + "; correct the result and resubmit using the same continuation.")
-        except (ops.AuthorityTargetError, ops.StatusTargetError,
-                ops.RefreshScopeError, ValueError) as exc:
+            return _error(
+                "validation",
+                "; ".join(exc.diagnostics)
+                + "; correct the result and resubmit using the same continuation.",
+            )
+        except (
+            ops.AuthorityTargetError,
+            ops.StatusTargetError,
+            ops.RefreshScopeError,
+            ValueError,
+        ) as exc:
             return _error("rejected", str(exc))
         except Exception as exc:
             # Shell-owned GraftUnavailableError mapping (I S1 §5.1): an
@@ -767,8 +760,7 @@ class McpAdapter:
         if self.provisioner is None:
             return _error(
                 "unavailable",
-                "initialize_repository needs a provisioned "
-                "server data directory",
+                "initialize_repository needs a provisioned " "server data directory",
             )
         try:
             context, result = self.provisioner(request)

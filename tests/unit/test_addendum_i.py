@@ -29,8 +29,12 @@ from span.shell.structural.memory import (
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -43,9 +47,7 @@ FILES = {
     "docs/guide.md": "# Guide\n\nPurpose here.\n",
 }
 
-SUBJECTS = (
-    InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),
-)
+SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
 def _sid():
@@ -95,7 +97,8 @@ def _harness():
 def _candidate(slice_note="does things"):
     return m.CandidateSemanticClaim(
         candidate_key="purpose-main",
-        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        subject=_sid(),
+        kind=m.ClaimKind.PURPOSE,
         value=m.PurposeValue(slice_note, ()),
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         evidence=(_ref("README.md"), _ref("src/main.py")),
@@ -118,17 +121,21 @@ class S1ExactLocatorTest(unittest.TestCase):
                 canonical_locator="workflows/tta",
             )
             store.write_index_batch(
-                m.CanonicalIndexBatch(
-                    subjects=(m.Subject(sid, "tta workflow", None),)
-                )
+                m.CanonicalIndexBatch(subjects=(m.Subject(sid, "tta workflow", None),))
             )
             by_id = _resolve_query_subject(
-                "repo-1", m.SubjectSelector(sid, None, (), None),
-                structural=structural, store=store, bounds=_bounds(),
+                "repo-1",
+                m.SubjectSelector(sid, None, (), None),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
             )
             by_path = _resolve_query_subject(
-                "repo-1", m.SubjectSelector(None, "workflows/tta", (), None),
-                structural=structural, store=store, bounds=_bounds(),
+                "repo-1",
+                m.SubjectSelector(None, "workflows/tta", (), None),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
             )
             self.assertIs(by_id.ambiguity, m.ResolutionAmbiguity.RESOLVED)
             self.assertIs(by_path.ambiguity, m.ResolutionAmbiguity.RESOLVED)
@@ -151,14 +158,20 @@ class S2ObservationalStatusTest(unittest.TestCase):
                 bounds=_bounds(),
             )
             first = ops.status(
-                req, structural=structural, evidence=evidence, store=store,
+                req,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(first, m.SemanticAnswer)
             self.assertEqual(len(continuations), 0)
             before = store.count_repository_subjects("repo-1")
             second = ops.status(
-                req, structural=structural, evidence=evidence, store=store,
+                req,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(second, m.SemanticAnswer)
@@ -186,7 +199,10 @@ class S2ObservationalStatusTest(unittest.TestCase):
                 repository_id="repo-1", target=None, bounds=_bounds()
             )
             answer = ops.status(
-                req, structural=structural, evidence=evidence, store=store,
+                req,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -214,7 +230,6 @@ class S3SchemaTest(unittest.TestCase):
             props = definition.get("properties", {})
             if "assertion_nature" in props:
                 found_nature = True
-                enum = props["assertion_nature"].get("enum") or []
                 # Flatten anyOf/enum shapes: must not advertise LEGACY.
                 text = str(props["assertion_nature"])
                 self.assertNotIn("LEGACY_UNCLASSIFIED", text)
@@ -236,13 +251,16 @@ class S3SchemaTest(unittest.TestCase):
 
         claim = {"kind": "PURPOSE"}
         with self.assertRaises(ValueError) as ctx:
-            decode_request("submit_interpretation", {
-                "repository_id": "r",
-                "continuation": "cont-1",
-                "result": {
-                    "claims": [dict(claim), dict(claim)],
+            decode_request(
+                "submit_interpretation",
+                {
+                    "repository_id": "r",
+                    "continuation": "cont-1",
+                    "result": {
+                        "claims": [dict(claim), dict(claim)],
+                    },
                 },
-            })
+            )
         text = str(ctx.exception)
         self.assertIn("result.claims[0]", text)
         self.assertIn("result.claims[1]", text)
@@ -254,23 +272,22 @@ class S3SchemaTest(unittest.TestCase):
         from span.shell.mcp import decode_request
 
         with self.assertRaises(ValueError) as ctx:
-            decode_request("initialize_target", {
-                "repository_id": "r",
-                "target": {
-                    "$type": "EvidenceScope",
-                    "paths": [],
-                    "evidence_refs": [],
-                    "bogus": 1,
+            decode_request(
+                "initialize_target",
+                {
+                    "repository_id": "r",
+                    "target": {
+                        "$type": "EvidenceScope",
+                        "paths": [],
+                        "evidence_refs": [],
+                        "bogus": 1,
+                    },
                 },
-            })
+            )
         text = str(ctx.exception)
         self.assertIn("missing field 'objective'", text)
-        self.assertIn(
-            "unexpected $type at unambiguous position: target", text
-        )
-        self.assertIn(
-            "target: unknown fields for EvidenceScope: ['bogus']", text
-        )
+        self.assertIn("unexpected $type at unambiguous position: target", text)
+        self.assertIn("target: unknown fields for EvidenceScope: ['bogus']", text)
 
     def test_single_shape_fault_keeps_decoder_text(self):
         # Aggregation must not alter the one-fault message callers and
@@ -337,9 +354,7 @@ class S3SchemaTest(unittest.TestCase):
                     required = definition.get("required", [])
                     if name.endswith("__tag"):
                         base = name[: -len("__tag")]
-                        self.assertEqual(
-                            properties.get("$type"), {"const": base}
-                        )
+                        self.assertEqual(properties.get("$type"), {"const": base})
                         self.assertIn("$type", required)
                     else:
                         self.assertNotIn("$type", properties)
@@ -424,13 +439,9 @@ class S3SchemaTest(unittest.TestCase):
         self.assertIn("#/$defs/EvidenceScope", locate_refs)
         self.assertFalse(any(r.endswith("__tag") for r in locate_refs))
 
-        seeds = TOOL_SCHEMAS["initialize_repository"]["properties"][
-            "authority_seeds"
-        ]
+        seeds = TOOL_SCHEMAS["initialize_repository"]["properties"]["authority_seeds"]
         array_branch = next(
-            branch
-            for branch in seeds["anyOf"]
-            if branch.get("type") == "array"
+            branch for branch in seeds["anyOf"] if branch.get("type") == "array"
         )
         seed_refs = self._refs(array_branch["items"])
         self.assertIn("#/$defs/EvidenceRef", seed_refs)
@@ -449,9 +460,7 @@ class S3SchemaTest(unittest.TestCase):
         support = requirements["supporting_context"]["description"]
         for tag in ("ClaimRef", "RelationshipRef", "EvidenceRef"):
             self.assertIn(tag, support)
-        input_refs = defs["SemanticBasis"]["properties"]["input_refs"][
-            "description"
-        ]
+        input_refs = defs["SemanticBasis"]["properties"]["input_refs"]["description"]
         for tag in ("ClaimRef", "RelationshipRef", "EvidenceRef"):
             self.assertIn(tag, input_refs)
 
@@ -460,7 +469,8 @@ class S3SchemaTest(unittest.TestCase):
 
         defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
         names = [
-            n for n in ("CandidateSemanticClaim", "CandidateSemanticClaim__tag")
+            n
+            for n in ("CandidateSemanticClaim", "CandidateSemanticClaim__tag")
             if n in defs
         ]
         self.assertTrue(names)
@@ -478,8 +488,11 @@ class S3SchemaTest(unittest.TestCase):
 
         defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
         names = [
-            n for n in ("SemanticInterpretationResult",
-                        "SemanticInterpretationResult__tag")
+            n
+            for n in (
+                "SemanticInterpretationResult",
+                "SemanticInterpretationResult__tag",
+            )
             if n in defs
         ]
         self.assertTrue(names)
@@ -503,9 +516,7 @@ class S3SchemaTest(unittest.TestCase):
             "status",
             {
                 "repository_id": "example-repo",
-                "bounds": TOOL_SCHEMAS["status"]["properties"]["bounds"][
-                    "default"
-                ],
+                "bounds": TOOL_SCHEMAS["status"]["properties"]["bounds"]["default"],
             },
         )
         self.assertIsNotNone(decoded)
@@ -522,10 +533,7 @@ class S3SchemaTest(unittest.TestCase):
         from span.shell.mcp import TOOL_SCHEMAS
 
         defs = TOOL_SCHEMAS["impact"]["$defs"]
-        names = [
-            n for n in ("SubjectSelector", "SubjectSelector__tag")
-            if n in defs
-        ]
+        names = [n for n in ("SubjectSelector", "SubjectSelector__tag") if n in defs]
         self.assertTrue(names)
         for selector in names:
             required = defs[selector]["required"]
@@ -545,7 +553,8 @@ class S3SchemaTest(unittest.TestCase):
 
         defs = TOOL_SCHEMAS["submit_interpretation"]["$defs"]
         names = [
-            n for n in ("CandidateSemanticClaim", "CandidateSemanticClaim__tag")
+            n
+            for n in ("CandidateSemanticClaim", "CandidateSemanticClaim__tag")
             if n in defs
         ]
         self.assertTrue(names)
@@ -639,7 +648,8 @@ class S3SchemaTest(unittest.TestCase):
         self.assertIn("CandidateSemanticClaim", defs)
         definition = defs["CandidateSemanticClaim"]
         branches = [
-            item for item in definition.get("allOf", [])
+            item
+            for item in definition.get("allOf", [])
             if "if" in item and "then" in item
         ]
         self.assertEqual(len(branches), len(CLAIM_VALUE_TYPE))
@@ -652,14 +662,9 @@ class S3SchemaTest(unittest.TestCase):
                 {"const": kind.value},
             )
             ref = branch["then"]["properties"]["value"]["$ref"]
-            expected = (
-                "#/$defs/"
-                f"{CLAIM_VALUE_TYPE[kind].__name__}__tag"
-            )
+            expected = "#/$defs/" f"{CLAIM_VALUE_TYPE[kind].__name__}__tag"
             self.assertEqual(ref, expected)
-            self.assertIn(
-                f"{CLAIM_VALUE_TYPE[kind].__name__}__tag", defs
-            )
+            self.assertIn(f"{CLAIM_VALUE_TYPE[kind].__name__}__tag", defs)
         for tagged_claim in ("SemanticClaim", "SemanticClaim__tag"):
             if tagged_claim in defs:
                 self.assertTrue(
@@ -685,13 +690,14 @@ class S3SchemaTest(unittest.TestCase):
             "assertion_nature": "DESCRIPTIVE",
             "evidence": [],
             "candidate_authority": None,
-            "basis": {"$type": "SemanticBasis", "derivation": "SEMANTIC_INTERPRETATION"},
+            "basis": {
+                "$type": "SemanticBasis",
+                "derivation": "SEMANTIC_INTERPRETATION",
+            },
         }
         decoded = m.from_canonical(m.CandidateSemanticClaim, payload)
         assert isinstance(decoded, m.CandidateSemanticClaim)
-        self.assertIs(
-            decoded.assertion_nature, m.AssertionNature.DESCRIPTIVE
-        )
+        self.assertIs(decoded.assertion_nature, m.AssertionNature.DESCRIPTIVE)
 
     def test_removed_legacy_nature_rejected(self):
         # The retired classification is not part of the current nature
@@ -709,7 +715,10 @@ class S3SchemaTest(unittest.TestCase):
             "assertion_nature": "LEGACY_UNCLASSIFIED",
             "evidence": [],
             "candidate_authority": None,
-            "basis": {"$type": "SemanticBasis", "derivation": "SEMANTIC_INTERPRETATION"},
+            "basis": {
+                "$type": "SemanticBasis",
+                "derivation": "SEMANTIC_INTERPRETATION",
+            },
         }
         # Only DESCRIPTIVE and NORMATIVE decode.
         with self.assertRaises(m.CanonicalDecodeError):
@@ -756,7 +765,9 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             question_slice="narrow",
                         ),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
         finally:
@@ -775,7 +786,9 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             question_slice="narrow",
                         ),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
         finally:
@@ -789,11 +802,13 @@ class S4QuestionSelectionTest(unittest.TestCase):
 
         files = {"README.md": "# x\n\nDoes x.\n", "src/x.py": "X = 1\n"}
         comp = m.SubjectId(
-            repository_id="repo-1", subject_kind=m.SubjectKind.COMPONENT,
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.COMPONENT,
             canonical_locator="src/x.py",
         )
         doc = m.SubjectId(
-            repository_id="repo-1", subject_kind=m.SubjectKind.DOCUMENT,
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.DOCUMENT,
             canonical_locator="src/x.py",
         )
         structural = InMemoryStructuralSource(
@@ -829,11 +844,10 @@ class S4QuestionSelectionTest(unittest.TestCase):
                     claims=(
                         m.SemanticClaim(
                             claim_id=m.ClaimId("clm-x"),
-                            subject=comp, kind=m.ClaimKind.PURPOSE,
+                            subject=comp,
+                            kind=m.ClaimKind.PURPOSE,
                             value=m.PurposeValue("does x", ()),
-                            assertion_nature=(
-                                m.AssertionNature.DESCRIPTIVE
-                            ),
+                            assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                         ),
                     ),
                     relationships=(
@@ -842,9 +856,7 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             source=comp,
                             kind=m.RelationshipKind.CROSSES_BOUNDARY,
                             target=doc,
-                            assertion_nature=(
-                                m.AssertionNature.DESCRIPTIVE
-                            ),
+                            assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                         ),
                     ),
                     coverage=(
@@ -854,22 +866,17 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             evidence_scope=m.EvidenceScope(),
                             declared_complete=False,
                             question=m.SemanticQuestionScope(
-                                scope_root=comp, subject=comp,
-                                question_class=(
-                                    m.SemanticQuestionClass.CQ_04
-                                ),
+                                scope_root=comp,
+                                subject=comp,
+                                question_class=(m.SemanticQuestionClass.CQ_04),
                                 question_slice=eff,
                                 materiality_basis="TRACE question-local",
                             ),
-                            disposition=(
-                                m.SemanticQuestionDisposition.OPEN
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.OPEN),
                             result_refs=(),
                             resolution_requirements=(
                                 m.ResolutionRequirement(
-                                    kind=(
-                                        m.ResolutionKind.MISSING_AUTHORITY
-                                    ),
+                                    kind=(m.ResolutionKind.MISSING_AUTHORITY),
                                     subject_or_claim=comp,
                                     description="test open",
                                     supporting_context=(),
@@ -890,13 +897,13 @@ class S4QuestionSelectionTest(unittest.TestCase):
                     boundary_only=False,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
-            self.assertEqual(
-                pending.request.subjects[0].subject_id, doc
-            )
+            self.assertEqual(pending.request.subjects[0].subject_id, doc)
         finally:
             store.close()
 
@@ -911,14 +918,14 @@ class S4QuestionSelectionTest(unittest.TestCase):
                 pending = ops.impact(
                     ops.SemanticImpactRequest(
                         repository_id="repo-1",
-                        target=m.SubjectSelector(
-                            None, "src/main.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/main.py", (), None),
                         change_kind=m.ChangeKind.BEHAVIOR,
                         change_description=description,
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
                 self.assertIsInstance(pending, PendingInterpretation)
@@ -941,11 +948,10 @@ class S4QuestionSelectionTest(unittest.TestCase):
                     claims=(
                         m.SemanticClaim(
                             claim_id=m.ClaimId("clm-status"),
-                            subject=_sid(), kind=m.ClaimKind.PURPOSE,
+                            subject=_sid(),
+                            kind=m.ClaimKind.PURPOSE,
                             value=m.PurposeValue("does things", ()),
-                            assertion_nature=(
-                                m.AssertionNature.DESCRIPTIVE
-                            ),
+                            assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                         ),
                     ),
                 )
@@ -953,14 +959,14 @@ class S4QuestionSelectionTest(unittest.TestCase):
             pending = ops.impact(
                 ops.SemanticImpactRequest(
                     repository_id="repo-1",
-                    target=m.SubjectSelector(
-                        None, "src/main.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
                     change_kind=m.ChangeKind.BEHAVIOR,
                     change_description="fix one",
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
@@ -991,11 +997,10 @@ class S4QuestionSelectionTest(unittest.TestCase):
                     claims=(
                         m.SemanticClaim(
                             claim_id=m.ClaimId("clm-pending"),
-                            subject=_sid(), kind=m.ClaimKind.PURPOSE,
+                            subject=_sid(),
+                            kind=m.ClaimKind.PURPOSE,
                             value=m.PurposeValue("does things", ()),
-                            assertion_nature=(
-                                m.AssertionNature.DESCRIPTIVE
-                            ),
+                            assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                         ),
                     ),
                     coverage=(
@@ -1005,16 +1010,13 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             evidence_scope=m.EvidenceScope(),
                             declared_complete=False,
                             question=m.SemanticQuestionScope(
-                                scope_root=_sid(), subject=_sid(),
-                                question_class=(
-                                    m.SemanticQuestionClass.CQ_04
-                                ),
+                                scope_root=_sid(),
+                                subject=_sid(),
+                                question_class=(m.SemanticQuestionClass.CQ_04),
                                 question_slice=trace_eff,
                                 materiality_basis="TRACE question-local",
                             ),
-                            disposition=(
-                                m.SemanticQuestionDisposition.PENDING
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.PENDING),
                             result_refs=(),
                             resolution_requirements=(),
                             disposition_basis="test pending",
@@ -1026,16 +1028,13 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             evidence_scope=m.EvidenceScope(),
                             declared_complete=False,
                             question=m.SemanticQuestionScope(
-                                scope_root=_sid(), subject=_sid(),
-                                question_class=(
-                                    m.SemanticQuestionClass.CQ_08
-                                ),
+                                scope_root=_sid(),
+                                subject=_sid(),
+                                question_class=(m.SemanticQuestionClass.CQ_08),
                                 question_slice=impact_eff,
                                 materiality_basis="IMPACT question-local",
                             ),
-                            disposition=(
-                                m.SemanticQuestionDisposition.PENDING
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.PENDING),
                             result_refs=(),
                             resolution_requirements=(),
                             disposition_basis="test pending",
@@ -1047,29 +1046,29 @@ class S4QuestionSelectionTest(unittest.TestCase):
             traced = ops.trace(
                 ops.SemanticTraceRequest(
                     repository_id="repo-1",
-                    target=m.SubjectSelector(
-                        None, "src/main.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
                     direction=StructuralDirection.BOTH,
                     relationship_filter=None,
                     boundary_only=False,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(traced, PendingInterpretation)
             impacted = ops.impact(
                 ops.SemanticImpactRequest(
                     repository_id="repo-1",
-                    target=m.SubjectSelector(
-                        None, "src/main.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
                     change_kind=m.ChangeKind.BEHAVIOR,
                     change_description="fix one",
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(impacted, PendingInterpretation)
@@ -1092,11 +1091,13 @@ class S4QuestionSelectionTest(unittest.TestCase):
 
         files = {"README.md": "# y\n\nDoes y.\n", "src/y.py": "Y = 1\n"}
         comp = m.SubjectId(
-            repository_id="repo-1", subject_kind=m.SubjectKind.COMPONENT,
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.COMPONENT,
             canonical_locator="src/y.py",
         )
         doc = m.SubjectId(
-            repository_id="repo-1", subject_kind=m.SubjectKind.DOCUMENT,
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.DOCUMENT,
             canonical_locator="src/y.py",
         )
         structural = InMemoryStructuralSource(
@@ -1108,7 +1109,8 @@ class S4QuestionSelectionTest(unittest.TestCase):
             ),
             (
                 InMemoryEdge(
-                    "src/y.py", m.StructuralEdgeKind.REFERENCES,
+                    "src/y.py",
+                    m.StructuralEdgeKind.REFERENCES,
                     "src/y.py",
                 ),
             ),
@@ -1122,7 +1124,9 @@ class S4QuestionSelectionTest(unittest.TestCase):
                     authority_seeds=(),
                 ),
                 repository_id="repo-1",
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
             )
             readme_ref = m.EvidenceRef(
                 evidence_id=m.EvidenceId("ev-README.md"),
@@ -1140,13 +1144,10 @@ class S4QuestionSelectionTest(unittest.TestCase):
                                 subject=comp,
                                 kind=m.ClaimKind.PURPOSE,
                                 value=m.PurposeValue("does y", ()),
-                                assertion_nature=(
-                                    m.AssertionNature.DESCRIPTIVE
-                                ),
+                                assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                                 evidence=(readme_ref,),
                                 basis=m.SemanticBasis(
-                                    m.DerivationKind
-                                    .SEMANTIC_INTERPRETATION,
+                                    m.DerivationKind.SEMANTIC_INTERPRETATION,
                                     "readme states the purpose",
                                 ),
                             ),
@@ -1166,14 +1167,19 @@ class S4QuestionSelectionTest(unittest.TestCase):
                     boundary_only=False,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
                 authority_seeds=(readme_ref,),
             )
             self.assertIsInstance(first, PendingInterpretation)
             second = ops.submit_interpretation(
-                first.continuation, agent.perform(first.request),
-                structural=structural, evidence=evidence, store=store,
+                first.continuation,
+                agent.perform(first.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             # The resumed walk reaches the DOCUMENT-kind subject instead
@@ -1217,9 +1223,7 @@ class S5ExecutionPathTest(unittest.TestCase):
             for path in files
             if path != "README.md"
         ) + (
-            InMemorySubject(
-                "src/draft.py", m.SubjectKind.REPRESENTATION, "draft"
-            ),
+            InMemorySubject("src/draft.py", m.SubjectKind.REPRESENTATION, "draft"),
             InMemorySubject(
                 "src/admitted.py", m.SubjectKind.REPRESENTATION, "admitted"
             ),
@@ -1237,13 +1241,16 @@ class S5ExecutionPathTest(unittest.TestCase):
                 authority_seeds=(),
             ),
             repository_id="repo-1",
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         return structural, evidence, store, files
 
     def _stage_id(self, locator, kind=m.SubjectKind.COMPONENT):
         return m.SubjectId(
-            repository_id="repo-1", subject_kind=kind,
+            repository_id="repo-1",
+            subject_kind=kind,
             canonical_locator=locator,
         )
 
@@ -1268,7 +1275,9 @@ class S5ExecutionPathTest(unittest.TestCase):
     def _stage_rel(self, name, source, kind, target):
         return m.SemanticRelationship(
             relationship_id=m.RelationshipId(f"rel-{name}"),
-            source=source, kind=kind, target=target,
+            source=source,
+            kind=kind,
+            target=target,
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
         )
 
@@ -1291,7 +1300,8 @@ class S5ExecutionPathTest(unittest.TestCase):
             evidence_scope=m.EvidenceScope(),
             declared_complete=answered,
             question=m.SemanticQuestionScope(
-                scope_root=sid, subject=sid,
+                scope_root=sid,
+                subject=sid,
                 question_class=m.SemanticQuestionClass.CQ_04,
                 question_slice=f"{stage} execution",
                 materiality_basis="S5 execution path",
@@ -1302,9 +1312,7 @@ class S5ExecutionPathTest(unittest.TestCase):
                 else m.SemanticQuestionDisposition.OPEN
             ),
             result_refs=(
-                (m.ClaimRef(id=m.ClaimId(f"clm-{stage}")),)
-                if answered
-                else ()
+                (m.ClaimRef(id=m.ClaimId(f"clm-{stage}")),) if answered else ()
             ),
             resolution_requirements=requirement_tuple,
             disposition_basis=f"test {stage}",
@@ -1328,33 +1336,43 @@ class S5ExecutionPathTest(unittest.TestCase):
         )
         by_stage = {name: self._stage_id(loc) for name, loc, _ in stages}
         draft = self._stage_id("src/draft.py", m.SubjectKind.REPRESENTATION)
-        admitted = self._stage_id(
-            "src/admitted.py", m.SubjectKind.REPRESENTATION
-        )
+        admitted = self._stage_id("src/admitted.py", m.SubjectKind.REPRESENTATION)
         rels = [
             self._stage_rel(
-                "lifecycle-gen-adm", by_stage["generator"],
-                m.RelationshipKind.TRANSITIONS_TO, by_stage["admission"],
+                "lifecycle-gen-adm",
+                by_stage["generator"],
+                m.RelationshipKind.TRANSITIONS_TO,
+                by_stage["admission"],
             ),
             self._stage_rel(
-                "lifecycle-adm-car", by_stage["admission"],
-                m.RelationshipKind.TRANSITIONS_TO, by_stage["carrier"],
+                "lifecycle-adm-car",
+                by_stage["admission"],
+                m.RelationshipKind.TRANSITIONS_TO,
+                by_stage["carrier"],
             ),
             self._stage_rel(
-                "lifecycle-cor-aud", by_stage["correction"],
-                m.RelationshipKind.TRANSITIONS_TO, by_stage["audit"],
+                "lifecycle-cor-aud",
+                by_stage["correction"],
+                m.RelationshipKind.TRANSITIONS_TO,
+                by_stage["audit"],
             ),
             self._stage_rel(
-                "gen-produces", by_stage["generator"],
-                m.RelationshipKind.PRODUCES, draft,
+                "gen-produces",
+                by_stage["generator"],
+                m.RelationshipKind.PRODUCES,
+                draft,
             ),
             self._stage_rel(
-                "adm-consumes", by_stage["admission"],
-                m.RelationshipKind.CONSUMES, draft,
+                "adm-consumes",
+                by_stage["admission"],
+                m.RelationshipKind.CONSUMES,
+                draft,
             ),
             self._stage_rel(
-                "adm-transforms", by_stage["admission"],
-                m.RelationshipKind.TRANSFORMS_TO, admitted,
+                "adm-transforms",
+                by_stage["admission"],
+                m.RelationshipKind.TRANSFORMS_TO,
+                admitted,
             ),
         ]
         if not defective:
@@ -1364,21 +1382,26 @@ class S5ExecutionPathTest(unittest.TestCase):
             # absent, so an upstream walk stops at the correction.
             rels[1:1] = [
                 self._stage_rel(
-                    "lifecycle-car-cor", by_stage["carrier"],
+                    "lifecycle-car-cor",
+                    by_stage["carrier"],
                     m.RelationshipKind.TRANSITIONS_TO,
                     by_stage["correction"],
                 )
             ]
             rels.append(
                 self._stage_rel(
-                    "car-carries", by_stage["carrier"],
-                    m.RelationshipKind.CARRIES, admitted,
+                    "car-carries",
+                    by_stage["carrier"],
+                    m.RelationshipKind.CARRIES,
+                    admitted,
                 )
             )
         rels.append(
             self._stage_rel(
-                "cor-consumes", by_stage["correction"],
-                m.RelationshipKind.CONSUMES, admitted,
+                "cor-consumes",
+                by_stage["correction"],
+                m.RelationshipKind.CONSUMES,
+                admitted,
             )
         )
         failure_requirements = {
@@ -1386,9 +1409,7 @@ class S5ExecutionPathTest(unittest.TestCase):
                 "first response rejected at admission: schema "
                 "admission failed before audit"
             ),
-            "carrier": (
-                "carrier lost admitted state before correction"
-            ),
+            "carrier": ("carrier lost admitted state before correction"),
             "correction": (
                 "correction replaced admitted output and dropped "
                 "carried fields; carrier link missing"
@@ -1399,10 +1420,10 @@ class S5ExecutionPathTest(unittest.TestCase):
         )
         coverages = tuple(
             self._stage_coverage(
-                name, by_stage[name], name != failure_stage,
-                None
-                if name != failure_stage
-                else failure_requirements[failure_stage],
+                name,
+                by_stage[name],
+                name != failure_stage,
+                None if name != failure_stage else failure_requirements[failure_stage],
             )
             for name, _, _ in stages
         ) + tuple(
@@ -1423,9 +1444,7 @@ class S5ExecutionPathTest(unittest.TestCase):
                     materiality_basis="TRACE question-local",
                 ),
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
-                result_refs=(
-                    m.ClaimRef(id=m.ClaimId(f"clm-{name}")),
-                ),
+                result_refs=(m.ClaimRef(id=m.ClaimId(f"clm-{name}")),),
                 resolution_requirements=(),
                 disposition_basis=f"test trace {name}",
                 question_evidence=(),
@@ -1433,38 +1452,41 @@ class S5ExecutionPathTest(unittest.TestCase):
             for name, _, _ in stages
         )
         subjects = tuple(
-            m.Subject(self._stage_id(loc), loc, None)
-            for _, loc, _ in stages
+            m.Subject(self._stage_id(loc), loc, None) for _, loc, _ in stages
         ) + (
             m.Subject(draft, "draft", None),
             m.Subject(admitted, "admitted", None),
         )
         claims = [
-            self._stage_claim(name, loc, summary)
-            for name, loc, summary in stages
+            self._stage_claim(name, loc, summary) for name, loc, summary in stages
         ]
         if defective:
             # The defective correction discards prior fields during
             # replacement: its claim no longer carries admitted state.
             claims = [
-                self._stage_claim(
-                    "correction", "src/correct.py",
-                    "replaces output without carried fields",
+                (
+                    self._stage_claim(
+                        "correction",
+                        "src/correct.py",
+                        "replaces output without carried fields",
+                    )
+                    if claim.claim_id.value == "clm-correction"
+                    else claim
                 )
-                if claim.claim_id.value == "clm-correction"
-                else claim
                 for claim in claims
             ]
         claims = tuple(claims)
         store.write_index_batch(
             m.CanonicalIndexBatch(
-                subjects=subjects, claims=claims,
+                subjects=subjects,
+                claims=claims,
                 relationships=tuple(rels),
             )
         )
         store.write_index_batch(
             m.CanonicalIndexBatch(
-                subjects=subjects, coverage=coverages,
+                subjects=subjects,
+                coverage=coverages,
             )
         )
         return structural, evidence, store, by_stage
@@ -1476,7 +1498,9 @@ class S5ExecutionPathTest(unittest.TestCase):
                 target=m.SubjectSelector(None, locator, (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=ContinuationStore(),
         )
         self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1489,22 +1513,22 @@ class S5ExecutionPathTest(unittest.TestCase):
         # boundaries from persisted relationships and qualifications.
         from span.ports.structural import StructuralDirection
 
-        structural, evidence, store, by_stage = (
-            self._establish_execution_path("admission")
+        structural, evidence, store, by_stage = self._establish_execution_path(
+            "admission"
         )
         try:
             answer = ops.trace(
                 ops.SemanticTraceRequest(
                     repository_id="repo-1",
-                    target=m.SubjectSelector(
-                        by_stage["audit"], None, (), None
-                    ),
+                    target=m.SubjectSelector(by_stage["audit"], None, (), None),
                     direction=StructuralDirection.UPSTREAM,
                     relationship_filter=None,
                     boundary_only=False,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1520,9 +1544,7 @@ class S5ExecutionPathTest(unittest.TestCase):
             admission = self._fresh_disposition(
                 store, structural, evidence, "src/admit.py"
             )
-            audit = self._fresh_disposition(
-                store, structural, evidence, "src/audit.py"
-            )
+            audit = self._fresh_disposition(store, structural, evidence, "src/audit.py")
 
             def _dispositions(readback):
                 return {
@@ -1557,34 +1579,28 @@ class S5ExecutionPathTest(unittest.TestCase):
         # inventing the unsupported edge.
         from span.ports.structural import StructuralDirection
 
-        structural, evidence, store, by_stage = (
-            self._establish_execution_path(
-                "correction", defective=True
-            )
+        structural, evidence, store, by_stage = self._establish_execution_path(
+            "correction", defective=True
         )
         try:
             answer = ops.trace(
                 ops.SemanticTraceRequest(
                     repository_id="repo-1",
-                    target=m.SubjectSelector(
-                        by_stage["audit"], None, (), None
-                    ),
+                    target=m.SubjectSelector(by_stage["audit"], None, (), None),
                     direction=StructuralDirection.UPSTREAM,
                     relationship_filter=None,
                     boundary_only=False,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             reached = {
-                r.source.canonical_locator
-                for r in answer.content.relationships
-            } | {
-                r.target.canonical_locator
-                for r in answer.content.relationships
-            }
+                r.source.canonical_locator for r in answer.content.relationships
+            } | {r.target.canonical_locator for r in answer.content.relationships}
             self.assertNotIn("src/admit.py", reached)
             correction = self._fresh_disposition(
                 store, structural, evidence, "src/correct.py"
@@ -1611,8 +1627,8 @@ class S5ExecutionPathTest(unittest.TestCase):
         # Second fixture changes the failing branch: the failure is at
         # correction, not admission. Repeating the motivating narrative
         # cannot pass; the agent must read the persisted dispositions.
-        structural, evidence, store, by_stage = (
-            self._establish_execution_path("correction")
+        structural, evidence, store, by_stage = self._establish_execution_path(
+            "correction"
         )
         try:
             admission = self._fresh_disposition(
@@ -1654,7 +1670,8 @@ class S6NatureTest(unittest.TestCase):
         )
         candidate = m.CandidateSemanticClaim(
             candidate_key="k",
-            subject=_sid(), kind=m.ClaimKind.PURPOSE,
+            subject=_sid(),
+            kind=m.ClaimKind.PURPOSE,
             value=m.PurposeValue("observes value", ()),
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
             evidence=(_ref("src/main.py"),),
@@ -1677,9 +1694,11 @@ class S6NatureTest(unittest.TestCase):
         )
         candidate = m.CandidateSemanticClaim(
             candidate_key="k",
-            subject=_sid(), kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+            subject=_sid(),
+            kind=m.ClaimKind.OWNERSHIP_CUSTODY,
             value=m.OwnershipCustodyValue(
-                owner=_sid(), role=m.OwnershipRole.OWNER,
+                owner=_sid(),
+                role=m.OwnershipRole.OWNER,
                 exclusivity=m.OwnershipExclusivity.EXCLUSIVE,
             ),
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
@@ -1694,13 +1713,12 @@ class S6NatureTest(unittest.TestCase):
 
         candidate = m.CandidateSemanticClaim(
             candidate_key="purpose",
-            subject=_sid(), kind=m.ClaimKind.PURPOSE,
+            subject=_sid(),
+            kind=m.ClaimKind.PURPOSE,
             value=m.PurposeValue(summary, ()),
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
             evidence=(_ref("src/main.py"),),
-            basis=m.SemanticBasis(
-                m.DerivationKind.SEMANTIC_INTERPRETATION, "saw"
-            ),
+            basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION, "saw"),
         )
         ctx = _v.ValidationContext(
             allowed_claim_kinds=tuple(m.ClaimKind),
@@ -1769,9 +1787,7 @@ class S7ExcerptTest(unittest.TestCase):
         from span.shell.structural.memory import fingerprint_content
 
         return m.EvidenceUnit(
-            evidence_ref=self._big_ref(
-                fingerprint_content(content)
-            ),
+            evidence_ref=self._big_ref(fingerprint_content(content)),
             content=content,
             content_fingerprint=fingerprint_content(content),
         )
@@ -1792,18 +1808,16 @@ class S7ExcerptTest(unittest.TestCase):
 
         content = "filler\nmain " + "x" * 500 + "\n" + "tail\n"
         projected, omissions, requirements = _project_excerpts(
-            (self._big_unit(content),), ("main",),
-            self._big_subject(), 100,
+            (self._big_unit(content),),
+            ("main",),
+            self._big_subject(),
+            100,
         )
         self.assertEqual(projected, ())
-        self.assertTrue(
-            any("1 hits unexamined" in line for line in omissions)
-        )
+        self.assertTrue(any("1 hits unexamined" in line for line in omissions))
         self.assertEqual(len(requirements), 1)
         requirement = requirements[0]
-        self.assertIs(
-            requirement.kind, m.ResolutionKind.MISSING_EVIDENCE
-        )
+        self.assertIs(requirement.kind, m.ResolutionKind.MISSING_EVIDENCE)
         self.assertIn("exceed the delivery budget", requirement.description)
         self.assertIn("src/big.py", requirement.description)
 
@@ -1812,15 +1826,15 @@ class S7ExcerptTest(unittest.TestCase):
 
         content = "main héllo wörld ✓✓✓\nsecond line here\n"
         projected, omissions, requirements = _project_excerpts(
-            (self._big_unit(content),), ("main",),
-            self._big_subject(), 96_000,
+            (self._big_unit(content),),
+            ("main",),
+            self._big_subject(),
+            96_000,
         )
         self.assertEqual(len(projected), 1)
         self.assertEqual(
             projected[0].content_range,
-            m.EvidenceLineRange(
-                start_line=1, end_line=1, total_lines=2
-            ),
+            m.EvidenceLineRange(start_line=1, end_line=1, total_lines=2),
         )
         self.assertEqual(projected[0].content, "main héllo wörld ✓✓✓")
         self.assertEqual(requirements, ())
@@ -1829,41 +1843,43 @@ class S7ExcerptTest(unittest.TestCase):
         from span.service.interpretation import _project_excerpts
 
         fitting, _, _ = _project_excerpts(
-            (self._big_unit("nothing relevant\n"),), ("zzz",),
-            self._big_subject(), 96_000,
+            (self._big_unit("nothing relevant\n"),),
+            ("zzz",),
+            self._big_subject(),
+            96_000,
         )
         self.assertEqual(len(fitting), 1)
         self.assertIsNone(fitting[0].content_range)
         missing, omissions, requirements = _project_excerpts(
-            (self._big_unit("nothing relevant\n"),), ("zzz",),
-            self._big_subject(), 4,
+            (self._big_unit("nothing relevant\n"),),
+            ("zzz",),
+            self._big_subject(),
+            4,
         )
         self.assertEqual(missing, ())
         self.assertTrue(any("0 hits unexamined" in line for line in omissions))
         # A single ungrounded line that cannot fit is a named
         # delivery requirement, not silent omission.
         self.assertEqual(len(requirements), 1)
-        self.assertIs(
-            requirements[0].kind, m.ResolutionKind.MISSING_EVIDENCE
-        )
+        self.assertIs(requirements[0].kind, m.ResolutionKind.MISSING_EVIDENCE)
 
     def test_distant_matches_deliver_prefix(self):
         from span.service.interpretation import _project_excerpts
 
-        lines = ["hit one here"] + [
-            f"filler {n}" for n in range(2, 50)
-        ] + ["hit two here"]
+        lines = (
+            ["hit one here"] + [f"filler {n}" for n in range(2, 50)] + ["hit two here"]
+        )
         content = "\n".join(lines) + "\n"
         first_bytes = len("hit one here\n".encode("utf-8"))
         projected, omissions, requirements = _project_excerpts(
-            (self._big_unit(content),), ("hit",),
-            self._big_subject(), first_bytes + 200,
+            (self._big_unit(content),),
+            ("hit",),
+            self._big_subject(),
+            first_bytes + 200,
         )
         self.assertEqual(len(projected), 1)
         self.assertEqual(projected[0].content, "hit one here")
-        self.assertTrue(
-            any("1 hits unexamined" in line for line in omissions)
-        )
+        self.assertTrue(any("1 hits unexamined" in line for line in omissions))
         self.assertEqual(requirements, ())
 
     def test_exact_budget_accounting(self):
@@ -1875,23 +1891,25 @@ class S7ExcerptTest(unittest.TestCase):
         meta = len(
             _json.dumps(
                 m.to_canonical(
-                    m.EvidenceLineRange(
-                        start_line=1, end_line=1, total_lines=2
-                    )
+                    m.EvidenceLineRange(start_line=1, end_line=1, total_lines=2)
                 ),
                 sort_keys=True,
             ).encode("utf-8")
         )
         exact = len("ab main".encode("utf-8")) + meta
         fitting, _, requirements = _project_excerpts(
-            (self._big_unit(text),), ("main",),
-            self._big_subject(), exact,
+            (self._big_unit(text),),
+            ("main",),
+            self._big_subject(),
+            exact,
         )
         self.assertEqual(len(fitting), 1)
         self.assertEqual(requirements, ())
         clipped, _, clipped_requirements = _project_excerpts(
-            (self._big_unit(text),), ("main",),
-            self._big_subject(), exact - 1,
+            (self._big_unit(text),),
+            ("main",),
+            self._big_subject(),
+            exact - 1,
         )
         self.assertEqual(clipped, ())
         self.assertEqual(len(clipped_requirements), 1)
@@ -1901,22 +1919,24 @@ class S7ExcerptTest(unittest.TestCase):
 
         content = "one\ntwo\nthree\nfour\n"
         projected, _, requirements = _project_excerpts(
-            (self._big_unit(content),), ("zzz",),
-            self._big_subject(), 96_000,
+            (self._big_unit(content),),
+            ("zzz",),
+            self._big_subject(),
+            96_000,
             structural_spans={"src/big.py": (2, 3)},
         )
         self.assertEqual(len(projected), 1)
         self.assertEqual(projected[0].content, "two\nthree")
         self.assertEqual(
             projected[0].content_range,
-            m.EvidenceLineRange(
-                start_line=2, end_line=3, total_lines=4
-            ),
+            m.EvidenceLineRange(start_line=2, end_line=3, total_lines=4),
         )
         self.assertEqual(requirements, ())
         fallback, _, _ = _project_excerpts(
-            (self._big_unit(content),), ("two",),
-            self._big_subject(), 96_000,
+            (self._big_unit(content),),
+            ("two",),
+            self._big_subject(),
+            96_000,
             structural_spans={"src/big.py": (99, 5)},
         )
         self.assertEqual(fallback[0].content, "two")
@@ -1925,22 +1945,19 @@ class S7ExcerptTest(unittest.TestCase):
     def _s7_round_harness(self):
         from span.shell.structural.memory import (
             InMemoryFile,
-            fingerprint_content,
         )
 
-        big_lines = ["# big.py alpha marker"] + [
-            f"filler line {n} padding padding" for n in range(2, 100)
-        ] + ["omega end ZZZ"]
+        big_lines = (
+            ["# big.py alpha marker"]
+            + [f"filler line {n} padding padding" for n in range(2, 100)]
+            + ["omega end ZZZ"]
+        )
         big_content = "\n".join(big_lines) + "\n"
         files = {"README.md": "# big\n\nBig.\n", "src/big.py": big_content}
         structural = InMemoryStructuralSource(
             "repo-1",
             tuple(InMemoryFile(p, c) for p, c in files.items()),
-            (
-                InMemorySubject(
-                    "src/big.py", m.SubjectKind.COMPONENT, "big"
-                ),
-            ),
+            (InMemorySubject("src/big.py", m.SubjectKind.COMPONENT, "big"),),
         )
         evidence = FixtureEvidenceSource("repo-1", dict(files))
         store = SqliteSemanticStore(":memory:")
@@ -1950,7 +1967,9 @@ class S7ExcerptTest(unittest.TestCase):
                 authority_seeds=(),
             ),
             repository_id="repo-1",
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         return structural, evidence, store, big_content
 
@@ -1972,7 +1991,9 @@ class S7ExcerptTest(unittest.TestCase):
                 "big",
                 None,
             ),
-            structural=structural, evidence=evidence, bounds=_bounds(),
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(),
             state=structural.repository_state("repo-1"),
             authority_seeds=(),
             operation_intent=m.SemanticIntent.EXPLAIN,
@@ -1981,7 +2002,8 @@ class S7ExcerptTest(unittest.TestCase):
             question_terms=("alpha",),
         )
         units = [
-            u for u in task.request.evidence_units
+            u
+            for u in task.request.evidence_units
             if u.evidence_ref.locator == "src/big.py"
         ]
         self.assertTrue(units)
@@ -1989,7 +2011,8 @@ class S7ExcerptTest(unittest.TestCase):
         self.assertNotIn("omega", units[0].content)
         continuations = ContinuationStore()
         pending = _suspend(
-            op="explain", repository_id="repo-1",
+            op="explain",
+            repository_id="repo-1",
             subject=m.Subject(
                 m.SubjectId(
                     repository_id="repo-1",
@@ -1999,7 +2022,9 @@ class S7ExcerptTest(unittest.TestCase):
                 "big",
                 None,
             ),
-            task=task, seeds=(), bounds=_bounds(),
+            task=task,
+            seeds=(),
+            bounds=_bounds(),
             state=structural.repository_state("repo-1"),
             resolution=None,
             continuations=continuations,
@@ -2015,7 +2040,8 @@ class S7ExcerptTest(unittest.TestCase):
                 status=m.AuthorityStatus.ACCEPTED,
             ),
             support=m.AuthoritySupport(
-                quoted_span=quote, status_section="src/big.py",
+                quoted_span=quote,
+                status_section="src/big.py",
             ),
         )
 
@@ -2029,13 +2055,9 @@ class S7ExcerptTest(unittest.TestCase):
         )
         from span.shell.structural.memory import fingerprint_content
 
-        structural, evidence, store, big_content = (
-            self._s7_round_harness()
-        )
+        structural, evidence, store, big_content = self._s7_round_harness()
         try:
-            pending, continuations = self._s7_pending(
-                structural, evidence, store
-            )
+            pending, continuations = self._s7_pending(structural, evidence, store)
             agent = FixtureAgent(
                 {
                     "src/big.py": FixtureCandidates(
@@ -2044,25 +2066,16 @@ class S7ExcerptTest(unittest.TestCase):
                                 candidate_key="purpose-big",
                                 subject=m.SubjectId(
                                     repository_id="repo-1",
-                                    subject_kind=(
-                                        m.SubjectKind.COMPONENT
-                                    ),
+                                    subject_kind=(m.SubjectKind.COMPONENT),
                                     canonical_locator="src/big.py",
                                 ),
                                 kind=m.ClaimKind.PURPOSE,
-                                value=m.PurposeValue(
-                                    "big does stuff", ()
-                                ),
-                                assertion_nature=(
-                                    m.AssertionNature.DESCRIPTIVE
-                                ),
+                                value=m.PurposeValue("big does stuff", ()),
+                                assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                                 evidence=(self._big_ref(),),
-                                candidate_authority=self._s7_authority(
-                                    "omega end ZZZ"
-                                ),
+                                candidate_authority=self._s7_authority("omega end ZZZ"),
                                 basis=m.SemanticBasis(
-                                    m.DerivationKind
-                                    .SEMANTIC_INTERPRETATION,
+                                    m.DerivationKind.SEMANTIC_INTERPRETATION,
                                     "big source states the purpose",
                                 ),
                             ),
@@ -2073,8 +2086,11 @@ class S7ExcerptTest(unittest.TestCase):
                 complete_questions=True,
             )
             answer = ops.submit_interpretation(
-                pending.continuation, agent.perform(pending.request),
-                structural=structural, evidence=evidence, store=store,
+                pending.continuation,
+                agent.perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -2096,19 +2112,17 @@ class S7ExcerptTest(unittest.TestCase):
             FixtureCandidates,
         )
 
-        structural, evidence, store, big_content = (
-            self._s7_round_harness()
-        )
+        structural, evidence, store, big_content = self._s7_round_harness()
         try:
-            pending, continuations = self._s7_pending(
-                structural, evidence, store
+            pending, continuations = self._s7_pending(structural, evidence, store)
+            changed = dict(
+                {
+                    "README.md": "# big\n\nBig.\n",
+                    "src/big.py": big_content.replace(
+                        "omega end ZZZ", "omega end CHANGED"
+                    ),
+                }
             )
-            changed = dict({
-                "README.md": "# big\n\nBig.\n",
-                "src/big.py": big_content.replace(
-                    "omega end ZZZ", "omega end CHANGED"
-                ),
-            })
             evidence_v2 = FixtureEvidenceSource("repo-1", changed)
             agent = FixtureAgent(
                 {
@@ -2118,25 +2132,16 @@ class S7ExcerptTest(unittest.TestCase):
                                 candidate_key="purpose-big",
                                 subject=m.SubjectId(
                                     repository_id="repo-1",
-                                    subject_kind=(
-                                        m.SubjectKind.COMPONENT
-                                    ),
+                                    subject_kind=(m.SubjectKind.COMPONENT),
                                     canonical_locator="src/big.py",
                                 ),
                                 kind=m.ClaimKind.PURPOSE,
-                                value=m.PurposeValue(
-                                    "big does stuff", ()
-                                ),
-                                assertion_nature=(
-                                    m.AssertionNature.DESCRIPTIVE
-                                ),
+                                value=m.PurposeValue("big does stuff", ()),
+                                assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                                 evidence=(self._big_ref(),),
-                                candidate_authority=self._s7_authority(
-                                    "omega end ZZZ"
-                                ),
+                                candidate_authority=self._s7_authority("omega end ZZZ"),
                                 basis=m.SemanticBasis(
-                                    m.DerivationKind
-                                    .SEMANTIC_INTERPRETATION,
+                                    m.DerivationKind.SEMANTIC_INTERPRETATION,
                                     "big source states the purpose",
                                 ),
                             ),
@@ -2148,9 +2153,12 @@ class S7ExcerptTest(unittest.TestCase):
             )
             with self.assertRaises(InterpretationUnitRejected):
                 ops.submit_interpretation(
-                    pending.continuation, agent.perform(pending.request),
-                    structural=structural, evidence=evidence_v2,
-                    store=store, continuations=continuations,
+                    pending.continuation,
+                    agent.perform(pending.request),
+                    structural=structural,
+                    evidence=evidence_v2,
+                    store=store,
+                    continuations=continuations,
                 )
             self.assertEqual(len(continuations), 1)
         finally:
@@ -2169,9 +2177,7 @@ class S7ExcerptTest(unittest.TestCase):
 
         structural, evidence, store, _ = self._s7_round_harness()
         try:
-            pending, continuations = self._s7_pending(
-                structural, evidence, store
-            )
+            pending, continuations = self._s7_pending(structural, evidence, store)
             agent = FixtureAgent(
                 {
                     "src/big.py": FixtureCandidates(
@@ -2180,22 +2186,15 @@ class S7ExcerptTest(unittest.TestCase):
                                 candidate_key="purpose-big",
                                 subject=m.SubjectId(
                                     repository_id="repo-1",
-                                    subject_kind=(
-                                        m.SubjectKind.COMPONENT
-                                    ),
+                                    subject_kind=(m.SubjectKind.COMPONENT),
                                     canonical_locator="src/big.py",
                                 ),
                                 kind=m.ClaimKind.PURPOSE,
-                                value=m.PurposeValue(
-                                    "big does stuff", ()
-                                ),
-                                assertion_nature=(
-                                    m.AssertionNature.DESCRIPTIVE
-                                ),
+                                value=m.PurposeValue("big does stuff", ()),
+                                assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                                 evidence=(self._big_ref(),),
                                 basis=m.SemanticBasis(
-                                    m.DerivationKind
-                                    .SEMANTIC_INTERPRETATION,
+                                    m.DerivationKind.SEMANTIC_INTERPRETATION,
                                     "big source states the purpose",
                                 ),
                             ),
@@ -2211,9 +2210,12 @@ class S7ExcerptTest(unittest.TestCase):
             del evidence._files["src/big.py"]
             with self.assertRaises(InterpretationUnitRejected) as cm:
                 ops.submit_interpretation(
-                    pending.continuation, result,
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=continuations,
+                    pending.continuation,
+                    result,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=continuations,
                 )
             self.assertIn("full-source reload failed", str(cm.exception))
             self.assertEqual(len(continuations), 1)
@@ -2230,14 +2232,13 @@ class S8ExplanationTest(unittest.TestCase):
             ("returned assertions: none",),
         )
         claim = m.SemanticClaim(
-            claim_id=m.ClaimId("clm-1"), subject=_sid(),
+            claim_id=m.ClaimId("clm-1"),
+            subject=_sid(),
             kind=m.ClaimKind.PURPOSE,
             value=m.PurposeValue("s", ()),
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
         )
-        nature, trust, freshness, verification = state_explanation_for(
-            (claim,), ()
-        )
+        nature, trust, freshness, verification = state_explanation_for((claim,), ())
         self.assertIn("descriptive-only", nature)
         self.assertIn("(1 descriptive, 0 normative)", nature)
         self.assertIn("1 unresolved", trust)
@@ -2247,21 +2248,24 @@ class S8ExplanationTest(unittest.TestCase):
             "no current passing verification carried for this scope",
         )
         full = state_explanation_for(
-            (claim,), (),
-            coverage=(1, 0, 1), bounds=(50, True),
+            (claim,),
+            (),
+            coverage=(1, 0, 1),
+            bounds=(50, True),
         )
         self.assertEqual(len(full), 6)
         self.assertIn("coverage: 1 answered, 0 open of 1 questions", full)
         self.assertIn(
-            "bounds: at most 50 returned items per page; "
-            "listing truncated",
+            "bounds: at most 50 returned items per page; " "listing truncated",
             full,
         )
         verified = m.SemanticClaim(
-            claim_id=m.ClaimId("clm-v"), subject=_sid(),
+            claim_id=m.ClaimId("clm-v"),
+            subject=_sid(),
             kind=m.ClaimKind.VERIFICATION,
             value=m.VerificationValue(
-                _sid(), m.VerificationKind.TEST,
+                _sid(),
+                m.VerificationKind.TEST,
                 m.VerificationCurrency.CURRENT_PASS,
             ),
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
@@ -2293,20 +2297,26 @@ class S8ExplanationTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             answer = ops.submit_interpretation(
-                pending.continuation, agent.perform(pending.request),
-                structural=structural, evidence=evidence, store=store,
+                pending.continuation,
+                agent.perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             # Unrelated OPEN question coverage persists alongside.
             sid = _sid()
             scope = m.SemanticQuestionScope(
-                scope_root=sid, subject=sid,
+                scope_root=sid,
+                subject=sid,
                 question_class=m.SemanticQuestionClass.CQ_06,
                 question_slice="ownership gap",
                 materiality_basis="test preserves unrelated reason",
@@ -2343,7 +2353,9 @@ class S8ExplanationTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(readback, m.SemanticAnswer)
@@ -2370,7 +2382,9 @@ class S8ExplanationTest(unittest.TestCase):
         task = prepare_interpretation_task(
             "repo-1",
             m.Subject(_sid(), "main", None),
-            structural=structural, evidence=evidence, bounds=_bounds(),
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(),
             state=structural.repository_state("repo-1"),
             authority_seeds=(),
             operation_intent=m.SemanticIntent.EXPLAIN,
@@ -2378,9 +2392,12 @@ class S8ExplanationTest(unittest.TestCase):
         )
         continuations = ContinuationStore()
         pending = _suspend(
-            op="explain", repository_id="repo-1",
+            op="explain",
+            repository_id="repo-1",
             subject=m.Subject(_sid(), "main", None),
-            task=task, seeds=(), bounds=_bounds(),
+            task=task,
+            seeds=(),
+            bounds=_bounds(),
             state=structural.repository_state("repo-1"),
             resolution=None,
             continuations=continuations,
@@ -2392,30 +2409,33 @@ class S8ExplanationTest(unittest.TestCase):
         # S8.3: withdrawing a shared output reopens the dependent
         # question with the actual withdrawal reason while preserving
         # its useful original requirements — never a generic reset.
-        from span.ports.interpretation import PendingInterpretation
 
         structural, evidence, store = _harness()
         try:
             claim_a = m.SemanticClaim(
                 claim_id=m.ClaimId("clm-shared-a"),
-                subject=_sid(), kind=m.ClaimKind.PURPOSE,
+                subject=_sid(),
+                kind=m.ClaimKind.PURPOSE,
                 value=m.PurposeValue("shared basis", ()),
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
             )
             claim_b = m.SemanticClaim(
                 claim_id=m.ClaimId("clm-dependent-b"),
-                subject=_sid(), kind=m.ClaimKind.PURPOSE,
+                subject=_sid(),
+                kind=m.ClaimKind.PURPOSE,
                 value=m.PurposeValue("depends on shared", ()),
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
             )
             scope_a = m.SemanticQuestionScope(
-                scope_root=_sid(), subject=_sid(),
+                scope_root=_sid(),
+                subject=_sid(),
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice="shared question",
                 materiality_basis="test shared output",
             )
             scope_b = m.SemanticQuestionScope(
-                scope_root=_sid(), subject=_sid(),
+                scope_root=_sid(),
+                subject=_sid(),
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice="dependent question",
                 materiality_basis="test shared output",
@@ -2456,9 +2476,7 @@ class S8ExplanationTest(unittest.TestCase):
                             evidence_scope=m.EvidenceScope(),
                             declared_complete=True,
                             question=scope_b,
-                            disposition=(
-                                m.SemanticQuestionDisposition.ANSWERED
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.ANSWERED),
                             result_refs=(
                                 m.ClaimRef(id=claim_a.claim_id),
                                 m.ClaimRef(id=claim_b.claim_id),
@@ -2479,11 +2497,10 @@ class S8ExplanationTest(unittest.TestCase):
                     claims=(
                         m.CandidateSemanticClaim(
                             candidate_key="bound-purpose",
-                            subject=_sid(), kind=m.ClaimKind.PURPOSE,
+                            subject=_sid(),
+                            kind=m.ClaimKind.PURPOSE,
                             value=m.PurposeValue("bound work", ()),
-                            assertion_nature=(
-                                m.AssertionNature.DESCRIPTIVE
-                            ),
+                            assertion_nature=(m.AssertionNature.DESCRIPTIVE),
                             evidence=(_ref("README.md"),),
                             basis=m.SemanticBasis(
                                 m.DerivationKind.SEMANTIC_INTERPRETATION,
@@ -2492,7 +2509,8 @@ class S8ExplanationTest(unittest.TestCase):
                         ),
                     ),
                     relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=m.SemanticQuestionDecision(
                         disposition=m.SemanticQuestionDisposition.ANSWERED,
                         disposition_basis="test bound answer",
@@ -2508,12 +2526,15 @@ class S8ExplanationTest(unittest.TestCase):
                         ),
                     ),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             found = [
-                cov for cov in store.load_all_question_coverages(
+                cov
+                for cov in store.load_all_question_coverages(
                     "repo-1", _sid(), (_sid(),)
                 )
                 if cov.question is not None
@@ -2521,13 +2542,8 @@ class S8ExplanationTest(unittest.TestCase):
             ]
             self.assertEqual(len(found), 1)
             reopened = found[0]
-            self.assertIs(
-                reopened.disposition, m.SemanticQuestionDisposition.PENDING
-            )
-            descriptions = [
-                req.description
-                for req in reopened.resolution_requirements
-            ]
+            self.assertIs(reopened.disposition, m.SemanticQuestionDisposition.PENDING)
+            descriptions = [req.description for req in reopened.resolution_requirements]
             self.assertTrue(
                 any(
                     "retracted: superseded by new evidence" in text

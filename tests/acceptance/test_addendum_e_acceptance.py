@@ -28,7 +28,6 @@ FILES = {
 OBJECTIVE = "Establish billing and shipping areas with exclusions."
 
 
-
 def _fill_batch(pending, accounts):
     """S5/J-6 test helper: account for every bound inventory item.
 
@@ -45,21 +44,30 @@ def _fill_batch(pending, accounts):
         eid = it.evidence_ref.evidence_id.value
         if eid in have:
             continue
-        out.append(m.CandidateTargetInventoryAccount(
-            evidence_id=it.evidence_ref.evidence_id,
-            resolution_requirements=(m.ResolutionRequirement(
-                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                subject_or_claim=None,
-                description="not examined in this test",
-                supporting_context=(),
-            ),),
-        ))
+        out.append(
+            m.CandidateTargetInventoryAccount(
+                evidence_id=it.evidence_ref.evidence_id,
+                resolution_requirements=(
+                    m.ResolutionRequirement(
+                        kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                        subject_or_claim=None,
+                        description="not examined in this test",
+                        supporting_context=(),
+                    ),
+                ),
+            )
+        )
     return tuple(out)
+
 
 def _bounds():
     return m.QueryBounds(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
 
@@ -83,7 +91,9 @@ def _harness(files=None):
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
@@ -127,52 +137,81 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         db_path = os.path.join(tmpdir, "oracle.db")
         files = dict(FILES)
         from span.shell.structural.memory import (
-            InMemoryFile as _F, InMemoryStructuralSource as _S,
+            InMemoryFile as _F,
+            InMemoryStructuralSource as _S,
             InMemorySubject as _Subj,
         )
+
         structural = _S(
-            REPO, tuple(_F(p, c) for p, c in files.items()),
-            tuple(_Subj(p, m.SubjectKind.COMPONENT, p.split(".")[0].split("_")[0]) for p in files),
+            REPO,
+            tuple(_F(p, c) for p, c in files.items()),
+            tuple(
+                _Subj(p, m.SubjectKind.COMPONENT, p.split(".")[0].split("_")[0])
+                for p in files
+            ),
             (),
         )
         from span.shell.evidence import FixtureEvidenceSource as _E
+
         evidence = _E(REPO, dict(files))
         store = SqliteSemanticStore(db_path)
         from span import service as _ops
+
         _ops.initialize_repository(
             _ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
                 authority_seeds=(),
             ),
-            repository_id=REPO, structural=structural, evidence=evidence, store=store,
+            repository_id=REPO,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         live = ContinuationStore()
         tid, _, _ = _tid()
-        billing = m.SubjectId(repository_id=REPO, subject_kind=m.SubjectKind.OTHER, canonical_locator="billing")
-        shipping = m.SubjectId(repository_id=REPO, subject_kind=m.SubjectKind.OTHER, canonical_locator="shipping")
+        billing = m.SubjectId(
+            repository_id=REPO,
+            subject_kind=m.SubjectKind.OTHER,
+            canonical_locator="billing",
+        )
+        shipping = m.SubjectId(
+            repository_id=REPO,
+            subject_kind=m.SubjectKind.OTHER,
+            canonical_locator="shipping",
+        )
 
         def _admit():
             return ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
                     repository_id=REPO,
-                    target=m.EvidenceScope(paths=tuple(sorted(FILES)), evidence_refs=()),
-                    objective=OBJECTIVE, bounds=_bounds(),
+                    target=m.EvidenceScope(
+                        paths=tuple(sorted(FILES)), evidence_refs=()
+                    ),
+                    objective=OBJECTIVE,
+                    bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=live, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=live,
+                authority_seeds=(),
             )
 
         # Drain mapping: assign a1+a2→billing, b→shipping, c→exclusion,
         # d→billing, e→unresolved. Admit PENDING billing/shipping purpose.
         billing_q = m.SemanticQuestionScope(
-            scope_root=billing, subject=billing,
+            scope_root=billing,
+            subject=billing,
             question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="billing purpose", materiality_basis="mapping admits billing",
+            question_slice="billing purpose",
+            materiality_basis="mapping admits billing",
         )
         shipping_q = m.SemanticQuestionScope(
-            scope_root=shipping, subject=shipping,
+            scope_root=shipping,
+            subject=shipping,
             question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="shipping purpose", materiality_basis="mapping admits shipping",
+            question_slice="shipping purpose",
+            materiality_basis="mapping admits shipping",
         )
         admitted = set()
         for _ in range(12):
@@ -197,29 +236,35 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 else:
                     area = None  # vendor_c / legacy_e unresolved
                 if loc == "vendor_c.py":
-                    accs.append(m.CandidateTargetInventoryAccount(
-                        evidence_id=item.evidence_ref.evidence_id,
-                        exclusion_basis=_basis(
-                            "third-party vendored code", (item.evidence_ref,)
-                        ),
-                    ))
-                elif loc == "legacy_e.py":
-                    accs.append(m.CandidateTargetInventoryAccount(
-                        evidence_id=item.evidence_ref.evidence_id,
-                        resolution_requirements=(
-                            m.ResolutionRequirement(
-                                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                                subject_or_claim=None,
-                                description="needs owner interview",
-                                supporting_context=(),
+                    accs.append(
+                        m.CandidateTargetInventoryAccount(
+                            evidence_id=item.evidence_ref.evidence_id,
+                            exclusion_basis=_basis(
+                                "third-party vendored code", (item.evidence_ref,)
                             ),
-                        ),
-                    ))
+                        )
+                    )
+                elif loc == "legacy_e.py":
+                    accs.append(
+                        m.CandidateTargetInventoryAccount(
+                            evidence_id=item.evidence_ref.evidence_id,
+                            resolution_requirements=(
+                                m.ResolutionRequirement(
+                                    kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                                    subject_or_claim=None,
+                                    description="needs owner interview",
+                                    supporting_context=(),
+                                ),
+                            ),
+                        )
+                    )
                 else:
-                    accs.append(m.CandidateTargetInventoryAccount(
-                        evidence_id=item.evidence_ref.evidence_id,
-                        assigned_area_subjects=(area,),
-                    ))
+                    accs.append(
+                        m.CandidateTargetInventoryAccount(
+                            evidence_id=item.evidence_ref.evidence_id,
+                            assigned_area_subjects=(area,),
+                        )
+                    )
                     if area == billing and "billing" not in admitted:
                         admitted.add("billing")
                         cov_list.append(
@@ -227,10 +272,13 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                                 subjects=(billing,),
                                 question_slice="billing purpose",
                                 evidence_scope=m.EvidenceScope(),
-                                declared_complete=False, question=billing_q,
+                                declared_complete=False,
+                                question=billing_q,
                                 disposition=m.SemanticQuestionDisposition.PENDING,
-                                result_refs=(), resolution_requirements=(),
-                                disposition_basis="admitted", question_evidence=(),
+                                result_refs=(),
+                                resolution_requirements=(),
+                                disposition_basis="admitted",
+                                question_evidence=(),
                             )
                         )
                     elif area == shipping and "shipping" not in admitted:
@@ -240,15 +288,21 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                                 subjects=(shipping,),
                                 question_slice="shipping purpose",
                                 evidence_scope=m.EvidenceScope(),
-                                declared_complete=False, question=shipping_q,
+                                declared_complete=False,
+                                question=shipping_q,
                                 disposition=m.SemanticQuestionDisposition.PENDING,
-                                result_refs=(), resolution_requirements=(),
-                                disposition_basis="admitted", question_evidence=(),
+                                result_refs=(),
+                                resolution_requirements=(),
+                                disposition_basis="admitted",
+                                question_evidence=(),
                             )
                         )
                     if area is not None and (
                         (area.canonical_locator == "billing" and loc == "billing_a1.py")
-                        or (area.canonical_locator == "shipping" and loc == "shipping_b.py")
+                        or (
+                            area.canonical_locator == "shipping"
+                            and loc == "shipping_b.py"
+                        )
                     ):
                         cands.append(
                             m.CandidateSubject(
@@ -265,15 +319,22 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(), governing_source_refs=(),
+                    claims=(),
+                    relationships=(),
+                    governing_source_refs=(),
                     diagnostics=("mapping",),
                     candidate_subjects=tuple(cands),
-                    candidate_conflicts=(), proposed_questions=_proposed(*cov_list),
+                    candidate_conflicts=(),
+                    proposed_questions=_proposed(*cov_list),
                     candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=_fill_batch(pending, tuple(accs)),
+                    proposed_target_inventory_accounting=_fill_batch(
+                        pending, tuple(accs)
+                    ),
                     proposed_target_questions=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
         assoc = store.load_target_association(REPO, tid)
@@ -281,12 +342,8 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         assert assoc is not None
         by_eid = {a.evidence_ref.locator: a for a in assoc.inventory_accounting}
         # Multiple files map to one area; areas distinct.
-        self.assertEqual(
-            set(by_eid["billing_a1.py"].assigned_area_subjects), {billing}
-        )
-        self.assertEqual(
-            set(by_eid["billing_a2.py"].assigned_area_subjects), {billing}
-        )
+        self.assertEqual(set(by_eid["billing_a1.py"].assigned_area_subjects), {billing})
+        self.assertEqual(set(by_eid["billing_a2.py"].assigned_area_subjects), {billing})
         self.assertNotEqual(
             set(by_eid["billing_a1.py"].assigned_area_subjects),
             set(by_eid["shipping_b.py"].assigned_area_subjects),
@@ -296,6 +353,7 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         self.assertTrue(by_eid["legacy_e.py"].resolution_requirements)
         # Negative: wrong grouping (a1→shipping) must fail validation.
         from span.core import validation as v
+
         ctx = v.ValidationContext(
             allowed_claim_kinds=tuple(m.ClaimKind),
             allowed_relationship_kinds=tuple(m.RelationshipKind),
@@ -306,14 +364,19 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             evidence_fingerprints={},
         )
         # Fabricated area identity rejects.
-        fake = m.SubjectId(repository_id=REPO, subject_kind=m.SubjectKind.OTHER, canonical_locator="nope")
+        fake = m.SubjectId(
+            repository_id=REPO,
+            subject_kind=m.SubjectKind.OTHER,
+            canonical_locator="nope",
+        )
         bad = m.CandidateTargetInventoryAccount(
-             evidence_id=by_eid["billing_a1.py"].evidence_ref.evidence_id,
+            evidence_id=by_eid["billing_a1.py"].evidence_ref.evidence_id,
             assigned_area_subjects=(fake,),
         )
         self.assertFalse(
             v.validate_target_inventory_account(
-                bad, ctx,
+                bad,
+                ctx,
                 current_inventory_ids=frozenset(
                     a.evidence_ref.evidence_id.value for a in assoc.inventory_accounting
                 ),
@@ -322,36 +385,50 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         # Unresolved prevents CURRENT.
         ans = ops.status(
             ops.SemanticStatusRequest(repository_id=REPO, target=tid, bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(ans, m.SemanticAnswer)
         assert isinstance(ans.content, m.StatusContent)
         self.assertEqual(
             ans.content.target_disposition, m.SemanticCoverageDisposition.INCOMPLETE
         )
+
         # Resolve legacy_e to shipping + answer billing/shipping purpose with
         # claims + cross-area DEPENDS_ON + in-target NOT_APPLICABLE for a
         # billing CQ_02 question. Each semantic pending is driven via
         # initialize_target (PENDING target questions only).
-        def _answer_pending(pending, question, claims, rels, coverages, extra_accounts=(), extra_qs=()):
+        def _answer_pending(
+            pending, question, claims, rels, coverages, extra_accounts=(), extra_qs=()
+        ):
             req = pending.request
             assert req.question is not None
             return ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=tuple(claims), relationships=tuple(rels),
-                    governing_source_refs=(), diagnostics=("semantic",),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=tuple(claims),
+                    relationships=tuple(rels),
+                    governing_source_refs=(),
+                    diagnostics=("semantic",),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_decision(coverages[0]),
                     proposed_questions=_proposed(*coverages[1:]),
                     candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=_fill_batch(pending, tuple(extra_accounts)),
+                    proposed_target_inventory_accounting=_fill_batch(
+                        pending, tuple(extra_accounts)
+                    ),
                     proposed_target_questions=tuple(extra_qs),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
+
         # Answer loop: at most a few rounds; each _admit returns PENDING or terminal.
         for _ in range(8):
             pending = _admit()
@@ -373,8 +450,9 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             if q.question_slice == "billing purpose":
                 claim = m.CandidateSemanticClaim(
                     candidate_key="billing-purpose",
-                    subject=billing, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=billing,
+                    kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(summary="billing computes charges"),
                     evidence=(billing_ref,),
                     basis=m.SemanticBasis(
@@ -385,9 +463,11 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 )
                 rel = m.CandidateSemanticRelationship(
                     candidate_key="billing-depends-shipping",
-                    source=billing, kind=m.RelationshipKind.DEPENDS_ON,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                    target=shipping, evidence=(billing_ref,),
+                    source=billing,
+                    kind=m.RelationshipKind.DEPENDS_ON,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    target=shipping,
+                    evidence=(billing_ref,),
                     basis=m.SemanticBasis(
                         derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
                         summary="billing feeds shipping",
@@ -395,15 +475,21 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                     ),
                 )
                 cov = m.InterpretationCoverage(
-                    subjects=(billing,), question_slice=q.question_slice,
-                    evidence_scope=m.EvidenceScope(), declared_complete=True,
-                    question=q, disposition=m.SemanticQuestionDisposition.ANSWERED,
-                    result_refs=(), resolution_requirements=(),
-                    disposition_basis="answered", question_evidence=(),
+                    subjects=(billing,),
+                    question_slice=q.question_slice,
+                    evidence_scope=m.EvidenceScope(),
+                    declared_complete=True,
+                    question=q,
+                    disposition=m.SemanticQuestionDisposition.ANSWERED,
+                    result_refs=(),
+                    resolution_requirements=(),
+                    disposition_basis="answered",
+                    question_evidence=(),
                 )
                 # Admit in-target NOT_APPLICABLE question for billing CQ_02 once.
                 na_q = m.SemanticQuestionScope(
-                    scope_root=billing, subject=billing,
+                    scope_root=billing,
+                    subject=billing,
                     question_class=m.SemanticQuestionClass.CQ_02,
                     question_slice="billing components na",
                     materiality_basis="no separate components",
@@ -416,17 +502,17 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                     for u in req.evidence_units[:1]
                 )
                 na_cov = m.InterpretationCoverage(
-                    subjects=(billing,), question_slice="billing components na",
+                    subjects=(billing,),
+                    question_slice="billing components na",
                     evidence_scope=m.EvidenceScope(
                         paths=(),
-                        evidence_refs=tuple(
-                            obs.evidence_ref for obs in na_qe
-                        ),
+                        evidence_refs=tuple(obs.evidence_ref for obs in na_qe),
                     ),
                     declared_complete=True,
                     question=na_q,
                     disposition=m.SemanticQuestionDisposition.NOT_APPLICABLE,
-                    result_refs=(), resolution_requirements=(),
+                    result_refs=(),
+                    resolution_requirements=(),
                     disposition_basis="single-file billing has no subcomponents",
                     question_evidence=na_qe,
                 )
@@ -434,31 +520,39 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             elif q.question_slice == "shipping purpose":
                 claim = m.CandidateSemanticClaim(
                     candidate_key="shipping-purpose",
-                    subject=shipping, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=shipping,
+                    kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(summary="shipping fulfills orders"),
                     evidence=(ref,),
                     basis=m.SemanticBasis(
                         derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
-                        summary="shipping purpose observed", input_refs=(ref,),
+                        summary="shipping purpose observed",
+                        input_refs=(ref,),
                     ),
                 )
                 cov = m.InterpretationCoverage(
-                    subjects=(shipping,), question_slice=q.question_slice,
-                    evidence_scope=m.EvidenceScope(), declared_complete=True,
-                    question=q, disposition=m.SemanticQuestionDisposition.ANSWERED,
-                    result_refs=(), resolution_requirements=(),
-                    disposition_basis="answered", question_evidence=(),
+                    subjects=(shipping,),
+                    question_slice=q.question_slice,
+                    evidence_scope=m.EvidenceScope(),
+                    declared_complete=True,
+                    question=q,
+                    disposition=m.SemanticQuestionDisposition.ANSWERED,
+                    result_refs=(),
+                    resolution_requirements=(),
+                    disposition_basis="answered",
+                    question_evidence=(),
                 )
                 # Resolve legacy_e here (revision allowed on semantic submit).
                 assoc_now = store.load_target_association(REPO, tid)
                 assert assoc_now is not None
                 e_acc = next(
-                    a for a in assoc_now.inventory_accounting
+                    a
+                    for a in assoc_now.inventory_accounting
                     if a.evidence_ref.locator == "legacy_e.py"
                 )
                 resolved = m.CandidateTargetInventoryAccount(
-                     evidence_id=e_acc.evidence_ref.evidence_id,
+                    evidence_id=e_acc.evidence_ref.evidence_id,
                     assigned_area_subjects=(shipping,),
                 )
                 _answer_pending(pending, q, (claim,), (), (cov,), (resolved,), ())
@@ -466,16 +560,24 @@ class AddendumEAcceptanceTest(unittest.TestCase):
                 raise AssertionError(f"unexpected question {q.question_slice}")
         ans2 = ops.status(
             ops.SemanticStatusRequest(repository_id=REPO, target=tid, bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(ans2, m.SemanticAnswer)
         assert isinstance(ans2.content, m.StatusContent)
         # Cross-area present; NOT_APPLICABLE member remains assigned.
         rels_page = store.load_relationships(
-            REPO, (billing,), (m.RelationshipKind.DEPENDS_ON,),
-            __import__("span.ports.structural", fromlist=["StructuralDirection"]).StructuralDirection.BOTH,
-            _bounds(), None,
+            REPO,
+            (billing,),
+            (m.RelationshipKind.DEPENDS_ON,),
+            __import__(
+                "span.ports.structural", fromlist=["StructuralDirection"]
+            ).StructuralDirection.BOTH,
+            _bounds(),
+            None,
         )
         self.assertTrue(
             any(r.source == billing and r.target == shipping for r in rels_page.items)
@@ -484,13 +586,18 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         assert assoc2 is not None
         by_loc = {a.evidence_ref.locator: a for a in assoc2.inventory_accounting}
         self.assertIn(billing, by_loc["config_d.py"].assigned_area_subjects)
-        self.assertEqual(ans2.content.target_disposition, m.SemanticCoverageDisposition.CURRENT)
+        self.assertEqual(
+            ans2.content.target_disposition, m.SemanticCoverageDisposition.CURRENT
+        )
         # Source-content change for an established area → STALE.
         evidence._files["billing_a1.py"] = "BILLING_A1 = 999\n"
         ans_stale = ops.status(
             ops.SemanticStatusRequest(repository_id=REPO, target=tid, bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(ans_stale, m.SemanticAnswer)
         assert isinstance(ans_stale.content, m.StatusContent)
@@ -499,16 +606,23 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         )
         # Scoped refresh re-examines the stale billing question → CURRENT again.
         billing_sel = m.SubjectSelector(
-            exact_subject_id=billing, name_or_locator=None, expected_kinds=(),
+            exact_subject_id=billing,
+            name_or_locator=None,
+            expected_kinds=(),
         )
         rconts = ContinuationStore()
         for _refresh_round in range(4):
             rpending = ops.refresh(
                 ops.SemanticRefreshRequest(
-                    repository_id=REPO, target=billing_sel, bounds=_bounds(),
+                    repository_id=REPO,
+                    target=billing_sel,
+                    bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=rconts, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=rconts,
+                authority_seeds=(),
             )
             if not hasattr(rpending, "continuation"):
                 break
@@ -516,10 +630,15 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             # Re-issue refresh on a fresh handle each round (single-use).
             rpending = ops.refresh(
                 ops.SemanticRefreshRequest(
-                    repository_id=REPO, target=billing_sel, bounds=_bounds(),
+                    repository_id=REPO,
+                    target=billing_sel,
+                    bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=rconts, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=rconts,
+                authority_seeds=(),
             )
             if not hasattr(rpending, "continuation"):
                 break
@@ -532,48 +651,59 @@ class AddendumEAcceptanceTest(unittest.TestCase):
             if rq_cov.question_slice == "billing components na":
                 rclaim_set, rrel_set = (), ()
                 rcov = m.InterpretationCoverage(
-                    subjects=(billing,), question_slice=rq_cov.question_slice,
-                    evidence_scope=m.EvidenceScope(
-                        paths=(), evidence_refs=runits[:1]
-                    ),
+                    subjects=(billing,),
+                    question_slice=rq_cov.question_slice,
+                    evidence_scope=m.EvidenceScope(paths=(), evidence_refs=runits[:1]),
                     declared_complete=True,
                     question=rq_cov,
                     disposition=m.SemanticQuestionDisposition.NOT_APPLICABLE,
-                    result_refs=(), resolution_requirements=(),
+                    result_refs=(),
+                    resolution_requirements=(),
                     disposition_basis="still no subcomponents",
                     question_evidence=(),
                 )
             else:
                 rclaim = m.CandidateSemanticClaim(
                     candidate_key=f"billing-purpose-r{_refresh_round}",
-                    subject=billing, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=billing,
+                    kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue(summary="billing computes charges refreshed"),
                     evidence=(runits[0],),
                     basis=m.SemanticBasis(
                         derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
-                        summary="refreshed billing purpose", input_refs=(runits[0],),
+                        summary="refreshed billing purpose",
+                        input_refs=(runits[0],),
                     ),
                 )
                 rclaim_set, rrel_set = (rclaim,), ()
                 rcov = m.InterpretationCoverage(
-                    subjects=(billing,), question_slice=rq_cov.question_slice,
-                    evidence_scope=m.EvidenceScope(), declared_complete=True,
+                    subjects=(billing,),
+                    question_slice=rq_cov.question_slice,
+                    evidence_scope=m.EvidenceScope(),
+                    declared_complete=True,
                     question=rq_cov,
                     disposition=m.SemanticQuestionDisposition.ANSWERED,
-                    result_refs=(), resolution_requirements=(),
-                    disposition_basis="refreshed", question_evidence=(),
+                    result_refs=(),
+                    resolution_requirements=(),
+                    disposition_basis="refreshed",
+                    question_evidence=(),
                 )
             ops.submit_interpretation(
                 rpending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=rclaim_set, relationships=rrel_set,
+                    claims=rclaim_set,
+                    relationships=rrel_set,
                     governing_source_refs=(),
-                    diagnostics=("refresh",), candidate_subjects=(),
-                    candidate_conflicts=(), question_decision=_decision(rcov),
+                    diagnostics=("refresh",),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
+                    question_decision=_decision(rcov),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=rconts,
             )
             rconts = ContinuationStore()
@@ -582,8 +712,11 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         # accounting fingerprint. Refresh alone restores CURRENT.
         ans_refreshed = ops.status(
             ops.SemanticStatusRequest(repository_id=REPO, target=tid, bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(ans_refreshed, m.SemanticAnswer)
         assert isinstance(ans_refreshed.content, m.StatusContent)
@@ -596,14 +729,18 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         # Membership change: delete legacy_e.py from the provider. Same scope
         # and objective → same TargetId → initialize_target reconciles.
         del evidence._files["legacy_e.py"]
-        reentry = ops.initialize_target(
+        ops.initialize_target(
             ops.SemanticInitializeTargetRequest(
                 repository_id=REPO,
                 target=m.EvidenceScope(paths=tuple(sorted(FILES)), evidence_refs=()),
-                objective=OBJECTIVE, bounds=_bounds(),
+                objective=OBJECTIVE,
+                bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assoc3 = store.load_target_association(REPO, tid)
         assert assoc3 is not None
@@ -618,8 +755,11 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         # Fresh-session retrieval: new continuations, no host memory.
         fresh = ops.status(
             ops.SemanticStatusRequest(repository_id=REPO, target=tid, bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(fresh, m.SemanticAnswer)
         assert isinstance(fresh.content, m.StatusContent)
@@ -632,7 +772,10 @@ class AddendumEAcceptanceTest(unittest.TestCase):
         got = store.load_subjects(
             REPO, tuple(fresh.content.target_association.area_subjects)
         )
-        self.assertEqual({s.subject_id for s in got}, set(fresh.content.target_association.area_subjects))
+        self.assertEqual(
+            {s.subject_id for s in got},
+            set(fresh.content.target_association.area_subjects),
+        )
         store.close()
 
 
@@ -643,7 +786,8 @@ class TargetReuseTest(unittest.TestCase):
 
     def test_reuse_and_wrong_grouping_oracle(self):
         from span.shell.structural.memory import (
-            InMemoryFile as _F, InMemoryStructuralSource as _S,
+            InMemoryFile as _F,
+            InMemoryStructuralSource as _S,
             InMemorySubject as _Subj,
         )
         from span.shell.evidence import FixtureEvidenceSource as _E
@@ -651,7 +795,8 @@ class TargetReuseTest(unittest.TestCase):
         repo = "e13h-reuse"
         files = {"one.py": "A=1\n", "two.py": "B=2\n"}
         structural = _S(
-            repo, tuple(_F(p, c) for p, c in files.items()),
+            repo,
+            tuple(_F(p, c) for p, c in files.items()),
             tuple(_Subj(p, m.SubjectKind.COMPONENT, p.split(".")[0]) for p in files),
             (),
         )
@@ -661,7 +806,9 @@ class TargetReuseTest(unittest.TestCase):
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
             ),
-            repository_id=repo, structural=structural, evidence=evidence,
+            repository_id=repo,
+            structural=structural,
+            evidence=evidence,
             store=store,
         )
         live = ContinuationStore()
@@ -669,11 +816,13 @@ class TargetReuseTest(unittest.TestCase):
         cscore, cobj = m.canonicalize_target_scope(repo, scope, "reuse objective")
         tid = m.derive_target_id(repo, cscore, cobj)
         area = m.SubjectId(
-            repository_id=repo, subject_kind=m.SubjectKind.OTHER,
+            repository_id=repo,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="area",
         )
         question = m.SemanticQuestionScope(
-            scope_root=area, subject=area,
+            scope_root=area,
+            subject=area,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="area purpose",
             materiality_basis="admitted by mapping",
@@ -682,11 +831,16 @@ class TargetReuseTest(unittest.TestCase):
         def _admit():
             return ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
-                    repository_id=repo, target=scope, objective="reuse objective",
+                    repository_id=repo,
+                    target=scope,
+                    objective="reuse objective",
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=live, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=live,
+                authority_seeds=(),
             )
 
         def _basis_for(ref):
@@ -704,12 +858,16 @@ class TargetReuseTest(unittest.TestCase):
         ops.submit_interpretation(
             first.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("m1",),
                 candidate_subjects=(
                     m.CandidateSubject(
-                        provisional_locator="area", kind=m.SubjectKind.OTHER,
-                        display_name="area", declared_kind="area",
+                        provisional_locator="area",
+                        kind=m.SubjectKind.OTHER,
+                        display_name="area",
+                        declared_kind="area",
                         evidence=(item1.evidence_ref,),
                         basis=_basis_for(item1.evidence_ref),
                     ),
@@ -719,9 +877,7 @@ class TargetReuseTest(unittest.TestCase):
                     m.ProposedSemanticQuestion(
                         question,
                         m.SemanticQuestionDecision(
-                            disposition=(
-                                m.SemanticQuestionDisposition.PENDING
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.PENDING),
                             disposition_basis="admitted",
                         ),
                     ),
@@ -736,7 +892,9 @@ class TargetReuseTest(unittest.TestCase):
                 ),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live,
         )
         # S5/J-6: the frontier binds the whole unaccounted batch in one
@@ -751,13 +909,15 @@ class TargetReuseTest(unittest.TestCase):
         # relabeling it to a second admitted area passes pure validation,
         # but the independent meaning oracle rejects it.
         other = m.SubjectId(
-            repository_id=repo, subject_kind=m.SubjectKind.OTHER,
+            repository_id=repo,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="other",
         )
         from span.core import validation as v
+
         got = {a.evidence_ref.locator: a for a in assoc.inventory_accounting}
         wrong = m.CandidateTargetInventoryAccount(
-             evidence_id=got["two.py"].evidence_ref.evidence_id,
+            evidence_id=got["two.py"].evidence_ref.evidence_id,
             assigned_area_subjects=(other,),
         )
         ctx = v.ValidationContext(
@@ -772,10 +932,10 @@ class TargetReuseTest(unittest.TestCase):
         # Shape validation cannot see meaning: with the area admitted it is ok.
         self.assertTrue(
             v.validate_target_inventory_account(
-                wrong, ctx,
+                wrong,
+                ctx,
                 current_inventory_ids=frozenset(
-                    a.evidence_ref.evidence_id.value
-                    for a in assoc.inventory_accounting
+                    a.evidence_ref.evidence_id.value for a in assoc.inventory_accounting
                 ),
                 admitted_area_ids=tuple(assoc.area_subjects) + (other,),
             ).ok
@@ -783,12 +943,16 @@ class TargetReuseTest(unittest.TestCase):
         expected = {"one.py": "area", "two.py": "area"}
         candidate = {"one.py": "area", "two.py": "other"}
         self.assertEqual(
-            {loc: acc.assigned_area_subjects[0].canonical_locator
-             for loc, acc in got.items() if acc.assigned_area_subjects},
+            {
+                loc: acc.assigned_area_subjects[0].canonical_locator
+                for loc, acc in got.items()
+                if acc.assigned_area_subjects
+            },
             expected,
         )
-        self.assertNotEqual(candidate, expected,
-                            "oracle must reject wrong grouping despite valid shape")
+        self.assertNotEqual(
+            candidate, expected, "oracle must reject wrong grouping despite valid shape"
+        )
         store.close()
 
     def test_first_admission_of_persisted_area_via_reuse(self):
@@ -801,7 +965,8 @@ class TargetReuseTest(unittest.TestCase):
         correction as "new area without PENDING question" / unknown area.
         """
         from span.shell.structural.memory import (
-            InMemoryFile as _F, InMemoryStructuralSource as _S,
+            InMemoryFile as _F,
+            InMemoryStructuralSource as _S,
             InMemorySubject as _Subj,
         )
         from span.shell.evidence import FixtureEvidenceSource as _E
@@ -809,7 +974,8 @@ class TargetReuseTest(unittest.TestCase):
         repo = "e13h-reuse-first-admission"
         files = {"one.py": "A=1\n", "two.py": "B=2\n"}
         structural = _S(
-            repo, tuple(_F(p, c) for p, c in files.items()),
+            repo,
+            tuple(_F(p, c) for p, c in files.items()),
             tuple(_Subj(p, m.SubjectKind.COMPONENT, p.split(".")[0]) for p in files),
             (),
         )
@@ -819,16 +985,20 @@ class TargetReuseTest(unittest.TestCase):
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
             ),
-            repository_id=repo, structural=structural, evidence=evidence,
+            repository_id=repo,
+            structural=structural,
+            evidence=evidence,
             store=store,
         )
         scope = m.EvidenceScope(paths=("one.py", "two.py"), evidence_refs=())
         area = m.SubjectId(
-            repository_id=repo, subject_kind=m.SubjectKind.OTHER,
+            repository_id=repo,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="area",
         )
         question = m.SemanticQuestionScope(
-            scope_root=area, subject=area,
+            scope_root=area,
+            subject=area,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="area purpose",
             materiality_basis="admitted by mapping",
@@ -845,11 +1015,16 @@ class TargetReuseTest(unittest.TestCase):
         live_a = ContinuationStore()
         first_a = ops.initialize_target(
             ops.SemanticInitializeTargetRequest(
-                repository_id=repo, target=scope,
-                objective="first objective", bounds=_bounds(),
+                repository_id=repo,
+                target=scope,
+                objective="first objective",
+                bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
-            continuations=live_a, authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=live_a,
+            authority_seeds=(),
         )
         assert first_a.request.question is None
         item_a = first_a.request.target_inventory_items[0]
@@ -857,12 +1032,16 @@ class TargetReuseTest(unittest.TestCase):
         ops.submit_interpretation(
             first_a.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("campaign-a admit",),
                 candidate_subjects=(
                     m.CandidateSubject(
-                        provisional_locator="area", kind=m.SubjectKind.OTHER,
-                        display_name="area", declared_kind="area",
+                        provisional_locator="area",
+                        kind=m.SubjectKind.OTHER,
+                        display_name="area",
+                        declared_kind="area",
                         evidence=(item_a.evidence_ref,),
                         basis=_basis_for(item_a.evidence_ref),
                     ),
@@ -872,23 +1051,26 @@ class TargetReuseTest(unittest.TestCase):
                     m.ProposedSemanticQuestion(
                         question,
                         m.SemanticQuestionDecision(
-                            disposition=(
-                                m.SemanticQuestionDisposition.PENDING
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.PENDING),
                             disposition_basis="admitted",
                         ),
                     ),
                 ),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=_fill_batch(first_a, (
-                    m.CandidateTargetInventoryAccount(
-                         evidence_id=item_a.evidence_ref.evidence_id,
-                        assigned_area_subjects=(area,),
+                proposed_target_inventory_accounting=_fill_batch(
+                    first_a,
+                    (
+                        m.CandidateTargetInventoryAccount(
+                            evidence_id=item_a.evidence_ref.evidence_id,
+                            assigned_area_subjects=(area,),
+                        ),
                     ),
-                )),
+                ),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live_a,
         )
         # The Subject and its coverage are now persisted independently of
@@ -908,11 +1090,16 @@ class TargetReuseTest(unittest.TestCase):
         live_b = ContinuationStore()
         first_b = ops.initialize_target(
             ops.SemanticInitializeTargetRequest(
-                repository_id=repo, target=scope,
-                objective="second objective", bounds=_bounds(),
+                repository_id=repo,
+                target=scope,
+                objective="second objective",
+                bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
-            continuations=live_b, authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=live_b,
+            authority_seeds=(),
         )
         assert first_b.request.question is None
         item_b = first_b.request.target_inventory_items[0]
@@ -920,32 +1107,36 @@ class TargetReuseTest(unittest.TestCase):
         ops.submit_interpretation(
             first_b.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("campaign-b first admission via reuse",),
-                candidate_subjects=(), candidate_conflicts=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=_fill_batch(first_b, (
-                    m.CandidateTargetInventoryAccount(
-                         evidence_id=item_b.evidence_ref.evidence_id,
-                        assigned_area_subjects=(area,),
+                proposed_target_inventory_accounting=_fill_batch(
+                    first_b,
+                    (
+                        m.CandidateTargetInventoryAccount(
+                            evidence_id=item_b.evidence_ref.evidence_id,
+                            assigned_area_subjects=(area,),
+                        ),
                     ),
-                )),
+                ),
                 proposed_target_questions=(question,),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live_b,
         )
-        cscore_b, cobj_b = m.canonicalize_target_scope(
-            repo, scope, "second objective"
-        )
+        cscore_b, cobj_b = m.canonicalize_target_scope(repo, scope, "second objective")
         tid_b = m.derive_target_id(repo, cscore_b, cobj_b)
         assoc_b = store.load_target_association(repo, tid_b)
         assert assoc_b is not None
         self.assertIn(area, assoc_b.area_subjects)
         self.assertIn(question, assoc_b.target_questions)
-        by_loc = {
-            a.evidence_ref.locator: a for a in assoc_b.inventory_accounting
-        }
+        by_loc = {a.evidence_ref.locator: a for a in assoc_b.inventory_accounting}
         self.assertEqual(
             set(by_loc[item_b.evidence_ref.locator].assigned_area_subjects),
             {area},
@@ -981,7 +1172,9 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 authority_seeds=(),
             ),
             repository_id=self.NAV_REPO,
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         return structural, evidence, store
 
@@ -989,11 +1182,17 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         return ops.initialize_target(
             ops.SemanticInitializeTargetRequest(
                 repository_id=self.NAV_REPO,
-                target=m.EvidenceScope(paths=tuple(sorted(self.NAV_FILES)), evidence_refs=()),
-                objective=self.NAV_OBJECTIVE, bounds=_bounds(),
+                target=m.EvidenceScope(
+                    paths=tuple(sorted(self.NAV_FILES)), evidence_refs=()
+                ),
+                objective=self.NAV_OBJECTIVE,
+                bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
-            continuations=live, authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=live,
+            authority_seeds=(),
         )
 
     def _tid(self):
@@ -1006,13 +1205,15 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
 
     def _nav_area(self):
         return m.SubjectId(
-            repository_id=self.NAV_REPO, subject_kind=m.SubjectKind.OTHER,
+            repository_id=self.NAV_REPO,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="nav",
         )
 
     def _file_a(self):
         return m.SubjectId(
-            repository_id=self.NAV_REPO, subject_kind=m.SubjectKind.COMPONENT,
+            repository_id=self.NAV_REPO,
+            subject_kind=m.SubjectKind.COMPONENT,
             canonical_locator="solo_a.py",
         )
 
@@ -1028,21 +1229,27 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 target=m.SubjectSelector(None, "solo_a.py", (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
-            continuations=live, authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=live,
+            authority_seeds=(),
         )
         self.assertTrue(hasattr(suspended, "continuation"))
         anchor_ref = suspended.request.evidence_units[0].evidence_ref
         ops.submit_interpretation(
             suspended.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("anchor-admission",),
                 candidate_subjects=(
                     m.CandidateSubject(
                         provisional_locator="solo_a.py",
                         kind=m.SubjectKind.COMPONENT,
-                        display_name="solo_a.py", declared_kind="COMPONENT",
+                        display_name="solo_a.py",
+                        declared_kind="COMPONENT",
                         evidence=(anchor_ref,),
                         basis=_basis("identity binds solo_a anchor", (anchor_ref,)),
                     ),
@@ -1052,7 +1259,9 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 proposed_target_inventory_accounting=_fill_batch(suspended, ()),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live,
         )
         self.assertTrue(store.load_subjects(self.NAV_REPO, (file_a,)))
@@ -1063,28 +1272,37 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         item = req.target_inventory_items[0]
         assert item is not None
         question = m.SemanticQuestionScope(
-            scope_root=nav, subject=file_a,
+            scope_root=nav,
+            subject=file_a,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="nav purpose",
             materiality_basis="mapping admits nav",
         )
         pending_cov = m.InterpretationCoverage(
-            subjects=(file_a,), question_slice="nav purpose",
-            evidence_scope=m.EvidenceScope(), declared_complete=False,
+            subjects=(file_a,),
+            question_slice="nav purpose",
+            evidence_scope=m.EvidenceScope(),
+            declared_complete=False,
             question=question,
             disposition=m.SemanticQuestionDisposition.PENDING,
-            result_refs=(), resolution_requirements=(),
-            disposition_basis="admitted", question_evidence=(),
+            result_refs=(),
+            resolution_requirements=(),
+            disposition_basis="admitted",
+            question_evidence=(),
         )
         submit = ops.submit_interpretation(
             first.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("mapping",),
                 candidate_subjects=(
                     m.CandidateSubject(
-                        provisional_locator="nav", kind=m.SubjectKind.OTHER,
-                        display_name="nav", declared_kind="nav",
+                        provisional_locator="nav",
+                        kind=m.SubjectKind.OTHER,
+                        display_name="nav",
+                        declared_kind="nav",
                         evidence=(item.evidence_ref,),
                         basis=_basis("mapping admits nav", (item.evidence_ref,)),
                     ),
@@ -1092,15 +1310,20 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 candidate_conflicts=(),
                 proposed_questions=_proposed(pending_cov),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=_fill_batch(first, (
-                    m.CandidateTargetInventoryAccount(
-                         evidence_id=item.evidence_ref.evidence_id,
-                        assigned_area_subjects=(nav,),
+                proposed_target_inventory_accounting=_fill_batch(
+                    first,
+                    (
+                        m.CandidateTargetInventoryAccount(
+                            evidence_id=item.evidence_ref.evidence_id,
+                            assigned_area_subjects=(nav,),
+                        ),
                     ),
-                )),
+                ),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live,
         )
         self.assertTrue(hasattr(submit, "continuation"))
@@ -1112,7 +1335,8 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         refs = tuple(u.evidence_ref for u in pending.request.evidence_units)
         self.assertTrue(refs)
         claim = m.CandidateSemanticClaim(
-            candidate_key="nav-purpose", subject=file_a,
+            candidate_key="nav-purpose",
+            subject=file_a,
             kind=m.ClaimKind.PURPOSE,
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
             value=m.PurposeValue(summary="solo_a holds navigation state"),
@@ -1123,28 +1347,38 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         answered = ops.submit_interpretation(
             pending.continuation,
             m.SemanticInterpretationResult(
-                claims=(claim,), relationships=(), governing_source_refs=(),
-                diagnostics=("semantic",), candidate_subjects=(),
+                claims=(claim,),
+                relationships=(),
+                governing_source_refs=(),
+                diagnostics=("semantic",),
+                candidate_subjects=(),
                 candidate_conflicts=(),
                 question_decision=_decision(
                     m.InterpretationCoverage(
                         subjects=(file_a,),
                         question_slice=question.question_slice,
                         evidence_scope=m.EvidenceScope(),
-                        declared_complete=True, question=question,
+                        declared_complete=True,
+                        question=question,
                         disposition=m.SemanticQuestionDisposition.ANSWERED,
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="examined", question_evidence=(),
+                        result_refs=(),
+                        resolution_requirements=(),
+                        disposition_basis="examined",
+                        question_evidence=(),
                     ),
                 ),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(pending, ()),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live,
         )
-        self.assertTrue(hasattr(answered, "continuation") or hasattr(answered, "answer_id"))
+        self.assertTrue(
+            hasattr(answered, "continuation") or hasattr(answered, "answer_id")
+        )
         covs = store.load_all_question_coverages(self.NAV_REPO, nav, (file_a,))
         self.assertTrue(
             any(
@@ -1158,9 +1392,13 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         self.assertFalse(hasattr(done, "continuation"))
         ans = ops.status(
             ops.SemanticStatusRequest(
-                repository_id=self.NAV_REPO, target=self._tid(), bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+                repository_id=self.NAV_REPO, target=self._tid(), bounds=_bounds()
+            ),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(ans, m.SemanticAnswer)
         assert isinstance(ans.content, m.StatusContent)
@@ -1179,12 +1417,16 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
 
         def _mapping_result(question):
             return m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("mapping",),
                 candidate_subjects=(
                     m.CandidateSubject(
-                        provisional_locator="nav", kind=m.SubjectKind.OTHER,
-                        display_name="nav", declared_kind="nav",
+                        provisional_locator="nav",
+                        kind=m.SubjectKind.OTHER,
+                        display_name="nav",
+                        declared_kind="nav",
                         evidence=(item.evidence_ref,),
                         basis=_basis("mapping admits nav", (item.evidence_ref,)),
                     ),
@@ -1194,9 +1436,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                     m.ProposedSemanticQuestion(
                         question,
                         m.SemanticQuestionDecision(
-                            disposition=(
-                                m.SemanticQuestionDisposition.PENDING
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.PENDING),
                             disposition_basis="admitted",
                         ),
                     ),
@@ -1204,7 +1444,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(
-                         evidence_id=item.evidence_ref.evidence_id,
+                        evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(nav,),
                     ),
                 ),
@@ -1215,15 +1455,19 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         # run-known but never persisted and not co-proposed. The
         # admission check names it.
         live_question = m.SemanticQuestionScope(
-            scope_root=nav, subject=file_a,
+            scope_root=nav,
+            subject=file_a,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="nav purpose",
             materiality_basis="mapping admits nav",
         )
         with self.assertRaises(ops.InterpretationUnitRejected) as cm:
             ops.submit_interpretation(
-                first.continuation, _mapping_result(live_question),
-                structural=structural, evidence=evidence, store=store,
+                first.continuation,
+                _mapping_result(live_question),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
         self.assertIn("target question subject does not resolve", str(cm.exception))
@@ -1233,19 +1477,24 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         self.assertTrue(hasattr(second, "continuation"))
         # Foreign subjects fail even earlier, at coverage validation.
         ghost = m.SubjectId(
-            repository_id=self.NAV_REPO, subject_kind=m.SubjectKind.OTHER,
+            repository_id=self.NAV_REPO,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="ghost.py",
         )
         ghost_question = m.SemanticQuestionScope(
-            scope_root=nav, subject=ghost,
+            scope_root=nav,
+            subject=ghost,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="ghost purpose",
             materiality_basis="mapping admits nav",
         )
         with self.assertRaises(ops.InterpretationUnitRejected) as cm2:
             ops.submit_interpretation(
-                second.continuation, _mapping_result(ghost_question),
-                structural=structural, evidence=evidence, store=store,
+                second.continuation,
+                _mapping_result(ghost_question),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
         self.assertIn("not run-bound", str(cm2.exception))
@@ -1271,7 +1520,9 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 authority_seeds=(),
             ),
             repository_id=self.NAV_REPO,
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         live = ContinuationStore()
         scope = m.EvidenceScope(paths=("solo_a.py", "solo_b.py"), evidence_refs=())
@@ -1279,16 +1530,22 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         def _admit():
             return ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
-                    repository_id=self.NAV_REPO, target=scope,
-                    objective=self.NAV_OBJECTIVE, bounds=_bounds(),
+                    repository_id=self.NAV_REPO,
+                    target=scope,
+                    objective=self.NAV_OBJECTIVE,
+                    bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=live, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=live,
+                authority_seeds=(),
             )
 
         nav = self._nav_area()
         file_a = m.SubjectId(
-            repository_id=self.NAV_REPO, subject_kind=m.SubjectKind.COMPONENT,
+            repository_id=self.NAV_REPO,
+            subject_kind=m.SubjectKind.COMPONENT,
             canonical_locator="solo_a.py",
         )
         # Anchor first (mapping cannot co-admit non-area subjects).
@@ -1298,21 +1555,27 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 target=m.SubjectSelector(None, "solo_a.py", (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
-            continuations=live, authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=live,
+            authority_seeds=(),
         )
         self.assertTrue(hasattr(suspended, "continuation"))
         anchor_ref = suspended.request.evidence_units[0].evidence_ref
         ops.submit_interpretation(
             suspended.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("anchor-admission",),
                 candidate_subjects=(
                     m.CandidateSubject(
                         provisional_locator="solo_a.py",
                         kind=m.SubjectKind.COMPONENT,
-                        display_name="solo_a.py", declared_kind="COMPONENT",
+                        display_name="solo_a.py",
+                        declared_kind="COMPONENT",
                         evidence=(anchor_ref,),
                         basis=_basis("identity binds solo_a anchor", (anchor_ref,)),
                     ),
@@ -1322,17 +1585,19 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                 proposed_target_inventory_accounting=_fill_batch(suspended, ()),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live,
         )
         # Drain mapping: solo_a admits nav + PENDING purpose, solo_b joins.
         question = m.SemanticQuestionScope(
-            scope_root=nav, subject=file_a,
+            scope_root=nav,
+            subject=file_a,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="nav purpose",
             materiality_basis="mapping admits nav",
         )
-        seen_anchor_question = False
         for _ in range(6):
             pending = _admit()
             if not hasattr(pending, "continuation"):
@@ -1345,18 +1610,24 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
             if item.evidence_ref.locator == "solo_a.py":
                 covs = (
                     m.InterpretationCoverage(
-                        subjects=(file_a,), question_slice="nav purpose",
-                        evidence_scope=m.EvidenceScope(), declared_complete=False,
+                        subjects=(file_a,),
+                        question_slice="nav purpose",
+                        evidence_scope=m.EvidenceScope(),
+                        declared_complete=False,
                         question=question,
                         disposition=m.SemanticQuestionDisposition.PENDING,
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="admitted", question_evidence=(),
+                        result_refs=(),
+                        resolution_requirements=(),
+                        disposition_basis="admitted",
+                        question_evidence=(),
                     ),
                 )
                 cands = (
                     m.CandidateSubject(
-                        provisional_locator="nav", kind=m.SubjectKind.OTHER,
-                        display_name="nav", declared_kind="nav",
+                        provisional_locator="nav",
+                        kind=m.SubjectKind.OTHER,
+                        display_name="nav",
+                        declared_kind="nav",
                         evidence=(item.evidence_ref,),
                         basis=_basis("mapping admits nav", (item.evidence_ref,)),
                     ),
@@ -1366,19 +1637,28 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
             ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(), governing_source_refs=(),
-                    diagnostics=("mapping",), candidate_subjects=cands,
+                    claims=(),
+                    relationships=(),
+                    governing_source_refs=(),
+                    diagnostics=("mapping",),
+                    candidate_subjects=cands,
                     candidate_conflicts=(),
-                    proposed_questions=_proposed(*covs), candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=_fill_batch(pending, (
-                        m.CandidateTargetInventoryAccount(
-                             evidence_id=item.evidence_ref.evidence_id,
-                            assigned_area_subjects=(nav,),
+                    proposed_questions=_proposed(*covs),
+                    candidate_withdrawals=(),
+                    proposed_target_inventory_accounting=_fill_batch(
+                        pending,
+                        (
+                            m.CandidateTargetInventoryAccount(
+                                evidence_id=item.evidence_ref.evidence_id,
+                                assigned_area_subjects=(nav,),
+                            ),
                         ),
-                    )),
+                    ),
                     proposed_target_questions=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
         # Answer the purpose question to CURRENT.
@@ -1392,7 +1672,8 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
             m.SemanticInterpretationResult(
                 claims=(
                     m.CandidateSemanticClaim(
-                        candidate_key="nav-purpose", subject=file_a,
+                        candidate_key="nav-purpose",
+                        subject=file_a,
                         kind=m.ClaimKind.PURPOSE,
                         assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue(summary="solo_a holds state"),
@@ -1400,25 +1681,32 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                         basis=_basis("mapping admits nav purpose", (refs[0],)),
                     ),
                 ),
-                relationships=(), governing_source_refs=(),
-                diagnostics=("semantic",), candidate_subjects=(),
+                relationships=(),
+                governing_source_refs=(),
+                diagnostics=("semantic",),
+                candidate_subjects=(),
                 candidate_conflicts=(),
                 question_decision=_decision(
                     m.InterpretationCoverage(
                         subjects=(file_a,),
                         question_slice=pending.request.question.question_slice,
-                        evidence_scope=m.EvidenceScope(), declared_complete=True,
+                        evidence_scope=m.EvidenceScope(),
+                        declared_complete=True,
                         question=pending.request.question,
                         disposition=m.SemanticQuestionDisposition.ANSWERED,
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="examined", question_evidence=(),
+                        result_refs=(),
+                        resolution_requirements=(),
+                        disposition_basis="examined",
+                        question_evidence=(),
                     ),
                 ),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(pending, ()),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live,
         )
         # Membership churn outside the examined file stales the coverage;
@@ -1427,11 +1715,16 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         live2 = ContinuationStore()
         suspended_refresh = ops.refresh(
             ops.SemanticRefreshRequest(
-                repository_id=self.NAV_REPO, target=scope, bounds=_bounds(),
+                repository_id=self.NAV_REPO,
+                target=scope,
+                bounds=_bounds(),
                 stale_only=True,
             ),
-            structural=structural, evidence=evidence2, store=store,
-            continuations=live2, authority_seeds=(),
+            structural=structural,
+            evidence=evidence2,
+            store=store,
+            continuations=live2,
+            authority_seeds=(),
         )
         self.assertTrue(hasattr(suspended_refresh, "continuation"))
         rreq = suspended_refresh.request
@@ -1443,7 +1736,8 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
             m.SemanticInterpretationResult(
                 claims=(
                     m.CandidateSemanticClaim(
-                        candidate_key="nav-purpose-again", subject=file_a,
+                        candidate_key="nav-purpose-again",
+                        subject=file_a,
                         kind=m.ClaimKind.PURPOSE,
                         assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue(summary="solo_a holds state"),
@@ -1451,29 +1745,37 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
                         basis=_basis("re-examined after churn", (rrefs[0],)),
                     ),
                 ),
-                relationships=(), governing_source_refs=(),
-                diagnostics=("re-examination",), candidate_subjects=(),
+                relationships=(),
+                governing_source_refs=(),
+                diagnostics=("re-examination",),
+                candidate_subjects=(),
                 candidate_conflicts=(),
                 question_decision=_decision(
                     m.InterpretationCoverage(
                         subjects=(file_a,),
                         question_slice=rreq.question.question_slice,
-                        evidence_scope=m.EvidenceScope(), declared_complete=True,
+                        evidence_scope=m.EvidenceScope(),
+                        declared_complete=True,
                         question=rreq.question,
                         disposition=m.SemanticQuestionDisposition.ANSWERED,
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="re-examined", question_evidence=(),
+                        result_refs=(),
+                        resolution_requirements=(),
+                        disposition_basis="re-examined",
+                        question_evidence=(),
                     ),
                 ),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=_fill_batch(suspended_refresh, ()),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence2, store=store,
+            structural=structural,
+            evidence=evidence2,
+            store=store,
             continuations=live2,
         )
         self.assertTrue(
-            hasattr(answered, "continuation") or hasattr(answered, "answer_id"))
+            hasattr(answered, "continuation") or hasattr(answered, "answer_id")
+        )
         covs = store.load_all_question_coverages(self.NAV_REPO, nav, (file_a,))
         self.assertTrue(
             any(
@@ -1486,6 +1788,7 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
     def test_anchorless_legacy_signals_in_status(self):
         structural, evidence, store = self._harness()
         from span.service.discovery import enumerate_target_inventory
+
         scope, obj = m.canonicalize_target_scope(
             self.NAV_REPO,
             m.EvidenceScope(paths=tuple(sorted(self.NAV_FILES)), evidence_refs=()),
@@ -1493,21 +1796,28 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         )
         tid = m.derive_target_id(self.NAV_REPO, scope, obj)
         inv_items = enumerate_target_inventory(
-            self.NAV_REPO, scope, evidence=evidence, bounds=_bounds(),
+            self.NAV_REPO,
+            scope,
+            evidence=evidence,
+            bounds=_bounds(),
         )
         self.assertEqual(len(inv_items), 1)
         nav = self._nav_area()
         ghost = m.SubjectId(
-            repository_id=self.NAV_REPO, subject_kind=m.SubjectKind.OTHER,
+            repository_id=self.NAV_REPO,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="ghost.py",
         )
         assoc = m.TargetAssociation(
-            target_id=tid, repository_id=self.NAV_REPO,
-            target_scope=scope, objective=obj,
+            target_id=tid,
+            repository_id=self.NAV_REPO,
+            target_scope=scope,
+            objective=obj,
             area_subjects=(nav,),
             target_questions=(
                 m.SemanticQuestionScope(
-                    scope_root=nav, subject=ghost,
+                    scope_root=nav,
+                    subject=ghost,
                     question_class=m.SemanticQuestionClass.CQ_01,
                     question_slice="ghost purpose",
                     materiality_basis="legacy admission",
@@ -1525,19 +1835,20 @@ class TargetQuestionAnswerabilityTest(unittest.TestCase):
         store.write_index_batch(m.CanonicalIndexBatch(target_associations=(assoc,)))
         ans = ops.status(
             ops.SemanticStatusRequest(
-                repository_id=self.NAV_REPO, target=tid, bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+                repository_id=self.NAV_REPO, target=tid, bounds=_bounds()
+            ),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(ans, m.SemanticAnswer)
         assert isinstance(ans.content, m.StatusContent)
         self.assertEqual(
             ans.content.target_disposition, m.SemanticCoverageDisposition.INCOMPLETE
         )
-        named = [
-            r for r in ans.resolution_requirements
-            if r.subject_or_claim == ghost
-        ]
+        named = [r for r in ans.resolution_requirements if r.subject_or_claim == ghost]
         self.assertTrue(named)
         self.assertIn("CandidateSubject", named[0].description)
 
@@ -1554,16 +1865,19 @@ class MappingBatchOrderAcceptanceTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             live = ContinuationStore()
-            scope = m.EvidenceScope(
-                paths=tuple(sorted(FILES)), evidence_refs=()
-            )
+            scope = m.EvidenceScope(paths=tuple(sorted(FILES)), evidence_refs=())
             pending = ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
-                    repository_id=REPO, target=scope,
-                    objective=OBJECTIVE, bounds=_bounds(),
+                    repository_id=REPO,
+                    target=scope,
+                    objective=OBJECTIVE,
+                    bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=live, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=live,
+                authority_seeds=(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             items = pending.request.target_inventory_items
@@ -1573,9 +1887,7 @@ class MappingBatchOrderAcceptanceTest(unittest.TestCase):
                     evidence_id=item.evidence_ref.evidence_id,
                     resolution_requirements=(
                         m.ResolutionRequirement(
-                            kind=(
-                                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
-                            ),
+                            kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
                             subject_or_claim=None,
                             description="not examined in this test",
                             supporting_context=(),
@@ -1587,22 +1899,29 @@ class MappingBatchOrderAcceptanceTest(unittest.TestCase):
             ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(), governing_source_refs=(),
+                    claims=(),
+                    relationships=(),
+                    governing_source_refs=(),
                     diagnostics=("reverse batch",),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     candidate_withdrawals=(),
                     proposed_target_inventory_accounting=accounts,
                     proposed_target_questions=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
             tid, _, _ = _tid()
             assoc = store.load_target_association(REPO, tid)
             assert assoc is not None
             self.assertEqual(
-                {acc.evidence_ref.evidence_id.value
-                 for acc in assoc.inventory_accounting},
+                {
+                    acc.evidence_ref.evidence_id.value
+                    for acc in assoc.inventory_accounting
+                },
                 {item.evidence_ref.evidence_id.value for item in items},
             )
         finally:

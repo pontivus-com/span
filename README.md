@@ -126,14 +126,13 @@ Span currently requires Linux (the verified installation path), Python 3.12 or
 newer, and Node.js with npm.
 
 ```bash
-git clone https://github.com/pontivus-com/span.git
-cd span
-python3 scripts/install-span.py --repo /path/to/your/repo
+pipx install span-mcp        # or: pip install span-mcp
+span-install --repo /path/to/your/repo
 ```
 
-The installer creates Span's environment, provisions the managed structural
-indexer, and registers supported hosts. Restart or reload your coding agent
-after installation.
+`span-install` creates Span's runtime environment, provisions the managed
+structural indexer, deploys the Agent Skills, and registers supported hosts.
+Restart or reload your coding agent after installation.
 
 Verify the installation:
 
@@ -141,14 +140,24 @@ Verify the installation:
 span-install --verify-only
 ```
 
+To work from a source checkout instead — when contributing, or when pinning to a
+commit — clone the repository and run the installer from its root:
+
+```bash
+git clone https://github.com/pontivus-com/span.git
+cd span
+python3 scripts/install-span.py --repo /path/to/your/repo
+```
+
 Installation establishes operational readiness, not repository understanding.
-For the full install path, the manual Codex command, and the OpenCode entry, see
+For the manual Codex command and the OpenCode entry, see
 [install and connect](docs/install.md).
 
 ## Works with
 
 | Host | Setup |
 | --- | --- |
+| Claude Code | Managed by the installer when the Claude Code CLI is present: user-scope MCP registration, skills at `~/.claude/skills`, and report-only lifecycle hooks in `~/.claude/settings.json`. Manual registration is in [install and connect](docs/install.md). |
 | Codex | Managed by the installer when the Codex CLI is present. Manual registration is in [install and connect](docs/install.md). |
 | OpenCode | Managed when an `opencode.json` is present. The supported manual entry is in [install and connect](docs/install.md). |
 | Other MCP hosts | Connect over stdio with `span-mcp --data-dir <DATA_DIR> --repo <TARGET_REPO>`. |
@@ -197,6 +206,7 @@ issues are welcome.
 
 ## Documentation
 
+- [Repository overview](docs/overview.md)
 - [Install and connect](docs/install.md)
 - [Using Span](docs/usage.md)
 - [MCP reference](docs/mcp.md)
@@ -206,6 +216,7 @@ issues are welcome.
 - [FAQ](docs/faq.md)
 - [Architecture](docs/architecture.md)
 - [Full documentation index](docs/README.md)
+- [Glossary](docs/glossary.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
@@ -213,7 +224,14 @@ issues are welcome.
 See [the contributing guide](docs/contributing.md). Changes should preserve the
 central contract: established understanding remains reusable only while its
 required supporting evidence remains current. Security reports are handled
-through [SECURITY.md](SECURITY.md).
+through [SECURITY.md](SECURITY.md). Support expectations are described in
+[SUPPORT.md](SUPPORT.md).
+
+## Registry
+
+Official MCP Registry entry: `io.github.pontivus-com/span`
+
+mcp-name: io.github.pontivus-com/span
 
 ## License
 

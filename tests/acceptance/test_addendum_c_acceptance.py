@@ -32,8 +32,12 @@ FILES = {
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -42,7 +46,8 @@ def _bounds(**overrides):
 
 def _sid(locator):
     return m.SubjectId(
-        repository_id=REPO, subject_kind=m.SubjectKind.COMPONENT,
+        repository_id=REPO,
+        subject_kind=m.SubjectKind.COMPONENT,
         canonical_locator=locator,
     )
 
@@ -72,7 +77,9 @@ def _harness():
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
@@ -80,7 +87,8 @@ def _harness():
 def _purpose_claim():
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
-        subject=_sid("src/seed.py"), kind=m.ClaimKind.PURPOSE,
+        subject=_sid("src/seed.py"),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Sorts seeds", ()),
         evidence=(_ref("README.md"),),
@@ -102,12 +110,12 @@ def _suspend(structural, evidence, store, continuations):
     current = ops.explain(
         ops.SemanticExplainRequest(
             repository_id=REPO,
-            target=m.SubjectSelector(
-                None, "src/seed.py", (), None
-            ),
+            target=m.SubjectSelector(None, "src/seed.py", (), None),
             bounds=_bounds(),
         ),
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
         continuations=continuations,
     )
     assert isinstance(current, PendingInterpretation), type(current)
@@ -127,16 +135,18 @@ class ExplicitDispositionTest(unittest.TestCase):
             current = ops.submit_interpretation(
                 current.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
-            rows = store.load_all_question_coverages(
-                REPO, None, (_sid("src/seed.py"),)
-            )
+            rows = store.load_all_question_coverages(REPO, None, (_sid("src/seed.py"),))
             self.assertEqual(len(rows), 1)
             self.assertIs(
                 rows[0].disposition,
@@ -147,12 +157,12 @@ class ExplicitDispositionTest(unittest.TestCase):
             again = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/seed.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(again, PendingInterpretation)
@@ -169,18 +179,20 @@ class ExplicitDispositionTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 current.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
-            rows = store.load_all_question_coverages(
-                REPO, None, (_sid("src/seed.py"),)
-            )
+            rows = store.load_all_question_coverages(REPO, None, (_sid("src/seed.py"),))
             self.assertEqual(len(rows), 1)
             self.assertIs(
                 rows[0].disposition,
@@ -191,12 +203,12 @@ class ExplicitDispositionTest(unittest.TestCase):
             again = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/seed.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(again, m.SemanticAnswer)
@@ -215,17 +227,19 @@ class ExplicitDispositionTest(unittest.TestCase):
                 ops.submit_interpretation(
                     current.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_answer_current(current.request),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
-            rows = store.load_all_question_coverages(
-                REPO, None, (_sid("src/seed.py"),)
-            )
+            rows = store.load_all_question_coverages(REPO, None, (_sid("src/seed.py"),))
             self.assertEqual(rows, ())
         finally:
             store.close()
@@ -249,16 +263,13 @@ class ExplicitDispositionTest(unittest.TestCase):
                                 ),
                                 declared_complete=True,
                                 question=m.SemanticQuestionScope(
-                                    scope_root=root, subject=root,
-                                    question_class=(
-                                        m.SemanticQuestionClass.CQ_01
-                                    ),
+                                    scope_root=root,
+                                    subject=root,
+                                    question_class=(m.SemanticQuestionClass.CQ_01),
                                     question_slice="s",
                                     materiality_basis="t",
                                 ),
-                                disposition=(
-                                    m.SemanticQuestionDisposition.ANSWERED
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.ANSWERED),
                                 result_refs=(),
                                 resolution_requirements=(),
                                 disposition_basis="t",
@@ -280,12 +291,16 @@ class ExplicitDispositionTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 current.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             first_id = answer.content.claims[0].claim_id.value
@@ -298,23 +313,27 @@ class ExplicitDispositionTest(unittest.TestCase):
             suspended = ops.refresh(
                 ops.SemanticRefreshRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/seed.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence_v2, store=store,
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
                 continuations=refresh_conts,
             )
             self.assertIsInstance(suspended, PendingInterpretation)
             ops.submit_interpretation(
                 suspended.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence_v2, store=store,
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
                 continuations=refresh_conts,
             )
             # Prior output survives; still loadable and unretired.
@@ -346,12 +365,12 @@ class CampaignIntegrityTest(unittest.TestCase):
             current = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/seed.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(current, PendingInterpretation)
@@ -372,10 +391,7 @@ class CampaignIntegrityTest(unittest.TestCase):
                     ),
                 )
 
-            workers = [
-                threading.Thread(target=analyze, args=(i,))
-                for i in range(3)
-            ]
+            workers = [threading.Thread(target=analyze, args=(i,)) for i in range(3)]
             for w in workers:
                 w.start()
             for w in workers:
@@ -386,22 +402,21 @@ class CampaignIntegrityTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=tuple(built[i] for i in sorted(built)),
                     relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
-            first_ids = sorted(
-                c.claim_id.value for c in answer.content.claims
-            )
+            first_ids = sorted(c.claim_id.value for c in answer.content.claims)
             self.assertEqual(len(first_ids), 3)
             # Identical retry: same content IDs, no duplicate rows.
-            before = store._db.execute(
-                "SELECT COUNT(*) FROM claims"
-            ).fetchone()[0]
+            before = store._db.execute("SELECT COUNT(*) FROM claims").fetchone()[0]
             self.assertEqual(before, 3)
         finally:
             store.close()
@@ -428,31 +443,36 @@ class BootstrapValueTest(unittest.TestCase):
                         authority_seeds=(),
                     ),
                     repository_id=REPO,
-                    structural=structural, evidence=evidence,
+                    structural=structural,
+                    evidence=evidence,
                     store=store_file,
                 )
                 continuations = ContinuationStore()
                 current = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/seed.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/seed.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store_file, continuations=continuations,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store_file,
+                    continuations=continuations,
                 )
                 answer = ops.submit_interpretation(
                     current.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(_purpose_claim(),), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(_purpose_claim(),),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_answer_current(current.request),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence,
-                    store=store_file, continuations=continuations,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store_file,
+                    continuations=continuations,
                 )
                 claim_id = answer.content.claims[0].claim_id.value
             finally:
@@ -464,9 +484,7 @@ class BootstrapValueTest(unittest.TestCase):
                     REPO, (m.ClaimRef(id=m.ClaimId(claim_id)),)
                 )
                 self.assertIsInstance(loaded, m.SemanticClaim)
-                self.assertEqual(
-                    loaded.value.summary, "Sorts seeds"
-                )
+                self.assertEqual(loaded.value.summary, "Sorts seeds")
                 rows = reopened.load_all_question_coverages(
                     REPO, None, (_sid("src/seed.py"),)
                 )
@@ -518,12 +536,16 @@ class MechanicalLimitsTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 current.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(wrong,), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(wrong,),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             # Mechanically valid (verbatim quote present) yet
@@ -550,12 +572,16 @@ class PostcommitCorrectionTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 current.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             old_id = answer.content.claims[0].claim_id.value
@@ -570,12 +596,12 @@ class PostcommitCorrectionTest(unittest.TestCase):
             suspended = ops.refresh(
                 ops.SemanticRefreshRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/seed.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence_v2, store=store,
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
                 continuations=refresh_conts,
             )
             self.assertIsInstance(suspended, PendingInterpretation)
@@ -591,9 +617,7 @@ class PostcommitCorrectionTest(unittest.TestCase):
                         repository_id=REPO,
                         source_kind=evidence_kind_for_path("README.md"),
                         locator="README.md",
-                        revision_or_fingerprint=fingerprint_content(
-                            grown["README.md"]
-                        ),
+                        revision_or_fingerprint=fingerprint_content(grown["README.md"]),
                     ),
                 ),
                 basis=m.SemanticBasis(
@@ -604,39 +628,36 @@ class PostcommitCorrectionTest(unittest.TestCase):
             answer2 = ops.submit_interpretation(
                 suspended.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(corrected,), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(corrected,),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(suspended.request),
                     candidate_withdrawals=(
                         m.CandidateSemanticWithdrawal(
                             target=old_ref,
                             basis=m.SemanticBasis(
-                                m.DerivationKind
-                                .SEMANTIC_INTERPRETATION,
+                                m.DerivationKind.SEMANTIC_INTERPRETATION,
                                 "purpose disproven by inspection",
                             ),
                             evidence=(
                                 m.EvidenceRef(
-                                    evidence_id=m.EvidenceId(
-                                        "ev-src/seed.py"
-                                    ),
+                                    evidence_id=m.EvidenceId("ev-src/seed.py"),
                                     repository_id=REPO,
-                                    source_kind=(
-                                        m.EvidenceSourceKind.SOURCE_CODE
-                                    ),
+                                    source_kind=(m.EvidenceSourceKind.SOURCE_CODE),
                                     locator="src/seed.py",
                                     revision_or_fingerprint=(
-                                        fingerprint_content(
-                                            FILES["src/seed.py"]
-                                        )
+                                        fingerprint_content(FILES["src/seed.py"])
                                     ),
                                 ),
                             ),
                         ),
                     ),
                 ),
-                structural=structural, evidence=evidence_v2,
-                store=store, continuations=refresh_conts,
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
+                continuations=refresh_conts,
             )
             self.assertIsInstance(answer2, m.SemanticAnswer)
             with self.assertRaises(ValueError):
@@ -644,9 +665,7 @@ class PostcommitCorrectionTest(unittest.TestCase):
             retired = store._db.execute(
                 "SELECT claim_id FROM retired_claims"
             ).fetchall()
-            self.assertTrue(
-                any(r[0] == old_id for r in retired)
-            )
+            self.assertTrue(any(r[0] == old_id for r in retired))
             self.assertEqual(
                 answer2.content.claims[0].value.summary,
                 "Sorts seeds reliably",
@@ -678,13 +697,16 @@ class DocumentSubjectTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 current.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
                     candidate_subjects=(doc,),
                     candidate_conflicts=(),
                     question_decision=_answer_current(current.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -698,9 +720,7 @@ class DocumentSubjectTest(unittest.TestCase):
                     ),
                 ),
             )
-            locators = {
-                s.subject_id.canonical_locator for s in subjects
-            }
+            locators = {s.subject_id.canonical_locator for s in subjects}
             self.assertIn("docs/spec.md", locators)
         finally:
             store.close()
@@ -716,18 +736,16 @@ class BoundednessTest(unittest.TestCase):
             current = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/seed.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(max_evidence_units=1),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(current, PendingInterpretation)
-            self.assertLessEqual(
-                len(current.request.evidence_units), 1
-            )
+            self.assertLessEqual(len(current.request.evidence_units), 1)
         finally:
             store.close()
 

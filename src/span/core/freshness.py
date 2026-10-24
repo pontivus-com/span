@@ -100,8 +100,7 @@ def classify_coverage(
                 state=m.FreshnessState.UNVERIFIABLE,
                 supporting_revision_or_fingerprint=recorded.inventory_fingerprint,
                 reason=(
-                    "authority seed fingerprint unavailable: "
-                    + seed.evidence_id.value
+                    "authority seed fingerprint unavailable: " + seed.evidence_id.value
                 ),
             )
         if current != seed.fingerprint:
@@ -109,8 +108,7 @@ def classify_coverage(
                 state=m.FreshnessState.STALE,
                 supporting_revision_or_fingerprint=recorded.inventory_fingerprint,
                 reason=(
-                    "authority seed changed since discovery: "
-                    + seed.evidence_id.value
+                    "authority seed changed since discovery: " + seed.evidence_id.value
                 ),
             )
     return m.Freshness(

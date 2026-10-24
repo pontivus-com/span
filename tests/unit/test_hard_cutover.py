@@ -71,9 +71,7 @@ def _state(repository_id: str = _REPO) -> m.RepositoryState:
         revision_id="rev-1",
         dirty=False,
         state_fingerprint="fp-1",
-        observed_at=datetime.datetime(
-            2026, 10, 23, tzinfo=datetime.timezone.utc
-        ),
+        observed_at=datetime.datetime(2026, 10, 23, tzinfo=datetime.timezone.utc),
     )
 
 
@@ -112,9 +110,7 @@ class HC01SchemaVersionTest(unittest.TestCase):
 class HC02FreshStoreTest(unittest.TestCase):
     def test_fresh_store_creates_schema_seven(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = SqliteSemanticStore(
-                str(pathlib.Path(tmp) / "fresh.db")
-            )
+            store = SqliteSemanticStore(str(pathlib.Path(tmp) / "fresh.db"))
             try:
                 self.assertEqual(store.schema_version(), m.SchemaVersion(7))
                 columns = {
@@ -134,16 +130,12 @@ class HC03CurrentStoreTest(unittest.TestCase):
             path = str(pathlib.Path(tmp) / "current.db")
             first = SqliteSemanticStore(path)
             try:
-                first.record_repository_initialization(
-                    _state(), (_seed(),)
-                )
+                first.record_repository_initialization(_state(), (_seed(),))
             finally:
                 first.close()
             second = SqliteSemanticStore(path)
             try:
-                self.assertEqual(
-                    second.schema_version(), m.SchemaVersion(7)
-                )
+                self.assertEqual(second.schema_version(), m.SchemaVersion(7))
                 self.assertEqual(
                     second.load_repository_authority_seeds(_REPO),
                     (_seed(),),
@@ -243,9 +235,7 @@ class HC07UncoveredAssertionsInvariantTest(unittest.TestCase):
                 kind=m.ClaimKind.PURPOSE,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("does a thing", ()),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE, "b"
-                ),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
             store.write_index_batch(
                 m.CanonicalIndexBatch(
@@ -254,9 +244,7 @@ class HC07UncoveredAssertionsInvariantTest(unittest.TestCase):
                 )
             )
             self.assertEqual(
-                store.load_question_coverages(
-                    _REPO, sid, (sid,), _bounds()
-                ),
+                store.load_question_coverages(_REPO, sid, (sid,), _bounds()),
                 (),
             )
             with self.assertRaisesRegex(
@@ -298,9 +286,7 @@ class HC08EmptyDiscoveryScopeTest(unittest.TestCase):
 class HC09StructuralConstructionTest(unittest.TestCase):
     def test_file_backed_source_requires_artifact_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(
-                ValueError, "requires artifact_dir"
-            ):
+            with self.assertRaisesRegex(ValueError, "requires artifact_dir"):
                 GraftStructuralSource(_REPO, tmp)
 
     def test_factory_requires_data_dir(self):
@@ -326,9 +312,7 @@ class HC10InstallerCutoverTest(unittest.TestCase):
                 install.merge_opencode_config(
                     str(config_path), ["span-mcp"], dry_run=False
                 )
-            self.assertEqual(
-                json.loads(config_path.read_text()), original
-            )
+            self.assertEqual(json.loads(config_path.read_text()), original)
             inspected = install.inspect_opencode_registration(
                 str(config_path), ["span-mcp"]
             )
@@ -346,9 +330,7 @@ class AP01SeedPersistenceTest(unittest.TestCase):
         try:
             seeds = (_seed(),)
             _initialize(store, seeds)
-            self.assertEqual(
-                store.load_repository_authority_seeds(_REPO), seeds
-            )
+            self.assertEqual(store.load_repository_authority_seeds(_REPO), seeds)
         finally:
             store.close()
 
@@ -362,18 +344,14 @@ class AP02RestartRehydrationTest(unittest.TestCase):
             data_dir = root / "data"
             data_dir.mkdir()
             seeds = (_seed(),)
-            store = SqliteSemanticStore(
-                str(data_dir / f"{_REPO}.db")
-            )
+            store = SqliteSemanticStore(str(data_dir / f"{_REPO}.db"))
             try:
                 store.record_repository_initialization(_state(), seeds)
             finally:
                 store.close()
             # A new process opens the existing store through the shared
             # context opener; no setup call is made.
-            repository_id, context = open_repository_context(
-                data_dir, str(repo)
-            )
+            repository_id, context = open_repository_context(data_dir, str(repo))
             try:
                 self.assertEqual(repository_id, _REPO)
                 self.assertEqual(context.authority_seeds, seeds)
@@ -388,9 +366,7 @@ class AP03OmittedSeedsPreserveTest(unittest.TestCase):
             seeds = (_seed(),)
             _initialize(store, seeds)
             _initialize(store, None)
-            self.assertEqual(
-                store.load_repository_authority_seeds(_REPO), seeds
-            )
+            self.assertEqual(store.load_repository_authority_seeds(_REPO), seeds)
         finally:
             store.close()
 
@@ -401,9 +377,7 @@ class AP04ExplicitEmptyClearsTest(unittest.TestCase):
         try:
             _initialize(store, (_seed(),))
             _initialize(store, ())
-            self.assertEqual(
-                store.load_repository_authority_seeds(_REPO), ()
-            )
+            self.assertEqual(store.load_repository_authority_seeds(_REPO), ())
         finally:
             store.close()
 
@@ -418,9 +392,7 @@ class AP05NonEmptyReplacesTest(unittest.TestCase):
                 _seed("src/a.py"),
             )
             _initialize(store, replacement)
-            self.assertEqual(
-                store.load_repository_authority_seeds(_REPO), replacement
-            )
+            self.assertEqual(store.load_repository_authority_seeds(_REPO), replacement)
         finally:
             store.close()
 
@@ -429,9 +401,7 @@ class AP06AbsentRowTest(unittest.TestCase):
     def test_uninitialized_repository_has_no_seeds(self):
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(
-                store.load_repository_authority_seeds("never-seen"), ()
-            )
+            self.assertEqual(store.load_repository_authority_seeds("never-seen"), ())
         finally:
             store.close()
 
@@ -534,14 +504,10 @@ class AP08ProvisioningResolutionTest(unittest.TestCase):
                     tuple(seed.locator for seed in persisted),
                     ("README.md",),
                 )
-                self.assertTrue(
-                    persisted[0].revision_or_fingerprint
-                )
+                self.assertTrue(persisted[0].revision_or_fingerprint)
                 self.assertEqual(
                     persisted,
-                    context.store.load_repository_authority_seeds(
-                        _REPO
-                    ),
+                    context.store.load_repository_authority_seeds(_REPO),
                 )
             finally:
                 context.store.close()
@@ -554,18 +520,12 @@ class AP09NoPersistentStoreTest(unittest.TestCase):
             repo = root / _REPO
             repo.mkdir()
             data_dir = root / "data"
-            repository_id, context = open_repository_context(
-                data_dir, str(repo)
-            )
+            repository_id, context = open_repository_context(data_dir, str(repo))
             try:
                 self.assertEqual(repository_id, _REPO)
                 self.assertEqual(context.authority_seeds, ())
-                self.assertIsNone(
-                    context.store.load_repository_state(_REPO)
-                )
-                self.assertFalse(
-                    (data_dir / f"{_REPO}.db").exists()
-                )
+                self.assertIsNone(context.store.load_repository_state(_REPO))
+                self.assertFalse((data_dir / f"{_REPO}.db").exists())
             finally:
                 context.store.close()
 
@@ -584,9 +544,7 @@ class AP10SingleAtomicWriteTest(unittest.TestCase):
             store.record_repository_initialization = counting
             _initialize(store, (_seed(),))
             self.assertEqual(len(calls), 1)
-            rows = store._db.execute(
-                "SELECT COUNT(*) FROM repositories"
-            ).fetchone()
+            rows = store._db.execute("SELECT COUNT(*) FROM repositories").fetchone()
             self.assertEqual(rows[0], 1)
         finally:
             store.close()

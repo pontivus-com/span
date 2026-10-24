@@ -1,11 +1,10 @@
-"""Addendum G completion tests (docs/semantic-governance-addendum-g.md).
+"""Addendum G completion tests.
 
 G-4 validation member identity: whole-unit atomic rejection stays, but
 every diagnostic carries `collection[index] (key=...)` so the agent can
 locate the bad member even with missing or duplicated keys.
 """
 
-import datetime
 import unittest
 
 from span.core import model as m
@@ -28,8 +27,12 @@ from span.shell.structural.memory import (
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -41,9 +44,7 @@ FILES = {
     "src/main.py": "VALUE = 1\n",
 }
 
-SUBJECTS = (
-    InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),
-)
+SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
 def _harness(files=None):
@@ -97,7 +98,8 @@ def _explain_request():
 def _claim(key, evidence):
     return m.CandidateSemanticClaim(
         candidate_key=key,
-        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        subject=_sid(),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=evidence,
@@ -122,8 +124,11 @@ class ValidationMemberIdentityTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             dup = m.SemanticInterpretationResult(
@@ -131,12 +136,17 @@ class ValidationMemberIdentityTest(unittest.TestCase):
                     _claim("dup-key", (_ref("README.md"),)),
                     _claim("dup-key", (_ref("src/main.py"),)),
                 ),
-                (), (), (),
+                (),
+                (),
+                (),
             )
             with self.assertRaises(InterpretationUnitRejected) as ctx:
                 ops.submit_interpretation(
-                    pending.continuation, dup,
-                    structural=structural, evidence=evidence, store=store,
+                    pending.continuation,
+                    dup,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             message = str(ctx.exception)
@@ -154,8 +164,11 @@ class ValidationMemberIdentityTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             bad = _claim(
@@ -173,7 +186,9 @@ class ValidationMemberIdentityTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult((bad,), (), (), ()),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             self.assertIn("claims[0] (key=ghost-claim)", str(ctx.exception))
@@ -192,9 +207,7 @@ class TransportDiagnosticsTest(unittest.TestCase):
         import json
 
         adapter = McpAdapter()
-        result = _dispatch(adapter, 
-            "status", {"repository_id": "nope", "target": None}
-        )
+        result = _dispatch(adapter, "status", {"repository_id": "nope", "target": None})
         self.assertTrue(result.is_error)
         body = json.loads(result.content)
         self.assertEqual(body["error"], "unknown_repository")
@@ -205,7 +218,8 @@ class TransportDiagnosticsTest(unittest.TestCase):
         import json
 
         adapter = McpAdapter()
-        result = _dispatch(adapter, 
+        result = _dispatch(
+            adapter,
             "locate",
             {
                 "repository_id": "repo-1",
@@ -218,14 +232,17 @@ class TransportDiagnosticsTest(unittest.TestCase):
         self.assertTrue(result.is_error)
         body = json.loads(result.content)
         self.assertEqual(body["error"], "ingress")
-        self.assertIn("continuation was supplied where a page token was expected", body["message"])
+        self.assertIn(
+            "continuation was supplied where a page token was expected", body["message"]
+        )
         self.assertIn("operation being paged", body["message"])
 
     def test_null_edge_kinds_decodes_as_all(self):
         import json
 
         adapter = McpAdapter()
-        result = _dispatch(adapter, 
+        result = _dispatch(
+            adapter,
             "neighbors",
             {
                 "repository_id": "nope",
@@ -250,7 +267,8 @@ class TransportDiagnosticsTest(unittest.TestCase):
         import json
 
         adapter = McpAdapter()
-        result = _dispatch(adapter, 
+        result = _dispatch(
+            adapter,
             "submit_interpretation",
             {
                 "repository_id": "repo-1",
@@ -261,12 +279,16 @@ class TransportDiagnosticsTest(unittest.TestCase):
         self.assertTrue(result.is_error)
         body = json.loads(result.content)
         self.assertEqual(body["error"], "ingress")
-        self.assertIn("page token was supplied where an interpretation continuation was expected", body["message"])
+        self.assertIn(
+            "page token was supplied where an interpretation continuation was expected",
+            body["message"],
+        )
 
     def test_bounds_over_maximum_names_received_max_default(self):
         with self.assertRaises(BoundsRejectedError) as ctx:
             resolve_bounds(
-                _bounds(max_results=1000000), hook=False,
+                _bounds(max_results=1000000),
+                hook=False,
             )
         message = str(ctx.exception)
         self.assertIn("max_results=1000000", message)
@@ -284,8 +306,11 @@ class TransportDiagnosticsTest(unittest.TestCase):
             )
             with self.assertRaises(StatusTargetError) as ctx:
                 ops.status(
-                    request, structural=structural, evidence=evidence,
-                    store=store, continuations=ContinuationStore(),
+                    request,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=ContinuationStore(),
                 )
             self.assertIn(
                 "campaign status requires StatusMode.NORMAL",
@@ -322,12 +347,12 @@ class RefreshTargetTypeTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
-            self.assertIsInstance(
-                answer, (m.SemanticAnswer, PendingInterpretation)
-            )
+            self.assertIsInstance(answer, (m.SemanticAnswer, PendingInterpretation))
         finally:
             store.close()
 
@@ -339,17 +364,15 @@ class RefreshTargetTypeTest(unittest.TestCase):
             answer = ops.refresh(
                 ops.SemanticRefreshRequest(
                     repository_id="repo-1",
-                    target=m.EvidenceScope(
-                        paths=("src/main.py",), evidence_refs=()
-                    ),
+                    target=m.EvidenceScope(paths=("src/main.py",), evidence_refs=()),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
-            self.assertIsInstance(
-                answer, (m.SemanticAnswer, PendingInterpretation)
-            )
+            self.assertIsInstance(answer, (m.SemanticAnswer, PendingInterpretation))
         finally:
             store.close()
 
@@ -365,7 +388,9 @@ class RefreshTargetTypeTest(unittest.TestCase):
                     bounds=_bounds(),
                     stale_only=False,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(result, PendingInterpretation)
@@ -386,7 +411,9 @@ class RefreshTargetTypeTest(unittest.TestCase):
                         bounds=_bounds(),
                         stale_only=False,
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             message = str(ctx.exception)
@@ -410,7 +437,9 @@ class RefreshTargetTypeTest(unittest.TestCase):
                         bounds=_bounds(),
                         stale_only=False,
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             self.assertEqual(len(continuations), 0)
@@ -421,12 +450,16 @@ class RefreshTargetTypeTest(unittest.TestCase):
         import pathlib
 
         doc = (
-            pathlib.Path(__file__).resolve().parents[2]
-            / "docs" / "mcp.md"
+            pathlib.Path(__file__).resolve().parents[2] / "docs" / "mcp.md"
         ).read_text(encoding="utf-8")
         for kind in (
-            "unknown_tool", "ingress", "unknown_repository",
-            "unavailable", "validation", "rejected", "transport",
+            "unknown_tool",
+            "ingress",
+            "unknown_repository",
+            "unavailable",
+            "validation",
+            "rejected",
+            "transport",
             "stale_continuation",
         ):
             self.assertIn(f"`{kind}`", doc)
@@ -454,25 +487,33 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
             path = root / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body, encoding="utf-8")
-        (root / ".gitignore").write_text(
-            "graft/\n.ignore\n", encoding="utf-8"
-        )
+        (root / ".gitignore").write_text("graft/\n.ignore\n", encoding="utf-8")
         subprocess.run(
             ("git", "-C", str(root), "init", "-q"),
-            check=True, timeout=60,
+            check=True,
+            timeout=60,
         )
         subprocess.run(
             ("git", "-C", str(root), "add", "-A"),
-            check=True, timeout=60,
+            check=True,
+            timeout=60,
         )
         if commit:
             subprocess.run(
                 (
-                    "git", "-C", str(root),
-                    "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "fixture",
+                    "git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-qm",
+                    "fixture",
                 ),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
         return root
 
@@ -489,9 +530,7 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
                 "name": pathlib.Path(rel).name,
                 "kind": "file",
                 "path": rel,
-                "body_hash": hashlib.sha256(
-                    body.encode("utf-8")
-                ).hexdigest(),
+                "body_hash": hashlib.sha256(body.encode("utf-8")).hexdigest(),
             }
             for rel, body in bodies.items()
         ]
@@ -513,22 +552,16 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
             root = self._write_repo(tmp, files)
             import pathlib
 
-            artifact_dir = (
-                pathlib.Path(tmp) / "data" / "structural" / "old-idx"
-            )
+            artifact_dir = pathlib.Path(tmp) / "data" / "structural" / "old-idx"
             self._write_wiring(artifact_dir, files)
             # Age the wiring before HEAD: HEAD time is now, so backdate
             # the wiring file by two minutes.
             wiring = artifact_dir / ".graph" / "wiring.json"
             old = time.time() - 120
             os.utime(wiring, (old, old))
-            source = GraftStructuralSource(
-                "old-idx", root, artifact_dir=artifact_dir
-            )
+            source = GraftStructuralSource("old-idx", root, artifact_dir=artifact_dir)
             report = source.verify_files("old-idx", ("src/a.py",))
-            self.assertIs(
-                report.coverage, m.ScopeCoverage.UNVERIFIED
-            )
+            self.assertIs(report.coverage, m.ScopeCoverage.UNVERIFIED)
             self.assertEqual(
                 report.coverage_detail,
                 "index-older-than-head+repository-population-unverified",
@@ -549,17 +582,11 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
             root = self._write_repo(tmp, files)
             import pathlib
 
-            artifact_dir = (
-                pathlib.Path(tmp) / "data" / "structural" / "unver"
-            )
+            artifact_dir = pathlib.Path(tmp) / "data" / "structural" / "unver"
             self._write_wiring(artifact_dir, files)
-            source = GraftStructuralSource(
-                "unver", root, artifact_dir=artifact_dir
-            )
+            source = GraftStructuralSource("unver", root, artifact_dir=artifact_dir)
             report = source.verify_files("unver", ("src/ghost.py",))
-            self.assertEqual(
-                report.coverage_detail, "unverifiable-file"
-            )
+            self.assertEqual(report.coverage_detail, "unverifiable-file")
             self.assertEqual(report.unverifiable_files, ("src/ghost.py",))
         finally:
             import shutil
@@ -576,14 +603,14 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
             "inj",
             "/nonexistent",
             wiring={
-                "nodes": [{
-                    "id": "src/a.py",
-                    "kind": "file",
-                    "path": "src/a.py",
-                    "body_hash": hashlib.sha256(
-                        body.encode("utf-8")
-                    ).hexdigest(),
-                }],
+                "nodes": [
+                    {
+                        "id": "src/a.py",
+                        "kind": "file",
+                        "path": "src/a.py",
+                        "body_hash": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                    }
+                ],
                 "edges": [],
             },
         )
@@ -606,19 +633,13 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
         try:
             root = pathlib.Path(tmp) / "repo"
             (root / "src").mkdir(parents=True, exist_ok=True)
-            (root / "src" / "a.py").write_text(
-                "VALUE = 1\n", encoding="utf-8"
-            )
-            artifact_dir = (
-                pathlib.Path(tmp) / "data" / "structural" / "nogit"
-            )
+            (root / "src" / "a.py").write_text("VALUE = 1\n", encoding="utf-8")
+            artifact_dir = pathlib.Path(tmp) / "data" / "structural" / "nogit"
             self._write_wiring(artifact_dir, {"src/a.py": "VALUE = 1\n"})
             # Deliberately no git init: scope currency cannot be
             # established, but the touched file verifies, so the
             # scope token stands alone.
-            source = GraftStructuralSource(
-                "nogit", root, artifact_dir=artifact_dir
-            )
+            source = GraftStructuralSource("nogit", root, artifact_dir=artifact_dir)
             report = source.verify_files("nogit", ("src/a.py",))
             self.assertEqual(report.coverage_detail, "non-git-tree")
         finally:
@@ -636,16 +657,10 @@ class StructuralDiagnosticTokensTest(unittest.TestCase):
         try:
             root = pathlib.Path(tmp) / "repo"
             (root / "src").mkdir(parents=True, exist_ok=True)
-            (root / "src" / "a.py").write_text(
-                "VALUE = 2\n", encoding="utf-8"
-            )
-            artifact_dir = (
-                pathlib.Path(tmp) / "data" / "structural" / "join"
-            )
+            (root / "src" / "a.py").write_text("VALUE = 2\n", encoding="utf-8")
+            artifact_dir = pathlib.Path(tmp) / "data" / "structural" / "join"
             self._write_wiring(artifact_dir, {"src/a.py": "VALUE = 1\n"})
-            source = GraftStructuralSource(
-                "join", root, artifact_dir=artifact_dir
-            )
+            source = GraftStructuralSource("join", root, artifact_dir=artifact_dir)
             report = source.verify_files("join", ("src/a.py",))
             self.assertEqual(
                 report.coverage_detail,
@@ -668,7 +683,8 @@ class EmptyResultWordingTest(unittest.TestCase):
 
         runbook = (
             pathlib.Path(__file__).resolve().parents[2]
-            / "docs" / "onboarding-runbook.md"
+            / "docs"
+            / "onboarding-runbook.md"
         ).read_text(encoding="utf-8")
         self.assertIn("UNVERIFIED", runbook)
         self.assertIn("proves nothing about absence", runbook)
@@ -707,17 +723,23 @@ class CoverageEntryGuidanceTest(unittest.TestCase):
     """SPMCP-05: status entry requirements name the exact next step."""
 
     def _write(self, store, coverage=None):
-        store.write_index_batch(m.CanonicalIndexBatch(
-            subjects=(m.Subject(_sid(), "main", None),),
-            coverage=() if coverage is None else (coverage,),
-        ))
+        store.write_index_batch(
+            m.CanonicalIndexBatch(
+                subjects=(m.Subject(_sid(), "main", None),),
+                coverage=() if coverage is None else (coverage,),
+            )
+        )
 
     def _requirements(self, structural, evidence, store):
         answer = ops.status(
             ops.SemanticStatusRequest(
-                repository_id="repo-1", target=None, bounds=_bounds(),
+                repository_id="repo-1",
+                target=None,
+                bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=ContinuationStore(),
         )
         assert isinstance(answer, m.SemanticAnswer)
@@ -739,18 +761,23 @@ class CoverageEntryGuidanceTest(unittest.TestCase):
         try:
             sid = _sid()
             question = m.SemanticQuestionScope(
-                scope_root=sid, subject=sid,
+                scope_root=sid,
+                subject=sid,
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice="main purpose",
                 materiality_basis="test admission",
             )
             coverage = m.InterpretationCoverage(
-                subjects=(sid,), question_slice="main purpose",
-                evidence_scope=m.EvidenceScope(), declared_complete=False,
+                subjects=(sid,),
+                question_slice="main purpose",
+                evidence_scope=m.EvidenceScope(),
+                declared_complete=False,
                 question=question,
                 disposition=m.SemanticQuestionDisposition.PENDING,
-                result_refs=(), resolution_requirements=(),
-                disposition_basis="test admission", question_evidence=(),
+                result_refs=(),
+                resolution_requirements=(),
+                disposition_basis="test admission",
+                question_evidence=(),
             )
             self._write(store, coverage)
             requirements = self._requirements(structural, evidence, store)
@@ -772,47 +799,61 @@ class RefreshAdmissionOrderTest(unittest.TestCase):
     def _write_pending(self, store, cls, slice):
         sid = _sid()
         question = m.SemanticQuestionScope(
-            scope_root=sid, subject=sid, question_class=cls,
-            question_slice=slice, materiality_basis="rotation test",
+            scope_root=sid,
+            subject=sid,
+            question_class=cls,
+            question_slice=slice,
+            materiality_basis="rotation test",
         )
-        store.write_index_batch(m.CanonicalIndexBatch(
-            subjects=(m.Subject(sid, "main", None),),
-            coverage=(m.InterpretationCoverage(
-                subjects=(sid,), question_slice=slice,
-                evidence_scope=m.EvidenceScope(), declared_complete=False,
-                question=question,
-                disposition=m.SemanticQuestionDisposition.PENDING,
-                result_refs=(), resolution_requirements=(),
-                disposition_basis="admitted",
-                question_evidence=()),),
-        ))
+        store.write_index_batch(
+            m.CanonicalIndexBatch(
+                subjects=(m.Subject(sid, "main", None),),
+                coverage=(
+                    m.InterpretationCoverage(
+                        subjects=(sid,),
+                        question_slice=slice,
+                        evidence_scope=m.EvidenceScope(),
+                        declared_complete=False,
+                        question=question,
+                        disposition=m.SemanticQuestionDisposition.PENDING,
+                        result_refs=(),
+                        resolution_requirements=(),
+                        disposition_basis="admitted",
+                        question_evidence=(),
+                    ),
+                ),
+            )
+        )
         return question
 
     def _refresh(self, structural, evidence, store, continuations):
         from span.ports.interpretation import PendingInterpretation  # noqa: F401
+
         return ops.refresh(
             ops.SemanticRefreshRequest(
                 repository_id="repo-1",
                 target=m.SubjectSelector(None, "src/main.py", (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
             authority_seeds=(_ref("README.md"),),
         )
 
     def _resolve_na(self, pending, structural, evidence, store, continuations):
-        observed = fingerprint_content(FILES["src/main.py"])
         return ops.submit_interpretation(
             pending.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
-                diagnostics=(), candidate_subjects=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
+                diagnostics=(),
+                candidate_subjects=(),
                 candidate_conflicts=(),
                 question_decision=m.SemanticQuestionDecision(
-                    disposition=(
-                        m.SemanticQuestionDisposition.NOT_APPLICABLE
-                    ),
+                    disposition=(m.SemanticQuestionDisposition.NOT_APPLICABLE),
                     evidence_scope=m.EvidenceScope(
                         evidence_refs=(_ref("src/main.py"),)
                     ),
@@ -822,7 +863,9 @@ class RefreshAdmissionOrderTest(unittest.TestCase):
                 proposed_target_inventory_accounting=(),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
 
@@ -833,38 +876,62 @@ class RefreshAdmissionOrderTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             self._write_pending(
-                store, m.SemanticQuestionClass.CQ_03, "zeta slice",
+                store,
+                m.SemanticQuestionClass.CQ_03,
+                "zeta slice",
             )
             self._write_pending(
-                store, m.SemanticQuestionClass.CQ_02, "alpha slice",
+                store,
+                m.SemanticQuestionClass.CQ_02,
+                "alpha slice",
             )
             first = self._refresh(
-                structural, evidence, store, continuations,
+                structural,
+                evidence,
+                store,
+                continuations,
             )
             self.assertIsInstance(first, PendingInterpretation)
             self.assertEqual(
-                first.request.question.question_slice, "alpha slice",
+                first.request.question.question_slice,
+                "alpha slice",
             )
             # The first unit is still live: the next refresh must bind
             # the other pending, never re-suspend the same question.
             second = self._refresh(
-                structural, evidence, store, continuations,
+                structural,
+                evidence,
+                store,
+                continuations,
             )
             self.assertIsInstance(second, PendingInterpretation)
             self.assertEqual(
-                second.request.question.question_slice, "zeta slice",
+                second.request.question.question_slice,
+                "zeta slice",
             )
             self.assertNotEqual(
-                first.continuation, second.continuation,
+                first.continuation,
+                second.continuation,
             )
             self._resolve_na(
-                first, structural, evidence, store, continuations,
+                first,
+                structural,
+                evidence,
+                store,
+                continuations,
             )
             self._resolve_na(
-                second, structural, evidence, store, continuations,
+                second,
+                structural,
+                evidence,
+                store,
+                continuations,
             )
             third = self._refresh(
-                structural, evidence, store, continuations,
+                structural,
+                evidence,
+                store,
+                continuations,
             )
             if isinstance(third, PendingInterpretation):
                 self.assertNotIn(
@@ -897,7 +964,10 @@ class GhostSubjectTest(unittest.TestCase):
             # the ghost rule only fires where positive display would
             # otherwise mislead.
             bare = _repository_coverage_entry(
-                "repo-1", ghost, evidence=evidence, store=store,
+                "repo-1",
+                ghost,
+                evidence=evidence,
+                store=store,
                 bounds=_bounds(),
             )
             self.assertIs(
@@ -913,24 +983,36 @@ class GhostSubjectTest(unittest.TestCase):
             # With persisted records behind it, the same absent path
             # reads UNVERIFIABLE with an explicit absence requirement.
             question = m.SemanticQuestionScope(
-                scope_root=ghost_id, subject=ghost_id,
+                scope_root=ghost_id,
+                subject=ghost_id,
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice="ghost purpose",
                 materiality_basis="ghost test",
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(ghost,),
-                coverage=(m.InterpretationCoverage(
-                    subjects=(ghost_id,), question_slice="ghost purpose",
-                    evidence_scope=m.EvidenceScope(),
-                    declared_complete=False, question=question,
-                    disposition=m.SemanticQuestionDisposition.PENDING,
-                    result_refs=(), resolution_requirements=(),
-                    disposition_basis="admitted",
-                    question_evidence=()),),
-            ))
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(ghost,),
+                    coverage=(
+                        m.InterpretationCoverage(
+                            subjects=(ghost_id,),
+                            question_slice="ghost purpose",
+                            evidence_scope=m.EvidenceScope(),
+                            declared_complete=False,
+                            question=question,
+                            disposition=m.SemanticQuestionDisposition.PENDING,
+                            result_refs=(),
+                            resolution_requirements=(),
+                            disposition_basis="admitted",
+                            question_evidence=(),
+                        ),
+                    ),
+                )
+            )
             entry = _repository_coverage_entry(
-                "repo-1", ghost, evidence=evidence, store=store,
+                "repo-1",
+                ghost,
+                evidence=evidence,
+                store=store,
                 bounds=_bounds(),
             )
             self.assertIs(
@@ -945,7 +1027,10 @@ class GhostSubjectTest(unittest.TestCase):
             )
             present = m.Subject(_sid(), "main", None)
             control = _repository_coverage_entry(
-                "repo-1", present, evidence=evidence, store=store,
+                "repo-1",
+                present,
+                evidence=evidence,
+                store=store,
                 bounds=_bounds(),
             )
             self.assertFalse(
@@ -980,23 +1065,17 @@ class InventoryWalkTest(unittest.TestCase):
             (root / "sub").mkdir()
             (root / "sub" / "keep.py").write_text("x = 1\n", encoding="utf-8")
             (root / "sub" / "nested").mkdir()
-            (root / "sub" / "nested" / "deep.md").write_text(
-                "# d\n", encoding="utf-8"
-            )
+            (root / "sub" / "nested" / "deep.md").write_text("# d\n", encoding="utf-8")
             (root / ".hidden.txt").write_text("h\n", encoding="utf-8")
             (root / "binary.bin").write_bytes(b"\x00\x01\x02binary")
             (root / "node_modules").mkdir()
-            (root / "node_modules" / "skip.js").write_text(
-                "x\n", encoding="utf-8"
-            )
+            (root / "node_modules" / "skip.js").write_text("x\n", encoding="utf-8")
             (root / ".git").mkdir()
             (root / ".git" / "skip2").write_text("x\n", encoding="utf-8")
             (root / "__pycache__").mkdir()
             (root / "__pycache__" / "skip3.pyc").write_bytes(b"\x00x")
             (root / "sub" / "__pycache__").mkdir()
-            (root / "sub" / "__pycache__" / "skip4.pyc").write_bytes(
-                b"\x00x"
-            )
+            (root / "sub" / "__pycache__" / "skip4.pyc").write_bytes(b"\x00x")
             (root / "node_modules_file").write_text("x\n", encoding="utf-8")
             source = FilesystemEvidenceSource("walk-repo", root)
             self.assertEqual(
@@ -1021,7 +1100,6 @@ class StructuralCurrentTest(unittest.TestCase):
     operations; TOOL_NAMES freeze covered in test_mcp_transport)."""
 
     def _refresh_harness(self, structural):
-        from span.shell.agent_exchange.continuations import ContinuationStore  # noqa: F401
         evidence = FixtureEvidenceSource("repo-1", dict(FILES))
         store = SqliteSemanticStore(":memory:")
         ops.initialize_repository(
@@ -1030,19 +1108,24 @@ class StructuralCurrentTest(unittest.TestCase):
                 authority_seeds=(),
             ),
             repository_id="repo-1",
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         return evidence, store
 
     def _refresh_answer(self, structural, evidence, store):
         from span.shell.agent_exchange.continuations import ContinuationStore
+
         return ops.refresh(
             ops.SemanticRefreshRequest(
                 repository_id="repo-1",
                 target=m.SubjectSelector(None, "src/main.py", (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=ContinuationStore(),
         )
 
@@ -1069,16 +1152,25 @@ class StructuralCurrentTest(unittest.TestCase):
     def test_currency_note_maps_states(self):
         from span.service.operations.refresh import _currency_note
 
-        self.assertIsNone(_currency_note(m.Freshness(
-            state=m.FreshnessState.CURRENT, reason="t-ok",
-        )))
-        note = _currency_note(m.Freshness(
-            state=m.FreshnessState.UNVERIFIABLE, reason="t-down",
-        ))
+        self.assertIsNone(
+            _currency_note(
+                m.Freshness(
+                    state=m.FreshnessState.CURRENT,
+                    reason="t-ok",
+                )
+            )
+        )
+        note = _currency_note(
+            m.Freshness(
+                state=m.FreshnessState.UNVERIFIABLE,
+                reason="t-down",
+            )
+        )
         self.assertIsNotNone(note)
         assert note is not None
         self.assertIs(
-            note.kind, m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+            note.kind,
+            m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
         )
         self.assertIn("t-down", note.description)
 
@@ -1112,8 +1204,12 @@ class StructuralCurrentTest(unittest.TestCase):
         wiring = {
             "nodes": [
                 {
-                    "id": "a.py", "name": "a.py", "kind": "file",
-                    "path": "a.py", "span": "L1-L2", "signature": None,
+                    "id": "a.py",
+                    "name": "a.py",
+                    "kind": "file",
+                    "path": "a.py",
+                    "span": "L1-L2",
+                    "signature": None,
                     "body_hash": "aa01",
                 },
             ],
@@ -1121,7 +1217,9 @@ class StructuralCurrentTest(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             src = g.GraftStructuralSource(
-                "repo-1", pathlib.Path(tmp), wiring=wiring,
+                "repo-1",
+                pathlib.Path(tmp),
+                wiring=wiring,
             )
             out = src.describe_current("repo-1")
             self.assertIs(out.state, m.FreshnessState.UNVERIFIABLE)
@@ -1129,15 +1227,18 @@ class StructuralCurrentTest(unittest.TestCase):
     def test_graft_ensure_never_raises_without_builder(self):
         import pathlib
         import tempfile
-        from unittest import mock
 
         from span.shell.structural import graft as g
 
         wiring = {
             "nodes": [
                 {
-                    "id": "a.py", "name": "a.py", "kind": "file",
-                    "path": "a.py", "span": "L1-L2", "signature": None,
+                    "id": "a.py",
+                    "name": "a.py",
+                    "kind": "file",
+                    "path": "a.py",
+                    "span": "L1-L2",
+                    "signature": None,
                     "body_hash": "aa01",
                 },
             ],
@@ -1146,7 +1247,9 @@ class StructuralCurrentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             src = g.GraftStructuralSource(
-                "repo-1", root, wiring=wiring,
+                "repo-1",
+                root,
+                wiring=wiring,
                 artifact_dir=root / "data",
             )
             calls = []
@@ -1181,9 +1284,13 @@ class StructuralCurrentTest(unittest.TestCase):
         structural = InMemoryStructuralSource(
             "repo-1",
             tuple(InMemoryFile(p, c) for p, c in files.items()),
-            (InMemorySubject(
-                "src/main.py", m.SubjectKind.COMPONENT, "main",
-            ),),
+            (
+                InMemorySubject(
+                    "src/main.py",
+                    m.SubjectKind.COMPONENT,
+                    "main",
+                ),
+            ),
         )
         evidence = FixtureEvidenceSource("repo-1", dict(files))
         store = SqliteSemanticStore(":memory:")
@@ -1193,7 +1300,9 @@ class StructuralCurrentTest(unittest.TestCase):
                 authority_seeds=(),
             ),
             repository_id="repo-1",
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         try:
             sid = _sid()
@@ -1202,23 +1311,31 @@ class StructuralCurrentTest(unittest.TestCase):
                 (m.SemanticQuestionClass.CQ_03, "zeta slice"),
             ):
                 question = m.SemanticQuestionScope(
-                    scope_root=sid, subject=sid, question_class=cls,
+                    scope_root=sid,
+                    subject=sid,
+                    question_class=cls,
                     question_slice=sl,
                     materiality_basis="walk test",
                 )
-                store.write_index_batch(m.CanonicalIndexBatch(
-                    subjects=(m.Subject(sid, "main", None),),
-                    coverage=(m.InterpretationCoverage(
-                        subjects=(sid,), question_slice=sl,
-                        evidence_scope=m.EvidenceScope(),
-                        declared_complete=False, question=question,
-                        disposition=(
-                            m.SemanticQuestionDisposition.PENDING
+                store.write_index_batch(
+                    m.CanonicalIndexBatch(
+                        subjects=(m.Subject(sid, "main", None),),
+                        coverage=(
+                            m.InterpretationCoverage(
+                                subjects=(sid,),
+                                question_slice=sl,
+                                evidence_scope=m.EvidenceScope(),
+                                declared_complete=False,
+                                question=question,
+                                disposition=(m.SemanticQuestionDisposition.PENDING),
+                                result_refs=(),
+                                resolution_requirements=(),
+                                disposition_basis="admitted",
+                                question_evidence=(),
+                            ),
                         ),
-                        result_refs=(), resolution_requirements=(),
-                        disposition_basis="admitted",
-                        question_evidence=()),),
-                ))
+                    )
+                )
             real_list = evidence.list_inventory_entries
             calls = []
 
@@ -1230,10 +1347,13 @@ class StructuralCurrentTest(unittest.TestCase):
             try:
                 answer = ops.status(
                     ops.SemanticStatusRequest(
-                        repository_id="repo-1", target=None,
+                        repository_id="repo-1",
+                        target=None,
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
             finally:

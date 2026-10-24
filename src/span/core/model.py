@@ -234,6 +234,7 @@ __all__ = [
 # Construction-validation helpers (stated plan rules only)
 # ---------------------------------------------------------------------------
 
+
 def _require_non_empty(name: str, value: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a non-empty string")
@@ -255,6 +256,7 @@ def _require_non_negative_int(name: str, value: int) -> int:
 # ---------------------------------------------------------------------------
 # §4.1 Subject kinds
 # ---------------------------------------------------------------------------
+
 
 class SubjectKind(_enum.Enum):
     REPOSITORY = "REPOSITORY"
@@ -343,6 +345,7 @@ class SubjectResolution:
 # §4.3 Claim kinds (closed in v0.5)
 # ---------------------------------------------------------------------------
 
+
 class ClaimKind(_enum.Enum):
     PURPOSE = "PURPOSE"
     CAPABILITY_MEMBERSHIP = "CAPABILITY_MEMBERSHIP"
@@ -394,6 +397,7 @@ NORMATIVE_ONLY_RELATIONSHIP_KINDS: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 # §4.4 Typed claim values (exactly one carrier per ClaimKind)
 # ---------------------------------------------------------------------------
+
 
 @_dataclass(frozen=True)
 class PurposeValue:
@@ -563,6 +567,7 @@ def _require_claim_value(kind: ClaimKind, value: TypedClaimValue) -> TypedClaimV
 # §4.5 Relationship kinds (closed in v0.5)
 # ---------------------------------------------------------------------------
 
+
 class RelationshipKind(_enum.Enum):
     MEMBER_OF = "MEMBER_OF"
     IMPLEMENTS = "IMPLEMENTS"
@@ -584,6 +589,7 @@ class RelationshipKind(_enum.Enum):
 # ---------------------------------------------------------------------------
 # §4.6 Evidence, authority, trust, freshness
 # ---------------------------------------------------------------------------
+
 
 class EvidenceSourceKind(_enum.Enum):
     SOURCE_CODE = "SOURCE_CODE"
@@ -703,6 +709,7 @@ class TrustState(_enum.Enum):
 # ---------------------------------------------------------------------------
 # §4.7 Canonical claim/relationship carriers, ids, refs
 # ---------------------------------------------------------------------------
+
 
 @_dataclass(frozen=True)
 class ClaimId:
@@ -851,6 +858,7 @@ class RecordedConflict:
 # §4.8 Repository readiness and hook-safe lifecycle notices
 # ---------------------------------------------------------------------------
 
+
 class RepositoryReadiness(_enum.Enum):
     UNINITIALIZED = "UNINITIALIZED"
     INITIALIZING = "INITIALIZING"
@@ -885,6 +893,7 @@ class HookStatusNotice:
 # ---------------------------------------------------------------------------
 # §4.9 Semantic basis, uncertainty resolution, change conditions
 # ---------------------------------------------------------------------------
+
 
 class ResolutionKind(_enum.Enum):
     MISSING_AUTHORITY = "MISSING_AUTHORITY"
@@ -979,8 +988,7 @@ class SemanticQuestionSelection:
         for anchor in self.question_anchors:
             if not anchor or len(anchor) > 120:
                 raise ValueError(
-                    "question anchor must be nonempty of at most "
-                    "120 characters"
+                    "question anchor must be nonempty of at most " "120 characters"
                 )
 
 
@@ -1209,6 +1217,7 @@ class CandidateAuthority:
 # §4.10 Semantic answer (one canonical service response envelope)
 # ---------------------------------------------------------------------------
 
+
 class SemanticIntent(_enum.Enum):
     EXPLAIN = "EXPLAIN"
     TRACE = "TRACE"
@@ -1326,25 +1335,25 @@ class SemanticAnswer:
             )
         if not self.state_explanation:
             claims = tuple(getattr(self.content, "claims", ()))
-            relationships = tuple(
-                getattr(self.content, "relationships", ())
-            )
+            relationships = tuple(getattr(self.content, "relationships", ()))
             items = (*claims, *relationships)
             if not items:
                 object.__setattr__(
-                    self, "state_explanation",
+                    self,
+                    "state_explanation",
                     ("returned assertions: none",),
                 )
             else:
                 descriptive = sum(
-                    1 for i in items
+                    1
+                    for i in items
                     if getattr(i, "assertion_nature", None)
                     is AssertionNature.DESCRIPTIVE
                 )
                 normative = sum(
-                    1 for i in items
-                    if getattr(i, "assertion_nature", None)
-                    is AssertionNature.NORMATIVE
+                    1
+                    for i in items
+                    if getattr(i, "assertion_nature", None) is AssertionNature.NORMATIVE
                 )
                 if descriptive and not normative:
                     distribution = "descriptive-only"
@@ -1359,13 +1368,16 @@ class SemanticAnswer:
                     "qualified regardless of nature"
                 )
                 object.__setattr__(
-                    self, "state_explanation", (sentence,),
+                    self,
+                    "state_explanation",
+                    (sentence,),
                 )
 
 
 # ---------------------------------------------------------------------------
 # §4.11 Supporting canonical contracts
 # ---------------------------------------------------------------------------
+
 
 @_dataclass(frozen=True)
 class RepositoryState:
@@ -1401,8 +1413,7 @@ class EvidenceLineRange:
         _require_positive_int("total_lines", self.total_lines)
         if not (self.start_line <= self.end_line <= self.total_lines):
             raise ValueError(
-                "EvidenceLineRange requires start_line <= end_line <= "
-                "total_lines"
+                "EvidenceLineRange requires start_line <= end_line <= " "total_lines"
             )
 
 
@@ -1508,9 +1519,7 @@ def evidence_scope_fingerprint(scope: EvidenceScope) -> str:
 
     paths = tuple(sorted(set(scope.paths)))
     refs = tuple(sorted({ref.locator for ref in scope.evidence_refs}))
-    return _hashlib.sha256(
-        repr((paths, refs)).encode("utf-8")
-    ).hexdigest()[:16]
+    return _hashlib.sha256(repr((paths, refs)).encode("utf-8")).hexdigest()[:16]
 
 
 class StatusMode(_enum.Enum):
@@ -1606,9 +1615,7 @@ _COVERAGE_DETAIL_ORDER: dict[str, int] = {
 }
 
 
-def _validate_coverage_detail(
-    name: str, value: str | None
-) -> str | None:
+def _validate_coverage_detail(name: str, value: str | None) -> str | None:
     """Strict validation for structural diagnostic detail (Addendum G).
 
     `None` is allowed. Any string must be a non-empty `+` join of closed
@@ -1951,9 +1958,7 @@ def canonicalize_target_scope(
         if key in seen:
             prev = seen[key]
             if prev.locator != ref.locator or prev.source_kind != ref.source_kind:
-                raise ValueError(
-                    f"conflicting provider identity for {key!r}"
-                )
+                raise ValueError(f"conflicting provider identity for {key!r}")
             continue
         seen[key] = ref
     canonical_scope = EvidenceScope(
@@ -2068,9 +2073,7 @@ class CandidateSemanticClaim:
         )
     )
     kind: ClaimKind = ClaimKind.PURPOSE
-    value: TypedClaimValue = _field(
-        default_factory=lambda: PurposeValue(summary="")
-    )
+    value: TypedClaimValue = _field(default_factory=lambda: PurposeValue(summary=""))
     assertion_nature: CandidateAssertionNature = _field(kw_only=True)  # type: ignore[assignment]
     evidence: tuple[EvidenceRef, ...] = ()
     candidate_authority: CandidateAuthority | None = None
@@ -2241,12 +2244,10 @@ QUESTION_CLASS_DEFAULT_SLICE: dict[SemanticQuestionClass, str] = {
         "failed, recovered, retained, or removed?"
     ),
     SemanticQuestionClass.CQ_08: (
-        "What is materially affected by the proposed change to this "
-        "subject?"
+        "What is materially affected by the proposed change to this " "subject?"
     ),
     SemanticQuestionClass.CQ_09: (
-        "How is this subject proven or checked, and what verification is "
-        "current?"
+        "How is this subject proven or checked, and what verification is " "current?"
     ),
 }
 
@@ -2268,8 +2269,7 @@ TASK_BRIEF_SUBMISSION_RULES: tuple[str, ...] = (
     "material aspects are substantiated.",
     "Do not declare a parent question ANSWERED merely because OPEN "
     "follow-ups exist.",
-    "Submit one strict canonical result with an explicit question "
-    "disposition.",
+    "Submit one strict canonical result with an explicit question " "disposition.",
 )
 
 # The following are the stable, compact projections of SA-3–SA-7. They are
@@ -2295,15 +2295,13 @@ TASK_BRIEF_SEMANTIC_RESULT: tuple[str, ...] = (
 )
 
 TASK_BRIEF_ADVERSARIAL_CHECKS: tuple[str, ...] = (
-    "Check alternate owner or authority, contradiction, and omitted "
-    "participants.",
+    "Check alternate owner or authority, contradiction, and omitted " "participants.",
     "Check terminal/failure paths, stale premises, unsupported routes, and "
     "missing verification.",
 )
 
 TASK_BRIEF_READBACK: tuple[str, ...] = (
-    "State what a fresh query can retrieve and what still requires "
-    "interpretation.",
+    "State what a fresh query can retrieve and what still requires " "interpretation.",
     "Do not claim useful completion unless the canonical result is readable "
     "from a fresh interaction.",
 )
@@ -2333,9 +2331,7 @@ class SemanticInterpretationRequest:
     prior_claims: tuple[SemanticClaim, ...] = ()
     prior_relationships: tuple[SemanticRelationship, ...] = ()
     analysis_obligations: tuple[str, ...] = ()
-    interpretation_profile: InterpretationProfile = (
-        InterpretationProfile.SA_1_7_V1
-    )
+    interpretation_profile: InterpretationProfile = InterpretationProfile.SA_1_7_V1
     target_id: TargetId | None = None
     target_inventory_items: tuple[EvidenceInventoryItem, ...] = ()
     discovery_scope: EvidenceScope = _field(default_factory=EvidenceScope)
@@ -2384,7 +2380,9 @@ class SemanticInterpretationResult:
     question_decision: SemanticQuestionDecision | None = None
     proposed_questions: tuple[ProposedSemanticQuestion, ...] = ()
     candidate_withdrawals: tuple[CandidateSemanticWithdrawal, ...] = ()
-    proposed_target_inventory_accounting: tuple[CandidateTargetInventoryAccount, ...] = ()
+    proposed_target_inventory_accounting: tuple[
+        CandidateTargetInventoryAccount, ...
+    ] = ()
     proposed_target_questions: tuple[SemanticQuestionScope, ...] = ()
 
 
@@ -2505,6 +2503,7 @@ class SchemaVersion:
 # §5.1 Shared bounds (value types; port operations are Phase 1.2)
 # ---------------------------------------------------------------------------
 
+
 @_dataclass(frozen=True)
 class QueryBounds:
     max_results: int
@@ -2539,6 +2538,7 @@ class ServiceBoundsPolicy:
 # Canonical serialization (deterministic mechanical encoding)
 # ---------------------------------------------------------------------------
 
+
 class CanonicalDecodeError(ValueError):
     """Raised when canonical data cannot be decoded into the target type.
 
@@ -2549,9 +2549,7 @@ class CanonicalDecodeError(ValueError):
     `str()` renders `path: reason` when a path is present.
     """
 
-    def __init__(
-        self, message: str, path: tuple[str, ...] = ()
-    ) -> None:
+    def __init__(self, message: str, path: tuple[str, ...] = ()) -> None:
         self.reason = message
         self.path = tuple(path)
         if self.path:
@@ -2645,9 +2643,7 @@ def _decode_value(hint: object, data: object) -> object:
             try:
                 parsed = _datetime.datetime.fromisoformat(data)
             except ValueError:
-                raise CanonicalDecodeError(
-                    f"invalid datetime: {data!r}"
-                ) from None
+                raise CanonicalDecodeError(f"invalid datetime: {data!r}") from None
             return parsed
         raise CanonicalDecodeError(f"expected datetime string, got {data!r}")
 
@@ -2698,9 +2694,7 @@ def _decode_value(hint: object, data: object) -> object:
 def _decode_dataclass(cls: type, data: dict) -> object:
     tag = data.get("$type")
     if tag != cls.__name__:
-        raise CanonicalDecodeError(
-            f"expected $type {cls.__name__!r}, got {tag!r}"
-        )
+        raise CanonicalDecodeError(f"expected $type {cls.__name__!r}, got {tag!r}")
     try:
         hints = _typing.get_type_hints(cls)
     except Exception as exc:

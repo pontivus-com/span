@@ -47,8 +47,12 @@ def target_subjects(
     carried separately on each pending interpretation request.
     """
     return _resolve_target_subjects(
-        repository_id, target, structural=structural,
-        evidence=evidence, store=store, bounds=bounds,
+        repository_id,
+        target,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
 
 
@@ -76,7 +80,9 @@ def _next_target_pending(
 
             try:
                 inv_items = enumerate_target_inventory(
-                    repository_id, target_scope, evidence=evidence,
+                    repository_id,
+                    target_scope,
+                    evidence=evidence,
                     bounds=bounds,
                 )
             except ValueError:
@@ -87,26 +93,37 @@ def _next_target_pending(
                     for acc in assoc.inventory_accounting
                 }
                 unaccounted = sorted(
-                    (it for it in inv_items if it.evidence_ref.evidence_id.value not in accounted_ids),
-                    key=lambda it: (it.evidence_ref.evidence_id.value, it.evidence_ref.locator),
+                    (
+                        it
+                        for it in inv_items
+                        if it.evidence_ref.evidence_id.value not in accounted_ids
+                    ),
+                    key=lambda it: (
+                        it.evidence_ref.evidence_id.value,
+                        it.evidence_ref.locator,
+                    ),
                 )
                 if unaccounted:
                     # S5/J-6: bind a bounded, deterministic batch of
                     # unaccounted members in one mapping unit. No new
                     # batch-size constant: the existing evidence bound is
                     # the limit; the frontier order is stable identity.
-                    batch = tuple(
-                        unaccounted[: bounds.max_evidence_units]
-                    )
+                    batch = tuple(unaccounted[: bounds.max_evidence_units])
                     item = batch[0]
                     anchor = None
                     for cand in candidates:
-                        if cand.subject_id.canonical_locator == item.evidence_ref.locator:
+                        if (
+                            cand.subject_id.canonical_locator
+                            == item.evidence_ref.locator
+                        ):
                             anchor = cand
                             break
                     if anchor is None:
                         for cand in scope:
-                            if cand.subject_id.canonical_locator == item.evidence_ref.locator:
+                            if (
+                                cand.subject_id.canonical_locator
+                                == item.evidence_ref.locator
+                            ):
                                 anchor = cand
                                 break
                     if anchor is None:
@@ -121,20 +138,33 @@ def _next_target_pending(
                             declared_kind=item.evidence_ref.locator,
                         )
                     mapping_task = prepare_interpretation_task(
-                        repository_id, anchor,
-                        structural=structural, evidence=evidence, bounds=bounds,
-                        state=state, authority_seeds=authority_seeds,
+                        repository_id,
+                        anchor,
+                        structural=structural,
+                        evidence=evidence,
+                        bounds=bounds,
+                        state=state,
+                        authority_seeds=authority_seeds,
                         operation_intent=m.SemanticIntent.EXPLAIN,
-                        store=store, scope_root=anchor.subject_id,
-                        objective=objective, target_scope=target_scope,
-                        target_id=target_id, target_inventory_items=batch,
+                        store=store,
+                        scope_root=anchor.subject_id,
+                        objective=objective,
+                        target_scope=target_scope,
+                        target_id=target_id,
+                        target_inventory_items=batch,
                         mapping_mode=True,
                     )
                     return _suspend(
-                        op="initialize_target", repository_id=repository_id,
-                        subject=anchor, task=mapping_task, seeds=authority_seeds,
-                        bounds=bounds, state=state, resolution=None,
-                        scope=scope, remaining=candidates,
+                        op="initialize_target",
+                        repository_id=repository_id,
+                        subject=anchor,
+                        task=mapping_task,
+                        seeds=authority_seeds,
+                        bounds=bounds,
+                        state=state,
+                        resolution=None,
+                        scope=scope,
+                        remaining=candidates,
                         continuations=continuations,
                         operation_intent="EXPLAIN",
                         question_slice=mapping_task.request.question_slice,
@@ -157,7 +187,8 @@ def _next_target_pending(
             for target_q in ordered_questions:
                 try:
                     coverages = store.load_all_question_coverages(
-                        repository_id, target_q.scope_root,
+                        repository_id,
+                        target_q.scope_root,
                         (target_q.subject,),
                     )
                 except Exception:
@@ -184,10 +215,7 @@ def _next_target_pending(
                     # No persisted row yet for an admitted question:
                     # it was admitted as PENDING by mapping.
                     needs_task = True
-                elif (
-                    match.disposition
-                    is m.SemanticQuestionDisposition.PENDING
-                ):
+                elif match.disposition is m.SemanticQuestionDisposition.PENDING:
                     needs_task = True
                 if not needs_task:
                     continue
@@ -198,35 +226,48 @@ def _next_target_pending(
                     continue
                 anchor = anchor_subjects[0]
                 member_refs = tuple(
-                    acc.evidence_ref for acc in assoc.inventory_accounting
+                    acc.evidence_ref
+                    for acc in assoc.inventory_accounting
                     if target_q.scope_root in acc.assigned_area_subjects
                 )
                 # Unresolved mappings stay visible: their evidence rides
                 # along as required (non-authority) context so later
                 # evidence can correct the grouping through revision.
                 unresolved_refs = tuple(
-                    acc.evidence_ref for acc in assoc.inventory_accounting
+                    acc.evidence_ref
+                    for acc in assoc.inventory_accounting
                     if acc.resolution_requirements
                 )
                 sem_task = prepare_interpretation_task(
-                    repository_id, anchor,
-                    structural=structural, evidence=evidence, bounds=bounds,
+                    repository_id,
+                    anchor,
+                    structural=structural,
+                    evidence=evidence,
+                    bounds=bounds,
                     state=state,
                     authority_seeds=tuple(authority_seeds),
                     operation_intent=m.SemanticIntent.EXPLAIN,
                     question_slice=target_q.question_slice,
-                    store=store, scope_root=target_q.scope_root,
+                    store=store,
+                    scope_root=target_q.scope_root,
                     question_class=target_q.question_class,
                     materiality_basis=target_q.materiality_basis,
-                    objective=objective, target_scope=target_scope,
+                    objective=objective,
+                    target_scope=target_scope,
                     target_id=target_id,
                     required_evidence_refs=member_refs + unresolved_refs,
                 )
                 return _suspend(
-                    op="initialize_target", repository_id=repository_id,
-                    subject=anchor, task=sem_task, seeds=authority_seeds,
-                    bounds=bounds, state=state, resolution=None,
-                    scope=scope, remaining=candidates,
+                    op="initialize_target",
+                    repository_id=repository_id,
+                    subject=anchor,
+                    task=sem_task,
+                    seeds=authority_seeds,
+                    bounds=bounds,
+                    state=state,
+                    resolution=None,
+                    scope=scope,
+                    remaining=candidates,
                     continuations=continuations,
                     operation_intent="EXPLAIN",
                     question_slice=sem_task.request.question_slice,
@@ -236,15 +277,25 @@ def _next_target_pending(
                     target_id=target_id,
                 )
             # No mapping and no PENDING target work: terminal target status.
-            from span.service.operations.status import _target_status_answer as _tgt_status
+            from span.service.operations.status import (
+                _target_status_answer as _tgt_status,
+            )
+
             return _tgt_status(
-                repository_id, target_id,
-                evidence=evidence, store=store, bounds=bounds, state=state,
+                repository_id,
+                target_id,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
+                state=state,
             )
     for index, subject in enumerate(candidates):
         if _baseline_sufficient(
-            repository_id, subject.subject_id,
-            store=store, evidence=evidence, bounds=bounds,
+            repository_id,
+            subject.subject_id,
+            store=store,
+            evidence=evidence,
+            bounds=bounds,
         ):
             continue
         # Persisted worklist first: an admitted PENDING question under this
@@ -252,33 +303,57 @@ def _next_target_pending(
         # frontier instead of re-asking an OPEN audit (same pattern as the
         # live-session resume in service/exchange.py).
         next_cov = _next_baseline_pending(
-            repository_id, subject, store=store, bounds=bounds,
+            repository_id,
+            subject,
+            store=store,
+            bounds=bounds,
         )
         if next_cov is not None:
             return _suspend_baseline_pending(
-                repository_id, subject, next_cov,
-                structural=structural, evidence=evidence, store=store,
-                bounds=bounds, state=state, seeds=authority_seeds,
-                resolution=None, continuations=continuations,
-                op="initialize_target", scope=candidates,
-                remaining=candidates[index + 1:],
-                objective=objective, target_scope=target_scope,
+                repository_id,
+                subject,
+                next_cov,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
+                state=state,
+                seeds=authority_seeds,
+                resolution=None,
+                continuations=continuations,
+                op="initialize_target",
+                scope=candidates,
+                remaining=candidates[index + 1 :],
+                objective=objective,
+                target_scope=target_scope,
                 target_id=target_id,
             )
         task = prepare_interpretation_task(
-            repository_id, subject,
-            structural=structural, evidence=evidence, bounds=bounds,
-            state=state, authority_seeds=authority_seeds,
+            repository_id,
+            subject,
+            structural=structural,
+            evidence=evidence,
+            bounds=bounds,
+            state=state,
+            authority_seeds=authority_seeds,
             operation_intent=m.SemanticIntent.EXPLAIN,
-            store=store, scope_root=subject.subject_id,
-            establish_baseline=True, objective=objective,
+            store=store,
+            scope_root=subject.subject_id,
+            establish_baseline=True,
+            objective=objective,
             target_scope=target_scope,
         )
         return _suspend(
-            op="initialize_target", repository_id=repository_id,
-            subject=subject, task=task, seeds=authority_seeds,
-            bounds=bounds, state=state, resolution=None,
-            scope=scope, remaining=candidates[index + 1:],
+            op="initialize_target",
+            repository_id=repository_id,
+            subject=subject,
+            task=task,
+            seeds=authority_seeds,
+            bounds=bounds,
+            state=state,
+            resolution=None,
+            scope=scope,
+            remaining=candidates[index + 1 :],
             continuations=continuations,
             operation_intent="EXPLAIN",
             question_slice=task.request.question_slice,
@@ -288,8 +363,13 @@ def _next_target_pending(
             target_id=target_id,
         )
     return _compose_status_answer(
-        repository_id, scope, structural=structural, evidence=evidence,
-        store=store, bounds=bounds, state=state,
+        repository_id,
+        scope,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
     )
 
 
@@ -331,9 +411,7 @@ def _ensure_target_association(
             inventory_fingerprint=fingerprint,
             observed_repository_state_fingerprint=state.state_fingerprint,
         )
-        store.write_index_batch(
-            m.CanonicalIndexBatch(target_associations=(assoc,))
-        )
+        store.write_index_batch(m.CanonicalIndexBatch(target_associations=(assoc,)))
         return assoc
     if existing.inventory_fingerprint == fingerprint:
         # Explicit re-entry with unchanged membership: deterministic
@@ -352,9 +430,7 @@ def _ensure_target_association(
             inventory_fingerprint=existing.inventory_fingerprint,
             observed_repository_state_fingerprint=state.state_fingerprint,
         )
-        store.write_index_batch(
-            m.CanonicalIndexBatch(target_associations=(touched,))
-        )
+        store.write_index_batch(m.CanonicalIndexBatch(target_associations=(touched,)))
         return touched
     present = {item.evidence_ref.evidence_id.value for item in items}
     by_id = {item.evidence_ref.evidence_id.value: item for item in items}
@@ -377,9 +453,7 @@ def _ensure_target_association(
         if acc.evidence_ref.evidence_id.value in present
     )
     area_subjects = tuple(
-        dict.fromkeys(
-            sid for acc in retained for sid in acc.assigned_area_subjects
-        )
+        dict.fromkeys(sid for acc in retained for sid in acc.assigned_area_subjects)
     )
     admitted = set(area_subjects)
     target_questions = tuple(
@@ -396,9 +470,7 @@ def _ensure_target_association(
         inventory_fingerprint=fingerprint,
         observed_repository_state_fingerprint=state.state_fingerprint,
     )
-    store.write_index_batch(
-        m.CanonicalIndexBatch(target_associations=(reconciled,))
-    )
+    store.write_index_batch(m.CanonicalIndexBatch(target_associations=(reconciled,)))
     return reconciled
 
 
@@ -431,17 +503,35 @@ def initialize_target(
             m.SemanticIntent.STATUS, request.repository_id, bounds, state
         )
     _ensure_target_association(
-        request.repository_id, canonical_scope, canonical_objective, target_id,
-        evidence=evidence, store=store, bounds=bounds, state=state,
+        request.repository_id,
+        canonical_scope,
+        canonical_objective,
+        target_id,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
     )
     subjects = target_subjects(
-        request.repository_id, canonical_scope,
-        structural=structural, evidence=evidence, store=store, bounds=bounds,
+        request.repository_id,
+        canonical_scope,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
     return _next_target_pending(
-        request.repository_id, subjects, subjects,
-        objective=canonical_objective, structural=structural, evidence=evidence,
-        store=store, bounds=bounds, state=state,
-        authority_seeds=authority_seeds, continuations=continuations,
-        target_scope=canonical_scope, target_id=target_id,
+        request.repository_id,
+        subjects,
+        subjects,
+        objective=canonical_objective,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
+        authority_seeds=authority_seeds,
+        continuations=continuations,
+        target_scope=canonical_scope,
+        target_id=target_id,
     )

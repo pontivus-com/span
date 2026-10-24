@@ -40,8 +40,12 @@ FILES = {
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -50,7 +54,8 @@ def _bounds(**overrides):
 
 def _sid(locator="src/seed.py"):
     return m.SubjectId(
-        repository_id=REPO, subject_kind=m.SubjectKind.COMPONENT,
+        repository_id=REPO,
+        subject_kind=m.SubjectKind.COMPONENT,
         canonical_locator=locator,
     )
 
@@ -62,8 +67,7 @@ def _ref(path, fingerprint=None, span=None):
         source_kind=m.EvidenceSourceKind.SOURCE_CODE,
         locator=path,
         revision_or_fingerprint=(
-            fingerprint if fingerprint is not None
-            else fingerprint_content(FILES[path])
+            fingerprint if fingerprint is not None else fingerprint_content(FILES[path])
         ),
         section_or_span=span,
     )
@@ -75,8 +79,7 @@ def _fixture_sources(files=None):
         REPO,
         tuple(InMemoryFile(p, c) for p, c in files.items()),
         tuple(
-            InMemorySubject(p, m.SubjectKind.COMPONENT, p.split("/")[-1])
-            for p in files
+            InMemorySubject(p, m.SubjectKind.COMPONENT, p.split("/")[-1]) for p in files
         ),
         (),
     )
@@ -94,7 +97,9 @@ def _harness(files=None):
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
@@ -121,7 +126,8 @@ def _proposed(scope, disposition, *, requirements=(), basis=""):
 def _purpose_claim(summary="Sorts seeds"):
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
-        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        subject=_sid(),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue(summary, ()),
         evidence=(_ref("src/seed.py"),),
@@ -139,7 +145,9 @@ def _suspend(structural, evidence, store, continuations):
             target=m.SubjectSelector(None, "src/seed.py", (), None),
             bounds=_bounds(),
         ),
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
         continuations=continuations,
     )
     assert isinstance(current, PendingInterpretation), type(current)
@@ -152,8 +160,7 @@ def _crash_during_commit(db_path):
         REPO,
         tuple(InMemoryFile(p, c) for p, c in FILES.items()),
         tuple(
-            InMemorySubject(p, m.SubjectKind.COMPONENT, p.split("/")[-1])
-            for p in FILES
+            InMemorySubject(p, m.SubjectKind.COMPONENT, p.split("/")[-1]) for p in FILES
         ),
         (),
     )
@@ -165,7 +172,9 @@ def _crash_during_commit(db_path):
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     continuations = ContinuationStore()
     pending = _suspend(structural, evidence, store, continuations)
@@ -178,12 +187,16 @@ def _crash_during_commit(db_path):
     ops.submit_interpretation(
         pending.continuation,
         m.SemanticInterpretationResult(
-            claims=(_purpose_claim(),), relationships=(),
-            candidate_subjects=(), candidate_conflicts=(),
+            claims=(_purpose_claim(),),
+            relationships=(),
+            candidate_subjects=(),
+            candidate_conflicts=(),
             question_decision=_answer_current(pending.request),
             candidate_withdrawals=(),
         ),
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
         continuations=continuations,
     )
     raise AssertionError("the child must terminate at the SQLite commit")
@@ -200,25 +213,29 @@ def _recover_after_commit_crash(db_path):
                 target=m.SubjectSelector(None, "src/seed.py", (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         if isinstance(fresh, PendingInterpretation):
             fresh = ops.submit_interpretation(
                 fresh.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(fresh.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
         page = store.load_claims(REPO, (_sid(),), (), _bounds())
-        coverages = store.load_question_coverages(
-            REPO, _sid(), (_sid(),), _bounds()
-        )
+        coverages = store.load_question_coverages(REPO, _sid(), (_sid(),), _bounds())
         return fresh, page, coverages
     finally:
         store.close()
@@ -233,7 +250,8 @@ class ContinuationOwnershipTest(unittest.TestCase):
         continuations = ContinuationStore()
         token = continuations.pend(
             SuspendedOperation(
-                op="explain", repository_id=REPO,
+                op="explain",
+                repository_id=REPO,
                 subject=m.Subject(_sid(), "seed", None),
                 request=m.SemanticInterpretationRequest(
                     repository_id=REPO,
@@ -248,7 +266,9 @@ class ContinuationOwnershipTest(unittest.TestCase):
                 ),
                 bounds=_bounds(),
                 state=m.RepositoryState(
-                    repository_id=REPO, revision_id="r1", dirty=False,
+                    repository_id=REPO,
+                    revision_id="r1",
+                    dirty=False,
                     state_fingerprint="fp",
                     observed_at=datetime.datetime(
                         2026, 1, 1, tzinfo=datetime.timezone.utc
@@ -282,12 +302,16 @@ class ContinuationOwnershipTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -295,12 +319,16 @@ class ContinuationOwnershipTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(_purpose_claim(),), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(_purpose_claim(),),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             page = store.load_claims(REPO, (_sid(),), (), _bounds())
@@ -316,21 +344,29 @@ class ContinuationOwnershipTest(unittest.TestCase):
             owned = continuations.acquire(pending.continuation)
             self.assertIsNotNone(owned)
             result = m.SemanticInterpretationResult(
-                claims=(_purpose_claim(),), relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
+                claims=(_purpose_claim(),),
+                relationships=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 question_decision=_answer_current(pending.request),
                 candidate_withdrawals=(),
             )
             with self.assertRaises(InterpretationUnavailable):
                 ops.submit_interpretation(
-                    pending.continuation, result,
-                    structural=structural, evidence=evidence, store=store,
+                    pending.continuation,
+                    result,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             continuations.release(pending.continuation)
             answer = ops.submit_interpretation(
-                pending.continuation, result,
-                structural=structural, evidence=evidence, store=store,
+                pending.continuation,
+                result,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -345,7 +381,8 @@ class ContinuationOwnershipTest(unittest.TestCase):
 
         def _record():
             return SuspendedOperation(
-                op="explain", repository_id=REPO,
+                op="explain",
+                repository_id=REPO,
                 subject=m.Subject(_sid(), "seed", None),
                 request=m.SemanticInterpretationRequest(
                     repository_id=REPO,
@@ -360,7 +397,9 @@ class ContinuationOwnershipTest(unittest.TestCase):
                 ),
                 bounds=_bounds(),
                 state=m.RepositoryState(
-                    repository_id=REPO, revision_id="r1", dirty=False,
+                    repository_id=REPO,
+                    revision_id="r1",
+                    dirty=False,
                     state_fingerprint="fp",
                     observed_at=datetime.datetime(
                         2026, 1, 1, tzinfo=datetime.timezone.utc
@@ -382,21 +421,23 @@ class ContinuationOwnershipTest(unittest.TestCase):
         now = [datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)]
         structural, evidence, store = _harness()
         try:
-            continuations = ContinuationStore(
-                ttl_seconds=60, now=lambda: now[0]
-            )
+            continuations = ContinuationStore(ttl_seconds=60, now=lambda: now[0])
             pending = _suspend(structural, evidence, store, continuations)
             now[0] += datetime.timedelta(seconds=61)
             with self.assertRaises(InterpretationUnavailable):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(_purpose_claim(),), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(_purpose_claim(),),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             # Recovery is the idempotent original operation, not reissue.
@@ -411,8 +452,10 @@ class ContinuationOwnershipTest(unittest.TestCase):
             continuations = ContinuationStore()
             pending = _suspend(structural, evidence, store, continuations)
             result = m.SemanticInterpretationResult(
-                claims=(_purpose_claim(),), relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
+                claims=(_purpose_claim(),),
+                relationships=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 question_decision=_answer_current(pending.request),
                 candidate_withdrawals=(),
             )
@@ -429,9 +472,12 @@ class ContinuationOwnershipTest(unittest.TestCase):
             try:
                 with self.assertRaises(RuntimeError):
                     ops.submit_interpretation(
-                        pending.continuation, result,
-                        structural=structural, evidence=evidence,
-                        store=store, continuations=continuations,
+                        pending.continuation,
+                        result,
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=continuations,
                     )
             finally:
                 store.write_index_batch = original
@@ -439,8 +485,11 @@ class ContinuationOwnershipTest(unittest.TestCase):
             page = store.load_claims(REPO, (_sid(),), (), _bounds())
             self.assertEqual(page.items, ())
             answer = ops.submit_interpretation(
-                pending.continuation, result,
-                structural=structural, evidence=evidence, store=store,
+                pending.continuation,
+                result,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -470,13 +519,17 @@ class ContinuationOwnershipTest(unittest.TestCase):
                     ops.submit_interpretation(
                         pending.continuation,
                         m.SemanticInterpretationResult(
-                            claims=(_purpose_claim(),), relationships=(),
-                            candidate_subjects=(), candidate_conflicts=(),
+                            claims=(_purpose_claim(),),
+                            relationships=(),
+                            candidate_subjects=(),
+                            candidate_conflicts=(),
                             question_decision=_answer_current(pending.request),
                             candidate_withdrawals=(),
                         ),
-                        structural=structural, evidence=evidence,
-                        store=store, continuations=continuations,
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=continuations,
                     )
             finally:
                 exchange_mod._compose_explain_answer = original
@@ -488,7 +541,9 @@ class ContinuationOwnershipTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -534,12 +589,16 @@ class EvidenceProvenanceTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(claim,), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(claim,),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             self.assertIn("ev-ghost-nested", str(cm.exception))
@@ -555,7 +614,8 @@ class EvidenceProvenanceTest(unittest.TestCase):
             continuations = ContinuationStore()
             pending = _suspend(structural, evidence, store, continuations)
             nested = _ref(
-                "src/other.py", fingerprint="0" * 64,
+                "src/other.py",
+                fingerprint="0" * 64,
                 span="made-up-nested-span",
             )
             claim = _purpose_claim()
@@ -576,18 +636,23 @@ class EvidenceProvenanceTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(claim,), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(claim,),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             persisted_basis = answer.content.claims[0].basis
             nested_refs = [
-                ref for ref in persisted_basis.input_refs
+                ref
+                for ref in persisted_basis.input_refs
                 if isinstance(ref, m.EvidenceRef)
             ]
             self.assertEqual(len(nested_refs), 1)
@@ -615,7 +680,8 @@ class EvidenceProvenanceTest(unittest.TestCase):
                 assertion_nature=forged.assertion_nature,
                 evidence=(
                     _ref(
-                        "src/seed.py", fingerprint=stale_fp,
+                        "src/seed.py",
+                        fingerprint=stale_fp,
                         span="completely-made-up-location",
                     ),
                 ),
@@ -625,12 +691,16 @@ class EvidenceProvenanceTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(forged,), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(forged,),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -663,12 +733,16 @@ class CorrectionBindingTest(unittest.TestCase):
         answer = ops.submit_interpretation(
             pending.continuation,
             m.SemanticInterpretationResult(
-                claims=(_purpose_claim("Sorts seeds"),), relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
+                claims=(_purpose_claim("Sorts seeds"),),
+                relationships=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 question_decision=_answer_current(pending.request),
                 candidate_withdrawals=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         self.assertIsInstance(answer, m.SemanticAnswer)
@@ -682,7 +756,9 @@ class CorrectionBindingTest(unittest.TestCase):
                 bounds=_bounds(),
                 stale_only=False,
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         self.assertIsInstance(challenged, PendingInterpretation)
@@ -703,9 +779,7 @@ class CorrectionBindingTest(unittest.TestCase):
             original_scope, _ = self._establish(
                 structural, evidence, store, continuations
             )
-            challenged = self._challenge(
-                structural, evidence, store, continuations
-            )
+            challenged = self._challenge(structural, evidence, store, continuations)
             wrong = m.SemanticQuestionScope(
                 scope_root=original_scope.scope_root,
                 subject=_sid("src/other.py"),
@@ -713,8 +787,15 @@ class CorrectionBindingTest(unittest.TestCase):
                 question_slice=original_scope.question_slice,
                 materiality_basis=original_scope.materiality_basis,
             )
-            self._assert_rejected(original_scope, wrong, challenged,
-                                  structural, evidence, store, continuations)
+            self._assert_rejected(
+                original_scope,
+                wrong,
+                challenged,
+                structural,
+                evidence,
+                store,
+                continuations,
+            )
         finally:
             store.close()
 
@@ -725,9 +806,7 @@ class CorrectionBindingTest(unittest.TestCase):
             original_scope, _ = self._establish(
                 structural, evidence, store, continuations
             )
-            challenged = self._challenge(
-                structural, evidence, store, continuations
-            )
+            challenged = self._challenge(structural, evidence, store, continuations)
             wrong = m.SemanticQuestionScope(
                 scope_root=original_scope.scope_root,
                 subject=original_scope.subject,
@@ -735,8 +814,15 @@ class CorrectionBindingTest(unittest.TestCase):
                 question_slice=original_scope.question_slice,
                 materiality_basis=original_scope.materiality_basis,
             )
-            self._assert_rejected(original_scope, wrong, challenged,
-                                  structural, evidence, store, continuations)
+            self._assert_rejected(
+                original_scope,
+                wrong,
+                challenged,
+                structural,
+                evidence,
+                store,
+                continuations,
+            )
         finally:
             store.close()
 
@@ -747,9 +833,7 @@ class CorrectionBindingTest(unittest.TestCase):
             original_scope, _ = self._establish(
                 structural, evidence, store, continuations
             )
-            challenged = self._challenge(
-                structural, evidence, store, continuations
-            )
+            challenged = self._challenge(structural, evidence, store, continuations)
             wrong = m.SemanticQuestionScope(
                 scope_root=_sid("src/other.py"),
                 subject=original_scope.subject,
@@ -757,31 +841,47 @@ class CorrectionBindingTest(unittest.TestCase):
                 question_slice=original_scope.question_slice,
                 materiality_basis=original_scope.materiality_basis,
             )
-            self._assert_rejected(original_scope, wrong, challenged,
-                                  structural, evidence, store, continuations)
+            self._assert_rejected(
+                original_scope,
+                wrong,
+                challenged,
+                structural,
+                evidence,
+                store,
+                continuations,
+            )
         finally:
             store.close()
 
     def _assert_rejected(
-        self, original_scope, wrong, challenged, structural, evidence,
-        store, continuations,
+        self,
+        original_scope,
+        wrong,
+        challenged,
+        structural,
+        evidence,
+        store,
+        continuations,
     ):
         with self.assertRaises(InterpretationUnitRejected) as cm:
             ops.submit_interpretation(
                 challenged.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     proposed_questions=(self._coverage(wrong),),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
         message = str(cm.exception)
         self.assertIn(
-            "correction question is not an exact persisted "
-            "SemanticQuestionScope",
+            "correction question is not an exact persisted " "SemanticQuestionScope",
             message,
         )
         self.assertIn("scope_root.repository_id=", message)
@@ -793,13 +893,14 @@ class CorrectionBindingTest(unittest.TestCase):
             m.SemanticInterpretationResult(
                 claims=(_purpose_claim("Sorts seeds reliably"),),
                 relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
-                proposed_questions=(
-                    self._coverage(original_scope),
-                ),
+                candidate_subjects=(),
+                candidate_conflicts=(),
+                proposed_questions=(self._coverage(original_scope),),
                 candidate_withdrawals=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         self.assertIsInstance(corrected, m.SemanticAnswer)
@@ -818,7 +919,9 @@ class CorrectionBindingTest(unittest.TestCase):
                     bounds=_bounds(),
                     stale_only=False,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(challenged, PendingInterpretation)
@@ -839,7 +942,8 @@ class CorrectionBindingTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim("Sorts seeds reliably"),),
                     relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     proposed_questions=(nominated,),
                     candidate_withdrawals=(
                         m.CandidateSemanticWithdrawal(
@@ -852,7 +956,9 @@ class CorrectionBindingTest(unittest.TestCase):
                         ),
                     ),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(corrected, m.SemanticAnswer)
@@ -862,7 +968,9 @@ class CorrectionBindingTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -894,44 +1002,44 @@ class CorrectionBindingTest(unittest.TestCase):
                     bounds=_bounds(),
                     stale_only=False,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(challenged, PendingInterpretation)
             fallback = challenged.request.question
             self.assertIsNotNone(fallback)
             self.assertNotEqual(fallback, original_scope)
-            self.assertIs(
-                fallback.question_class, m.SemanticQuestionClass.CQ_09
-            )
+            self.assertIs(fallback.question_class, m.SemanticQuestionClass.CQ_09)
             corrected = ops.submit_interpretation(
                 challenged.continuation,
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim("Sorts seeds reliably"),),
                     relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     proposed_questions=(
                         m.ProposedSemanticQuestion(
                             original_scope,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.ANSWERED
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.ANSWERED),
                                 disposition_basis="corrected reading",
                             ),
                         ),
                     ),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(corrected, m.SemanticAnswer)
-            rows = store.load_all_question_coverages(
-                REPO, None, (_sid(),)
-            )
+            rows = store.load_all_question_coverages(REPO, None, (_sid(),))
             original_rows = [
-                cov for cov in rows
+                cov
+                for cov in rows
                 if cov.question is not None and cov.question == original_scope
             ]
             self.assertEqual(len(original_rows), 1)
@@ -940,7 +1048,8 @@ class CorrectionBindingTest(unittest.TestCase):
                 m.SemanticQuestionDisposition.ANSWERED,
             )
             extras = [
-                cov for cov in rows
+                cov
+                for cov in rows
                 if cov.question is not None and cov.question != original_scope
             ]
             self.assertEqual(extras, [])
@@ -950,14 +1059,16 @@ class CorrectionBindingTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(status, m.SemanticAnswer)
             pending_views = [
-                view for view in status.content.question_coverage
-                if view.effective_disposition
-                is m.SemanticQuestionDisposition.PENDING
+                view
+                for view in status.content.question_coverage
+                if view.effective_disposition is m.SemanticQuestionDisposition.PENDING
             ]
             self.assertEqual(pending_views, [])
         finally:
@@ -977,7 +1088,9 @@ class CorrectionBindingTest(unittest.TestCase):
                     bounds=_bounds(),
                     stale_only=False,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(challenged, PendingInterpretation)
@@ -1000,15 +1113,19 @@ class CorrectionBindingTest(unittest.TestCase):
                 ops.submit_interpretation(
                     challenged.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(_purpose_claim(),), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(_purpose_claim(),),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         proposed_questions=(
                             _coverage(original_scope),
                             _coverage(other_scope),
                         ),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             self.assertIn(
@@ -1027,13 +1144,14 @@ class CorrectionBindingTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim("Sorts seeds reliably"),),
                     relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
-                    proposed_questions=(
-                        _coverage(original_scope),
-                    ),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
+                    proposed_questions=(_coverage(original_scope),),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1051,14 +1169,10 @@ class TargetCountsTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             scope = m.EvidenceScope(paths=("src",), evidence_refs=())
-            canonical_scope, canonical_objective = (
-                m.canonicalize_target_scope(
-                    REPO, scope, "Establish seed areas."
-                )
+            canonical_scope, canonical_objective = m.canonicalize_target_scope(
+                REPO, scope, "Establish seed areas."
             )
-            target_id = m.derive_target_id(
-                REPO, canonical_scope, canonical_objective
-            )
+            target_id = m.derive_target_id(REPO, canonical_scope, canonical_objective)
             area = _sid()
             assoc = m.TargetAssociation(
                 target_id=target_id,
@@ -1080,15 +1194,16 @@ class TargetCountsTest(unittest.TestCase):
                 inventory_fingerprint="drifted-membership",
                 observed_repository_state_fingerprint="fp",
             )
-            store.write_index_batch(
-                m.CanonicalIndexBatch(target_associations=(assoc,))
-            )
+            store.write_index_batch(m.CanonicalIndexBatch(target_associations=(assoc,)))
             over = ops.status(
                 ops.SemanticStatusRequest(
-                    repository_id=REPO, target=target_id,
+                    repository_id=REPO,
+                    target=target_id,
                     bounds=_bounds(max_results=1),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(over, m.SemanticAnswer)
@@ -1103,10 +1218,13 @@ class TargetCountsTest(unittest.TestCase):
             # as STALE, with counts from the current enumeration.
             roomy = ops.status(
                 ops.SemanticStatusRequest(
-                    repository_id=REPO, target=target_id,
+                    repository_id=REPO,
+                    target=target_id,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(roomy, m.SemanticAnswer)
@@ -1126,14 +1244,10 @@ class TargetCountsTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             scope = m.EvidenceScope(paths=("src",), evidence_refs=())
-            canonical_scope, canonical_objective = (
-                m.canonicalize_target_scope(
-                    REPO, scope, "Establish seed areas."
-                )
+            canonical_scope, canonical_objective = m.canonicalize_target_scope(
+                REPO, scope, "Establish seed areas."
             )
-            target_id = m.derive_target_id(
-                REPO, canonical_scope, canonical_objective
-            )
+            target_id = m.derive_target_id(REPO, canonical_scope, canonical_objective)
             area = _sid()
             assoc = m.TargetAssociation(
                 target_id=target_id,
@@ -1155,15 +1269,16 @@ class TargetCountsTest(unittest.TestCase):
                 inventory_fingerprint="drifted-membership",
                 observed_repository_state_fingerprint="fp",
             )
-            store.write_index_batch(
-                m.CanonicalIndexBatch(target_associations=(assoc,))
-            )
+            store.write_index_batch(m.CanonicalIndexBatch(target_associations=(assoc,)))
             answer = ops.status(
                 ops.SemanticStatusRequest(
-                    repository_id=REPO, target=target_id,
+                    repository_id=REPO,
+                    target=target_id,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1196,10 +1311,14 @@ class TargetCountsTest(unittest.TestCase):
             objective = "Establish seed areas."
             pending = ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
-                    repository_id=REPO, target=scope,
-                    objective=objective, bounds=_bounds(),
+                    repository_id=REPO,
+                    target=scope,
+                    objective=objective,
+                    bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
                 authority_seeds=(),
             )
@@ -1207,15 +1326,16 @@ class TargetCountsTest(unittest.TestCase):
             canonical_scope, canonical_objective = m.canonicalize_target_scope(
                 REPO, scope, objective
             )
-            target_id = m.derive_target_id(
-                REPO, canonical_scope, canonical_objective
-            )
+            target_id = m.derive_target_id(REPO, canonical_scope, canonical_objective)
             answer = ops.status(
                 ops.SemanticStatusRequest(
-                    repository_id=REPO, target=target_id,
+                    repository_id=REPO,
+                    target=target_id,
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1238,7 +1358,9 @@ def _suspend_for(structural, evidence, store, continuations, locator):
             target=m.SubjectSelector(None, locator, (), None),
             bounds=_bounds(),
         ),
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
         continuations=continuations,
     )
     assert isinstance(current, PendingInterpretation), type(current)
@@ -1258,12 +1380,16 @@ class UnsupportedChallengeTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_purpose_claim("Sorts seeds"),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_purpose_claim("Sorts seeds"),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             old_id = answer.content.claims[0].claim_id
@@ -1274,32 +1400,32 @@ class UnsupportedChallengeTest(unittest.TestCase):
                     bounds=_bounds(),
                     stale_only=False,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(challenged, PendingInterpretation)
             kept = ops.submit_interpretation(
                 challenged.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     proposed_questions=(
                         m.ProposedSemanticQuestion(
                             original_scope,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.OPEN
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.OPEN),
                                 resolution_requirements=(
                                     m.ResolutionRequirement(
                                         kind=(
-                                            m.ResolutionKind
-                                            .MISSING_SEMANTIC_COVERAGE
+                                            m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
                                         ),
                                         subject_or_claim=_sid(),
                                         description=(
-                                            "challenge lacks supporting "
-                                            "evidence"
+                                            "challenge lacks supporting " "evidence"
                                         ),
                                         supporting_context=(),
                                     ),
@@ -1310,7 +1436,9 @@ class UnsupportedChallengeTest(unittest.TestCase):
                     ),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(kept, m.SemanticAnswer)
@@ -1320,13 +1448,13 @@ class UnsupportedChallengeTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/seed.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
-            self.assertEqual(
-                answer.content.claims[0].value.summary, "Sorts seeds"
-            )
+            self.assertEqual(answer.content.claims[0].value.summary, "Sorts seeds")
             store.load_by_refs(REPO, (m.ClaimRef(id=old_id),))
         finally:
             store.close()
@@ -1342,9 +1470,7 @@ class CommitBoundaryRecoveryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = str(pathlib.Path(tmp) / "h-commit.db")
             context = multiprocessing.get_context("spawn")
-            process = context.Process(
-                target=_crash_during_commit, args=(db,)
-            )
+            process = context.Process(target=_crash_during_commit, args=(db,))
             process.start()
             process.join(30)
             self.assertFalse(process.is_alive())
@@ -1374,7 +1500,9 @@ class CrashRecoveryTest(unittest.TestCase):
                     authority_seeds=(),
                 ),
                 repository_id=REPO,
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
             )
             try:
                 continuations = ContinuationStore()
@@ -1382,12 +1510,16 @@ class CrashRecoveryTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(_purpose_claim(),), relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(_purpose_claim(),),
+                        relationships=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
                 # Crash: continuations and store handles are lost.
@@ -1397,12 +1529,12 @@ class CrashRecoveryTest(unittest.TestCase):
                 answer = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/seed.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/seed.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
                 self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1427,8 +1559,9 @@ class QuestionEvidenceUnionTest(unittest.TestCase):
             other_sid = _sid("src/other.py")
             claim = m.CandidateSemanticClaim(
                 candidate_key="purpose-other",
-                subject=other_sid, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                subject=other_sid,
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Other module", ()),
                 evidence=(_ref("src/seed.py"),),
                 basis=m.SemanticBasis(
@@ -1439,12 +1572,16 @@ class QuestionEvidenceUnionTest(unittest.TestCase):
             answer = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(claim,), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(claim,),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_answer_current(pending.request),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1452,9 +1589,7 @@ class QuestionEvidenceUnionTest(unittest.TestCase):
             coverages = store.load_question_coverages(
                 REPO, bound.scope_root, (bound.subject,), _bounds()
             )
-            match = next(
-                cov for cov in coverages if cov.question == bound
-            )
+            match = next(cov for cov in coverages if cov.question == bound)
             observed = {
                 obs.evidence_ref.evidence_id.value: obs.observed_fingerprint
                 for obs in match.question_evidence
@@ -1486,7 +1621,9 @@ class FreshSessionTest(unittest.TestCase):
                     authority_seeds=(),
                 ),
                 repository_id=REPO,
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
             )
             try:
                 continuations = ContinuationStore()
@@ -1497,24 +1634,27 @@ class FreshSessionTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim("Sorts seeds"),),
                         relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=_answer_current(pending.request),
                         candidate_withdrawals=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
                 old_id = first.content.claims[0].claim_id
                 challenged = ops.refresh(
                     ops.SemanticRefreshRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/seed.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/seed.py", (), None),
                         bounds=_bounds(),
                         stale_only=False,
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
                 seed_ref = challenged.request.evidence_units[0].evidence_ref
@@ -1523,7 +1663,8 @@ class FreshSessionTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim("Sorts seeds reliably"),),
                         relationships=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         proposed_questions=(
                             m.ProposedSemanticQuestion(
                                 original_scope,
@@ -1539,15 +1680,16 @@ class FreshSessionTest(unittest.TestCase):
                             m.CandidateSemanticWithdrawal(
                                 target=m.ClaimRef(id=old_id),
                                 basis=m.SemanticBasis(
-                                    m.DerivationKind
-                                    .SEMANTIC_INTERPRETATION,
+                                    m.DerivationKind.SEMANTIC_INTERPRETATION,
                                     "purpose disproven by inspection",
                                 ),
                                 evidence=(seed_ref,),
                             ),
                         ),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
                 store.close()
@@ -1555,12 +1697,12 @@ class FreshSessionTest(unittest.TestCase):
                 fresh = ops.explain(
                     ops.SemanticExplainRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/seed.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/seed.py", (), None),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
                 self.assertIsInstance(fresh, m.SemanticAnswer)
@@ -1596,11 +1738,7 @@ class DocumentMappingTest(unittest.TestCase):
         structural = InMemoryStructuralSource(
             REPO,
             tuple(InMemoryFile(p, c) for p, c in files.items()),
-            (
-                InMemorySubject(
-                    "src/app.py", m.SubjectKind.COMPONENT, "app.py"
-                ),
-            ),
+            (InMemorySubject("src/app.py", m.SubjectKind.COMPONENT, "app.py"),),
             (),
         )
         evidence = FixtureEvidenceSource(REPO, dict(files))
@@ -1611,20 +1749,24 @@ class DocumentMappingTest(unittest.TestCase):
                 authority_seeds=(),
             ),
             repository_id=REPO,
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         return structural, evidence, store
 
     def _doc_area(self):
         return m.SubjectId(
-            repository_id=REPO, subject_kind=m.SubjectKind.DOCUMENT,
+            repository_id=REPO,
+            subject_kind=m.SubjectKind.DOCUMENT,
             canonical_locator="docs/contract.md",
         )
 
     def _doc_question(self):
         area = self._doc_area()
         return m.SemanticQuestionScope(
-            scope_root=area, subject=area,
+            scope_root=area,
+            subject=area,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="contract purpose",
             materiality_basis="mapping admits contract",
@@ -1633,32 +1775,37 @@ class DocumentMappingTest(unittest.TestCase):
     def _doc_scope(self):
         return m.EvidenceScope(
             paths=(
-                "src/app.py", "docs/contract.md", "docs/notes.md",
+                "src/app.py",
+                "docs/contract.md",
+                "docs/notes.md",
             ),
             evidence_refs=(),
         )
 
-    def _start_doc_campaign(self, structural, evidence, store,
-                            continuations):
+    def _start_doc_campaign(self, structural, evidence, store, continuations):
         pending = ops.initialize_target(
             ops.SemanticInitializeTargetRequest(
-                repository_id=REPO, target=self._doc_scope(),
-                objective="document mapping probe", bounds=_bounds(),
+                repository_id=REPO,
+                target=self._doc_scope(),
+                objective="document mapping probe",
+                bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         self.assertIsInstance(pending, PendingInterpretation)
         return pending
 
-    def _map_current_item(self, structural, evidence, store,
-                          continuations, pending):
+    def _map_current_item(self, structural, evidence, store, continuations, pending):
         area = self._doc_area()
         item = pending.request.target_inventory_items[0]
         loc = item.evidence_ref.locator
         if loc == "docs/contract.md":
             result = m.SemanticInterpretationResult(
-                claims=(), relationships=(),
+                claims=(),
+                relationships=(),
                 candidate_subjects=(
                     m.CandidateSubject(
                         provisional_locator="docs/contract.md",
@@ -1676,9 +1823,7 @@ class DocumentMappingTest(unittest.TestCase):
                     m.ProposedSemanticQuestion(
                         self._doc_question(),
                         m.SemanticQuestionDecision(
-                            disposition=(
-                                m.SemanticQuestionDisposition.PENDING
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.PENDING),
                             disposition_basis="admitted on mapping",
                         ),
                     ),
@@ -1686,7 +1831,7 @@ class DocumentMappingTest(unittest.TestCase):
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(
-                         evidence_id=item.evidence_ref.evidence_id,
+                        evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
                     ),
                 ),
@@ -1694,18 +1839,17 @@ class DocumentMappingTest(unittest.TestCase):
             )
         elif loc == "docs/notes.md":
             result = m.SemanticInterpretationResult(
-                claims=(), relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
+                claims=(),
+                relationships=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(
-                         evidence_id=item.evidence_ref.evidence_id,
+                        evidence_id=item.evidence_ref.evidence_id,
                         resolution_requirements=(
                             m.ResolutionRequirement(
-                                kind=(
-                                    m.ResolutionKind
-                                    .MISSING_SEMANTIC_COVERAGE
-                                ),
+                                kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
                                 subject_or_claim=None,
                                 description="notes need owner triage",
                                 supporting_context=(),
@@ -1717,12 +1861,14 @@ class DocumentMappingTest(unittest.TestCase):
             )
         else:
             result = m.SemanticInterpretationResult(
-                claims=(), relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
+                claims=(),
+                relationships=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(
-                         evidence_id=item.evidence_ref.evidence_id,
+                        evidence_id=item.evidence_ref.evidence_id,
                         assigned_area_subjects=(area,),
                     ),
                 ),
@@ -1739,16 +1885,16 @@ class DocumentMappingTest(unittest.TestCase):
                 ),
             )
         return ops.submit_interpretation(
-            pending.continuation, result,
-            structural=structural, evidence=evidence, store=store,
+            pending.continuation,
+            result,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
 
-    def _drain_doc_campaign(self, structural, evidence, store,
-                            continuations):
-        pending = self._start_doc_campaign(
-            structural, evidence, store, continuations
-        )
+    def _drain_doc_campaign(self, structural, evidence, store, continuations):
+        pending = self._start_doc_campaign(structural, evidence, store, continuations)
         for _ in range(6):
             self.assertIsInstance(pending, PendingInterpretation)
             if pending.request.question is not None:
@@ -1760,7 +1906,8 @@ class DocumentMappingTest(unittest.TestCase):
 
     def _synthetic_sid(self, locator):
         return m.SubjectId(
-            repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+            repository_id=REPO,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator=locator,
         )
 
@@ -1776,18 +1923,17 @@ class DocumentMappingTest(unittest.TestCase):
             items = pending.request.target_inventory_items
             self.assertEqual(len(items), 3)
             partial = m.SemanticInterpretationResult(
-                claims=(), relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
+                claims=(),
+                relationships=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 candidate_withdrawals=(),
                 proposed_target_inventory_accounting=(
                     m.CandidateTargetInventoryAccount(
                         evidence_id=items[0].evidence_ref.evidence_id,
                         resolution_requirements=(
                             m.ResolutionRequirement(
-                                kind=(
-                                    m.ResolutionKind
-                                    .MISSING_SEMANTIC_COVERAGE
-                                ),
+                                kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
                                 subject_or_claim=None,
                                 description="not examined in this test",
                                 supporting_context=(),
@@ -1799,19 +1945,18 @@ class DocumentMappingTest(unittest.TestCase):
             )
             with self.assertRaises(InterpretationUnitRejected) as ctx:
                 ops.submit_interpretation(
-                    pending.continuation, partial,
-                    structural=structural, evidence=evidence, store=store,
+                    pending.continuation,
+                    partial,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             message = str(ctx.exception)
             for item in items[1:]:
                 self.assertIn(item.evidence_ref.evidence_id.value, message)
-            self.assertIn(
-                "bound mapping item has no accounting candidate", message
-            )
-            assoc = store.load_target_association(
-                REPO, pending.request.target_id
-            )
+            self.assertIn("bound mapping item has no accounting candidate", message)
+            assoc = store.load_target_association(REPO, pending.request.target_id)
             assert assoc is not None
             self.assertEqual(assoc.inventory_accounting, ())
             self.assertEqual(len(continuations), 1)
@@ -1827,37 +1972,26 @@ class DocumentMappingTest(unittest.TestCase):
                     repository_id=REPO,
                     mode=m.StructuralLocateMode.TARGET_MEMBERS,
                     bounds=_bounds(),
-                    target=m.EvidenceScope(
-                        paths=("docs",), evidence_refs=()
-                    ),
+                    target=m.EvidenceScope(paths=("docs",), evidence_refs=()),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
             )
-            by_loc = {
-                entry.evidence_ref.locator: entry
-                for entry in members.entries
-            }
+            by_loc = {entry.evidence_ref.locator: entry for entry in members.entries}
             self.assertIsNone(by_loc["docs/contract.md"].subject)
             pending = self._drain_doc_campaign(
                 structural, evidence, store, continuations
             )
             self.assertIsNotNone(pending.request.question)
-            self.assertEqual(
-                pending.request.question.scope_root, self._doc_area()
-            )
-            assoc = store.load_target_association(
-                REPO, pending.request.target_id
-            )
+            self.assertEqual(pending.request.question.scope_root, self._doc_area())
+            assoc = store.load_target_association(REPO, pending.request.target_id)
             self.assertIn(self._doc_area(), assoc.area_subjects)
             self.assertFalse(
-                store.load_subjects(
-                    REPO, (self._synthetic_sid("docs/contract.md"),)
-                )
+                store.load_subjects(REPO, (self._synthetic_sid("docs/contract.md"),))
             )
             self.assertFalse(
-                store.load_subjects(
-                    REPO, (self._synthetic_sid("cdg-workflow-area"),)
-                )
+                store.load_subjects(REPO, (self._synthetic_sid("cdg-workflow-area"),))
             )
         finally:
             store.close()
@@ -1877,9 +2011,7 @@ class DocumentMappingTest(unittest.TestCase):
             )
             item = m.EvidenceInventoryItem(
                 evidence_ref=m.EvidenceRef(
-                    evidence_id=m.EvidenceId(
-                        "ev-docs/contract.md"
-                    ),
+                    evidence_id=m.EvidenceId("ev-docs/contract.md"),
                     repository_id=REPO,
                     source_kind=m.EvidenceSourceKind.DOCUMENTATION,
                     locator="docs/contract.md",
@@ -1893,13 +2025,18 @@ class DocumentMappingTest(unittest.TestCase):
                 ),
             )
             task = prepare_interpretation_task(
-                REPO, anchor,
-                structural=structural, evidence=evidence,
-                bounds=_bounds(), state=state, store=store,
+                REPO,
+                anchor,
+                structural=structural,
+                evidence=evidence,
+                bounds=_bounds(),
+                state=state,
+                store=store,
                 target_scope=m.EvidenceScope(
                     paths=("docs/contract.md",), evidence_refs=()
                 ),
-                target_inventory_items=(item,), mapping_mode=True,
+                target_inventory_items=(item,),
+                mapping_mode=True,
             )
             text = " ".join(
                 task.request.brief.scope_boundaries
@@ -1907,9 +2044,7 @@ class DocumentMappingTest(unittest.TestCase):
             )
             self.assertIn("subject: null", text)
             self.assertIn("service-owned PENDING CQ-01 seed", text)
-            self.assertNotIn(
-                "requires at least one target question", text
-            )
+            self.assertNotIn("requires at least one target question", text)
         finally:
             store.close()
 
@@ -1925,15 +2060,19 @@ def _fill_batch(pending, accounts):
         eid = it.evidence_ref.evidence_id.value
         if eid in have:
             continue
-        out.append(m.CandidateTargetInventoryAccount(
-            evidence_id=it.evidence_ref.evidence_id,
-            resolution_requirements=(m.ResolutionRequirement(
-                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                subject_or_claim=None,
-                description="not examined in this test",
-                supporting_context=(),
-            ),),
-        ))
+        out.append(
+            m.CandidateTargetInventoryAccount(
+                evidence_id=it.evidence_ref.evidence_id,
+                resolution_requirements=(
+                    m.ResolutionRequirement(
+                        kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                        subject_or_claim=None,
+                        description="not examined in this test",
+                        supporting_context=(),
+                    ),
+                ),
+            )
+        )
     return tuple(out)
 
 

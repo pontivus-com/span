@@ -17,15 +17,16 @@ from span.service.discovery import _coverage_scope_snapshots
 from span.service.refs import _claim_ref, _ref_value, _relationship_ref
 
 __all__ = [
-    'preflight',
-    '_premise_preflight',
-    '_classify_current',
-    '_classify_coverage_updates',
-    '_evaluate_current',
-    'coverage_check',
-    '_latest_coverages',
-    '_refresh_view',
+    "preflight",
+    "_premise_preflight",
+    "_classify_current",
+    "_classify_coverage_updates",
+    "_evaluate_current",
+    "coverage_check",
+    "_latest_coverages",
+    "_refresh_view",
 ]
+
 
 def preflight(
     repository_id: str,
@@ -45,14 +46,20 @@ def preflight(
     if not semantic_ids:
         return ()
     updates, _ = _classify_current(
-        repository_id, semantic_ids, evidence=evidence,
-        store=store, bounds=bounds,
+        repository_id,
+        semantic_ids,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
     live: dict[str, m.FreshnessState] = {
         u.semantic_id.id.value: u.freshness.state for u in updates
     }
     premise_updates = _premise_preflight(
-        repository_id, semantic_ids, store=store, bounds=bounds,
+        repository_id,
+        semantic_ids,
+        store=store,
+        bounds=bounds,
         live_states=live,
     )
     merged: dict[str, m.FreshnessUpdate] = {}
@@ -62,6 +69,7 @@ def preflight(
     if final:
         store.mark_freshness(final)
     return final
+
 
 def _premise_preflight(
     repository_id: str,
@@ -88,8 +96,12 @@ def _premise_preflight(
     updates: dict[str, m.FreshnessUpdate] = {}
     clean: set[str] = set()
 
-    def _mark(rid: str, ref: m.ClaimRef | m.RelationshipRef,
-              state: m.FreshnessState, reason: str) -> None:
+    def _mark(
+        rid: str,
+        ref: m.ClaimRef | m.RelationshipRef,
+        state: m.FreshnessState,
+        reason: str,
+    ) -> None:
         updates.setdefault(
             rid,
             m.FreshnessUpdate(
@@ -102,7 +114,8 @@ def _premise_preflight(
         return update.freshness.state if update is not None else None
 
     def _visit(
-        ref: m.ClaimRef | m.RelationshipRef, path: tuple[str, ...],
+        ref: m.ClaimRef | m.RelationshipRef,
+        path: tuple[str, ...],
         depth: int,
     ) -> bool:
         """Walk one subtree; True iff fully explored (no truncation)."""
@@ -115,12 +128,15 @@ def _premise_preflight(
             (item,) = store.load_by_refs(repository_id, (ref,))
         except ValueError:
             _mark(
-                rid, ref, m.FreshnessState.UNVERIFIABLE,
+                rid,
+                ref,
+                m.FreshnessState.UNVERIFIABLE,
                 "premise unknown/retired; reassessment required",
             )
             return True
         premises = [
-            pref for pref in item.basis.input_refs
+            pref
+            for pref in item.basis.input_refs
             if isinstance(pref, (m.ClaimRef, m.RelationshipRef))
         ]
         if not premises:
@@ -131,7 +147,9 @@ def _premise_preflight(
             pid = pref.id.value
             if pid == rid or pid in path:
                 _mark(
-                    rid, ref, m.FreshnessState.UNVERIFIABLE,
+                    rid,
+                    ref,
+                    m.FreshnessState.UNVERIFIABLE,
                     "premise cycle; unverifiable until reconciled",
                 )
                 continue
@@ -143,28 +161,29 @@ def _premise_preflight(
                 state = live_states.get(pid)
             if state is None:
                 try:
-                    (premise,) = store.load_by_refs(
-                        repository_id, (pref,)
-                    )
+                    (premise,) = store.load_by_refs(repository_id, (pref,))
                 except ValueError:
                     _mark(
-                        rid, ref, m.FreshnessState.STALE,
-                        "premise retired/unknown; dependent reassessment "
-                        "required",
+                        rid,
+                        ref,
+                        m.FreshnessState.STALE,
+                        "premise retired/unknown; dependent reassessment " "required",
                     )
                     continue
                 state = premise.freshness.state
             if state is m.FreshnessState.UNVERIFIABLE:
                 _mark(
-                    rid, ref, m.FreshnessState.UNVERIFIABLE,
-                    "upstream premise unverifiable; dependent "
-                    "reassessment required",
+                    rid,
+                    ref,
+                    m.FreshnessState.UNVERIFIABLE,
+                    "upstream premise unverifiable; dependent " "reassessment required",
                 )
             elif state is not m.FreshnessState.CURRENT:
                 _mark(
-                    rid, ref, m.FreshnessState.STALE,
-                    "upstream premise noncurrent; dependent reassessment "
-                    "required",
+                    rid,
+                    ref,
+                    m.FreshnessState.STALE,
+                    "upstream premise noncurrent; dependent reassessment " "required",
                 )
         if complete and rid not in updates:
             clean.add(rid)
@@ -173,18 +192,21 @@ def _premise_preflight(
     for ref in semantic_ids:
         if not _visit(ref, (), 0):
             _mark(
-                ref.id.value, ref, m.FreshnessState.UNVERIFIABLE,
+                ref.id.value,
+                ref,
+                m.FreshnessState.UNVERIFIABLE,
                 "premise frontier truncated; outstanding scope",
             )
-        if len(clean) + len(updates) > bounds.max_results * 4 + len(
-            semantic_ids
-        ):
+        if len(clean) + len(updates) > bounds.max_results * 4 + len(semantic_ids):
             _mark(
-                ref.id.value, ref, m.FreshnessState.UNVERIFIABLE,
+                ref.id.value,
+                ref,
+                m.FreshnessState.UNVERIFIABLE,
                 "premise frontier truncated; outstanding scope",
             )
             break
     return tuple(updates.values())
+
 
 def _latest_coverages(
     coverages: tuple[m.CoverageDependency, ...],
@@ -208,11 +230,10 @@ def _latest_coverages(
     """
     latest: dict[tuple[str, ...], m.CoverageDependency] = {}
     for coverage in coverages:
-        key = tuple(
-            sorted(s.canonical_locator for s in coverage.scope_subjects)
-        )
+        key = tuple(sorted(s.canonical_locator for s in coverage.scope_subjects))
         latest[key] = coverage
     return tuple(latest.values())
+
 
 def _classify_coverage_updates(
     repository_id: str,
@@ -234,25 +255,17 @@ def _classify_coverage_updates(
             for item in items
         )
     )
-    coverages = store.load_coverage_dependencies(
-        repository_id, scope_subjects
-    )
+    coverages = store.load_coverage_dependencies(repository_id, scope_subjects)
     if not coverages:
         return ()
-    snapshots = _coverage_scope_snapshots(
-        repository_id, coverages, evidence=evidence
-    )
+    snapshots = _coverage_scope_snapshots(repository_id, coverages, evidence=evidence)
     updates: list[m.FreshnessUpdate] = []
     for coverage in _latest_coverages(coverages):
         inventory_fp, seed_map = snapshots[coverage.discovery_scope]
-        freshness = _freshness.classify_coverage(
-            coverage, inventory_fp, seed_map
-        )
+        freshness = _freshness.classify_coverage(coverage, inventory_fp, seed_map)
         if freshness.state is m.FreshnessState.CURRENT:
             continue
-        covered = {
-            s.canonical_locator for s in coverage.scope_subjects
-        }
+        covered = {s.canonical_locator for s in coverage.scope_subjects}
         for item in items:
             locator = (
                 item.subject.canonical_locator
@@ -300,25 +313,17 @@ def coverage_check(
             for item in items
         )
     )
-    coverages = store.load_coverage_dependencies(
-        repository_id, scope_subjects
-    )
+    coverages = store.load_coverage_dependencies(repository_id, scope_subjects)
     if not coverages:
         return ()
-    snapshots = _coverage_scope_snapshots(
-        repository_id, coverages, evidence=evidence
-    )
+    snapshots = _coverage_scope_snapshots(repository_id, coverages, evidence=evidence)
     updates: list[m.FreshnessUpdate] = []
     for coverage in _latest_coverages(coverages):
         inventory_fp, seed_map = snapshots[coverage.discovery_scope]
-        freshness = _freshness.classify_coverage(
-            coverage, inventory_fp, seed_map
-        )
+        freshness = _freshness.classify_coverage(coverage, inventory_fp, seed_map)
         if freshness.state is m.FreshnessState.CURRENT:
             continue
-        covered = {
-            s.canonical_locator for s in coverage.scope_subjects
-        }
+        covered = {s.canonical_locator for s in coverage.scope_subjects}
         for item in items:
             locator = (
                 item.subject.canonical_locator
@@ -362,8 +367,11 @@ def _evaluate_current(
     semantics; no numeric severity order.
     """
     direct_updates, dependencies = _classify_current(
-        repository_id, semantic_ids, evidence=evidence,
-        store=store, bounds=bounds,
+        repository_id,
+        semantic_ids,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
     live: dict[str, m.FreshnessState] = {}
     for update in direct_updates:
@@ -371,15 +379,11 @@ def _evaluate_current(
     # Reached premise evidence joins the live map so a source changed
     # before any other operation marks its premise stale.
     try:
-        premise_deps = store.load_evidence_dependencies(
-            repository_id, semantic_ids
-        )
+        premise_deps = store.load_evidence_dependencies(repository_id, semantic_ids)
     except Exception:
         premise_deps = ()
     if premise_deps:
-        premise_refs = tuple(
-            dict.fromkeys(dep.evidence_ref for dep in premise_deps)
-        )
+        premise_refs = tuple(dict.fromkeys(dep.evidence_ref for dep in premise_deps))
         try:
             premise_page = evidence.inventory_evidence(
                 repository_id,
@@ -394,11 +398,17 @@ def _evaluate_current(
         except Exception:
             pass
     premise_updates = _premise_preflight(
-        repository_id, semantic_ids, store=store, bounds=bounds,
+        repository_id,
+        semantic_ids,
+        store=store,
+        bounds=bounds,
         live_states=live,
     )
     coverage_updates = _classify_coverage_updates(
-        repository_id, items, evidence=evidence, store=store,
+        repository_id,
+        items,
+        evidence=evidence,
+        store=store,
     )
     merged: dict[str, m.FreshnessUpdate] = {}
     for update in (*direct_updates, *premise_updates, *coverage_updates):
@@ -408,6 +418,7 @@ def _evaluate_current(
         if update.semantic_id.id.value not in merged:
             merged[update.semantic_id.id.value] = update
     return tuple(merged.values()), dependencies
+
 
 def _refresh_view(
     repository_id: str,
@@ -425,8 +436,12 @@ def _refresh_view(
     ) + tuple(_relationship_ref(r) for r in relationships)
     items = tuple(claims) + tuple(relationships)
     updates, _ = _evaluate_current(
-        repository_id, ids, items, evidence=evidence,
-        store=store, bounds=bounds,
+        repository_id,
+        ids,
+        items,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
     if updates:
         store.mark_freshness(updates)
@@ -439,11 +454,16 @@ def _refresh_view(
         if freshness is None:
             return claim
         return m.SemanticClaim(
-            claim_id=claim.claim_id, subject=claim.subject, kind=claim.kind,
-            value=claim.value, assertion_nature=claim.assertion_nature,
+            claim_id=claim.claim_id,
+            subject=claim.subject,
+            kind=claim.kind,
+            value=claim.value,
+            assertion_nature=claim.assertion_nature,
             evidence=claim.evidence,
-            authority=claim.authority, trust=claim.trust,
-            freshness=freshness, basis=claim.basis,
+            authority=claim.authority,
+            trust=claim.trust,
+            freshness=freshness,
+            basis=claim.basis,
         )
 
     def _with_freshness_rel(
@@ -453,18 +473,23 @@ def _refresh_view(
         if freshness is None:
             return rel
         return m.SemanticRelationship(
-            relationship_id=rel.relationship_id, source=rel.source,
-            kind=rel.kind, target=rel.target,
+            relationship_id=rel.relationship_id,
+            source=rel.source,
+            kind=rel.kind,
+            target=rel.target,
             assertion_nature=rel.assertion_nature,
             evidence=rel.evidence,
-            authority=rel.authority, trust=rel.trust,
-            freshness=freshness, basis=rel.basis,
+            authority=rel.authority,
+            trust=rel.trust,
+            freshness=freshness,
+            basis=rel.basis,
         )
 
     return (
         tuple(_with_freshness_claim(c) for c in claims),
         tuple(_with_freshness_rel(r) for r in relationships),
     )
+
 
 def _classify_current(
     repository_id: str,
@@ -481,9 +506,7 @@ def _classify_current(
     """
     if not semantic_ids:
         return (), ()
-    dependencies = store.load_evidence_dependencies(
-        repository_id, semantic_ids
-    )
+    dependencies = store.load_evidence_dependencies(repository_id, semantic_ids)
     refs = tuple(dict.fromkeys(dep.evidence_ref for dep in dependencies))
     current: dict[str, str | None] = {}
     if refs:
@@ -493,7 +516,5 @@ def _classify_current(
             bounds,
         )
         for item in page.items:
-            current[item.evidence_ref.evidence_id.value] = (
-                item.content_fingerprint
-            )
+            current[item.evidence_ref.evidence_id.value] = item.content_fingerprint
     return _freshness.classify_all(dependencies, current), dependencies

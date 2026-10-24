@@ -67,7 +67,11 @@ class SuspendedOperation:
 
     def __post_init__(self) -> None:
         if self.op not in (
-            "explain", "authority", "refresh", "trace", "impact",
+            "explain",
+            "authority",
+            "refresh",
+            "trace",
+            "impact",
             "initialize_target",
         ):
             raise ValueError(f"unknown suspended op: {self.op}")
@@ -95,17 +99,13 @@ class ContinuationStore:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive")
         self._ttl = ttl_seconds
-        self._now = now or (
-            lambda: _datetime.datetime.now(_datetime.timezone.utc)
-        )
+        self._now = now or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._counter = 0
         self._entries: dict[str, _Entry] = {}
         self._lock = _threading.Lock()
         self._in_flight: set[str] = set()
 
-    def _is_expired_at(
-        self, entry: _Entry, now: _datetime.datetime
-    ) -> bool:
+    def _is_expired_at(self, entry: _Entry, now: _datetime.datetime) -> bool:
         """Abandonment predicate shared by reads and sweeps.
 
         Mirrors exactly what ``claim()`` abandons: naive timestamps or
@@ -125,7 +125,8 @@ class ContinuationStore:
         are actually removed, so TTL bounds memory retention.
         """
         dead = [
-            token for token, entry in self._entries.items()
+            token
+            for token, entry in self._entries.items()
             if self._is_expired_at(entry, now)
         ]
         for token in dead:
@@ -220,20 +221,24 @@ class ContinuationStore:
                 continue
             question = record.request.question
             if question is not None:
-                keys.add((
-                    record.repository_id,
-                    question.subject.canonical_locator,
-                    question.question_class.value,
-                    question.question_slice,
-                ))
+                keys.add(
+                    (
+                        record.repository_id,
+                        question.subject.canonical_locator,
+                        question.question_class.value,
+                        question.question_slice,
+                    )
+                )
             elif record.request.question_slice:
                 for subject in record.request.subjects:
-                    keys.add((
-                        record.repository_id,
-                        subject.subject_id.canonical_locator,
-                        "",
-                        record.request.question_slice,
-                    ))
+                    keys.add(
+                        (
+                            record.repository_id,
+                            subject.subject_id.canonical_locator,
+                            "",
+                            record.request.question_slice,
+                        )
+                    )
         return frozenset(keys)
 
     def __len__(self) -> int:

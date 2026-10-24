@@ -38,17 +38,22 @@ def encode_traversal_token(
     Distinct format from offset tokens; never interchanged.
     """
     payload = _json.dumps(
-        {"v": version, "seen": list(visited),
-         "frontier": [list(pair) for pair in frontier]},
+        {
+            "v": version,
+            "seen": list(visited),
+            "frontier": [list(pair) for pair in frontier],
+        },
         separators=(",", ":"),
     )
-    return _TOKEN_PREFIX + _base64.urlsafe_b64encode(
-        payload.encode("utf-8")
-    ).decode("ascii")
+    return _TOKEN_PREFIX + _base64.urlsafe_b64encode(payload.encode("utf-8")).decode(
+        "ascii"
+    )
 
 
 def decode_traversal_token(
-    page_token: str | None, *, version: str,
+    page_token: str | None,
+    *,
+    version: str,
 ) -> tuple[tuple[str, ...], tuple[tuple[str, int], ...]]:
     """Decode BFS resume state; version drift restarts the traversal."""
     if page_token is None:
@@ -58,23 +63,17 @@ def decode_traversal_token(
     try:
         payload = _json.loads(
             _base64.urlsafe_b64decode(
-                page_token[len(_TOKEN_PREFIX):].encode("ascii")
+                page_token[len(_TOKEN_PREFIX) :].encode("ascii")
             ).decode("utf-8")
         )
         token_version = payload["v"]
         visited = tuple(payload["seen"])
-        frontier = tuple(
-            (loc, depth) for loc, depth in payload["frontier"]
-        )
+        frontier = tuple((loc, depth) for loc, depth in payload["frontier"])
     except (ValueError, KeyError, TypeError) as exc:
         raise ValueError(f"unknown page token: {page_token}") from exc
-    if (
-        not all(isinstance(loc, str) for loc in visited)
-        or not all(
-            isinstance(loc, str) and isinstance(depth, int)
-            and not isinstance(depth, bool)
-            for loc, depth in frontier
-        )
+    if not all(isinstance(loc, str) for loc in visited) or not all(
+        isinstance(loc, str) and isinstance(depth, int) and not isinstance(depth, bool)
+        for loc, depth in frontier
     ):
         raise ValueError(f"unknown page token: {page_token}")
     if any(d < 0 for _, d in frontier):
@@ -105,7 +104,11 @@ def _all_edges(
     token: str | None = None
     while True:
         page = structural.edges(
-            repository_id, subject, edge_kinds, direction, bounds,
+            repository_id,
+            subject,
+            edge_kinds,
+            direction,
+            bounds,
             token,
         )
         if page.unsupported:
@@ -127,9 +130,7 @@ def neighbors(
 ) -> m.StructuralNeighborsResult:
     """Execute one structural neighbors traversal (read-only)."""
     if not _is_initialized(request.repository_id, store=store):
-        raise ValueError(
-            f"repository not initialized: {request.repository_id}"
-        )
+        raise ValueError(f"repository not initialized: {request.repository_id}")
     if (
         isinstance(request.max_depth, bool)
         or not isinstance(request.max_depth, int)
@@ -147,8 +148,11 @@ def neighbors(
     except ValueError as exc:
         raise ValueError(f"neighbors failed: {exc}") from None
     resolution = _resolve_query_subject(
-        request.repository_id, request.target, structural=structural,
-        store=store, bounds=bounds,
+        request.repository_id,
+        request.target,
+        structural=structural,
+        store=store,
+        bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         state = structural.repository_state(request.repository_id)
@@ -200,15 +204,20 @@ def neighbors(
         # Subject kind is irrelevant to edge filtering (locator-only);
         # resolution already established identity above.
         page_edges, page_unsupported = _all_edges(
-            structural, request.repository_id, current_id, kinds,
-            direction, bounds,
+            structural,
+            request.repository_id,
+            current_id,
+            kinds,
+            direction,
+            bounds,
         )
         if page_unsupported:
             unsupported = True
             break
         for edge in page_edges:
             key = (
-                edge.source.canonical_locator, edge.kind.value,
+                edge.source.canonical_locator,
+                edge.kind.value,
                 edge.target.canonical_locator,
             )
             collected.setdefault(key, edge)
@@ -243,9 +252,7 @@ def neighbors(
         tuple(sorted({e.evidence.locator for e in edges})),
     )
     stale_set = set(report.stale_files)
-    live_edges = tuple(
-        e for e in edges if e.evidence.locator not in stale_set
-    )
+    live_edges = tuple(e for e in edges if e.evidence.locator not in stale_set)
     stale_omitted = len(edges) - len(live_edges)
     if queue:
         truncated = True
@@ -262,10 +269,9 @@ def neighbors(
             truncated=truncated,
             truncated_category="neighbors" if truncated else None,
             continuation_token=(
-                encode_traversal_token(
-                    version, tuple(sorted(seen)), resume_frontier
-                )
-                if truncated else None
+                encode_traversal_token(version, tuple(sorted(seen)), resume_frontier)
+                if truncated
+                else None
             ),
         ),
         edges=live_edges,

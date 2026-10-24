@@ -64,12 +64,8 @@ SUBJECTS = (
     InMemorySubject("pay-svc", m.SubjectKind.REPOSITORY, "pay-svc"),
     InMemorySubject("cap/payments", m.SubjectKind.CAPABILITY, "payments-cap"),
     InMemorySubject("src/payments.py", m.SubjectKind.COMPONENT, "payments"),
-    InMemorySubject(
-        "src/payments.py:Handler", m.SubjectKind.CODE_SYMBOL, "Handler"
-    ),
-    InMemorySubject(
-        "src/refunds.py:Handler", m.SubjectKind.CODE_SYMBOL, "Handler"
-    ),
+    InMemorySubject("src/payments.py:Handler", m.SubjectKind.CODE_SYMBOL, "Handler"),
+    InMemorySubject("src/refunds.py:Handler", m.SubjectKind.CODE_SYMBOL, "Handler"),
 )
 
 EDGES = (
@@ -82,9 +78,7 @@ EDGES = (
 
 
 def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(
-        repository_id=REPO, subject_kind=kind, canonical_locator=locator
-    )
+    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
 
 
 def _ref(path):
@@ -130,8 +124,9 @@ def _payments_candidates():
     return FixtureCandidates(
         claims=(
             m.CandidateSemanticClaim(
-                subject=sid, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                subject=sid,
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("processes payments", (cap,)),
                 evidence=(_ref("README.md"),),
                 candidate_authority=_accepted(
@@ -140,31 +135,33 @@ def _payments_candidates():
                 basis=m.SemanticBasis(interp, "stated in README"),
             ),
             m.CandidateSemanticClaim(
-                subject=sid, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                subject=sid,
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("sends receipts", ()),
                 evidence=(_ref("README.md"),),
                 basis=m.SemanticBasis(interp, "mentioned in README"),
             ),
             m.CandidateSemanticClaim(
-                subject=sid, kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                subject=sid,
+                kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.CapabilityMembershipValue(cap, "processor"),
                 evidence=(_ref("src/payments.py"),),
                 basis=m.SemanticBasis(interp, "module docstring"),
             ),
             m.CandidateSemanticClaim(
-                subject=sid, kind=m.ClaimKind.RESPONSIBILITY,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                value=m.ResponsibilityValue(
-                    "captures charges", "checkout path"
-                ),
+                subject=sid,
+                kind=m.ClaimKind.RESPONSIBILITY,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.ResponsibilityValue("captures charges", "checkout path"),
                 evidence=(_ref("src/payments.py"),),
                 basis=m.SemanticBasis(interp, "Handler.charge"),
             ),
             m.CandidateSemanticClaim(
-                subject=sid, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                subject=sid,
+                kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.OwnershipCustodyValue(
                     _sid("team/payments", m.SubjectKind.COMPONENT),
                     m.OwnershipRole.OWNER,
@@ -177,8 +174,9 @@ def _payments_candidates():
                 basis=m.SemanticBasis(interp, "ownership record"),
             ),
             m.CandidateSemanticClaim(
-                subject=sid, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                subject=sid,
+                kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+                assertion_nature=m.AssertionNature.NORMATIVE,
                 value=m.InvariantConstraintValue(
                     "refunds never exceed the captured amount",
                     "refund path",
@@ -201,11 +199,9 @@ def _payments_candidates():
         ),
         relationships=(
             m.CandidateSemanticRelationship(
-                source=_sid(
-                    "src/payments.py:Handler", m.SubjectKind.CODE_SYMBOL
-                ),
+                source=_sid("src/payments.py:Handler", m.SubjectKind.CODE_SYMBOL),
                 kind=m.RelationshipKind.MEMBER_OF,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 target=sid,
                 evidence=(_ref("src/payments.py"),),
                 basis=m.SemanticBasis(interp, "Handler defined in payments"),
@@ -253,30 +249,41 @@ def _explain_request(target):
     return SemanticExplainRequest(
         repository_id=REPO,
         target=m.SubjectSelector(
-            exact_subject_id=None, name_or_locator=target,
-            expected_kinds=(), retrieval_scope_hint=None,
+            exact_subject_id=None,
+            name_or_locator=target,
+            expected_kinds=(),
+            retrieval_scope_hint=None,
         ),
         bounds=_bounds(),
     )
 
 
-def _exchange(explain_request, structural, evidence, store, agent,
-              seeds=None, continuations=None):
+def _exchange(
+    explain_request, structural, evidence, store, agent, seeds=None, continuations=None
+):
     """Drive the client protocol: explain, and if Span suspends, have the
     test agent perform the task and submit the result."""
     continuations = continuations or ContinuationStore()
     seeds = _seeds() if seeds is None else seeds
     first = explain(
-        explain_request, structural=structural, evidence=evidence,
-        store=store, continuations=continuations, authority_seeds=seeds,
+        explain_request,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+        authority_seeds=seeds,
     )
     if isinstance(first, m.SemanticAnswer):
         return first
     assert isinstance(first, PendingInterpretation), type(first)
     result = agent.perform(first.request)
     return submit_interpretation(
-        first.continuation, result, structural=structural,
-        evidence=evidence, store=store, continuations=continuations,
+        first.continuation,
+        result,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
     )
 
 
@@ -286,7 +293,10 @@ class VerticalSliceTest(unittest.TestCase):
         try:
             answer = _exchange(
                 _explain_request("src/payments.py"),
-                structural, evidence, store, agent,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertIs(
                 answer.subject_resolution.ambiguity,
@@ -304,12 +314,11 @@ class VerticalSliceTest(unittest.TestCase):
                     m.ClaimKind.RESPONSIBILITY,
                     m.ClaimKind.OWNERSHIP_CUSTODY,
                     m.ClaimKind.INVARIANT_CONSTRAINT,
-                } <= kinds
+                }
+                <= kinds
             )
             self.assertEqual(len(content.relationships), 1)
-            self.assertIs(
-                content.relationships[0].kind, m.RelationshipKind.MEMBER_OF
-            )
+            self.assertIs(content.relationships[0].kind, m.RelationshipKind.MEMBER_OF)
             self.assertTrue(content.implementation_locations)
             self.assertEqual(
                 content.implementation_locations[0].location.locator,
@@ -317,12 +326,11 @@ class VerticalSliceTest(unittest.TestCase):
             )
             for claim in content.claims:
                 self.assertIsInstance(claim.trust, m.TrustState)
-                self.assertIsInstance(
-                    claim.freshness.state, m.FreshnessState
-                )
+                self.assertIsInstance(claim.freshness.state, m.FreshnessState)
             self.assertEqual(len(content.conflicts), 1)
             missing = [
-                r for r in answer.resolution_requirements
+                r
+                for r in answer.resolution_requirements
                 if r.kind is m.ResolutionKind.MISSING_AUTHORITY
             ]
             self.assertGreaterEqual(len(missing), 2)
@@ -332,7 +340,8 @@ class VerticalSliceTest(unittest.TestCase):
                     m.TrustState.ESTABLISHED,
                     m.TrustState.PARTIAL,
                     m.TrustState.UNRESOLVED,
-                } <= trusts
+                }
+                <= trusts
             )
         finally:
             store.close()
@@ -343,8 +352,11 @@ class VerticalSliceTest(unittest.TestCase):
             continuations = ContinuationStore()
             pending = explain(
                 _explain_request("src/payments.py"),
-                structural=structural, evidence=evidence, store=store,
-                continuations=continuations, authority_seeds=_seeds(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+                authority_seeds=_seeds(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             request = pending.request
@@ -352,9 +364,7 @@ class VerticalSliceTest(unittest.TestCase):
             self.assertTrue(request.evidence_units)
             self.assertTrue(request.allowed_claim_kinds)
             # Nothing indexed by suspension alone.
-            page = store.load_claims(
-                REPO, (_sid("src/payments.py"),), (), _bounds()
-            )
+            page = store.load_claims(REPO, (_sid("src/payments.py"),), (), _bounds())
             self.assertEqual(page.items, ())
         finally:
             store.close()
@@ -365,18 +375,28 @@ class VerticalSliceTest(unittest.TestCase):
             continuations = ContinuationStore()
             pending = explain(
                 _explain_request("src/payments.py"),
-                structural=structural, evidence=evidence, store=store,
-                continuations=continuations, authority_seeds=_seeds(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+                authority_seeds=_seeds(),
             )
             result = agent.perform(pending.request)
             submit_interpretation(
-                pending.continuation, result, structural=structural,
-                evidence=evidence, store=store, continuations=continuations,
+                pending.continuation,
+                result,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
             )
             with self.assertRaises(InterpretationUnavailable):
                 submit_interpretation(
-                    pending.continuation, result, structural=structural,
-                    evidence=evidence, store=store,
+                    pending.continuation,
+                    result,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
         finally:
@@ -387,7 +407,9 @@ class VerticalSliceTest(unittest.TestCase):
         try:
             answer = explain(
                 _explain_request("Handler"),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
                 authority_seeds=_seeds(),
             )
@@ -397,9 +419,7 @@ class VerticalSliceTest(unittest.TestCase):
                 m.ResolutionAmbiguity.AMBIGUOUS,
             )
             self.assertEqual(len(answer.subject_resolution.candidates), 2)
-            kinds = {
-                r.kind for r in answer.resolution_requirements
-            }
+            kinds = {r.kind for r in answer.resolution_requirements}
             self.assertIn(m.ResolutionKind.AMBIGUOUS_IDENTITY, kinds)
         finally:
             store.close()
@@ -415,26 +435,31 @@ class VerticalSliceTest(unittest.TestCase):
                     target=m.SubjectSelector(
                         exact_subject_id=None,
                         name_or_locator="src/payments.py",
-                        expected_kinds=(), retrieval_scope_hint=None,
+                        expected_kinds=(),
+                        retrieval_scope_hint=None,
                     ),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=continuations, authority_seeds=seeds,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+                authority_seeds=seeds,
             )
             self.assertIsInstance(pending, PendingInterpretation)
             answer = submit_interpretation(
-                pending.continuation, agent.perform(pending.request),
-                structural=structural, evidence=evidence, store=store,
+                pending.continuation,
+                agent.perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             content = answer.content
             self.assertIsInstance(content, m.AuthorityContent)
             statuses = {b.status for b in content.governing_bindings}
             self.assertIn(m.AuthorityStatus.ACCEPTED, statuses)
-            locators = {
-                b.evidence_ref.locator for b in content.governing_bindings
-            }
+            locators = {b.evidence_ref.locator for b in content.governing_bindings}
             self.assertTrue({"README.md", "OWNERSHIP.md"} <= locators)
             kinds = {r.kind for r in content.unresolved}
             self.assertIn(m.ResolutionKind.MISSING_AUTHORITY, kinds)
@@ -448,16 +473,14 @@ class VerticalSliceTest(unittest.TestCase):
             continuations = ContinuationStore()
             first = _exchange(
                 _explain_request("src/payments.py"),
-                structural, evidence, store, agent,
+                structural,
+                evidence,
+                store,
+                agent,
                 continuations=continuations,
             )
-            states = {
-                c.claim_id.value: c.freshness.state
-                for c in first.content.claims
-            }
-            self.assertTrue(
-                all(s is m.FreshnessState.CURRENT for s in states.values())
-            )
+            states = {c.claim_id.value: c.freshness.state for c in first.content.claims}
+            self.assertTrue(all(s is m.FreshnessState.CURRENT for s in states.values()))
             changed = dict(FILES_V1)
             changed["src/payments.py"] = (
                 "class Handler:\n    def charge(self):\n        pass\n"
@@ -466,7 +489,10 @@ class VerticalSliceTest(unittest.TestCase):
             evidence_v2 = FixtureEvidenceSource(REPO, changed)
             second = _exchange(
                 _explain_request("src/payments.py"),
-                structural, evidence_v2, store, agent,
+                structural,
+                evidence_v2,
+                store,
+                agent,
                 continuations=continuations,
             )
             states = {
@@ -474,28 +500,33 @@ class VerticalSliceTest(unittest.TestCase):
                 for c in second.content.claims
             }
             stale_kinds = {
-                kind for state, kind in states.values()
+                kind
+                for state, kind in states.values()
                 if state is m.FreshnessState.STALE
             }
             current_kinds = {
-                kind for state, kind in states.values()
+                kind
+                for state, kind in states.values()
                 if state is m.FreshnessState.CURRENT
             }
             self.assertTrue(
                 {
                     m.ClaimKind.CAPABILITY_MEMBERSHIP,
                     m.ClaimKind.RESPONSIBILITY,
-                } <= stale_kinds
+                }
+                <= stale_kinds
             )
             self.assertTrue(
                 {
                     m.ClaimKind.PURPOSE,
                     m.ClaimKind.OWNERSHIP_CUSTODY,
                     m.ClaimKind.INVARIANT_CONSTRAINT,
-                } <= current_kinds
+                }
+                <= current_kinds
             )
             stale_reqs = [
-                r for r in second.resolution_requirements
+                r
+                for r in second.resolution_requirements
                 if r.kind is m.ResolutionKind.STALE_EVIDENCE
             ]
             self.assertTrue(stale_reqs)
@@ -508,13 +539,17 @@ class VerticalSliceTest(unittest.TestCase):
             continuations = ContinuationStore()
             pending = explain(
                 _explain_request("src/payments.py"),
-                structural=structural, evidence=evidence, store=store,
-                continuations=continuations, authority_seeds=_seeds(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+                authority_seeds=_seeds(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             bad = m.CandidateSemanticClaim(
-                subject=_sid("src/payments.py"), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                subject=_sid("src/payments.py"),
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("ghost", ()),
                 evidence=(
                     m.EvidenceRef(
@@ -530,12 +565,12 @@ class VerticalSliceTest(unittest.TestCase):
                 submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult((bad,), (), (), ()),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
-            page = store.load_claims(
-                REPO, (_sid("src/payments.py"),), (), _bounds()
-            )
+            page = store.load_claims(REPO, (_sid("src/payments.py"),), (), _bounds())
             self.assertEqual(page.items, ())
         finally:
             store.close()
@@ -548,7 +583,13 @@ class FreshSessionPathReuseTest(unittest.TestCase):
 
     def _bounds(self):
         return m.QueryBounds(
-            50, 5, 8, 24, 96_000, 64, 64,
+            50,
+            5,
+            8,
+            24,
+            96_000,
+            64,
+            64,
         )
 
     def test_path_only_explain_and_trace(self):
@@ -556,15 +597,19 @@ class FreshSessionPathReuseTest(unittest.TestCase):
         from span.ports.structural import StructuralDirection
         from span.service.questions import effective_trace_slice
         from span.service.requests import SemanticTraceRequest
+
         repo = self.CTX
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         structural = InMemoryStructuralSource(
             repo,
             tuple(InMemoryFile(p, c) for p, c in files.items()),
-            (InMemorySubject(
-                "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
-            ),),
+            (
+                InMemorySubject(
+                    "canonical_assembly/candidate_packager.py",
+                    m.SubjectKind.COMPONENT,
+                    "candidate_packager",
+                ),
+            ),
         )
         evidence = FixtureEvidenceSource(repo, dict(files))
         store = SqliteSemanticStore(":memory:")
@@ -574,74 +619,70 @@ class FreshSessionPathReuseTest(unittest.TestCase):
                     repository_locator="fixture",
                     authority_seeds=(),
                 ),
-                repository_id=repo, structural=structural,
-                evidence=evidence, store=store,
+                repository_id=repo,
+                structural=structural,
+                evidence=evidence,
+                store=store,
             )
             canon = m.SubjectId(
-                repository_id=repo, subject_kind=m.SubjectKind.COMPONENT,
+                repository_id=repo,
+                subject_kind=m.SubjectKind.COMPONENT,
                 canonical_locator="canonical_assembly",
             )
             root = m.SubjectId(
-                repository_id=repo, subject_kind=m.SubjectKind.SUBSYSTEM,
+                repository_id=repo,
+                subject_kind=m.SubjectKind.SUBSYSTEM,
                 canonical_locator="review_workflow",
             )
             term = m.SubjectId(
-                repository_id=repo, subject_kind=m.SubjectKind.COMPONENT,
+                repository_id=repo,
+                subject_kind=m.SubjectKind.COMPONENT,
                 canonical_locator="terminal",
             )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             eref = m.EvidenceRef(
-                evidence_id=m.EvidenceId(
-                    "ev-canonical_assembly/candidate_packager.py"
-                ),
+                evidence_id=m.EvidenceId("ev-canonical_assembly/candidate_packager.py"),
                 repository_id=repo,
                 source_kind=m.EvidenceSourceKind.SOURCE_CODE,
                 locator="canonical_assembly/candidate_packager.py",
                 revision_or_fingerprint=fp,
             )
             claim = m.SemanticClaim(
-                claim_id=m.ClaimId("c-purpose"), subject=canon,
+                claim_id=m.ClaimId("c-purpose"),
+                subject=canon,
                 kind=m.ClaimKind.PURPOSE,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                value=m.PurposeValue("packs", ()), evidence=(eref,),
+                value=m.PurposeValue("packs", ()),
+                evidence=(eref,),
                 trust=m.TrustState.ESTABLISHED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE
-                ),
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             mem = m.SemanticRelationship(
                 relationship_id=m.RelationshipId("r-mem"),
-                source=canon, kind=m.RelationshipKind.MEMBER_OF,
+                source=canon,
+                kind=m.RelationshipKind.MEMBER_OF,
                 target=root,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE
-                ),
+                evidence=(eref,),
+                trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             exec_rel = m.SemanticRelationship(
                 relationship_id=m.RelationshipId("r-exec"),
-                source=root, kind=m.RelationshipKind.PRODUCES,
+                source=root,
+                kind=m.RelationshipKind.PRODUCES,
                 target=term,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE
-                ),
+                evidence=(eref,),
+                trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             explain_q = m.SemanticQuestionScope(
-                scope_root=canon, subject=canon,
+                scope_root=canon,
+                subject=canon,
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice=canon.canonical_locator,
                 materiality_basis="EXPLAIN question-local",
@@ -649,110 +690,129 @@ class FreshSessionPathReuseTest(unittest.TestCase):
             explain_cov = m.InterpretationCoverage(
                 subjects=(canon,),
                 question_slice=canon.canonical_locator,
-                declared_complete=True, question=explain_q,
+                declared_complete=True,
+                question=explain_q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(m.ClaimRef(id=claim.claim_id),),
                 disposition_basis="b",
             )
             trace_slice = effective_trace_slice(
-                root.canonical_locator, StructuralDirection.BOTH,
-                None, False,
+                root.canonical_locator,
+                StructuralDirection.BOTH,
+                None,
+                False,
             )
 
             def _tcov(subj, ref):
                 q = m.SemanticQuestionScope(
-                    scope_root=root, subject=subj,
+                    scope_root=root,
+                    subject=subj,
                     question_class=m.SemanticQuestionClass.CQ_04,
                     question_slice=trace_slice,
                     materiality_basis="TRACE question-local",
                 )
                 return m.InterpretationCoverage(
-                    subjects=(subj,), question_slice=trace_slice,
-                    declared_complete=True, question=q,
+                    subjects=(subj,),
+                    question_slice=trace_slice,
+                    declared_complete=True,
+                    question=q,
                     disposition=m.SemanticQuestionDisposition.ANSWERED,
-                    result_refs=(ref,), disposition_basis="b",
+                    result_refs=(ref,),
+                    disposition_basis="b",
                 )
 
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                    m.Subject(term, "Terminal", None),
-                ),
-                claims=(claim,), relationships=(mem, exec_rel),
-                evidence_dependencies=(
-                    m.EvidenceDependency(
-                        m.ClaimRef(id=claim.claim_id), eref, fp
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
+                        m.Subject(term, "Terminal", None),
                     ),
-                    m.EvidenceDependency(
-                        m.RelationshipRef(id=mem.relationship_id),
-                        eref, fp,
+                    claims=(claim,),
+                    relationships=(mem, exec_rel),
+                    evidence_dependencies=(
+                        m.EvidenceDependency(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        m.EvidenceDependency(
+                            m.RelationshipRef(id=mem.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                        m.EvidenceDependency(
+                            m.RelationshipRef(id=exec_rel.relationship_id),
+                            eref,
+                            fp,
+                        ),
                     ),
-                    m.EvidenceDependency(
-                        m.RelationshipRef(id=exec_rel.relationship_id),
-                        eref, fp,
+                    coverage=(
+                        explain_cov,
+                        _tcov(
+                            root,
+                            m.RelationshipRef(id=exec_rel.relationship_id),
+                        ),
+                        _tcov(
+                            term,
+                            m.RelationshipRef(id=exec_rel.relationship_id),
+                        ),
+                        _tcov(
+                            canon,
+                            m.RelationshipRef(id=mem.relationship_id),
+                        ),
                     ),
-                ),
-                coverage=(
-                    explain_cov,
-                    _tcov(
-                        root,
-                        m.RelationshipRef(id=exec_rel.relationship_id),
-                    ),
-                    _tcov(
-                        term,
-                        m.RelationshipRef(id=exec_rel.relationship_id),
-                    ),
-                    _tcov(
-                        canon,
-                        m.RelationshipRef(id=mem.relationship_id),
-                    ),
-                ),
-            ))
+                )
+            )
             # Session 2: new continuations, no retained semantic IDs.
             fresh_continuations = ContinuationStore()
             explained = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=repo,
                     target=m.SubjectSelector(
-                        None, "canonical_assembly/candidate_packager.py",
-                        (), None,
+                        None,
+                        "canonical_assembly/candidate_packager.py",
+                        (),
+                        None,
                     ),
                     bounds=self._bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=fresh_continuations,
             )
             self.assertIsInstance(explained, m.SemanticAnswer)
             self.assertEqual(
-                explained.subject_resolution.candidates[0]
-                .subject.subject_id,
+                explained.subject_resolution.candidates[0].subject.subject_id,
                 canon,
             )
             traced = ops.trace(
                 SemanticTraceRequest(
                     repository_id=repo,
                     target=m.SubjectSelector(
-                        None, "canonical_assembly/candidate_packager.py",
-                        (), None,
+                        None,
+                        "canonical_assembly/candidate_packager.py",
+                        (),
+                        None,
                     ),
                     direction=StructuralDirection.BOTH,
-                    relationship_filter=None, boundary_only=False,
+                    relationship_filter=None,
+                    boundary_only=False,
                     bounds=self._bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(traced, m.SemanticAnswer)
             self.assertEqual(
-                traced.subject_resolution.candidates[0]
-                .subject.subject_id,
+                traced.subject_resolution.candidates[0].subject.subject_id,
                 root,
             )
-            self.assertTrue(any(
-                r.kind is m.RelationshipKind.PRODUCES
-                for r in traced.content.relationships
-            ))
+            self.assertTrue(
+                any(
+                    r.kind is m.RelationshipKind.PRODUCES
+                    for r in traced.content.relationships
+                )
+            )
         finally:
             store.close()
 

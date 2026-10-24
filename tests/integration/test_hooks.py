@@ -18,7 +18,6 @@ from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
     InMemorySubject,
-    fingerprint_content,
 )
 
 from integrations.hooks.contract import (
@@ -78,9 +77,7 @@ class ContractTest(unittest.TestCase):
         self.assertIsNone(mapped.target)
 
     def test_change_carries_scope(self):
-        mapped = map_to_intent(
-            HookIntent.SOURCE_CHANGED, ("src/main.py",)
-        )
+        mapped = map_to_intent(HookIntent.SOURCE_CHANGED, ("src/main.py",))
         self.assertIsInstance(mapped.target, m.EvidenceScope)
         self.assertEqual(mapped.target.paths, ("src/main.py",))
 
@@ -109,12 +106,8 @@ class ClaudeMappingTest(unittest.TestCase):
                         "paths": ["src/main.py"],
                     }
                 )
-                self.assertIs(
-                    mapped.intent, HookIntent.SOURCE_CHANGED
-                )
-                self.assertEqual(
-                    mapped.target.paths, ("src/main.py",)
-                )
+                self.assertIs(mapped.intent, HookIntent.SOURCE_CHANGED)
+                self.assertEqual(mapped.target.paths, ("src/main.py",))
 
     def test_non_edit_tool_is_silent(self):
         self.assertIsNone(
@@ -128,9 +121,7 @@ class ClaudeMappingTest(unittest.TestCase):
         )
 
     def test_stop_maps(self):
-        mapped = adapt_event(
-            {"hook": "Stop", "paths": ["src/main.py"]}
-        )
+        mapped = adapt_event({"hook": "Stop", "paths": ["src/main.py"]})
         self.assertIs(mapped.intent, HookIntent.SESSION_STOP)
 
     def test_unknown_hook_is_silent(self):
@@ -152,11 +143,8 @@ class HookSafetyTest(unittest.TestCase):
                 bounds=_bounds(),
             )
             self.assertIsInstance(notice, m.HookStatusNotice)
-            self.assertIs(
-                notice.readiness, m.RepositoryReadiness.UNINITIALIZED
-            )
-            self.assertIn("initialize_repository",
-                          notice.recommended_action)
+            self.assertIs(notice.readiness, m.RepositoryReadiness.UNINITIALIZED)
+            self.assertIn("initialize_repository", notice.recommended_action)
             # No implicit bootstrap happened.
             self.assertIsNone(store.load_repository_state(REPO))
         finally:
@@ -195,17 +183,14 @@ class HookSafetyTest(unittest.TestCase):
                 bounds=_bounds(),
             )
             self.assertIsInstance(notice, m.HookStatusNotice)
-            self.assertIs(
-                notice.readiness, m.RepositoryReadiness.READY
-            )
+            self.assertIs(notice.readiness, m.RepositoryReadiness.READY)
         finally:
             store.close()
 
     def test_adapter_calls_only_hook_fast_status(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         source = (
-            root / "integrations" / "hooks" / "hosts" / "claude"
-            / "adapter.py"
+            root / "integrations" / "hooks" / "hosts" / "claude" / "adapter.py"
         ).read_text(encoding="utf-8")
         self.assertIn("HOOK_FAST", source)
         self.assertIn("ops.status(", source)

@@ -5,6 +5,7 @@ build/
 dist/
 .tmp-probe/
 .tmp-e2e/
+.tmp-freshclone/
 .pytest_cache/
 .coverage
 .venv/

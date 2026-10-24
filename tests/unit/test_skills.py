@@ -68,9 +68,7 @@ class SkillNonAuthorityTest(unittest.TestCase):
         for path in SKILLS:
             with self.subTest(skill=path.name):
                 text = _text(path)
-                mentioned = set(
-                    re.findall(r"`([a-z_]+)`", text)
-                ) & CANONICAL_OPS
+                mentioned = set(re.findall(r"`([a-z_]+)`", text)) & CANONICAL_OPS
                 self.assertTrue(mentioned)
                 stale = set(re.findall(r"span_[a-z_]+", text))
                 self.assertEqual(stale, set())
@@ -322,17 +320,13 @@ class SkillLifecycleConsistencyTest(unittest.TestCase):
             text = self._normalized(path)
             with self.subTest(skill=path.name):
                 self.assertNotIn("Admit each new material area with", text)
-                self.assertNotIn(
-                    "proposed_questions` entry for a new area", text
-                )
+                self.assertNotIn("proposed_questions` entry for a new area", text)
         for path in (SKILLS[0], SKILLS[2]):
             text = self._normalized(path)
             with self.subTest(skill=path.name):
                 self.assertIn("Span creates the", text)
                 self.assertIn("first-admission", text)
-        self.assertIn(
-            "do not manufacture it", self._normalized(SKILLS[2])
-        )
+        self.assertIn("do not manufacture it", self._normalized(SKILLS[2]))
 
     def test_closeout_order_is_consistent_in_all_skills(self):
         # edit -> scoped status -> external tests/review -> scoped

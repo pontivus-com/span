@@ -27,9 +27,7 @@ import sys
 
 def _text(result):
     return "".join(
-        block.text
-        for block in result.content
-        if getattr(block, "type", "") == "text"
+        block.text for block in result.content if getattr(block, "type", "") == "text"
     )
 
 
@@ -37,10 +35,7 @@ async def _call(exe, repo, data_dir, tool, arguments):
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
-    env = {
-        key: value for key, value in os.environ.items()
-        if key != "PYTHONPATH"
-    }
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
     params = StdioServerParameters(
         command=exe,
         args=["--data-dir", str(data_dir), "--repo", str(repo)],
@@ -59,9 +54,7 @@ async def _call(exe, repo, data_dir, tool, arguments):
 
 def _brief_authority(payload):
     return list(
-        payload.get("request", {}).get("brief", {}).get(
-            "evidence_authority", ()
-        )
+        payload.get("request", {}).get("brief", {}).get("evidence_authority", ())
     )
 
 
@@ -88,13 +81,10 @@ async def _run(exe, repo, data_dir):
         },
     )
     if first["is_error"]:
-        raise AssertionError(
-            f"first initialize_repository failed: {first['payload']}"
-        )
+        raise AssertionError(f"first initialize_repository failed: {first['payload']}")
     if first["payload"].get("readiness") != "READY":
         raise AssertionError(
-            "first initialize_repository was not READY: "
-            f"{first['payload']!r}"
+            "first initialize_repository was not READY: " f"{first['payload']!r}"
         )
 
     question_slice = "EC-31 previously unasked authority restart question"
@@ -112,9 +102,7 @@ async def _run(exe, repo, data_dir):
         },
     )
     if second["is_error"]:
-        raise AssertionError(
-            f"fresh-process explain failed: {second['payload']}"
-        )
+        raise AssertionError(f"fresh-process explain failed: {second['payload']}")
     payload = second["payload"]
     if payload.get("$type") != "PendingInterpretation":
         raise AssertionError(
@@ -122,9 +110,7 @@ async def _run(exe, repo, data_dir):
             f"PendingInterpretation: {payload.get('$type')!r}"
         )
     if not payload.get("continuation"):
-        raise AssertionError(
-            "fresh-process PendingInterpretation has no continuation"
-        )
+        raise AssertionError("fresh-process PendingInterpretation has no continuation")
     authority = _brief_authority(payload)
     if not any("README.md" in line for line in authority):
         raise AssertionError(

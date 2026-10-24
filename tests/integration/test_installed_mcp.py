@@ -17,18 +17,14 @@ this gate. Requires ``uv`` and network access to build the isolated
 environment; skips otherwise.
 """
 
-import asyncio as _asyncio
-import contextlib as _contextlib
 import hashlib as _hashlib
 import json as _json
 import os as _os
 import pathlib as _pathlib
 import shutil as _shutil
 import subprocess as _subprocess
-import sys as _sys
 import tempfile as _tempfile
 import unittest as _unittest
-
 
 _REPO_FILES = {
     "README.md": "# synth\n\nSynthetic repository.\n",
@@ -56,9 +52,7 @@ def _tree_digest(root):
         path = root / entry
         if path.is_dir():
             for dirpath, dirnames, filenames in _os.walk(path):
-                dirnames[:] = sorted(
-                    d for d in dirnames if d != "__pycache__"
-                )
+                dirnames[:] = sorted(d for d in dirnames if d != "__pycache__")
                 for name in sorted(filenames):
                     if name.endswith((".pyc", ".pyo")):
                         continue
@@ -78,7 +72,9 @@ def _tree_revision(root):
     try:
         head = _subprocess.run(
             ("git", "-C", str(root), "rev-parse", "HEAD"),
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         dirty = _subprocess.run(
             ("git", "-C", str(root), "diff", "--quiet"),
@@ -86,9 +82,7 @@ def _tree_revision(root):
         )
         if head.returncode != 0:
             return "unknown"
-        return head.stdout.strip() + (
-            "" if dirty.returncode == 0 else "-dirty"
-        )
+        return head.stdout.strip() + ("" if dirty.returncode == 0 else "-dirty")
     except (OSError, _subprocess.SubprocessError):
         return "unknown"
 
@@ -109,7 +103,8 @@ def _ensure_isolated_exe(work):
     repo_root = _pathlib.Path(__file__).resolve().parents[2]
     srctree = work / "srctree"
     _shutil.copytree(
-        repo_root / "src", srctree / "src",
+        repo_root / "src",
+        srctree / "src",
         ignore=_shutil.ignore_patterns("__pycache__"),
     )
     for name in ("pyproject.toml", "README.md"):
@@ -123,14 +118,17 @@ def _ensure_isolated_exe(work):
     )
     venv = work / "iso-venv"
     _subprocess.run(
-        ("uv", "venv", str(venv)), check=True, timeout=300,
+        ("uv", "venv", str(venv)),
+        check=True,
+        timeout=300,
         capture_output=True,
     )
     isolated_python = str(venv / "bin" / "python")
     _subprocess.run(
-        ("uv", "pip", "install", "--python", isolated_python,
-         str(srctree)),
-        check=True, timeout=900, capture_output=True,
+        ("uv", "pip", "install", "--python", isolated_python, str(srctree)),
+        check=True,
+        timeout=900,
+        capture_output=True,
     )
     return str(venv / "bin" / "span-mcp"), isolated_python, identity
 
@@ -146,13 +144,19 @@ def _write_repo(work):
         ("init", "-q"),
         ("add", "-A"),
         (
-            "-c", "user.email=t@t", "-c", "user.name=t",
-            "commit", "-qm", "held-out",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "held-out",
         ),
     ):
         _subprocess.run(
             ("git", "-C", str(work), *args),
-            check=True, timeout=60,
+            check=True,
+            timeout=60,
         )
     # No target structural artifacts: the installed provider must build
     # the index into Span's data directory during provisioning.
@@ -161,33 +165,33 @@ def _write_repo(work):
 class InstalledMcpDriverTest(_unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = _pathlib.Path(
-            _tempfile.mkdtemp(prefix="span-installed-mcp-")
-        )
+        cls.tmp = _pathlib.Path(_tempfile.mkdtemp(prefix="span-installed-mcp-"))
         cls.addClassCleanup(_shutil.rmtree, cls.tmp, True)
-        cls.exe, cls.isolated_python, cls.identity = (
-            _ensure_isolated_exe(cls.tmp / "gate")
+        cls.exe, cls.isolated_python, cls.identity = _ensure_isolated_exe(
+            cls.tmp / "gate"
         )
         proc = _subprocess.run(
-            [cls.isolated_python, "-c",
-             "import span, json, sys;"
-             "print(span.__file__);"
-             "print(sys.version.split()[0]);"
-             "print(open(__import__('pathlib').Path(span.__file__)"
-             ".resolve().parent / 'BUILD_IDENTITY').read())"],
-            capture_output=True, text=True, timeout=120,
+            [
+                cls.isolated_python,
+                "-c",
+                "import span, json, sys;"
+                "print(span.__file__);"
+                "print(sys.version.split()[0]);"
+                "print(open(__import__('pathlib').Path(span.__file__)"
+                ".resolve().parent / 'BUILD_IDENTITY').read())",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
             cwd=str(cls.tmp),
-            env={k: v for k, v in _os.environ.items()
-                 if k != "PYTHONPATH"},
+            env={k: v for k, v in _os.environ.items() if k != "PYTHONPATH"},
         )
         if proc.returncode != 0:
             raise AssertionError(
                 "S9.8 BLOCKED: isolated package identity unreadable: "
                 + proc.stderr[-2000:]
             )
-        location, interpreter, identity_json = (
-            proc.stdout.strip().splitlines()
-        )
+        location, interpreter, identity_json = proc.stdout.strip().splitlines()
         if "site-packages" not in location:
             raise AssertionError(
                 "S9.8 BLOCKED: isolated install resolves inside the "
@@ -207,9 +211,10 @@ class InstalledMcpDriverTest(_unittest.TestCase):
     def test_installed_entrypoint_resolved(self):
         proc = _subprocess.run(
             [self.exe, "--help"],
-            capture_output=True, text=True, timeout=120,
-            env={k: v for k, v in _os.environ.items()
-                 if k != "PYTHONPATH"},
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={k: v for k, v in _os.environ.items() if k != "PYTHONPATH"},
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
         # Resolved in setUpClass: installed package outside any source
@@ -242,16 +247,21 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         probe = _pathlib.Path(__file__).with_name("cold_start_probe.py")
         proc = _subprocess.run(
             [
-                self.isolated_python, str(probe),
-                str(self.exe), str(work), str(data_dir),
+                self.isolated_python,
+                str(probe),
+                str(self.exe),
+                str(work),
+                str(data_dir),
             ],
             cwd=str(self.tmp),
-            capture_output=True, text=True, timeout=300,
-            env={k: v for k, v in _os.environ.items()
-                 if k != "PYTHONPATH"},
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env={k: v for k, v in _os.environ.items() if k != "PYTHONPATH"},
         )
         self.assertEqual(
-            proc.returncode, 0,
+            proc.returncode,
+            0,
             (proc.stderr or proc.stdout)[-4000:],
         )
         observed = _json.loads(proc.stdout.strip().splitlines()[-1])
@@ -268,9 +278,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         )
         self.assertFalse(observed["initialize_error"])
         self.assertEqual(observed["initialize"]["readiness"], "READY")
-        self.assertEqual(
-            observed["initialize"]["repository_id"], "cold"
-        )
+        self.assertEqual(observed["initialize"]["repository_id"], "cold")
         self.assertTrue(
             observed["after_initialize"]["wiring"],
             "explicit initialize_repository did not build the index",
@@ -281,16 +289,10 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertFalse((work / "graft").exists())
         self.assertFalse((work / ".graph").exists())
         self.assertFalse(
-            any(
-                path.name == "wiring.json"
-                for path in work.rglob("wiring.json")
-            )
+            any(path.name == "wiring.json" for path in work.rglob("wiring.json"))
         )
         self.assertTrue(
-            (
-                data_dir / "structural" / "cold" / ".graph"
-                / "wiring.json"
-            ).is_file()
+            (data_dir / "structural" / "cold" / ".graph" / "wiring.json").is_file()
         )
 
     def _run_authority_restart(self):
@@ -301,26 +303,27 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             _write_repo(work)
             data_dir = self.tmp / "restart-data"
             data_dir.mkdir(parents=True, exist_ok=True)
-            probe = _pathlib.Path(__file__).with_name(
-                "authority_restart_probe.py"
-            )
+            probe = _pathlib.Path(__file__).with_name("authority_restart_probe.py")
             proc = _subprocess.run(
                 [
-                    self.isolated_python, str(probe),
-                    str(self.exe), str(work), str(data_dir),
+                    self.isolated_python,
+                    str(probe),
+                    str(self.exe),
+                    str(work),
+                    str(data_dir),
                 ],
                 cwd=str(self.tmp),
-                capture_output=True, text=True, timeout=300,
-                env={k: v for k, v in _os.environ.items()
-                     if k != "PYTHONPATH"},
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env={k: v for k, v in _os.environ.items() if k != "PYTHONPATH"},
             )
             self.assertEqual(
-                proc.returncode, 0,
+                proc.returncode,
+                0,
                 (proc.stderr or proc.stdout)[-4000:],
             )
-            type(self)._ec31_result = _json.loads(
-                proc.stdout.strip().splitlines()[-1]
-            )
+            type(self)._ec31_result = _json.loads(proc.stdout.strip().splitlines()[-1])
         return type(self)._ec31_result
 
     def test_installed_authority_restart(self):
@@ -338,14 +341,9 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertEqual(observed["first_ready"], "READY")
         self.assertFalse(observed["restart_called_initialize"])
         self.assertTrue(observed["pending"])
-        self.assertEqual(
-            observed["authority_seed_locator"], "README.md"
-        )
+        self.assertEqual(observed["authority_seed_locator"], "README.md")
         self.assertTrue(
-            any(
-                "README.md" in line
-                for line in observed["brief_evidence_authority"]
-            ),
+            any("README.md" in line for line in observed["brief_evidence_authority"]),
             observed["brief_evidence_authority"],
         )
 
@@ -359,9 +357,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         from span.shell import install
 
         config_path = self.tmp / "opencode.json"
-        config_path.write_text(
-            _json.dumps({"mcp": {}}), encoding="utf-8"
-        )
+        config_path.write_text(_json.dumps({"mcp": {}}), encoding="utf-8")
         install.merge_opencode_config(
             str(config_path),
             [self.exe, "--data-dir", str(data_dir), "--repo", str(work)],
@@ -374,22 +370,26 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             guidance,
             dry_run=False,
         )
-        runner = _pathlib.Path(__file__).with_name(
-            "external_client_runner.py"
-        )
+        runner = _pathlib.Path(__file__).with_name("external_client_runner.py")
         proc = _subprocess.run(
             [
-                self.isolated_python, str(runner),
-                str(self.exe), str(work), str(data_dir),
-                str(config_path), str(guidance / "AGENTS.md"),
+                self.isolated_python,
+                str(runner),
+                str(self.exe),
+                str(work),
+                str(data_dir),
+                str(config_path),
+                str(guidance / "AGENTS.md"),
             ],
             cwd=str(self.tmp),
-            capture_output=True, text=True, timeout=300,
-            env={k: v for k, v in _os.environ.items()
-                 if k != "PYTHONPATH"},
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env={k: v for k, v in _os.environ.items() if k != "PYTHONPATH"},
         )
         self.assertEqual(
-            proc.returncode, 0,
+            proc.returncode,
+            0,
             (proc.stderr or proc.stdout)[-4000:],
         )
         external = _json.loads(proc.stdout.strip().splitlines()[-1])
@@ -418,21 +418,26 @@ class InstalledMcpDriverTest(_unittest.TestCase):
                 "installed span-mcp driven over MCP stdio"
             ),
             "command": [
-                self.exe, "--data-dir", "<tmp>/data",
-                "--repo", "<tmp>/synth",
+                self.exe,
+                "--data-dir",
+                "<tmp>/data",
+                "--repo",
+                "<tmp>/synth",
             ],
             "executable": self.exe,
             "package_location": type(self).pkg_location,
             "interpreter": self.pkg_interpreter,
             "interpreter_path": self.pkg_interpreter_path,
             "package_version": next(
-                entry["server_version"] for entry in transcript
+                entry["server_version"]
+                for entry in transcript
                 if "server_version" in entry
             ),
             "source_revision": self.identity["source_revision"],
             "source_digest": self.identity["source_digest"],
             "schema_digest": next(
-                entry["schema_digest"] for entry in transcript
+                entry["schema_digest"]
+                for entry in transcript
                 if "schema_digest" in entry
             ),
             "exit_code": 0,
@@ -444,7 +449,9 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         }
         record_path = (
             _pathlib.Path(__file__).resolve().parents[2]
-            / "tests" / ".artifacts" / "record.json"
+            / "tests"
+            / ".artifacts"
+            / "record.json"
         )
         record_path.parent.mkdir(parents=True, exist_ok=True)
         record_path.write_text(
@@ -452,10 +459,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             encoding="utf-8",
         )
         (record_path.parent / "stdio-transcript.jsonl").write_text(
-            "\n".join(
-                _json.dumps(entry, sort_keys=True)
-                for entry in transcript
-            ),
+            "\n".join(_json.dumps(entry, sort_keys=True) for entry in transcript),
             encoding="utf-8",
         )
 

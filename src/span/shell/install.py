@@ -32,7 +32,7 @@ INSTALL_VERSION = 1
 #: ``span/shell/structural/graft.py`` (duplicated, not imported: this
 #: module must stay stdlib-only at top level).
 STRUCTURAL_INDEXER_PACKAGE = "@nanonets/graft"
-STRUCTURAL_INDEXER_VERSION = "0.23.0"
+STRUCTURAL_INDEXER_VERSION = "0.25.0"
 
 # Only this table varies by OS. Everything else is platform-neutral.
 PLATFORM_PATHS = {
@@ -91,9 +91,7 @@ def check_prereqs():
     """Fail closed naming the first missing prerequisite."""
     errors = []
     if sys.version_info < (3, 12):
-        errors.append(
-            f"python >= 3.12 required, found {sys.version.split()[0]}"
-        )
+        errors.append(f"python >= 3.12 required, found {sys.version.split()[0]}")
     # Node and npm provision the managed structural indexer at install
     # time; the indexer itself is never a user prerequisite.
     for tool in ("node", "npm"):
@@ -110,9 +108,7 @@ def default_tools_dir(venv_dir):
 
 def indexer_binary_path(tools_dir):
     """Expected indexer binary inside a tools directory."""
-    return (
-        Path(tools_dir) / "node_modules" / ".bin" / "graft"
-    )
+    return Path(tools_dir) / "node_modules" / ".bin" / "graft"
 
 
 def _redact_provider(text):
@@ -133,8 +129,7 @@ def ensure_structural_indexer(venv_dir, dry_run=False):
     tools_dir = default_tools_dir(venv_dir)
     binary = indexer_binary_path(tools_dir)
     package_json = (
-        tools_dir / "node_modules" / STRUCTURAL_INDEXER_PACKAGE
-        / "package.json"
+        tools_dir / "node_modules" / STRUCTURAL_INDEXER_PACKAGE / "package.json"
     )
     installed_version = None
     try:
@@ -153,18 +148,19 @@ def ensure_structural_indexer(venv_dir, dry_run=False):
     if dry_run:
         return str(binary)
     cmd = [
-        "npm", "install", "--prefix", str(tools_dir),
-        "--no-audit", "--no-fund",
+        "npm",
+        "install",
+        "--prefix",
+        str(tools_dir),
+        "--no-audit",
+        "--no-fund",
         f"{STRUCTURAL_INDEXER_PACKAGE}@{STRUCTURAL_INDEXER_VERSION}",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        detail = _redact_provider(
-            proc.stderr.strip() or proc.stdout.strip()
-        )
+        detail = _redact_provider(proc.stderr.strip() or proc.stdout.strip())
         raise SystemExit(
-            f"structural indexer provisioning failed "
-            f"({proc.returncode}): {detail}"
+            f"structural indexer provisioning failed " f"({proc.returncode}): {detail}"
         )
     if not binary.is_file():
         raise SystemExit(
@@ -186,7 +182,8 @@ def write_indexer_pointer(data_dir, binary, dry_run=False):
         return payload
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     (Path(data_dir) / "structural-indexer.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    )
     return payload
 
 
@@ -200,7 +197,10 @@ def parse_args(argv=None):
         ),
     )
     parser.add_argument(
-        "--repo", action="append", default=[], metavar="TARGET_DIR",
+        "--repo",
+        action="append",
+        default=[],
+        metavar="TARGET_DIR",
         help=(
             "Target repository root (repeatable). Provisioning builds "
             "the structural index into Span's data directory when "
@@ -208,71 +208,102 @@ def parse_args(argv=None):
         ),
     )
     parser.add_argument(
-        "--data-dir", default=None,
+        "--data-dir",
+        default=None,
         help="SQLite store directory (default: platform data dir). "
         "Refused when inside any target repo.",
     )
     parser.add_argument(
-        "--venv-dir", default=None,
+        "--venv-dir",
+        default=None,
         help="Virtualenv location (default: platform venv dir).",
     )
     parser.add_argument(
-        "--bin-dir", default=None,
-        help="Directory receiving the span-mcp symlink "
-        "(default: platform bin dir).",
+        "--bin-dir",
+        default=None,
+        help="Directory receiving the span-mcp symlink " "(default: platform bin dir).",
     )
     parser.add_argument(
-        "--span-repo", default=".",
+        "--span-repo",
+        default=".",
         help="Span source checkout to install (default: cwd).",
     )
     parser.add_argument(
-        "--opencode-config", default=None,
+        "--opencode-config",
+        default=None,
         help="opencode.json to merge the span MCP entry into. "
         "Default: ./opencode.json when present, else skipped.",
     )
     parser.add_argument(
-        "--with-codex", action="store_true", default=None,
+        "--with-codex",
+        action="store_true",
+        default=None,
         help="Register via `codex mcp add` (default: automatic when "
         "the codex CLI is present; --no-codex to skip).",
     )
     parser.add_argument(
-        "--no-codex", action="store_true",
+        "--no-codex",
+        action="store_true",
         help="Skip all Codex integration even when detected.",
     )
     parser.add_argument(
-        "--with-hooks", action="store_true", default=None,
+        "--with-claude",
+        action="store_true",
+        default=None,
+        help="Register via `claude mcp add` (default: automatic when "
+        "the claude CLI is present; --no-claude to skip).",
+    )
+    parser.add_argument(
+        "--no-claude",
+        action="store_true",
+        help="Skip all Claude Code integration even when detected.",
+    )
+    parser.add_argument(
+        "--with-hooks",
+        action="store_true",
+        default=None,
         help="Wire report-only lifecycle hooks (default: automatic "
         "when a supported host is detected; --no-hooks to skip). "
         "Hooks only report readiness/dependents/closure; they never "
         "write, interpret, refresh, or initialize.",
     )
     parser.add_argument(
-        "--no-hooks", action="store_true",
+        "--no-hooks",
+        action="store_true",
         help="Skip hook wiring even when hosts are detected.",
     )
     parser.add_argument(
-        "--no-skills", action="store_true",
+        "--no-skills",
+        action="store_true",
         help="Skip skill deployment even when hosts are detected.",
     )
     parser.add_argument(
-        "--authority-seeds-file", default=None,
+        "--authority-seeds-file",
+        default=None,
         help="JSON file with canonical EvidenceRef items for init. "
         "Absent means no seeds; seeds are never invented.",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Print planned actions; execute nothing.",
     )
     parser.add_argument(
-        "--snapshot-census", default=None, metavar="OUT_JSON",
+        "--snapshot-census",
+        default=None,
+        metavar="OUT_JSON",
         help="Write a read-only target artifact census snapshot and exit.",
     )
     parser.add_argument(
-        "--compare-census", nargs=2, default=None, metavar=("BEFORE", "AFTER"),
+        "--compare-census",
+        nargs=2,
+        default=None,
+        metavar=("BEFORE", "AFTER"),
         help="Diff two census snapshots with a readable verdict and exit.",
     )
     parser.add_argument(
-        "--verify-only", action="store_true",
+        "--verify-only",
+        action="store_true",
         help="Skip install; verify an existing installation and exit.",
     )
     return parser.parse_args(argv)
@@ -306,14 +337,15 @@ def ensure_venv(venv_dir, dry_run=False):
         _run([uv, "venv", str(venv_dir)], dry_run=dry_run)
         return venv_dir / "bin" / "python"
     try:
-        _run([sys.executable, "-m", "venv", str(venv_dir)],
-             dry_run=dry_run)
+        _run([sys.executable, "-m", "venv", str(venv_dir)], dry_run=dry_run)
     except SystemExit:
         # Debian-style pythons ship without pip bootstrap; retry
         # without pip and install through uv when available.
         print("venv pip bootstrap unavailable; retrying --without-pip")
-        _run([sys.executable, "-m", "venv", "--without-pip",
-              str(venv_dir)], dry_run=dry_run)
+        _run(
+            [sys.executable, "-m", "venv", "--without-pip", str(venv_dir)],
+            dry_run=dry_run,
+        )
     return venv_dir / "bin" / "python"
 
 
@@ -322,7 +354,8 @@ def _has_venv_pip(venv_python, dry_run=False):
         return True
     proc = subprocess.run(
         [str(venv_python), "-m", "pip", "--version"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return proc.returncode == 0
 
@@ -379,8 +412,7 @@ def backup_data_dir(data_dir, dry_run=False):
     dbs = sorted(data_dir.glob("*.db"))
     if not dbs:
         return None
-    stamp = datetime.datetime.now(datetime.timezone.utc).strftime(
-        "%Y%m%dT%H%M%S")
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
     dest_dir = data_dir / "backups" / stamp
     try:
         dest_dir.mkdir(parents=True, exist_ok=False)
@@ -405,14 +437,11 @@ def backup_data_dir(data_dir, dry_run=False):
 
 def snapshot_census(targets, out_path, dry_run=False):
     """Write a read-only artifact census snapshot (Addendum E §9.2)."""
-    payload = {
-        str(t): target_artifact_snapshot(t) for t in targets
-    }
+    payload = {str(t): target_artifact_snapshot(t) for t in targets}
     print(f"+ snapshot census: {out_path}")
     if dry_run:
         return payload
-    Path(out_path).write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    Path(out_path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return payload
 
 
@@ -423,14 +452,14 @@ def compare_census(path_a, path_b):
     legitimate offline rebuild. Always exits 0; the verdict is in the
     printed lines.
     """
+
     def _load(path):
         try:
             data = json.loads(Path(path).read_text())
         except (OSError, ValueError) as exc:
             raise SystemExit(f"cannot read census snapshot {path}: {exc}")
         if not isinstance(data, dict):
-            raise SystemExit(
-                f"census snapshot is not an object: {path}")
+            raise SystemExit(f"census snapshot is not an object: {path}")
         return data
 
     before, after = _load(path_a), _load(path_b)
@@ -479,15 +508,100 @@ def _clean_build_staging(span_repo, dry_run=False):
     return removed
 
 
+#: Stdlib-only version probe run inside the runtime venv. Used only in
+#: distribution mode, where there is no source tree to hash.
+_VERSION_PROBE = "import importlib.metadata as m; print(m.version('span-mcp'))"
+
+
+def install_mode(span_repo):
+    """Where the runtime comes from: a source checkout or a distribution.
+
+    ``span-install`` is reachable in both cases. Only a checkout has
+    ``src/span``, the build staging setuptools reuses, and the canonical
+    ``skills`` and ``docs/agents-snippet.md``. A wheel install has none
+    of them, so those steps resolve against the assets bundled inside the
+    package instead of failing or guessing a path.
+    """
+    checkout = Path(span_repo) / "src" / "span"
+    return "checkout" if checkout.is_dir() else "distribution"
+
+
+def distribution_version():
+    """Version of the ``span-mcp`` distribution this installer came from."""
+    from importlib import metadata
+
+    try:
+        return metadata.version("span-mcp")
+    except metadata.PackageNotFoundError:
+        raise SystemExit(
+            "span-install cannot determine its own distribution version; "
+            "reinstall with `pip install span-mcp`."
+        )
+
+
+def bundled_assets_root():
+    """Installer assets shipped inside the installed package."""
+    return Path(__file__).resolve().parent.parent / "_assets"
+
+
+def canonical_skills_dir(span_repo):
+    """Directory holding the canonical skills for this installation mode."""
+    if install_mode(span_repo) == "checkout":
+        return Path(span_repo) / "skills"
+    return bundled_assets_root() / "skills"
+
+
+def agents_snippet_path(span_repo):
+    """Canonical lifecycle snippet for this installation mode."""
+    if install_mode(span_repo) == "checkout":
+        return Path(span_repo) / "docs" / "agents-snippet.md"
+    return bundled_assets_root() / "agents-snippet.md"
+
+
+def distribution_venv_in_sync(venv_python):
+    """Fast path for a distribution install: compare versions.
+
+    There is no source tree to hash, so the only meaningful equality is
+    "the runtime venv holds the distribution version this installer came
+    from". Returns the same three-tuple shape as
+    ``source_venv_in_sync`` so the caller stays single-shaped.
+    """
+    expected = distribution_version()
+    try:
+        proc = subprocess.run(
+            [str(venv_python), "-c", _VERSION_PROBE],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False, 0, ()
+    if proc.returncode != 0 or proc.stdout.strip() != expected:
+        return False, 0, ()
+    return True, 1, ()
+
+
 def pip_install(venv_python, span_repo, dry_run=False):
+    mode = install_mode(span_repo)
+    if mode == "checkout":
+        target = str(span_repo)
+    else:
+        # A wheel install has no package to build from the working
+        # directory: install the exact distribution the user already
+        # has, so the runtime venv matches `pip install span-mcp`.
+        target = f"span-mcp=={distribution_version()}"
     # --no-cache on both paths: the package version is static, so a
     # warm wheel cache can serve a stale build that no byte check would
     # otherwise catch before install. Cache must never decide content.
     if _has_venv_pip(venv_python, dry_run):
         _run(
             [
-                str(venv_python), "-m", "pip", "install",
-                "--force-reinstall", "--no-cache-dir", str(span_repo),
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
+                "--force-reinstall",
+                "--no-cache-dir",
+                target,
             ],
             dry_run=dry_run,
         )
@@ -495,13 +609,18 @@ def pip_install(venv_python, span_repo, dry_run=False):
     uv = shutil.which("uv")
     if uv is None:
         raise SystemExit(
-            "venv has no pip and no `uv` on PATH; install pip or uv, "
-            "then re-run."
+            "venv has no pip and no `uv` on PATH; install pip or uv, " "then re-run."
         )
     _run(
         [
-            uv, "pip", "install", "--reinstall", "--no-cache",
-            "--python", str(venv_python), str(span_repo),
+            uv,
+            "pip",
+            "install",
+            "--reinstall",
+            "--no-cache",
+            "--python",
+            str(venv_python),
+            target,
         ],
         dry_run=dry_run,
     )
@@ -513,17 +632,37 @@ def verify_installed(span_repo, venv_python):
     Compares installed bytes against source AFTER pip runs: a stale
     build cache or packaging quirk must fail loudly here, never ship
     silently. Returns (ok, detail); callers fail closed on not-ok.
+
+    A distribution install has no source tree to compare, so the proof
+    is the runtime venv holding the exact version this installer came
+    from — still a positive check, never a skip.
     """
+    if install_mode(span_repo) == "distribution":
+        expected = distribution_version()
+        try:
+            proc = subprocess.run(
+                [str(venv_python), "-c", _VERSION_PROBE],
+                capture_output=True,
+                text=True,
+            )
+        except OSError as exc:
+            return False, f"cannot run the runtime venv: {exc}"
+        actual = proc.stdout.strip()
+        if proc.returncode != 0 or not actual:
+            return False, "span-mcp is not installed in the runtime venv"
+        if actual != expected:
+            return False, (
+                f"runtime venv has span-mcp {actual}, " f"expected {expected}"
+            )
+        return True, f"span-mcp {actual} installed from the distribution"
     in_sync, checked, extra = source_venv_in_sync(span_repo, venv_python)
     if not in_sync:
         return False, (
-            f"installed tree does not match source "
-            f"({checked} files checked)"
+            f"installed tree does not match source " f"({checked} files checked)"
         )
     if extra:
         return False, (
-            "stale files installed that source does not contain: "
-            + ", ".join(extra)
+            "stale files installed that source does not contain: " + ", ".join(extra)
         )
     return True, f"{checked} files match source"
 
@@ -562,7 +701,9 @@ def target_artifact_snapshot(target):
         }
     except OSError:
         wiring_info = {
-            "present": False, "mtime_ns": None, "size_bytes": None,
+            "present": False,
+            "mtime_ns": None,
+            "size_bytes": None,
         }
     cards = 0
     index_md = False
@@ -653,19 +794,24 @@ def preflight_facts(targets, seeds_path=None):
         try:
             head = subprocess.run(
                 ["git", "-C", str(target), "rev-parse", "HEAD"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if head.returncode == 0:
                 entry["git_head"] = head.stdout.strip() or None
                 status = subprocess.run(
                     ["git", "-C", str(target), "status", "--short"],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 entry["git_dirty"] = bool(status.stdout.strip())
                 log = subprocess.run(
-                    ["git", "-C", str(target), "log", "-1",
-                     "--format=%ct"],
-                    capture_output=True, text=True, timeout=30,
+                    ["git", "-C", str(target), "log", "-1", "--format=%ct"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 try:
                     entry["git_head_time"] = int(log.stdout.strip())
@@ -688,9 +834,7 @@ def preflight_facts(targets, seeds_path=None):
                 "supplied": True,
                 "readable": True,
                 "shape_valid": isinstance(parsed, list),
-                "item_count": (
-                    len(parsed) if isinstance(parsed, list) else None
-                ),
+                "item_count": (len(parsed) if isinstance(parsed, list) else None),
             }
         except (OSError, ValueError):
             facts["seeds_file"] = {
@@ -758,8 +902,7 @@ def register_codex(span_cmd, dry_run=False):
         print("+ register codex (dry-run, skipped)")
         return {"status": "skipped", "reason": "dry-run"}
     try:
-        _run(["codex", "mcp", "add", "span", "--"] + span_cmd,
-             dry_run=dry_run)
+        _run(["codex", "mcp", "add", "span", "--"] + span_cmd, dry_run=dry_run)
     except SystemExit as exc:
         # The local Codex config itself can be broken (e.g. an
         # invalid service_tier); that error is outside Span. Warn
@@ -767,6 +910,55 @@ def register_codex(span_cmd, dry_run=False):
         print(f"codex registration failed, continuing: {exc}")
         return {"status": "failed", "error": str(exc)}
     return {"status": "registered"}
+
+
+def register_claude(span_cmd, dry_run=False):
+    """Register Span with Claude Code at user scope.
+
+    Claude Code owns its registration format, so the supported surface is
+    its CLI rather than a config file Span writes itself. User scope makes
+    the server available in every project instead of binding it to the
+    directory the installer happened to run in.
+
+    Span owns the ``span`` entry, so an existing one is removed before it
+    is re-added: that is convergence on the exact command, and it never
+    touches another server.
+    """
+    if shutil.which("claude") is None:
+        print("claude CLI absent; skipping claude registration.")
+        return {"status": "skipped", "reason": "claude CLI absent"}
+    if dry_run:
+        print("+ register claude (dry-run, skipped)")
+        return {"status": "skipped", "reason": "dry-run"}
+    # Absent entry is the normal first-install case; a non-zero exit
+    # here is expected and carries no signal.
+    subprocess.run(
+        ["claude", "mcp", "remove", "span", "--scope", "user"],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        _run(
+            [
+                "claude",
+                "mcp",
+                "add",
+                "--scope",
+                "user",
+                "--transport",
+                "stdio",
+                "span",
+                "--",
+            ]
+            + span_cmd,
+            dry_run=dry_run,
+        )
+    except SystemExit as exc:
+        # A broken Claude configuration is outside Span: warn and
+        # continue instead of aborting the whole install.
+        print(f"claude registration failed, continuing: {exc}")
+        return {"status": "failed", "error": str(exc)}
+    return {"status": "registered", "scope": "user"}
 
 
 def _hook_bin(venv_dir, bin_dir):
@@ -795,10 +987,12 @@ def wire_codex_hooks(hook_bin, dry_run=False):
         shutil.copy2(hooks_path, backup)
         print(f"codex hooks backed up: {backup}")
     entries = [
-        ("SessionStart", "startup|resume|compact",
-         [hook_bin, "session-start"]),
-        ("PostToolUse", "apply_patch|Write|Edit|MultiEdit",
-         [hook_bin, "source-changed"]),
+        ("SessionStart", "startup|resume|compact", [hook_bin, "session-start"]),
+        (
+            "PostToolUse",
+            "apply_patch|Write|Edit|MultiEdit",
+            [hook_bin, "source-changed"],
+        ),
         ("Stop", "", [hook_bin, "session-stop"]),
     ]
     added = 0
@@ -808,26 +1002,113 @@ def wire_codex_hooks(hook_bin, dry_run=False):
         group = hooks.setdefault(event, [])
         duplicate = any(
             block.get("matcher", "") == matcher
-            and any(
-                h.get("command", "") == command
-                for h in block.get("hooks", [])
-            )
+            and any(h.get("command", "") == command for h in block.get("hooks", []))
             for block in group
         )
         if duplicate:
             continue
-        group.append({
-            "matcher": matcher,
-            "hooks": [{
-                "type": "command",
-                "command": command,
-                "timeout": 10,
-                "statusMessage": "Span lifecycle notice",
-            }],
-        })
+        group.append(
+            {
+                "matcher": matcher,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": command,
+                        "timeout": 10,
+                        "statusMessage": "Span lifecycle notice",
+                    }
+                ],
+            }
+        )
         added += 1
     hooks_path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"codex hooks updated ({added} entries).")
+    return {"status": "wired", "added": added}
+
+
+def wire_claude_hooks(hook_bin, data_dir, dry_run=False):
+    """Append report-only span entries to Claude Code's user settings.
+
+    Uses the same three lifecycle events the Claude-style adapter maps:
+    ``SessionStart``, post-edit ``PostToolUse``, and ``Stop``. Only the
+    ``hooks`` key is touched; every other setting and every foreign hook
+    entry is preserved, and the file is backed up before the first write.
+
+    ``--data-dir`` is part of every command: without it the runner falls
+    back to the platform default and would inspect a different store than
+    the one this install registered.
+    """
+    settings_path = Path(os.path.expanduser("~")) / ".claude" / "settings.json"
+    print(f"+ wire claude hooks: {settings_path}")
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    if not settings_path.exists():
+        print("no claude settings.json; skipping claude hook wiring.")
+        return {"status": "skipped", "reason": "no claude settings.json"}
+    try:
+        config = json.loads(settings_path.read_text())
+    except ValueError as exc:
+        raise SystemExit(f"cannot parse claude settings.json: {exc}")
+    backup = settings_path.with_suffix(".json.bak-span")
+    if not backup.exists():
+        shutil.copy2(settings_path, backup)
+        print(f"claude settings backed up: {backup}")
+    entries = [
+        (
+            "SessionStart",
+            "startup|resume|compact",
+            [hook_bin, "session-start", "--data-dir", str(data_dir)],
+        ),
+        (
+            "PostToolUse",
+            "Write|Edit|MultiEdit",
+            [hook_bin, "source-changed", "--data-dir", str(data_dir)],
+        ),
+        ("Stop", "", [hook_bin, "session-stop", "--data-dir", str(data_dir)]),
+    ]
+    added = 0
+    hooks = config.setdefault("hooks", {})
+    for event, matcher, cmd in entries:
+        command = " ".join(cmd)
+        group = hooks.setdefault(event, [])
+        # Span owns every command that invokes this hook binary, so an
+        # older Span entry is replaced instead of accumulating beside the
+        # new one. Foreign commands and foreign matchers are untouched.
+        kept_blocks = []
+        for block in group:
+            block_hooks = block.get("hooks", [])
+            kept = [
+                hook
+                for hook in block_hooks
+                if str(hook.get("command", "")).split()[:1] != [hook_bin]
+            ]
+            if kept:
+                block = {**block, "hooks": kept}
+                kept_blocks.append(block)
+        group[:] = kept_blocks
+        duplicate = any(
+            block.get("matcher", "") == matcher
+            and any(h.get("command", "") == command for h in block.get("hooks", []))
+            for block in group
+        )
+        if duplicate:
+            continue
+        group.append(
+            {
+                "matcher": matcher,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": command,
+                        "timeout": 10,
+                        "statusMessage": "Span lifecycle notice",
+                    }
+                ],
+            }
+        )
+        added += 1
+    settings_path.write_text(json.dumps(config, indent=2) + "\n")
+    print(f"claude hooks updated ({added} entries).")
     return {"status": "wired", "added": added}
 
 
@@ -866,10 +1147,11 @@ def ensure_agents_rule(span_repo, target, dry_run=False):
     print(f"+ ensure agents rule: {dst}")
     if dry_run:
         return {
-            "status": "skipped", "reason": "dry-run",
+            "status": "skipped",
+            "reason": "dry-run",
             "path": str(dst),
         }
-    src = Path(span_repo) / "docs" / "agents-snippet.md"
+    src = agents_snippet_path(span_repo)
     if not src.is_file():
         raise SystemExit(f"agents snippet source missing: {src}")
     snippet = src.read_text().rstrip("\n") + "\n"
@@ -888,18 +1170,13 @@ def ensure_agents_rule(span_repo, target, dry_run=False):
         )
     start = existing.find(AGENTS_START)
     end = existing.find(AGENTS_END)
-    if (start != -1) != (end != -1) or (
-        start != -1 and end != -1 and end < start
-    ):
+    if (start != -1) != (end != -1) or (start != -1 and end != -1 and end < start):
         raise SystemExit(
             f"agents block markers malformed in {dst}; "
             "inspect the file before rerunning."
         )
     if start != -1:
-        new_text = (
-            existing[:start] + block
-            + existing[end + len(AGENTS_END):]
-        )
+        new_text = existing[:start] + block + existing[end + len(AGENTS_END) :]
     elif existing.strip():
         new_text = existing.rstrip("\n") + "\n\n" + block + "\n"
     else:
@@ -930,8 +1207,10 @@ def write_receipt(data_dir, payload, dry_run=False):
 
 def git_rev(span_repo):
     proc = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=str(span_repo),
-        capture_output=True, text=True,
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(span_repo),
+        capture_output=True,
+        text=True,
     )
     if proc.returncode != 0:
         return "unknown"
@@ -946,8 +1225,11 @@ def verify_installation(venv_python, data_dir, repos, dry_run=False):
     establishes semantic knowledge.
     """
     cmd = [
-        str(venv_python), "-m", "span.shell.install_verify",
-        "--data-dir", str(data_dir),
+        str(venv_python),
+        "-m",
+        "span.shell.install_verify",
+        "--data-dir",
+        str(data_dir),
     ]
     for repo in repos:
         cmd += ["--repo", str(repo)]
@@ -963,9 +1245,13 @@ def verify_installation(venv_python, data_dir, repos, dry_run=False):
 def detect_hosts():
     """Detect supported agent hosts without changing anything."""
     hosts = {"opencode": True}  # MCP config merge is file-local.
-    hosts["codex"] = shutil.which("codex") is not None or (
-        Path(os.path.expanduser("~")) / ".codex"
-    ).exists()
+    home = Path(os.path.expanduser("~"))
+    hosts["codex"] = shutil.which("codex") is not None or (home / ".codex").exists()
+    hosts["claude"] = (
+        shutil.which("claude") is not None
+        or (home / ".claude").exists()
+        or (home / ".claude.json").exists()
+    )
     return hosts
 
 
@@ -978,52 +1264,69 @@ def deploy_skills(span_repo, dry_run=False):
     beside each skill records the source rev so doctor can detect
     drift. Nothing is merged into host-owned files.
     """
-    import shutil as _shutil
 
-    skills_root = Path(span_repo) / "skills"
-    if not skills_root.is_dir():
-        print(f"no skills directory in {span_repo}; skipping.")
+    skills_dir = canonical_skills_dir(span_repo)
+    if not skills_dir.is_dir():
+        print(f"no skills directory for {span_repo}; skipping.")
         return []
-    names = sorted(p.name for p in skills_root.iterdir() if p.is_dir())
+    names = sorted(p.name for p in skills_dir.iterdir() if p.is_dir())
     if not names:
         print("no skills found; skipping.")
         return []
     home = Path(os.path.expanduser("~"))
+    # Readiness is the host's own directory, not the skills subdirectory:
+    # a fresh host has no skills directory yet, and skipping there would
+    # silently deploy nothing for the host that was just detected. The
+    # host root always pre-exists, so this never fabricates a host.
     destinations = [
-        home / ".config" / "opencode" / "skills",
-        home / ".codex" / "skills",
+        home / ".config" / "opencode",
+        home / ".codex",
+        home / ".claude",
     ]
+    mode = install_mode(span_repo)
+    version = distribution_version() if mode == "distribution" else None
     deployed = []
     try:
         rev_proc = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=str(span_repo),
-            capture_output=True, text=True,
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(span_repo),
+            capture_output=True,
+            text=True,
         )
         rev = rev_proc.stdout.strip() if rev_proc.returncode == 0 else "unknown"
     except OSError:
         rev = "unknown"
-    for dest_root in destinations:
-        if not dest_root.exists():
-            print(f"host skills dir absent, skipping: {dest_root}")
+    for host_root in destinations:
+        if not host_root.is_dir():
+            print(f"host directory absent, skipping: {host_root}")
             continue
+        dest_root = host_root / "skills"
+        if not dry_run:
+            dest_root.mkdir(exist_ok=True)
         for name in names:
-            src = skills_root / name
+            src = skills_dir / name
             dst_dir = dest_root / name
             print(f"+ deploy skill {name} -> {dst_dir}")
             if dry_run:
                 continue
             shutil.copytree(src, dst_dir, dirs_exist_ok=True)
-            (dst_dir / ".span-origin.json").write_text(json.dumps(
-                {
-                    "skill": name,
-                    "span_repo": str(span_repo),
-                    "span_rev": rev,
-                    "installed_at": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
-                },
-                indent=2, sort_keys=True,
-            ) + "\n")
+            (dst_dir / ".span-origin.json").write_text(
+                json.dumps(
+                    {
+                        "skill": name,
+                        "install_mode": mode,
+                        "span_repo": str(span_repo) if mode == "checkout" else None,
+                        "distribution_version": version,
+                        "span_rev": rev,
+                        "installed_at": datetime.datetime.now(
+                            datetime.timezone.utc
+                        ).isoformat(),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
             deployed.append(str(dst_dir))
     return deployed
 
@@ -1034,6 +1337,7 @@ def check_skills(dry_run=False):
     for dest_root in (
         home / ".config" / "opencode" / "skills",
         home / ".codex" / "skills",
+        home / ".claude" / "skills",
     ):
         if not dest_root.is_dir():
             continue
@@ -1046,10 +1350,10 @@ def check_skills(dry_run=False):
             except ValueError:
                 print(f"skills: {skill_dir} has unreadable origin.")
                 continue
-            print(
-                f"skills: {skill_dir} from "
-                f"{record.get('span_repo')} rev {record.get('span_rev')}"
-            )
+            source = record.get("span_repo")
+            if source is None:
+                source = f"span-mcp {record.get('distribution_version')}"
+            print(f"skills: {skill_dir} from {source} rev {record.get('span_rev')}")
 
 
 def expected_span_command(span_mcp, data_dir, repos):
@@ -1093,9 +1397,7 @@ def inspect_opencode_registration(config_path, span_cmd):
         return result
     mcp = config.get("mcp") if isinstance(config, dict) else None
     servers = mcp.get("servers") if isinstance(mcp, dict) else None
-    nested = (
-        servers.get("span") if isinstance(servers, dict) else None
-    )
+    nested = servers.get("span") if isinstance(servers, dict) else None
     flat = mcp.get("span") if isinstance(mcp, dict) else None
     if isinstance(flat, dict) and isinstance(nested, dict):
         result["status"] = "mismatched"
@@ -1108,8 +1410,7 @@ def inspect_opencode_registration(config_path, span_cmd):
         result["status"] = "mismatched"
         result["configured_command"] = flat.get("command")
         result["reason"] = (
-            "unsupported flat mcp.span registration; use "
-            "mcp.servers.span"
+            "unsupported flat mcp.span registration; use " "mcp.servers.span"
         )
         return result
     if not isinstance(nested, dict):
@@ -1129,8 +1430,7 @@ def inspect_opencode_registration(config_path, span_cmd):
     if nested.get("codemode") is not False:
         result["status"] = "mismatched"
         result["reason"] = (
-            "mcp.servers.span entry has Code Mode enabled; codemode "
-            "must be false"
+            "mcp.servers.span entry has Code Mode enabled; codemode " "must be false"
         )
         return result
     if nested.get("command") == expected:
@@ -1163,6 +1463,42 @@ def inspect_codex_registration():
     return {"status": "skipped", "reason": "codex CLI not detected"}
 
 
+def inspect_claude_registration(span_cmd):
+    """Read-only inspection of Claude Code's user-scope MCP entry.
+
+    ``~/.claude.json`` is the documented user-scope store, so this check
+    reads it directly and never runs the CLI. Missing file, missing
+    entry, unreadable JSON, and a differing command are reported
+    distinctly; nothing is written.
+    """
+    config_path = Path(os.path.expanduser("~")) / ".claude.json"
+    expected = [str(part) for part in span_cmd]
+    result = {
+        "status": "missing",
+        "config": str(config_path),
+        "expected_command": expected,
+    }
+    try:
+        raw = config_path.read_text()
+    except OSError:
+        return result
+    try:
+        config = json.loads(raw)
+    except ValueError:
+        result["status"] = "unreadable"
+        return result
+    servers = config.get("mcpServers")
+    entry = servers.get("span") if isinstance(servers, dict) else None
+    if not isinstance(entry, dict):
+        return result
+    actual = [str(entry.get("command", ""))] + [
+        str(arg) for arg in entry.get("args", [])
+    ]
+    result["actual_command"] = actual
+    result["status"] = "matched" if actual == expected else "mismatched"
+    return result
+
+
 def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     """Re-verify an existing installation without changing anything."""
     print("== span install doctor ==")
@@ -1181,21 +1517,22 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     selected_config = opencode_config
     if selected_config is None and Path("opencode.json").exists():
         selected_config = "opencode.json"
-    opencode_state = inspect_opencode_registration(
-        selected_config,
-        expected_span_command(
-            resolved if resolved is not None else "span-mcp",
-            data_dir,
-            repos,
-        ),
+    span_cmd = expected_span_command(
+        resolved if resolved is not None else "span-mcp", data_dir, repos
     )
+    opencode_state = inspect_opencode_registration(selected_config, span_cmd)
     codex_state = inspect_codex_registration()
+    claude_state = inspect_claude_registration(span_cmd)
     print(f"opencode registration: {opencode_state['status']}")
     if opencode_state.get("reason"):
         print(f"  {opencode_state['reason']}")
     print(
         f"codex registration: {codex_state['status']} "
         f"({codex_state.get('reason', '')})"
+    )
+    print(
+        f"claude registration: {claude_state['status']} "
+        f"({claude_state.get('config', '')})"
     )
     report = verify_installation(venv_python, data_dir, repos, dry_run)
     print(f"runtime verification: span-mcp={resolved}")
@@ -1209,6 +1546,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         "repository_readiness": report,
         "opencode_registration": opencode_state,
         "codex_registration": codex_state,
+        "claude_registration": claude_state,
     }
 
 
@@ -1231,8 +1569,11 @@ def main(argv=None):
     if args.verify_only:
         venv_python = venv_dir / "bin" / "python"
         doctor(
-            venv_python, data_dir, targets,
-            args.opencode_config, dry,
+            venv_python,
+            data_dir,
+            targets,
+            args.opencode_config,
+            dry,
         )
         return
 
@@ -1264,24 +1605,33 @@ def main(argv=None):
     print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
     venv_python = ensure_venv(venv_dir, dry_run=dry)
     indexer_binary = ensure_structural_indexer(venv_dir, dry_run=dry)
-    indexer_pointer = write_indexer_pointer(data_dir, indexer_binary,
-                                            dry_run=dry)
+    indexer_pointer = write_indexer_pointer(data_dir, indexer_binary, dry_run=dry)
     # Tier-1 verify-fast-path (E §9.2): skip reinstall when the venv
-    # already matches source, with proof. The check itself is read-only
-    # and runs on dry-run too; backup precedes mutation only.
-    in_sync, files_checked, extra_files = source_venv_in_sync(
-        span_repo, venv_python)
+    # already matches the install source, with proof. The check itself
+    # is read-only and runs on dry-run too; backup precedes mutation
+    # only. A distribution install proves version equality because it
+    # has no source tree to hash.
+    mode = install_mode(span_repo)
+    if mode == "checkout":
+        in_sync, files_checked, extra_files = source_venv_in_sync(
+            span_repo, venv_python
+        )
+        match_detail = f"source ({files_checked} files)"
+    else:
+        in_sync, files_checked, extra_files = distribution_venv_in_sync(venv_python)
+        match_detail = f"span-mcp {distribution_version()}"
     data_backup = None
     post_install_verified = None
     if in_sync:
-        print(
-            f"venv matches source ({files_checked} files); "
-            "skipping reinstall with proof."
-        )
+        print(f"venv matches {match_detail}; skipping reinstall with proof.")
         reinstalled = False
     else:
         data_backup = backup_data_dir(data_dir, dry_run=dry)
-        _clean_build_staging(span_repo, dry_run=dry)
+        if mode == "checkout":
+            # Build staging only exists for a source build; cleaning it in
+            # a distribution install would touch whatever `build/` happens
+            # to sit in the caller's working directory.
+            _clean_build_staging(span_repo, dry_run=dry)
         pip_install(venv_python, span_repo, dry_run=dry)
         reinstalled = not dry
         if reinstalled:
@@ -1297,7 +1647,8 @@ def main(argv=None):
     if extra_files:
         print(
             "warning: stale files in venv pip reinstall never removes: "
-            + ", ".join(extra_files) + ". Recreate the venv to clear them."
+            + ", ".join(extra_files)
+            + ". Recreate the venv to clear them."
         )
     source_venv_sync = {
         "in_sync_before_install": bool(in_sync),
@@ -1334,12 +1685,15 @@ def main(argv=None):
             )
         except SystemExit as exc:
             host_registration["opencode"] = {
-                "status": "failed", "error": str(exc),
+                "status": "failed",
+                "error": str(exc),
             }
             raise
     else:
-        print("no opencode.json found; skipping host registration "
-              "(pass --opencode-config PATH).")
+        print(
+            "no opencode.json found; skipping host registration "
+            "(pass --opencode-config PATH)."
+        )
         host_registration["opencode"] = {
             "status": "skipped",
             "reason": "no opencode.json found (pass --opencode-config PATH)",
@@ -1359,7 +1713,24 @@ def main(argv=None):
             _codex_reason = "codex CLI not detected"
         print(f"skipping codex registration ({_codex_reason}).")
         host_registration["codex"] = {
-            "status": "skipped", "reason": _codex_reason,
+            "status": "skipped",
+            "reason": _codex_reason,
+        }
+    if args.with_claude is None:
+        args.with_claude = detect_hosts()["claude"] and not args.no_claude
+    elif args.no_claude:
+        args.with_claude = False
+    if args.with_claude:
+        host_registration["claude"] = register_claude(span_cmd, dry_run=dry)
+    else:
+        if args.no_claude:
+            _claude_reason = "claude disabled (--no-claude)"
+        else:
+            _claude_reason = "claude CLI not detected"
+        print(f"skipping claude registration ({_claude_reason}).")
+        host_registration["claude"] = {
+            "status": "skipped",
+            "reason": _claude_reason,
         }
     if args.with_hooks:
         hook_bin = _hook_bin(venv_dir, bin_dir)
@@ -1368,9 +1739,26 @@ def main(argv=None):
         except SystemExit as exc:
             _codex_hooks = {"status": "failed", "error": str(exc)}
             host_registration["hooks"] = {
-                "codex": _codex_hooks, "opencode_plugin": {},
+                "codex": _codex_hooks,
+                "opencode_plugin": {},
             }
             raise
+        if args.with_claude:
+            try:
+                _claude_hooks = wire_claude_hooks(hook_bin, data_dir, dry_run=dry)
+            except SystemExit as exc:
+                _claude_hooks = {"status": "failed", "error": str(exc)}
+                host_registration["hooks"] = {
+                    "codex": _codex_hooks,
+                    "claude": _claude_hooks,
+                    "opencode_plugin": {},
+                }
+                raise
+        else:
+            _claude_hooks = {
+                "status": "skipped",
+                "reason": "claude integration not enabled",
+            }
         # Addendum E §3/E-02: per-target opencode plugin deployment would
         # write into target repositories and is therefore removed. Host
         # hooks outside targets remain allowed.
@@ -1386,13 +1774,20 @@ def main(argv=None):
             "(Addendum E §3/E-02: Span never writes into targets)."
         )
         host_registration["hooks"] = {
-            "codex": _codex_hooks, "opencode_plugin": _plugin,
+            "codex": _codex_hooks,
+            "claude": _claude_hooks,
+            "opencode_plugin": _plugin,
         }
     else:
         print("skipping hook wiring (--no-hooks).")
         host_registration["hooks"] = {
             "codex": {
-                "status": "skipped", "reason": "hooks disabled (--no-hooks)",
+                "status": "skipped",
+                "reason": "hooks disabled (--no-hooks)",
+            },
+            "claude": {
+                "status": "skipped",
+                "reason": "hooks disabled (--no-hooks)",
             },
             "opencode_plugin": {},
         }
@@ -1401,9 +1796,7 @@ def main(argv=None):
     else:
         print("skipping skill deployment (--no-skills).")
         host_registration["skills"] = []
-    host_registration["agents"] = deploy_agents_rules(
-        span_repo, targets, dry_run=dry
-    )
+    host_registration["agents"] = deploy_agents_rules(span_repo, targets, dry_run=dry)
 
     report = verify_installation(venv_python, data_dir, targets, dry)
     receipt = {
@@ -1431,9 +1824,7 @@ def main(argv=None):
         "preflight_facts": preflight,
         # Deterministic installer performs no host exchange (A1 only).
         "a2": "not_run",
-        "installed_at": datetime.datetime.now(
-            datetime.timezone.utc
-        ).isoformat(),
+        "installed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     write_receipt(data_dir, receipt, dry_run=dry)
     print("install complete.")

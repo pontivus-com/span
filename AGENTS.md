@@ -40,8 +40,10 @@ From the repository root:
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e '.[test]'
+pip install -e '.[test,dev]'
 pytest
+ruff check .
+black --check .
 ```
 
 The installed-MCP lane also needs `uv`, Node, and npm. It builds a

@@ -29,9 +29,7 @@ def _registered_ids(tools):
             continue
         tail = text.split(marker, 1)[1]
         listing = tail.split(".", 1)[0]
-        return [
-            part.strip() for part in listing.split(",") if part.strip()
-        ]
+        return [part.strip() for part in listing.split(",") if part.strip()]
     return []
 
 
@@ -39,10 +37,7 @@ async def _run(exe, repo, data_dir):
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
-    env = {
-        key: value for key, value in os.environ.items()
-        if key != "PYTHONPATH"
-    }
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
     params = StdioServerParameters(
         command=exe,
         args=["--data-dir", str(data_dir), "--repo", str(repo)],
@@ -57,7 +52,10 @@ async def _run(exe, repo, data_dir):
             repo_id = registered[0] if len(registered) == 1 else None
             wiring = (
                 pathlib.Path(data_dir)
-                / "structural" / str(repo_id) / ".graph" / "wiring.json"
+                / "structural"
+                / str(repo_id)
+                / ".graph"
+                / "wiring.json"
             )
             database = pathlib.Path(data_dir) / f"{repo_id}.db"
             before = {
@@ -69,7 +67,8 @@ async def _run(exe, repo, data_dir):
                 {"repository_locator": str(repo)},
             )
             text = "".join(
-                block.text for block in result.content
+                block.text
+                for block in result.content
                 if getattr(block, "type", "") == "text"
             )
             payload = json.loads(text)

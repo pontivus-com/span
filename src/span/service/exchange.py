@@ -15,7 +15,6 @@ from span.ports.interpretation import PendingInterpretation
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.continuations import SuspendedOperation
 
 from span.service.discovery import (
     _coverage_for_task,
@@ -57,7 +56,7 @@ from span.service.resolution import (
 )
 
 __all__ = [
-    'submit_interpretation',
+    "submit_interpretation",
 ]
 
 
@@ -137,8 +136,10 @@ def submit_interpretation(
             continue
         if (
             _resolve_exact_subject(
-                record.repository_id, endpoint,
-                structural=structural, bounds=bounds,
+                record.repository_id,
+                endpoint,
+                structural=structural,
+                bounds=bounds,
             )
             is not None
         ):
@@ -186,10 +187,7 @@ def submit_interpretation(
 
         nominated_by_identity: dict[tuple[str, ...], m.SemanticQuestionScope] = {}
         for submitted in result.proposed_questions:
-            if (
-                request_question is not None
-                and submitted.question == request_question
-            ):
+            if request_question is not None and submitted.question == request_question:
                 continue
             nominated_by_identity.setdefault(
                 _question_identity(submitted.question), submitted.question
@@ -211,14 +209,14 @@ def submit_interpretation(
             correction_question = next(iter(nominated_by_identity.values()))
             try:
                 persisted_rows = store.load_all_question_coverages(
-                    record.repository_id, correction_question.scope_root,
+                    record.repository_id,
+                    correction_question.scope_root,
                     (correction_question.subject,),
                 )
             except Exception:
                 persisted_rows = ()
             if not any(
-                cov.question is not None
-                and cov.question == correction_question
+                cov.question is not None and cov.question == correction_question
                 for cov in persisted_rows
             ):
                 raise _CorrectionRejected(
@@ -231,35 +229,34 @@ def submit_interpretation(
                         "status/explain question coverage",
                     )
                 )
-            for sid in (
-                correction_question.scope_root, correction_question.subject
-            ):
+            for sid in (correction_question.scope_root, correction_question.subject):
                 if sid not in task.known_subject_ids and sid not in extra_known:
                     if store.load_subjects(record.repository_id, (sid,)):
                         extra_known.append(sid)
     effective_target_id = (
-        record.target_id
-        if record.target_id is not None
-        else task.request.target_id
+        record.target_id if record.target_id is not None else task.request.target_id
     )
     has_target_proposals = bool(
-        result.proposed_target_inventory_accounting
-        or result.proposed_target_questions
+        result.proposed_target_inventory_accounting or result.proposed_target_questions
     )
     target_assoc: m.TargetAssociation | None = None
     inventory_ids: frozenset[str] = frozenset()
     inventory_snapshot: dict[str, m.EvidenceRef] = {}
-    inventory_fingerprints: dict[str, str] = {}
-    target_items: tuple[m.EvidenceInventoryItem, ...] = task.request.target_inventory_items
+    target_items: tuple[m.EvidenceInventoryItem, ...] = (
+        task.request.target_inventory_items
+    )
     if effective_target_id is not None or has_target_proposals:
         try:
-            target_assoc = store.load_target_association(
-                record.repository_id, effective_target_id
-            ) if effective_target_id is not None else None
+            target_assoc = (
+                store.load_target_association(record.repository_id, effective_target_id)
+                if effective_target_id is not None
+                else None
+            )
         except Exception:
             target_assoc = None
         if effective_target_id is not None and target_assoc is None:
             from span.core.validation import InterpretationUnitRejected as _Rejected
+
             raise _Rejected(("target association does not resolve",))
         scope_for_inventory = (
             target_assoc.target_scope
@@ -270,8 +267,10 @@ def submit_interpretation(
             from span.service.discovery import enumerate_target_inventory
 
             inv_items = enumerate_target_inventory(
-                record.repository_id, scope_for_inventory,
-                evidence=evidence, bounds=bounds,
+                record.repository_id,
+                scope_for_inventory,
+                evidence=evidence,
+                bounds=bounds,
             )
             inventory_ids = frozenset(
                 item.evidence_ref.evidence_id.value for item in inv_items
@@ -292,10 +291,7 @@ def submit_interpretation(
             # mapping-assigned areas above — membership in the just-loaded
             # association is the authority, so no resolution round-trip.
             for area in target_assoc.area_subjects:
-                if (
-                    area not in task.known_subject_ids
-                    and area not in extra_known
-                ):
+                if area not in task.known_subject_ids and area not in extra_known:
                     extra_known.append(area)
     # Commit-critical section: acquire single-commit ownership only
     # here, after all fallible preparation. Preparation above ran on
@@ -309,12 +305,17 @@ def submit_interpretation(
         )
     try:
         _materialize_unit(
-            task, result, store=store, evidence=evidence, state=state,
+            task,
+            result,
+            store=store,
+            evidence=evidence,
+            state=state,
             extra_known_subjects=tuple(extra_known),
             coverage=_coverage_for_task(
                 record.repository_id,
                 tuple(s.subject_id for s in task.request.subjects),
-                evidence=evidence, seeds=record.seeds,
+                evidence=evidence,
+                seeds=record.seeds,
                 question=task.request.question,
                 discovery_scope=task.request.discovery_scope,
             ),
@@ -338,57 +339,89 @@ def submit_interpretation(
     if record.op == "initialize_target":
         if effective_target_id is not None:
             return _next_target_pending(
-                record.repository_id, record.remaining, record.scope,
-                objective=record.objective, structural=structural,
-                evidence=evidence, store=store, bounds=bounds, state=state,
-                authority_seeds=record.seeds, continuations=continuations,
+                record.repository_id,
+                record.remaining,
+                record.scope,
+                objective=record.objective,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
+                state=state,
+                authority_seeds=record.seeds,
+                continuations=continuations,
                 target_scope=record.target_scope,
                 target_id=record.target_id,
             )
         next_cov = _next_baseline_pending(
-            record.repository_id, record.subject,
-            store=store, bounds=bounds,
+            record.repository_id,
+            record.subject,
+            store=store,
+            bounds=bounds,
         )
         if next_cov is not None:
             return _suspend_baseline_pending(
-                record.repository_id, record.subject, next_cov,
-                structural=structural, evidence=evidence, store=store,
-                bounds=bounds, state=state, seeds=record.seeds,
-                resolution=record.resolution, continuations=continuations,
-                op="initialize_target", scope=record.scope,
-                remaining=record.remaining, objective=record.objective,
+                record.repository_id,
+                record.subject,
+                next_cov,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
+                state=state,
+                seeds=record.seeds,
+                resolution=record.resolution,
+                continuations=continuations,
+                op="initialize_target",
+                scope=record.scope,
+                remaining=record.remaining,
+                objective=record.objective,
                 target_scope=record.target_scope,
                 target_id=record.target_id,
             )
         return _next_target_pending(
-            record.repository_id, record.remaining, record.scope,
-            objective=record.objective, structural=structural,
-            evidence=evidence, store=store, bounds=bounds, state=state,
-            authority_seeds=record.seeds, continuations=continuations,
+            record.repository_id,
+            record.remaining,
+            record.scope,
+            objective=record.objective,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
+            authority_seeds=record.seeds,
+            continuations=continuations,
             target_scope=record.target_scope,
             target_id=record.target_id,
         )
     if record.op == "refresh" and record.remaining:
         nxt, rest = record.remaining[0], record.remaining[1:]
         nxt_stale = _stale_question_scopes(
-            record.repository_id, nxt,
-            store=store, evidence=evidence, bounds=bounds,
+            record.repository_id,
+            nxt,
+            store=store,
+            evidence=evidence,
+            bounds=bounds,
             suspended=continuations.live_question_keys(),
         )
         nxt_scope = nxt_stale[0] if nxt_stale else None
         nxt_task = prepare_interpretation_task(
-            record.repository_id, nxt, structural=structural,
-            evidence=evidence, bounds=bounds, state=state,
+            record.repository_id,
+            nxt,
+            structural=structural,
+            evidence=evidence,
+            bounds=bounds,
+            state=state,
             authority_seeds=record.seeds,
             operation_intent=m.SemanticIntent.STATUS,
             question_slice=(
-                nxt_scope.question_slice if nxt_scope is not None
+                nxt_scope.question_slice
+                if nxt_scope is not None
                 else nxt.subject_id.canonical_locator
             ),
             store=store,
             scope_root=(
-                nxt_scope.scope_root if nxt_scope is not None
-                else nxt.subject_id
+                nxt_scope.scope_root if nxt_scope is not None else nxt.subject_id
             ),
             question_class=(
                 nxt_scope.question_class if nxt_scope is not None else None
@@ -398,10 +431,18 @@ def submit_interpretation(
             ),
         )
         return _suspend(
-            op="refresh", repository_id=record.repository_id, subject=nxt,
-            task=nxt_task, seeds=record.seeds, bounds=bounds, state=state,
-            resolution=None, scope=record.scope, remaining=rest,
-            changed=record.changed, continuations=continuations,
+            op="refresh",
+            repository_id=record.repository_id,
+            subject=nxt,
+            task=nxt_task,
+            seeds=record.seeds,
+            bounds=bounds,
+            state=state,
+            resolution=None,
+            scope=record.scope,
+            remaining=rest,
+            changed=record.changed,
+            continuations=continuations,
             operation_intent="STATUS",
             question_slice=nxt_task.request.question_slice,
             declared_complete=True,
@@ -409,14 +450,22 @@ def submit_interpretation(
     if record.op == "explain":
         if record.establish_baseline:
             nxt_cov = _next_baseline_pending(
-                record.repository_id, record.subject,
-                store=store, bounds=bounds,
+                record.repository_id,
+                record.subject,
+                store=store,
+                bounds=bounds,
             )
             if nxt_cov is not None:
                 return _suspend_baseline_pending(
-                    record.repository_id, record.subject, nxt_cov,
-                    structural=structural, evidence=evidence, store=store,
-                    bounds=bounds, state=state, seeds=record.seeds,
+                    record.repository_id,
+                    record.subject,
+                    nxt_cov,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    bounds=bounds,
+                    state=state,
+                    seeds=record.seeds,
                     resolution=record.resolution,
                     continuations=continuations,
                 )
@@ -427,9 +476,14 @@ def submit_interpretation(
                 f"{record.request.question.question_slice}"
             )
         return _compose_explain_answer(
-            record.repository_id, record.subject, record.resolution,
-            structural=structural, evidence=evidence, store=store,
-            bounds=bounds, state=state,
+            record.repository_id,
+            record.subject,
+            record.resolution,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
             scope_root=record.subject.subject_id,
             question_key=_qkey,
         )
@@ -441,15 +495,25 @@ def submit_interpretation(
                 f"{record.request.question.question_slice}"
             )
         return _compose_authority_answer(
-            record.repository_id, record.subject, record.resolution,
-            structural=structural, evidence=evidence, store=store,
-            bounds=bounds, state=state,
+            record.repository_id,
+            record.subject,
+            record.resolution,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
             question_key=_qkey,
         )
     if record.op == "trace":
         return _resume_trace(
-            record, structural=structural, evidence=evidence, store=store,
-            bounds=bounds, state=state, continuations=continuations,
+            record,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
+            continuations=continuations,
         )
     if record.op == "impact":
         target = record.scope[0] if record.scope else record.subject
@@ -457,9 +521,14 @@ def submit_interpretation(
         if record.subject.subject_id not in resumed:
             resumed = resumed + (record.subject.subject_id,)
         return _compose_impact_answer(
-            record.repository_id, target, record.resolution,
-            structural=structural, evidence=evidence, store=store,
-            bounds=bounds, state=state,
+            record.repository_id,
+            target,
+            record.resolution,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
             change_kind=(
                 ChangeKind(record.change_kind)
                 if record.change_kind is not None
@@ -474,8 +543,12 @@ def submit_interpretation(
             root_question=record.root_question,
         )
     return _compose_refresh_answer(
-        record.repository_id, record.scope,
-        structural=structural, evidence=evidence, store=store,
-        bounds=bounds, state=state,
+        record.repository_id,
+        record.scope,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
         changed=record.changed,
     )

@@ -25,7 +25,6 @@ from span.core.model import (
     RepositoryState,
     SchemaVersion,
     SemanticClaim,
-    SemanticQuestionScope,
     SemanticRelationship,
     StoreWriteResult,
     Subject,
@@ -42,8 +41,7 @@ from span.ports.structural import StructuralDirection
 class SemanticStore(_typing.Protocol):
     def load_subjects(
         self, repository_id: str, subject_ids: tuple[SubjectId, ...]
-    ) -> tuple[Subject, ...]:
-        ...
+    ) -> tuple[Subject, ...]: ...
 
     def load_subjects_by_locator(
         self,
@@ -77,9 +75,7 @@ class SemanticStore(_typing.Protocol):
         """Count persisted semantic subjects for report bounds."""
         ...
 
-    def count_question_dispositions(
-        self, repository_id: str
-    ) -> dict[str, int]:
+    def count_question_dispositions(self, repository_id: str) -> dict[str, int]:
         """Persisted question-coverage counts by disposition (S8/D-10)."""
         ...
 
@@ -87,9 +83,7 @@ class SemanticStore(_typing.Protocol):
         """Count active target associations (S8/D-10)."""
         ...
 
-    def count_target_inventory_outcomes(
-        self, repository_id: str
-    ) -> tuple[int, int]:
+    def count_target_inventory_outcomes(self, repository_id: str) -> tuple[int, int]:
         """Count persisted accounted and unresolved target members."""
         ...
 
@@ -114,8 +108,7 @@ class SemanticStore(_typing.Protocol):
         claim_kinds: tuple[ClaimKind, ...],
         bounds: QueryBounds,
         page_token: str | None = None,
-    ) -> ClaimPage:
-        ...
+    ) -> ClaimPage: ...
 
     def load_relationships(
         self,
@@ -125,15 +118,13 @@ class SemanticStore(_typing.Protocol):
         direction: StructuralDirection,
         bounds: QueryBounds,
         page_token: str | None = None,
-    ) -> RelationshipPage:
-        ...
+    ) -> RelationshipPage: ...
 
     def load_evidence_dependencies(
         self,
         repository_id: str,
         claim_or_relationship_ids: tuple[ClaimRef | RelationshipRef, ...],
-    ) -> tuple[EvidenceDependency, ...]:
-        ...
+    ) -> tuple[EvidenceDependency, ...]: ...
 
     def load_evidence_records(
         self,
@@ -152,8 +143,7 @@ class SemanticStore(_typing.Protocol):
         self,
         repository_id: str,
         scope_subjects: tuple[SubjectId, ...],
-    ) -> tuple[CoverageDependency, ...]:
-        ...
+    ) -> tuple[CoverageDependency, ...]: ...
 
     def load_question_coverages(
         self,
@@ -218,11 +208,9 @@ class SemanticStore(_typing.Protocol):
 
     def mark_freshness(
         self, updates: tuple[FreshnessUpdate, ...]
-    ) -> StoreWriteResult:
-        ...
+    ) -> StoreWriteResult: ...
 
-    def schema_version(self) -> SchemaVersion:
-        ...
+    def schema_version(self) -> SchemaVersion: ...
 
     def record_repository_initialization(
         self,
@@ -247,8 +235,6 @@ class SemanticStore(_typing.Protocol):
         """
         ...
 
-    def load_repository_state(
-        self, repository_id: str
-    ) -> RepositoryState | None:
+    def load_repository_state(self, repository_id: str) -> RepositoryState | None:
         """Current recorded state, or None when never initialized."""
         ...

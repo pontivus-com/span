@@ -37,9 +37,7 @@ def locate(
 ) -> m.StructuralLocateResult:
     """Execute one structural locate (read-only, no persistence)."""
     if not _is_initialized(request.repository_id, store=store):
-        raise ValueError(
-            f"repository not initialized: {request.repository_id}"
-        )
+        raise ValueError(f"repository not initialized: {request.repository_id}")
     bounds = _resolve_bounds(request.bounds, hook=False)
     mode = request.mode
     if mode is m.StructuralLocateMode.SYMBOL:
@@ -50,8 +48,13 @@ def locate(
         else:
             allowed = request.target
         return _locate_symbol(
-            request.repository_id, request.query, request.match,
-            bounds, request.page_token, allowed, structural=structural,
+            request.repository_id,
+            request.query,
+            request.match,
+            bounds,
+            request.page_token,
+            allowed,
+            structural=structural,
         )
     if mode is m.StructuralLocateMode.FILE_OUTLINE:
         if not request.query or not request.query.strip():
@@ -61,8 +64,11 @@ def locate(
         if request.match is not m.StructuralLocateMatch.EXACT:
             raise ValueError("locate match modes apply to SYMBOL only")
         return _locate_outline(
-            request.repository_id, request.query, bounds,
-            request.page_token, structural=structural,
+            request.repository_id,
+            request.query,
+            bounds,
+            request.page_token,
+            structural=structural,
         )
     if mode is m.StructuralLocateMode.TARGET_MEMBERS:
         if request.target is None:
@@ -72,8 +78,12 @@ def locate(
         if request.match is not m.StructuralLocateMatch.EXACT:
             raise ValueError("locate match modes apply to SYMBOL only")
         return _locate_members(
-            request.repository_id, request.target, bounds,
-            request.page_token, structural=structural, evidence=evidence,
+            request.repository_id,
+            request.target,
+            bounds,
+            request.page_token,
+            structural=structural,
+            evidence=evidence,
         )
     raise ValueError(f"unknown locate mode: {mode}")
 
@@ -99,10 +109,7 @@ def _locate_symbol(
     entries: list[m.StructuralLocateEntry] = []
     for hit in page.items:
         subject = hit.candidate.subject.subject_id
-        locator = subject.canonical_locator
-        refs = structural.locations(
-            repository_id, subject, bounds
-        ).items
+        refs = structural.locations(repository_id, subject, bounds).items
         if not refs:
             # Defensive: a search hit always has a location; without
             # evidence there is no entry to build, and inventing one is
@@ -138,9 +145,7 @@ def _locate_outline(
     structural: StructuralSource,
 ) -> m.StructuralLocateResult:
     try:
-        page = structural.file_outline(
-            repository_id, locator, bounds, page_token
-        )
+        page = structural.file_outline(repository_id, locator, bounds, page_token)
     except StaleContinuationError:
         raise
     except ValueError as exc:
@@ -148,9 +153,7 @@ def _locate_outline(
     entries: list[m.StructuralLocateEntry] = []
     for member in page.items:
         subject = member.subject.subject_id
-        refs = structural.locations(
-            repository_id, subject, bounds
-        ).items
+        refs = structural.locations(repository_id, subject, bounds).items
         if not refs:
             continue
         ref = refs[0].location
@@ -196,7 +199,7 @@ def _locate_members(
         if str(exc).startswith("stale listing continuation"):
             raise StaleContinuationError(str(exc)) from None
         raise ValueError(f"locate members failed: {exc}") from None
-    window = items[offset:offset + bounds.max_results]
+    window = items[offset : offset + bounds.max_results]
     remaining = len(items) - (offset + len(window))
     truncated = remaining > 0
     bound_info = m.BoundInfo(
@@ -207,7 +210,8 @@ def _locate_members(
         truncated_category="members" if truncated else None,
         continuation_token=(
             _paging.format_versioned_token(version, offset + len(window))
-            if truncated else None
+            if truncated
+            else None
         ),
     )
     # One outline per distinct file: subject + transcribed span/signature
@@ -229,9 +233,7 @@ def _locate_members(
                 except StaleContinuationError:
                     raise
                 except ValueError as exc:
-                    raise ValueError(
-                        f"locate members failed: {exc}"
-                    ) from None
+                    raise ValueError(f"locate members failed: {exc}") from None
                 for entry in outline.items:
                     collected.setdefault(
                         entry.subject.subject_id.canonical_locator, entry
@@ -260,14 +262,9 @@ def _locate_members(
             m.StructuralLocateEntry(
                 evidence_ref=item.evidence_ref,
                 content_fingerprint=item.content_fingerprint,
-                subject=(
-                    member.subject.subject_id if member is not None
-                    else None
-                ),
+                subject=(member.subject.subject_id if member is not None else None),
                 span_text=member.span_text if member is not None else None,
-                signature_text=(
-                    member.signature_text if member is not None else None
-                ),
+                signature_text=(member.signature_text if member is not None else None),
             )
         )
     state = structural.repository_state(repository_id)

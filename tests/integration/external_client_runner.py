@@ -24,10 +24,7 @@ import os as _os
 import pathlib as _pathlib
 import sys as _sys
 
-
-_CLIENT_MODULE = _pathlib.Path(__file__).with_name(
-    "external_client.py"
-).resolve()
+_CLIENT_MODULE = _pathlib.Path(__file__).with_name("external_client.py").resolve()
 _CLIENT_BYTECODE_PREFIX = str(
     _CLIENT_MODULE.parent / "__pycache__" / "external_client."
 )
@@ -88,9 +85,7 @@ _install_read_guard()
 
 def _load_client():
     module_path = _pathlib.Path(__file__).with_name("external_client.py")
-    spec = _importlib_util.spec_from_file_location(
-        "_span_external_client", module_path
-    )
+    spec = _importlib_util.spec_from_file_location("_span_external_client", module_path)
     if spec is None or spec.loader is None:
         raise SystemExit(f"cannot load external client module: {module_path}")
     module = _importlib_util.module_from_spec(spec)
@@ -102,9 +97,7 @@ def _load_client():
 def _check_host_artifacts(
     config_path, agents_path, exe, repo, data_dir, transcript
 ) -> None:
-    config = _json.loads(
-        _pathlib.Path(config_path).read_text(encoding="utf-8")
-    )
+    config = _json.loads(_pathlib.Path(config_path).read_text(encoding="utf-8"))
     mcp = config["mcp"]
     assert "span" not in mcp, "legacy flat mcp.span registration remains"
     nested = mcp["servers"]["span"]
@@ -112,16 +105,23 @@ def _check_host_artifacts(
     assert nested["codemode"] is False, nested
     assert nested.get("disabled") in (None, False), nested
     expected_command = [
-        str(exe), "--data-dir", str(data_dir), "--repo", str(repo),
+        str(exe),
+        "--data-dir",
+        str(data_dir),
+        "--repo",
+        str(repo),
     ]
     assert nested["command"] == expected_command, nested
-    transcript.append({
-        "phase": "EC-28", "ok": True,
-        "registration": "mcp.servers.span",
-        "codemode": nested["codemode"],
-        "disabled": nested.get("disabled"),
-        "command": nested["command"],
-    })
+    transcript.append(
+        {
+            "phase": "EC-28",
+            "ok": True,
+            "registration": "mcp.servers.span",
+            "codemode": nested["codemode"],
+            "disabled": nested.get("disabled"),
+            "command": nested["command"],
+        }
+    )
 
     text = _pathlib.Path(agents_path).read_text(encoding="utf-8")
     for required in (
@@ -142,10 +142,13 @@ def _check_host_artifacts(
         "rebuilds the structural index",
     ):
         assert forbidden not in text, forbidden
-    transcript.append({
-        "phase": "EC-29", "ok": True,
-        "guidance": str(agents_path),
-    })
+    transcript.append(
+        {
+            "phase": "EC-29",
+            "ok": True,
+            "guidance": str(agents_path),
+        }
+    )
 
 
 def main(argv: list[str]) -> int:
@@ -167,11 +170,15 @@ def main(argv: list[str]) -> int:
         )
     )
     _check_host_artifacts(
-        argv[4], argv[5], argv[1], argv[2], argv[3], transcript,
+        argv[4],
+        argv[5],
+        argv[1],
+        argv[2],
+        argv[3],
+        transcript,
     )
     forbidden = [
-        name for name in _sys.modules
-        if name == "span" or name.startswith("span.")
+        name for name in _sys.modules if name == "span" or name.startswith("span.")
     ]
     if forbidden:
         raise SystemExit(
@@ -182,11 +189,14 @@ def main(argv: list[str]) -> int:
             "external client read Span implementation/test modules: "
             + ", ".join(sorted(set(_FORBIDDEN_READS)))
         )
-    transcript.append({
-        "phase": "EC-30", "ok": True,
-        "span_imports": [],
-        "forbidden_reads": [],
-    })
+    transcript.append(
+        {
+            "phase": "EC-30",
+            "ok": True,
+            "span_imports": [],
+            "forbidden_reads": [],
+        }
+    )
     ec_results = {
         entry["phase"]: entry["ok"]
         for entry in transcript
@@ -196,16 +206,20 @@ def main(argv: list[str]) -> int:
     missing = [name for name in expected if name not in ec_results]
     if missing:
         raise SystemExit(
-            "external acceptance matrix incomplete: missing "
-            + ", ".join(missing)
+            "external acceptance matrix incomplete: missing " + ", ".join(missing)
         )
-    print(_json.dumps({
-        "claims": [alpha, beta],
-        "transcript": transcript,
-        "span_imports": forbidden,
-        "forbidden_reads": [],
-        "ec_results": ec_results,
-    }, sort_keys=True))
+    print(
+        _json.dumps(
+            {
+                "claims": [alpha, beta],
+                "transcript": transcript,
+                "span_imports": forbidden,
+                "forbidden_reads": [],
+                "ec_results": ec_results,
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

@@ -25,7 +25,6 @@ from span.shell.mcp import (
     McpAdapter,
     ServiceContext,
     _REQUEST_CLASS,
-    decode_request,
     encode_result,
 )
 from span.shell.sqlite_store import SqliteSemanticStore
@@ -53,6 +52,7 @@ def _decision(coverage):
         disposition_basis=coverage.disposition_basis,
     )
 
+
 REPO = "mcp-svc"
 
 FILES = {
@@ -73,9 +73,11 @@ def _ref(path):
     return m.EvidenceRef(
         evidence_id=m.EvidenceId(f"ev-{path}"),
         repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.DOCUMENTATION
-        if path.endswith(".md")
-        else m.EvidenceSourceKind.SOURCE_CODE,
+        source_kind=(
+            m.EvidenceSourceKind.DOCUMENTATION
+            if path.endswith(".md")
+            else m.EvidenceSourceKind.SOURCE_CODE
+        ),
         locator=path,
         revision_or_fingerprint=fingerprint_content(FILES[path]),
     )
@@ -84,7 +86,8 @@ def _ref(path):
 def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
-        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        subject=_sid(),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("serves tools", ()),
         evidence=(_ref("README.md"),),
@@ -125,9 +128,7 @@ def _harness():
         evidence=evidence,
         store=store,
     )
-    agent = FixtureAgent(
-        {"src/tools.py": FixtureCandidates((_candidate(),), ())}
-    )
+    agent = FixtureAgent({"src/tools.py": FixtureCandidates((_candidate(),), ())})
     adapter = McpAdapter(
         contexts={
             REPO: ServiceContext(
@@ -192,17 +193,14 @@ class SchemaSyncTest(unittest.TestCase):
                 # Required dataclass fields except bounds (plan §5.1
                 # defaults omitted bounds at the boundary).
                 required = {
-                    f.name for f in fields
+                    f.name
+                    for f in fields
                     if f.default is dataclasses.MISSING
                     and f.default_factory is dataclasses.MISSING
                 } - {"bounds"}
                 schema = TOOL_SCHEMAS[tool]
-                self.assertEqual(
-                    set(schema["required"]), required, tool
-                )
-                self.assertTrue(
-                    set(schema["properties"]) >= names, tool
-                )
+                self.assertEqual(set(schema["required"]), required, tool)
+                self.assertTrue(set(schema["properties"]) >= names, tool)
 
     def test_nullable_targets_advertise_null(self):
         # J-8/S6.2: a single-dataclass (or X|None) position forbids the
@@ -220,14 +218,17 @@ class SchemaSyncTest(unittest.TestCase):
         refresh_schema = TOOL_SCHEMAS["refresh"]["properties"]["target"]
         self.assertFalse(
             any(
-                branch == {"type": "null"}
-                for branch in refresh_schema.get("anyOf", [])
+                branch == {"type": "null"} for branch in refresh_schema.get("anyOf", [])
             ),
             refresh_schema,
         )
         for tool in (
-            "explain", "impact", "trace", "authority",
-            "initialize_target", "neighbors",
+            "explain",
+            "impact",
+            "trace",
+            "authority",
+            "initialize_target",
+            "neighbors",
         ):
             with self.subTest(tool=tool):
                 target_schema = TOOL_SCHEMAS[tool]["properties"]["target"]
@@ -248,9 +249,7 @@ class SchemaSyncTest(unittest.TestCase):
             set(init["required"]),
             {"repository_locator"},
         )
-        self.assertNotIn(
-            "structural_provider_config", init["properties"]
-        )
+        self.assertNotIn("structural_provider_config", init["properties"])
         impact = TOOL_SCHEMAS["impact"]
         self.assertNotIn("change_description", impact["required"])
         trace = TOOL_SCHEMAS["trace"]
@@ -311,14 +310,13 @@ class DispatchTest(unittest.TestCase):
     def test_initialize_target_advances_complete_boundary(self):
         adapter, agent = _harness()
         try:
-            pending = _dispatch(adapter, 
+            pending = _dispatch(
+                adapter,
                 "initialize_target",
                 {
                     "repository_id": REPO,
                     "target": m.to_canonical(
-                        m.EvidenceScope(
-                            paths=("src/tools.py",), evidence_refs=()
-                        )
+                        m.EvidenceScope(paths=("src/tools.py",), evidence_refs=())
                     ),
                     "objective": "Understand the tool boundary and its use.",
                 },
@@ -353,31 +351,40 @@ class DispatchTest(unittest.TestCase):
             assert task.target_inventory_items[0] is not None
             item_ref = task.target_inventory_items[0].evidence_ref
             area = m.SubjectId(
-                repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+                repository_id=REPO,
+                subject_kind=m.SubjectKind.OTHER,
                 canonical_locator="tools-area",
             )
             map_q = m.SemanticQuestionScope(
-                scope_root=area, subject=area,
+                scope_root=area,
+                subject=area,
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice="tools purpose",
                 materiality_basis="mapping admits tools",
             )
             map_cov = m.InterpretationCoverage(
-                subjects=(area,), question_slice="tools purpose",
-                evidence_scope=m.EvidenceScope(), declared_complete=False,
+                subjects=(area,),
+                question_slice="tools purpose",
+                evidence_scope=m.EvidenceScope(),
+                declared_complete=False,
                 question=map_q,
                 disposition=m.SemanticQuestionDisposition.PENDING,
-                result_refs=(), resolution_requirements=(),
-                disposition_basis="admitted", question_evidence=(),
+                result_refs=(),
+                resolution_requirements=(),
+                disposition_basis="admitted",
+                question_evidence=(),
             )
-            answered = _dispatch(adapter, 
+            answered = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
                     "result": m.to_canonical(
                         m.SemanticInterpretationResult(
-                            claims=(), relationships=(),
-                            governing_source_refs=(), diagnostics=("mapping",),
+                            claims=(),
+                            relationships=(),
+                            governing_source_refs=(),
+                            diagnostics=("mapping",),
                             candidate_subjects=(
                                 m.CandidateSubject(
                                     provisional_locator="tools-area",
@@ -429,9 +436,7 @@ class DispatchTest(unittest.TestCase):
                 {
                     "repository_id": REPO,
                     "target": m.to_canonical(
-                        m.EvidenceScope(
-                            paths=("src/tools.py",), evidence_refs=()
-                        )
+                        m.EvidenceScope(paths=("src/tools.py",), evidence_refs=())
                     ),
                     "objective": "Understand the tool boundary and its use.",
                 },
@@ -449,9 +454,7 @@ class DispatchTest(unittest.TestCase):
                     evidence_id=evidence_id,
                     resolution_requirements=(
                         m.ResolutionRequirement(
-                            kind=(
-                                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
-                            ),
+                            kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
                             subject_or_claim=None,
                             description="not examined in this test",
                             supporting_context=(),
@@ -467,15 +470,14 @@ class DispatchTest(unittest.TestCase):
                         "continuation": envelope["continuation"],
                         "result": m.to_canonical(
                             m.SemanticInterpretationResult(
-                                claims=(), relationships=(),
+                                claims=(),
+                                relationships=(),
                                 governing_source_refs=(),
                                 diagnostics=("mapping",),
                                 candidate_subjects=(),
                                 candidate_conflicts=(),
                                 candidate_withdrawals=(),
-                                proposed_target_inventory_accounting=(
-                                    account,
-                                ),
+                                proposed_target_inventory_accounting=(account,),
                                 proposed_target_questions=(),
                             )
                         ),
@@ -488,8 +490,7 @@ class DispatchTest(unittest.TestCase):
             payload = json.loads(failed.content)
             self.assertEqual(payload["error"], "validation")
             self.assertIn("ev-not-bound", payload["message"])
-            self.assertIn("outside the bound mapping batch",
-                          payload["message"])
+            self.assertIn("outside the bound mapping batch", payload["message"])
 
             corrected = _submit(_unresolved(item_ref.evidence_id))
             self.assertFalse(corrected.is_error)
@@ -499,7 +500,8 @@ class DispatchTest(unittest.TestCase):
     def test_explain_suspend_then_submit_over_wire(self):
         adapter, agent = _harness()
         try:
-            pending = _dispatch(adapter, 
+            pending = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": REPO,
@@ -514,7 +516,8 @@ class DispatchTest(unittest.TestCase):
                 envelope["request"],
             )
             result = agent.perform(task)
-            answered = _dispatch(adapter, 
+            answered = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
@@ -528,22 +531,18 @@ class DispatchTest(unittest.TestCase):
             self.assertEqual(answer["intent"], "EXPLAIN")
             self.assertTrue(answer["content"]["claims"])
             # Refs resolve inside the answer (I-36 over the wire).
-            carried = {
-                c["claim_id"]["value"]
-                for c in answer["content"]["claims"]
-            }
+            carried = {c["claim_id"]["value"] for c in answer["content"]["claims"]}
             for conflict in answer["content"]["conflicts"]:
                 for side in ("left", "right"):
-                    self.assertIn(
-                        conflict[side]["id"]["value"], carried
-                    )
+                    self.assertIn(conflict[side]["id"]["value"], carried)
         finally:
             adapter.contexts[REPO].store.close()
 
     def test_status_hook_fast_notice_shape(self):
         adapter, _ = _harness()
         try:
-            notice = _dispatch(adapter, 
+            notice = _dispatch(
+                adapter,
                 "status",
                 {
                     "repository_id": REPO,
@@ -560,7 +559,8 @@ class DispatchTest(unittest.TestCase):
     def test_status_normal_exposes_repository_coverage_report(self):
         adapter, _ = _harness()
         try:
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "status",
                 {
                     "repository_id": REPO,
@@ -592,13 +592,12 @@ class DispatchTest(unittest.TestCase):
     def test_bad_continuation_is_unavailable(self):
         adapter, _ = _harness()
         try:
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": "cont-999",
-                    "result": m.to_canonical(
-                        m.SemanticInterpretationResult()
-                    ),
+                    "result": m.to_canonical(m.SemanticInterpretationResult()),
                     "repository_id": REPO,
                 },
             )
@@ -611,13 +610,12 @@ class DispatchTest(unittest.TestCase):
     def test_unavailable_names_recovery(self):
         adapter, _ = _harness()
         try:
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": "cont-999",
-                    "result": m.to_canonical(
-                        m.SemanticInterpretationResult()
-                    ),
+                    "result": m.to_canonical(m.SemanticInterpretationResult()),
                     "repository_id": REPO,
                 },
             )
@@ -631,7 +629,8 @@ class DispatchTest(unittest.TestCase):
     def test_validation_names_same_continuation_resubmit(self):
         adapter, _ = _harness()
         try:
-            pending = _dispatch(adapter, 
+            pending = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": REPO,
@@ -660,10 +659,12 @@ class DispatchTest(unittest.TestCase):
                     ),
                 ),
                 relationships=(),
-                candidate_subjects=(), candidate_conflicts=(),
+                candidate_subjects=(),
+                candidate_conflicts=(),
                 candidate_withdrawals=(),
             )
-            rejected = _dispatch(adapter, 
+            rejected = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": continuation,
@@ -674,9 +675,7 @@ class DispatchTest(unittest.TestCase):
             self.assertTrue(rejected.is_error)
             body = json.loads(rejected.content)
             self.assertEqual(body["error"], "validation")
-            self.assertIn(
-                "resubmit using the same continuation", body["message"]
-            )
+            self.assertIn("resubmit using the same continuation", body["message"])
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -700,7 +699,8 @@ class DispatchTest(unittest.TestCase):
                     ),
                     bounds=DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
                 ),
-                structural=context.structural, evidence=context.evidence,
+                structural=context.structural,
+                evidence=context.evidence,
                 store=context.store,
                 continuations=context.continuations,
             )
@@ -709,9 +709,7 @@ class DispatchTest(unittest.TestCase):
             coverage = m.InterpretationCoverage(
                 subjects=(original_scope.subject,),
                 question_slice=original_scope.question_slice,
-                evidence_scope=m.EvidenceScope(
-                    paths=(), evidence_refs=()
-                ),
+                evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
                 declared_complete=True,
                 question=original_scope,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
@@ -723,12 +721,15 @@ class DispatchTest(unittest.TestCase):
             answered = ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(_candidate(),), relationships=(),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    claims=(_candidate(),),
+                    relationships=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     question_decision=_decision(coverage),
                     candidate_withdrawals=(),
                 ),
-                structural=context.structural, evidence=context.evidence,
+                structural=context.structural,
+                evidence=context.evidence,
                 store=context.store,
                 continuations=context.continuations,
             )
@@ -754,9 +755,7 @@ class DispatchTest(unittest.TestCase):
             wrong_coverage = m.InterpretationCoverage(
                 subjects=(wrong.subject,),
                 question_slice=wrong.question_slice,
-                evidence_scope=m.EvidenceScope(
-                    paths=(), evidence_refs=()
-                ),
+                evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
                 declared_complete=True,
                 question=wrong,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
@@ -772,7 +771,8 @@ class DispatchTest(unittest.TestCase):
                     "continuation": envelope["continuation"],
                     "result": m.to_canonical(
                         m.SemanticInterpretationResult(
-                            claims=(_candidate(),), relationships=(),
+                            claims=(_candidate(),),
+                            relationships=(),
                             candidate_subjects=(),
                             candidate_conflicts=(),
                             proposed_questions=(
@@ -794,9 +794,7 @@ class DispatchTest(unittest.TestCase):
                 "SemanticQuestionScope",
                 body["message"],
             )
-            self.assertIn(
-                f"scope_root.repository_id={REPO}", body["message"]
-            )
+            self.assertIn(f"scope_root.repository_id={REPO}", body["message"])
             self.assertIn(
                 "subject.canonical_locator=src/tools.py",
                 body["message"],
@@ -814,7 +812,8 @@ class DispatchTest(unittest.TestCase):
         """
         adapter, agent = _harness()
         try:
-            pending = _dispatch(adapter, 
+            pending = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": REPO,
@@ -836,7 +835,8 @@ class DispatchTest(unittest.TestCase):
                 )
                 for claim in bad["claims"]
             ]
-            rejected = _dispatch(adapter, 
+            rejected = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": continuation,
@@ -845,10 +845,9 @@ class DispatchTest(unittest.TestCase):
                 },
             )
             self.assertTrue(rejected.is_error)
-            self.assertEqual(
-                json.loads(rejected.content)["error"], "ingress"
-            )
-            recovered = _dispatch(adapter, 
+            self.assertEqual(json.loads(rejected.content)["error"], "ingress")
+            recovered = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": continuation,
@@ -865,7 +864,8 @@ class DispatchTest(unittest.TestCase):
     def test_unknown_repository_is_typed_error(self):
         adapter, _ = _harness()
         try:
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": "nope",
@@ -882,13 +882,12 @@ class DispatchTest(unittest.TestCase):
     def test_page_token_as_continuation_names_both_mechanisms(self):
         adapter, _ = _harness()
         try:
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": "pg:0",
-                    "result": m.to_canonical(
-                        m.SemanticInterpretationResult()
-                    ),
+                    "result": m.to_canonical(m.SemanticInterpretationResult()),
                     "repository_id": REPO,
                 },
             )
@@ -903,7 +902,8 @@ class DispatchTest(unittest.TestCase):
     def test_continuation_as_page_token_names_both_mechanisms(self):
         adapter, _ = _harness()
         try:
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": REPO,
@@ -927,7 +927,8 @@ class DispatchTest(unittest.TestCase):
         """
         adapter, agent = _harness()
         try:
-            pending = _dispatch(adapter, 
+            pending = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": REPO,
@@ -961,7 +962,8 @@ class DispatchTest(unittest.TestCase):
                 candidate_subjects=(),
                 candidate_conflicts=(),
             )
-            rejected = _dispatch(adapter, 
+            rejected = _dispatch(
+                adapter,
                 "submit_interpretation",
                 {
                     "continuation": envelope["continuation"],
@@ -975,7 +977,9 @@ class DispatchTest(unittest.TestCase):
             self.assertIn("claims[1]", body["message"])
             store = adapter.contexts[REPO].store
             page = store.load_claims(
-                REPO, (_sid(),), (),
+                REPO,
+                (_sid(),),
+                (),
                 DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
             )
             self.assertEqual(page.items, ())
@@ -985,9 +989,7 @@ class DispatchTest(unittest.TestCase):
 
     def test_encode_result_is_deterministic(self):
         first = encode_result(m.SemanticInterpretationResult())
-        self.assertEqual(first, encode_result(
-            m.SemanticInterpretationResult()
-        ))
+        self.assertEqual(first, encode_result(m.SemanticInterpretationResult()))
         json.loads(first)
 
     def test_graft_edge_population_is_unverified_when_index_predates_head(self):
@@ -1002,12 +1004,8 @@ class DispatchTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="span-mcp-graft-") as tmp:
             root = pathlib.Path(tmp)
             (root / "src").mkdir()
-            (root / "src" / "a.py").write_text(
-                "import b\n", encoding="utf-8"
-            )
-            (root / "src" / "b.py").write_text(
-                "VALUE = 1\n", encoding="utf-8"
-            )
+            (root / "src" / "a.py").write_text("import b\n", encoding="utf-8")
+            (root / "src" / "b.py").write_text("VALUE = 1\n", encoding="utf-8")
             graph = root / "structural" / REPO / ".graph"
             graph.mkdir(parents=True)
             (root / ".gitignore").write_text("graft/\n", encoding="utf-8")
@@ -1032,15 +1030,21 @@ class DispatchTest(unittest.TestCase):
                     }
                 ],
             }
-            (graph / "wiring.json").write_text(
-                json.dumps(wiring), encoding="utf-8"
-            )
+            (graph / "wiring.json").write_text(json.dumps(wiring), encoding="utf-8")
             subprocess.run(("git", "-C", str(root), "init", "-q"), check=True)
             subprocess.run(("git", "-C", str(root), "add", "-A"), check=True)
             subprocess.run(
                 (
-                    "git", "-C", str(root), "-c", "user.email=t@t",
-                    "-c", "user.name=t", "commit", "-qm", "after-index",
+                    "git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-qm",
+                    "after-index",
                 ),
                 check=True,
                 env={
@@ -1106,7 +1110,10 @@ class DispatchTest(unittest.TestCase):
 
         source = (
             _pathlib.Path(__file__).resolve().parents[2]
-            / "src" / "span" / "shell" / "mcp.py"
+            / "src"
+            / "span"
+            / "shell"
+            / "mcp.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("import mcp", source)
         self.assertNotIn("from mcp", source)
@@ -1133,7 +1140,8 @@ class DispatchTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             adapter = McpAdapter()
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": "ghost",
@@ -1143,16 +1151,15 @@ class DispatchTest(unittest.TestCase):
             self.assertTrue(result.is_error)
             body = json.loads(result.content)
             self.assertEqual(body["error"], "unknown_repository")
-            init = _dispatch(adapter, 
+            init = _dispatch(
+                adapter,
                 "initialize_repository",
                 {
                     "repository_locator": "/x",
                 },
             )
             self.assertTrue(init.is_error)
-            self.assertEqual(
-                json.loads(init.content)["error"], "unavailable"
-            )
+            self.assertEqual(json.loads(init.content)["error"], "unavailable")
             self.assertEqual(list(pathlib.Path(tmp).iterdir()), [])
 
 
@@ -1167,14 +1174,18 @@ class ListTimeDiscoveryTest(unittest.TestCase):
         adapter, _ = _harness()
         try:
             listed = mcp_server.handle_list_tools(adapter)
-            by_name = {
-                spec["name"]: spec["description"] for spec in listed
-            }
+            by_name = {spec["name"]: spec["description"] for spec in listed}
             for name in (
-                "initialize_target", "explain", "impact", "trace",
-                "authority", "status", "refresh",
+                "initialize_target",
+                "explain",
+                "impact",
+                "trace",
+                "authority",
+                "status",
+                "refresh",
                 "submit_interpretation",
-                "locate", "neighbors",
+                "locate",
+                "neighbors",
             ):
                 self.assertIn(REPO, by_name[name])
             self.assertNotIn(REPO, by_name["initialize_repository"])
@@ -1187,9 +1198,7 @@ class ListTimeDiscoveryTest(unittest.TestCase):
 
         listed = mcp_server.handle_list_tools(McpAdapter())
         by_name = {spec["name"]: spec["description"] for spec in listed}
-        self.assertIn(
-            "No repositories registered yet", by_name["explain"]
-        )
+        self.assertIn("No repositories registered yet", by_name["explain"])
 
 
 @unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")
@@ -1201,9 +1210,7 @@ class ServerWiringTest(unittest.TestCase):
         try:
             listed = mcp_server.handle_list_tools(adapter)
             self.assertEqual(len(listed), 11)
-            self.assertEqual(
-                [spec["name"] for spec in listed], list(TOOL_NAMES)
-            )
+            self.assertEqual([spec["name"] for spec in listed], list(TOOL_NAMES))
             for spec in listed:
                 self.assertEqual(
                     set(spec["inputSchema"]["required"]),
@@ -1231,9 +1238,7 @@ class ServerWiringTest(unittest.TestCase):
             server = mcp_server.build_server(adapter)
             entry = server.get_request_handler("tools/list")
             assert entry is not None
-            result = asyncio.run(
-                entry.handler(None, _types.PaginatedRequestParams())
-            )
+            result = asyncio.run(entry.handler(None, _types.PaginatedRequestParams()))
             self.assertIsInstance(result, _types.ListToolsResult)
             self.assertEqual(len(result.tools), 11)
             json.loads(result.model_dump_json(by_alias=True))
@@ -1248,7 +1253,8 @@ class ServerWiringTest(unittest.TestCase):
         adapter, _ = _harness()
         try:
             content, is_error = mcp_server.handle_call_tool(
-                adapter, "status",
+                adapter,
+                "status",
                 {
                     "repository_id": REPO,
                     "target": None,
@@ -1299,58 +1305,63 @@ class ProvisionPathTest(unittest.TestCase):
         import tempfile
 
         from span.shell import mcp_server
-        from span.shell.agent_exchange.fixture import (
-            FixtureAgent as _Agent,
-        )
         from span.shell.mcp import McpAdapter as _Adapter
 
         fixture_src = (
             pathlib.Path(__file__).resolve().parents[2]
-            / "tests" / "fixtures" / "order-svc"
+            / "tests"
+            / "fixtures"
+            / "order-svc"
         )
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="span-mcp-"))
         try:
             work = tmp / "order-svc"
             shutil.copytree(fixture_src, work)
-            (work / ".gitignore").write_text(
-                "graft/\n.ignore\n", encoding="utf-8"
-            )
+            (work / ".gitignore").write_text("graft/\n.ignore\n", encoding="utf-8")
             subprocess.run(
                 ("git", "-C", str(work), "init", "-q"),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
             subprocess.run(
                 ("git", "-C", str(work), "add", "-A"),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
             subprocess.run(
                 (
-                    "git", "-C", str(work),
-                    "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "held-out",
+                    "git",
+                    "-C",
+                    str(work),
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-qm",
+                    "held-out",
                 ),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
             # The provider index lives in Span's data directory; this
             # in-process fixture supplies the minimal wiring it owns.
             # The graft/ tree is git-ignored above, so the tree stays
             # clean and the index postdates HEAD.
-            graph_dir = (
-                tmp / "data" / "structural" / "order-svc" / ".graph"
-            )
+            graph_dir = tmp / "data" / "structural" / "order-svc" / ".graph"
             graph_dir.mkdir(parents=True, exist_ok=True)
             nodes = []
             for rel in ("src/orders.js", "src/inventory.js"):
                 body = (work / rel).read_text(encoding="utf-8")
-                nodes.append({
-                    "id": rel,
-                    "name": pathlib.Path(rel).name,
-                    "kind": "file",
-                    "path": rel,
-                    "body_hash": hashlib.sha256(
-                        body.encode("utf-8")
-                    ).hexdigest(),
-                })
+                nodes.append(
+                    {
+                        "id": rel,
+                        "name": pathlib.Path(rel).name,
+                        "kind": "file",
+                        "path": rel,
+                        "body_hash": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                    }
+                )
             (graph_dir / "wiring.json").write_text(
                 json.dumps({"nodes": nodes, "edges": []}),
                 encoding="utf-8",
@@ -1360,23 +1371,18 @@ class ProvisionPathTest(unittest.TestCase):
                 repository_locator=str(work),
                 authority_seeds=(),
             )
-            context, result = mcp_server.provision_repository(
-                config, request
-            )
+            context, result = mcp_server.provision_repository(config, request)
             try:
                 self.assertEqual(result.repository_id, "order-svc")
-                self.assertIs(
-                    result.readiness, m.RepositoryReadiness.READY
-                )
+                self.assertIs(result.readiness, m.RepositoryReadiness.READY)
                 adapter = _Adapter(
                     provisioner=(
-                        lambda req: mcp_server.provision_repository(
-                            config, req
-                        )
+                        lambda req: mcp_server.provision_repository(config, req)
                     )
                 )
                 adapter.register(result.repository_id, context)
-                status = _dispatch(adapter, 
+                status = _dispatch(
+                    adapter,
                     "status",
                     {
                         "repository_id": "order-svc",
@@ -1386,9 +1392,7 @@ class ProvisionPathTest(unittest.TestCase):
                 )
                 self.assertFalse(status.is_error)
                 notice = json.loads(status.content)
-                self.assertEqual(
-                    notice["readiness"], "READY"
-                )
+                self.assertEqual(notice["readiness"], "READY")
             finally:
                 context.store.close()
         finally:
@@ -1408,18 +1412,18 @@ class ContextualPathSmokeTest(unittest.TestCase):
             },
         )
         self.assertIsInstance(decoded, ops.SemanticExplainRequest)
-        self.assertEqual(
-            decoded.target.name_or_locator, "src/tools.py"
-        )
+        self.assertEqual(decoded.target.name_or_locator, "src/tools.py")
         adapter, _ = _harness()
         try:
             ctx = adapter.contexts[REPO]
             area = m.SubjectId(
-                repository_id=REPO, subject_kind=m.SubjectKind.COMPONENT,
+                repository_id=REPO,
+                subject_kind=m.SubjectKind.COMPONENT,
                 canonical_locator="tools_area",
             )
             feature = m.SubjectId(
-                repository_id=REPO, subject_kind=m.SubjectKind.SUBSYSTEM,
+                repository_id=REPO,
+                subject_kind=m.SubjectKind.SUBSYSTEM,
                 canonical_locator="tools_feature",
             )
             eref = m.EvidenceRef(
@@ -1427,39 +1431,34 @@ class ContextualPathSmokeTest(unittest.TestCase):
                 repository_id=REPO,
                 source_kind=m.EvidenceSourceKind.SOURCE_CODE,
                 locator="src/tools.py",
-                revision_or_fingerprint=fingerprint_content(
-                    FILES["src/tools.py"]
-                ),
+                revision_or_fingerprint=fingerprint_content(FILES["src/tools.py"]),
             )
             fp = fingerprint_content(FILES["src/tools.py"])
             claim = m.SemanticClaim(
-                claim_id=m.ClaimId("c-tools"), subject=area,
+                claim_id=m.ClaimId("c-tools"),
+                subject=area,
                 kind=m.ClaimKind.PURPOSE,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("serves tools", ()),
-                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE
-                ),
+                evidence=(eref,),
+                trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             mem = m.SemanticRelationship(
                 relationship_id=m.RelationshipId("r-tools-mem"),
-                source=area, kind=m.RelationshipKind.MEMBER_OF,
+                source=area,
+                kind=m.RelationshipKind.MEMBER_OF,
                 target=feature,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE
-                ),
+                evidence=(eref,),
+                trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             question = m.SemanticQuestionScope(
-                scope_root=area, subject=area,
+                scope_root=area,
+                subject=area,
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice=area.canonical_locator,
                 materiality_basis="EXPLAIN question-local",
@@ -1467,29 +1466,33 @@ class ContextualPathSmokeTest(unittest.TestCase):
             coverage = m.InterpretationCoverage(
                 subjects=(area,),
                 question_slice=area.canonical_locator,
-                declared_complete=True, question=question,
+                declared_complete=True,
+                question=question,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(m.ClaimRef(id=claim.claim_id),),
                 disposition_basis="b",
             )
-            ctx.store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(area, "Tools Area", None),
-                    m.Subject(feature, "Tools Feature", None),
-                ),
-                claims=(claim,), relationships=(mem,),
-                evidence_dependencies=(
-                    m.EvidenceDependency(
-                        m.ClaimRef(id=claim.claim_id), eref, fp
+            ctx.store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(area, "Tools Area", None),
+                        m.Subject(feature, "Tools Feature", None),
                     ),
-                    m.EvidenceDependency(
-                        m.RelationshipRef(id=mem.relationship_id),
-                        eref, fp,
+                    claims=(claim,),
+                    relationships=(mem,),
+                    evidence_dependencies=(
+                        m.EvidenceDependency(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        m.EvidenceDependency(
+                            m.RelationshipRef(id=mem.relationship_id),
+                            eref,
+                            fp,
+                        ),
                     ),
-                ),
-                coverage=(coverage,),
-            ))
-            pending = _dispatch(adapter, 
+                    coverage=(coverage,),
+                )
+            )
+            pending = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": REPO,
@@ -1502,8 +1505,7 @@ class ContextualPathSmokeTest(unittest.TestCase):
             candidates = answer["subject_resolution"]["candidates"]
             self.assertTrue(candidates)
             locators = {
-                c["subject"]["subject_id"]["canonical_locator"]
-                for c in candidates
+                c["subject"]["subject_id"]["canonical_locator"] for c in candidates
             }
             self.assertIn("tools_area", locators)
         finally:
@@ -1519,6 +1521,7 @@ if __name__ == "__main__":
 # agent-facing form. These wrappers project a payload to that grammar before
 # the transport consumes it (schema-driven, exact).
 
+
 def _compact_args(tool, arguments):
     if not isinstance(arguments, dict):
         return arguments
@@ -1527,9 +1530,7 @@ def _compact_args(tool, arguments):
 
 
 def _dispatch(adapter, tool, arguments):
-    return McpAdapter.dispatch(
-        adapter, tool, _compact_args(tool, arguments)
-    )
+    return McpAdapter.dispatch(adapter, tool, _compact_args(tool, arguments))
 
 
 def _decode_request(tool, arguments):
