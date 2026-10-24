@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="assets/span-logo-plate-dark.png" alt="Span" width="360">
+  <img src="https://raw.githubusercontent.com/pontivus-com/span/v0.6.0/assets/span-logo-plate-dark.png" alt="Span" width="360">
 </h1>
 
 <p align="center">
@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-server-111B21?style=flat-square" alt="MCP server"></a>
   <a href="https://github.com/pontivus-com/span/actions/workflows/ci.yml"><img src="https://github.com/pontivus-com/span/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache-2.0"></a>
+  <a href="https://github.com/pontivus-com/span/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache-2.0"></a>
   <img src="https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/platform-Linux%20verified-lightgrey?style=flat-square" alt="Linux verified">
   <img src="https://img.shields.io/badge/status-beta-orange?style=flat-square" alt="Beta">
@@ -25,7 +25,7 @@
 <p align="center">
   <a href="#quick-start"><strong>Quick start</strong></a> ·
   <a href="#how-it-works"><strong>How it works</strong></a> ·
-  <a href="docs/"><strong>Docs</strong></a>
+  <a href="https://github.com/pontivus-com/span/tree/master/docs"><strong>Docs</strong></a>
 </p>
 
 ## The problem
@@ -47,7 +47,7 @@ support is still current.
 This is a real exchange from the current build, against a two-file fixture.
 The client is a scripted MCP client, not a model; it shows the wire and
 freshness behaviour, not model judgement. Raw records:
-[current MCP acceptance evidence](docs/acceptance-evidence/mcp-current-2026-10-23/README.md).
+[current MCP acceptance evidence](https://github.com/pontivus-com/span/blob/master/docs/acceptance-evidence/mcp-current-2026-10-23/README.md).
 
 ```text
 > explain src/alpha.py
@@ -144,15 +144,15 @@ python3 scripts/install-span.py --repo /path/to/your/repo
 
 Installation establishes operational readiness, not repository understanding.
 For the manual Codex command and the OpenCode entry, see
-[install and connect](docs/install.md).
+[install and connect](https://github.com/pontivus-com/span/blob/master/docs/install.md).
 
 ## Works with
 
 | Host | Setup |
 | --- | --- |
-| Claude Code | Managed by the installer when the Claude Code CLI is present: user-scope MCP registration, skills at `~/.claude/skills`, and report-only lifecycle hooks in `~/.claude/settings.json`. Manual registration is in [install and connect](docs/install.md). |
-| Codex | Managed by the installer when the Codex CLI is present. Manual registration is in [install and connect](docs/install.md). |
-| OpenCode | Managed when an `opencode.json` is present. The supported manual entry is in [install and connect](docs/install.md). |
+| Claude Code | Managed by the installer when the Claude Code CLI is present: user-scope MCP registration, skills at `~/.claude/skills`, and report-only lifecycle hooks in `~/.claude/settings.json`. Manual registration is in [install and connect](https://github.com/pontivus-com/span/blob/master/docs/install.md). |
+| Codex | Managed by the installer when the Codex CLI is present. Manual registration is in [install and connect](https://github.com/pontivus-com/span/blob/master/docs/install.md). |
+| OpenCode | Managed when an `opencode.json` is present. The supported manual entry is in [install and connect](https://github.com/pontivus-com/span/blob/master/docs/install.md). |
 | Other MCP hosts | Connect over stdio with `span-mcp --data-dir <DATA_DIR> --repo <TARGET_REPO>`. |
 
 Span runs locally over stdio. It does not call an LLM, choose a model, or store
@@ -174,7 +174,7 @@ evidence, its authority, its dependencies, and its freshness.
 | **Span** | **Yes** | **Yes, per item, premise, and discovery scope** | **Yes, with the reason** | **Yes** |
 
 The detailed comparison, including the difference between validation and
-scoped doubt, is in [scope and boundaries](docs/scope.md).
+scoped doubt, is in [scope and boundaries](https://github.com/pontivus-com/span/blob/master/docs/scope.md).
 
 ## What it is not
 
@@ -185,36 +185,36 @@ scoped doubt, is in [scope and boundaries](docs/scope.md).
 - Not autonomous: it does not edit code, run tests, or make stale
   understanding current by itself.
 
-See [scope and boundaries](docs/scope.md) for the full list.
+See [scope and boundaries](https://github.com/pontivus-com/span/blob/master/docs/scope.md) for the full list.
 
 ## Status
 
 Span is beta. Linux is the currently verified installation path; macOS and
 Windows paths are reserved but not verified. The public operation surface is
-eleven MCP operations; see the [MCP reference](docs/mcp.md). Recorded acceptance
-runs are in [acceptance evidence](docs/acceptance-evidence/).
+eleven MCP operations; see the [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md). Recorded acceptance
+runs are in [acceptance evidence](https://github.com/pontivus-com/span/blob/master/docs/acceptance-evidence/).
 
 If Span is useful to you, a star helps other developers find it. Feedback and
 issues are welcome.
 
 ## Documentation
 
-- [Repository overview](docs/overview.md)
-- [Install and connect](docs/install.md)
-- [Using Span](docs/usage.md)
-- [MCP reference](docs/mcp.md)
-- [Freshness and refresh](docs/freshness.md)
-- [Evidence, authority, trust](docs/authority-trust.md)
-- [Scope, boundaries, and differentiation](docs/scope.md)
-- [FAQ](docs/faq.md)
-- [Architecture](docs/architecture.md)
-- [Full documentation index](docs/README.md)
-- [Glossary](docs/glossary.md)
+- [Repository overview](https://github.com/pontivus-com/span/blob/master/docs/overview.md)
+- [Install and connect](https://github.com/pontivus-com/span/blob/master/docs/install.md)
+- [Using Span](https://github.com/pontivus-com/span/blob/master/docs/usage.md)
+- [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md)
+- [Freshness and refresh](https://github.com/pontivus-com/span/blob/master/docs/freshness.md)
+- [Evidence, authority, trust](https://github.com/pontivus-com/span/blob/master/docs/authority-trust.md)
+- [Scope, boundaries, and differentiation](https://github.com/pontivus-com/span/blob/master/docs/scope.md)
+- [FAQ](https://github.com/pontivus-com/span/blob/master/docs/faq.md)
+- [Architecture](https://github.com/pontivus-com/span/blob/master/docs/architecture.md)
+- [Full documentation index](https://github.com/pontivus-com/span/blob/master/docs/README.md)
+- [Glossary](https://github.com/pontivus-com/span/blob/master/docs/glossary.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
 
-See [the contributing guide](docs/contributing.md). Changes should preserve the
+See [the contributing guide](https://github.com/pontivus-com/span/blob/master/docs/contributing.md). Changes should preserve the
 central contract: established understanding remains reusable only while its
 required supporting evidence remains current. Security reports are handled
 through [SECURITY.md](SECURITY.md). Support expectations are described in
