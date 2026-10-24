@@ -10,6 +10,7 @@ Recommended use
 - `span-icon.svg`: canonical scalable icon-only mark.
 - `span-logo-full-color-light.png`: transparent logo for light surfaces.
 - `span-logo-full-color-dark.png`: transparent white/teal logo for dark surfaces.
+- `span-logo-plate-dark.png`: dark-surface lockup on a graphite plate; use this where the reading surface theme is unknown (for example a README that renders in both).
 - `span-logo-mono-black.png` / `span-logo-mono-white.png`: one-color contexts.
 - `span-icon-*.png`: repository avatar, app icon and favicon sizes.
 - `span-favicon.ico`: browser favicon.
