@@ -233,15 +233,19 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             )
             from span import service as ops
 
-            with mock.patch.object(g._shutil, "which", return_value=None):
-                with self.assertRaises(ValueError) as ctx:
-                    provision_repository(
-                        ServerConfig(data_dir=data),
-                        ops.SemanticInitializeRepositoryRequest(
-                            repository_locator=str(repo),
-                            authority_seeds=(),
-                        ),
-                    )
+            # An explicit override outranks PATH lookup, so the
+            # no-indexer path is only reachable with the override absent.
+            with mock.patch.dict(g._os.environ):
+                g._os.environ.pop(g.INDEXER_BINARY_ENV_VAR, None)
+                with mock.patch.object(g._shutil, "which", return_value=None):
+                    with self.assertRaises(ValueError) as ctx:
+                        provision_repository(
+                            ServerConfig(data_dir=data),
+                            ops.SemanticInitializeRepositoryRequest(
+                                repository_locator=str(repo),
+                                authority_seeds=(),
+                            ),
+                        )
             self.assertIn("unavailable", str(ctx.exception).lower())
 
     def test_malformed_output_is_unavailable_not_empty(self):
