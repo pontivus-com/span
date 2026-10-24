@@ -163,7 +163,7 @@ An interpretation can have been well established previously and still become sta
 | --- | --- |
 | `CURRENT` | The recorded understanding is still supported by the evidence and premises it depends on. |
 | `STALE` | Relevant support changed after the understanding was established. Re-check it before treating it as current. |
-| `UNVERIFIABLE` | Span cannot currently establish whether the required support remains valid. The gap stays visible. |
+| `UNVERIFIABLE` | A conclusion exists, but the support needed to confirm it could not be obtained: a recorded source is absent from the inventory, an authority seed is missing, an inventory fingerprint is unavailable, or a bounded premise walk did not complete. It is neither current nor known-stale. A provider or store failure is not this state — the operation fails instead. |
 
 ### Unresolved work
 

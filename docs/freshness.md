@@ -18,6 +18,15 @@
 Stored disposition is history; effective disposition is computed on
 every read from evidence, discovery, and premise state.
 
+`UNVERIFIABLE` is produced only when the support needed to confirm an
+existing conclusion cannot be obtained, and each cause is a fact about
+the repository: a recorded source is absent from the current inventory,
+a recorded authority seed no longer resolves, the provider cannot
+produce the inventory fingerprint, or a bounded premise walk did not
+complete. A provider or store that fails is not classified as
+`UNVERIFIABLE`; the operation fails instead, so an impaired runtime can
+never be mistaken for uncertain knowledge.
+
 ## Explicit refresh (`refresh`, always scoped)
 
 Identify stale/unverifiable (direct + coverage) → reselect bounded

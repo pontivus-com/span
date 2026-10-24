@@ -31,8 +31,12 @@ interpretation task. It is never persisted and never authoritative. See
 See [interpretation](interpretation.md#explicit-completion).
 
 **Current / stale / unverifiable** — The three freshness states. `CURRENT` means
-the required support still holds; `STALE` means supporting evidence changed;
-`UNVERIFIABLE` means Span cannot establish currency. The gap stays visible. See
+the required support still holds; `STALE` means supporting evidence changed and
+must be re-checked; `UNVERIFIABLE` means a conclusion exists but the support
+needed to confirm it could not be obtained — a recorded source is absent from the
+inventory, an authority seed is missing, an inventory fingerprint is unavailable,
+or a bounded premise walk did not complete. It is never how Span reports its own
+failure: a provider or store failure fails the operation. See
 [freshness](freshness.md).
 
 **Evidence (`EvidenceRef`)** — A located, revisioned source span with a source
