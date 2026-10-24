@@ -109,6 +109,13 @@ NODE_SUBJECT_KIND: dict[str, m.SubjectKind] = {
     # Swift structs. The indexer re-kinds these away from "class" so a DTO
     # stays distinguishable from a service.
     "struct": m.SubjectKind.CODE_SYMBOL,
+    # A module is a code container, the same role a file plays (Rust
+    # `mod`). It is not a subsystem: it carries no semantic boundary.
+    "module": m.SubjectKind.COMPONENT,
+    # A named value declaration (Rust `const`/`static`). Like `enum` and
+    # `type`, it is a named declaration in code rather than a callable or
+    # a member of a type, so it belongs to the same bucket.
+    "constant": m.SubjectKind.CODE_SYMBOL,
 }
 
 #: Closed edge-relation mapping (structural only). `extends`/`implements`

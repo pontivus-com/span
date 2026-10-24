@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.2 — 2026-10-24
+
+- Rust sources index again. The provider reports `mod` and `const` nodes,
+  which had no mapping, so the whole structural load failed with "unknown
+  structural node kind". `module` now maps to COMPONENT (a code container,
+  like a file) and `constant` to CODE_SYMBOL (a named declaration, like a
+  type), which is where `enum`, `type`, and `struct` already sat.
+- A provider-vocabulary lane runs the pinned indexer against a Rust fixture,
+  so a newly emitted node kind fails in CI rather than in a user's first
+  `initialize_repository`.
+
 ## 0.6.1 — 2026-10-24
 
 - README images and documentation links are absolute. The relative logo path

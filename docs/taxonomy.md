@@ -24,15 +24,20 @@ free-form. Every node kind maps to exactly one `SubjectKind`:
 
 | Provider node kind | `SubjectKind` |
 | --- | --- |
-| `file` | COMPONENT |
+| `file`, `module` | COMPONENT |
 | `function`, `class`, `method`, `interface`, `type`, `enum` | CODE_SYMBOL |
-| `struct` | CODE_SYMBOL |
+| `struct`, `constant` | CODE_SYMBOL |
 
 `enum` is a named type declaration in the same sense as `class`,
 `interface`, and `type`. `struct` is a nominal data carrier — Go
 structs, Java records, Swift structs — reported by the provider as its
 own node kind rather than as `class`, and classified here as
-CODE_SYMBOL. A kind outside this table is rejected, never guessed.
+CODE_SYMBOL. `module` is a code container, the role a file plays (Rust
+`mod`), and never a subsystem: it carries no semantic boundary.
+`constant` is a named value declaration (Rust `const`/`static`); like a
+type declaration it is a named declaration in code, not a callable and
+not a member of a type. A kind outside this table is rejected, never
+guessed.
 
 Edges are mapped the same way: `contains` → DEFINES; `imports`,
 `calls`, `references`, and `depends_on` → their namesake kinds; and

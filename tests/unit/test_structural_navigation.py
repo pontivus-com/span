@@ -675,6 +675,49 @@ class StaleContinuationEnvelopeTest(unittest.TestCase):
             store.close()
 
 
+class ProviderVocabularyTest(unittest.TestCase):
+    """Every provider node kind the indexer emits maps to one SubjectKind."""
+
+    def _source(self, nodes):
+        from span.shell.structural.graft import GraftStructuralSource
+
+        return GraftStructuralSource(
+            "vocab-repo", ".", wiring={"nodes": list(nodes), "edges": []}
+        )
+
+    def test_module_and_constant_map_to_canonical_subjects(self):
+        source = self._source(
+            (
+                {"id": "lib.rs", "name": "lib.rs", "kind": "file", "path": "lib.rs"},
+                {
+                    "id": "lib.rs#MAX",
+                    "name": "MAX",
+                    "kind": "constant",
+                    "path": "lib.rs",
+                },
+                {
+                    "id": "lib.rs#inner",
+                    "name": "inner",
+                    "kind": "module",
+                    "path": "lib.rs",
+                },
+            )
+        )
+        kinds = {
+            node_id: source._to_subject(node_id).subject_id.subject_kind
+            for node_id in source._nodes
+        }
+        self.assertIs(kinds["lib.rs"], m.SubjectKind.COMPONENT)
+        self.assertIs(kinds["lib.rs#MAX"], m.SubjectKind.CODE_SYMBOL)
+        self.assertIs(kinds["lib.rs#inner"], m.SubjectKind.COMPONENT)
+
+    def test_unknown_provider_kind_still_fails_closed(self):
+        from span.shell.structural.graft import GraftVocabularyError
+
+        with self.assertRaises(GraftVocabularyError):
+            self._source(({"id": "x", "name": "x", "kind": "variable", "path": "x"},))
+
+
 class LocateDescriptionTest(unittest.TestCase):
     """SPMCP-06: the tool description is self-sufficient about modes."""
 
