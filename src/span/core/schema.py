@@ -20,6 +20,7 @@ import typing as _typing
 
 __all__ = [
     "schema_for_request",
+    "schema_for_result",
     "definition_closure",
     "from_wire",
     "to_wire",
@@ -269,6 +270,46 @@ def schema_for_request(
     if not omit_type_tag:
         schema["properties"] = dict(properties)
         schema["properties"]["$type"] = {"const": root.__name__}
+    return schema
+
+
+def _project_result_hint(hint: object, defs: dict[str, dict]) -> dict:
+    """Project a canonical result root with its discriminating tag."""
+    nullable, inner = _is_optional(hint)
+    origin = _typing.get_origin(inner)
+    args = _typing.get_args(inner)
+    if origin is _typing.Union or origin is _types.UnionType:
+        branches = [_project_result_hint(arg, defs) for arg in args]
+        result: dict = {"anyOf": branches}
+    elif isinstance(inner, type) and hasattr(inner, "__dataclass_fields__"):
+        _ensure_def(inner, defs, set())
+        result = {"$ref": f"#/$defs/{inner.__name__}__tag"}
+    else:
+        result = _project_hint(inner, defs, set())
+    if nullable:
+        result = {"anyOf": [result, {"type": "null"}]}
+    return result
+
+
+def schema_for_result(root: object) -> dict:
+    """Project one canonical result type or tagged result union.
+
+    Result roots are always discriminated, including a single carrier. The
+    dataclass definitions remain the sole source of field shape and closed
+    object behavior.
+    """
+    defs: dict[str, dict] = {}
+    projected = _project_result_hint(root, defs)
+    # MCP 2.3.0 requires an object at the output-schema root. Keep the
+    # canonical tagged root/union as the validation branch beneath it.
+    if "$ref" in projected:
+        schema = {"type": "object", "allOf": [projected]}
+    else:
+        schema = {"type": "object", **projected}
+    full_defs = _prune_defs(schema, defs)
+    if full_defs:
+        schema = dict(schema)
+        schema["$defs"] = full_defs
     return schema
 
 

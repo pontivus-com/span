@@ -8,6 +8,7 @@ the ChangeCondition derivation table, and truncation tokens.
 """
 
 import unittest
+from unittest import mock
 
 from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
@@ -624,6 +625,330 @@ class StatusTest(unittest.TestCase):
         finally:
             store.close()
 
+    def test_status_projects_first_time_live_question_without_token(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            continuations = ContinuationStore()
+            pending = ops.explain(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+                authority_seeds=_seeds(),
+            )
+            self.assertIsInstance(pending, PendingInterpretation)
+            answer = ops.status(
+                _status_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertTrue(
+                any(
+                    "CQ_01" in requirement.description
+                    and "live explain" in requirement.description
+                    and "continuation returned" in requirement.description
+                    for requirement in answer.resolution_requirements
+                )
+            )
+            self.assertNotIn(
+                pending.continuation,
+                " ".join(
+                    requirement.description
+                    for requirement in answer.resolution_requirements
+                ),
+            )
+            report = answer.content.coverage_report
+            self.assertIsNotNone(report)
+            entry = next(
+                entry
+                for entry in report.entries
+                if entry.subject.canonical_locator == "src/flow.py"
+            )
+            self.assertIs(
+                entry.disposition,
+                m.SemanticCoverageDisposition.UNASSESSED,
+            )
+            entry_descriptions = " ".join(
+                requirement.description for requirement in entry.resolution_requirements
+            )
+            self.assertIn("live explain", entry_descriptions)
+            self.assertNotIn("run question-local explain", entry_descriptions)
+        finally:
+            store.close()
+
+    def test_ambiguous_selector_returns_canonical_candidates(self):
+        structural = InMemoryStructuralSource(
+            REPO,
+            (InMemoryFile("a.py", "x\n"), InMemoryFile("b.py", "y\n")),
+            (
+                InMemorySubject("a.py#dup", m.SubjectKind.CODE_SYMBOL, "dup"),
+                InMemorySubject("b.py#dup", m.SubjectKind.CODE_SYMBOL, "dup"),
+            ),
+        )
+        evidence = FixtureEvidenceSource(REPO, {"a.py": "x\n", "b.py": "y\n"})
+        store = SqliteSemanticStore(":memory:")
+        try:
+            ops.initialize_repository(
+                ops.SemanticInitializeRepositoryRequest(
+                    repository_locator="fixture",
+                    authority_seeds=(),
+                ),
+                repository_id=REPO,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+            )
+            answer = ops.status(
+                _status_request(target=m.SubjectSelector(None, "dup", (), None)),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIsNotNone(answer.subject_resolution)
+            self.assertIs(
+                answer.subject_resolution.ambiguity,
+                m.ResolutionAmbiguity.AMBIGUOUS,
+            )
+            self.assertEqual(
+                {
+                    candidate.subject.subject_id.canonical_locator
+                    for candidate in answer.subject_resolution.candidates
+                },
+                {"a.py#dup", "b.py#dup"},
+            )
+            requirement = next(
+                requirement
+                for requirement in answer.resolution_requirements
+                if requirement.kind is m.ResolutionKind.AMBIGUOUS_IDENTITY
+            )
+            self.assertIn("2 subjects match", requirement.description)
+        finally:
+            store.close()
+
+    def test_ready_qualifier_is_separate_from_semantic_coverage(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            answer = ops.status(
+                _status_request(target=None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIs(answer.content.readiness, m.RepositoryReadiness.READY)
+            self.assertTrue(
+                answer.state_explanation[0].startswith(
+                    "repository readiness: READY means the Span semantic store"
+                )
+            )
+            self.assertIn("reported separately", answer.state_explanation[0])
+            coverage_line = next(
+                line
+                for line in answer.state_explanation
+                if line.startswith("semantic coverage (")
+            )
+            for token in (
+                "current",
+                "incomplete",
+                "stale",
+                "unverifiable",
+                "unassessed subjects",
+                "persisted pending",
+                "persisted open",
+            ):
+                self.assertIn(token, coverage_line)
+        finally:
+            store.close()
+
+    def test_status_explanation_names_target_and_missing_authority(self):
+        from span.service.operations.status import _status_state_explanation
+
+        content = m.StatusContent(
+            readiness=m.RepositoryReadiness.READY,
+            target_disposition=m.SemanticCoverageDisposition.INCOMPLETE,
+            unresolved=(
+                m.ResolutionRequirement(
+                    kind=m.ResolutionKind.MISSING_AUTHORITY,
+                    subject_or_claim=None,
+                    description="governing authority not recorded",
+                    supporting_context=(),
+                ),
+            ),
+        )
+        lines = _status_state_explanation((), content)
+        self.assertTrue(
+            any(line.startswith("target disposition: INCOMPLETE") for line in lines)
+        )
+        self.assertTrue(
+            any("governing authority remains unresolved" in line for line in lines)
+        )
+
+    def test_absent_source_reads_unverifiable(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
+            )
+            evidence._files.pop("src/flow.py", None)
+            answer = ops.status(
+                _status_request(target=None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
+            )
+            entry = next(
+                entry
+                for entry in answer.content.coverage_report.entries
+                if entry.subject.canonical_locator == "src/flow.py"
+            )
+            self.assertIs(
+                entry.disposition,
+                m.SemanticCoverageDisposition.UNVERIFIABLE,
+            )
+            self.assertTrue(
+                any(
+                    "absent from the evidence inventory" in requirement.description
+                    for requirement in entry.resolution_requirements
+                )
+            )
+        finally:
+            store.close()
+
+    def test_store_failure_reading_coverage_is_an_error(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
+            )
+
+            def boom(*args, **kwargs):
+                raise RuntimeError("store read failed")
+
+            store.load_coverage_dependencies = boom
+            with self.assertRaises(RuntimeError):
+                ops.status(
+                    _status_request(target=None),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=ContinuationStore(),
+                )
+        finally:
+            store.close()
+
+    def test_provider_failure_capturing_snapshot_is_an_error(self):
+        from span.service.operations import status as status_op
+
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
+            )
+            with mock.patch.object(
+                status_op,
+                "_coverage_scope_snapshots",
+                side_effect=RuntimeError("provider down"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    ops.status(
+                        _status_request(target=None),
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=ContinuationStore(),
+                    )
+        finally:
+            store.close()
+
+    def test_inventory_failure_is_not_reported_as_absent_source(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _exchange(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
+            )
+
+            def boom(*args, **kwargs):
+                raise RuntimeError("evidence provider down")
+
+            evidence.inventory_evidence = boom
+            with self.assertRaises(RuntimeError):
+                ops.status(
+                    _status_request(target=None),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=ContinuationStore(),
+                )
+        finally:
+            store.close()
+
+    def test_store_failure_reading_target_association_is_an_error(self):
+        structural, evidence, store, agent = _harness()
+        try:
+
+            def boom(*args, **kwargs):
+                raise RuntimeError("store read failed")
+
+            store.load_target_association = boom
+            with self.assertRaises(RuntimeError):
+                ops.status(
+                    _status_request(target=m.TargetId("tgt-missing")),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=ContinuationStore(),
+                )
+        finally:
+            store.close()
+
     def test_none_target_reports_empty_persisted_frontier(self):
         structural, evidence, store, agent = _harness()
         try:
@@ -641,6 +966,46 @@ class StatusTest(unittest.TestCase):
             self.assertIsNotNone(report)
             self.assertEqual(report.persisted_subject_count, 0)
             self.assertEqual(report.entries, ())
+        finally:
+            store.close()
+
+    def test_none_target_projects_first_time_live_question(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            continuations = ContinuationStore()
+            pending = ops.explain(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
+                    bounds=_bounds(),
+                ),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+                authority_seeds=_seeds(),
+            )
+            self.assertIsInstance(pending, PendingInterpretation)
+            answer = ops.status(
+                _status_request(target=None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+            )
+            self.assertTrue(
+                any(
+                    "live explain" in requirement.description
+                    for requirement in answer.resolution_requirements
+                )
+            )
+            self.assertNotIn(
+                pending.continuation,
+                " ".join(
+                    requirement.description
+                    for requirement in answer.resolution_requirements
+                ),
+            )
         finally:
             store.close()
 

@@ -30,6 +30,7 @@ from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import (
     TOOL_DESCRIPTIONS,
     TOOL_NAMES,
+    TOOL_OUTPUT_SCHEMAS,
     TOOL_SCHEMAS,
     McpAdapter,
     ServiceContext,
@@ -206,6 +207,7 @@ def handle_list_tools(adapter: McpAdapter) -> list[dict]:
                 "name": name,
                 "description": description,
                 "inputSchema": TOOL_SCHEMAS[name],
+                "outputSchema": TOOL_OUTPUT_SCHEMAS[name],
             }
         )
     return specs
@@ -248,6 +250,7 @@ def build_server(adapter: McpAdapter):
                     name=spec["name"],
                     description=spec["description"],
                     inputSchema=spec["inputSchema"],
+                    outputSchema=spec["outputSchema"],
                 )
                 for spec in handle_list_tools(adapter)
             ]
@@ -256,10 +259,11 @@ def build_server(adapter: McpAdapter):
     async def _call_tool(_request: object, params: object) -> object:
         name = params.name  # type: ignore[union-attr]
         arguments = params.arguments or {}  # type: ignore[union-attr]
-        content, is_error = handle_call_tool(adapter, name, arguments)
+        tool_result = adapter.dispatch(name, arguments)
         return _types.CallToolResult(
-            content=[_types.TextContent(type="text", text=content)],
-            isError=is_error,
+            content=[_types.TextContent(type="text", text=tool_result.content)],
+            structuredContent=tool_result.structured_content,
+            isError=tool_result.is_error,
         )
 
     server.add_request_handler("tools/list", _types.PaginatedRequestParams, _list_tools)

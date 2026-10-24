@@ -36,7 +36,8 @@ Use this path for every non-trivial Span interaction:
    never initiates interpretation, allocates continuations, or persists
    freshness. Follow its entry guidance: stale/unverifiable → `refresh`
    with the exact `SubjectSelector` it names; `UNASSESSED` →
-   question-local `explain`; pending question work → only the
+   question-local `explain` only when no owning operation is live; otherwise
+   continue the returned continuation. Pending question work → only the
    continuation returned by the suspending operation. Inventory
    accounting and semantic-question coverage are separate. Preserve
    every `OPEN`, `PENDING`, `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`,
@@ -51,6 +52,16 @@ Use this path for every non-trivial Span interaction:
    explicit scoped `refresh` and re-submit where required, then scoped
    `status` again. `impact` is preparation, not approval; `refresh` alone
    proves nothing.
+
+Refresh lifecycle: `UNASSESSED → explain` only when no owning operation is
+live; `STALE`/`UNVERIFIABLE → refresh` unless that refresh is already live;
+an explicit CURRENT challenge uses `refresh(stale_only=false)` only for an
+already-persisted question. Refresh never establishes first coverage.
+
+MCP success results have both canonical text and structured output derived
+from the same Span carrier. Status identifies live pending question state and
+its owning operation without revealing continuation tokens. `READY` means
+storage/runtime availability, not semantic completeness.
 
 ### Operation selection
 

@@ -285,12 +285,25 @@ class _Wire:
             if getattr(block, "type", "") == "text"
         ]
         text = "".join(texts)
-        try:
-            payload = _json.loads(text)
-        except ValueError:
-            raise AssertionError(
-                f"tool {tool} returned non-JSON payload: {text[:500]!r}"
-            )
+        structured = getattr(result, "structured_content", None)
+        if result.is_error:
+            try:
+                payload = _json.loads(text)
+            except ValueError:
+                raise AssertionError(
+                    f"tool {tool} returned non-JSON error payload: {text[:500]!r}"
+                )
+            assert (
+                structured is None
+            ), f"error tool {tool} returned a false structured success payload"
+        else:
+            assert structured is not None, f"tool {tool} omitted structured_content"
+            payload = structured
+            # The text channel is retained for model-facing clients, but it
+            # must be the exact same canonical object as structured output.
+            assert (
+                _json.loads(text) == structured
+            ), f"tool {tool} text and structured MCP results diverged"
         # Full input/output transcript (S9.5): request arguments and
         # the complete returned JSON, not summaries.
         self._transcript.append(

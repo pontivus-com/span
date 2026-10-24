@@ -264,6 +264,8 @@ class TargetStatusTest(unittest.TestCase):
         return ops, structural, evidence, store, repo, ContinuationStore()
 
     def test_unassessed_then_incomplete_and_hook_fast_reject(self):
+        from span.shell.agent_exchange.continuations import ContinuationStore
+
         ops, structural, evidence, store, repo, conts = self._harness()
         try:
             bounds = m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64)
@@ -314,6 +316,29 @@ class TargetStatusTest(unittest.TestCase):
             )
             assert isinstance(ans2, m.SemanticAnswer)
             assert isinstance(ans2.content, m.StatusContent)
+            self.assertTrue(
+                any(
+                    "live initialize_target" in requirement.description
+                    for requirement in ans2.resolution_requirements
+                )
+            )
+            no_live = ops.status(
+                ops.SemanticStatusRequest(
+                    repository_id=repo, target=tid, bounds=bounds
+                ),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertTrue(
+                any(
+                    "no live initialize_target" in requirement.description
+                    and "same exact target scope and objective"
+                    in requirement.description
+                    for requirement in no_live.resolution_requirements
+                )
+            )
             # No accounting yet → INCOMPLETE (not CURRENT).
             self.assertEqual(
                 ans2.content.target_disposition,

@@ -61,6 +61,7 @@ def _question_identity_key(
         question.scope_root.repository_id,
         question.scope_root.subject_kind.value,
         question.scope_root.canonical_locator,
+        question.subject.repository_id,
         question.subject.subject_kind.value,
         question.subject.canonical_locator,
         question.question_class.value,
@@ -499,7 +500,7 @@ def _stale_question_scopes(
     store: SemanticStore,
     evidence: EvidenceSource,
     bounds: m.QueryBounds,
-    suspended: frozenset[tuple[str, str, str, str]] = frozenset(),
+    suspended: frozenset[tuple[str, ...]] = frozenset(),
 ) -> list[m.SemanticQuestionScope]:
     """Persisted questions requiring reassessment, deterministic order.
 
@@ -514,8 +515,7 @@ def _stale_question_scopes(
     puts recorded-PENDING first (unexamined work before
     re-verification), then the rest by (class, slice). Entries whose
     question already has a live (unexpired, unclaimed) continuation
-    — passed as ``suspended`` keys of
-    (repository_id, subject locator, class value, slice) — are
+    — passed as ``suspended`` keys of the complete question identity — are
     excluded, so one question is never suspended twice concurrently.
     Root re-verification is preserved: once no pending binds, the
     stale root admits exactly as before.
@@ -537,12 +537,7 @@ def _stale_question_scopes(
     for cov in coverages:
         if cov.question is None or cov.question.subject != sid:
             continue
-        key = (
-            repository_id,
-            cov.question.subject.canonical_locator,
-            cov.question.question_class.value,
-            cov.question.question_slice,
-        )
+        key = _question_identity_key(cov.question)
         if key in suspended:
             continue
         if cov.disposition is m.SemanticQuestionDisposition.PENDING:

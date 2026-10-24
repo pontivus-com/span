@@ -200,18 +200,18 @@ class ContinuationStore:
             return None
         return entry.record
 
-    def live_question_keys(self) -> frozenset[tuple[str, str, str, str]]:
+    def live_question_keys(self) -> frozenset[tuple[str, ...]]:
         """Identity keys of unexpired suspended units.
 
-        One key per live entry: (repository_id, subject locator,
-        question-class value or "", question slice). Used by refresh
-        admission (G-15) so a recorded pending is never suspended
-        twice while its first unit is still outstanding. Expired
-        entries are skipped here (they are abandoned on next claim);
-        nothing is evicted by this read.
+        One key per live entry uses the complete semantic question identity:
+        scope root, subject, question class, and question slice. Used by
+        refresh admission (G-15) so a recorded pending is never suspended
+        twice while its first unit is still outstanding. Expired entries are
+        skipped here (they are abandoned on next claim); nothing is evicted
+        by this read.
         """
         now = self._now()
-        keys: set[tuple[str, str, str, str]] = set()
+        keys: set[tuple[str, ...]] = set()
         for entry in self._entries.values():
             record = entry.record
             created = entry.created_at
@@ -223,7 +223,12 @@ class ContinuationStore:
             if question is not None:
                 keys.add(
                     (
-                        record.repository_id,
+                        "q",
+                        question.scope_root.repository_id,
+                        question.scope_root.subject_kind.value,
+                        question.scope_root.canonical_locator,
+                        question.subject.repository_id,
+                        question.subject.subject_kind.value,
                         question.subject.canonical_locator,
                         question.question_class.value,
                         question.question_slice,
@@ -233,13 +238,63 @@ class ContinuationStore:
                 for subject in record.request.subjects:
                     keys.add(
                         (
+                            "q",
                             record.repository_id,
+                            "",
+                            "",
+                            subject.subject_id.repository_id,
+                            subject.subject_id.subject_kind.value,
                             subject.subject_id.canonical_locator,
                             "",
                             record.request.question_slice,
                         )
                     )
         return frozenset(keys)
+
+    def live_records(self) -> tuple[SuspendedOperation, ...]:
+        """Return unexpired suspended records for read-only status views.
+
+        The accessor exposes the existing exchange records, never private
+        entries or continuation tokens. Ordering is stable across calls and
+        expired records remain excluded without changing the store.
+        """
+        now = self._now()
+        with self._lock:
+            records = [
+                entry.record
+                for entry in self._entries.values()
+                if not self._is_expired_at(entry, now)
+            ]
+        return tuple(
+            sorted(
+                records,
+                key=lambda record: (
+                    record.repository_id,
+                    record.target_id.value if record.target_id is not None else "",
+                    (
+                        record.request.question.scope_root.canonical_locator
+                        if record.request.question is not None
+                        else ""
+                    ),
+                    (
+                        record.request.question.subject.canonical_locator
+                        if record.request.question is not None
+                        else record.subject.subject_id.canonical_locator
+                    ),
+                    (
+                        record.request.question.question_class.value
+                        if record.request.question is not None
+                        else ""
+                    ),
+                    (
+                        record.request.question.question_slice
+                        if record.request.question is not None
+                        else record.request.question_slice
+                    ),
+                    record.op,
+                ),
+            )
+        )
 
     def __len__(self) -> int:
         return len(self._entries)

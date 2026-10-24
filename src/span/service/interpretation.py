@@ -247,10 +247,10 @@ def _project_excerpts(
                     f"1-{total} of {total} (0 hits unexamined)"
                 )
                 total_ranges += 1
-                if total == 1:
-                    # A single ungrounded line that cannot fit is still
-                    # a named delivery requirement, not silent omission.
-                    requirements.append(_delivery_requirement(unit, 1, total, total))
+                # Evidence omitted in full is still a named delivery
+                # requirement, even when it has multiple lines and no
+                # grounded hit. It must not disappear from the task.
+                requirements.append(_delivery_requirement(unit, 1, total, total))
             continue
         first, last = hits[0], hits[-1]
         # Contiguous enclosing range.
@@ -489,8 +489,8 @@ def _build_task_brief(
         material_aspects=m.QUESTION_CLASS_ASPECTS.get(resolved_class, ()),
         scope_boundaries=scope_boundaries,
         evidence_authority=(
-            evidence_authority,
             authority_guidance,
+            evidence_authority,
             "Distinguish observed behavior from governing intent; "
             "preserve absent or conflicting authority explicitly.",
             "Missing evidence: obtain current EvidenceRefs via locate "
@@ -576,7 +576,49 @@ def prepare_interpretation_task(
         question_terms=question_terms,
         target_scope=target_scope,
     )
-    units = _read_units_within_bytes(evidence, selection.selected_refs, bounds)
+    # All evidence classes share the same bounded read and delivery pass.
+    # Mapping and required refs have priority because they are explicit
+    # task inputs; ordinary discovery refs fill the remaining bounded set.
+    mandatory_refs: list[m.EvidenceRef] = []
+    mandatory_ids: set[str] = set()
+    for ref in (
+        *(item.evidence_ref for item in target_inventory_items),
+        *required_evidence_refs,
+    ):
+        if ref.evidence_id.value in mandatory_ids:
+            continue
+        mandatory_ids.add(ref.evidence_id.value)
+        mandatory_refs.append(ref)
+    combined_refs: list[m.EvidenceRef] = []
+    seen_ref_ids: set[str] = set()
+    for ref in (*mandatory_refs, *selection.selected_refs):
+        evidence_id = ref.evidence_id.value
+        if evidence_id in seen_ref_ids:
+            continue
+        seen_ref_ids.add(evidence_id)
+        combined_refs.append(ref)
+    try:
+        units = _read_units_within_bytes(evidence, tuple(combined_refs), bounds)
+    except ValueError:
+        if not mandatory_refs:
+            raise
+        units = ()
+    retained_ids = {unit.evidence_ref.evidence_id.value for unit in units}
+    source_bound_requirements = tuple(
+        m.ResolutionRequirement(
+            kind=m.ResolutionKind.MISSING_EVIDENCE,
+            subject_or_claim=sid,
+            description=(
+                f"mandatory evidence source read omitted {ref.locator} "
+                "before delivery projection because the bounded evidence "
+                "unit, byte limit, or source read failure prevented delivery; "
+                "narrow the target or cite its canonical EvidenceRef"
+            ),
+            supporting_context=(ref,),
+        )
+        for ref in mandatory_refs
+        if ref.evidence_id.value not in retained_ids
+    )
     # S7 §5.7 excerpt projection: service-owned, after bounded read.
     # Full-source identity/fingerprint versus delivered range; omissions
     # in scope_boundaries; byte accounting UTF-8 against delivery ceiling.
@@ -589,6 +631,11 @@ def prepare_interpretation_task(
     units, _excerpt_omissions, _excerpt_requirements = _project_excerpts(
         tuple(units), question_terms, subject, _delivery_budget
     )
+    _excerpt_requirements = (
+        *source_bound_requirements,
+        *_excerpt_requirements,
+    )
+    delivered_refs = tuple(unit.evidence_ref for unit in units)
     fingerprints = tuple(
         (unit.evidence_ref.evidence_id.value, unit.content_fingerprint)
         for unit in units
@@ -680,66 +727,6 @@ def prepare_interpretation_task(
     open_requirements.sort(key=lambda req: req.description)
     units_list = list(units)
     fingerprints_list = list(fingerprints)
-    item_unreadable_notes: list[str] = []
-    if mapping_mode and target_inventory_items:
-        # S5.2: deliver every bound member's canonical EvidenceRef,
-        # inserting in batch order; an unreadable member is reported, not
-        # dropped — the agent records an unresolved mapping requirement.
-        for item in reversed(target_inventory_items):
-            item_ref = item.evidence_ref
-            if all(
-                u.evidence_ref.evidence_id.value != item_ref.evidence_id.value
-                for u in units_list
-            ):
-                try:
-                    item_units = evidence.read_evidence((item_ref,), bounds)
-                except Exception as exc:
-                    item_unreadable_notes.append(
-                        f"current inventory item evidence unreadable: "
-                        f"{item_ref.locator} ({exc}); record an unresolved "
-                        f"mapping requirement, do not skip this item"
-                    )
-                else:
-                    for iu in item_units:
-                        units_list.insert(0, iu)
-                        fingerprints_list.insert(
-                            0,
-                            (
-                                iu.evidence_ref.evidence_id.value,
-                                iu.content_fingerprint,
-                            ),
-                        )
-    if required_evidence_refs:
-        present = {u.evidence_ref.evidence_id.value for u in units_list}
-        missing = [
-            ref
-            for ref in required_evidence_refs
-            if ref.evidence_id.value not in present
-        ]
-        if missing:
-            try:
-                extra_units = evidence.read_evidence(tuple(missing), bounds)
-            except Exception as exc:
-                raise _validation.InterpretationUnitRejected(
-                    (f"required task evidence unreadable: {exc}",)
-                )
-            for iu in extra_units:
-                units_list.append(iu)
-                fingerprints_list.append(
-                    (iu.evidence_ref.evidence_id.value, iu.content_fingerprint)
-                )
-    if mapping_mode and target_inventory_items:
-        present_ids = {u.evidence_ref.evidence_id.value for u in units_list}
-        if any(
-            item.evidence_ref.evidence_id.value not in present_ids
-            and not any(
-                item.evidence_ref.locator in note for note in item_unreadable_notes
-            )
-            for item in target_inventory_items
-        ):
-            raise _validation.InterpretationUnitRejected(
-                ("mapping item evidence missing from task",)
-            )
     if mapping_mode:
         item_locators = (
             ", ".join(item.evidence_ref.locator for item in target_inventory_items)
@@ -761,15 +748,14 @@ def prepare_interpretation_task(
                     f"current inventory item: {item.evidence_ref.locator}"
                     for item in target_inventory_items
                 ]
-                + list(item_unreadable_notes)
             ),
             evidence_authority=(
                 (
                     (
                         "Evidence examined: "
-                        + ", ".join(r.locator for r in selection.selected_refs)
+                        + ", ".join(r.locator for r in delivered_refs)
                     )
-                    if selection.selected_refs
+                    if delivered_refs
                     else "Evidence examined: none recorded."
                 ),
                 "Include the current inventory item's EvidenceRef before supplementary evidence.",
@@ -845,7 +831,7 @@ def prepare_interpretation_task(
                 resolved_class=resolved_class,
                 root=root,
                 subject=subject,
-                selected_refs=selection.selected_refs,
+                selected_refs=delivered_refs,
                 authority_seeds=authority_seeds,
                 open_requirements=tuple(open_requirements),
                 target_scope=target_scope,

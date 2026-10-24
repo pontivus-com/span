@@ -18,6 +18,7 @@ from span.service.discovery import (
     _coverage_scope_snapshots,
     _inventory_snapshot,
 )
+from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 
@@ -195,6 +196,7 @@ class DiscoveryScopeLocalityTest(unittest.TestCase):
                 REPO,
                 evidence=evidence,
                 store=store,
+                continuations=ContinuationStore(),
                 bounds=bounds,
                 state=m.RepositoryState(
                     repository_id=REPO,

@@ -201,6 +201,9 @@ class TaskBriefTest(unittest.TestCase):
         self.assertTrue(
             any("Governing authority:" in item for item in brief.evidence_authority)
         )
+        # Governing-authority status leads: the reader must see that
+        # authority is unrecorded before the evidence-examined statement.
+        self.assertTrue(brief.evidence_authority[0].startswith("Governing authority:"))
         self.assertEqual(
             task.request.analysis_obligations,
             m.SA_ANALYSIS_OBLIGATIONS,

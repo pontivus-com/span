@@ -288,6 +288,7 @@ def _next_target_pending(
                 store=store,
                 bounds=bounds,
                 state=state,
+                continuations=continuations,
             )
     for index, subject in enumerate(candidates):
         if _baseline_sufficient(

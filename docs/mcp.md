@@ -43,6 +43,16 @@ continuation: correct and resubmit under the same continuation. Only a
 successful commit consumes it; repeating a successful submission is
 rejected without duplicates.
 
+Successful tools expose the same canonical result twice: the model-facing
+JSON text and the application-facing MCP structured result. Both are
+projections of one canonical Span carrier and are not separate contracts.
+Errors keep readable JSON text and have no structured success payload.
+
+Continuation tokens remain opaque and are never exposed by `status`. Normal
+status can identify the exact pending question and its owning operation, and
+whether its live continuation still exists. A lost or expired continuation is
+recovered by re-running the original idempotent operation.
+
 ## Repository discovery
 
 `tools/list` appends the sorted registered canonical repository IDs to
@@ -86,7 +96,9 @@ notice and does not return the repository inventory.
   brief carries a task-bound PENDING submission template.
 - Narrow answers deliver bounded excerpts (`EvidenceLineRange`) with
   full-source fingerprints and explicit `excerpt omitted …` plus summary
-  lines. Validation uses full provider content. Every answer carries
+  lines. If a complete evidence unit cannot fit the delivery ceiling, the
+  task carries `MISSING_EVIDENCE` instead of claiming it was examined.
+  Validation uses full provider content. Every answer carries
   `state_explanation` with the exact nature-sentence syntax.
 
 ## Worked exchange (schematic)
@@ -99,7 +111,8 @@ One complete target campaign over the eleven tools (exact carriers in
    If readiness is `UNINITIALIZED`, call `initialize_repository` once in its
    dedicated setup session and reuse the returned ID; an already initialized
    repository is used directly. `READY` is operational storage readiness
-   only.
+   only; `READY != semantic completeness`. Use coverage and disposition for
+   semantic currency.
 2. `initialize_target` with the exact `EvidenceScope` and objective →
    deterministic `TargetId` plus a `PendingInterpretation` carrying one
    `target_inventory_items` (`question=None`: mapping work, not a semantic
@@ -208,7 +221,8 @@ agent intent; setup is separate from ordinary queries:
   coverage; `HOOK_FAST` event-local notice only, never inventory).
   Status entry requirements name the next exact step: stale or
   unverifiable → `refresh` with the exact `SubjectSelector`; `UNASSESSED`
-  → question-local `explain`; pending question work → only the
+  → question-local `explain` only when no owning operation is live; otherwise
+  continue the returned continuation. Pending question work → only the
   continuation returned by the suspending operation.
 - Knowledge maintenance: `initialize_target` (exact `EvidenceScope`
   plus user-directed objective; admits a campaign), `refresh` (ordinary
@@ -318,9 +332,9 @@ Span exposes eleven canonical MCP operations. No semantic_* aliases exist.
 
 Every non-current `status` entry names the next exact step: stale or
 unverifiable work uses `refresh` with that entry's exact `SubjectSelector`;
-unassessed work uses a question-local `explain`; pending question work
-continues only through the continuation returned by the suspending
-operation. Pass every returned page token or continuation unchanged; never
+unassessed work uses a question-local `explain` only when no owning operation
+is live; live first-time work continues only through the continuation returned
+by the suspending operation. Pass every returned page token or continuation unchanged; never
 decode, edit, or synthesize either opaque value.
 
 

@@ -330,15 +330,13 @@ class TransportDiagnosticsTest(unittest.TestCase):
 
 class RefreshTargetTypeTest(unittest.TestCase):
     """SPMCP-03: stale refresh accepts either target; an unchanged-source
-    CURRENT challenge accepts only an exact SubjectSelector."""
+    CURRENT challenge accepts only an exact SubjectSelector and an existing
+    persisted question."""
 
-    # A fresh fixture has no persisted coverage, so an admitted stale
-    # refresh legitimately suspends for interpretation. These tests assert
-    # admission (no RefreshScopeError), not a particular terminal shape.
+    # A fresh fixture is UNASSESSED. Refresh must not establish first
+    # semantic coverage or allocate a continuation.
 
     def test_stale_subject_selector_refresh_works(self):
-        from span.ports.interpretation import PendingInterpretation
-
         structural, evidence, store = _harness()
         try:
             answer = ops.refresh(
@@ -352,13 +350,15 @@ class RefreshTargetTypeTest(unittest.TestCase):
                 store=store,
                 continuations=ContinuationStore(),
             )
-            self.assertIsInstance(answer, (m.SemanticAnswer, PendingInterpretation))
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIn(
+                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                {requirement.kind for requirement in answer.resolution_requirements},
+            )
         finally:
             store.close()
 
     def test_stale_evidence_scope_refresh_works(self):
-        from span.ports.interpretation import PendingInterpretation
-
         structural, evidence, store = _harness()
         try:
             answer = ops.refresh(
@@ -372,13 +372,15 @@ class RefreshTargetTypeTest(unittest.TestCase):
                 store=store,
                 continuations=ContinuationStore(),
             )
-            self.assertIsInstance(answer, (m.SemanticAnswer, PendingInterpretation))
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIn(
+                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                {requirement.kind for requirement in answer.resolution_requirements},
+            )
         finally:
             store.close()
 
-    def test_subject_selector_current_challenge_suspends(self):
-        from span.ports.interpretation import PendingInterpretation
-
+    def test_subject_selector_current_challenge_requires_existing_question(self):
         structural, evidence, store = _harness()
         try:
             result = ops.refresh(
@@ -393,9 +395,64 @@ class RefreshTargetTypeTest(unittest.TestCase):
                 store=store,
                 continuations=ContinuationStore(),
             )
-            self.assertIsInstance(result, PendingInterpretation)
+            self.assertIsInstance(result, m.SemanticAnswer)
+            self.assertIn(
+                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                {requirement.kind for requirement in result.resolution_requirements},
+            )
         finally:
             store.close()
+
+    def test_current_or_stale_rows_without_question_cannot_be_corrected(self):
+        for freshness_state in (
+            m.FreshnessState.CURRENT,
+            m.FreshnessState.STALE,
+        ):
+            with self.subTest(freshness_state=freshness_state):
+                structural, evidence, store = _harness()
+                try:
+                    store.write_index_batch(
+                        m.CanonicalIndexBatch(
+                            subjects=(m.Subject(_sid(), "main", None),),
+                            claims=(
+                                m.SemanticClaim(
+                                    claim_id=m.ClaimId("clm-existing"),
+                                    subject=_sid(),
+                                    kind=m.ClaimKind.PURPOSE,
+                                    value=m.PurposeValue("existing", ()),
+                                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                                    freshness=m.Freshness(
+                                        freshness_state,
+                                        reason="test state",
+                                    ),
+                                ),
+                            ),
+                        )
+                    )
+                    continuations = ContinuationStore()
+                    result = ops.refresh(
+                        ops.SemanticRefreshRequest(
+                            repository_id="repo-1",
+                            target=m.SubjectSelector(None, "src/main.py", (), None),
+                            bounds=_bounds(),
+                            stale_only=False,
+                        ),
+                        structural=structural,
+                        evidence=evidence,
+                        store=store,
+                        continuations=continuations,
+                    )
+                    self.assertIsInstance(result, m.SemanticAnswer)
+                    self.assertEqual(len(continuations), 0)
+                    self.assertIn(
+                        m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                        {
+                            requirement.kind
+                            for requirement in result.resolution_requirements
+                        },
+                    )
+                finally:
+                    store.close()
 
     def test_evidence_scope_current_challenge_is_rejected(self):
         structural, evidence, store = _harness()
@@ -464,6 +521,61 @@ class RefreshTargetTypeTest(unittest.TestCase):
         ):
             self.assertIn(f"`{kind}`", doc)
         self.assertIn("page one", doc)
+
+    def test_ambiguous_selector_keeps_canonical_candidates(self):
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            (InMemoryFile("a.py", "x\n"), InMemoryFile("b.py", "y\n")),
+            (
+                InMemorySubject("a.py#dup", m.SubjectKind.CODE_SYMBOL, "dup"),
+                InMemorySubject("b.py#dup", m.SubjectKind.CODE_SYMBOL, "dup"),
+            ),
+        )
+        evidence = FixtureEvidenceSource("repo-1", {"a.py": "x\n", "b.py": "y\n"})
+        store = SqliteSemanticStore(":memory:")
+        try:
+            ops.initialize_repository(
+                ops.SemanticInitializeRepositoryRequest(
+                    repository_locator="fixture",
+                    authority_seeds=(),
+                ),
+                repository_id="repo-1",
+                structural=structural,
+                evidence=evidence,
+                store=store,
+            )
+            answer = ops.refresh(
+                ops.SemanticRefreshRequest(
+                    repository_id="repo-1",
+                    target=m.SubjectSelector(None, "dup", (), None),
+                    bounds=_bounds(),
+                ),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
+            )
+            self.assertIsInstance(answer, m.SemanticAnswer)
+            self.assertIsNotNone(answer.subject_resolution)
+            self.assertIs(
+                answer.subject_resolution.ambiguity,
+                m.ResolutionAmbiguity.AMBIGUOUS,
+            )
+            self.assertEqual(
+                {
+                    candidate.subject.subject_id.canonical_locator
+                    for candidate in answer.subject_resolution.candidates
+                },
+                {"a.py#dup", "b.py#dup"},
+            )
+            requirement = next(
+                requirement
+                for requirement in answer.resolution_requirements
+                if requirement.kind is m.ResolutionKind.AMBIGUOUS_IDENTITY
+            )
+            self.assertIn("2 subjects match", requirement.description)
+        finally:
+            store.close()
 
 
 class StructuralDiagnosticTokensTest(unittest.TestCase):
@@ -756,7 +868,7 @@ class CoverageEntryGuidanceTest(unittest.TestCase):
         finally:
             store.close()
 
-    def test_pending_names_returned_continuation_only(self):
+    def test_pending_without_live_continuation_does_not_guess_owner(self):
         structural, evidence, store = _harness()
         try:
             sid = _sid()
@@ -782,11 +894,11 @@ class CoverageEntryGuidanceTest(unittest.TestCase):
             self._write(store, coverage)
             requirements = self._requirements(structural, evidence, store)
             descriptions = " ".join(r.description for r in requirements)
-            self.assertIn(
-                "continuation returned by the suspending operation",
-                descriptions,
+            self.assertIn("does not record its originating operation", descriptions)
+            self.assertIn("repeat the original idempotent request", descriptions)
+            self.assertNotIn(
+                "continuation returned by the suspending operation", descriptions
             )
-            self.assertIn("pass the returned continuation unchanged", descriptions)
         finally:
             store.close()
 
@@ -938,6 +1050,104 @@ class RefreshAdmissionOrderTest(unittest.TestCase):
                     third.request.question.question_slice,
                     ("alpha slice", "zeta slice"),
                 )
+        finally:
+            store.close()
+
+    def test_live_refresh_replaces_nested_pending_guidance(self):
+        from span.ports.interpretation import PendingInterpretation
+
+        structural, evidence, store = _harness()
+        try:
+            self._write_pending(
+                store,
+                m.SemanticQuestionClass.CQ_01,
+                "refresh slice",
+            )
+            continuations = ContinuationStore()
+            pending = self._refresh(
+                structural,
+                evidence,
+                store,
+                continuations,
+            )
+            self.assertIsInstance(pending, PendingInterpretation)
+            answer = ops.status(
+                ops.SemanticStatusRequest(
+                    repository_id="repo-1",
+                    target=m.SubjectSelector(None, "src/main.py", (), None),
+                    bounds=_bounds(),
+                ),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+            )
+            entry = next(
+                entry
+                for entry in answer.content.coverage_report.entries
+                if entry.subject.canonical_locator == "src/main.py"
+            )
+            descriptions = " ".join(
+                requirement.description for requirement in entry.resolution_requirements
+            )
+            self.assertIn("live refresh", descriptions)
+            self.assertNotIn(
+                "continuation returned by the suspending operation",
+                descriptions,
+            )
+        finally:
+            store.close()
+
+
+class ContinuationIdentityTest(unittest.TestCase):
+    def test_live_question_keys_keep_distinct_scope_roots(self):
+        from dataclasses import replace
+
+        from span.ports.interpretation import PendingInterpretation
+        from span.shell.agent_exchange.continuations import SuspendedOperation
+
+        structural, evidence, store = _harness()
+        try:
+            continuations = ContinuationStore()
+            pending = ops.explain(
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+            )
+            self.assertIsInstance(pending, PendingInterpretation)
+            question = pending.request.question
+            assert question is not None
+            second_root = m.SubjectId(
+                repository_id="repo-1",
+                subject_kind=m.SubjectKind.SUBSYSTEM,
+                canonical_locator="other-root",
+            )
+            second_question = m.SemanticQuestionScope(
+                scope_root=second_root,
+                subject=question.subject,
+                question_class=question.question_class,
+                question_slice=question.question_slice,
+                materiality_basis=question.materiality_basis,
+            )
+            subject = pending.request.subjects[0]
+            state = structural.repository_state("repo-1")
+            for question_scope in (question, second_question):
+                continuations.pend(
+                    SuspendedOperation(
+                        op="explain",
+                        repository_id="repo-1",
+                        subject=subject,
+                        request=replace(
+                            pending.request,
+                            question=question_scope,
+                        ),
+                        bounds=_bounds(),
+                        state=state,
+                    )
+                )
+            self.assertEqual(len(continuations.live_question_keys()), 2)
         finally:
             store.close()
 
