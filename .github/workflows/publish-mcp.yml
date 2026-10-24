@@ -1,0 +1,44 @@
+name: Publish to MCP Registry
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # One source of truth: the package version, not a second hand edit.
+      - name: Set the registry version from the package
+        run: |
+          version=$(grep -m1 '__version__' src/span/__init__.py | cut -d'"' -f2)
+          jq --arg v "$version" '.version = $v' server.json > server.tmp
+          mv server.tmp server.json
+          jq --arg v "$version" '.packages[0].version = $v' server.json > server.tmp
+          mv server.tmp server.json
+          grep -E '"version"' server.json
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Authenticate to the MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate
+
+      - name: Publish server metadata
+        run: ./mcp-publisher publish
