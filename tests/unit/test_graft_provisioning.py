@@ -417,6 +417,37 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             self.assertTrue(str(wiring).startswith(str(pathlib.Path(tmp) / "data")))
             self.assertFalse(str(wiring).startswith(str(repo)))
 
+    def test_build_disables_provider_telemetry(self):
+        # The provider mints a per-repository telemetry id inside the
+        # target on first use unless the cross-tool opt-out is set. A
+        # build must confine every write to the provider cache, so the
+        # build environment closes that gate itself rather than relying
+        # on the user having run the indexer before.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp) / "repo"
+            repo.mkdir()
+            (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+            artifact = pathlib.Path(tmp) / "data" / "structural" / "repo"
+            seen = {}
+
+            def fake_run(cmd, **kwargs):
+                seen["cmd"] = cmd
+                seen["env"] = kwargs["env"]
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+
+            fake_module = mock.Mock()
+            fake_module.run = fake_run
+            with mock.patch.object(g, "resolve_indexer_binary", return_value="graft"):
+                with mock.patch.object(g, "_subprocess", fake_module):
+                    with mock.patch.dict(
+                        "os.environ", {"GRAFT_API_KEY": "secret"}, clear=False
+                    ):
+                        ok, _detail = g._run_index_build(repo, artifact)
+            self.assertTrue(ok)
+            self.assertEqual(seen["env"]["DO_NOT_TRACK"], "1")
+            self.assertNotIn("GRAFT_API_KEY", seen["env"])
+            self.assertEqual(seen["cmd"][-1], str(repo))
+
     def test_restart_reuses_cache_without_build(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = pathlib.Path(tmp) / "repo"

@@ -483,6 +483,15 @@ def _run_index_build(
     The binary resolves without user configuration (installer-managed
     pointer, then ``PATH`` fallback). Returns (ok, detail) with
     provider-neutral details; never raises.
+
+    ``DO_NOT_TRACK=1`` is part of the environment. The provider's
+    telemetry mints a per-repository id on first use and stores it at
+    ``<repo>/graft/.cache/telemetry-repo-id.json``; on a host that has
+    never run the indexer before, that bootstrap would write a
+    directory into the target. The cross-tool opt-out closes the
+    telemetry gate before the id is minted, so the build stays confined
+    to the provider cache. An automated background build is also not a
+    user interaction to report.
     """
     data_dir = _data_dir_from_artifact_dir(artifact_dir)
     binary = resolve_indexer_binary(data_dir)
@@ -504,6 +513,7 @@ def _run_index_build(
         str(repo_path),
     ]
     env = {k: v for k, v in _os.environ.items() if k != "GRAFT_API_KEY"}
+    env["DO_NOT_TRACK"] = "1"
     try:
         proc = _subprocess.run(
             cmd,
