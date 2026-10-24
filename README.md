@@ -1,8 +1,5 @@
 <h1 align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/span-logo-full-color-dark.png">
-    <img src="assets/span-logo-full-color-light.png" alt="Span" width="360">
-  </picture>
+  <img src="assets/span-logo-plate-dark.png" alt="Span" width="360">
 </h1>
 
 <p align="center">
@@ -29,10 +26,6 @@
   <a href="#quick-start"><strong>Quick start</strong></a> ·
   <a href="#how-it-works"><strong>How it works</strong></a> ·
   <a href="docs/"><strong>Docs</strong></a>
-</p>
-
-<p align="center">
-  <img src="assets/span-product-concept-1600x900.png" alt="Repository evidence flows into Span, which returns CURRENT, STALE, or UNVERIFIABLE understanding" width="900">
 </p>
 
 ## The problem
