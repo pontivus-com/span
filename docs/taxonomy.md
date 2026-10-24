@@ -17,6 +17,51 @@ are opaque evidence, never canonical identity. Semantic-only subjects
 agent proposal plus core validation — never from the structural
 provider.
 
+### Structural node kinds
+
+The structural provider vocabulary is closed and mapped, never
+free-form. Every node kind maps to exactly one `SubjectKind`:
+
+| Provider node kind | `SubjectKind` |
+| --- | --- |
+| `file` | COMPONENT |
+| `function`, `class`, `method`, `interface`, `type`, `enum` | CODE_SYMBOL |
+| `struct` | CODE_SYMBOL |
+
+`enum` is a named type declaration in the same sense as `class`,
+`interface`, and `type`. `struct` is a nominal data carrier — Go
+structs, Java records, Swift structs — reported by the provider as its
+own node kind rather than as `class`, and classified here as
+CODE_SYMBOL. A kind outside this table is rejected, never guessed.
+
+Edges are mapped the same way: `contains` → DEFINES; `imports`,
+`calls`, `references`, and `depends_on` → their namesake kinds; and
+`extends` / `implements` → DEPENDS_ON, because a compile-time
+dependency is structural possibility, never a semantic IMPLEMENTS
+claim.
+
+### Coverage status
+
+Every persisted semantic subject carries exactly one coverage status.
+They are evaluated in this order, and the first match wins:
+
+| Status | Meaning |
+| --- | --- |
+| `UNVERIFIABLE` | A conclusion exists, but the support needed to confirm it could not be obtained: a recorded source is absent from the inventory, an authority seed is missing, an inventory fingerprint is unavailable, or a bounded premise walk did not complete. It is neither current nor known-stale. A provider or store failure is not this state — the operation fails instead. |
+| `STALE` | Supporting evidence, or an effective question, changed; the affected conclusion needs reassessment. |
+| `INCOMPLETE` | Adopted understanding with work outstanding — a pending or open question, an unexamined question scope, or a truncated page. |
+| `UNASSESSED` | No adopted question coverage is persisted for the subject; this is the `explain` entry point. |
+| `CURRENT` | Adopted understanding whose questions are decided and whose evidence, verification, and dependencies are current. |
+
+A persisted question carries exactly one decision: `PENDING`
+(unresolved and handed out), `ANSWERED`, `OPEN` (examined and still
+unresolved), or `NOT_APPLICABLE`. A stale effective question is
+reported as `STALE` coverage; the stored decision is never rewritten to
+express freshness.
+
+Readiness is a separate, operational state. It is not coverage, and it
+is never semantic truth.
+
 ## Claims (one typed value per kind)
 
 PURPOSE · CAPABILITY_MEMBERSHIP · RESPONSIBILITY ·
