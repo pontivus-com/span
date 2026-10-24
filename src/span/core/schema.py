@@ -38,9 +38,7 @@ def _is_optional(hint: object) -> tuple[bool, object]:
     return False, hint
 
 
-def _project_hint(
-    hint: object, defs: dict[str, dict], seen: set[str]
-) -> dict:
+def _project_hint(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
     nullable, inner = _is_optional(hint)
     schema = _project_inner(inner, defs, seen)
     if nullable:
@@ -48,9 +46,7 @@ def _project_hint(
     return schema
 
 
-def _project_inner(
-    hint: object, defs: dict[str, dict], seen: set[str]
-) -> dict:
+def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
     origin = _typing.get_origin(hint)
     args = _typing.get_args(hint)
     if hint is None or hint is type(None):
@@ -93,8 +89,7 @@ def _project_inner(
         dataclass_members = [
             a
             for a in args
-            if isinstance(a, type)
-            and hasattr(a, "__dataclass_fields__")
+            if isinstance(a, type) and hasattr(a, "__dataclass_fields__")
         ]
         if dataclass_members and all(
             isinstance(a, type) for a in args if a is not type(None)
@@ -107,21 +102,13 @@ def _project_inner(
                     member, "__dataclass_fields__"
                 ):
                     _ensure_def(member, defs, seen)
-                    refs.append({
-                        "$ref": (
-                            f"#/$defs/{member.__name__}__tag"
-                        )
-                    })
+                    refs.append({"$ref": (f"#/$defs/{member.__name__}__tag")})
                 else:
                     refs.append(_project_hint(member, defs, seen))
             if len(refs) == 1:
                 return refs[0]
             return {"anyOf": refs}
-        return {
-            "anyOf": [
-                _project_hint(a, defs, seen) for a in args
-            ]
-        }
+        return {"anyOf": [_project_hint(a, defs, seen) for a in args]}
     if isinstance(hint, type) and hasattr(hint, "__dataclass_fields__"):
         _ensure_def(hint, defs, seen)
         return {"$ref": f"#/$defs/{hint.__name__}"}
@@ -161,16 +148,12 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
     properties: dict[str, dict] = {}
     required: list[str] = []
     for field in _dataclasses.fields(cls):
-        field_schema = _project_hint(
-            hints.get(field.name, str), defs, seen
-        )
+        field_schema = _project_hint(hints.get(field.name, str), defs, seen)
         tags = _tag_names(field_schema)
         if len(tags) >= 2:
             field_schema = {
                 **field_schema,
-                "description": (
-                    "Allowed $type values: " + ", ".join(tags) + "."
-                ),
+                "description": ("Allowed $type values: " + ", ".join(tags) + "."),
             }
         # Defaults advertised equal canonical decoder defaults.
         if (
@@ -239,8 +222,7 @@ def _prune_defs(schema: dict, defs: dict[str, dict]) -> dict[str, dict]:
                 walk(value)
 
     walk(schema)
-    return {name: definition for name, definition in defs.items()
-            if name in used}
+    return {name: definition for name, definition in defs.items() if name in used}
 
 
 def schema_for_request(
@@ -259,9 +241,7 @@ def schema_for_request(
     properties: dict[str, dict] = {}
     required: list[str] = []
     for field in _dataclasses.fields(root):
-        field_schema = _project_hint(
-            hints.get(field.name, str), defs, set()
-        )
+        field_schema = _project_hint(hints.get(field.name, str), defs, set())
         # Merge nested defs discovered during projection.
         # _project_hint populates a throwaway defs; re-collect via closure.
         properties[field.name] = field_schema
@@ -292,9 +272,7 @@ def schema_for_request(
     return schema
 
 
-def _collect_hint_defs(
-    hint: object, defs: dict[str, dict], seen: set[str]
-) -> None:
+def _collect_hint_defs(hint: object, defs: dict[str, dict], seen: set[str]) -> None:
     origin = _typing.get_origin(hint)
     args = _typing.get_args(hint)
     nullable, inner = _is_optional(hint)
@@ -331,14 +309,12 @@ def _collect_hint_defs(
 # Compact wire codec (J-8/S6). Tagging is a property of the field POSITION.
 # ---------------------------------------------------------------------------
 
+
 def _dataclass_members(hint: object) -> list:
     origin = _typing.get_origin(hint)
     args = _typing.get_args(hint)
     if origin is _typing.Union or origin is _types.UnionType:
-        return [
-            a for a in args
-            if isinstance(a, type) and _dataclasses.is_dataclass(a)
-        ]
+        return [a for a in args if isinstance(a, type) and _dataclasses.is_dataclass(a)]
     return []
 
 
@@ -360,24 +336,15 @@ def _inject(hint: object, value: object, path: str) -> object:
     origin = _typing.get_origin(hint)
     args = _typing.get_args(hint)
     if origin is _typing.Union or origin is _types.UnionType:
-        dms = [
-            a for a in args
-            if isinstance(a, type) and _dataclasses.is_dataclass(a)
-        ]
+        dms = [a for a in args if isinstance(a, type) and _dataclasses.is_dataclass(a)]
         non_none = [a for a in args if a is not type(None)]
         if len(dms) >= 2:
-            if not isinstance(value, dict) or not isinstance(
-                value.get("$type"), str
-            ):
-                raise ValueError(
-                    f"missing $type discriminator at {path or 'root'}"
-                )
+            if not isinstance(value, dict) or not isinstance(value.get("$type"), str):
+                raise ValueError(f"missing $type discriminator at {path or 'root'}")
             tag = value["$type"]
             member = next((mm for mm in dms if mm.__name__ == tag), None)
             if member is None:
-                raise ValueError(
-                    f"unknown $type {tag!r} at {path or 'root'}"
-                )
+                raise ValueError(f"unknown $type {tag!r} at {path or 'root'}")
             return _inject_dataclass(member, value, path, keep_tag=True)
         if len(dms) == 1 and len(non_none) == 1:
             return _inject_dataclass(dms[0], value, path, keep_tag=False)
@@ -403,9 +370,7 @@ def _inject(hint: object, value: object, path: str) -> object:
     return value
 
 
-def _inject_dataclass(
-    cls: type, value: object, path: str, *, keep_tag: bool
-) -> dict:
+def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) -> dict:
     if not isinstance(value, dict):
         raise ValueError(f"expected object at {path or cls.__name__}")
     hints = _typing.get_type_hints(cls)
@@ -414,16 +379,13 @@ def _inject_dataclass(
     faults: list[str] = []
     if "$type" in value and not keep_tag:
         faults.append(
-            "unexpected $type at unambiguous position: "
-            f"{path or cls.__name__}"
+            "unexpected $type at unambiguous position: " f"{path or cls.__name__}"
         )
     # The tagging pass is the first ingress pass, so it also reports the
     # field-shape faults the strict decoder would raise later; otherwise
     # a tag fault and an unknown/missing field cost two round trips.
     # Texts match the decoder's for the single-fault case.
-    unknown = sorted(
-        key for key in value if key != "$type" and key not in fields
-    )
+    unknown = sorted(key for key in value if key != "$type" and key not in fields)
     if unknown:
         faults.append(f"{at}unknown fields for {cls.__name__}: {unknown}")
     for field in fields.values():
@@ -433,9 +395,7 @@ def _inject_dataclass(
             field.default is _dataclasses.MISSING
             and field.default_factory is _dataclasses.MISSING  # type: ignore[misc]
         ):
-            faults.append(
-                f"{at}missing field {field.name!r} for {cls.__name__}"
-            )
+            faults.append(f"{at}missing field {field.name!r} for {cls.__name__}")
     out: dict = {"$type": cls.__name__}
     for key, v in value.items():
         if key == "$type" or key not in fields:
@@ -458,15 +418,10 @@ def to_wire(value: object, hint: object) -> object:
     origin = _typing.get_origin(hint)
     args = _typing.get_args(hint)
     if origin is _typing.Union or origin is _types.UnionType:
-        dms = [
-            a for a in args
-            if isinstance(a, type) and _dataclasses.is_dataclass(a)
-        ]
+        dms = [a for a in args if isinstance(a, type) and _dataclasses.is_dataclass(a)]
         if len(dms) >= 2:
             tag = value.get("$type") if isinstance(value, dict) else None
-            member = next(
-                (mm for mm in dms if mm.__name__ == tag), None
-            )
+            member = next((mm for mm in dms if mm.__name__ == tag), None)
             if member is None:
                 return value
             return _compact_dataclass(member, value, keep_tag=True)
@@ -477,10 +432,7 @@ def to_wire(value: object, hint: object) -> object:
         return _compact_dataclass(hint, value, keep_tag=False)
     if origin in (tuple, list):
         item = args[0] if args else None
-        return [
-            to_wire(v, item)
-            for v in value  # type: ignore[union-attr]
-        ]
+        return [to_wire(v, item) for v in value]  # type: ignore[union-attr]
     return value
 
 

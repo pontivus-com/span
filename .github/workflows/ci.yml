@@ -26,16 +26,48 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Read the managed indexer pin
+        id: indexer-pin
+        run: |
+          version=$(grep -m1 'STRUCTURAL_INDEXER_VERSION = ' \
+            src/span/shell/install.py | cut -d'"' -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Install Span
+      - name: Cache the npm indexer download
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-graft-${{ steps.indexer-pin.outputs.version }}
+          restore-keys: |
+            npm-${{ runner.os }}-graft-
+
+      - name: Cache uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[test]'
+          pip install -e '.[test,dev]'
+
+      - name: Lint and format
+        run: |
+          ruff check .
+          black --check .
 
       - name: Test
-        run: pytest -q
+        run: |
+          coverage run -m pytest -q
+          coverage report --show-missing
+          coverage xml
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: error
 
   build:
     runs-on: ubuntu-latest

@@ -45,9 +45,7 @@ def is_probably_text(path: _pathlib.Path) -> bool:
 class FilesystemEvidenceSource:
     """EvidenceSource over a repository working tree."""
 
-    def __init__(
-        self, repository_id: str, root: str | _pathlib.Path
-    ) -> None:
+    def __init__(self, repository_id: str, root: str | _pathlib.Path) -> None:
         self._repository_id = repository_id
         self._root = _pathlib.Path(root)
 
@@ -159,7 +157,8 @@ class FilesystemEvidenceSource:
         if scope.paths or scope.evidence_refs:
             paths = self._expand_paths(scope.paths)
             ref_paths = [
-                r.locator for r in scope.evidence_refs
+                r.locator
+                for r in scope.evidence_refs
                 if (self._root / r.locator).is_file()
             ]
             paths = sorted(set(paths) | set(ref_paths))
@@ -170,8 +169,10 @@ class FilesystemEvidenceSource:
         # page). Path order is deterministic, so kept items and
         # BoundInfo are identical to fingerprint-then-slice.
         kept_paths, bound_info = _paging.paginate(
-            tuple(paths), bounds.max_evidence_units,
-            "inventory", page_token,
+            tuple(paths),
+            bounds.max_evidence_units,
+            "inventory",
+            page_token,
         )
         items = tuple(self._item_for(p) for p in kept_paths)
         return m.EvidenceInventoryPage(
@@ -217,9 +218,7 @@ class FilesystemEvidenceSource:
                 requested_max_depth=0,
                 returned_results=len(kept),
                 truncated=len(kept) < len(ordered),
-                truncated_category=(
-                    "selection" if len(kept) < len(ordered) else None
-                ),
+                truncated_category=("selection" if len(kept) < len(ordered) else None),
                 continuation_token=None,
             ),
         )
@@ -248,7 +247,6 @@ class FilesystemEvidenceSource:
             )
         if len(units) > bounds.max_evidence_units:
             raise ValueError(
-                "evidence exceeds max_evidence_units "
-                f"({bounds.max_evidence_units})"
+                "evidence exceeds max_evidence_units " f"({bounds.max_evidence_units})"
             )
         return tuple(units)

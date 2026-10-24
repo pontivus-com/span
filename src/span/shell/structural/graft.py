@@ -69,7 +69,7 @@ __all__ = [
 #: ``span/shell/install.py`` (which must stay stdlib-only, so the
 #: constants are duplicated, not imported).
 STRUCTURAL_INDEXER_PACKAGE = "@nanonets/graft"
-STRUCTURAL_INDEXER_VERSION = "0.23.0"
+STRUCTURAL_INDEXER_VERSION = "0.25.0"
 
 #: Env override for the indexer binary (contributor/debug use). The
 #: normal path is the installer-written pointer under the data dir.
@@ -105,6 +105,10 @@ NODE_SUBJECT_KIND: dict[str, m.SubjectKind] = {
     "interface": m.SubjectKind.CODE_SYMBOL,
     "type": m.SubjectKind.CODE_SYMBOL,
     "enum": m.SubjectKind.CODE_SYMBOL,
+    # A nominal data carrier, not a service: Go structs, Java records, and
+    # Swift structs. The indexer re-kinds these away from "class" so a DTO
+    # stays distinguishable from a service.
+    "struct": m.SubjectKind.CODE_SYMBOL,
 }
 
 #: Closed edge-relation mapping (structural only). `extends`/`implements`
@@ -142,8 +146,7 @@ def _build_lock_for(key: str) -> _threading.Lock:
 def _sanitize_repository_id(repository_id: str) -> str:
     """Filesystem-safe directory name for one repository id."""
     cleaned = "".join(
-        c if (c.isalnum() or c in ("-", "_", ".")) else "_"
-        for c in repository_id
+        c if (c.isalnum() or c in ("-", "_", ".")) else "_" for c in repository_id
     ).strip("._")
     return cleaned or "repo"
 
@@ -159,9 +162,7 @@ def default_artifact_dir(
     by Span; generated prose is never semantic evidence.
     """
     return (
-        _pathlib.Path(data_dir)
-        / "structural"
-        / _sanitize_repository_id(repository_id)
+        _pathlib.Path(data_dir) / "structural" / _sanitize_repository_id(repository_id)
     )
 
 
@@ -349,8 +350,12 @@ def _git_revision(repo_path: _pathlib.Path) -> tuple[str | None, bool]:
     try:
         proc = _subprocess.run(
             [
-                "git", "-C", str(repo_path), "status",
-                "--porcelain=v2", "--branch",
+                "git",
+                "-C",
+                str(repo_path),
+                "status",
+                "--porcelain=v2",
+                "--branch",
             ],
             capture_output=True,
             text=True,
@@ -364,7 +369,7 @@ def _git_revision(repo_path: _pathlib.Path) -> tuple[str | None, bool]:
     dirty = False
     for line in proc.stdout.splitlines():
         if line.startswith("# branch.oid "):
-            value = line[len("# branch.oid "):].strip()
+            value = line[len("# branch.oid ") :].strip()
             if value and value != "(initial)":
                 oid = value
         elif line.startswith("#"):
@@ -406,8 +411,14 @@ def _git_scope_baseline_time(
     try:
         proc = _subprocess.run(
             [
-                "git", "-C", str(repo_path), "log", "-1", "--format=%ct",
-                "--", *scope_paths,
+                "git",
+                "-C",
+                str(repo_path),
+                "log",
+                "-1",
+                "--format=%ct",
+                "--",
+                *scope_paths,
             ],
             capture_output=True,
             text=True,
@@ -440,8 +451,13 @@ def _git_scope_dirty(
     try:
         proc = _subprocess.run(
             [
-                "git", "-C", str(repo_path), "status", "--porcelain",
-                "--", *scope_paths,
+                "git",
+                "-C",
+                str(repo_path),
+                "status",
+                "--porcelain",
+                "--",
+                *scope_paths,
             ],
             capture_output=True,
             text=True,
@@ -472,20 +488,22 @@ def _run_index_build(
     binary = resolve_indexer_binary(data_dir)
     if binary is None:
         return False, (
-            "structural indexer unavailable: rerun installation to "
-            "provision it"
+            "structural indexer unavailable: rerun installation to " "provision it"
         )
     try:
         _pathlib.Path(artifact_dir).mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return False, f"cannot create provider cache: {exc}"
     cmd = [
-        binary, "--dir", str(artifact_dir),
-        "build", "--no-gitignore", "--no-ignore", str(repo_path),
+        binary,
+        "--dir",
+        str(artifact_dir),
+        "build",
+        "--no-gitignore",
+        "--no-ignore",
+        str(repo_path),
     ]
-    env = {
-        k: v for k, v in _os.environ.items() if k != "GRAFT_API_KEY"
-    }
+    env = {k: v for k, v in _os.environ.items() if k != "GRAFT_API_KEY"}
     try:
         proc = _subprocess.run(
             cmd,
@@ -523,9 +541,7 @@ class GraftStructuralSource:
         self._repository_id = repository_id
         self._repo_path = _pathlib.Path(repo_path)
         if wiring is None and artifact_dir is None:
-            raise ValueError(
-                "file-backed structural source requires artifact_dir"
-            )
+            raise ValueError("file-backed structural source requires artifact_dir")
         self._artifact_dir = (
             _pathlib.Path(artifact_dir) if artifact_dir is not None else None
         )
@@ -601,10 +617,7 @@ class GraftStructuralSource:
 
     def _require_index(self) -> None:
         if not self._loaded:
-            detail = (
-                f": {self._load_error}" if self._load_error is not None
-                else ""
-            )
+            detail = f": {self._load_error}" if self._load_error is not None else ""
             raise GraftUnavailableError(
                 f"no usable structural index for repository "
                 f"{self._repository_id!r}{detail}; run "
@@ -662,9 +675,7 @@ class GraftStructuralSource:
                 continue
             path = str(node["path"])
             body = node.get("body_hash")
-            hashes[path] = (
-                body if isinstance(body, str) and body else None
-            )
+            hashes[path] = body if isinstance(body, str) and body else None
         return hashes
 
     def _compute_index_version(self) -> str:
@@ -781,7 +792,8 @@ class GraftStructuralSource:
         return _git_scope_dirty(self._repo_path, scope_paths) is False
 
     def _file_detail(
-        self, stale: list[str] | tuple[str, ...],
+        self,
+        stale: list[str] | tuple[str, ...],
         unverifiable: list[str] | tuple[str, ...],
     ) -> str:
         """File-only diagnostic tokens (no tree/population tokens)."""
@@ -797,8 +809,11 @@ class GraftStructuralSource:
     def _join_detail(self, tokens: list[str] | tuple[str, ...]) -> str:
         """Join diagnostic tokens in the closed fixed order (J-11)."""
         order = {
-            "non-git-tree": 0, "injected-index": 1, "dirty-tree": 2,
-            "touched-file-mismatch": 3, "unverifiable-file": 4,
+            "non-git-tree": 0,
+            "injected-index": 1,
+            "dirty-tree": 2,
+            "touched-file-mismatch": 3,
+            "unverifiable-file": 4,
             "index-older-than-head": 5,
             "repository-population-unverified": 6,
         }
@@ -858,9 +873,7 @@ class GraftStructuralSource:
         stale, unverifiable = self._verify_exact_files(files)
         coverage = (
             m.ScopeCoverage.VERIFIED
-            if not stale
-            and not unverifiable
-            and self._repository_population_current()
+            if not stale and not unverifiable and self._repository_population_current()
             else m.ScopeCoverage.UNVERIFIED
         )
         detail = (
@@ -903,7 +916,7 @@ class GraftStructuralSource:
         category: str,
         version: str | None = None,
     ) -> tuple[tuple[object, ...], m.BoundInfo]:
-        kept = items[offset:offset + max_results]
+        kept = items[offset : offset + max_results]
         remaining = len(items) - (offset + len(kept))
         truncated = remaining > 0
         token_version = self._index_version if version is None else version
@@ -914,10 +927,9 @@ class GraftStructuralSource:
             truncated=truncated,
             truncated_category=category if truncated else None,
             continuation_token=(
-                _paging.format_versioned_token(
-                    token_version, offset + len(kept)
-                )
-                if truncated else None
+                _paging.format_versioned_token(token_version, offset + len(kept))
+                if truncated
+                else None
             ),
         )
 
@@ -940,9 +952,7 @@ class GraftStructuralSource:
         offset = self._versioned_offset(page_token, version=version)
         if match is m.StructuralLocateMatch.EXACT:
             locators = [query] if query in self._nodes else []
-            ranked = [
-                (loc, m.CandidateRankBasis.EXACT_LOCATOR) for loc in locators
-            ]
+            ranked = [(loc, m.CandidateRankBasis.EXACT_LOCATOR) for loc in locators]
             if not ranked:
                 # Bare symbol names never equal a path#symbol node id;
                 # fall through to exact-name matching (F-01 recall fix).
@@ -959,9 +969,7 @@ class GraftStructuralSource:
                         continue
                     basename = node_id.split("#")[-1].rsplit("/", 1)[-1]
                     if query == basename:
-                        ranked.append(
-                            (node_id, m.CandidateRankBasis.EXACT_NAME)
-                        )
+                        ranked.append((node_id, m.CandidateRankBasis.EXACT_NAME))
                 order = {
                     m.CandidateRankBasis.EXACT_LOCATOR: 0,
                     m.CandidateRankBasis.EXACT_DECLARATION: 1,
@@ -975,10 +983,7 @@ class GraftStructuralSource:
                 expected_kinds=(),
                 retrieval_scope_hint=None,
             )
-            ranked = [
-                (loc, rank)
-                for loc, rank in self._match_name(selector)
-            ]
+            ranked = [(loc, rank) for loc, rank in self._match_name(selector)]
             order = {
                 m.CandidateRankBasis.EXACT_LOCATOR: 0,
                 m.CandidateRankBasis.EXACT_DECLARATION: 1,
@@ -993,7 +998,8 @@ class GraftStructuralSource:
             # out-of-scope global match cannot consume a page or hide an
             # in-scope result.
             ranked = [
-                (loc, rank) for loc, rank in ranked
+                (loc, rank)
+                for loc, rank in ranked
                 if m.evidence_scope_allows(loc, scope)
             ]
         candidates = tuple(
@@ -1003,15 +1009,10 @@ class GraftStructuralSource:
                     structural_evidence=(),
                     rank_basis=rank,
                 ),
-                span_text=(
-                    str(node["span"]) if self._nodes[loc].get("span")
-                    else None
-                ),
+                span_text=(str(node["span"]) if self._nodes[loc].get("span") else None),
                 signature_text=(
                     str(node["signature"])
-                    if isinstance(
-                        self._nodes[loc].get("signature"), str
-                    )
+                    if isinstance(self._nodes[loc].get("signature"), str)
                     else None
                 ),
             )
@@ -1031,8 +1032,7 @@ class GraftStructuralSource:
             scope_paths = tuple(sorted(scope.paths))
             scoped_files = tuple(
                 sorted(
-                    p for p in self._file_hashes
-                    if m.evidence_scope_allows(p, scope)
+                    p for p in self._file_hashes if m.evidence_scope_allows(p, scope)
                 )
             )
             stale, unverifiable = self._verify_exact_files(scoped_files)
@@ -1042,21 +1042,23 @@ class GraftStructuralSource:
             # candidate population to be proven current.
             stale, unverifiable = self._verify_exact_files(
                 tuple(
-                    sorted({
-                        self._node_path(
-                            h.candidate.subject.subject_id.canonical_locator
-                        )
-                        for h in kept
-                    })
+                    sorted(
+                        {
+                            self._node_path(
+                                h.candidate.subject.subject_id.canonical_locator
+                            )
+                            for h in kept
+                        }
+                    )
                 )
             )
             population_ok = self._repository_population_current()
         stale_set = set(stale)
         live_items = tuple(
-            h for h in kept
-            if self._node_path(
-                h.candidate.subject.subject_id.canonical_locator
-            ) not in stale_set
+            h
+            for h in kept
+            if self._node_path(h.candidate.subject.subject_id.canonical_locator)
+            not in stale_set
         )
         stale_omitted = len(kept) - len(live_items)
         if not stale and not unverifiable and population_ok:
@@ -1069,8 +1071,7 @@ class GraftStructuralSource:
                 if not population_ok:
                     dirty = _git_scope_dirty(self._repo_path, scope_paths)
                     tokens.append(
-                        "dirty-tree" if dirty
-                        else "repository-population-unverified"
+                        "dirty-tree" if dirty else "repository-population-unverified"
                     )
                 if stale:
                     tokens.append("touched-file-mismatch")
@@ -1105,7 +1106,8 @@ class GraftStructuralSource:
         self._require_index()
         offset = self._versioned_offset(page_token)
         members = sorted(
-            node_id for node_id, node in self._nodes.items()
+            node_id
+            for node_id, node in self._nodes.items()
             if str(node["path"]) == locator
         )
         if not members:
@@ -1116,8 +1118,7 @@ class GraftStructuralSource:
             except OSError:
                 on_disk = False
             coverage = (
-                m.ScopeCoverage.UNVERIFIED if on_disk
-                else m.ScopeCoverage.VERIFIED
+                m.ScopeCoverage.UNVERIFIED if on_disk else m.ScopeCoverage.VERIFIED
             )
             kept, bound_info = self._versioned_page((), offset, 1, "outline")
             if coverage is m.ScopeCoverage.VERIFIED:
@@ -1137,14 +1138,11 @@ class GraftStructuralSource:
             m.StructuralOutlineEntry(
                 subject=self._to_subject(node_id),
                 span_text=(
-                    str(node["span"]) if self._nodes[node_id].get("span")
-                    else None
+                    str(node["span"]) if self._nodes[node_id].get("span") else None
                 ),
                 signature_text=(
                     str(node["signature"])
-                    if isinstance(
-                        self._nodes[node_id].get("signature"), str
-                    )
+                    if isinstance(self._nodes[node_id].get("signature"), str)
                     else None
                 ),
             )
@@ -1156,9 +1154,7 @@ class GraftStructuralSource:
         )
         report = self.verify_files(repository_id, (locator,))
         stale_set = set(report.stale_files)
-        live_items = (
-            () if locator in stale_set else kept  # type: ignore[assignment]
-        )
+        live_items = () if locator in stale_set else kept  # type: ignore[assignment]
         stale_omitted = 0 if live_items else len(kept)
         # S2.2: a file outline is VERIFIED when the requested file matches
         # the loaded index; unrelated dirty files are irrelevant (J-7).
@@ -1194,20 +1190,15 @@ class GraftStructuralSource:
             try:
                 node_id = node["id"]
                 kind = node["kind"]
-                path = node["path"]
+                _ = node["path"]  # required key; the raw node carries it
             except (KeyError, TypeError) as exc:
-                raise GraftShapeError(
-                    f"node missing id/kind/path: {node!r}"
-                ) from exc
+                raise GraftShapeError(f"node missing id/kind/path: {node!r}") from exc
             if kind not in NODE_SUBJECT_KIND:
-                raise GraftVocabularyError(
-                    f"unknown structural node kind: {kind}"
-                )
+                raise GraftVocabularyError(f"unknown structural node kind: {kind}")
             nodes[node_id] = node
         return nodes
 
-    def _resolve_dotted(self, endpoint: str,
-                          file_ids: dict[str, str]) -> str | None:
+    def _resolve_dotted(self, endpoint: str, file_ids: dict[str, str]) -> str | None:
         """Map a dotted module id to a known file node, or None.
 
         Provider-local evidence join (Addendum G follow-up): import
@@ -1289,9 +1280,7 @@ class GraftStructuralSource:
     # -- mapping ------------------------------------------------------------
 
     def _subject_kind_of(self, node: dict) -> m.SubjectKind:
-        if node["kind"] == "file" and str(node["path"]).endswith(
-            _DOCUMENT_SUFFIXES
-        ):
+        if node["kind"] == "file" and str(node["path"]).endswith(_DOCUMENT_SUFFIXES):
             return m.SubjectKind.DOCUMENT
         return NODE_SUBJECT_KIND[node["kind"]]
 
@@ -1333,16 +1322,16 @@ class GraftStructuralSource:
             locator=path,
             revision_or_fingerprint=self.fingerprint_for(
                 path,
-                node.get("body_hash") if isinstance(node.get("body_hash"), str) else None,
+                (
+                    node.get("body_hash")
+                    if isinstance(node.get("body_hash"), str)
+                    else None
+                ),
             ),
-            section_or_span=(
-                str(node["span"]) if node.get("span") else None
-            ),
+            section_or_span=(str(node["span"]) if node.get("span") else None),
         )
 
-    def _to_edge(
-        self, source: str, target: str, relation: str
-    ) -> m.StructuralEdge:
+    def _to_edge(self, source: str, target: str, relation: str) -> m.StructuralEdge:
         return m.StructuralEdge(
             source=self._subject_id_of(source),
             kind=RELATION_EDGE_KIND[relation],
@@ -1361,7 +1350,9 @@ class GraftStructuralSource:
         )
         digest = _hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
         self._state_fingerprint_memo = (
-            self._wiring_mtime_ns, self._wiring_size, digest,
+            self._wiring_mtime_ns,
+            self._wiring_size,
+            digest,
         )
         return digest
 
@@ -1490,9 +1481,7 @@ class GraftStructuralSource:
         if not self._index_missing_or_stale():
             return current
         lock_key = str(
-            self._wiring_path
-            if self._wiring_path is not None
-            else self._repo_path
+            self._wiring_path if self._wiring_path is not None else self._repo_path
         )
         lock = _build_lock_for(lock_key)
         with lock:
@@ -1504,9 +1493,7 @@ class GraftStructuralSource:
             if not self._index_missing_or_stale():
                 return current
             assert self._artifact_dir is not None
-            ok, detail = _run_index_build(
-                self._repo_path, self._artifact_dir
-            )
+            ok, detail = _run_index_build(self._repo_path, self._artifact_dir)
             if not ok:
                 return m.Freshness(
                     state=m.FreshnessState.UNVERIFIABLE,
@@ -1666,15 +1653,23 @@ class GraftStructuralSource:
             edge = self._to_edge(source, target, relation)
             if edge.kind not in kinds:
                 continue
-            if direction in (
-                StructuralDirection.DOWNSTREAM,
-                StructuralDirection.BOTH,
-            ) and source == locator:
+            if (
+                direction
+                in (
+                    StructuralDirection.DOWNSTREAM,
+                    StructuralDirection.BOTH,
+                )
+                and source == locator
+            ):
                 found.append(edge)
-            elif direction in (
-                StructuralDirection.UPSTREAM,
-                StructuralDirection.BOTH,
-            ) and target == locator:
+            elif (
+                direction
+                in (
+                    StructuralDirection.UPSTREAM,
+                    StructuralDirection.BOTH,
+                )
+                and target == locator
+            ):
                 found.append(edge)
         found.sort(
             key=lambda e: (
@@ -1712,7 +1707,11 @@ class GraftStructuralSource:
         token: str | None = None
         while True:
             page = self.edges(
-                repository_id, subject, edge_kinds, direction, bounds,
+                repository_id,
+                subject,
+                edge_kinds,
+                direction,
+                bounds,
                 token,
             )
             out.extend(page.items)
@@ -1745,7 +1744,10 @@ class GraftStructuralSource:
             # of leaking KeyError; callers such as impact treat empty
             # reach as claims-only coverage with explicit limits.
             kept, bound_info = _paging.paginate(
-                (), bounds.max_results, "reach", page_token,
+                (),
+                bounds.max_results,
+                "reach",
+                page_token,
                 requested_max_depth=limit,
             )
             return m.StructuralReachPage(
@@ -1755,9 +1757,7 @@ class GraftStructuralSource:
                 unsupported=False,
             )
         seen = {subject.canonical_locator}
-        via: dict[str, m.StructuralEdge | None] = {
-            subject.canonical_locator: None
-        }
+        via: dict[str, m.StructuralEdge | None] = {subject.canonical_locator: None}
         frontier = [subject.canonical_locator]
         nodes: list[m.StructuralReachNode] = []
         # Exhaustion rule (Addendum F §4.2): every adjacency page of
@@ -1778,7 +1778,10 @@ class GraftStructuralSource:
                     canonical_locator=current,
                 )
                 for edge in self._all_edges(
-                    repository_id, current_id, edge_kinds, direction,
+                    repository_id,
+                    current_id,
+                    edge_kinds,
+                    direction,
                     bounds,
                 ):
                     other = (
@@ -1803,7 +1806,10 @@ class GraftStructuralSource:
             if not frontier or capped:
                 break
         kept, bound_info = _paging.paginate(
-            tuple(nodes), bounds.max_results, "reach", page_token,
+            tuple(nodes),
+            bounds.max_results,
+            "reach",
+            page_token,
             requested_max_depth=limit,
         )
         if capped and not bound_info.truncated:

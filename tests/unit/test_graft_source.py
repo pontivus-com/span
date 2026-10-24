@@ -16,8 +16,12 @@ from span.shell.structural import graft as g
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -28,33 +32,48 @@ def _wiring():
     return {
         "nodes": [
             {
-                "id": "src/inventory.js", "name": "inventory.js",
-                "kind": "file", "path": "src/inventory.js",
-                "span": "L1-L4", "signature": None,
+                "id": "src/inventory.js",
+                "name": "inventory.js",
+                "kind": "file",
+                "path": "src/inventory.js",
+                "span": "L1-L4",
+                "signature": None,
                 "body_hash": "aa01",
             },
             {
-                "id": "src/inventory.js#reserve", "name": "reserve",
-                "kind": "function", "path": "src/inventory.js",
-                "span": "L1-L3", "signature": "function reserve(sku)",
+                "id": "src/inventory.js#reserve",
+                "name": "reserve",
+                "kind": "function",
+                "path": "src/inventory.js",
+                "span": "L1-L3",
+                "signature": "function reserve(sku)",
                 "body_hash": "bb02",
             },
             {
-                "id": "src/orders.js", "name": "orders.js",
-                "kind": "file", "path": "src/orders.js",
-                "span": "L1-L6", "signature": None,
+                "id": "src/orders.js",
+                "name": "orders.js",
+                "kind": "file",
+                "path": "src/orders.js",
+                "span": "L1-L6",
+                "signature": None,
                 "body_hash": "cc03",
             },
             {
-                "id": "src/orders.js#place", "name": "place",
-                "kind": "function", "path": "src/orders.js",
-                "span": "L3-L5", "signature": "function place(order)",
+                "id": "src/orders.js#place",
+                "name": "place",
+                "kind": "function",
+                "path": "src/orders.js",
+                "span": "L3-L5",
+                "signature": "function place(order)",
                 "body_hash": "dd04",
             },
             {
-                "id": "README.md", "name": "README.md",
-                "kind": "file", "path": "README.md",
-                "span": None, "signature": None,
+                "id": "README.md",
+                "name": "README.md",
+                "kind": "file",
+                "path": "README.md",
+                "span": None,
+                "signature": None,
                 "body_hash": "ee05",
             },
         ],
@@ -92,38 +111,57 @@ def _source(tmp=None):
 
 class GraftMappingTest(unittest.TestCase):
     def test_closed_tables(self):
-        self.assertIs(
-            g.RELATION_EDGE_KIND["contains"], m.StructuralEdgeKind.DEFINES
-        )
-        self.assertIs(
-            g.RELATION_EDGE_KIND["imports"], m.StructuralEdgeKind.IMPORTS
-        )
-        self.assertIs(
-            g.RELATION_EDGE_KIND["calls"], m.StructuralEdgeKind.CALLS
-        )
-        self.assertIs(
-            g.NODE_SUBJECT_KIND["file"], m.SubjectKind.COMPONENT
-        )
-        self.assertIs(
-            g.NODE_SUBJECT_KIND["function"], m.SubjectKind.CODE_SYMBOL
-        )
-        self.assertIs(
-            g.NODE_SUBJECT_KIND["enum"], m.SubjectKind.CODE_SYMBOL
-        )
-        self.assertIs(
-            g.RELATION_EDGE_KIND["extends"], m.StructuralEdgeKind.DEPENDS_ON
-        )
+        self.assertIs(g.RELATION_EDGE_KIND["contains"], m.StructuralEdgeKind.DEFINES)
+        self.assertIs(g.RELATION_EDGE_KIND["imports"], m.StructuralEdgeKind.IMPORTS)
+        self.assertIs(g.RELATION_EDGE_KIND["calls"], m.StructuralEdgeKind.CALLS)
+        self.assertIs(g.NODE_SUBJECT_KIND["file"], m.SubjectKind.COMPONENT)
+        self.assertIs(g.NODE_SUBJECT_KIND["function"], m.SubjectKind.CODE_SYMBOL)
+        self.assertIs(g.NODE_SUBJECT_KIND["enum"], m.SubjectKind.CODE_SYMBOL)
+        self.assertIs(g.NODE_SUBJECT_KIND["struct"], m.SubjectKind.CODE_SYMBOL)
+        self.assertIs(g.RELATION_EDGE_KIND["extends"], m.StructuralEdgeKind.DEPENDS_ON)
         self.assertIs(
             g.RELATION_EDGE_KIND["implements"],
             m.StructuralEdgeKind.DEPENDS_ON,
+        )
+
+    def test_struct_node_parses(self):
+        # Go structs, Java records, and Swift structs are emitted as
+        # "struct" rather than "class"; the vocabulary must accept them or
+        # the whole index fails closed for those repositories.
+        wiring = _wiring()
+        wiring["nodes"] = list(wiring["nodes"]) + [
+            {
+                "id": "src/main.go#Store",
+                "name": "Store",
+                "kind": "struct",
+                "path": "src/main.go",
+                "span": "L1-L3",
+                "signature": "type Store struct",
+                "body_hash": "hh08",
+            },
+        ]
+        src = g.GraftStructuralSource("repo-1", ".", wiring=wiring)
+        resolution = src.resolve_subject(
+            "repo-1",
+            m.SubjectSelector(None, "Store", (), None),
+            _bounds(),
+        )
+        self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+        self.assertIs(
+            resolution.candidates[0].subject.subject_id.subject_kind,
+            m.SubjectKind.CODE_SYMBOL,
         )
 
     def test_unknown_node_kind_raises(self):
         wiring = _wiring()
         wiring["nodes"] = [
             {
-                "id": "x", "name": "x", "kind": "macro",
-                "path": "x.h", "span": None, "body_hash": None,
+                "id": "x",
+                "name": "x",
+                "kind": "macro",
+                "path": "x.h",
+                "span": None,
+                "body_hash": None,
             }
         ]
         with self.assertRaises(g.GraftVocabularyError):
@@ -131,9 +169,7 @@ class GraftMappingTest(unittest.TestCase):
 
     def test_unknown_relation_raises(self):
         wiring = _wiring()
-        wiring["edges"] = [
-            {"source": "a", "target": "b", "relation": "teleports"}
-        ]
+        wiring["edges"] = [{"source": "a", "target": "b", "relation": "teleports"}]
         with self.assertRaises(g.GraftVocabularyError):
             g.GraftStructuralSource("repo-1", ".", wiring=wiring)
 
@@ -141,15 +177,21 @@ class GraftMappingTest(unittest.TestCase):
         wiring = _wiring()
         wiring["nodes"] = list(wiring["nodes"]) + [
             {
-                "id": "src/types.ts#DataSource", "name": "DataSource",
-                "kind": "enum", "path": "src/types.ts",
-                "span": "L1-L4", "signature": None,
+                "id": "src/types.ts#DataSource",
+                "name": "DataSource",
+                "kind": "enum",
+                "path": "src/types.ts",
+                "span": "L1-L4",
+                "signature": None,
                 "body_hash": "ff06",
             },
             {
-                "id": "src/base.ts#Base", "name": "Base",
-                "kind": "class", "path": "src/base.ts",
-                "span": "L1-L2", "signature": None,
+                "id": "src/base.ts#Base",
+                "name": "Base",
+                "kind": "class",
+                "path": "src/base.ts",
+                "span": "L1-L2",
+                "signature": None,
                 "body_hash": "gg07",
             },
         ]
@@ -171,9 +213,7 @@ class GraftMappingTest(unittest.TestCase):
             m.SubjectSelector(None, "DataSource", (), None),
             _bounds(),
         )
-        self.assertIs(
-            enum_resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
-        )
+        self.assertIs(enum_resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED)
         self.assertIs(
             enum_resolution.candidates[0].subject.subject_id.subject_kind,
             m.SubjectKind.CODE_SYMBOL,
@@ -186,7 +226,10 @@ class GraftMappingTest(unittest.TestCase):
         kinds = {
             e.kind
             for e in src.edges(
-                "repo-1", sid, (), StructuralDirection.DOWNSTREAM,
+                "repo-1",
+                sid,
+                (),
+                StructuralDirection.DOWNSTREAM,
                 _bounds(),
             ).items
         }
@@ -209,9 +252,7 @@ class GraftMappingTest(unittest.TestCase):
                 _bounds(),
             )
         freshness = src.describe_current("repo-1")
-        self.assertIs(
-            freshness.state, m.FreshnessState.UNVERIFIABLE
-        )
+        self.assertIs(freshness.state, m.FreshnessState.UNVERIFIABLE)
 
     def test_malformed_wiring_raises(self):
         with self.assertRaises(g.GraftShapeError):
@@ -238,9 +279,7 @@ class GraftMappingTest(unittest.TestCase):
             subject_kind=m.SubjectKind.CODE_SYMBOL,
             canonical_locator="src/orders.js#place",
         )
-        page = src.edges(
-            "repo-1", sid, (), StructuralDirection.DOWNSTREAM, _bounds()
-        )
+        page = src.edges("repo-1", sid, (), StructuralDirection.DOWNSTREAM, _bounds())
         self.assertEqual(len(page.items), 1)
         self.assertIs(page.items[0].kind, m.StructuralEdgeKind.CALLS)
 
@@ -280,29 +319,36 @@ class GraftPortBehaviorTest(unittest.TestCase):
 
             root = pathlib.Path(tmp)
             (root / "src").mkdir()
-            (root / "src" / "orders.js").write_text(
-                body, encoding="utf-8"
-            )
+            (root / "src" / "orders.js").write_text(body, encoding="utf-8")
             src = _graft.GraftStructuralSource(
                 "repo-1",
                 root,
                 wiring={
-                    "nodes": [{
-                        "id": "src/orders.js", "name": "orders.js",
-                        "kind": "file", "path": "src/orders.js",
-                        "body_hash": digest,
-                    }, {
-                        "id": "src/orders.js#place", "name": "place",
-                        "kind": "function", "path": "src/orders.js",
-                        "span": "L1-L3",
-                        "signature": "function place(order)",
-                        "body_hash": digest,
-                    }],
+                    "nodes": [
+                        {
+                            "id": "src/orders.js",
+                            "name": "orders.js",
+                            "kind": "file",
+                            "path": "src/orders.js",
+                            "body_hash": digest,
+                        },
+                        {
+                            "id": "src/orders.js#place",
+                            "name": "place",
+                            "kind": "function",
+                            "path": "src/orders.js",
+                            "span": "L1-L3",
+                            "signature": "function place(order)",
+                            "body_hash": digest,
+                        },
+                    ],
                     "edges": [],
                 },
             )
             exact = src.search_symbols(
-                "repo-1", "place", m.StructuralLocateMatch.EXACT,
+                "repo-1",
+                "place",
+                m.StructuralLocateMatch.EXACT,
                 _bounds(),
             )
             self.assertEqual(len(exact.items), 1)
@@ -315,8 +361,10 @@ class GraftPortBehaviorTest(unittest.TestCase):
                 m.CandidateRankBasis.EXACT_DECLARATION,
             )
             full_id = src.search_symbols(
-                "repo-1", "src/orders.js#place",
-                m.StructuralLocateMatch.EXACT, _bounds(),
+                "repo-1",
+                "src/orders.js#place",
+                m.StructuralLocateMatch.EXACT,
+                _bounds(),
             )
             self.assertEqual(len(full_id.items), 1)
             self.assertIs(
@@ -324,12 +372,16 @@ class GraftPortBehaviorTest(unittest.TestCase):
                 m.CandidateRankBasis.EXACT_LOCATOR,
             )
             partial = src.search_symbols(
-                "repo-1", "plac", m.StructuralLocateMatch.EXACT,
+                "repo-1",
+                "plac",
+                m.StructuralLocateMatch.EXACT,
                 _bounds(),
             )
             self.assertEqual(partial.items, ())
             contains = src.search_symbols(
-                "repo-1", "place", m.StructuralLocateMatch.CONTAINS,
+                "repo-1",
+                "place",
+                m.StructuralLocateMatch.CONTAINS,
                 _bounds(),
             )
             self.assertTrue(
@@ -348,9 +400,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
             _bounds(),
         )
         subject = resolution.candidates[0].subject
-        self.assertIs(
-            subject.subject_id.subject_kind, m.SubjectKind.COMPONENT
-        )
+        self.assertIs(subject.subject_id.subject_kind, m.SubjectKind.COMPONENT)
         readme = src.resolve_subject(
             "repo-1",
             m.SubjectSelector(None, "README.md", (), None),
@@ -368,9 +418,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
             subject_kind=m.SubjectKind.CODE_SYMBOL,
             canonical_locator="src/orders.js#place",
         )
-        page = src.edges(
-            "repo-1", sid, (), StructuralDirection.DOWNSTREAM, _bounds()
-        )
+        page = src.edges("repo-1", sid, (), StructuralDirection.DOWNSTREAM, _bounds())
         self.assertEqual(len(page.items), 1)
         self.assertIs(page.items[0].kind, m.StructuralEdgeKind.CALLS)
         file_sid = m.SubjectId(
@@ -378,9 +426,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
             subject_kind=m.SubjectKind.COMPONENT,
             canonical_locator="src/orders.js",
         )
-        both = src.edges(
-            "repo-1", file_sid, (), StructuralDirection.BOTH, _bounds()
-        )
+        both = src.edges("repo-1", file_sid, (), StructuralDirection.BOTH, _bounds())
         kinds = {e.kind for e in both.items}
         self.assertEqual(
             kinds,
@@ -408,9 +454,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
             subject_kind=m.SubjectKind.CODE_SYMBOL,
             canonical_locator="src/orders.js#place",
         )
-        page = src.reach(
-            "repo-1", sid, (), StructuralDirection.BOTH, 3, _bounds()
-        )
+        page = src.reach("repo-1", sid, (), StructuralDirection.BOTH, 3, _bounds())
         locators = {n.subject.canonical_locator for n in page.items}
         self.assertIn("src/inventory.js#reserve", locators)
         first = src.repository_state("repo-1")
@@ -427,9 +471,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
             subject_kind=m.SubjectKind.OTHER,
             canonical_locator="some-area",
         )
-        page = src.reach(
-            "repo-1", sid, (), StructuralDirection.BOTH, 3, _bounds()
-        )
+        page = src.reach("repo-1", sid, (), StructuralDirection.BOTH, 3, _bounds())
         self.assertEqual(page.items, ())
         self.assertFalse(page.unsupported)
 
@@ -460,28 +502,34 @@ class GraftPortBehaviorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             (root / "src").mkdir()
-            (root / "src" / "orders.js").write_text(
-                "place();\n", encoding="utf-8"
-            )
+            (root / "src" / "orders.js").write_text("place();\n", encoding="utf-8")
             subprocess.run(
                 ("git", "-C", str(root), "init", "-q"),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
             subprocess.run(
                 ("git", "-C", str(root), "add", "-A"),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
             subprocess.run(
                 (
-                    "git", "-C", str(root),
-                    "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "x",
+                    "git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-qm",
+                    "x",
                 ),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
-            src = g.GraftStructuralSource(
-                "repo-1", root, wiring=_wiring()
-            )
+            src = g.GraftStructuralSource("repo-1", root, wiring=_wiring())
             clean = src.repository_state("repo-1")
             self.assertFalse(clean.dirty)
             self.assertTrue(clean.revision_id)
@@ -492,22 +540,15 @@ class GraftPortBehaviorTest(unittest.TestCase):
             self.assertTrue(dirty.dirty)
             # A commit alone does not move the wiring fingerprint;
             # content-addressed body hashes do.
-            self.assertEqual(
-                clean.state_fingerprint, dirty.state_fingerprint
-            )
+            self.assertEqual(clean.state_fingerprint, dirty.state_fingerprint)
 
     def test_wiring_fingerprint_follows_body_hashes(self):
         src = _source()
         first = src.repository_state("repo-1").state_fingerprint
         altered = _wiring()
         altered["nodes"][0]["body_hash"] = "zz99"
-        other = g.GraftStructuralSource(
-            "repo-1", pathlib.Path("."), wiring=altered
-        )
-        self.assertNotEqual(
-            first, other.repository_state("repo-1").state_fingerprint
-        )
-
+        other = g.GraftStructuralSource("repo-1", pathlib.Path("."), wiring=altered)
+        self.assertNotEqual(first, other.repository_state("repo-1").state_fingerprint)
 
     def test_repeated_resolutions_bound_subprocesses(self):
         # Perf regression: resolving several subjects must not fan out
@@ -519,10 +560,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
         import tempfile
         from unittest import mock
 
-        bodies = {
-            f"src/f{i}.js": f"export function f{i}() {{}}\n"
-            for i in range(5)
-        }
+        bodies = {f"src/f{i}.js": f"export function f{i}() {{}}\n" for i in range(5)}
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             (root / "src").mkdir()
@@ -531,39 +569,54 @@ class GraftPortBehaviorTest(unittest.TestCase):
                 (root / rel).write_text(body, encoding="utf-8")
                 digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
                 stem = pathlib.Path(rel).stem
-                nodes.append({
-                    "id": rel, "name": pathlib.Path(rel).name,
-                    "kind": "file", "path": rel, "body_hash": digest,
-                })
-                nodes.append({
-                    "id": f"{rel}#{stem}", "name": stem,
-                    "kind": "function", "path": rel,
-                    "body_hash": digest,
-                })
+                nodes.append(
+                    {
+                        "id": rel,
+                        "name": pathlib.Path(rel).name,
+                        "kind": "file",
+                        "path": rel,
+                        "body_hash": digest,
+                    }
+                )
+                nodes.append(
+                    {
+                        "id": f"{rel}#{stem}",
+                        "name": stem,
+                        "kind": "function",
+                        "path": rel,
+                        "body_hash": digest,
+                    }
+                )
             subprocess.run(
                 ("git", "-C", str(root), "init", "-q"),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
             subprocess.run(
                 ("git", "-C", str(root), "add", "-A"),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
             subprocess.run(
                 (
-                    "git", "-C", str(root),
-                    "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "x",
+                    "git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-qm",
+                    "x",
                 ),
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
-            (root / "structural" / "repo-1" / ".graph").mkdir(
-                parents=True
-            )
+            (root / "structural" / "repo-1" / ".graph").mkdir(parents=True)
             import json
 
-            (
-                root / "structural" / "repo-1" / ".graph" / "wiring.json"
-            ).write_text(
+            (root / "structural" / "repo-1" / ".graph" / "wiring.json").write_text(
                 json.dumps({"nodes": nodes, "edges": []}),
                 encoding="utf-8",
             )
@@ -577,9 +630,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
                 calls.append(args[0][:3])
                 return real_run(*args, **kwargs)
 
-            with mock.patch.object(
-                g._subprocess, "run", side_effect=counting_run
-            ):
+            with mock.patch.object(g._subprocess, "run", side_effect=counting_run):
                 for rel in sorted(bodies):
                     page = src.locations(
                         "repo-1",
@@ -595,9 +646,7 @@ class GraftPortBehaviorTest(unittest.TestCase):
             # path is gone here; the bound bites only on fan-out
             # regressions (pre-fix: full fingerprint walk per call).
             self.assertLessEqual(len(calls), 10)
-            self.assertTrue(
-                all(cmd[0] == "git" for cmd in calls)
-            )
+            self.assertTrue(all(cmd[0] == "git" for cmd in calls))
 
 
 if __name__ == "__main__":
@@ -615,18 +664,26 @@ class DottedModuleMappingTest(unittest.TestCase):
     def _nodes(self, *paths):
         nodes = []
         for p in paths:
-            nodes.append({
-                "id": p, "name": p.split("/")[-1], "kind": "file",
-                "path": p, "span": "L1-L2", "signature": None,
-                "body_hash": "aa01",
-            })
+            nodes.append(
+                {
+                    "id": p,
+                    "name": p.split("/")[-1],
+                    "kind": "file",
+                    "path": p,
+                    "span": "L1-L2",
+                    "signature": None,
+                    "body_hash": "aa01",
+                }
+            )
         return nodes
 
     def _src(self, nodes, edges):
         import tempfile
+
         tmp = tempfile.mkdtemp()
         return g.GraftStructuralSource(
-            "repo-1", tmp,
+            "repo-1",
+            tmp,
             wiring={"nodes": self._nodes(*nodes), "edges": edges},
         )
 
@@ -646,7 +703,8 @@ class DottedModuleMappingTest(unittest.TestCase):
             [self._edge("app.main", "pkg.sub")],
         )
         self.assertNotIn(
-            ("app/main.py", "pkg/sub.py", "imports"), src._edges,
+            ("app/main.py", "pkg/sub.py", "imports"),
+            src._edges,
         )
         self.assertEqual(src._edges, [])
 

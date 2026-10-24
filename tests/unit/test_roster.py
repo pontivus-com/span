@@ -22,8 +22,12 @@ REPO = "roster-svc"
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -45,18 +49,15 @@ SUBJECTS = (
 )
 
 EDGES = (
-    InMemoryEdge(
-        "src/entry.py", m.StructuralEdgeKind.DEPENDS_ON, "src/mid.py"
-    ),
-    InMemoryEdge(
-        "src/mid.py", m.StructuralEdgeKind.DEPENDS_ON, "src/leaf.py"
-    ),
+    InMemoryEdge("src/entry.py", m.StructuralEdgeKind.DEPENDS_ON, "src/mid.py"),
+    InMemoryEdge("src/mid.py", m.StructuralEdgeKind.DEPENDS_ON, "src/leaf.py"),
 )
 
 
 def _sid(locator):
     return m.SubjectId(
-        repository_id=REPO, subject_kind=m.SubjectKind.COMPONENT,
+        repository_id=REPO,
+        subject_kind=m.SubjectKind.COMPONENT,
         canonical_locator=locator,
     )
 
@@ -68,8 +69,10 @@ def _structural():
 class RosterTest(unittest.TestCase):
     def test_chain_and_island_form_two_territories(self):
         roster = propose_territories(
-            REPO, (_sid("src/mid.py"), _sid("src/solo.py")),
-            structural=_structural(), bounds=_bounds(),
+            REPO,
+            (_sid("src/mid.py"), _sid("src/solo.py")),
+            structural=_structural(),
+            bounds=_bounds(),
         )
         self.assertIsInstance(roster, Roster)
         self.assertEqual(len(roster.territories), 2)
@@ -82,9 +85,7 @@ class RosterTest(unittest.TestCase):
             [s.canonical_locator for s in chain.entry_points],
             ["src/entry.py"],
         )
-        self.assertIn(
-            m.StructuralEdgeKind.DEPENDS_ON, chain.edge_kinds
-        )
+        self.assertIn(m.StructuralEdgeKind.DEPENDS_ON, chain.edge_kinds)
         self.assertEqual(
             [s.canonical_locator for s in island.members],
             ["src/solo.py"],
@@ -96,8 +97,10 @@ class RosterTest(unittest.TestCase):
 
     def test_overlapping_seeds_merge(self):
         roster = propose_territories(
-            REPO, (_sid("src/entry.py"), _sid("src/leaf.py")),
-            structural=_structural(), bounds=_bounds(),
+            REPO,
+            (_sid("src/entry.py"), _sid("src/leaf.py")),
+            structural=_structural(),
+            bounds=_bounds(),
         )
         self.assertEqual(len(roster.territories), 1)
         self.assertEqual(len(roster.territories[0].members), 3)
@@ -110,18 +113,16 @@ class RosterTest(unittest.TestCase):
 
     def test_unknown_seed_skipped(self):
         roster = propose_territories(
-            REPO, (_sid("src/missing.py"), _sid("src/solo.py")),
-            structural=_structural(), bounds=_bounds(),
+            REPO,
+            (_sid("src/missing.py"), _sid("src/solo.py")),
+            structural=_structural(),
+            bounds=_bounds(),
         )
         self.assertEqual(len(roster.territories), 1)
 
     def test_no_ranking_or_scores(self):
-        territory_fields = {
-            f.name for f in dataclasses.fields(Territory)
-        }
-        self.assertEqual(
-            territory_fields, {"members", "entry_points", "edge_kinds"}
-        )
+        territory_fields = {f.name for f in dataclasses.fields(Territory)}
+        self.assertEqual(territory_fields, {"members", "entry_points", "edge_kinds"})
         self.assertFalse(
             any(
                 "rank" in name or "score" in name or "weight" in name
@@ -131,12 +132,16 @@ class RosterTest(unittest.TestCase):
 
     def test_deterministic_order(self):
         first = propose_territories(
-            REPO, (_sid("src/solo.py"), _sid("src/mid.py")),
-            structural=_structural(), bounds=_bounds(),
+            REPO,
+            (_sid("src/solo.py"), _sid("src/mid.py")),
+            structural=_structural(),
+            bounds=_bounds(),
         )
         second = propose_territories(
-            REPO, (_sid("src/mid.py"), _sid("src/solo.py")),
-            structural=_structural(), bounds=_bounds(),
+            REPO,
+            (_sid("src/mid.py"), _sid("src/solo.py")),
+            structural=_structural(),
+            bounds=_bounds(),
         )
         self.assertEqual(first, second)
 
@@ -155,9 +160,7 @@ class RosterTest(unittest.TestCase):
         from span.core import model as m
 
         structural = _structural()
-        evidence = FixtureEvidenceSource(
-            REPO, {f.path: f.content for f in FILES}
-        )
+        evidence = FixtureEvidenceSource(REPO, {f.path: f.content for f in FILES})
         store = SqliteSemanticStore(":memory:")
         try:
             ops.initialize_repository(
@@ -166,33 +169,36 @@ class RosterTest(unittest.TestCase):
                     authority_seeds=(),
                 ),
                 repository_id=REPO,
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
             )
             roster = propose_territories(
-                REPO, (_sid("src/mid.py"), _sid("src/solo.py")),
-                structural=structural, bounds=_bounds(),
+                REPO,
+                (_sid("src/mid.py"), _sid("src/solo.py")),
+                structural=structural,
+                bounds=_bounds(),
             )
             # Agent-side selection: the territory holding the known
             # entry file; root is its entry point.
             candidates = [
-                t for t in roster.territories
-                if "src/entry.py" in {
-                    s.canonical_locator for s in t.members
-                }
+                t
+                for t in roster.territories
+                if "src/entry.py" in {s.canonical_locator for s in t.members}
             ]
             self.assertEqual(len(candidates), 1)
             root = candidates[0].entry_points[0]
             pending = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, root.canonical_locator, (), None
-                    ),
+                    target=m.SubjectSelector(None, root.canonical_locator, (), None),
                     bounds=_bounds(),
                     establish_baseline=True,
                 ),
-                structural=structural, evidence=evidence,
-                store=store, continuations=ContinuationStore(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
                 authority_seeds=(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
@@ -200,9 +206,7 @@ class RosterTest(unittest.TestCase):
                 pending.request.question.question_class,
                 m.SemanticQuestionClass.CQ_01,
             )
-            self.assertEqual(
-                pending.request.question.subject, root
-            )
+            self.assertEqual(pending.request.question.subject, root)
         finally:
             store.close()
 

@@ -141,9 +141,7 @@ def _pending(structural, evidence, store, continuations, locator="src/router.py"
 
 
 def _coverage(store, scope):
-    rows = store.load_all_question_coverages(
-        REPO, scope.scope_root, (scope.subject,)
-    )
+    rows = store.load_all_question_coverages(REPO, scope.scope_root, (scope.subject,))
     matches = [row for row in rows if row.question == scope]
     assert len(matches) == 1, matches
     return matches[0]
@@ -185,12 +183,8 @@ class CompactCommandTest(unittest.TestCase):
             coverage = _coverage(store, bound)
             self.assertEqual(coverage.question, bound)
             self.assertEqual(coverage.question_slice, bound.question_slice)
-            self.assertEqual(
-                coverage.subjects, (bound.subject,)
-            )
-            self.assertIs(
-                coverage.disposition, m.SemanticQuestionDisposition.ANSWERED
-            )
+            self.assertEqual(coverage.subjects, (bound.subject,))
+            self.assertIs(coverage.disposition, m.SemanticQuestionDisposition.ANSWERED)
             # declared_complete is a deterministic consequence of ANSWERED.
             self.assertTrue(coverage.declared_complete)
             self.assertEqual(len(coverage.result_refs), 1)
@@ -236,9 +230,7 @@ class CompactCommandTest(unittest.TestCase):
                 continuations=continuations,
             )
             opened = _coverage(store, pending.request.question)
-            self.assertIs(
-                opened.disposition, m.SemanticQuestionDisposition.OPEN
-            )
+            self.assertIs(opened.disposition, m.SemanticQuestionDisposition.OPEN)
             self.assertFalse(opened.declared_complete)
             self.assertEqual(opened.result_refs, ())
             self.assertEqual(opened.resolution_requirements, (requirement,))
@@ -255,9 +247,7 @@ class CompactCommandTest(unittest.TestCase):
                 pending.continuation,
                 m.SemanticInterpretationResult(
                     question_decision=m.SemanticQuestionDecision(
-                        disposition=(
-                            m.SemanticQuestionDisposition.NOT_APPLICABLE
-                        ),
+                        disposition=(m.SemanticQuestionDisposition.NOT_APPLICABLE),
                         evidence_scope=m.EvidenceScope(
                             evidence_refs=(_ref("README.md"),)
                         ),
@@ -301,9 +291,7 @@ class CompactCommandTest(unittest.TestCase):
                         m.ProposedSemanticQuestion(
                             follow_pending,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.PENDING
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.PENDING),
                                 disposition_basis="agent-admitted follow-up",
                             ),
                         ),
@@ -313,10 +301,7 @@ class CompactCommandTest(unittest.TestCase):
                                 disposition=m.SemanticQuestionDisposition.OPEN,
                                 resolution_requirements=(
                                     m.ResolutionRequirement(
-                                        kind=(
-                                            m.ResolutionKind
-                                            .MISSING_AUTHORITY
-                                        ),
+                                        kind=(m.ResolutionKind.MISSING_AUTHORITY),
                                         subject_or_claim=_sid("src/router.py"),
                                         description="authority not examined",
                                         supporting_context=(),
@@ -369,9 +354,7 @@ class WireCeremonyTest(unittest.TestCase):
         self.assertNotIn("InterpretationCoverage", text)
         payload = json.loads(text.split(": ", 1)[1])
         self.assertNotIn("question_decision", payload)
-        decoded = _schema.from_wire(
-            m.SemanticInterpretationResult, payload
-        )
+        decoded = _schema.from_wire(m.SemanticInterpretationResult, payload)
         self.assertIsNone(decoded.question_decision)
         self.assertEqual(
             [
@@ -422,17 +405,14 @@ class WireCeremonyTest(unittest.TestCase):
         self.assertFalse(
             any(
                 branch == {"type": "null"}
-                for branch in schema["properties"]["target"].get(
-                    "anyOf", []
-                )
+                for branch in schema["properties"]["target"].get("anyOf", [])
             )
         )
 
 
 def _obs_ids(coverage):
     return tuple(
-        obs.evidence_ref.evidence_id.value
-        for obs in coverage.question_evidence
+        obs.evidence_ref.evidence_id.value for obs in coverage.question_evidence
     )
 
 
@@ -469,12 +449,8 @@ class QuestionEvidenceIsolationTest(unittest.TestCase):
                 pending.continuation,
                 m.SemanticInterpretationResult(
                     question_decision=m.SemanticQuestionDecision(
-                        disposition=(
-                            m.SemanticQuestionDisposition.NOT_APPLICABLE
-                        ),
-                        evidence_scope=m.EvidenceScope(
-                            evidence_refs=(selected,)
-                        ),
+                        disposition=(m.SemanticQuestionDisposition.NOT_APPLICABLE),
+                        evidence_scope=m.EvidenceScope(evidence_refs=(selected,)),
                         disposition_basis="readme has no routing tests",
                     ),
                 ),
@@ -488,21 +464,21 @@ class QuestionEvidenceIsolationTest(unittest.TestCase):
 
             _, changed_b = _changed_evidence(**{"src/router.py": "ROUTE = 2\n"})
             view = effective_question_view(
-                coverage, evidence=changed_b, store=store,
+                coverage,
+                evidence=changed_b,
+                store=store,
                 repository_id=REPO,
             )
-            self.assertIs(
-                view.freshness.state, m.FreshnessState.CURRENT
-            )
+            self.assertIs(view.freshness.state, m.FreshnessState.CURRENT)
 
             _, changed_a = _changed_evidence(**{"README.md": "# changed\n"})
             view = effective_question_view(
-                coverage, evidence=changed_a, store=store,
+                coverage,
+                evidence=changed_a,
+                store=store,
                 repository_id=REPO,
             )
-            self.assertIsNot(
-                view.freshness.state, m.FreshnessState.CURRENT
-            )
+            self.assertIsNot(view.freshness.state, m.FreshnessState.CURRENT)
             self.assertIs(
                 view.effective_disposition,
                 m.SemanticQuestionDisposition.PENDING,
@@ -519,9 +495,7 @@ class QuestionEvidenceIsolationTest(unittest.TestCase):
                 pending.continuation,
                 m.SemanticInterpretationResult(
                     question_decision=m.SemanticQuestionDecision(
-                        disposition=(
-                            m.SemanticQuestionDisposition.NOT_APPLICABLE
-                        ),
+                        disposition=(m.SemanticQuestionDisposition.NOT_APPLICABLE),
                         disposition_basis="nothing in the bounded scope",
                     ),
                 ),
@@ -534,7 +508,9 @@ class QuestionEvidenceIsolationTest(unittest.TestCase):
             self.assertEqual(coverage.result_refs, ())
             self.assertEqual(coverage.question_evidence, ())
             view = effective_question_view(
-                coverage, evidence=evidence, store=store,
+                coverage,
+                evidence=evidence,
+                store=store,
                 repository_id=REPO,
             )
             self.assertIs(
@@ -555,9 +531,7 @@ class QuestionEvidenceIsolationTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     question_decision=m.SemanticQuestionDecision(
                         disposition=m.SemanticQuestionDisposition.OPEN,
-                        evidence_scope=m.EvidenceScope(
-                            evidence_refs=(selected,)
-                        ),
+                        evidence_scope=m.EvidenceScope(evidence_refs=(selected,)),
                         resolution_requirements=(
                             m.ResolutionRequirement(
                                 kind=m.ResolutionKind.MISSING_AUTHORITY,
@@ -579,21 +553,21 @@ class QuestionEvidenceIsolationTest(unittest.TestCase):
 
             _, changed_b = _changed_evidence(**{"src/router.py": "ROUTE = 2\n"})
             view = effective_question_view(
-                coverage, evidence=changed_b, store=store,
+                coverage,
+                evidence=changed_b,
+                store=store,
                 repository_id=REPO,
             )
-            self.assertIs(
-                view.freshness.state, m.FreshnessState.CURRENT
-            )
+            self.assertIs(view.freshness.state, m.FreshnessState.CURRENT)
 
             _, changed_a = _changed_evidence(**{"README.md": "# changed\n"})
             view = effective_question_view(
-                coverage, evidence=changed_a, store=store,
+                coverage,
+                evidence=changed_a,
+                store=store,
                 repository_id=REPO,
             )
-            self.assertIsNot(
-                view.freshness.state, m.FreshnessState.CURRENT
-            )
+            self.assertIsNot(view.freshness.state, m.FreshnessState.CURRENT)
         finally:
             store.close()
 
@@ -630,9 +604,7 @@ class QuestionEvidenceIsolationTest(unittest.TestCase):
                         m.ProposedSemanticQuestion(
                             follow,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.PENDING
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.PENDING),
                                 evidence_scope=m.EvidenceScope(
                                     evidence_refs=(follow_ref,)
                                 ),
@@ -700,12 +672,8 @@ class PriorOwnershipTest(unittest.TestCase):
             )
             (claim_id,) = _result_ids(answered)
 
-            _, changed = _changed_evidence(
-                **{"README.md": "# changed\n"}
-            )
-            refresh = _refresh_pending(
-                structural, changed, store, continuations
-            )
+            _, changed = _changed_evidence(**{"README.md": "# changed\n"})
+            refresh = _refresh_pending(structural, changed, store, continuations)
             ops.submit_interpretation(
                 refresh.continuation,
                 m.SemanticInterpretationResult(
@@ -728,12 +696,12 @@ class PriorOwnershipTest(unittest.TestCase):
                 continuations=continuations,
             )
             reopened = _coverage(store, scope)
-            self.assertIs(
-                reopened.disposition, m.SemanticQuestionDisposition.OPEN
-            )
+            self.assertIs(reopened.disposition, m.SemanticQuestionDisposition.OPEN)
             self.assertIn(claim_id, _result_ids(reopened))
             view = effective_question_view(
-                reopened, evidence=changed, store=store,
+                reopened,
+                evidence=changed,
+                store=store,
                 repository_id=REPO,
             )
             self.assertIsNot(
@@ -752,12 +720,8 @@ class PriorOwnershipTest(unittest.TestCase):
             )
             (claim_id,) = _result_ids(answered)
 
-            _, changed = _changed_evidence(
-                **{"README.md": "# changed\n"}
-            )
-            refresh = _refresh_pending(
-                structural, changed, store, continuations
-            )
+            _, changed = _changed_evidence(**{"README.md": "# changed\n"})
+            refresh = _refresh_pending(structural, changed, store, continuations)
             ops.submit_interpretation(
                 refresh.continuation,
                 m.SemanticInterpretationResult(
@@ -772,9 +736,7 @@ class PriorOwnershipTest(unittest.TestCase):
                 continuations=continuations,
             )
             pending = _coverage(store, scope)
-            self.assertIs(
-                pending.disposition, m.SemanticQuestionDisposition.PENDING
-            )
+            self.assertIs(pending.disposition, m.SemanticQuestionDisposition.PENDING)
             self.assertIn(claim_id, _result_ids(pending))
         finally:
             store.close()
@@ -788,12 +750,8 @@ class PriorOwnershipTest(unittest.TestCase):
             )
             (old_id,) = _result_ids(answered)
 
-            _, changed = _changed_evidence(
-                **{"README.md": "# changed\n"}
-            )
-            refresh = _refresh_pending(
-                structural, changed, store, continuations
-            )
+            _, changed = _changed_evidence(**{"README.md": "# changed\n"})
+            refresh = _refresh_pending(structural, changed, store, continuations)
             ops.submit_interpretation(
                 refresh.continuation,
                 m.SemanticInterpretationResult(
@@ -817,13 +775,11 @@ class PriorOwnershipTest(unittest.TestCase):
             )
             self.assertIn(old_id, _result_ids(_coverage(store, scope)))
 
-            _, changed_again = _changed_evidence(
-                **{"README.md": "# changed again\n"}
+            _, changed_again = _changed_evidence(**{"README.md": "# changed again\n"})
+            refresh = _refresh_pending(structural, changed_again, store, continuations)
+            new_ref = _ref_from(
+                dict(FILES, **{"README.md": "# changed again\n"}), "README.md"
             )
-            refresh = _refresh_pending(
-                structural, changed_again, store, continuations
-            )
-            new_ref = _ref_from(dict(FILES, **{"README.md": "# changed again\n"}), "README.md")
             ops.submit_interpretation(
                 refresh.continuation,
                 m.SemanticInterpretationResult(
@@ -842,9 +798,7 @@ class PriorOwnershipTest(unittest.TestCase):
                         ),
                     ),
                     question_decision=m.SemanticQuestionDecision(
-                        disposition=(
-                            m.SemanticQuestionDisposition.ANSWERED
-                        ),
+                        disposition=(m.SemanticQuestionDisposition.ANSWERED),
                         disposition_basis="changed readme examined",
                     ),
                 ),
@@ -858,9 +812,7 @@ class PriorOwnershipTest(unittest.TestCase):
             self.assertEqual(len(final_ids), 1)
             self.assertNotIn(old_id, final_ids)
             with self.assertRaises(ValueError):
-                store.load_by_refs(
-                    REPO, (m.ClaimRef(id=m.ClaimId(old_id)),)
-                )
+                store.load_by_refs(REPO, (m.ClaimRef(id=m.ClaimId(old_id)),))
         finally:
             store.close()
 
@@ -874,12 +826,8 @@ class PriorOwnershipTest(unittest.TestCase):
             (old_id,) = _result_ids(answered)
             old_ref = m.ClaimRef(id=m.ClaimId(old_id))
 
-            _, changed = _changed_evidence(
-                **{"README.md": "# changed\n"}
-            )
-            refresh = _refresh_pending(
-                structural, changed, store, continuations
-            )
+            _, changed = _changed_evidence(**{"README.md": "# changed\n"})
+            refresh = _refresh_pending(structural, changed, store, continuations)
             ops.submit_interpretation(
                 refresh.continuation,
                 m.SemanticInterpretationResult(
@@ -1027,9 +975,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                         m.ProposedSemanticQuestion(
                             qa,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.PENDING
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.PENDING),
                                 evidence_scope=m.EvidenceScope(
                                     evidence_refs=(items[0].evidence_ref,)
                                 ),
@@ -1039,9 +985,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                         m.ProposedSemanticQuestion(
                             qb,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.PENDING
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.PENDING),
                                 evidence_scope=m.EvidenceScope(
                                     evidence_refs=(items[1].evidence_ref,)
                                 ),
@@ -1060,9 +1004,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                 REPO, semantic.request.target_id
             )
             self.assertIsNotNone(association)
-            self.assertEqual(
-                {qa, qb} - set(association.target_questions), set()
-            )
+            self.assertEqual({qa, qb} - set(association.target_questions), set())
             self.assertEqual(
                 _obs_ids(_coverage(store, qa)),
                 (items[0].evidence_ref.evidence_id.value,),
@@ -1091,9 +1033,7 @@ class CommandRoleTest(unittest.TestCase):
                             m.ProposedSemanticQuestion(
                                 pending.request.question,
                                 m.SemanticQuestionDecision(
-                                    disposition=(
-                                        m.SemanticQuestionDisposition.PENDING
-                                    ),
+                                    disposition=(m.SemanticQuestionDisposition.PENDING),
                                     disposition_basis="wrong channel",
                                 ),
                             ),
@@ -1114,9 +1054,7 @@ class CommandRoleTest(unittest.TestCase):
                 m.SemanticInterpretationResult(
                     claims=(_purpose_claim(),),
                     question_decision=m.SemanticQuestionDecision(
-                        disposition=(
-                            m.SemanticQuestionDisposition.ANSWERED
-                        ),
+                        disposition=(m.SemanticQuestionDisposition.ANSWERED),
                         disposition_basis="corrected submission",
                     ),
                 ),
@@ -1141,9 +1079,7 @@ class CommandRoleTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(_purpose_claim(),),
                         question_decision=m.SemanticQuestionDecision(
-                            disposition=(
-                                m.SemanticQuestionDisposition.ANSWERED
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.ANSWERED),
                             disposition_basis="bound examined",
                         ),
                         proposed_questions=(
@@ -1168,7 +1104,8 @@ class CommandRoleTest(unittest.TestCase):
                 str(ctx.exception),
             )
             rows = store.load_all_question_coverages(
-                REPO, pending.request.question.scope_root,
+                REPO,
+                pending.request.question.scope_root,
                 (pending.request.question.subject,),
             )
             self.assertEqual(rows, ())
@@ -1208,8 +1145,7 @@ class CommandRoleTest(unittest.TestCase):
                             ),
                             resolution_requirements=(
                                 requirement
-                                if disposition
-                                is m.SemanticQuestionDisposition.OPEN
+                                if disposition is m.SemanticQuestionDisposition.OPEN
                                 else ()
                             ),
                             disposition_basis="agent follow-up",
@@ -1232,9 +1168,7 @@ class CommandRoleTest(unittest.TestCase):
                 continuations=continuations,
             )
             for disposition, scope in scopes.items():
-                self.assertIs(
-                    _coverage(store, scope).disposition, disposition
-                )
+                self.assertIs(_coverage(store, scope).disposition, disposition)
         finally:
             store.close()
 
@@ -1276,12 +1210,8 @@ class CommandRoleTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             continuations = ContinuationStore()
-            original = self._establish(
-                structural, evidence, store, continuations
-            )
-            challenged = self._challenge(
-                structural, evidence, store, continuations
-            )
+            original = self._establish(structural, evidence, store, continuations)
+            challenged = self._challenge(structural, evidence, store, continuations)
             self.assertNotEqual(challenged.request.question, original)
             new_claim = m.CandidateSemanticClaim(
                 candidate_key="purpose-v2",
@@ -1303,9 +1233,7 @@ class CommandRoleTest(unittest.TestCase):
                         m.ProposedSemanticQuestion(
                             original,
                             m.SemanticQuestionDecision(
-                                disposition=(
-                                    m.SemanticQuestionDisposition.ANSWERED
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.ANSWERED),
                                 disposition_basis="corrected reading",
                             ),
                         ),
@@ -1324,14 +1252,12 @@ class CommandRoleTest(unittest.TestCase):
             self.assertEqual(len(corrected.result_refs), 1)
             # The fallback scaffolding question is never persisted.
             rows = store.load_all_question_coverages(
-                REPO, challenged.request.question.scope_root,
+                REPO,
+                challenged.request.question.scope_root,
                 (challenged.request.question.subject,),
             )
             self.assertFalse(
-                any(
-                    row.question == challenged.request.question
-                    for row in rows
-                )
+                any(row.question == challenged.request.question for row in rows)
             )
         finally:
             store.close()
@@ -1340,14 +1266,10 @@ class CommandRoleTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             continuations = ContinuationStore()
-            original = self._establish(
-                structural, evidence, store, continuations
-            )
+            original = self._establish(structural, evidence, store, continuations)
             before = _coverage(store, original)
             (claim_id,) = _result_ids(before)
-            challenged = self._challenge(
-                structural, evidence, store, continuations
-            )
+            challenged = self._challenge(structural, evidence, store, continuations)
             ops.submit_interpretation(
                 challenged.continuation,
                 m.SemanticInterpretationResult(
@@ -1358,13 +1280,8 @@ class CommandRoleTest(unittest.TestCase):
                                 disposition=m.SemanticQuestionDisposition.OPEN,
                                 resolution_requirements=(
                                     m.ResolutionRequirement(
-                                        kind=(
-                                            m.ResolutionKind
-                                            .MISSING_AUTHORITY
-                                        ),
-                                        subject_or_claim=_sid(
-                                            "src/router.py"
-                                        ),
+                                        kind=(m.ResolutionKind.MISSING_AUTHORITY),
+                                        subject_or_claim=_sid("src/router.py"),
                                         description="challenge unresolved",
                                         supporting_context=(),
                                     ),

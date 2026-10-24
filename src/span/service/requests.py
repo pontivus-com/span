@@ -59,6 +59,7 @@ class SemanticStructuralNeighborsRequest:
     max_depth: int = 1
     page_token: str | None = None
 
+
 #: Canonical change vocabulary lives in the core model (single carrier);
 #: re-exported here for service consumers (plan §11.10, I-04).
 ChangeKind = m.ChangeKind

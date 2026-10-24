@@ -50,16 +50,12 @@ def open_repository_context(
     root = repo_root_from_config(repository_locator)
     evidence = FilesystemEvidenceSource(repository_id, root)
     store_path = data_root / f"{repository_id}.db"
-    store = SqliteSemanticStore(
-        str(store_path) if store_path.is_file() else ":memory:"
-    )
+    store = SqliteSemanticStore(str(store_path) if store_path.is_file() else ":memory:")
     context = ServiceContext(
         structural=structural,
         evidence=evidence,
         store=store,
         continuations=ContinuationStore(),
-        authority_seeds=store.load_repository_authority_seeds(
-            repository_id
-        ),
+        authority_seeds=store.load_repository_authority_seeds(repository_id),
     )
     return repository_id, context

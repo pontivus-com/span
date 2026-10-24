@@ -19,7 +19,13 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 # File classes scanned strictly (code/config/fixtures — a hit here fails).
 STRICT_SUFFIXES = {
-    ".py", ".toml", ".cfg", ".ini", ".yaml", ".yml", ".json",
+    ".py",
+    ".toml",
+    ".cfg",
+    ".ini",
+    ".yaml",
+    ".yml",
+    ".json",
 }
 
 ABSOLUTE_HOME_MARKERS = (
@@ -65,9 +71,7 @@ SELF = pathlib.Path(__file__).resolve()
 
 class IsolationGateTest(unittest.TestCase):
     def test_no_required_symlinks_outside_span(self):
-        offenders = [
-            str(p) for p in _repo_files() if p.is_symlink()
-        ]
+        offenders = [str(p) for p in _repo_files() if p.is_symlink()]
         self.assertEqual(offenders, [], f"required symlinks: {offenders}")
 
     def test_strict_files_have_no_workspace_coupling(self):

@@ -85,9 +85,7 @@ class DriveResult:
 
     def __post_init__(self) -> None:
         if (self.answer is None) == (self.halt is None):
-            raise ValueError(
-                "DriveResult carries exactly one of answer/halt"
-            )
+            raise ValueError("DriveResult carries exactly one of answer/halt")
 
 
 def drive(
@@ -121,10 +119,13 @@ def drive(
         )
 
     def _halt(
-        kind: HaltKind, message: str,
+        kind: HaltKind,
+        message: str,
         diagnostics: tuple[str, ...] = (),
     ) -> DriveResult:
-        return DriveResult(answer=None, halt=DriveHalt(kind, message, diagnostics), cost=_cost())
+        return DriveResult(
+            answer=None, halt=DriveHalt(kind, message, diagnostics), cost=_cost()
+        )
 
     try:
         current = invoke()

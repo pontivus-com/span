@@ -13,12 +13,9 @@ fails on any ``span``/``span.*`` import.
 
 from __future__ import annotations
 
-import asyncio as _asyncio
 import contextlib as _contextlib
 import json as _json
 import os as _os
-import pathlib as _pathlib
-
 
 _TOOL_NAMES = (
     "initialize_repository",
@@ -67,9 +64,7 @@ def _discover_repository_id(tools):
             continue
         tail = text.split(marker, 1)[1]
         listing = tail.split(".", 1)[0]
-        found = [
-            part.strip() for part in listing.split(",") if part.strip()
-        ]
+        found = [part.strip() for part in listing.split(",") if part.strip()]
         break
     assert len(found) == 1, (
         "expected exactly one registered repository in public tool "
@@ -85,11 +80,7 @@ def submission_template_from_pending(pending):
     ``request.brief.submission_rules`` entry that begins with the
     documented marker. Nothing here is reconstructed from Span source.
     """
-    rules = (
-        pending.get("request", {})
-        .get("brief", {})
-        .get("submission_rules", [])
-    )
+    rules = pending.get("request", {}).get("brief", {}).get("submission_rules", [])
     for rule in rules:
         if not isinstance(rule, str):
             continue
@@ -100,8 +91,7 @@ def submission_template_from_pending(pending):
         assert isinstance(template, dict), template
         return template
     raise AssertionError(
-        "pending task did not return a minimal submission template: "
-        f"{rules!r}"
+        "pending task did not return a minimal submission template: " f"{rules!r}"
     )
 
 
@@ -166,19 +156,14 @@ class _SchemaValidator:
         if not isinstance(schema, dict):
             return
         if "$ref" in schema:
-            self._validate(
-                value, self._resolve(schema["$ref"], root), root, path
-            )
+            self._validate(value, self._resolve(schema["$ref"], root), root, path)
             return
         if "const" in schema and value != schema["const"]:
             raise _SchemaViolation(
-                f"{path}: expected const {schema['const']!r}, "
-                f"got {value!r}"
+                f"{path}: expected const {schema['const']!r}, " f"got {value!r}"
             )
         if "enum" in schema and value not in schema["enum"]:
-            raise _SchemaViolation(
-                f"{path}: {value!r} not in enum {schema['enum']!r}"
-            )
+            raise _SchemaViolation(f"{path}: {value!r} not in enum {schema['enum']!r}")
         if "allOf" in schema:
             for branch in schema["allOf"]:
                 self._validate(value, branch, root, path)
@@ -190,17 +175,12 @@ class _SchemaValidator:
                 self._validate(value, schema["else"], root, path)
         if "anyOf" in schema:
             if not any(
-                self._matches(value, branch, root)
-                for branch in schema["anyOf"]
+                self._matches(value, branch, root) for branch in schema["anyOf"]
             ):
-                raise _SchemaViolation(
-                    f"{path}: no anyOf branch matched: {value!r}"
-                )
+                raise _SchemaViolation(f"{path}: no anyOf branch matched: {value!r}")
         if "oneOf" in schema:
             matched = sum(
-                1
-                for branch in schema["oneOf"]
-                if self._matches(value, branch, root)
+                1 for branch in schema["oneOf"] if self._matches(value, branch, root)
             )
             if matched != 1:
                 raise _SchemaViolation(
@@ -212,8 +192,7 @@ class _SchemaValidator:
             types = declared if isinstance(declared, list) else [declared]
             if not any(self._type_matches(value, name) for name in types):
                 raise _SchemaViolation(
-                    f"{path}: expected type {types!r}, "
-                    f"got {type(value).__name__}"
+                    f"{path}: expected type {types!r}, " f"got {type(value).__name__}"
                 )
         if isinstance(value, dict):
             properties = schema.get("properties")
@@ -221,8 +200,7 @@ class _SchemaValidator:
                 for required in schema.get("required", []):
                     if required not in value:
                         raise _SchemaViolation(
-                            f"{path}: missing required field "
-                            f"{required!r}"
+                            f"{path}: missing required field " f"{required!r}"
                         )
                 if schema.get("additionalProperties") is False:
                     extra = set(value) - set(properties)
@@ -240,9 +218,7 @@ class _SchemaValidator:
                         )
         if isinstance(value, list) and "items" in schema:
             for index, item in enumerate(value):
-                self._validate(
-                    item, schema["items"], root, f"{path}[{index}]"
-                )
+                self._validate(item, schema["items"], root, f"{path}[{index}]")
 
     @staticmethod
     def _type_matches(value, name):
@@ -255,9 +231,7 @@ class _SchemaValidator:
         if name == "integer":
             return isinstance(value, int) and not isinstance(value, bool)
         if name == "number":
-            return isinstance(value, (int, float)) and not isinstance(
-                value, bool
-            )
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
         if name == "boolean":
             return isinstance(value, bool)
         if name == "null":
@@ -306,7 +280,8 @@ class _Wire:
             self._validator.validate_call(tool, args)
         result = await self._session.call_tool(tool, args)
         texts = [
-            block.text for block in result.content
+            block.text
+            for block in result.content
             if getattr(block, "type", "") == "text"
         ]
         text = "".join(texts)
@@ -318,12 +293,14 @@ class _Wire:
             )
         # Full input/output transcript (S9.5): request arguments and
         # the complete returned JSON, not summaries.
-        self._transcript.append({
-            "tool": tool,
-            "arguments": args,
-            "error": bool(result.is_error),
-            "response": payload,
-        })
+        self._transcript.append(
+            {
+                "tool": tool,
+                "arguments": args,
+                "error": bool(result.is_error),
+                "response": payload,
+            }
+        )
         return payload, bool(result.is_error)
 
 
@@ -356,9 +333,7 @@ async def _submit_answered(
     decision["disposition"] = "ANSWERED"
     decision["disposition_basis"] = disposition_basis
     if "resolution_requirements" in updates:
-        decision["resolution_requirements"] = updates.pop(
-            "resolution_requirements"
-        )
+        decision["resolution_requirements"] = updates.pop("resolution_requirements")
     if claims is not None:
         result["claims"] = list(claims)
     elif summary is not None:
@@ -387,23 +362,20 @@ async def lane(exe, work, data_dir, transcript):
     from mcp.client.stdio import StdioServerParameters, stdio_client
     from mcp import ClientSession
 
-    env = {
-        key: value for key, value in _os.environ.items()
-        if key != "PYTHONPATH"
-    }
+    env = {key: value for key, value in _os.environ.items() if key != "PYTHONPATH"}
 
     async def _session(register: bool = True):
         args = ["--data-dir", str(data_dir)]
         if register:
             args += ["--repo", str(work)]
         params = StdioServerParameters(
-            command=exe, args=args, env=env,
+            command=exe,
+            args=args,
+            env=env,
         )
         stack = _contextlib.AsyncExitStack()
         read, write = await stack.enter_async_context(stdio_client(params))
-        session = await stack.enter_async_context(
-            ClientSession(read, write)
-        )
+        session = await stack.enter_async_context(ClientSession(read, write))
         initialized = await session.initialize()
         listed = await session.list_tools()
         return stack, session, initialized, listed
@@ -425,15 +397,16 @@ async def lane(exe, work, data_dir, transcript):
 
         import hashlib as _hashlib
 
-        transcript.append({
-            "schema_digest": _hashlib.sha256(
-                _json.dumps(
-                    {tool.name: tool.input_schema
-                     for tool in listed.tools},
-                    sort_keys=True,
-                ).encode("utf-8")
-            ).hexdigest(),
-        })
+        transcript.append(
+            {
+                "schema_digest": _hashlib.sha256(
+                    _json.dumps(
+                        {tool.name: tool.input_schema for tool in listed.tools},
+                        sort_keys=True,
+                    ).encode("utf-8")
+                ).hexdigest(),
+            }
+        )
 
         repo_id = _discover_repository_id(listed.tools)
         assert repo_id, "registered repository ID was not discoverable"
@@ -456,7 +429,9 @@ async def lane(exe, work, data_dir, transcript):
         assert "$defs" in submit_schema
         assert "SemanticInterpretationResult" in submit_schema["$defs"]
         assert set(submit_schema["required"]) >= {
-            "continuation", "result", "repository_id",
+            "continuation",
+            "result",
+            "repository_id",
         }
 
         # EC-04: direct semantic entry, no status preflight, bounded
@@ -466,8 +441,7 @@ async def lane(exe, work, data_dir, transcript):
         ), "status preflight preceded the first semantic call"
         alpha_pending, is_error = await wire.call(
             "explain",
-            {"repository_id": repo_id,
-             "target": _selector("src/alpha.py")},
+            {"repository_id": repo_id, "target": _selector("src/alpha.py")},
         )
         assert not is_error, alpha_pending
         assert "continuation" in alpha_pending, alpha_pending
@@ -477,9 +451,7 @@ async def lane(exe, work, data_dir, transcript):
         _phase(
             transcript,
             "EC-04",
-            question_class=alpha_pending["request"]["question"][
-                "question_class"
-            ],
+            question_class=alpha_pending["request"]["question"]["question_class"],
         )
 
         alpha_token = alpha_pending["continuation"]
@@ -505,14 +477,12 @@ async def lane(exe, work, data_dir, transcript):
         assert consumed.get("error") == "unavailable", consumed
         reentry, is_error = await wire.call(
             "explain",
-            {"repository_id": repo_id,
-             "target": _selector("src/alpha.py")},
+            {"repository_id": repo_id, "target": _selector("src/alpha.py")},
         )
         assert not is_error, reentry
         assert "continuation" not in reentry, reentry
         assert [
-            claim["claim_id"]["value"]
-            for claim in reentry["content"]["claims"]
+            claim["claim_id"]["value"] for claim in reentry["content"]["claims"]
         ] == [alpha_claim], reentry
         _phase(transcript, "EC-08", claim_id=alpha_claim)
 
@@ -529,9 +499,11 @@ async def lane(exe, work, data_dir, transcript):
         # EC-09: trace with only required arguments (defaults omitted).
         payload, is_error = await wire.call(
             "trace",
-            {"repository_id": repo_id,
-             "target": _selector("src/alpha.py"),
-             "direction": "BOTH"},
+            {
+                "repository_id": repo_id,
+                "target": _selector("src/alpha.py"),
+                "direction": "BOTH",
+            },
         )
         assert not is_error, payload
         if "continuation" in payload:
@@ -546,8 +518,10 @@ async def lane(exe, work, data_dir, transcript):
         # EC-11: authority is a direct entry point.
         payload, is_error = await wire.call(
             "authority",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/alpha.py")},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/alpha.py"),
+            },
         )
         assert not is_error, payload
         if "continuation" in payload:
@@ -562,9 +536,11 @@ async def lane(exe, work, data_dir, transcript):
         # EC-10: impact without an optional change_description.
         payload, is_error = await wire.call(
             "impact",
-            {"repository_id": repo_id,
-             "target": _selector("src/alpha.py"),
-             "change_kind": "BEHAVIOR"},
+            {
+                "repository_id": repo_id,
+                "target": _selector("src/alpha.py"),
+                "change_kind": "BEHAVIOR",
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -579,8 +555,7 @@ async def lane(exe, work, data_dir, transcript):
         # Establish the second subject for the isolation check.
         payload, is_error = await wire.call(
             "explain",
-            {"repository_id": repo_id,
-             "target": _selector("src/beta.py")},
+            {"repository_id": repo_id, "target": _selector("src/beta.py")},
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -589,7 +564,6 @@ async def lane(exe, work, data_dir, transcript):
         )
         beta_claim = answer["content"]["claims"][0]["claim_id"]["value"]
         beta_subject = _pending_subject(payload)
-        beta_evidence = _pending_evidence_ref(payload)
 
         # EC-16: changing supporting evidence makes alpha noncurrent.
         (work / "src" / "alpha.py").write_text(
@@ -597,8 +571,10 @@ async def lane(exe, work, data_dir, transcript):
         )
         payload, is_error = await wire.call(
             "status",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/alpha.py")},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/alpha.py"),
+            },
         )
         assert not is_error, payload
         assert "STALE" in _json.dumps(payload), payload
@@ -607,8 +583,10 @@ async def lane(exe, work, data_dir, transcript):
         # EC-17: scoped refresh answers only the affected scope.
         payload, is_error = await wire.call(
             "refresh",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/alpha.py")},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/alpha.py"),
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -621,14 +599,15 @@ async def lane(exe, work, data_dir, transcript):
         # EC-18: unrelated established knowledge is still reusable.
         payload, is_error = await wire.call(
             "status",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py")},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+            },
         )
         assert not is_error, payload
         beta_views = payload["content"].get("question_coverage", [])
         assert any(
-            view.get("effective_disposition") == "ANSWERED"
-            for view in beta_views
+            view.get("effective_disposition") == "ANSWERED" for view in beta_views
         ), payload
         assert beta_claim in _json.dumps(payload), payload
         _phase(transcript, "EC-18")
@@ -637,9 +616,11 @@ async def lane(exe, work, data_dir, transcript):
         # question preserves the other's explicit gap reason (S8.2).
         payload, is_error = await wire.call(
             "trace",
-            {"repository_id": repo_id,
-             "target": _selector("src/beta.py"),
-             "direction": "BOTH"},
+            {
+                "repository_id": repo_id,
+                "target": _selector("src/beta.py"),
+                "direction": "BOTH",
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -657,14 +638,17 @@ async def lane(exe, work, data_dir, transcript):
             "decision": {
                 "disposition": "OPEN",
                 "evidence_scope": {"paths": [], "evidence_refs": []},
-                "resolution_requirements": [{
-                    "kind": "MISSING_SEMANTIC_COVERAGE",
-                    "subject_or_claim": {
-                        "$type": "SubjectId", **trace_subject,
-                    },
-                    "description": "second gap stays open",
-                    "supporting_context": [],
-                }],
+                "resolution_requirements": [
+                    {
+                        "kind": "MISSING_SEMANTIC_COVERAGE",
+                        "subject_or_claim": {
+                            "$type": "SubjectId",
+                            **trace_subject,
+                        },
+                        "description": "second gap stays open",
+                        "supporting_context": [],
+                    }
+                ],
                 "disposition_basis": "wire acceptance open question",
             },
         }
@@ -672,15 +656,15 @@ async def lane(exe, work, data_dir, transcript):
             wire,
             payload,
             repo_id,
-            claims=[wire.claim(
-                trace_subject, "beta trace look", trace_ref
-            )],
+            claims=[wire.claim(trace_subject, "beta trace look", trace_ref)],
             proposed_questions=[open_coverage],
         )
         payload, is_error = await wire.call(
             "status",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py")},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+            },
         )
         assert not is_error, payload
         assert "second gap stays open" in _json.dumps(payload), payload
@@ -688,9 +672,11 @@ async def lane(exe, work, data_dir, transcript):
         # EC-19: correction of a current exact subject.
         payload, is_error = await wire.call(
             "refresh",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py"),
-             "stale_only": False},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+                "stale_only": False,
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -705,9 +691,11 @@ async def lane(exe, work, data_dir, transcript):
         # explanation with generic pending scaffolding.
         payload, is_error = await wire.call(
             "refresh",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py"),
-             "stale_only": False},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+                "stale_only": False,
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -717,19 +705,19 @@ async def lane(exe, work, data_dir, transcript):
         assert "content" in answer, answer
         payload, is_error = await wire.call(
             "status",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py")},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+            },
         )
         assert not is_error, payload
         second_views = [
-            view for view in payload["content"].get("question_coverage", [])
-            if view.get("question", {}).get("question_slice")
-            == "beta second question"
+            view
+            for view in payload["content"].get("question_coverage", [])
+            if view.get("question", {}).get("question_slice") == "beta second question"
         ]
         assert len(second_views) == 1, payload
-        assert (
-            second_views[0].get("effective_disposition") == "OPEN"
-        ), payload
+        assert second_views[0].get("effective_disposition") == "OPEN", payload
         assert [
             req.get("description")
             for req in second_views[0].get("resolution_requirements", [])
@@ -739,14 +727,17 @@ async def lane(exe, work, data_dir, transcript):
         # coverage explicitly referencing beta's claim reopens with the
         # actual withdrawal reason when that claim is withdrawn.
         beta_ref = {
-            "$type": "ClaimRef", "kind": "CLAIM",
+            "$type": "ClaimRef",
+            "kind": "CLAIM",
             "id": {"value": beta_claim},
         }
         payload, is_error = await wire.call(
             "impact",
-            {"repository_id": repo_id,
-             "target": _selector("src/beta.py"),
-             "change_kind": "BEHAVIOR"},
+            {
+                "repository_id": repo_id,
+                "target": _selector("src/beta.py"),
+                "change_kind": "BEHAVIOR",
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -755,7 +746,8 @@ async def lane(exe, work, data_dir, transcript):
         shared_requirement = {
             "kind": "MISSING_AUTHORITY",
             "subject_or_claim": {
-                "$type": "SubjectId", **refresh_subject,
+                "$type": "SubjectId",
+                **refresh_subject,
             },
             "description": "shared dependent original gap",
             "supporting_context": [],
@@ -770,21 +762,22 @@ async def lane(exe, work, data_dir, transcript):
             disposition_basis="wire acceptance shared output",
         )
         shared_claims = [
-            claim for claim in answer["content"]["claims"]
+            claim
+            for claim in answer["content"]["claims"]
             if claim["value"].get("summary") == "beta holds the other value"
         ]
         # Re-materializing the identical canonical claim content makes the
         # second answered question a co-owner of beta's exact claim id.
         assert shared_claims, answer
-        assert (
-            shared_claims[0]["claim_id"]["value"] == beta_claim
-        ), shared_claims
+        assert shared_claims[0]["claim_id"]["value"] == beta_claim, shared_claims
 
         payload, is_error = await wire.call(
             "refresh",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py"),
-             "stale_only": False},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+                "stale_only": False,
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -794,36 +787,35 @@ async def lane(exe, work, data_dir, transcript):
             wire,
             payload,
             repo_id,
-            claims=[wire.claim(
-                withdraw_subject, "beta withdraw look", withdraw_ref
-            )],
-            candidate_withdrawals=[{
-                "target": beta_ref,
-                "basis": {
-                    "derivation": "SEMANTIC_INTERPRETATION",
-                    "summary": (
-                        "retracted: wire test withdraws "
-                        "shared beta basis"
-                    ),
-                },
-                "evidence": [withdraw_ref],
-            }],
+            claims=[wire.claim(withdraw_subject, "beta withdraw look", withdraw_ref)],
+            candidate_withdrawals=[
+                {
+                    "target": beta_ref,
+                    "basis": {
+                        "derivation": "SEMANTIC_INTERPRETATION",
+                        "summary": (
+                            "retracted: wire test withdraws " "shared beta basis"
+                        ),
+                    },
+                    "evidence": [withdraw_ref],
+                }
+            ],
         )
         payload, is_error = await wire.call(
             "status",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py")},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+            },
         )
         assert not is_error, payload
         shared_views = [
-            view for view in payload["content"].get("question_coverage", [])
-            if view.get("question", {}).get("question_slice")
-            == shared_slice
+            view
+            for view in payload["content"].get("question_coverage", [])
+            if view.get("question", {}).get("question_slice") == shared_slice
         ]
         assert len(shared_views) == 1, payload
-        assert (
-            shared_views[0].get("effective_disposition") == "PENDING"
-        ), payload
+        assert shared_views[0].get("effective_disposition") == "PENDING", payload
         shared_reasons = [
             req.get("description")
             for req in shared_views[0].get("resolution_requirements", [])
@@ -837,9 +829,11 @@ async def lane(exe, work, data_dir, transcript):
         # EC-06: malformed ingress retains the live continuation.
         payload, is_error = await wire.call(
             "refresh",
-            {"repository_id": repo_id,
-             "target": _tagged_subject_selector("src/beta.py"),
-             "stale_only": False},
+            {
+                "repository_id": repo_id,
+                "target": _tagged_subject_selector("src/beta.py"),
+                "stale_only": False,
+            },
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
@@ -847,8 +841,7 @@ async def lane(exe, work, data_dir, transcript):
         malformed_token = payload["continuation"]
         payload, is_error = await wire.call(
             "submit_interpretation",
-            {"continuation": malformed_token,
-             "repository_id": repo_id},
+            {"continuation": malformed_token, "repository_id": repo_id},
             validate=False,
         )
         assert is_error, payload
@@ -963,8 +956,7 @@ async def lane(exe, work, data_dir, transcript):
         wire = _wire(session, listed)
         payload, is_error = await wire.call(
             "explain",
-            {"repository_id": repo_id,
-             "target": _selector("src/alpha.py")},
+            {"repository_id": repo_id, "target": _selector("src/alpha.py")},
         )
         assert not is_error, payload
         assert "continuation" not in payload, payload
@@ -972,8 +964,7 @@ async def lane(exe, work, data_dir, transcript):
         # refresh correction may have added a superseding claim citing
         # current evidence, so this asserts membership, not equality.
         assert alpha_claim in [
-            claim["claim_id"]["value"]
-            for claim in payload["content"]["claims"]
+            claim["claim_id"]["value"] for claim in payload["content"]["claims"]
         ], payload
         _phase(transcript, "EC-20", claim_id=alpha_claim)
     finally:
@@ -982,9 +973,9 @@ async def lane(exe, work, data_dir, transcript):
     # EC-22: the provider built its index into Span's data directory,
     # never into the target repository.
     for artifact in ("graft", ".graph"):
-        assert not (work / artifact).exists(), (
-            f"target structural artifact was written: {artifact}"
-        )
+        assert not (
+            work / artifact
+        ).exists(), f"target structural artifact was written: {artifact}"
     assert not any(
         path.name == "wiring.json" for path in work.rglob("wiring.json")
     ), "provider index was written into the target repository"
@@ -994,9 +985,7 @@ async def lane(exe, work, data_dir, transcript):
     _phase(
         transcript,
         "EC-22",
-        index=str(
-            data_dir / "structural" / repo_id / ".graph" / "wiring.json"
-        ),
+        index=str(data_dir / "structural" / repo_id / ".graph" / "wiring.json"),
     )
 
     # -- phase 3: unregistered setup call, one locator -------------------
@@ -1030,9 +1019,7 @@ async def lane(exe, work, data_dir, transcript):
         assert not is_error, payload
         assert "continuation" in payload, payload
         items = payload["request"]["target_inventory_items"]
-        bound_ids = [
-            item["evidence_ref"]["evidence_id"]["value"] for item in items
-        ]
+        bound_ids = [item["evidence_ref"]["evidence_id"]["value"] for item in items]
         assert len(bound_ids) >= 2, payload
         template = submission_template_from_pending(payload)
         template_ids = [
@@ -1087,9 +1074,7 @@ async def lane(exe, work, data_dir, transcript):
             },
         )
         assert not is_error, payload
-        assert (
-            payload["request"]["question"]["question_class"] == "CQ_01"
-        ), payload
+        assert payload["request"]["question"]["question_class"] == "CQ_01", payload
         assert "service-owned first-admission" in (
             payload["request"]["question"]["materiality_basis"]
         ), payload
@@ -1170,9 +1155,7 @@ async def lane(exe, work, data_dir, transcript):
         rules = " ".join(pending["request"]["brief"]["submission_rules"])
         assert "non-progressing" in rules, rules
         template = submission_template_from_pending(pending)
-        ids = [
-            item["evidence_ref"]["evidence_id"]["value"] for item in items
-        ]
+        ids = [item["evidence_ref"]["evidence_id"]["value"] for item in items]
         template_ids = [
             account["evidence_id"]["value"]
             for account in template["proposed_target_inventory_accounting"]
@@ -1206,9 +1189,7 @@ async def lane(exe, work, data_dir, transcript):
             ), again
         else:
             assert "content" in again, again
-            assert (
-                again["content"].get("target_disposition") != "CURRENT"
-            ), again
+            assert again["content"].get("target_disposition") != "CURRENT", again
             assert again["content"].get("unresolved"), again
         _phase(transcript, "EC-24", non_progressing=True)
     finally:
@@ -1219,9 +1200,13 @@ async def lane(exe, work, data_dir, transcript):
     try:
         wire = _wire(session, listed)
         small = {
-            "max_results": 1, "max_depth": 5, "max_subjects": 1,
-            "max_evidence_units": 24, "max_evidence_bytes": 96000,
-            "max_candidate_claims": 64, "max_candidate_relationships": 64,
+            "max_results": 1,
+            "max_depth": 5,
+            "max_subjects": 1,
+            "max_evidence_units": 24,
+            "max_evidence_bytes": 96000,
+            "max_candidate_claims": 64,
+            "max_candidate_relationships": 64,
         }
         first, is_error = await wire.call(
             "status",
@@ -1233,14 +1218,16 @@ async def lane(exe, work, data_dir, transcript):
         second, is_error = await wire.call(
             "status",
             {
-                "repository_id": repo_id, "target": None,
-                "bounds": small, "page_token": token,
+                "repository_id": repo_id,
+                "target": None,
+                "bounds": small,
+                "page_token": token,
             },
         )
         assert not is_error, second
-        assert second["content"] != first["content"], (
-            "the redeemed page repeated the first page"
-        )
+        assert (
+            second["content"] != first["content"]
+        ), "the redeemed page repeated the first page"
         _phase(transcript, "EC-12", page_token_opaque=True)
 
         opaque_errors = []
@@ -1261,8 +1248,10 @@ async def lane(exe, work, data_dir, transcript):
         mismatched, is_error = await wire.call(
             "status",
             {
-                "repository_id": repo_id, "target": None,
-                "bounds": changed, "page_token": token,
+                "repository_id": repo_id,
+                "target": None,
+                "bounds": changed,
+                "page_token": token,
             },
         )
         assert is_error, mismatched

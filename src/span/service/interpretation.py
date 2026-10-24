@@ -14,7 +14,6 @@ import dataclasses as _dataclasses
 from dataclasses import dataclass as _dataclass
 
 from span.core import model as m
-from span.core import schema as _schema
 from span.core import validation as _validation
 from span.ports.evidence import EvidenceSource
 from span.ports.interpretation import PendingInterpretation
@@ -36,16 +35,16 @@ from span.service.resolution import (
 )
 
 __all__ = [
-    'InterpretationTask',
-    'prepare_interpretation_task',
-    '_validation_context_for',
-    '_assign_candidate_keys',
-    '_admit_cited_evidence',
-    '_derive_question_evidence',
-    '_materialize_unit',
-    '_next_baseline_pending',
-    '_suspend_baseline_pending',
-    '_suspend',
+    "InterpretationTask",
+    "prepare_interpretation_task",
+    "_validation_context_for",
+    "_assign_candidate_keys",
+    "_admit_cited_evidence",
+    "_derive_question_evidence",
+    "_materialize_unit",
+    "_next_baseline_pending",
+    "_suspend_baseline_pending",
+    "_suspend",
 ]
 
 
@@ -69,6 +68,7 @@ def _member_diagnostics(
         label += " (key=?)"
     return [f"{label}: {text}" for text in diagnostics]
 
+
 @_dataclass(frozen=True)
 class InterpretationTask:
     """Prepared bounded interpretation task (Span side, pre-suspension)."""
@@ -86,7 +86,8 @@ def _project_excerpts(
     delivery_budget: int,
     structural_spans: dict[str, tuple[int, int]] | None = None,
 ) -> tuple[
-    tuple[m.EvidenceUnit, ...], tuple[str, ...],
+    tuple[m.EvidenceUnit, ...],
+    tuple[str, ...],
     tuple[m.ResolutionRequirement, ...],
 ]:
     """Bounded excerpt delivery (Addendum I S7 §5.7).
@@ -146,11 +147,7 @@ def _project_excerpts(
         subject.display_name,
         subject.subject_id.canonical_locator.rsplit("/", 1)[-1],
     )
-    anchors = tuple(
-        dict.fromkeys(
-            a for a in (*default_anchors, *question_terms) if a
-        )
-    )
+    anchors = tuple(dict.fromkeys(a for a in (*default_anchors, *question_terms) if a))
     spans = structural_spans or {}
     projected: list[m.EvidenceUnit] = []
     omissions: list[str] = []
@@ -187,12 +184,10 @@ def _project_excerpts(
                     projected.append(unit)
                     used += size
                     continue
-            excerpt_text = "\n".join(lines[start - 1:end])
+            excerpt_text = "\n".join(lines[start - 1 : end])
             if content.endswith("\n") and end == total:
                 excerpt_text += "\n"
-            size = len(excerpt_text.encode("utf-8")) + _range_meta(
-                start, end, total
-            )
+            size = len(excerpt_text.encode("utf-8")) + _range_meta(start, end, total)
             if used + size <= delivery_budget:
                 projected.append(
                     _dc.replace(
@@ -223,15 +218,16 @@ def _project_excerpts(
                         total_ranges += 1
                 continue
             first_line = lines[start - 1] + (
-                "\n" if content.endswith("\n") and start == end == total
-                else ""
+                "\n" if content.endswith("\n") and start == end == total else ""
             )
-            if start == end or used + len(
-                first_line.encode("utf-8")
-            ) + _range_meta(start, start, total) > delivery_budget:
-                requirements.append(
-                    _delivery_requirement(unit, start, end, total)
-                )
+            if (
+                start == end
+                or used
+                + len(first_line.encode("utf-8"))
+                + _range_meta(start, start, total)
+                > delivery_budget
+            ):
+                requirements.append(_delivery_requirement(unit, start, end, total))
             omissions.append(
                 f"excerpt omitted {unit.evidence_ref.locator} lines "
                 f"{start}-{end} of {total} "
@@ -254,20 +250,16 @@ def _project_excerpts(
                 if total == 1:
                     # A single ungrounded line that cannot fit is still
                     # a named delivery requirement, not silent omission.
-                    requirements.append(
-                        _delivery_requirement(unit, 1, total, total)
-                    )
+                    requirements.append(_delivery_requirement(unit, 1, total, total))
             continue
         first, last = hits[0], hits[-1]
         # Contiguous enclosing range.
-        excerpt_lines = lines[first - 1:last]
+        excerpt_lines = lines[first - 1 : last]
         excerpt_text = "\n".join(excerpt_lines)
         # Preserve trailing newline semantics minimally.
         if content.endswith("\n") and last == total:
             excerpt_text += "\n"
-        size = len(excerpt_text.encode("utf-8")) + _range_meta(
-            first, last, total
-        )
+        size = len(excerpt_text.encode("utf-8")) + _range_meta(first, last, total)
         if used + size <= delivery_budget:
             projected.append(
                 _dc.replace(
@@ -303,34 +295,30 @@ def _project_excerpts(
         # Maximal prefix of hits in line order that fits.
         kept_last = first
         for h in hits:
-            trial = "\n".join(lines[first - 1:h])
+            trial = "\n".join(lines[first - 1 : h])
             if content.endswith("\n") and h == total:
                 trial += "\n"
-            trial_size = len(trial.encode("utf-8")) + _range_meta(
-                first, h, total
-            )
+            trial_size = len(trial.encode("utf-8")) + _range_meta(first, h, total)
             if used + trial_size <= delivery_budget:
                 kept_last = h
             else:
                 break
-        excerpt_text = "\n".join(lines[first - 1:kept_last])
+        excerpt_text = "\n".join(lines[first - 1 : kept_last])
         if content.endswith("\n") and kept_last == total:
             excerpt_text += "\n"
-        size = len(excerpt_text.encode("utf-8")) + _range_meta(
-            first, kept_last, total
-        )
+        size = len(excerpt_text.encode("utf-8")) + _range_meta(first, kept_last, total)
         if not excerpt_text or used + size > delivery_budget:
             first_line = lines[first - 1] + (
-                "\n"
-                if content.endswith("\n") and first == total
-                else ""
+                "\n" if content.endswith("\n") and first == total else ""
             )
-            if first == last or used + len(
-                first_line.encode("utf-8")
-            ) + _range_meta(first, first, total) > delivery_budget:
-                requirements.append(
-                    _delivery_requirement(unit, first, last, total)
-                )
+            if (
+                first == last
+                or used
+                + len(first_line.encode("utf-8"))
+                + _range_meta(first, first, total)
+                > delivery_budget
+            ):
+                requirements.append(_delivery_requirement(unit, first, last, total))
             omissions.append(
                 f"excerpt omitted {unit.evidence_ref.locator} lines "
                 f"{first}-{last} of {total} "
@@ -393,8 +381,7 @@ def _submission_template(
         "PENDING with the actual disposition when the examination reaches "
         "one, add claims/relationships only when supported semantic "
         "material exists, and add optional fields only when materially "
-        "applicable): "
-        + _json.dumps(example, sort_keys=True)
+        "applicable): " + _json.dumps(example, sort_keys=True)
     )
 
 
@@ -453,10 +440,7 @@ def _build_task_brief(
 ) -> m.TaskBrief:
     """Project one admitted task into the uniform quality card."""
     evidence_authority = (
-        (
-            "Evidence examined: "
-            + ", ".join(ref.locator for ref in selected_refs)
-        )
+        ("Evidence examined: " + ", ".join(ref.locator for ref in selected_refs))
         if selected_refs
         else "Evidence examined: none recorded; do not assert unsupported facts."
     )
@@ -470,15 +454,16 @@ def _build_task_brief(
     )
     target_boundaries = tuple(
         [f"target path: {path}" for path in target_scope.paths]
-        + [
-            f"target evidence: {ref.locator}"
-            for ref in target_scope.evidence_refs
-        ]
+        + [f"target evidence: {ref.locator}" for ref in target_scope.evidence_refs]
     )
-    scope_boundaries = target_boundaries + (
-        f"scope root: {root.canonical_locator}",
-        f"structural anchor: {subject.subject_id.canonical_locator}",
-    ) + tuple(excerpt_omissions)
+    scope_boundaries = (
+        target_boundaries
+        + (
+            f"scope root: {root.canonical_locator}",
+            f"structural anchor: {subject.subject_id.canonical_locator}",
+        )
+        + tuple(excerpt_omissions)
+    )
     # S3.4 task-bound submission example: minimal shape populated with
     # bound question and immutable identities, PENDING + missing
     # examination, not a fabricated answer. Agents supply validated
@@ -498,11 +483,10 @@ def _build_task_brief(
                 objective.strip() + " — "
                 if objective.strip()
                 else "Support the admitted engineering question: "
-            ) + resolved_slice
+            )
+            + resolved_slice
         ),
-        material_aspects=m.QUESTION_CLASS_ASPECTS.get(
-            resolved_class, ()
-        ),
+        material_aspects=m.QUESTION_CLASS_ASPECTS.get(resolved_class, ()),
         scope_boundaries=scope_boundaries,
         evidence_authority=(
             evidence_authority,
@@ -559,9 +543,7 @@ def prepare_interpretation_task(
     in admission.
     """
     sid = subject.subject_id
-    edges = structural.edges(
-        repository_id, sid, (), StructuralDirection.BOTH, bounds
-    )
+    edges = structural.edges(repository_id, sid, (), StructuralDirection.BOTH, bounds)
     observations = [
         m.StructuralObservation(
             source_subject=edge.source,
@@ -584,13 +566,17 @@ def prepare_interpretation_task(
         for loc in locations
     )
     selection = discover_evidence(
-        repository_id, subject, structural=structural, evidence=evidence,
-        bounds=bounds, state=state, authority_seeds=authority_seeds,
-        question_terms=question_terms, target_scope=target_scope,
+        repository_id,
+        subject,
+        structural=structural,
+        evidence=evidence,
+        bounds=bounds,
+        state=state,
+        authority_seeds=authority_seeds,
+        question_terms=question_terms,
+        target_scope=target_scope,
     )
-    units = _read_units_within_bytes(
-        evidence, selection.selected_refs, bounds
-    )
+    units = _read_units_within_bytes(evidence, selection.selected_refs, bounds)
     # S7 §5.7 excerpt projection: service-owned, after bounded read.
     # Full-source identity/fingerprint versus delivered range; omissions
     # in scope_boundaries; byte accounting UTF-8 against delivery ceiling.
@@ -607,20 +593,19 @@ def prepare_interpretation_task(
         (unit.evidence_ref.evidence_id.value, unit.content_fingerprint)
         for unit in units
     )
-    known_subjects = (sid,) + tuple(
-        obs.target_subject
-        for obs in observations
-        if obs.target_subject is not None
-    ) + tuple(obs.source_subject for obs in observations)
+    known_subjects = (
+        (sid,)
+        + tuple(
+            obs.target_subject for obs in observations if obs.target_subject is not None
+        )
+        + tuple(obs.source_subject for obs in observations)
+    )
     resolved_class = question_class or _question_class_for_intent(
         operation_intent, establish_baseline
     )
     # J-3/S3.2: never use a subject locator as the question slice. When the
     # host supplied no selection, use the canonical operation/CQ default.
-    resolved_slice = (
-        question_slice
-        or m.QUESTION_CLASS_DEFAULT_SLICE[resolved_class]
-    )
+    resolved_slice = question_slice or m.QUESTION_CLASS_DEFAULT_SLICE[resolved_class]
     if establish_baseline and not question_slice:
         resolved_slice = (
             "Establish the selected root's purpose, principal participants, "
@@ -645,9 +630,7 @@ def prepare_interpretation_task(
     prior_relationships: tuple[m.SemanticRelationship, ...] = ()
     if store is not None:
         try:
-            claim_page = store.load_claims(
-                repository_id, (sid,), (), bounds, None
-            )
+            claim_page = store.load_claims(repository_id, (sid,), (), bounds, None)
             prior_claims = tuple(claim_page.items)[: bounds.max_results]
         except Exception:
             prior_claims = ()
@@ -669,7 +652,10 @@ def prepare_interpretation_task(
     if store is not None:
         try:
             scoped = store.load_question_coverages(
-                repository_id, root, (sid,), bounds,
+                repository_id,
+                root,
+                (sid,),
+                bounds,
             )
         except Exception:
             scoped = ()
@@ -717,15 +703,17 @@ def prepare_interpretation_task(
                     for iu in item_units:
                         units_list.insert(0, iu)
                         fingerprints_list.insert(
-                            0, (
+                            0,
+                            (
                                 iu.evidence_ref.evidence_id.value,
                                 iu.content_fingerprint,
-                            )
+                            ),
                         )
     if required_evidence_refs:
         present = {u.evidence_ref.evidence_id.value for u in units_list}
         missing = [
-            ref for ref in required_evidence_refs
+            ref
+            for ref in required_evidence_refs
             if ref.evidence_id.value not in present
         ]
         if missing:
@@ -745,8 +733,7 @@ def prepare_interpretation_task(
         if any(
             item.evidence_ref.evidence_id.value not in present_ids
             and not any(
-                item.evidence_ref.locator in note
-                for note in item_unreadable_notes
+                item.evidence_ref.locator in note for note in item_unreadable_notes
             )
             for item in target_inventory_items
         ):
@@ -754,9 +741,10 @@ def prepare_interpretation_task(
                 ("mapping item evidence missing from task",)
             )
     if mapping_mode:
-        item_locators = ", ".join(
-            item.evidence_ref.locator for item in target_inventory_items
-        ) or sid.canonical_locator
+        item_locators = (
+            ", ".join(item.evidence_ref.locator for item in target_inventory_items)
+            or sid.canonical_locator
+        )
         mapping_slice = (
             f"Account for inventory member(s) {item_locators} in target: "
             f"assign to admitted area(s), record an evidence-backed "
@@ -764,7 +752,8 @@ def prepare_interpretation_task(
             f"each."
         )
         mapping_brief = m.TaskBrief(
-            objective=((objective.strip() + " — ") if objective.strip() else "") + mapping_slice,
+            objective=((objective.strip() + " — ") if objective.strip() else "")
+            + mapping_slice,
             scope_boundaries=tuple(
                 [f"target path: {p}" for p in target_scope.paths]
                 + [f"target evidence: {r.locator}" for r in target_scope.evidence_refs]
@@ -775,8 +764,14 @@ def prepare_interpretation_task(
                 + list(item_unreadable_notes)
             ),
             evidence_authority=(
-                ("Evidence examined: " + ", ".join(r.locator for r in selection.selected_refs))
-                if selection.selected_refs else "Evidence examined: none recorded.",
+                (
+                    (
+                        "Evidence examined: "
+                        + ", ".join(r.locator for r in selection.selected_refs)
+                    )
+                    if selection.selected_refs
+                    else "Evidence examined: none recorded."
+                ),
                 "Include the current inventory item's EvidenceRef before supplementary evidence.",
                 "Distinguish observed behavior from governing intent.",
             ),
@@ -786,7 +781,8 @@ def prepare_interpretation_task(
             readback=m.TASK_BRIEF_READBACK,
             open_requirements=tuple(open_requirements),
             open_handling=m.TASK_BRIEF_OPEN_HANDLING,
-            submission_rules=m.TASK_BRIEF_SUBMISSION_RULES + (
+            submission_rules=m.TASK_BRIEF_SUBMISSION_RULES
+            + (
                 "Submit exactly one CandidateTargetInventoryAccount for "
                 "every inventory member bound in this mapping task; every "
                 "returned bound EvidenceId must appear exactly once. The "
@@ -805,7 +801,8 @@ def prepare_interpretation_task(
                 "it first through question-local examination (explain), "
                 "then reuse it; mapping tasks cannot co-admit non-area "
                 "subjects under the orphan rule.",
-            ) + (
+            )
+            + (
                 (
                     "The anchor subject is a synthetic structural fallback "
                     "(OTHER kind): it is discovery input only, not an "
@@ -821,7 +818,8 @@ def prepare_interpretation_task(
                     "the item to an admitted or newly proposed coherent area, "
                     "never to the anchor itself unless the anchor is that area.",
                 )
-            ) + (_mapping_submission_template(target_inventory_items),),
+            )
+            + (_mapping_submission_template(target_inventory_items),),
         )
     request = m.SemanticInterpretationRequest(
         repository_id=repository_id,
@@ -839,18 +837,22 @@ def prepare_interpretation_task(
         prior_claims=prior_claims,
         prior_relationships=prior_relationships,
         analysis_obligations=m.SA_ANALYSIS_OBLIGATIONS,
-        brief=mapping_brief if mapping_mode else _build_task_brief(
-            resolved_slice=resolved_slice,
-            resolved_class=resolved_class,
-            root=root,
-            subject=subject,
-            selected_refs=selection.selected_refs,
-            authority_seeds=authority_seeds,
-            open_requirements=tuple(open_requirements),
-            target_scope=target_scope,
-            objective=objective,
-            excerpt_omissions=_excerpt_omissions,
-            bound_question=question,
+        brief=(
+            mapping_brief
+            if mapping_mode
+            else _build_task_brief(
+                resolved_slice=resolved_slice,
+                resolved_class=resolved_class,
+                root=root,
+                subject=subject,
+                selected_refs=selection.selected_refs,
+                authority_seeds=authority_seeds,
+                open_requirements=tuple(open_requirements),
+                target_scope=target_scope,
+                objective=objective,
+                excerpt_omissions=_excerpt_omissions,
+                bound_question=question,
+            )
         ),
         target_scope=target_scope,
         target_id=target_id,
@@ -867,6 +869,7 @@ def prepare_interpretation_task(
         known_subject_ids=known_subjects,
         observations=tuple(observations),
     )
+
 
 def _validation_context_for(
     task: InterpretationTask,
@@ -888,6 +891,7 @@ def _validation_context_for(
         },
     )
 
+
 def _assign_candidate_keys(
     result: m.SemanticInterpretationResult,
 ) -> m.SemanticInterpretationResult:
@@ -897,12 +901,9 @@ def _assign_candidate_keys(
     deterministic `auto:<index>` values so every result carries unique
     non-empty keys. Explicit duplicates reject the unit.
     """
-    keys = [
-        c.candidate_key for c in result.claims
-    ] + [
+    keys = [c.candidate_key for c in result.claims] + [
         r.candidate_key for r in result.relationships
     ]
-    explicit = [k for k in keys if k]
     seen: dict[str, int] = {}
     duplicates: list[str] = []
     for index, key in enumerate(keys):
@@ -928,28 +929,36 @@ def _assign_candidate_keys(
     if all(keys):
         return result
     claims = tuple(
-        c if c.candidate_key else m.CandidateSemanticClaim(
-            candidate_key=f"auto-{n}",
-            subject=c.subject,
-            kind=c.kind,
-            value=c.value,
-            assertion_nature=c.assertion_nature,
-            evidence=c.evidence,
-            candidate_authority=c.candidate_authority,
-            basis=c.basis,
+        (
+            c
+            if c.candidate_key
+            else m.CandidateSemanticClaim(
+                candidate_key=f"auto-{n}",
+                subject=c.subject,
+                kind=c.kind,
+                value=c.value,
+                assertion_nature=c.assertion_nature,
+                evidence=c.evidence,
+                candidate_authority=c.candidate_authority,
+                basis=c.basis,
+            )
         )
         for n, c in enumerate(result.claims)
     )
     relationships = tuple(
-        r if r.candidate_key else m.CandidateSemanticRelationship(
-            candidate_key=f"auto-c{len(result.claims) + n}",
-            source=r.source,
-            kind=r.kind,
-            target=r.target,
-            assertion_nature=r.assertion_nature,
-            evidence=r.evidence,
-            candidate_authority=r.candidate_authority,
-            basis=r.basis,
+        (
+            r
+            if r.candidate_key
+            else m.CandidateSemanticRelationship(
+                candidate_key=f"auto-c{len(result.claims) + n}",
+                source=r.source,
+                kind=r.kind,
+                target=r.target,
+                assertion_nature=r.assertion_nature,
+                evidence=r.evidence,
+                candidate_authority=r.candidate_authority,
+                basis=r.basis,
+            )
         )
         for n, r in enumerate(result.relationships)
     )
@@ -966,6 +975,7 @@ def _assign_candidate_keys(
         proposed_target_inventory_accounting=result.proposed_target_inventory_accounting,
         proposed_target_questions=result.proposed_target_questions,
     )
+
 
 def _normalize_cited_ref(
     cited: m.EvidenceRef,
@@ -1088,27 +1098,20 @@ def _admit_cited_evidence(
                 m.EvidenceScope(
                     paths=(),
                     evidence_refs=tuple(
-                        ref
-                        for eid in wanted
-                        for ref in cited_by_id[eid]
+                        ref for eid in wanted for ref in cited_by_id[eid]
                     ),
                 ),
                 bounds,
             )
         except ValueError as exc:
-            return ctx, result, [
-                f"cited evidence inventory unavailable: {exc}"
-            ]
+            return ctx, result, [f"cited evidence inventory unavailable: {exc}"]
         try:
             from span.service.discovery import check_inventory_identity
 
             items = check_inventory_identity(tuple(page.items))
         except ValueError as exc:
             return ctx, result, [f"cited evidence {exc}"]
-        by_id = {
-            item.evidence_ref.evidence_id.value: item
-            for item in items
-        }
+        by_id = {item.evidence_ref.evidence_id.value: item for item in items}
         for eid in wanted:
             item = by_id.get(eid)
             if item is None:
@@ -1130,14 +1133,10 @@ def _admit_cited_evidence(
             try:
                 units = evidence.read_evidence((canonical,), bounds)
             except ValueError:
-                problems.append(
-                    f"cited evidence is unreadable: {eid}"
-                )
+                problems.append(f"cited evidence is unreadable: {eid}")
                 continue
             if len(units) != 1:
-                problems.append(
-                    f"cited evidence is unreadable: {eid}"
-                )
+                problems.append(f"cited evidence is unreadable: {eid}")
                 continue
             (unit,) = units
             fingerprints[eid] = unit.content_fingerprint
@@ -1156,17 +1155,17 @@ def _admit_cited_evidence(
         canonical = canonical_refs.get(ref.evidence_id.value)
         if canonical is None:
             return ref
-        return _normalize_cited_ref(
-            ref, canonical, fingerprints[ref.evidence_id.value]
-        )
+        return _normalize_cited_ref(ref, canonical, fingerprints[ref.evidence_id.value])
 
     def _normalize_basis(basis: m.SemanticBasis) -> m.SemanticBasis:
         return _dataclasses.replace(
             basis,
             input_refs=tuple(
-                _normalize(input_ref)
-                if isinstance(input_ref, m.EvidenceRef)
-                else input_ref
+                (
+                    _normalize(input_ref)
+                    if isinstance(input_ref, m.EvidenceRef)
+                    else input_ref
+                )
                 for input_ref in basis.input_refs
             ),
         )
@@ -1177,9 +1176,11 @@ def _admit_cited_evidence(
         return _dataclasses.replace(
             requirement,
             supporting_context=tuple(
-                _normalize(context_ref)
-                if isinstance(context_ref, m.EvidenceRef)
-                else context_ref
+                (
+                    _normalize(context_ref)
+                    if isinstance(context_ref, m.EvidenceRef)
+                    else context_ref
+                )
                 for context_ref in requirement.supporting_context
             ),
         )
@@ -1191,9 +1192,7 @@ def _admit_cited_evidence(
             return None
         return _dataclasses.replace(
             precedence,
-            overrides=tuple(
-                _normalize(ref) for ref in precedence.overrides
-            ),
+            overrides=tuple(_normalize(ref) for ref in precedence.overrides),
         )
 
     def _normalize_authority(
@@ -1213,9 +1212,7 @@ def _admit_cited_evidence(
         _dataclasses.replace(
             candidate,
             evidence=tuple(_normalize(ref) for ref in candidate.evidence),
-            candidate_authority=_normalize_authority(
-                candidate.candidate_authority
-            ),
+            candidate_authority=_normalize_authority(candidate.candidate_authority),
             basis=_normalize_basis(candidate.basis),
         )
         for candidate in result.claims
@@ -1224,9 +1221,7 @@ def _admit_cited_evidence(
         _dataclasses.replace(
             candidate,
             evidence=tuple(_normalize(ref) for ref in candidate.evidence),
-            candidate_authority=_normalize_authority(
-                candidate.candidate_authority
-            ),
+            candidate_authority=_normalize_authority(candidate.candidate_authority),
             basis=_normalize_basis(candidate.basis),
         )
         for candidate in result.relationships
@@ -1242,9 +1237,7 @@ def _admit_cited_evidence(
     conflicts = tuple(
         _dataclasses.replace(
             conflict,
-            candidate_precedence=_normalize_precedence(
-                conflict.candidate_precedence
-            ),
+            candidate_precedence=_normalize_precedence(conflict.candidate_precedence),
             basis=_normalize_basis(conflict.basis),
         )
         for conflict in result.candidate_conflicts
@@ -1266,9 +1259,7 @@ def _admit_cited_evidence(
             evidence_scope=_dataclasses.replace(
                 decision.evidence_scope,
                 evidence_refs=tuple(
-                    _normalize(ref)
-                    if ref.evidence_id.value in canonical_refs
-                    else ref
+                    _normalize(ref) if ref.evidence_id.value in canonical_refs else ref
                     for ref in decision.evidence_scope.evidence_refs
                 ),
             ),
@@ -1287,9 +1278,11 @@ def _admit_cited_evidence(
                 else _dataclasses.replace(
                     account.exclusion_basis,
                     input_refs=tuple(
-                        _normalize(input_ref)
-                        if isinstance(input_ref, m.EvidenceRef)
-                        else input_ref
+                        (
+                            _normalize(input_ref)
+                            if isinstance(input_ref, m.EvidenceRef)
+                            else input_ref
+                        )
                         for input_ref in account.exclusion_basis.input_refs
                     ),
                 )
@@ -1327,26 +1320,27 @@ def _admit_cited_evidence(
         proposed_target_inventory_accounting=accounts,
         proposed_target_questions=result.proposed_target_questions,
     )
-    return _validation.ValidationContext(
-        allowed_claim_kinds=ctx.allowed_claim_kinds,
-        allowed_relationship_kinds=ctx.allowed_relationship_kinds,
-        known_evidence_ids=known,
-        known_subject_ids=ctx.known_subject_ids,
-        evidence_fingerprints=fingerprints,
-        evidence_contents=contents,
-        evidence_refs=canonical_refs,
-    ), normalized, problems
+    return (
+        _validation.ValidationContext(
+            allowed_claim_kinds=ctx.allowed_claim_kinds,
+            allowed_relationship_kinds=ctx.allowed_relationship_kinds,
+            known_evidence_ids=known,
+            known_subject_ids=ctx.known_subject_ids,
+            evidence_fingerprints=fingerprints,
+            evidence_contents=contents,
+            evidence_refs=canonical_refs,
+        ),
+        normalized,
+        problems,
+    )
 
 
 def _material_result_refs(
     claims: tuple[m.SemanticClaim, ...],
     relationships: tuple[m.SemanticRelationship, ...],
 ) -> tuple[m.ClaimRef | m.RelationshipRef, ...]:
-    return tuple(
-        m.ClaimRef(id=c.claim_id) for c in claims
-    ) + tuple(
-        m.RelationshipRef(id=r.relationship_id)
-        for r in relationships
+    return tuple(m.ClaimRef(id=c.claim_id) for c in claims) + tuple(
+        m.RelationshipRef(id=r.relationship_id) for r in relationships
     )
 
 
@@ -1373,13 +1367,17 @@ def _load_prior_question_coverage(
     """Load the exact persisted row for one canonical question identity."""
     try:
         rows = store.load_all_question_coverages(
-            repository_id, question.scope_root, (question.subject,),
+            repository_id,
+            question.scope_root,
+            (question.subject,),
         )
     except Exception:
         try:
             rows = store.load_question_coverages(
-                repository_id, question.scope_root,
-                (question.subject,), bounds,
+                repository_id,
+                question.scope_root,
+                (question.subject,),
+                bounds,
             )
         except Exception:
             rows = ()
@@ -1527,13 +1525,17 @@ def _retire_replaced_outputs(
     """
     try:
         prior_qcovs = store.load_all_question_coverages(
-            repository_id, question.scope_root, (question.subject,),
+            repository_id,
+            question.scope_root,
+            (question.subject,),
         )
     except Exception:
         try:
             prior_qcovs = store.load_question_coverages(
-                repository_id, question.scope_root,
-                (question.subject,), bounds,
+                repository_id,
+                question.scope_root,
+                (question.subject,),
+                bounds,
             )
         except Exception:
             prior_qcovs = ()
@@ -1547,8 +1549,11 @@ def _retire_replaced_outputs(
         # retirement). Deferral propagates: never retire with an
         # incomplete owner set.
         all_qcovs = _load_all_coverages_or_defer(
-            repository_id, None, (),
-            store=store, bounds=bounds,
+            repository_id,
+            None,
+            (),
+            store=store,
+            bounds=bounds,
             purpose="shared-output retirement check",
         )
         shared = False
@@ -1564,9 +1569,7 @@ def _retire_replaced_outputs(
         try:
             (old_item,) = store.load_by_refs(
                 repository_id,
-                (
-                    m.ClaimRef(id=m.ClaimId(oid)),
-                ),
+                (m.ClaimRef(id=m.ClaimId(oid)),),
             )
             if isinstance(old_item, m.SemanticClaim):
                 retires_claims.append(m.ClaimRef(id=m.ClaimId(oid)))
@@ -1578,17 +1581,14 @@ def _retire_replaced_outputs(
             try:
                 store.load_by_refs(
                     repository_id,
-                    (
-                        m.RelationshipRef(
-                            id=m.RelationshipId(oid)
-                        ),
-                    ),
+                    (m.RelationshipRef(id=m.RelationshipId(oid)),),
                 )
                 retires_relationships.append(
                     m.RelationshipRef(id=m.RelationshipId(oid))
                 )
             except Exception:
                 continue
+
 
 def _materialize_unit(
     task: InterpretationTask,
@@ -1649,9 +1649,7 @@ def _materialize_unit(
         _eid = _unit.evidence_ref.evidence_id.value
         _canonical_ref = _full_refs.get(_eid, _unit.evidence_ref)
         try:
-            _full_units = evidence.read_evidence(
-                (_canonical_ref,), task.request.bounds
-            )
+            _full_units = evidence.read_evidence((_canonical_ref,), task.request.bounds)
         except ValueError as exc:
             _reload_failures.append(
                 f"excerpt full-source reload failed for {_eid}: {exc}; "
@@ -1668,9 +1666,7 @@ def _materialize_unit(
             continue
         _full_contents[_eid] = _full_units[0].content
     if _reload_failures:
-        raise _validation.InterpretationUnitRejected(
-            tuple(_reload_failures)
-        )
+        raise _validation.InterpretationUnitRejected(tuple(_reload_failures))
     ctx = _validation.ValidationContext(
         allowed_claim_kinds=ctx.allowed_claim_kinds,
         allowed_relationship_kinds=ctx.allowed_relationship_kinds,
@@ -1681,8 +1677,11 @@ def _materialize_unit(
         evidence_refs=_full_refs,
     )
     ctx, result, evidence_problems = _admit_cited_evidence(
-        task.request.repository_id, result, ctx,
-        evidence=evidence, bounds=task.request.bounds,
+        task.request.repository_id,
+        result,
+        ctx,
+        evidence=evidence,
+        bounds=task.request.bounds,
     )
     failures: list[str] = []
     failures.extend(evidence_problems)
@@ -1722,9 +1721,7 @@ def _materialize_unit(
             allowed_claim_kinds=ctx.allowed_claim_kinds,
             allowed_relationship_kinds=ctx.allowed_relationship_kinds,
             known_evidence_ids=ctx.known_evidence_ids,
-            known_subject_ids=(
-                ctx.known_subject_ids + tuple(new_subject_ids)
-            ),
+            known_subject_ids=(ctx.known_subject_ids + tuple(new_subject_ids)),
             evidence_fingerprints=ctx.evidence_fingerprints,
             evidence_contents=ctx.evidence_contents,
             evidence_refs=ctx.evidence_refs,
@@ -1735,21 +1732,22 @@ def _materialize_unit(
         if not validation.ok:
             failures.extend(
                 _member_diagnostics(
-                    "claims", index, candidate.candidate_key or None,
+                    "claims",
+                    index,
+                    candidate.candidate_key or None,
                     validation.diagnostics,
                 )
             )
             continue
-        claims.append(
-            _validation.materialize_claim(candidate, validation, state)
-        )
+        claims.append(_validation.materialize_claim(candidate, validation, state))
     relationships: list[m.SemanticRelationship] = []
     for index, candidate in enumerate(result.relationships):
         validation = _validation.validate_candidate_relationship(candidate, ctx)
         if not validation.ok:
             failures.extend(
                 _member_diagnostics(
-                    "relationships", index,
+                    "relationships",
+                    index,
                     candidate.candidate_key or None,
                     validation.diagnostics,
                 )
@@ -1776,10 +1774,7 @@ def _materialize_unit(
             _ref_value(r): r
             for r in (
                 tuple(m.ClaimRef(id=c.claim_id) for c in claims)
-                + tuple(
-                    m.RelationshipRef(id=r.relationship_id)
-                    for r in relationships
-                )
+                + tuple(m.RelationshipRef(id=r.relationship_id) for r in relationships)
             )
         }
         for item in (*claims, *relationships):
@@ -1796,18 +1791,12 @@ def _materialize_unit(
                     continue
                 if pid in seen_ids:
                     # Within-unit cycle: new items referencing each other.
-                    failures.append(
-                        f"semantic premise cycle within unit: {pid}"
-                    )
+                    failures.append(f"semantic premise cycle within unit: {pid}")
                     continue
                 try:
-                    (prior,) = store.load_by_refs(
-                        task.request.repository_id, (pref,)
-                    )
+                    (prior,) = store.load_by_refs(task.request.repository_id, (pref,))
                 except ValueError:
-                    failures.append(
-                        f"semantic premise does not resolve: {pid}"
-                    )
+                    failures.append(f"semantic premise does not resolve: {pid}")
                     continue
                 if prior.freshness.state is not m.FreshnessState.CURRENT:
                     failures.append(
@@ -1825,9 +1814,7 @@ def _materialize_unit(
     for candidate, item in zip(result.claims, claims):
         key_to_ref[candidate.candidate_key] = m.ClaimRef(id=item.claim_id)
     for candidate, item in zip(result.relationships, relationships):
-        key_to_ref[candidate.candidate_key] = m.RelationshipRef(
-            id=item.relationship_id
-        )
+        key_to_ref[candidate.candidate_key] = m.RelationshipRef(id=item.relationship_id)
     recorded: list[m.RecordedConflict] = []
     for index, proposed in enumerate(result.candidate_conflicts):
         validation = _validation.validate_candidate_conflict(
@@ -1836,7 +1823,8 @@ def _materialize_unit(
         if not validation.ok:
             failures.extend(
                 _member_diagnostics(
-                    "conflicts", index,
+                    "conflicts",
+                    index,
                     f"{proposed.left_key}/{proposed.right_key}",
                     validation.diagnostics,
                 )
@@ -1845,8 +1833,7 @@ def _materialize_unit(
         left = key_to_ref[proposed.left_key]
         right = key_to_ref[proposed.right_key]
         left_item = next(
-            item for item in (*claims, *relationships)
-            if _item_ref(item) == left
+            item for item in (*claims, *relationships) if _item_ref(item) == left
         )
         recorded.append(
             m.RecordedConflict(
@@ -1866,9 +1853,8 @@ def _materialize_unit(
     # ctx fingerprints include addendum-A/F2 admitted established
     # evidence alongside task fingerprints.
     fingerprints = dict(ctx.evidence_fingerprints)
-    is_mapping_write = (
-        task.request.question is None
-        and bool(task.request.target_inventory_items)
+    is_mapping_write = task.request.question is None and bool(
+        task.request.target_inventory_items
     )
     if is_mapping_write:
         # Mapping anchors are discovery inputs, never semantic areas:
@@ -1887,14 +1873,17 @@ def _materialize_unit(
             bq = task.request.question
             try:
                 existing_qcovs = store.load_all_question_coverages(
-                    task.request.repository_id, bq.scope_root,
+                    task.request.repository_id,
+                    bq.scope_root,
                     (bq.subject,),
                 )
             except Exception:
                 try:
                     existing_qcovs = store.load_question_coverages(
-                        task.request.repository_id, bq.scope_root,
-                        (bq.subject,), task.request.bounds,
+                        task.request.repository_id,
+                        bq.scope_root,
+                        (bq.subject,),
+                        task.request.bounds,
                     )
                 except Exception:
                     existing_qcovs = ()
@@ -1903,28 +1892,25 @@ def _materialize_unit(
                     continue
                 q = qc.question
                 if (
-                    q.scope_root == bq.scope_root and q.subject == bq.subject
+                    q.scope_root == bq.scope_root
+                    and q.subject == bq.subject
                     and q.question_class == bq.question_class
                     and q.question_slice == bq.question_slice
                 ):
-                    prior_refs_for_withdrawal.update(
-                        r.id.value for r in qc.result_refs
-                    )
+                    prior_refs_for_withdrawal.update(r.id.value for r in qc.result_refs)
         else:
             for sid in retire_scope:
                 try:
                     lc, lr, _, _ = _load_subject_state(
-                        task.request.repository_id, sid, store=store,
+                        task.request.repository_id,
+                        sid,
+                        store=store,
                         bounds=task.request.bounds,
                     )
                 except Exception:
                     continue
-                prior_refs_for_withdrawal.update(
-                    c.claim_id.value for c in lc
-                )
-                prior_refs_for_withdrawal.update(
-                    r.relationship_id.value for r in lr
-                )
+                prior_refs_for_withdrawal.update(c.claim_id.value for c in lc)
+                prior_refs_for_withdrawal.update(r.relationship_id.value for r in lr)
     except Exception:
         prior_refs_for_withdrawal = set()
     if correction_question is not None:
@@ -1933,7 +1919,8 @@ def _materialize_unit(
         # question. New-unit ids are already in all_result_ids.
         try:
             nominated_qcovs = store.load_all_question_coverages(
-                task.request.repository_id, correction_question.scope_root,
+                task.request.repository_id,
+                correction_question.scope_root,
                 (correction_question.subject,),
             )
         except Exception:
@@ -1942,21 +1929,24 @@ def _materialize_unit(
             if qc.question is None:
                 continue
             if qc.question == correction_question:
-                prior_refs_for_withdrawal.update(
-                    r.id.value for r in qc.result_refs
-                )
+                prior_refs_for_withdrawal.update(r.id.value for r in qc.result_refs)
     known_for_withdrawal = frozenset(all_result_ids | prior_refs_for_withdrawal)
     validated_withdrawals: list[m.CandidateSemanticWithdrawal] = []
     for index, withdrawal in enumerate(result.candidate_withdrawals):
         withdrawal_key = withdrawal.target.id.value
         problem = _validation.validate_candidate_withdrawal(
-            withdrawal, ctx, known_for_withdrawal, "withdrawal",
+            withdrawal,
+            ctx,
+            known_for_withdrawal,
+            "withdrawal",
         )
         if problem is not None:
             raise _validation.InterpretationUnitRejected(
                 tuple(
                     _member_diagnostics(
-                        "withdrawals", index, withdrawal_key,
+                        "withdrawals",
+                        index,
+                        withdrawal_key,
                         (problem,),
                     )
                 )
@@ -1966,18 +1956,15 @@ def _materialize_unit(
         # target-campaign `target_id` parameter used below.
         withdrawal_target_id = withdrawal.target.id.value
         try:
-            store.load_by_refs(
-                task.request.repository_id, (withdrawal.target,)
-            )
+            store.load_by_refs(task.request.repository_id, (withdrawal.target,))
         except ValueError:
             raise _validation.InterpretationUnitRejected(
                 tuple(
                     _member_diagnostics(
-                        "withdrawals", index, withdrawal_target_id,
-                        (
-                            f"withdrawal target unknown: "
-                            f"{withdrawal_target_id}",
-                        ),
+                        "withdrawals",
+                        index,
+                        withdrawal_target_id,
+                        (f"withdrawal target unknown: " f"{withdrawal_target_id}",),
                     )
                 )
             )
@@ -2014,7 +2001,8 @@ def _materialize_unit(
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "proposed_questions", index,
+                            "proposed_questions",
+                            index,
                             bound_question.question_slice or None,
                             (
                                 "the already-bound question must be answered "
@@ -2028,14 +2016,14 @@ def _materialize_unit(
                 )
     for index, proposed in enumerate(result.proposed_questions):
         if (
-            proposed.decision.disposition
-            is m.SemanticQuestionDisposition.ANSWERED
+            proposed.decision.disposition is m.SemanticQuestionDisposition.ANSWERED
             and proposed.question != correction_question
         ):
             raise _validation.InterpretationUnitRejected(
                 tuple(
                     _member_diagnostics(
-                        "proposed_questions", index,
+                        "proposed_questions",
+                        index,
                         proposed.question.question_slice or None,
                         (
                             "additional questions may be introduced as "
@@ -2050,7 +2038,8 @@ def _materialize_unit(
     if correction_question is not None and bound_question is not None:
         try:
             bound_existing = store.load_all_question_coverages(
-                task.request.repository_id, bound_question.scope_root,
+                task.request.repository_id,
+                bound_question.scope_root,
                 (bound_question.subject,),
             )
         except Exception:
@@ -2094,23 +2083,29 @@ def _materialize_unit(
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "question_coverages", qindex, None,
+                            "question_coverages",
+                            qindex,
+                            None,
                             ("question coverage without question scope",),
                         )
                     )
                 )
             q = submitted.question
             ident = (
-                q.scope_root.repository_id, q.scope_root.canonical_locator,
-                q.scope_root.subject_kind.value, q.subject.canonical_locator,
-                q.subject.subject_kind.value, q.question_class.value,
+                q.scope_root.repository_id,
+                q.scope_root.canonical_locator,
+                q.scope_root.subject_kind.value,
+                q.subject.canonical_locator,
+                q.subject.subject_kind.value,
+                q.question_class.value,
                 q.question_slice,
             )
             if ident in seen_qidentities:
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "question_coverages", qindex,
+                            "question_coverages",
+                            qindex,
                             q.question_slice or None,
                             ("duplicate question identity in submission",),
                         )
@@ -2118,13 +2113,16 @@ def _materialize_unit(
                 )
             seen_qidentities.add(ident)
             problem = _validation.validate_question_coverage(
-                submitted, ctx, "question coverage",
+                submitted,
+                ctx,
+                "question coverage",
             )
             if problem is not None:
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "question_coverages", qindex,
+                            "question_coverages",
+                            qindex,
                             q.question_slice or None,
                             (problem,),
                         )
@@ -2134,7 +2132,8 @@ def _materialize_unit(
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "question_coverages", qindex,
+                            "question_coverages",
+                            qindex,
                             q.question_slice or None,
                             ("question_slice mismatch in coverage",),
                         )
@@ -2155,20 +2154,19 @@ def _materialize_unit(
         material_evidence = _material_evidence_refs(claims, relationships)
         new_result_refs = _material_result_refs(claims, relationships)
         withdrawn_ids = frozenset(
-            withdrawal.target.id.value
-            for withdrawal in validated_withdrawals
+            withdrawal.target.id.value for withdrawal in validated_withdrawals
         )
-        prior_cache: dict[
-            m.SemanticQuestionScope, m.InterpretationCoverage | None
-        ] = {}
+        prior_cache: dict[m.SemanticQuestionScope, m.InterpretationCoverage | None] = {}
 
         def _prior(
             question: m.SemanticQuestionScope,
         ) -> m.InterpretationCoverage | None:
             if question not in prior_cache:
                 prior_cache[question] = _load_prior_question_coverage(
-                    task.request.repository_id, question,
-                    store=store, bounds=task.request.bounds,
+                    task.request.repository_id,
+                    question,
+                    store=store,
+                    bounds=task.request.bounds,
                 )
             return prior_cache[question]
 
@@ -2179,9 +2177,7 @@ def _materialize_unit(
         ) -> m.InterpretationCoverage:
             prior = _prior(submitted.question)
             prior_refs = () if prior is None else prior.result_refs
-            prior_evidence = (
-                () if prior is None else prior.question_evidence
-            )
+            prior_evidence = () if prior is None else prior.question_evidence
             decision = m.SemanticQuestionDecision(
                 disposition=submitted.disposition,
                 evidence_scope=submitted.evidence_scope,
@@ -2195,9 +2191,7 @@ def _materialize_unit(
                     decision,
                     canonical_refs=ctx.evidence_refs,
                     fingerprints=fingerprints,
-                    material_evidence=(
-                        material_evidence if owns_material else ()
-                    ),
+                    material_evidence=(material_evidence if owns_material else ()),
                 )
             elif disposition is m.SemanticQuestionDisposition.OPEN:
                 result_refs = _ordered_result_refs(
@@ -2209,14 +2203,14 @@ def _materialize_unit(
                     decision,
                     canonical_refs=ctx.evidence_refs,
                     fingerprints=fingerprints,
-                    material_evidence=(
-                        material_evidence if owns_material else ()
-                    ),
+                    material_evidence=(material_evidence if owns_material else ()),
                     prior_evidence=prior_evidence,
                 )
             elif disposition is m.SemanticQuestionDisposition.PENDING:
                 result_refs = _ordered_result_refs(
-                    prior_refs, (), withdrawn_ids,
+                    prior_refs,
+                    (),
+                    withdrawn_ids,
                 )
                 question_evidence = _derive_question_evidence(
                     decision,
@@ -2243,19 +2237,20 @@ def _materialize_unit(
         current_qcov: m.InterpretationCoverage | None = None
         if bound_question is not None and not bound_is_fallback_scaffolding:
             is_current = [
-                c for c in submitted_coverages
+                c
+                for c in submitted_coverages
                 if c.question is not None and c.question == bound_question
             ]
             if is_current:
                 current_qcov = is_current[0]
                 if (
-                    current_qcov.disposition
-                    is m.SemanticQuestionDisposition.ANSWERED
+                    current_qcov.disposition is m.SemanticQuestionDisposition.ANSWERED
                 ) and not (claims or relationships):
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "question_coverages", 0,
+                                "question_coverages",
+                                0,
                                 bound_question.question_slice or None,
                                 (
                                     "explicit ANSWERED with zero "
@@ -2266,9 +2261,7 @@ def _materialize_unit(
                             )
                         )
                     )
-                current_qcov = _finalize(
-                    current_qcov, owns_material=True
-                )
+                current_qcov = _finalize(current_qcov, owns_material=True)
             else:
                 # Addendum C C-05: no explicit current coverage means no
                 # completion claim. Always synthesize PENDING (admitted but
@@ -2281,8 +2274,7 @@ def _materialize_unit(
                     evidence_scope=m.EvidenceScope(
                         paths=(),
                         evidence_refs=tuple(
-                            unit.evidence_ref
-                            for unit in task.request.evidence_units
+                            unit.evidence_ref for unit in task.request.evidence_units
                         ),
                     ),
                     declared_complete=False,
@@ -2295,9 +2287,7 @@ def _materialize_unit(
                     ),
                     resolution_requirements=(
                         m.ResolutionRequirement(
-                            kind=(
-                                m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
-                            ),
+                            kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
                             subject_or_claim=bound_question.subject,
                             description=(
                                 "question submitted without explicit "
@@ -2314,17 +2304,18 @@ def _materialize_unit(
                     ),
                 )
             if current_qcov is not None and (
-                current_qcov.disposition
-                is m.SemanticQuestionDisposition.ANSWERED
+                current_qcov.disposition is m.SemanticQuestionDisposition.ANSWERED
             ):
                 # Addendum C C-05: only a complete replacement retires
                 # prior unshared outputs. PENDING/OPEN/NOT_APPLICABLE never
                 # authorize omission-based retirement; explicit withdrawals
                 # retire through the validated-withdrawal path above.
                 _retire_replaced_outputs(
-                    task.request.repository_id, bound_question,
+                    task.request.repository_id,
+                    bound_question,
                     {r.id.value for r in current_qcov.result_refs},
-                    store=store, bounds=task.request.bounds,
+                    store=store,
+                    bounds=task.request.bounds,
                     retires_claims=retires_claims,
                     retires_relationships=retires_relationships,
                 )
@@ -2334,20 +2325,20 @@ def _materialize_unit(
         nominated_qcov: m.InterpretationCoverage | None = None
         if correction_question is not None:
             is_nominated = [
-                c for c in submitted_coverages
-                if c.question is not None
-                and c.question == correction_question
+                c
+                for c in submitted_coverages
+                if c.question is not None and c.question == correction_question
             ]
             if is_nominated:
                 nominated_qcov = is_nominated[0]
                 if (
-                    nominated_qcov.disposition
-                    is m.SemanticQuestionDisposition.ANSWERED
+                    nominated_qcov.disposition is m.SemanticQuestionDisposition.ANSWERED
                 ) and not (claims or relationships):
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "question_coverages", 0,
+                                "question_coverages",
+                                0,
                                 correction_question.question_slice or None,
                                 (
                                     "explicit ANSWERED with zero "
@@ -2358,17 +2349,14 @@ def _materialize_unit(
                             )
                         )
                     )
-                nominated_qcov = _finalize(
-                    nominated_qcov, owns_material=True
-                )
-                if (
-                    nominated_qcov.disposition
-                    is m.SemanticQuestionDisposition.ANSWERED
-                ):
+                nominated_qcov = _finalize(nominated_qcov, owns_material=True)
+                if nominated_qcov.disposition is m.SemanticQuestionDisposition.ANSWERED:
                     _retire_replaced_outputs(
-                        task.request.repository_id, correction_question,
+                        task.request.repository_id,
+                        correction_question,
                         {r.id.value for r in nominated_qcov.result_refs},
-                        store=store, bounds=task.request.bounds,
+                        store=store,
+                        bounds=task.request.bounds,
                         retires_claims=retires_claims,
                         retires_relationships=retires_relationships,
                     )
@@ -2386,10 +2374,7 @@ def _materialize_unit(
             if c.question is None
             or (
                 (bound_question is None or c.question != bound_question)
-                and (
-                    correction_question is None
-                    or c.question != correction_question
-                )
+                and (correction_question is None or c.question != correction_question)
             )
         ]
         if current_qcov is not None:
@@ -2401,18 +2386,17 @@ def _materialize_unit(
         # write) instead of retiring with an incomplete fanout.
         if validated_withdrawals:
             all_qcovs = _load_all_coverages_or_defer(
-                task.request.repository_id, None, (),
-                store=store, bounds=task.request.bounds,
+                task.request.repository_id,
+                None,
+                (),
+                store=store,
+                bounds=task.request.bounds,
                 purpose="withdrawal fanout",
             )
-            withdrawn_ids = {
-                w.target.id.value for w in validated_withdrawals
-            }
+            withdrawn_ids = {w.target.id.value for w in validated_withdrawals}
             withdrawn_reasons: dict[str, str] = {}
             for w in validated_withdrawals:
-                withdrawn_reasons.setdefault(
-                    w.target.id.value, w.basis.summary
-                )
+                withdrawn_reasons.setdefault(w.target.id.value, w.basis.summary)
             for other in all_qcovs:
                 if other.question is None:
                     continue
@@ -2427,22 +2411,20 @@ def _materialize_unit(
                     # superseded by the derived ANSWERED coverage above,
                     # not reopened.
                     continue
-                other_ref_ids = {
-                    r.id.value for r in other.result_refs
-                }
+                other_ref_ids = {r.id.value for r in other.result_refs}
                 if withdrawn_ids & other_ref_ids:
                     # S8.3: reopen with the actual withdrawal reason
                     # while preserving the dependent question's useful
                     # original requirements.
-                    reasons = sorted({
-                        withdrawn_reasons[rid]
-                        for rid in other_ref_ids
-                        if rid in withdrawn_reasons
-                    })
+                    reasons = sorted(
+                        {
+                            withdrawn_reasons[rid]
+                            for rid in other_ref_ids
+                            if rid in withdrawn_reasons
+                        }
+                    )
                     reason = (
-                        "; ".join(reasons)
-                        if reasons
-                        else "shared output withdrawn"
+                        "; ".join(reasons) if reasons else "shared output withdrawn"
                     )
                     reopened_coverages.append(
                         m.InterpretationCoverage(
@@ -2457,12 +2439,8 @@ def _materialize_unit(
                                 tuple(other.resolution_requirements)
                                 + (
                                     m.ResolutionRequirement(
-                                        kind=(
-                                            m.ResolutionKind.STALE_EVIDENCE
-                                        ),
-                                        subject_or_claim=(
-                                            other.question.subject
-                                        ),
+                                        kind=(m.ResolutionKind.STALE_EVIDENCE),
+                                        subject_or_claim=(other.question.subject),
                                         description=(
                                             "shared output withdrawn "
                                             f"({reason}); reassessment "
@@ -2471,8 +2449,7 @@ def _materialize_unit(
                                         supporting_context=tuple(
                                             w.target
                                             for w in validated_withdrawals
-                                            if w.target.id.value
-                                            in other_ref_ids
+                                            if w.target.id.value in other_ref_ids
                                         ),
                                     ),
                                 )
@@ -2497,49 +2474,39 @@ def _materialize_unit(
         for item in (*claims, *relationships)
         for ref in item.evidence
     )
-    all_coverages = tuple(question_coverages_to_persist) + tuple(
-        reopened_coverages
-    )
+    all_coverages = tuple(question_coverages_to_persist) + tuple(reopened_coverages)
     # Addendum E target accounting (same atomic batch). Pure validation
     # here; persistence joins the single CanonicalIndexBatch below.
     updated_associations: tuple[m.TargetAssociation, ...] = ()
     has_target_proposals = bool(
-        result.proposed_target_inventory_accounting
-        or result.proposed_target_questions
+        result.proposed_target_inventory_accounting or result.proposed_target_questions
     )
-    effective_target_id = (
-        target_id if target_id is not None else task.request.target_id
-    )
+    effective_target_id = target_id if target_id is not None else task.request.target_id
     if has_target_proposals and effective_target_id is None:
         raise _validation.InterpretationUnitRejected(
             tuple(
                 _member_diagnostics(
-                    "target_accounts", 0, None,
+                    "target_accounts",
+                    0,
+                    None,
                     ("target proposals without target mode",),
                 )
             )
         )
-    bound_items = (
-        target_inventory_items
-        or task.request.target_inventory_items
-    )
+    bound_items = target_inventory_items or task.request.target_inventory_items
     # J-6/S5: a mapping batch is correlated strictly by stable EvidenceId,
     # never by position in the submitted list. The map is built once from
     # the bound batch so every later check names the exact member.
-    bound_by_id = {
-        item.evidence_ref.evidence_id.value: item
-        for item in bound_items
-    }
-    is_mapping_task = (
-        task.request.question is None and bool(bound_items)
-    )
+    bound_by_id = {item.evidence_ref.evidence_id.value: item for item in bound_items}
+    is_mapping_task = task.request.question is None and bool(bound_items)
     if is_mapping_task and not result.proposed_target_inventory_accounting:
         raise _validation.InterpretationUnitRejected(
             tuple(
                 diagnostic
                 for index, item in enumerate(bound_items)
                 for diagnostic in _member_diagnostics(
-                    "bound_items", index,
+                    "bound_items",
+                    index,
                     item.evidence_ref.evidence_id.value,
                     ("bound mapping item has no accounting candidate",),
                 )
@@ -2552,30 +2519,30 @@ def _materialize_unit(
             raise _validation.InterpretationUnitRejected(
                 tuple(
                     _member_diagnostics(
-                        "target_accounts", 0, None,
+                        "target_accounts",
+                        0,
+                        None,
                         ("target association does not resolve",),
                     )
                 )
             )
         if result.proposed_target_inventory_accounting:
             seen_ids: set[str] = set()
-            for tindex, acc in enumerate(
-                result.proposed_target_inventory_accounting
-            ):
+            for tindex, acc in enumerate(result.proposed_target_inventory_accounting):
                 eid = acc.evidence_id.value
                 if eid in seen_ids:
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "target_accounts", tindex, eid,
+                                "target_accounts",
+                                tindex,
+                                eid,
                                 (f"duplicate target account: {eid}",),
                             )
                         )
                     )
                 seen_ids.add(eid)
-            expected_ids = {
-                item.evidence_ref.evidence_id.value for item in bound_items
-            }
+            expected_ids = {item.evidence_ref.evidence_id.value for item in bound_items}
             if expected_ids:
                 for tindex, acc in enumerate(
                     result.proposed_target_inventory_accounting
@@ -2585,7 +2552,9 @@ def _materialize_unit(
                         raise _validation.InterpretationUnitRejected(
                             tuple(
                                 _member_diagnostics(
-                                    "target_accounts", tindex, eid,
+                                    "target_accounts",
+                                    tindex,
+                                    eid,
                                     (
                                         "target account is outside the bound "
                                         "mapping batch",
@@ -2596,11 +2565,10 @@ def _materialize_unit(
             admitted_existing = tuple(target_association.area_subjects)
             new_ids = tuple(new_subject_ids)
             snapshot = current_inventory_snapshot or {}
-            for tindex, acc in enumerate(
-                result.proposed_target_inventory_accounting
-            ):
+            for tindex, acc in enumerate(result.proposed_target_inventory_accounting):
                 validation = _validation.validate_target_inventory_account(
-                    acc, ctx,
+                    acc,
+                    ctx,
                     current_inventory_ids=current_inventory_ids,
                     expected_evidence_id=None,
                     admitted_area_ids=admitted_existing,
@@ -2610,7 +2578,8 @@ def _materialize_unit(
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "target_accounts", tindex,
+                                "target_accounts",
+                                tindex,
                                 acc.evidence_id.value,
                                 tuple(validation.diagnostics),
                             )
@@ -2623,7 +2592,8 @@ def _materialize_unit(
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "target_accounts", tindex,
+                                "target_accounts",
+                                tindex,
                                 acc.evidence_id.value,
                                 (
                                     "target account not in provider "
@@ -2639,15 +2609,12 @@ def _materialize_unit(
                         tuple(
                             diagnostic
                             for index, item in enumerate(bound_items)
-                            if item.evidence_ref.evidence_id.value
-                            in missing_ids
+                            if item.evidence_ref.evidence_id.value in missing_ids
                             for diagnostic in _member_diagnostics(
-                                "bound_items", index,
+                                "bound_items",
+                                index,
                                 item.evidence_ref.evidence_id.value,
-                                (
-                                    "bound mapping item has no accounting "
-                                    "candidate",
-                                ),
+                                ("bound mapping item has no accounting " "candidate",),
                             )
                         )
                     )
@@ -2663,7 +2630,9 @@ def _materialize_unit(
                         raise _validation.InterpretationUnitRejected(
                             tuple(
                                 _member_diagnostics(
-                                    "target_accounts", 0, None,
+                                    "target_accounts",
+                                    0,
+                                    None,
                                     ("orphan target-mapping subject",),
                                 )
                             )
@@ -2677,12 +2646,10 @@ def _materialize_unit(
                         cov.question.scope_root
                         for cov in question_coverages_to_persist
                         if cov.question is not None
-                        and cov.disposition
-                        is m.SemanticQuestionDisposition.PENDING
+                        and cov.disposition is m.SemanticQuestionDisposition.PENDING
                     }
                     reuse_roots = {
-                        qq.scope_root
-                        for qq in result.proposed_target_questions
+                        qq.scope_root for qq in result.proposed_target_questions
                     }
                     satisfying = new_roots | reuse_roots
                     area_member_refs = {
@@ -2724,15 +2691,12 @@ def _materialize_unit(
                                 ),
                                 declared_complete=False,
                                 question=seed_question,
-                                disposition=(
-                                    m.SemanticQuestionDisposition.PENDING
-                                ),
+                                disposition=(m.SemanticQuestionDisposition.PENDING),
                                 result_refs=(),
                                 resolution_requirements=(
                                     m.ResolutionRequirement(
                                         kind=(
-                                            m.ResolutionKind
-                                            .INCOMPLETE_SEMANTIC_SCOPE
+                                            m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE
                                         ),
                                         subject_or_claim=sid,
                                         description=(
@@ -2746,17 +2710,16 @@ def _materialize_unit(
                                     ),
                                 ),
                                 disposition_basis=(
-                                    "service-owned first-admission "
-                                    "target seed"
+                                    "service-owned first-admission " "target seed"
                                 ),
                                 question_evidence=(),
                             )
                         )
                     # The persisted coverage set changed: recompute before
                     # it is consumed by the atomic batch.
-                    all_coverages = tuple(
-                        question_coverages_to_persist
-                    ) + tuple(reopened_coverages)
+                    all_coverages = tuple(question_coverages_to_persist) + tuple(
+                        reopened_coverages
+                    )
             else:
                 # Semantic-phase revisions are task-evidence-bounded: a
                 # revised member must be present in this task's evidence.
@@ -2771,7 +2734,8 @@ def _materialize_unit(
                         raise _validation.InterpretationUnitRejected(
                             tuple(
                                 _member_diagnostics(
-                                    "target_accounts", tindex,
+                                    "target_accounts",
+                                    tindex,
                                     acc.evidence_id.value,
                                     (
                                         "target revision outside task "
@@ -2798,7 +2762,9 @@ def _materialize_unit(
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "target_questions", 0, None,
+                            "target_questions",
+                            0,
+                            None,
                             tuple(validation_q.diagnostics),
                         )
                     )
@@ -2808,12 +2774,11 @@ def _materialize_unit(
             # proposed_questions in the same unit (which
             # auto-contribute their scopes below), never through this
             # reuse field.
-            for qq_index, qq in enumerate(
-                result.proposed_target_questions
-            ):
+            for qq_index, qq in enumerate(result.proposed_target_questions):
                 try:
                     persisted = store.load_all_question_coverages(
-                        task.request.repository_id, qq.scope_root,
+                        task.request.repository_id,
+                        qq.scope_root,
                         (qq.subject,),
                     )
                 except Exception:
@@ -2829,7 +2794,8 @@ def _materialize_unit(
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "target_questions", qq_index,
+                                "target_questions",
+                                qq_index,
                                 qq.question_slice or None,
                                 (
                                     "target question does not resolve to "
@@ -2840,18 +2806,14 @@ def _materialize_unit(
                             )
                         )
                     )
-                if not store.load_subjects(
-                    task.request.repository_id, (qq.subject,)
-                ):
+                if not store.load_subjects(task.request.repository_id, (qq.subject,)):
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "target_questions", qq_index,
+                                "target_questions",
+                                qq_index,
                                 qq.subject.canonical_locator,
-                                (
-                                    "target question subject does not "
-                                    "resolve",
-                                ),
+                                ("target question subject does not " "resolve",),
                             )
                         )
                     )
@@ -2871,11 +2833,10 @@ def _materialize_unit(
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "target_accounts", 0, eid,
-                            (
-                                "target account not in provider "
-                                f"snapshot: {eid}",
-                            ),
+                            "target_accounts",
+                            0,
+                            eid,
+                            ("target account not in provider " f"snapshot: {eid}",),
                         )
                     )
                 )
@@ -2887,14 +2848,13 @@ def _materialize_unit(
             )
         new_area_union = tuple(
             dict.fromkeys(
-                sid
-                for acc in merged.values()
-                for sid in acc.assigned_area_subjects
+                sid for acc in merged.values() for sid in acc.assigned_area_subjects
             )
         )
         admitted_set = set(new_area_union)
         kept_questions = tuple(
-            q for q in target_association.target_questions
+            q
+            for q in target_association.target_questions
             if q.scope_root in admitted_set
         )
         added_scopes: list[m.SemanticQuestionScope] = []
@@ -2904,7 +2864,8 @@ def _materialize_unit(
                     raise _validation.InterpretationUnitRejected(
                         tuple(
                             _member_diagnostics(
-                                "question_coverages", cov_index,
+                                "question_coverages",
+                                cov_index,
                                 cov.question.question_slice or None,
                                 (
                                     "question scope root is not an admitted "
@@ -2924,12 +2885,10 @@ def _materialize_unit(
                         raise _validation.InterpretationUnitRejected(
                             tuple(
                                 _member_diagnostics(
-                                    "question_coverages", cov_index,
+                                    "question_coverages",
+                                    cov_index,
                                     cov.question.subject.canonical_locator,
-                                    (
-                                        "target question subject does not "
-                                        "resolve",
-                                    ),
+                                    ("target question subject does not " "resolve",),
                                 )
                             )
                         )
@@ -2939,12 +2898,10 @@ def _materialize_unit(
                 raise _validation.InterpretationUnitRejected(
                     tuple(
                         _member_diagnostics(
-                            "target_questions", qq_index,
+                            "target_questions",
+                            qq_index,
                             qq.question_slice or None,
-                            (
-                                "question scope root is not an admitted "
-                                "target area",
-                            ),
+                            ("question scope root is not an admitted " "target area",),
                         )
                     )
                 )
@@ -2975,9 +2932,7 @@ def _materialize_unit(
             objective=target_association.objective,
             area_subjects=new_area_union,
             target_questions=tuple(deduped),
-            inventory_accounting=tuple(
-                merged[k] for k in sorted(merged)
-            ),
+            inventory_accounting=tuple(merged[k] for k in sorted(merged)),
             inventory_fingerprint=target_association.inventory_fingerprint,
             observed_repository_state_fingerprint=(
                 target_association.observed_repository_state_fingerprint
@@ -3021,6 +2976,7 @@ def _materialize_unit(
         )
     )
 
+
 def _next_baseline_pending(
     repository_id: str,
     root: m.Subject,
@@ -3038,18 +2994,23 @@ def _next_baseline_pending(
     """
     try:
         pending = store.load_all_question_coverages(
-            repository_id, root.subject_id, (root.subject_id,),
+            repository_id,
+            root.subject_id,
+            (root.subject_id,),
         )
     except Exception:
         try:
             pending = store.load_question_coverages(
-                repository_id, root.subject_id,
-                (root.subject_id,), bounds,
+                repository_id,
+                root.subject_id,
+                (root.subject_id,),
+                bounds,
             )
         except Exception:
             pending = ()
     next_pending = [
-        cov for cov in pending
+        cov
+        for cov in pending
         if cov.disposition is m.SemanticQuestionDisposition.PENDING
         and cov.question is not None
     ]
@@ -3061,6 +3022,7 @@ def _next_baseline_pending(
         )
     )
     return next_pending[0] if next_pending else None
+
 
 def _suspend_baseline_pending(
     repository_id: str,
@@ -3086,23 +3048,26 @@ def _suspend_baseline_pending(
     identity (no regenerated wording, no restarted audit)."""
     assert coverage.question is not None
     try:
-        loaded = store.load_subjects(
-            repository_id, (coverage.question.subject,)
-        )
+        loaded = store.load_subjects(repository_id, (coverage.question.subject,))
         nxt_subject = (
             m.Subject(
                 subject_id=loaded[0].subject_id,
                 display_name=loaded[0].display_name,
                 declared_kind=loaded[0].declared_kind,
             )
-            if loaded else root
+            if loaded
+            else root
         )
     except Exception:
         nxt_subject = root
     nxt_task = prepare_interpretation_task(
-        repository_id, nxt_subject,
-        structural=structural, evidence=evidence, bounds=bounds,
-        state=state, authority_seeds=seeds,
+        repository_id,
+        nxt_subject,
+        structural=structural,
+        evidence=evidence,
+        bounds=bounds,
+        state=state,
+        authority_seeds=seeds,
         operation_intent=m.SemanticIntent.EXPLAIN,
         question_slice=coverage.question.question_slice,
         store=store,
@@ -3115,10 +3080,16 @@ def _suspend_baseline_pending(
         target_id=target_id,
     )
     return _suspend(
-        op=op, repository_id=repository_id,
-        subject=nxt_subject, task=nxt_task, seeds=seeds,
-        bounds=bounds, state=state, resolution=resolution,
-        scope=scope, remaining=remaining,
+        op=op,
+        repository_id=repository_id,
+        subject=nxt_subject,
+        task=nxt_task,
+        seeds=seeds,
+        bounds=bounds,
+        state=state,
+        resolution=resolution,
+        scope=scope,
+        remaining=remaining,
         continuations=continuations,
         operation_intent="EXPLAIN",
         question_slice=coverage.question.question_slice,
@@ -3127,6 +3098,7 @@ def _suspend_baseline_pending(
         target_scope=target_scope,
         target_id=target_id,
     )
+
 
 def _suspend(
     *,

@@ -21,9 +21,7 @@ __all__ = ["FixtureEvidenceSource"]
 class FixtureEvidenceSource:
     """EvidenceSource over an explicit file map (tests/fixtures only)."""
 
-    def __init__(
-        self, repository_id: str, files: dict[str, str]
-    ) -> None:
+    def __init__(self, repository_id: str, files: dict[str, str]) -> None:
         self._repository_id = repository_id
         self._files = dict(files)
 
@@ -52,10 +50,7 @@ class FixtureEvidenceSource:
                 continue
             prefix = path.rstrip("/") + "/"
             expanded.extend(
-                sorted(
-                    p for p in self._files
-                    if p == path or p.startswith(prefix)
-                )
+                sorted(p for p in self._files if p == path or p.startswith(prefix))
             )
         return expanded
 

@@ -66,10 +66,16 @@ class TargetIdentityTest(unittest.TestCase):
             )
 
     def test_inventory_fingerprint_membership_only(self):
-        a = m.EvidenceInventoryItem(evidence_ref=_ref("ev-a", "a.py"), content_fingerprint="c1")
-        b = m.EvidenceInventoryItem(evidence_ref=_ref("ev-b", "b.py"), content_fingerprint="c2")
+        a = m.EvidenceInventoryItem(
+            evidence_ref=_ref("ev-a", "a.py"), content_fingerprint="c1"
+        )
+        b = m.EvidenceInventoryItem(
+            evidence_ref=_ref("ev-b", "b.py"), content_fingerprint="c2"
+        )
         f1 = m.target_inventory_fingerprint((a, b))
-        b2 = m.EvidenceInventoryItem(evidence_ref=_ref("ev-b", "b.py"), content_fingerprint="CHANGED")
+        b2 = m.EvidenceInventoryItem(
+            evidence_ref=_ref("ev-b", "b.py"), content_fingerprint="CHANGED"
+        )
         f2 = m.target_inventory_fingerprint((a, b2))
         self.assertEqual(f1, f2)
 
@@ -104,9 +110,7 @@ class RetiredFieldTransitionTest(unittest.TestCase):
         ref = _ref()
         sid = _sid()
         clean = m.to_canonical(
-            m.TargetInventoryAccount(
-                evidence_ref=ref, assigned_area_subjects=(sid,)
-            )
+            m.TargetInventoryAccount(evidence_ref=ref, assigned_area_subjects=(sid,))
         )
         assert isinstance(clean, dict)
         tampered = dict(clean)
@@ -127,14 +131,16 @@ class RetiredFieldTransitionTest(unittest.TestCase):
                 evidence_ref=_ref(), assigned_area_subjects=(_sid(),)
             )
             assoc = m.TargetAssociation(
-                target_id=tid, repository_id="r1", target_scope=scope,
-                objective=obj, area_subjects=(_sid(),),
-                target_questions=(), inventory_accounting=(acc,),
+                target_id=tid,
+                repository_id="r1",
+                target_scope=scope,
+                objective=obj,
+                area_subjects=(_sid(),),
+                target_questions=(),
+                inventory_accounting=(acc,),
                 inventory_fingerprint="fp1",
             )
-            store.write_index_batch(
-                m.CanonicalIndexBatch(target_associations=(assoc,))
-            )
+            store.write_index_batch(m.CanonicalIndexBatch(target_associations=(assoc,)))
             row = store._db.execute(
                 "SELECT canonical_json FROM target_associations "
                 "WHERE repository_id=? AND target_id=?",
@@ -160,15 +166,21 @@ class RetiredFieldTransitionTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
 class TargetValidationTest(unittest.TestCase):
     def test_account_and_question_validation(self):
         from span.core import validation as v
+
         repo = "r1"
         ref = m.EvidenceRef(
-            evidence_id=m.EvidenceId("ev-a"), repository_id=repo,
-            source_kind=m.EvidenceSourceKind.SOURCE_CODE, locator="a.py",
+            evidence_id=m.EvidenceId("ev-a"),
+            repository_id=repo,
+            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+            locator="a.py",
         )
-        sid = m.SubjectId(repository_id=repo, subject_kind=m.SubjectKind.OTHER, canonical_locator="a")
+        sid = m.SubjectId(
+            repository_id=repo, subject_kind=m.SubjectKind.OTHER, canonical_locator="a"
+        )
         ctx = v.ValidationContext(
             allowed_claim_kinds=tuple(m.ClaimKind),
             allowed_relationship_kinds=tuple(m.RelationshipKind),
@@ -180,27 +192,40 @@ class TargetValidationTest(unittest.TestCase):
             evidence_id=ref.evidence_id, assigned_area_subjects=(sid,)
         )
         ok = v.validate_target_inventory_account(
-            ok_acc, ctx, current_inventory_ids=frozenset({"ev-a"}),
-            expected_evidence_id="ev-a", admitted_area_ids=(sid,),
+            ok_acc,
+            ctx,
+            current_inventory_ids=frozenset({"ev-a"}),
+            expected_evidence_id="ev-a",
+            admitted_area_ids=(sid,),
         )
         self.assertTrue(ok.ok)
         bad = v.validate_target_inventory_account(
-            ok_acc, ctx, current_inventory_ids=frozenset({"ev-other"}),
+            ok_acc,
+            ctx,
+            current_inventory_ids=frozenset({"ev-other"}),
         )
         self.assertFalse(bad.ok)
         q = m.SemanticQuestionScope(
-            scope_root=sid, subject=sid,
+            scope_root=sid,
+            subject=sid,
             question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="s", materiality_basis="b",
+            question_slice="s",
+            materiality_basis="b",
         )
         self.assertTrue(v.validate_target_questions((q,), admitted_area_ids=(sid,)).ok)
-        other = m.SubjectId(repository_id=repo, subject_kind=m.SubjectKind.OTHER, canonical_locator="z")
-        q2 = m.SemanticQuestionScope(
-            scope_root=other, subject=other,
-            question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="s", materiality_basis="b",
+        other = m.SubjectId(
+            repository_id=repo, subject_kind=m.SubjectKind.OTHER, canonical_locator="z"
         )
-        self.assertFalse(v.validate_target_questions((q2,), admitted_area_ids=(sid,)).ok)
+        q2 = m.SemanticQuestionScope(
+            scope_root=other,
+            subject=other,
+            question_class=m.SemanticQuestionClass.CQ_01,
+            question_slice="s",
+            materiality_basis="b",
+        )
+        self.assertFalse(
+            v.validate_target_questions((q2,), admitted_area_ids=(sid,)).ok
+        )
 
 
 class TargetStatusTest(unittest.TestCase):
@@ -209,14 +234,21 @@ class TargetStatusTest(unittest.TestCase):
         from span.shell.agent_exchange.continuations import ContinuationStore
         from span.shell.evidence import FixtureEvidenceSource
         from span.shell.structural.memory import (
-            InMemoryFile, InMemoryStructuralSource, InMemorySubject,
+            InMemoryFile,
+            InMemoryStructuralSource,
+            InMemorySubject,
         )
+
         repo = "tgt-status-1"
         files = {"a.py": "A=1\n", "b.py": "B=2\n"}
         structural = InMemoryStructuralSource(
-            repo, tuple(InMemoryFile(p, c) for p, c in files.items()),
-            (InMemorySubject("a.py", m.SubjectKind.COMPONENT, "a"),
-             InMemorySubject("b.py", m.SubjectKind.COMPONENT, "b")), (),
+            repo,
+            tuple(InMemoryFile(p, c) for p, c in files.items()),
+            (
+                InMemorySubject("a.py", m.SubjectKind.COMPONENT, "a"),
+                InMemorySubject("b.py", m.SubjectKind.COMPONENT, "b"),
+            ),
+            (),
         )
         evidence = FixtureEvidenceSource(repo, dict(files))
         store = SqliteSemanticStore(":memory:")
@@ -224,7 +256,10 @@ class TargetStatusTest(unittest.TestCase):
             ops.SemanticInitializeRepositoryRequest(
                 repository_locator="fixture",
             ),
-            repository_id=repo, structural=structural, evidence=evidence, store=store,
+            repository_id=repo,
+            structural=structural,
+            evidence=evidence,
+            store=store,
         )
         return ops, structural, evidence, store, repo, ContinuationStore()
 
@@ -234,44 +269,67 @@ class TargetStatusTest(unittest.TestCase):
             bounds = m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64)
             missing = m.TargetId("tgt-deadbeefdeadbeef")
             ans = ops.status(
-                ops.SemanticStatusRequest(repository_id=repo, target=missing, bounds=bounds),
-                structural=structural, evidence=evidence, store=store,
+                ops.SemanticStatusRequest(
+                    repository_id=repo, target=missing, bounds=bounds
+                ),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=conts,
             )
             assert isinstance(ans, m.SemanticAnswer)
             assert isinstance(ans.content, m.StatusContent)
-            self.assertEqual(ans.content.target_disposition, m.SemanticCoverageDisposition.UNASSESSED)
-            pending = ops.initialize_target(
+            self.assertEqual(
+                ans.content.target_disposition, m.SemanticCoverageDisposition.UNASSESSED
+            )
+            ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
                     repository_id=repo,
                     target=m.EvidenceScope(paths=("a.py", "b.py"), evidence_refs=()),
-                    objective=" goal ", bounds=bounds,
+                    objective=" goal ",
+                    bounds=bounds,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=conts,
             )
             # Association created with canonical objective + deterministic ID.
             scope, obj = m.canonicalize_target_scope(
-                repo, m.EvidenceScope(paths=("a.py", "b.py"), evidence_refs=()), " goal ")
+                repo,
+                m.EvidenceScope(paths=("a.py", "b.py"), evidence_refs=()),
+                " goal ",
+            )
             tid = m.derive_target_id(repo, scope, obj)
             loaded = store.load_target_association(repo, tid)
             self.assertIsNotNone(loaded)
             ans2 = ops.status(
-                ops.SemanticStatusRequest(repository_id=repo, target=tid, bounds=bounds),
-                structural=structural, evidence=evidence, store=store,
+                ops.SemanticStatusRequest(
+                    repository_id=repo, target=tid, bounds=bounds
+                ),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=conts,
             )
             assert isinstance(ans2, m.SemanticAnswer)
             assert isinstance(ans2.content, m.StatusContent)
             # No accounting yet → INCOMPLETE (not CURRENT).
-            self.assertEqual(ans2.content.target_disposition, m.SemanticCoverageDisposition.INCOMPLETE)
+            self.assertEqual(
+                ans2.content.target_disposition,
+                m.SemanticCoverageDisposition.INCOMPLETE,
+            )
             with self.assertRaises(Exception):
                 ops.status(
                     ops.SemanticStatusRequest(
-                        repository_id=repo, target=tid, bounds=bounds,
+                        repository_id=repo,
+                        target=tid,
+                        bounds=bounds,
                         mode=m.StatusMode.HOOK_FAST,
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=conts,
                 )
         finally:
@@ -299,18 +357,17 @@ class TargetRetentionTest(unittest.TestCase):
             )
             tid = m.derive_target_id("r1", scope, obj)
             assoc = m.TargetAssociation(
-                target_id=tid, repository_id="r1", target_scope=scope,
-                objective=obj, inventory_fingerprint="fp1",
+                target_id=tid,
+                repository_id="r1",
+                target_scope=scope,
+                objective=obj,
+                inventory_fingerprint="fp1",
             )
-            store.write_index_batch(
-                m.CanonicalIndexBatch(target_associations=(assoc,))
-            )
+            store.write_index_batch(m.CanonicalIndexBatch(target_associations=(assoc,)))
             self.assertIsNotNone(store.load_target_association("r1", tid))
             # Touch before expiry extends TTL.
             now[0] = base + datetime.timedelta(days=10)
-            store.write_index_batch(
-                m.CanonicalIndexBatch(target_associations=(assoc,))
-            )
+            store.write_index_batch(m.CanonicalIndexBatch(target_associations=(assoc,)))
             self.assertIsNotNone(store.load_target_association("r1", tid))
             # Past extended expiry reads as absent without mutating.
             now[0] = base + datetime.timedelta(days=41)

@@ -11,11 +11,12 @@ git clone https://github.com/pontivus-com/span.git
 cd span
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e '.[test]'
+pip install -e '.[test,dev]'
 pytest
 ```
 
-The installed-MCP acceptance lane also needs `uv`, Node, and npm.
+The installed-MCP acceptance lane also needs `uv`, Node, and npm. Before a pull
+request, run `ruff check .` and `black --check .` (or `black .`).
 
 ## Before you open a pull request
 
@@ -33,10 +34,12 @@ it under the project licence. There is no separate CLA.
 
 ## Where the details are
 
+- [Repository overview](docs/overview.md) — the code map and request path.
 - [Contributing guide](docs/contributing.md) — setup, tests, dependencies,
   provenance.
 - [Architecture](docs/architecture.md) — where code belongs.
 - [MCP reference](docs/mcp.md) — the public operation surface.
+- [Support](SUPPORT.md) — where to ask and what to expect.
 - [Security policy](SECURITY.md) — private reporting.
 
 ## Licence

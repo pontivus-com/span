@@ -46,9 +46,7 @@ def _load_all_coverages_or_defer(
     fanout, and nothing is partially mutated (raise precedes write).
     """
     try:
-        total = store.count_question_coverages(
-            repository_id, scope_root, subject_ids
-        )
+        total = store.count_question_coverages(repository_id, scope_root, subject_ids)
     except Exception:
         total = None
     if total is not None and total > bounds.max_results:
@@ -60,9 +58,7 @@ def _load_all_coverages_or_defer(
             )
         )
     try:
-        return store.load_all_question_coverages(
-            repository_id, scope_root, subject_ids
-        )
+        return store.load_all_question_coverages(repository_id, scope_root, subject_ids)
     except Exception:
         try:
             return store.load_question_coverages(
@@ -166,9 +162,7 @@ def _resolve_query_subject(
         if resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED:
             return resolution
         if resolution.ambiguity is m.ResolutionAmbiguity.NOT_FOUND:
-            found = store.load_subjects(
-                repository_id, (target.exact_subject_id,)
-            )
+            found = store.load_subjects(repository_id, (target.exact_subject_id,))
             if found:
                 return m.SubjectResolution(
                     candidates=(
@@ -315,15 +309,17 @@ def _resolve_scope_subjects(
         if evidence is not None:
             return (
                 _resolve_target_subjects(
-                    repository_id, target, structural=structural,
-                    evidence=evidence, store=store, bounds=bounds,
+                    repository_id,
+                    target,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    bounds=bounds,
                 ),
                 m.ResolutionAmbiguity.RESOLVED,
             )
         subjects: list[m.Subject] = []
-        paths = list(target.paths) + [
-            ref.locator for ref in target.evidence_refs
-        ]
+        paths = list(target.paths) + [ref.locator for ref in target.evidence_refs]
         for path in dict.fromkeys(paths):
             resolution = structural.resolve_subject(
                 repository_id,
@@ -345,7 +341,10 @@ def _resolve_scope_subjects(
                 unique.append(subject)
         return tuple(unique), m.ResolutionAmbiguity.RESOLVED
     resolution = _resolve_query_subject(
-        repository_id, target, structural=structural, store=store,
+        repository_id,
+        target,
+        structural=structural,
+        store=store,
         bounds=bounds,
     )
     return (
@@ -383,9 +382,7 @@ def _resolve_target_subjects(
     items: list[m.EvidenceInventoryItem] = []
     page_token: str | None = None
     while True:
-        page = evidence.inventory_evidence(
-            repository_id, target, bounds, page_token
-        )
+        page = evidence.inventory_evidence(repository_id, target, bounds, page_token)
         items.extend(page.items)
         next_token = page.bound_info.continuation_token
         if next_token is None:
@@ -399,8 +396,10 @@ def _resolve_target_subjects(
         resolution = structural.resolve_subject(
             repository_id,
             m.SubjectSelector(
-                exact_subject_id=None, name_or_locator=locator,
-                expected_kinds=(), retrieval_scope_hint=None,
+                exact_subject_id=None,
+                name_or_locator=locator,
+                expected_kinds=(),
+                retrieval_scope_hint=None,
             ),
             bounds,
         )
@@ -408,8 +407,7 @@ def _resolve_target_subjects(
         if (
             resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED
             and len(resolution.candidates) == 1
-            and resolution.candidates[0].subject.subject_id.canonical_locator
-            == locator
+            and resolution.candidates[0].subject.subject_id.canonical_locator == locator
         ):
             subject = resolution.candidates[0].subject
         if subject is None:
@@ -424,21 +422,20 @@ def _resolve_target_subjects(
             )
         found[(subject.subject_id.subject_kind, locator)] = subject
     target_paths = tuple(
-        dict.fromkeys(
-            (*target.paths, *(ref.locator for ref in target.evidence_refs))
-        )
+        dict.fromkeys((*target.paths, *(ref.locator for ref in target.evidence_refs)))
     )
     subject_token: str | None = None
     while True:
         page = store.load_repository_subjects(
-            repository_id, bounds, offset=(
-                int(subject_token[3:]) if subject_token else 0
-            ),
+            repository_id,
+            bounds,
+            offset=(int(subject_token[3:]) if subject_token else 0),
         )
         for subject in page.items:
             locator = subject.subject_id.canonical_locator
             if any(
-                locator == path or locator.startswith(path.rstrip("/") + "/")
+                locator == path
+                or locator.startswith(path.rstrip("/") + "/")
                 or locator.startswith(path.rstrip("/") + "#")
                 for path in target_paths
             ):
@@ -446,15 +443,15 @@ def _resolve_target_subjects(
         subject_token = page.bound_info.continuation_token
         if subject_token is None:
             break
-    return tuple(
-        found[key] for key in sorted(found, key=lambda pair: pair[1])
-    )
+    return tuple(found[key] for key in sorted(found, key=lambda pair: pair[1]))
 
 
 def _subject_key(sid: m.SubjectId) -> tuple[str, str, str]:
     """Complete identity key: repository + kind + locator (§4.2)."""
     return (
-        sid.repository_id, sid.subject_kind.value, sid.canonical_locator,
+        sid.repository_id,
+        sid.subject_kind.value,
+        sid.canonical_locator,
     )
 
 
@@ -473,9 +470,7 @@ def _make_not_found(bounds: m.QueryBounds) -> m.SubjectResolution:
     )
 
 
-def _make_resolved(
-    subject: m.Subject, bounds: m.QueryBounds
-) -> m.SubjectResolution:
+def _make_resolved(subject: m.Subject, bounds: m.QueryBounds) -> m.SubjectResolution:
     # Contextual candidates are reached through evidence linkage, not
     # an exact locator match: report the truthful non-exact basis.
     return m.SubjectResolution(
@@ -499,7 +494,8 @@ def _make_resolved(
 
 
 def _make_ambiguous(
-    subjects: tuple[m.Subject, ...], bounds: m.QueryBounds,
+    subjects: tuple[m.Subject, ...],
+    bounds: m.QueryBounds,
     *,
     truncated: bool = False,
     truncated_category: str | None = None,
@@ -516,9 +512,7 @@ def _make_ambiguous(
             m.SubjectCandidate(
                 subject=subject,
                 structural_evidence=(),
-                rank_basis=(
-                    m.CandidateRankBasis.STRUCTURAL_PROXIMITY
-                ),
+                rank_basis=(m.CandidateRankBasis.STRUCTURAL_PROXIMITY),
             )
             for subject in ordered
         ),
@@ -528,9 +522,7 @@ def _make_ambiguous(
             requested_max_depth=0,
             returned_results=len(ordered),
             truncated=truncated,
-            truncated_category=(
-                truncated_category if truncated else None
-            ),
+            truncated_category=(truncated_category if truncated else None),
             continuation_token=None,
         ),
     )
@@ -558,13 +550,16 @@ def _has_established_semantic_state(
     if claims.items:
         return True
     rels = store.load_relationships(
-        repository_id, (sid,), (), StructuralDirection.BOTH, bounds, None,
+        repository_id,
+        (sid,),
+        (),
+        StructuralDirection.BOTH,
+        bounds,
+        None,
     )
     if rels.items:
         return True
-    return store.count_question_coverages(
-        repository_id, None, (sid,)
-    ) > 0
+    return store.count_question_coverages(repository_id, None, (sid,)) > 0
 
 
 def _bounded_path_inventory(
@@ -596,9 +591,7 @@ def _bounded_path_inventory(
     fetches = 0
     while True:
         fetches += 1
-        page = evidence.inventory_evidence(
-            repository_id, scope, bounds, page_token
-        )
+        page = evidence.inventory_evidence(repository_id, scope, bounds, page_token)
         raw.extend(page.items)
         try:
             deduped = check_inventory_identity(tuple(raw))
@@ -635,9 +628,7 @@ def _load_contextual_semantics(
     """
     if not evidence_id_values:
         return (), ()
-    deps = store.load_evidence_records(
-        repository_id, tuple(evidence_id_values)
-    )
+    deps = store.load_evidence_records(repository_id, tuple(evidence_id_values))
     if not deps:
         return (), ()
     seen: set[tuple[str, str]] = set()
@@ -649,12 +640,8 @@ def _load_contextual_semantics(
             seen.add(key)
             refs.append(ref)
     loaded = store.load_by_refs(repository_id, tuple(refs))
-    claims = tuple(
-        item for item in loaded if isinstance(item, m.SemanticClaim)
-    )
-    rels = tuple(
-        item for item in loaded if isinstance(item, m.SemanticRelationship)
-    )
+    claims = tuple(item for item in loaded if isinstance(item, m.SemanticClaim))
+    rels = tuple(item for item in loaded if isinstance(item, m.SemanticRelationship))
     return claims, rels
 
 
@@ -679,7 +666,8 @@ def _direct_candidate_ids(
         sorted(
             out.values(),
             key=lambda s: (
-                s.subject_kind.value, s.canonical_locator,
+                s.subject_kind.value,
+                s.canonical_locator,
                 s.repository_id,
             ),
         )
@@ -704,42 +692,52 @@ def _current_parents(
     _refresh_view here.
     """
     claim_page = store.load_claims(
-        repository_id, (sid,),
-        (m.ClaimKind.CAPABILITY_MEMBERSHIP,), bounds, None,
+        repository_id,
+        (sid,),
+        (m.ClaimKind.CAPABILITY_MEMBERSHIP,),
+        bounds,
+        None,
     )
     if claim_page.bound_info.truncated:
         return None
     rel_page = store.load_relationships(
-        repository_id, (sid,),
+        repository_id,
+        (sid,),
         (m.RelationshipKind.MEMBER_OF,),
-        StructuralDirection.DOWNSTREAM, bounds, None,
+        StructuralDirection.DOWNSTREAM,
+        bounds,
+        None,
     )
     if rel_page.bound_info.truncated:
         return None
     member_claims = [
-        c for c in claim_page.items
-        if c.subject == sid
-        and isinstance(c.value, m.CapabilityMembershipValue)
+        c
+        for c in claim_page.items
+        if c.subject == sid and isinstance(c.value, m.CapabilityMembershipValue)
     ]
     member_rels = [
-        r for r in rel_page.items
+        r
+        for r in rel_page.items
         if r.source == sid and r.kind is m.RelationshipKind.MEMBER_OF
     ]
     if not member_claims and not member_rels:
         return ()
     refs: list[m.ClaimRef | m.RelationshipRef] = [
         m.ClaimRef(id=c.claim_id) for c in member_claims
-    ] + [
-        m.RelationshipRef(id=r.relationship_id) for r in member_rels
-    ]
+    ] + [m.RelationshipRef(id=r.relationship_id) for r in member_rels]
     items: list[m.SemanticClaim | m.SemanticRelationship] = [
-        *member_claims, *member_rels,
+        *member_claims,
+        *member_rels,
     ]
     from span.service.freshness import _evaluate_current
 
     updates, _ = _evaluate_current(
-        repository_id, tuple(refs), tuple(items),
-        evidence=evidence, store=store, bounds=bounds,
+        repository_id,
+        tuple(refs),
+        tuple(items),
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
     bad: set[tuple[str, str]] = set()
     for update in updates:
@@ -758,14 +756,13 @@ def _current_parents(
             continue
         if rel.freshness.state is not m.FreshnessState.CURRENT:
             continue
-        parents.setdefault(
-            _subject_key(rel.target), rel.target
-        )
+        parents.setdefault(_subject_key(rel.target), rel.target)
     return tuple(
         sorted(
             parents.values(),
             key=lambda s: (
-                s.subject_kind.value, s.canonical_locator,
+                s.subject_kind.value,
+                s.canonical_locator,
                 s.repository_id,
             ),
         )
@@ -791,15 +788,20 @@ def _resolve_contextual_subjects(
     _ = structural
     if selector.exact_subject_id is not None:
         return (
-            _make_not_found(bounds), _make_not_found(bounds),
+            _make_not_found(bounds),
+            _make_not_found(bounds),
         )
     query = selector.name_or_locator
     if not query:
         return (
-            _make_not_found(bounds), _make_not_found(bounds),
+            _make_not_found(bounds),
+            _make_not_found(bounds),
         )
     inventory = _bounded_path_inventory(
-        repository_id, query, evidence=evidence, bounds=bounds,
+        repository_id,
+        query,
+        evidence=evidence,
+        bounds=bounds,
     )
     if inventory is None:
         ambiguous = _make_ambiguous(
@@ -808,28 +810,25 @@ def _resolve_contextual_subjects(
         return (ambiguous, ambiguous)
     if not inventory:
         return (
-            _make_not_found(bounds), _make_not_found(bounds),
+            _make_not_found(bounds),
+            _make_not_found(bounds),
         )
     evidence_ids = tuple(
-        dict.fromkeys(
-            item.evidence_ref.evidence_id.value for item in inventory
-        )
+        dict.fromkeys(item.evidence_ref.evidence_id.value for item in inventory)
     )
-    claims, rels = _load_contextual_semantics(
-        repository_id, evidence_ids, store=store
-    )
+    claims, rels = _load_contextual_semantics(repository_id, evidence_ids, store=store)
     candidate_ids = _direct_candidate_ids(claims, rels)
     allowed: set[m.SubjectKind] | None = (
         set(selector.expected_kinds) if selector.expected_kinds else None
     )
     if allowed is not None:
         candidate_ids = tuple(
-            sid for sid in candidate_ids
-            if sid.subject_kind in allowed
+            sid for sid in candidate_ids if sid.subject_kind in allowed
         )
     if not candidate_ids:
         return (
-            _make_not_found(bounds), _make_not_found(bounds),
+            _make_not_found(bounds),
+            _make_not_found(bounds),
         )
     if len(candidate_ids) > bounds.max_subjects:
         ambiguous = _make_ambiguous(
@@ -850,20 +849,26 @@ def _resolve_contextual_subjects(
     known: list[m.Subject] = [by_key[_subject_key(sid)] for sid in candidate_ids]
     if not known:
         return (
-            _make_not_found(bounds), _make_not_found(bounds),
+            _make_not_found(bounds),
+            _make_not_found(bounds),
         )
     if len(known) == 1:
         local = known[0]
         orientation = _make_resolved(local, bounds)
         parents = _current_parents(
-            repository_id, local.subject_id,
-            evidence=evidence, store=store, bounds=bounds,
+            repository_id,
+            local.subject_id,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
         )
         if parents is None:
             return (
                 orientation,
                 _make_ambiguous(
-                    (), bounds, truncated=True,
+                    (),
+                    bounds,
+                    truncated=True,
                     truncated_category="context",
                 ),
             )
@@ -874,9 +879,7 @@ def _resolve_contextual_subjects(
             # a parent outside expected_kinds can never become the
             # trace subject. Narrow to allowed parents first; with none
             # allowed the local candidate stands.
-            parents = tuple(
-                p for p in parents if p.subject_kind in allowed
-            )
+            parents = tuple(p for p in parents if p.subject_kind in allowed)
             if not parents:
                 return (orientation, _make_resolved(local, bounds))
         if len(parents) == 1:
@@ -885,19 +888,20 @@ def _resolve_contextual_subjects(
                 return (
                     orientation,
                     _make_ambiguous(
-                        (), bounds, truncated=True,
+                        (),
+                        bounds,
+                        truncated=True,
                         truncated_category="context",
                     ),
                 )
             return (orientation, _make_resolved(loaded[0], bounds))
-        if (
-            len(parents) > bounds.max_subjects
-            or len(parents) > bounds.max_results
-        ):
+        if len(parents) > bounds.max_subjects or len(parents) > bounds.max_results:
             return (
                 orientation,
                 _make_ambiguous(
-                    (), bounds, truncated=True,
+                    (),
+                    bounds,
+                    truncated=True,
                     truncated_category="context",
                 ),
             )
@@ -913,16 +917,22 @@ def _resolve_contextual_subjects(
         while True:
             if len(chain) - 1 >= bounds.max_depth:
                 parents = _current_parents(
-                    repository_id, current,
-                    evidence=evidence, store=store, bounds=bounds,
+                    repository_id,
+                    current,
+                    evidence=evidence,
+                    store=store,
+                    bounds=bounds,
                 )
                 if parents is None or parents:
                     failed = "bound"
                     break
                 break
             parents = _current_parents(
-                repository_id, current,
-                evidence=evidence, store=store, bounds=bounds,
+                repository_id,
+                current,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
             )
             if parents is None:
                 failed = "bound"
@@ -945,7 +955,9 @@ def _resolve_contextual_subjects(
             current = parent
         if failed == "bound":
             ambiguous = _make_ambiguous(
-                tuple(known), bounds, truncated=True,
+                tuple(known),
+                bounds,
+                truncated=True,
                 truncated_category="context",
             )
             return (ambiguous, ambiguous)
@@ -959,11 +971,15 @@ def _resolve_contextual_subjects(
     if len(distinct) > bounds.max_subjects or len(distinct) > bounds.max_results:
         return (
             _make_ambiguous(
-                tuple(known), bounds, truncated=True,
+                tuple(known),
+                bounds,
+                truncated=True,
                 truncated_category="context",
             ),
             _make_ambiguous(
-                tuple(known), bounds, truncated=True,
+                tuple(known),
+                bounds,
+                truncated=True,
                 truncated_category="context",
             ),
         )
@@ -971,9 +987,12 @@ def _resolve_contextual_subjects(
     for chain in chains.values():
         all_ids.extend(chain)
     loaded_all = store.load_subjects(
-        repository_id, tuple(dict.fromkeys(
-            all_ids,  # type: ignore[arg-type]
-        ))
+        repository_id,
+        tuple(
+            dict.fromkeys(
+                all_ids,  # type: ignore[arg-type]
+            )
+        ),
     )
     # NOTE: dict.fromkeys over SubjectId preserves first occurrence;
     # reload by key below for chain membership checks.
@@ -982,15 +1001,14 @@ def _resolve_contextual_subjects(
         for sid in chain:
             if _subject_key(sid) not in loaded_by_key:
                 ambiguous = _make_ambiguous(
-                    tuple(known), bounds, truncated=True,
+                    tuple(known),
+                    bounds,
+                    truncated=True,
                     truncated_category="context",
                 )
                 return (ambiguous, ambiguous)
     first_chain = next(iter(chains.values()))
-    chain_sets = [
-        {_subject_key(sid) for sid in chain}
-        for chain in chains.values()
-    ]
+    chain_sets = [{_subject_key(sid) for sid in chain} for chain in chains.values()]
     common: m.SubjectId | None = None
     for sid in first_chain:
         key = _subject_key(sid)
@@ -1013,4 +1031,3 @@ def _resolve_contextual_subjects(
     common_subject = loaded_by_key[_subject_key(common)]
     resolved = _make_resolved(common_subject, bounds)
     return (resolved, resolved)
-

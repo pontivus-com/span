@@ -90,7 +90,9 @@ def _state():
     import datetime as dt
 
     return m.RepositoryState(
-        repository_id="repo-1", revision_id="r1", dirty=False,
+        repository_id="repo-1",
+        revision_id="r1",
+        dirty=False,
         state_fingerprint="state-fp",
         observed_at=dt.datetime(2026, 10, 7, tzinfo=dt.timezone.utc),
     )
@@ -163,7 +165,8 @@ class CandidateValidationTest(unittest.TestCase):
             _ctx(
                 known_evidence_ids=frozenset({"ev-src/a.py", "ev-other"}),
                 evidence_fingerprints={
-                    "ev-src/a.py": "fp-1", "ev-other": "fp-2",
+                    "ev-src/a.py": "fp-1",
+                    "ev-other": "fp-2",
                 },
             ),
         )
@@ -213,15 +216,13 @@ class CandidateValidationTest(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertIs(result.trust, m.TrustState.UNRESOLVED)
         self.assertEqual(len(result.requirements), 1)
-        self.assertIs(
-            result.requirements[0].kind, m.ResolutionKind.MISSING_AUTHORITY
-        )
+        self.assertIs(result.requirements[0].kind, m.ResolutionKind.MISSING_AUTHORITY)
 
     def test_relationship_endpoint_must_be_known(self):
         rel = m.CandidateSemanticRelationship(
             source=_sid(),
             kind=m.RelationshipKind.MEMBER_OF,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
             target=m.SubjectId(
                 repository_id="repo-1",
                 subject_kind=m.SubjectKind.CAPABILITY,
@@ -242,9 +243,7 @@ class MaterializeTest(unittest.TestCase):
         second = v.materialize_claim(candidate, result, _state())
         self.assertEqual(first.claim_id, second.claim_id)
         self.assertTrue(first.claim_id.value.startswith("clm-"))
-        self.assertIs(
-            first.freshness.state, m.FreshnessState.CURRENT
-        )
+        self.assertIs(first.freshness.state, m.FreshnessState.CURRENT)
 
     def test_failed_candidate_not_materialized(self):
         result = v.validate_candidate_claim(_claim(evidence=()), _ctx())
@@ -268,23 +267,17 @@ class ConflictDetectionTest(unittest.TestCase):
         )
 
     def _purpose(self, cid, summary):
-        return self._established(
-            cid, m.ClaimKind.PURPOSE, m.PurposeValue(summary, ())
-        )
+        return self._established(cid, m.ClaimKind.PURPOSE, m.PurposeValue(summary, ()))
 
     def _verification(self, cid, currency):
         return self._established(
             cid,
             m.ClaimKind.VERIFICATION,
-            m.VerificationValue(
-                _sid(), m.VerificationKind.TEST, currency
-            ),
+            m.VerificationValue(_sid(), m.VerificationKind.TEST, currency),
         )
 
     def test_equal_values_no_conflict(self):
-        pair = (
-            self._purpose("c-1", "same"), self._purpose("c-2", "same")
-        )
+        pair = (self._purpose("c-1", "same"), self._purpose("c-2", "same"))
         self.assertEqual(v.find_conflicts(pair, ()), ())
 
     def test_structured_difference_conflicts(self):
@@ -315,7 +308,7 @@ class ConflictDetectionTest(unittest.TestCase):
             relationship_id=m.RelationshipId("r-sup"),
             source=_sid("src/b.py"),
             kind=m.RelationshipKind.SUPERSEDES,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+            assertion_nature=m.AssertionNature.NORMATIVE,
             target=_sid(),
             evidence=(_ref(),),
             authority=_accepted_binding(),
@@ -347,9 +340,7 @@ class ConflictDetectionTest(unittest.TestCase):
                 summary="x",
             ),
         )
-        bad = v.validate_candidate_conflict(
-            dangling, frozenset({"k1", "k2"}), _ctx()
-        )
+        bad = v.validate_candidate_conflict(dangling, frozenset({"k1", "k2"}), _ctx())
         self.assertFalse(bad.ok)
 
     def test_subject_proposal_validates(self):
@@ -363,18 +354,14 @@ class ConflictDetectionTest(unittest.TestCase):
                 "test proposal restating cited evidence",
             ),
         )
-        self.assertTrue(
-            v.validate_candidate_subject(good, _ctx()).ok
-        )
+        self.assertTrue(v.validate_candidate_subject(good, _ctx()).ok)
         bad = m.CandidateSubject(
             provisional_locator="",
             kind=m.SubjectKind.CAPABILITY,
             display_name="Billing",
             evidence=(_ref(),),
         )
-        self.assertFalse(
-            v.validate_candidate_subject(bad, _ctx()).ok
-        )
+        self.assertFalse(v.validate_candidate_subject(bad, _ctx()).ok)
 
 
 class FreshnessClassificationTest(unittest.TestCase):
@@ -399,16 +386,15 @@ class FreshnessClassificationTest(unittest.TestCase):
         )
         dep_gone = m.EvidenceDependency(
             m.RelationshipRef(id=m.RelationshipId("r-1")),
-            _ref("ev-c", "c.py"), "fp-c",
+            _ref("ev-c", "c.py"),
+            "fp-c",
         )
         updates = fresh.classify_all(
             (dep_current, dep_stale, dep_gone),
             {"ev-a": "fp-a", "ev-b": "fp-new"},
         )
         self.assertEqual(len(updates), 2)
-        self.assertEqual(
-            updates[0].semantic_id, m.ClaimRef(id=m.ClaimId("c-2"))
-        )
+        self.assertEqual(updates[0].semantic_id, m.ClaimRef(id=m.ClaimId("c-2")))
         self.assertIs(updates[0].freshness.state, m.FreshnessState.STALE)
         self.assertIs(updates[1].freshness.state, m.FreshnessState.UNVERIFIABLE)
 
@@ -417,37 +403,31 @@ class FreshnessClassificationTest(unittest.TestCase):
             scope_subjects=(_sid(),),
             inventory_fingerprint="inv-1",
             seed_fingerprints=(
-                m.SeedFingerprint(
-                    m.EvidenceId("ev-a"), "a.py", "fp-a"
-                ),
+                m.SeedFingerprint(m.EvidenceId("ev-a"), "a.py", "fp-a"),
             ),
         )
-        current = fresh.classify_coverage(
-            recorded, "inv-1", {"ev-a": "fp-a"}
-        )
+        current = fresh.classify_coverage(recorded, "inv-1", {"ev-a": "fp-a"})
         self.assertIs(current.state, m.FreshnessState.CURRENT)
-        stale = fresh.classify_coverage(
-            recorded, "inv-2", {"ev-a": "fp-a"}
-        )
+        stale = fresh.classify_coverage(recorded, "inv-2", {"ev-a": "fp-a"})
         self.assertIs(stale.state, m.FreshnessState.STALE)
-        unverifiable = fresh.classify_coverage(
-            recorded, "inv-1", {}
-        )
-        self.assertIs(
-            unverifiable.state, m.FreshnessState.UNVERIFIABLE
-        )
+        unverifiable = fresh.classify_coverage(recorded, "inv-1", {})
+        self.assertIs(unverifiable.state, m.FreshnessState.UNVERIFIABLE)
 
 
 class AnswerHelpersTest(unittest.TestCase):
     def test_requirements_for_claim_states(self):
         base = dict(
-            claim_id=m.ClaimId("c-1"), subject=_sid(), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            value=m.PurposeValue("s", ()), evidence=(_ref(),),
+            claim_id=m.ClaimId("c-1"),
+            subject=_sid(),
+            kind=m.ClaimKind.PURPOSE,
+            assertion_nature=m.AssertionNature.DESCRIPTIVE,
+            value=m.PurposeValue("s", ()),
+            evidence=(_ref(),),
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
         )
         unresolved = m.SemanticClaim(
-            **base, trust=m.TrustState.UNRESOLVED,
+            **base,
+            trust=m.TrustState.UNRESOLVED,
             freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
         )
         reqs = ans.requirements_for_claim(unresolved)
@@ -455,7 +435,8 @@ class AnswerHelpersTest(unittest.TestCase):
         self.assertIs(reqs[0].kind, m.ResolutionKind.MISSING_AUTHORITY)
 
         stale = m.SemanticClaim(
-            **base, trust=m.TrustState.ESTABLISHED,
+            **base,
+            trust=m.TrustState.ESTABLISHED,
             authority=_accepted_binding(),
             freshness=m.Freshness(m.FreshnessState.STALE, reason="t"),
         )
@@ -463,7 +444,8 @@ class AnswerHelpersTest(unittest.TestCase):
         self.assertIs(reqs[0].kind, m.ResolutionKind.STALE_EVIDENCE)
 
         established = m.SemanticClaim(
-            **base, trust=m.TrustState.ESTABLISHED,
+            **base,
+            trust=m.TrustState.ESTABLISHED,
             authority=_accepted_binding(),
             freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
         )
@@ -473,11 +455,13 @@ class AnswerHelpersTest(unittest.TestCase):
         resolution = m.SubjectResolution(
             candidates=(
                 m.SubjectCandidate(
-                    m.Subject(_sid("a.py"), "A", None), (),
+                    m.Subject(_sid("a.py"), "A", None),
+                    (),
                     m.CandidateRankBasis.EXACT_NAME,
                 ),
                 m.SubjectCandidate(
-                    m.Subject(_sid("b.py"), "A", None), (),
+                    m.Subject(_sid("b.py"), "A", None),
+                    (),
                     m.CandidateRankBasis.EXACT_NAME,
                 ),
             ),
@@ -494,7 +478,8 @@ class AnswerHelpersTest(unittest.TestCase):
             bound_info=m.BoundInfo(8, 0, 0, False),
         )
         reqs = ans.requirements_for_resolution(
-            resolution, repository_id="repo-1",
+            resolution,
+            repository_id="repo-1",
             name_or_locator="other-root/workflows/x.py",
         )
         self.assertEqual(len(reqs), 1)
@@ -531,9 +516,7 @@ class AnswerHelpersTest(unittest.TestCase):
         self.assertEqual(token, "trunc:claims:2")
 
     def test_truncate_fields_no_truncation_no_token(self):
-        kept, truncated, category, token = ans.truncate_fields(
-            ((("a",), "claims"),), 5
-        )
+        kept, truncated, category, token = ans.truncate_fields(((("a",), "claims"),), 5)
         self.assertEqual(kept, (("a",),))
         self.assertFalse(truncated)
         self.assertIsNone(category)

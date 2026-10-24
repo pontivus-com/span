@@ -57,9 +57,7 @@ def map_to_intent(
         return MappedEvent(intent=intent, target=None)
     return MappedEvent(
         intent=intent,
-        target=m.EvidenceScope(
-            paths=tuple(changed_paths), evidence_refs=()
-        ),
+        target=m.EvidenceScope(paths=tuple(changed_paths), evidence_refs=()),
     )
 
 

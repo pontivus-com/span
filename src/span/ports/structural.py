@@ -23,7 +23,6 @@ from span.core.model import (
     StructuralOutlinePage,  # noqa: F401
     StructuralReachPage,
     StructuralSearchPage,  # noqa: F401
-    Subject,
     SubjectId,
     SubjectResolution,
     SubjectSelector,

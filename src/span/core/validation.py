@@ -105,9 +105,7 @@ class InterpretationUnitRejected(Exception):
         self.diagnostics = diagnostics
 
 
-def _check_basis(
-    basis: m.SemanticBasis, owner: str
-) -> str | None:
+def _check_basis(basis: m.SemanticBasis, owner: str) -> str | None:
     # Plan §4.9: every material claim/relationship carries a bounded
     # SemanticBasis whose summary restates the evidence/derivation
     # relationship. An empty summary states no account and is a unit
@@ -157,14 +155,9 @@ def _check_authority(
     # §6.3 (v0.6): the verbatim quote must occur in the cited unit.
     if not support.quoted_span:
         return f"{owner}: authority support quote is empty"
-    unit_content = ctx.evidence_contents.get(
-        binding.evidence_ref.evidence_id.value
-    )
+    unit_content = ctx.evidence_contents.get(binding.evidence_ref.evidence_id.value)
     if unit_content is None:
-        return (
-            f"{owner}: authority evidence content unavailable for "
-            f"support check"
-        )
+        return f"{owner}: authority evidence content unavailable for " f"support check"
     if support.quoted_span not in unit_content:
         return (
             f"{owner}: authority support quote is not a verbatim "
@@ -175,9 +168,7 @@ def _check_authority(
     if binding.status is not m.AuthorityStatus.UNKNOWN:
         if not support.status_section:
             return f"{owner}: authority status has no locating section"
-        sections = {
-            (ref.section_or_span or ref.locator) for ref in evidence
-        }
+        sections = {(ref.section_or_span or ref.locator) for ref in evidence}
         if support.status_section not in sections:
             return (
                 f"{owner}: authority status section does not resolve "
@@ -187,9 +178,7 @@ def _check_authority(
     if scope.subject_scope or scope.description:
         if not support.applicability_section:
             return f"{owner}: authority applicability has no locating section"
-        sections = {
-            (ref.section_or_span or ref.locator) for ref in evidence
-        }
+        sections = {(ref.section_or_span or ref.locator) for ref in evidence}
         if support.applicability_section not in sections:
             return (
                 f"{owner}: authority applicability section does not "
@@ -214,9 +203,7 @@ def _derive_trust(
                 m.ResolutionRequirement(
                     kind=m.ResolutionKind.MISSING_AUTHORITY,
                     subject_or_claim=subject,
-                    description=(
-                        f"no authority binding established for {kind_label}"
-                    ),
+                    description=(f"no authority binding established for {kind_label}"),
                     supporting_context=(),
                 ),
             ),
@@ -300,9 +287,7 @@ def validate_candidate_relationship(
             ok=False,
             trust=m.TrustState.UNRESOLVED,
             requirements=(),
-            diagnostics=(
-                f"relationship kind not allowed: {candidate.kind.value}",
-            ),
+            diagnostics=(f"relationship kind not allowed: {candidate.kind.value}",),
         )
     nature = candidate.assertion_nature
     if (
@@ -383,17 +368,12 @@ def validate_candidate_subject(
             diagnostics=("subject provisional locator is not repository-relative",),
         )
     for known in ctx.known_subject_ids:
-        if (
-            known.canonical_locator == locator
-            and known.subject_kind != candidate.kind
-        ):
+        if known.canonical_locator == locator and known.subject_kind != candidate.kind:
             return CandidateValidation(
                 ok=False,
                 trust=m.TrustState.UNRESOLVED,
                 requirements=(),
-                diagnostics=(
-                    "subject locator collides with a different-kind subject",
-                ),
+                diagnostics=("subject locator collides with a different-kind subject",),
             )
     if candidate.kind is m.SubjectKind.OTHER and not candidate.declared_kind:
         return CandidateValidation(
@@ -482,22 +462,28 @@ def _claim_content_payload(
         kind=candidate.kind,
         value=candidate.value,
         assertion_nature=candidate.assertion_nature,
-        evidence=tuple(sorted(
-            candidate.evidence,
-            key=lambda r: (r.evidence_id.value, r.locator),
-        )),
+        evidence=tuple(
+            sorted(
+                candidate.evidence,
+                key=lambda r: (r.evidence_id.value, r.locator),
+            )
+        ),
         candidate_authority=candidate.candidate_authority,
         basis=m.SemanticBasis(
             derivation=candidate.basis.derivation,
             summary=candidate.basis.summary,
-            input_refs=tuple(sorted(
-                (
-                    r.id.value if isinstance(
-                        r, (m.ClaimRef, m.RelationshipRef)
-                    ) else r.evidence_id.value
-                    for r in candidate.basis.input_refs
+            input_refs=tuple(
+                sorted(
+                    (
+                        (
+                            r.id.value
+                            if isinstance(r, (m.ClaimRef, m.RelationshipRef))
+                            else r.evidence_id.value
+                        )
+                        for r in candidate.basis.input_refs
+                    )
                 )
-            )),
+            ),
         ),
     )
     return [m.to_canonical(stripped), trust.value]
@@ -512,22 +498,28 @@ def _relationship_content_payload(
         kind=candidate.kind,
         target=candidate.target,
         assertion_nature=candidate.assertion_nature,
-        evidence=tuple(sorted(
-            candidate.evidence,
-            key=lambda r: (r.evidence_id.value, r.locator),
-        )),
+        evidence=tuple(
+            sorted(
+                candidate.evidence,
+                key=lambda r: (r.evidence_id.value, r.locator),
+            )
+        ),
         candidate_authority=candidate.candidate_authority,
         basis=m.SemanticBasis(
             derivation=candidate.basis.derivation,
             summary=candidate.basis.summary,
-            input_refs=tuple(sorted(
-                (
-                    r.id.value if isinstance(
-                        r, (m.ClaimRef, m.RelationshipRef)
-                    ) else r.evidence_id.value
-                    for r in candidate.basis.input_refs
+            input_refs=tuple(
+                sorted(
+                    (
+                        (
+                            r.id.value
+                            if isinstance(r, (m.ClaimRef, m.RelationshipRef))
+                            else r.evidence_id.value
+                        )
+                        for r in candidate.basis.input_refs
+                    )
                 )
-            )),
+            ),
         ),
     )
     return [m.to_canonical(stripped), trust.value]
@@ -549,9 +541,7 @@ def deterministic_relationship_id(
     )
 
 
-def _check_premise_refs(
-    basis: m.SemanticBasis, owner: str
-) -> str | None:
+def _check_premise_refs(basis: m.SemanticBasis, owner: str) -> str | None:
     for ref in basis.input_refs:
         if isinstance(ref, (m.ClaimRef, m.RelationshipRef)):
             if not ref.id.value:
@@ -655,9 +645,7 @@ def materialize_claim(
         trust=validation.trust,
         freshness=m.Freshness(
             state=m.FreshnessState.CURRENT,
-            supporting_revision_or_fingerprint=(
-                repository_state.state_fingerprint
-            ),
+            supporting_revision_or_fingerprint=(repository_state.state_fingerprint),
             reason=(
                 "materialized from current evidence at repository state "
                 + repository_state.state_fingerprint
@@ -681,9 +669,7 @@ def materialize_relationship(
         else None
     )
     return m.SemanticRelationship(
-        relationship_id=deterministic_relationship_id(
-            candidate, validation.trust
-        ),
+        relationship_id=deterministic_relationship_id(candidate, validation.trust),
         source=candidate.source,
         kind=candidate.kind,
         target=candidate.target,
@@ -693,9 +679,7 @@ def materialize_relationship(
         trust=validation.trust,
         freshness=m.Freshness(
             state=m.FreshnessState.CURRENT,
-            supporting_revision_or_fingerprint=(
-                repository_state.state_fingerprint
-            ),
+            supporting_revision_or_fingerprint=(repository_state.state_fingerprint),
             reason=(
                 "materialized from current evidence at repository state "
                 + repository_state.state_fingerprint
@@ -759,9 +743,9 @@ def find_conflicts(
                 left, right = group[i], group[j]
                 if left.value == right.value:
                     continue
-                if _structured_projection(
-                    left.value
-                ) == _structured_projection(right.value):
+                if _structured_projection(left.value) == _structured_projection(
+                    right.value
+                ):
                     continue
                 if right.subject in supersedes.get(left.subject, set()):
                     continue
@@ -797,31 +781,75 @@ def validate_target_inventory_account(
     """
     eid = account.evidence_id.value
     if eid not in current_inventory_ids:
-        return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target account out-of-target evidence: {eid}",))
+        return CandidateValidation(
+            False,
+            m.TrustState.UNRESOLVED,
+            (),
+            (f"target account out-of-target evidence: {eid}",),
+        )
     if expected_evidence_id is not None and eid != expected_evidence_id:
-        return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target account does not match current item: {eid}",))
+        return CandidateValidation(
+            False,
+            m.TrustState.UNRESOLVED,
+            (),
+            (f"target account does not match current item: {eid}",),
+        )
     if account.assigned_area_subjects:
         known = set(ctx.known_subject_ids) | set(admitted_area_ids) | set(new_area_ids)
         for sid in account.assigned_area_subjects:
             if sid not in known:
-                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target assignment names unknown area: {sid.canonical_locator}",))
+                return CandidateValidation(
+                    False,
+                    m.TrustState.UNRESOLVED,
+                    (),
+                    (f"target assignment names unknown area: {sid.canonical_locator}",),
+                )
         return CandidateValidation(True, m.TrustState.ESTABLISHED, (), ())
     if account.exclusion_basis is not None:
         basis = account.exclusion_basis
         if not basis.summary:
-            return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target exclusion without summary",))
+            return CandidateValidation(
+                False,
+                m.TrustState.UNRESOLVED,
+                (),
+                ("target exclusion without summary",),
+            )
         if not basis.input_refs:
-            return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target exclusion without evidence support",))
+            return CandidateValidation(
+                False,
+                m.TrustState.UNRESOLVED,
+                (),
+                ("target exclusion without evidence support",),
+            )
         for ref in basis.input_refs:
             if not isinstance(ref, m.EvidenceRef):
-                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), ("target exclusion requires evidence refs, not semantic refs",))
+                return CandidateValidation(
+                    False,
+                    m.TrustState.UNRESOLVED,
+                    (),
+                    ("target exclusion requires evidence refs, not semantic refs",),
+                )
             if ref.evidence_id.value not in ctx.known_evidence_ids:
-                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"exclusion evidence does not resolve: {ref.evidence_id.value}",))
+                return CandidateValidation(
+                    False,
+                    m.TrustState.UNRESOLVED,
+                    (),
+                    (f"exclusion evidence does not resolve: {ref.evidence_id.value}",),
+                )
             if ref.evidence_id.value not in ctx.evidence_fingerprints:
-                return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"exclusion evidence fingerprint unavailable: {ref.evidence_id.value}",))
+                return CandidateValidation(
+                    False,
+                    m.TrustState.UNRESOLVED,
+                    (),
+                    (
+                        f"exclusion evidence fingerprint unavailable: {ref.evidence_id.value}",
+                    ),
+                )
         return CandidateValidation(True, m.TrustState.ESTABLISHED, (), ())
     if account.resolution_requirements:
-        return CandidateValidation(True, m.TrustState.UNRESOLVED, tuple(account.resolution_requirements), ())
+        return CandidateValidation(
+            True, m.TrustState.UNRESOLVED, tuple(account.resolution_requirements), ()
+        )
     return CandidateValidation(True, m.TrustState.UNRESOLVED, (), ())
 
 
@@ -834,5 +862,12 @@ def validate_target_questions(
     admitted = set(admitted_area_ids)
     for q in questions:
         if q.scope_root not in admitted:
-            return CandidateValidation(False, m.TrustState.UNRESOLVED, (), (f"target question root not admitted: {q.scope_root.canonical_locator}",))
+            return CandidateValidation(
+                False,
+                m.TrustState.UNRESOLVED,
+                (),
+                (
+                    f"target question root not admitted: {q.scope_root.canonical_locator}",
+                ),
+            )
     return CandidateValidation(True, m.TrustState.ESTABLISHED, (), ())

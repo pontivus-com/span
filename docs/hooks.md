@@ -29,7 +29,7 @@ notice. Session-start and session-stop select the
 registered repository containing the active working directory; callers
 may override it with `--repo-root`. A working directory outside every
 registered repository is a silent no-op. Per-host trigger support
-(opencode, codex, fallback): `integrations/hosts/triggers.md`.
+(opencode, codex, claude): `integrations/hosts/triggers.md`.
 
 ## Responsibility matrix
 

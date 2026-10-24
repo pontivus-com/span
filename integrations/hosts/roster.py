@@ -105,8 +105,12 @@ def propose_territories(
         reached.setdefault(seed.canonical_locator, seed)
         unions.union(seed.canonical_locator, seed.canonical_locator)
         page = structural.reach(
-            repository_id, seed, edge_kinds,
-            StructuralDirection.BOTH, bounds.max_depth, bounds,
+            repository_id,
+            seed,
+            edge_kinds,
+            StructuralDirection.BOTH,
+            bounds.max_depth,
+            bounds,
         )
         for node in page.items:
             key = node.subject.canonical_locator
@@ -126,9 +130,7 @@ def propose_territories(
         groups.setdefault(unions.find(key), set()).add(key)
     territories: list[Territory] = []
     for group in groups.values():
-        members = tuple(
-            reached[key] for key in sorted(group)
-        )
+        members = tuple(reached[key] for key in sorted(group))
         # Exact territory-internal entries: one upstream read per
         # member. Entry is claimed only when proven — a truncated
         # incoming page cannot prove entry, so that member is not
@@ -137,23 +139,26 @@ def propose_territories(
         proven: set[str] = set()
         for key in sorted(group):
             page = structural.edges(
-                repository_id, reached[key], (), StructuralDirection.UPSTREAM,
+                repository_id,
+                reached[key],
+                (),
+                StructuralDirection.UPSTREAM,
                 bounds,
             )
             if page.bound_info.truncated:
                 continue
             proven.add(key)
             internal_incoming[key] = {
-                e.source.canonical_locator for e in page.items
+                e.source.canonical_locator
+                for e in page.items
                 if e.source.canonical_locator in group
             }
             for edge in page.items:
                 kinds.setdefault(key, set()).add(edge.kind)
-                kinds.setdefault(
-                    edge.source.canonical_locator, set()
-                ).add(edge.kind)
+                kinds.setdefault(edge.source.canonical_locator, set()).add(edge.kind)
         entries = tuple(
-            reached[key] for key in sorted(group)
+            reached[key]
+            for key in sorted(group)
             if key in proven and not internal_incoming[key]
         )
         group_kinds = sorted(
@@ -167,7 +172,5 @@ def propose_territories(
                 edge_kinds=tuple(group_kinds),
             )
         )
-    territories.sort(
-        key=lambda t: t.members[0].canonical_locator if t.members else ""
-    )
+    territories.sort(key=lambda t: t.members[0].canonical_locator if t.members else "")
     return Roster(territories=tuple(territories))

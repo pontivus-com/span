@@ -20,7 +20,6 @@ from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
     InMemorySubject,
-    fingerprint_content,
 )
 
 REPO = "target-acct-svc"
@@ -34,7 +33,6 @@ FILES = {
 TARGET_PATHS = ("src/postings.py", "src/inventory.py")
 OBJECTIVE = "Establish reusable memory for the postings scope."
 FOLLOW_SLICE = "Establish the postings root purpose from direct evidence."
-
 
 
 def _decision(coverage):
@@ -71,21 +69,30 @@ def _fill_batch(pending, accounts):
         eid = it.evidence_ref.evidence_id.value
         if eid in have:
             continue
-        out.append(m.CandidateTargetInventoryAccount(
-            evidence_id=it.evidence_ref.evidence_id,
-            resolution_requirements=(m.ResolutionRequirement(
-                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                subject_or_claim=None,
-                description="not examined in this test",
-                supporting_context=(),
-            ),),
-        ))
+        out.append(
+            m.CandidateTargetInventoryAccount(
+                evidence_id=it.evidence_ref.evidence_id,
+                resolution_requirements=(
+                    m.ResolutionRequirement(
+                        kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                        subject_or_claim=None,
+                        description="not examined in this test",
+                        supporting_context=(),
+                    ),
+                ),
+            )
+        )
     return tuple(out)
+
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -97,10 +104,8 @@ def _harness():
         REPO,
         tuple(InMemoryFile(p, c) for p, c in FILES.items()),
         (
-            InMemorySubject(
-                "src/postings.py", m.SubjectKind.COMPONENT, "postings"),
-            InMemorySubject(
-                "src/inventory.py", m.SubjectKind.COMPONENT, "inventory"),
+            InMemorySubject("src/postings.py", m.SubjectKind.COMPONENT, "postings"),
+            InMemorySubject("src/inventory.py", m.SubjectKind.COMPONENT, "inventory"),
         ),
         (),
     )
@@ -112,13 +117,14 @@ def _harness():
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
 
-def _admit(structural, evidence, store, continuations,
-           paths=TARGET_PATHS):
+def _admit(structural, evidence, store, continuations, paths=TARGET_PATHS):
     return ops.initialize_target(
         ops.SemanticInitializeTargetRequest(
             repository_id=REPO,
@@ -126,8 +132,11 @@ def _admit(structural, evidence, store, continuations,
             objective=OBJECTIVE,
             bounds=_bounds(),
         ),
-        structural=structural, evidence=evidence, store=store,
-        continuations=continuations, authority_seeds=(),
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+        authority_seeds=(),
     )
 
 
@@ -139,8 +148,7 @@ def _submit_audit_open(pending, structural, evidence, store, continuations):
     open_cov = m.InterpretationCoverage(
         subjects=(root,),
         question_slice=req.question.question_slice,
-        evidence_scope=m.EvidenceScope(paths=TARGET_PATHS,
-                                       evidence_refs=refs),
+        evidence_scope=m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=refs),
         declared_complete=False,
         question=req.question,
         disposition=m.SemanticQuestionDisposition.OPEN,
@@ -157,7 +165,8 @@ def _submit_audit_open(pending, structural, evidence, store, continuations):
         question_evidence=(),
     )
     follow_q = m.SemanticQuestionScope(
-        scope_root=root, subject=root,
+        scope_root=root,
+        subject=root,
         question_class=m.SemanticQuestionClass.CQ_01,
         question_slice=FOLLOW_SLICE,
         materiality_basis="admitted by the audit as material; unexamined",
@@ -177,14 +186,19 @@ def _submit_audit_open(pending, structural, evidence, store, continuations):
     return ops.submit_interpretation(
         pending.continuation,
         m.SemanticInterpretationResult(
-            claims=(), relationships=(), governing_source_refs=(),
+            claims=(),
+            relationships=(),
+            governing_source_refs=(),
             diagnostics=("test audit",),
-            candidate_subjects=(), candidate_conflicts=(),
+            candidate_subjects=(),
+            candidate_conflicts=(),
             question_decision=_decision(open_cov),
             proposed_questions=_proposed(follow_cov),
             candidate_withdrawals=(),
         ),
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
         continuations=continuations,
     )
 
@@ -201,26 +215,35 @@ class TargetAccountingTest(unittest.TestCase):
         self.assertIsNotNone(item)
         assert item is not None
         area = m.SubjectId(
-            repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+            repository_id=REPO,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="postings-area",
         )
         q = m.SemanticQuestionScope(
-            scope_root=area, subject=area,
+            scope_root=area,
+            subject=area,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice=FOLLOW_SLICE,
             materiality_basis="admitted by mapping; unexamined",
         )
         pend = m.InterpretationCoverage(
-            subjects=(area,), question_slice=FOLLOW_SLICE,
-            evidence_scope=m.EvidenceScope(), declared_complete=False,
-            question=q, disposition=m.SemanticQuestionDisposition.PENDING,
-            result_refs=(), resolution_requirements=(),
-            disposition_basis="admitted by mapping", question_evidence=(),
+            subjects=(area,),
+            question_slice=FOLLOW_SLICE,
+            evidence_scope=m.EvidenceScope(),
+            declared_complete=False,
+            question=q,
+            disposition=m.SemanticQuestionDisposition.PENDING,
+            result_refs=(),
+            resolution_requirements=(),
+            disposition_basis="admitted by mapping",
+            question_evidence=(),
         )
         ops.submit_interpretation(
             first.continuation,
             m.SemanticInterpretationResult(
-                claims=(), relationships=(), governing_source_refs=(),
+                claims=(),
+                relationships=(),
+                governing_source_refs=(),
                 diagnostics=("mapping",),
                 candidate_subjects=(
                     m.CandidateSubject(
@@ -239,19 +262,25 @@ class TargetAccountingTest(unittest.TestCase):
                 candidate_conflicts=(),
                 proposed_questions=_proposed(pend),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=_fill_batch(first, (
-                    m.CandidateTargetInventoryAccount(
-                         evidence_id=item.evidence_ref.evidence_id,
-                        assigned_area_subjects=(area,),
+                proposed_target_inventory_accounting=_fill_batch(
+                    first,
+                    (
+                        m.CandidateTargetInventoryAccount(
+                            evidence_id=item.evidence_ref.evidence_id,
+                            assigned_area_subjects=(area,),
+                        ),
                     ),
-                )),
+                ),
                 proposed_target_questions=(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=live,
         )
         scope, obj = m.canonicalize_target_scope(
-            REPO, m.EvidenceScope(paths=solo, evidence_refs=()), OBJECTIVE)
+            REPO, m.EvidenceScope(paths=solo, evidence_refs=()), OBJECTIVE
+        )
         tid = m.derive_target_id(REPO, scope, obj)
         assoc = store.load_target_association(REPO, tid)
         self.assertIsNotNone(assoc)
@@ -265,7 +294,8 @@ class TargetAccountingTest(unittest.TestCase):
         structural, evidence, store = _harness()
         live = ContinuationStore()
         area = m.SubjectId(
-            repository_id=REPO, subject_kind=m.SubjectKind.OTHER,
+            repository_id=REPO,
+            subject_kind=m.SubjectKind.OTHER,
             canonical_locator="postings-area",
         )
         for _ in range(1):
@@ -273,10 +303,14 @@ class TargetAccountingTest(unittest.TestCase):
                 ops.SemanticInitializeTargetRequest(
                     repository_id=REPO,
                     target=m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
-                    objective=OBJECTIVE, bounds=_bounds(),
+                    objective=OBJECTIVE,
+                    bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=live, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=live,
+                authority_seeds=(),
             )
             if not hasattr(pending, "continuation"):
                 break
@@ -284,22 +318,30 @@ class TargetAccountingTest(unittest.TestCase):
             item = pending.request.target_inventory_items[0]
             assert item is not None
             q = m.SemanticQuestionScope(
-                scope_root=area, subject=area,
+                scope_root=area,
+                subject=area,
                 question_class=m.SemanticQuestionClass.CQ_01,
                 question_slice=FOLLOW_SLICE,
                 materiality_basis="admitted by mapping; unexamined",
             )
             pend = m.InterpretationCoverage(
-                subjects=(area,), question_slice=FOLLOW_SLICE,
-                evidence_scope=m.EvidenceScope(), declared_complete=False,
-                question=q, disposition=m.SemanticQuestionDisposition.PENDING,
-                result_refs=(), resolution_requirements=(),
-                disposition_basis="admitted by mapping", question_evidence=(),
+                subjects=(area,),
+                question_slice=FOLLOW_SLICE,
+                evidence_scope=m.EvidenceScope(),
+                declared_complete=False,
+                question=q,
+                disposition=m.SemanticQuestionDisposition.PENDING,
+                result_refs=(),
+                resolution_requirements=(),
+                disposition_basis="admitted by mapping",
+                question_evidence=(),
             )
             ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(), governing_source_refs=(),
+                    claims=(),
+                    relationships=(),
+                    governing_source_refs=(),
                     diagnostics=("mapping",),
                     candidate_subjects=(
                         m.CandidateSubject(
@@ -318,19 +360,25 @@ class TargetAccountingTest(unittest.TestCase):
                     candidate_conflicts=(),
                     proposed_questions=_proposed(pend),
                     candidate_withdrawals=(),
-                    proposed_target_inventory_accounting=_fill_batch(pending, (
-                        m.CandidateTargetInventoryAccount(
-                             evidence_id=item.evidence_ref.evidence_id,
-                            assigned_area_subjects=(area,),
+                    proposed_target_inventory_accounting=_fill_batch(
+                        pending,
+                        (
+                            m.CandidateTargetInventoryAccount(
+                                evidence_id=item.evidence_ref.evidence_id,
+                                assigned_area_subjects=(area,),
+                            ),
                         ),
-                    )),
+                    ),
                     proposed_target_questions=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
         scope, obj = m.canonicalize_target_scope(
-            REPO, m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()), OBJECTIVE)
+            REPO, m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()), OBJECTIVE
+        )
         tid = m.derive_target_id(REPO, scope, obj)
         assoc = store.load_target_association(REPO, tid)
         self.assertIsNotNone(assoc)
@@ -338,13 +386,17 @@ class TargetAccountingTest(unittest.TestCase):
         self.assertEqual(len(assoc.inventory_accounting), len(TARGET_PATHS))
         ans = ops.status(
             ops.SemanticStatusRequest(repository_id=REPO, target=tid, bounds=_bounds()),
-            structural=structural, evidence=evidence, store=store,
-            continuations=ContinuationStore(), authority_seeds=(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+            authority_seeds=(),
         )
         assert isinstance(ans, m.SemanticAnswer)
         assert isinstance(ans.content, m.StatusContent)
         self.assertEqual(
-            ans.content.target_disposition, m.SemanticCoverageDisposition.INCOMPLETE)
+            ans.content.target_disposition, m.SemanticCoverageDisposition.INCOMPLETE
+        )
 
 
 def _unresolved_account(item):
@@ -363,7 +415,8 @@ def _unresolved_account(item):
 
 def _target_id():
     scope, obj = m.canonicalize_target_scope(
-        REPO, m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
+        REPO,
+        m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
         OBJECTIVE,
     )
     return m.derive_target_id(REPO, scope, obj)
@@ -390,17 +443,16 @@ class MappingBatchIdentityTest(unittest.TestCase):
             ]
             self.assertGreaterEqual(len(bound), 2)
             text = pending.request.brief.submission_rules[-1]
-            self.assertIn("every inventory member", " ".join(
-                pending.request.brief.submission_rules
-            ))
+            self.assertIn(
+                "every inventory member",
+                " ".join(pending.request.brief.submission_rules),
+            )
             payload = json.loads(text.split(": ", 1)[1])
             self.assertNotIn("question_decision", payload)
             self.assertEqual(
                 [
                     account["evidence_id"]["value"]
-                    for account in payload[
-                        "proposed_target_inventory_accounting"
-                    ]
+                    for account in payload["proposed_target_inventory_accounting"]
                 ],
                 bound,
             )
@@ -413,31 +465,38 @@ class MappingBatchIdentityTest(unittest.TestCase):
         try:
             pending = _admit(structural, evidence, store, live)
             self.assertEqual(len(pending.request.target_inventory_items), 2)
-            reversed_items = tuple(
-                reversed(pending.request.target_inventory_items)
-            )
+            reversed_items = tuple(reversed(pending.request.target_inventory_items))
             ops.submit_interpretation(
                 pending.continuation,
                 m.SemanticInterpretationResult(
-                    claims=(), relationships=(), governing_source_refs=(),
+                    claims=(),
+                    relationships=(),
+                    governing_source_refs=(),
                     diagnostics=("mapping in reverse order",),
-                    candidate_subjects=(), candidate_conflicts=(),
+                    candidate_subjects=(),
+                    candidate_conflicts=(),
                     candidate_withdrawals=(),
                     proposed_target_inventory_accounting=tuple(
                         _unresolved_account(item) for item in reversed_items
                     ),
                     proposed_target_questions=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=live,
             )
             assoc = store.load_target_association(REPO, _target_id())
             assert assoc is not None
             self.assertEqual(
-                {acc.evidence_ref.evidence_id.value
-                 for acc in assoc.inventory_accounting},
-                {item.evidence_ref.evidence_id.value
-                 for item in pending.request.target_inventory_items},
+                {
+                    acc.evidence_ref.evidence_id.value
+                    for acc in assoc.inventory_accounting
+                },
+                {
+                    item.evidence_ref.evidence_id.value
+                    for item in pending.request.target_inventory_items
+                },
             )
         finally:
             store.close()
@@ -453,23 +512,27 @@ class MappingBatchIdentityTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(), governing_source_refs=(),
+                        claims=(),
+                        relationships=(),
+                        governing_source_refs=(),
                         diagnostics=("partial mapping",),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         candidate_withdrawals=(),
                         proposed_target_inventory_accounting=(
                             _unresolved_account(items[0]),
                         ),
                         proposed_target_questions=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=live,
                 )
             message = str(ctx.exception)
             missing = items[1].evidence_ref.evidence_id.value
             self.assertIn(missing, message)
-            self.assertIn("bound mapping item has no accounting candidate",
-                          message)
+            self.assertIn("bound mapping item has no accounting candidate", message)
             self.assertIn("bound_items[1]", message)
             # Atomic rejection: no accounting committed, continuation live.
             assoc = store.load_target_association(REPO, _target_id())
@@ -489,35 +552,41 @@ class MappingBatchIdentityTest(unittest.TestCase):
             pending = ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
                     repository_id=REPO,
-                    target=m.EvidenceScope(
-                        paths=TARGET_PATHS, evidence_refs=()
-                    ),
+                    target=m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
                     objective=OBJECTIVE,
                     bounds=bounds,
                 ),
-                structural=structural, evidence=evidence, store=store,
-                continuations=live, authority_seeds=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=live,
+                authority_seeds=(),
             )
             self.assertEqual(len(pending.request.target_inventory_items), 1)
             inventory = enumerate_target_inventory(
-                REPO, m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
-                evidence=evidence, bounds=_bounds(),
+                REPO,
+                m.EvidenceScope(paths=TARGET_PATHS, evidence_refs=()),
+                evidence=evidence,
+                bounds=_bounds(),
             )
-            bound_id = (
-                pending.request.target_inventory_items[0]
-                .evidence_ref.evidence_id.value
-            )
+            bound_id = pending.request.target_inventory_items[
+                0
+            ].evidence_ref.evidence_id.value
             extra = next(
-                item for item in inventory
+                item
+                for item in inventory
                 if item.evidence_ref.evidence_id.value != bound_id
             )
             with self.assertRaises(InterpretationUnitRejected) as ctx:
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(), governing_source_refs=(),
+                        claims=(),
+                        relationships=(),
+                        governing_source_refs=(),
                         diagnostics=("extra mapping",),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         candidate_withdrawals=(),
                         proposed_target_inventory_accounting=(
                             _unresolved_account(
@@ -527,7 +596,9 @@ class MappingBatchIdentityTest(unittest.TestCase):
                         ),
                         proposed_target_questions=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=live,
                 )
             message = str(ctx.exception)
@@ -556,14 +627,19 @@ class MappingBatchIdentityTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(), governing_source_refs=(),
+                        claims=(),
+                        relationships=(),
+                        governing_source_refs=(),
                         diagnostics=("duplicate mapping",),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         candidate_withdrawals=(),
                         proposed_target_inventory_accounting=duplicated,
                         proposed_target_questions=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=live,
                 )
             message = str(ctx.exception)
@@ -584,6 +660,7 @@ class ArtifactSnapshotTest(unittest.TestCase):
         import tempfile
 
         from span.shell.structural.graft import artifact_snapshot
+
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             graph = root / "graft" / ".graph"
@@ -604,6 +681,7 @@ class ArtifactSnapshotTest(unittest.TestCase):
         import tempfile
 
         from span.shell.structural.graft import artifact_snapshot
+
         with tempfile.TemporaryDirectory() as tmp:
             snap = artifact_snapshot(pathlib.Path(tmp) / "absent")
         self.assertFalse(snap["wiring"]["present"])

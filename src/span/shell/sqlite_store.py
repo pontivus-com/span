@@ -408,8 +408,7 @@ class SqliteSemanticStore:
                 truncated=truncated,
                 truncated_category="semantic_subjects" if truncated else None,
                 continuation_token=(
-                    _paging.next_page_token(offset + len(items))
-                    if truncated else None
+                    _paging.next_page_token(offset + len(items)) if truncated else None
                 ),
             ),
         )
@@ -421,9 +420,7 @@ class SqliteSemanticStore:
         ).fetchone()
         return int(row[0]) if row is not None else 0
 
-    def count_question_dispositions(
-        self, repository_id: str
-    ) -> dict[str, int]:
+    def count_question_dispositions(self, repository_id: str) -> dict[str, int]:
         rows = self._db.execute(
             "SELECT disposition, COUNT(*) FROM question_coverages "
             "WHERE repository_id=? GROUP BY disposition",
@@ -439,9 +436,7 @@ class SqliteSemanticStore:
         ).fetchone()
         return int(row[0]) if row is not None else 0
 
-    def count_target_inventory_outcomes(
-        self, repository_id: str
-    ) -> tuple[int, int]:
+    def count_target_inventory_outcomes(self, repository_id: str) -> tuple[int, int]:
         """Count persisted accounted/unresolved members with SQLite JSON."""
         row = self._db.execute(
             "SELECT "
@@ -499,9 +494,7 @@ class SqliteSemanticStore:
                     (ref.id.value, repository_id),
                 ).fetchone()
                 if row is None:
-                    raise ValueError(
-                        f"unknown claim ref: {ref.id.value}"
-                    )
+                    raise ValueError(f"unknown claim ref: {ref.id.value}")
                 found.append(_decode_claim(row[0]))
             else:
                 row = self._db.execute(
@@ -510,9 +503,7 @@ class SqliteSemanticStore:
                     (ref.id.value, repository_id),
                 ).fetchone()
                 if row is None:
-                    raise ValueError(
-                        f"unknown relationship ref: {ref.id.value}"
-                    )
+                    raise ValueError(f"unknown relationship ref: {ref.id.value}")
                 found.append(_decode_relationship(row[0]))
         return tuple(found)
 
@@ -710,9 +701,7 @@ class SqliteSemanticStore:
     ) -> tuple[m.InterpretationCoverage, ...]:
         """Unbounded reads for reconciliation decisions (B-03)."""
         return tuple(
-            self._filter_question_coverages(
-                repository_id, scope_root, subject_ids
-            )
+            self._filter_question_coverages(repository_id, scope_root, subject_ids)
         )
 
     def count_question_coverages(
@@ -744,11 +733,6 @@ class SqliteSemanticStore:
         wanted = {r.id.value for r in premise_refs}
         if not wanted:
             return ()
-        rows = self._db.execute(
-            "SELECT dependent_id, dependent_kind FROM premise_dependents "
-            "WHERE repository_id=? ORDER BY dependent_id",
-            (repository_id,),
-        ).fetchall()
         # Filter by premise membership via premise_id column.
         premise_rows = self._db.execute(
             "SELECT premise_id, dependent_id, dependent_kind "
@@ -844,9 +828,11 @@ class SqliteSemanticStore:
                     "VALUES(?, ?, ?, ?, ?, ?, ?)",
                     (
                         _ref_id(semantic_id),
-                        "CLAIM"
-                        if isinstance(semantic_id, m.ClaimRef)
-                        else "RELATIONSHIP",
+                        (
+                            "CLAIM"
+                            if isinstance(semantic_id, m.ClaimRef)
+                            else "RELATIONSHIP"
+                        ),
                         dep.evidence_ref.evidence_id.value,
                         dep.evidence_ref.repository_id,
                         dep.evidence_ref.locator,
@@ -856,17 +842,17 @@ class SqliteSemanticStore:
                 )
                 written += 1
             for coverage in batch.coverage_dependencies:
-                scope = sorted(
-                    {s.canonical_locator for s in coverage.scope_subjects}
-                )
+                scope = sorted({s.canonical_locator for s in coverage.scope_subjects})
                 self._db.execute(
                     "INSERT INTO coverage_dependencies"
                     "(repository_id, scope_locators, inventory_fingerprint, "
                     "observed_at, canonical_json) VALUES(?, ?, ?, ?, ?)",
                     (
-                        batch.subjects[0].subject_id.repository_id
-                        if batch.subjects
-                        else "",
+                        (
+                            batch.subjects[0].subject_id.repository_id
+                            if batch.subjects
+                            else ""
+                        ),
                         _json.dumps(scope, sort_keys=True),
                         coverage.inventory_fingerprint,
                         coverage.observed_at.isoformat(),
@@ -883,8 +869,7 @@ class SqliteSemanticStore:
                 # what validation admitted; the service must derive refs
                 # before writing. Fail the batch, never persist it.
                 if (
-                    qcov.disposition
-                    is m.SemanticQuestionDisposition.ANSWERED
+                    qcov.disposition is m.SemanticQuestionDisposition.ANSWERED
                     and not qcov.result_refs
                 ):
                     raise ValueError(
@@ -922,9 +907,7 @@ class SqliteSemanticStore:
                         question.question_class.value,
                         question.question_slice,
                         qcov.disposition.value,
-                        _datetime.datetime.now(
-                            _datetime.timezone.utc
-                        ).isoformat(),
+                        _datetime.datetime.now(_datetime.timezone.utc).isoformat(),
                         _encode(m.to_canonical(qcov)),
                     ),
                 )
@@ -958,9 +941,7 @@ class SqliteSemanticStore:
                     else item.relationship_id.value
                 )
                 dep_kind = (
-                    "CLAIM"
-                    if isinstance(item, m.SemanticClaim)
-                    else "RELATIONSHIP"
+                    "CLAIM" if isinstance(item, m.SemanticClaim) else "RELATIONSHIP"
                 )
                 repo_id = (
                     item.subject.repository_id
@@ -978,9 +959,7 @@ class SqliteSemanticStore:
                         (
                             repo_id,
                             pref.id.value,
-                            "CLAIM"
-                            if isinstance(pref, m.ClaimRef)
-                            else "RELATIONSHIP",
+                            "CLAIM" if isinstance(pref, m.ClaimRef) else "RELATIONSHIP",
                             dep_id,
                             dep_kind,
                             _json.dumps(
@@ -990,9 +969,7 @@ class SqliteSemanticStore:
                         ),
                     )
                     written += 1
-            retired_at = _datetime.datetime.now(
-                _datetime.timezone.utc
-            ).isoformat()
+            retired_at = _datetime.datetime.now(_datetime.timezone.utc).isoformat()
             for ref in batch.retires_claims:
                 row = self._db.execute(
                     "SELECT canonical_json, repository_id FROM claims "
@@ -1000,18 +977,14 @@ class SqliteSemanticStore:
                     (ref.id.value,),
                 ).fetchone()
                 if row is None:
-                    raise ValueError(
-                        f"retire names unknown claim: {ref.id.value}"
-                    )
+                    raise ValueError(f"retire names unknown claim: {ref.id.value}")
                 self._db.execute(
                     "INSERT OR REPLACE INTO retired_claims"
                     "(claim_id, repository_id, retired_at, canonical_json) "
                     "VALUES(?, ?, ?, ?)",
                     (ref.id.value, row[1], retired_at, row[0]),
                 )
-                self._db.execute(
-                    "DELETE FROM claims WHERE claim_id=?", (ref.id.value,)
-                )
+                self._db.execute("DELETE FROM claims WHERE claim_id=?", (ref.id.value,))
                 self._db.execute(
                     "DELETE FROM evidence_dependencies WHERE semantic_id=?",
                     (ref.id.value,),
@@ -1034,8 +1007,7 @@ class SqliteSemanticStore:
                 ).fetchone()
                 if row is None:
                     raise ValueError(
-                        "retire names unknown relationship: "
-                        + ref.id.value
+                        "retire names unknown relationship: " + ref.id.value
                     )
                 self._db.execute(
                     "INSERT OR REPLACE INTO retired_relationships"
@@ -1084,8 +1056,7 @@ class SqliteSemanticStore:
                 now = self._now()
                 now_iso = now.isoformat()
                 expires = (
-                    now
-                    + _datetime.timedelta(days=self._target_retention_days)
+                    now + _datetime.timedelta(days=self._target_retention_days)
                 ).isoformat()
                 self._db.execute(
                     "DELETE FROM target_associations WHERE expires_at <= ?",
@@ -1221,16 +1192,13 @@ class SqliteSemanticStore:
         never silently replaced by an empty tuple.
         """
         row = self._db.execute(
-            "SELECT authority_seeds_json FROM repositories "
-            "WHERE repository_id=?",
+            "SELECT authority_seeds_json FROM repositories " "WHERE repository_id=?",
             (repository_id,),
         ).fetchone()
         if row is None:
             return ()
         try:
-            decoded = m.from_canonical(
-                tuple[m.EvidenceRef, ...], _json.loads(row[0])
-            )
+            decoded = m.from_canonical(tuple[m.EvidenceRef, ...], _json.loads(row[0]))
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"repository {repository_id!r} authority seeds are not "
@@ -1240,8 +1208,7 @@ class SqliteSemanticStore:
             isinstance(seed, m.EvidenceRef) for seed in decoded
         ):
             raise ValueError(
-                f"repository {repository_id!r} authority seeds are not "
-                "canonical"
+                f"repository {repository_id!r} authority seeds are not " "canonical"
             )
         for seed in decoded:
             if seed.repository_id != repository_id:
@@ -1251,9 +1218,7 @@ class SqliteSemanticStore:
                 )
         return decoded
 
-    def load_repository_state(
-        self, repository_id: str
-    ) -> m.RepositoryState | None:
+    def load_repository_state(self, repository_id: str) -> m.RepositoryState | None:
         row = self._db.execute(
             "SELECT revision_id, dirty, state_fingerprint, observed_at "
             "FROM repositories WHERE repository_id=?",

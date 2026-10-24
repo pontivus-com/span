@@ -120,10 +120,21 @@ class ClosedVocabularyTest(unittest.TestCase):
         self.assertEqual(
             {e.value for e in m.SubjectKind},
             {
-                "REPOSITORY", "SUBSYSTEM", "COMPONENT", "CAPABILITY",
-                "CODE_SYMBOL", "CONTRACT", "BOUNDARY", "REPRESENTATION",
-                "CONFIGURATION", "DOCUMENT", "TEST_OR_GATE", "SURFACE",
-                "FIELD", "EXTERNAL_DEPENDENCY", "OTHER",
+                "REPOSITORY",
+                "SUBSYSTEM",
+                "COMPONENT",
+                "CAPABILITY",
+                "CODE_SYMBOL",
+                "CONTRACT",
+                "BOUNDARY",
+                "REPRESENTATION",
+                "CONFIGURATION",
+                "DOCUMENT",
+                "TEST_OR_GATE",
+                "SURFACE",
+                "FIELD",
+                "EXTERNAL_DEPENDENCY",
+                "OTHER",
             },
         )
 
@@ -131,10 +142,16 @@ class ClosedVocabularyTest(unittest.TestCase):
         self.assertEqual(
             {e.value for e in m.ClaimKind},
             {
-                "PURPOSE", "CAPABILITY_MEMBERSHIP", "RESPONSIBILITY",
-                "OWNERSHIP_CUSTODY", "REPRESENTATION_CONTRACT",
-                "TRANSFORMATION_OWNERSHIP", "INVARIANT_CONSTRAINT",
-                "CONFIGURATION_ENVIRONMENT", "LIFECYCLE_STATE", "VERIFICATION",
+                "PURPOSE",
+                "CAPABILITY_MEMBERSHIP",
+                "RESPONSIBILITY",
+                "OWNERSHIP_CUSTODY",
+                "REPRESENTATION_CONTRACT",
+                "TRANSFORMATION_OWNERSHIP",
+                "INVARIANT_CONSTRAINT",
+                "CONFIGURATION_ENVIRONMENT",
+                "LIFECYCLE_STATE",
+                "VERIFICATION",
             },
         )
 
@@ -142,10 +159,21 @@ class ClosedVocabularyTest(unittest.TestCase):
         self.assertEqual(
             {e.value for e in m.RelationshipKind},
             {
-                "MEMBER_OF", "IMPLEMENTS", "PRODUCES", "CARRIES", "CONSUMES",
-                "DEPENDS_ON", "CROSSES_BOUNDARY", "REPRESENTS_AS",
-                "TRANSFORMS_TO", "GOVERNED_BY", "CONFIGURED_BY", "PERSISTS_AT",
-                "TRANSITIONS_TO", "VERIFIED_BY", "SUPERSEDES",
+                "MEMBER_OF",
+                "IMPLEMENTS",
+                "PRODUCES",
+                "CARRIES",
+                "CONSUMES",
+                "DEPENDS_ON",
+                "CROSSES_BOUNDARY",
+                "REPRESENTS_AS",
+                "TRANSFORMS_TO",
+                "GOVERNED_BY",
+                "CONFIGURED_BY",
+                "PERSISTS_AT",
+                "TRANSITIONS_TO",
+                "VERIFIED_BY",
+                "SUPERSEDES",
             },
         )
 
@@ -188,8 +216,10 @@ class ClosedVocabularyTest(unittest.TestCase):
         self.assertEqual(
             {e.value for e in m.DerivationKind},
             {
-                "EXPLICIT_EVIDENCE", "SEMANTIC_INTERPRETATION",
-                "STRUCTURAL_OBSERVATION", "DERIVED_JOIN",
+                "EXPLICIT_EVIDENCE",
+                "SEMANTIC_INTERPRETATION",
+                "STRUCTURAL_OBSERVATION",
+                "DERIVED_JOIN",
             },
         )
 
@@ -199,9 +229,7 @@ class ClosedVocabularyTest(unittest.TestCase):
         self.assertEqual(len(m.VerificationKind), 4)
         self.assertEqual(len(m.VerificationCurrency), 5)
         self.assertEqual(len(m.RepositoryReadiness), 5)
-        self.assertEqual(
-            {e.value for e in m.StatusMode}, {"NORMAL", "HOOK_FAST"}
-        )
+        self.assertEqual({e.value for e in m.StatusMode}, {"NORMAL", "HOOK_FAST"})
         self.assertEqual(len(m.StructuralEdgeKind), 5)
         self.assertEqual(len(m.LifecyclePhase), 12)
         self.assertEqual(len(m.CandidateRankBasis), 5)
@@ -253,9 +281,7 @@ class ConstructionValidationTest(unittest.TestCase):
                 overrides=(_evidence_ref(),),
             )
         with self.assertRaises(ValueError):
-            m.DeclaredPrecedence(
-                m.PrecedenceKind.PRIORITY_RANK, priority_rank=1
-            )
+            m.DeclaredPrecedence(m.PrecedenceKind.PRIORITY_RANK, priority_rank=1)
         ok = m.DeclaredPrecedence(
             m.PrecedenceKind.PRIORITY_RANK,
             priority_rank=1,
@@ -281,13 +307,20 @@ class ConstructionValidationTest(unittest.TestCase):
         good = _query_bounds()
         self.assertEqual(good.max_depth, 5)
         bad = dict(
-            max_results=50, max_depth=5, max_subjects=20, max_evidence_units=20,
-            max_evidence_bytes=65536, max_candidate_claims=20,
+            max_results=50,
+            max_depth=5,
+            max_subjects=20,
+            max_evidence_units=20,
+            max_evidence_bytes=65536,
+            max_candidate_claims=20,
             max_candidate_relationships=20,
         )
         for key in (
-            "max_results", "max_subjects", "max_evidence_units",
-            "max_evidence_bytes", "max_candidate_claims",
+            "max_results",
+            "max_subjects",
+            "max_evidence_units",
+            "max_evidence_bytes",
+            "max_candidate_claims",
             "max_candidate_relationships",
         ):
             with self.assertRaises(ValueError, msg=key):
@@ -301,31 +334,36 @@ class ConstructionValidationTest(unittest.TestCase):
     def test_repository_state_rejects_naive_datetime(self):
         with self.assertRaises(ValueError):
             m.RepositoryState(
-                repository_id="repo-1", revision_id=None, dirty=False,
+                repository_id="repo-1",
+                revision_id=None,
+                dirty=False,
                 state_fingerprint="fp",
                 observed_at=datetime.datetime(2026, 10, 7, 12, 0, 0),
             )
 
     def test_unsupported_page_requires_empty_items(self):
         edge = m.StructuralEdge(
-            source=_subject_id(), kind=m.StructuralEdgeKind.CALLS,
-            target=_subject_id(), evidence=_evidence_ref(),
+            source=_subject_id(),
+            kind=m.StructuralEdgeKind.CALLS,
+            target=_subject_id(),
+            evidence=_evidence_ref(),
         )
         with self.assertRaises(ValueError):
             m.StructuralEdgePage(
-                items=(edge,), repository_state=_repository_state(),
-                bound_info=_bound_info(), unsupported=True,
+                items=(edge,),
+                repository_state=_repository_state(),
+                bound_info=_bound_info(),
+                unsupported=True,
             )
 
     def test_coverage_detail_accepts_closed_tokens_in_order(self):
         report = m.StructuralFreshnessReport(
-            stale_files=("a.py",), unverifiable_files=(),
+            stale_files=("a.py",),
+            unverifiable_files=(),
             coverage=m.ScopeCoverage.UNVERIFIED,
             coverage_detail="dirty-tree+touched-file-mismatch",
         )
-        self.assertEqual(
-            report.coverage_detail, "dirty-tree+touched-file-mismatch"
-        )
+        self.assertEqual(report.coverage_detail, "dirty-tree+touched-file-mismatch")
         clean = m.StructuralFreshnessReport(
             coverage=m.ScopeCoverage.VERIFIED,
             coverage_detail="clean-verified",
@@ -364,22 +402,23 @@ class ClaimValueMappingTest(unittest.TestCase):
             m.ClaimKind.OWNERSHIP_CUSTODY: m.OwnershipCustodyValue(
                 sid, m.OwnershipRole.OWNER, m.OwnershipExclusivity.EXCLUSIVE
             ),
-            m.ClaimKind.REPRESENTATION_CONTRACT:
-                m.RepresentationContractValue("rep"),
-            m.ClaimKind.TRANSFORMATION_OWNERSHIP:
-                m.TransformationOwnershipValue(sid),
+            m.ClaimKind.REPRESENTATION_CONTRACT: m.RepresentationContractValue("rep"),
+            m.ClaimKind.TRANSFORMATION_OWNERSHIP: m.TransformationOwnershipValue(sid),
             m.ClaimKind.INVARIANT_CONSTRAINT: m.InvariantConstraintValue("inv"),
-            m.ClaimKind.CONFIGURATION_ENVIRONMENT:
-                m.ConfigurationEnvironmentValue("concern"),
-            m.ClaimKind.LIFECYCLE_STATE:
-                m.LifecycleStateValue(m.LifecyclePhase.USE),
+            m.ClaimKind.CONFIGURATION_ENVIRONMENT: m.ConfigurationEnvironmentValue(
+                "concern"
+            ),
+            m.ClaimKind.LIFECYCLE_STATE: m.LifecycleStateValue(m.LifecyclePhase.USE),
             m.ClaimKind.VERIFICATION: m.VerificationValue(
                 sid, m.VerificationKind.TEST, m.VerificationCurrency.CANDIDATE
             ),
         }
         for n, (kind, value) in enumerate(values.items()):
             claim = m.SemanticClaim(
-                m.ClaimId(f"c-{n}"), sid, kind, value,
+                m.ClaimId(f"c-{n}"),
+                sid,
+                kind,
+                value,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
@@ -388,14 +427,17 @@ class ClaimValueMappingTest(unittest.TestCase):
     def test_mismatched_value_rejected(self):
         with self.assertRaises(ValueError):
             m.SemanticClaim(
-                m.ClaimId("c-x"), _subject_id(), m.ClaimKind.PURPOSE,
+                m.ClaimId("c-x"),
+                _subject_id(),
+                m.ClaimKind.PURPOSE,
                 m.ResponsibilityValue("r"),
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
         with self.assertRaises(ValueError):
             m.CandidateSemanticClaim(
-                subject=_subject_id(), kind=m.ClaimKind.VERIFICATION,
+                subject=_subject_id(),
+                kind=m.ClaimKind.VERIFICATION,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("s", ()),
             )
@@ -415,7 +457,10 @@ class AnswerCorrespondenceTest(unittest.TestCase):
         ]
         for n, (intent, content) in enumerate(pairs):
             answer = m.SemanticAnswer(
-                m.AnswerId(f"a-{n}"), intent, _repository_state(), None,
+                m.AnswerId(f"a-{n}"),
+                intent,
+                _repository_state(),
+                None,
                 content,
             )
             self.assertIs(answer.intent, intent)
@@ -423,8 +468,11 @@ class AnswerCorrespondenceTest(unittest.TestCase):
     def test_mismatched_content_rejected(self):
         with self.assertRaises(ValueError):
             m.SemanticAnswer(
-                m.AnswerId("a-x"), m.SemanticIntent.EXPLAIN,
-                _repository_state(), None, m.TraceContent(),
+                m.AnswerId("a-x"),
+                m.SemanticIntent.EXPLAIN,
+                _repository_state(),
+                None,
+                m.TraceContent(),
             )
 
 
@@ -451,7 +499,8 @@ class SerializationRoundTripTest(unittest.TestCase):
         resolution = m.SubjectResolution(
             (
                 m.SubjectCandidate(
-                    subject, (_evidence_ref(),),
+                    subject,
+                    (_evidence_ref(),),
                     m.CandidateRankBasis.EXACT_LOCATOR,
                 ),
             ),
@@ -490,14 +539,19 @@ class SerializationRoundTripTest(unittest.TestCase):
 
     def test_resolution_change_impact(self):
         req = m.ResolutionRequirement(
-            m.ResolutionKind.MISSING_AUTHORITY, _subject_id(), "no binding",
+            m.ResolutionKind.MISSING_AUTHORITY,
+            _subject_id(),
+            "no binding",
             (m.ClaimRef(id=m.ClaimId("c-1")),),
         )
         self._round_trip(m.ResolutionRequirement, req)
         item = m.ImpactItem(
-            _subject_id(), m.ImpactEstablishment.SEMANTICALLY_ESTABLISHED,
+            _subject_id(),
+            m.ImpactEstablishment.SEMANTICALLY_ESTABLISHED,
             m.SemanticBasis(m.DerivationKind.DERIVED_JOIN),
-            (_evidence_ref(),), (m.ClaimRef(id=m.ClaimId("c-1")),), (),
+            (_evidence_ref(),),
+            (m.ClaimRef(id=m.ClaimId("c-1")),),
+            (),
         )
         self._round_trip(m.ImpactItem, item)
         kind = m.ChangeKind.OWNERSHIP
@@ -508,10 +562,15 @@ class SerializationRoundTripTest(unittest.TestCase):
 
     def test_answer_envelope(self):
         answer = m.SemanticAnswer(
-            m.AnswerId("a-1"), m.SemanticIntent.EXPLAIN,
-            _repository_state(), None,
+            m.AnswerId("a-1"),
+            m.SemanticIntent.EXPLAIN,
+            _repository_state(),
+            None,
             m.ExplainContent(
-                (_semantic_claim(),), (_semantic_relationship(),), (), (),
+                (_semantic_claim(),),
+                (_semantic_relationship(),),
+                (),
+                (),
             ),
             resolution_requirements=(),
         )
@@ -522,12 +581,17 @@ class SerializationRoundTripTest(unittest.TestCase):
         unit = m.EvidenceUnit(_evidence_ref(), "content", "fp")
         self._round_trip(m.EvidenceUnit, unit)
         obs = m.StructuralObservation(
-            _subject_id(), m.StructuralEdgeKind.CALLS, _subject_id(),
-            _evidence_ref(), _repository_state(),
+            _subject_id(),
+            m.StructuralEdgeKind.CALLS,
+            _subject_id(),
+            _evidence_ref(),
+            _repository_state(),
         )
         self._round_trip(m.StructuralObservation, obs)
         edge = m.StructuralEdge(
-            _subject_id(), m.StructuralEdgeKind.IMPORTS, _subject_id(),
+            _subject_id(),
+            m.StructuralEdgeKind.IMPORTS,
+            _subject_id(),
             _evidence_ref(),
         )
         self._round_trip(m.StructuralEdge, edge)
@@ -543,7 +607,8 @@ class SerializationRoundTripTest(unittest.TestCase):
         self._round_trip(m.StructuralEdgePage, page)
         inv = m.EvidenceInventoryPage(
             (m.EvidenceInventoryItem(_evidence_ref(), "fp"),),
-            _repository_state(), _bound_info(),
+            _repository_state(),
+            _bound_info(),
         )
         self._round_trip(m.EvidenceInventoryPage, inv)
         sel = m.EvidenceSelection((_evidence_ref(),), _bound_info())
@@ -592,8 +657,9 @@ class SerializationRoundTripTest(unittest.TestCase):
         res = m.SemanticInterpretationResult(
             (
                 m.CandidateSemanticClaim(
-                    subject=_subject_id(), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=_subject_id(),
+                    kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("s", ()),
                 ),
             ),
@@ -629,9 +695,7 @@ class SerializationRoundTripTest(unittest.TestCase):
                 scope_subjects=(_subject_id(),),
                 inventory_fingerprint="inv-9",
                 seed_fingerprints=(
-                    m.SeedFingerprint(
-                        m.EvidenceId("ev-x"), "x.md", "fp-x"
-                    ),
+                    m.SeedFingerprint(m.EvidenceId("ev-x"), "x.md", "fp-x"),
                 ),
             ),
         )
@@ -652,17 +716,13 @@ class SerializationRoundTripTest(unittest.TestCase):
 
     def test_decode_rejects_unknown_tags_and_values(self):
         with self.assertRaises(m.CanonicalDecodeError):
-            m.from_canonical(
-                m.SemanticContent, {"$type": "Nope", "claims": []}
-            )
+            m.from_canonical(m.SemanticContent, {"$type": "Nope", "claims": []})
         with self.assertRaises(m.CanonicalDecodeError):
             m.from_canonical(m.TrustState, "BOGUS")
         with self.assertRaises(m.CanonicalDecodeError):
             m.from_canonical(m.QueryBounds, {"$type": "QueryBounds"})
         with self.assertRaises(m.CanonicalDecodeError):
-            m.from_canonical(
-                m.FreshnessState, {"$type": "FreshnessState"}
-            )
+            m.from_canonical(m.FreshnessState, {"$type": "FreshnessState"})
 
     def test_decode_rejects_unknown_fields(self):
         data = m.to_canonical(_subject_id())
@@ -725,7 +785,9 @@ class IngressFaultAggregationTest(unittest.TestCase):
                 },
             ],
             "evidence_scope": {
-                "$type": "EvidenceScope", "paths": [], "evidence_refs": []
+                "$type": "EvidenceScope",
+                "paths": [],
+                "evidence_refs": [],
             },
         }
         try:
@@ -763,15 +825,10 @@ class CorePurityTest(unittest.TestCase):
         import sys
 
         allowed_roots = set(sys.stdlib_module_names)
-        core = (
-            pathlib.Path(__file__).resolve().parents[2]
-            / "src" / "span" / "core"
-        )
+        core = pathlib.Path(__file__).resolve().parents[2] / "src" / "span" / "core"
         offenders = []
         for path in sorted(core.glob("*.py")):
-            tree = ast.parse(
-                path.read_text(encoding="utf-8"), str(path)
-            )
+            tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
@@ -784,12 +841,8 @@ class CorePurityTest(unittest.TestCase):
                         continue
                     root = (node.module or "").split(".")[0]
                     if root == "span":
-                        if not (node.module or "").startswith(
-                            "span.core"
-                        ):
-                            offenders.append(
-                                f"{path.name}:{node.module}"
-                            )
+                        if not (node.module or "").startswith("span.core"):
+                            offenders.append(f"{path.name}:{node.module}")
                     elif root not in allowed_roots:
                         offenders.append(f"{path.name}:{root}")
         self.assertEqual(offenders, [])

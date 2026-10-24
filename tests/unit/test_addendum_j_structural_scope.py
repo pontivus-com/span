@@ -35,12 +35,14 @@ class StructuralSearchScopeTest(unittest.TestCase):
     def test_scope_filters_before_pagination(self):
         src = _source()
         page = src.search_symbols(
-            REPO, "alpha", m.StructuralLocateMatch.CONTAINS, _bounds(),
+            REPO,
+            "alpha",
+            m.StructuralLocateMatch.CONTAINS,
+            _bounds(),
             scope=m.EvidenceScope(paths=("pkg",)),
         )
         locators = {
-            h.candidate.subject.subject_id.canonical_locator
-            for h in page.items
+            h.candidate.subject.subject_id.canonical_locator for h in page.items
         }
         self.assertEqual(locators, {"pkg/a.py", "pkg/b.py"})
 
@@ -49,8 +51,11 @@ class StructuralSearchScopeTest(unittest.TestCase):
         # out-of-scope global match that sorts ahead of it.
         src = _source()
         page = src.search_symbols(
-            REPO, "alpha", m.StructuralLocateMatch.CONTAINS,
-            _bounds(max_results=1), scope=m.EvidenceScope(paths=("pkg",)),
+            REPO,
+            "alpha",
+            m.StructuralLocateMatch.CONTAINS,
+            _bounds(max_results=1),
+            scope=m.EvidenceScope(paths=("pkg",)),
         )
         self.assertEqual(len(page.items), 1)
         self.assertEqual(
@@ -64,25 +69,28 @@ class StructuralSearchScopeTest(unittest.TestCase):
             REPO, "alpha", m.StructuralLocateMatch.CONTAINS, _bounds()
         )
         locators = {
-            h.candidate.subject.subject_id.canonical_locator
-            for h in page.items
+            h.candidate.subject.subject_id.canonical_locator for h in page.items
         }
-        self.assertEqual(
-            locators, {"other/c.py", "pkg/a.py", "pkg/b.py"}
-        )
+        self.assertEqual(locators, {"other/c.py", "pkg/a.py", "pkg/b.py"})
 
     def test_scope_binds_continuation_token(self):
         src = _source()
         page = src.search_symbols(
-            REPO, "alpha", m.StructuralLocateMatch.CONTAINS,
-            _bounds(max_results=1), scope=m.EvidenceScope(paths=("pkg",)),
+            REPO,
+            "alpha",
+            m.StructuralLocateMatch.CONTAINS,
+            _bounds(max_results=1),
+            scope=m.EvidenceScope(paths=("pkg",)),
         )
         token = page.bound_info.continuation_token
         self.assertIsNotNone(token)
         with self.assertRaises(StaleContinuationError):
             src.search_symbols(
-                REPO, "alpha", m.StructuralLocateMatch.CONTAINS,
-                _bounds(max_results=1), page_token=token,
+                REPO,
+                "alpha",
+                m.StructuralLocateMatch.CONTAINS,
+                _bounds(max_results=1),
+                page_token=token,
                 scope=m.EvidenceScope(paths=("other",)),
             )
 

@@ -6,7 +6,6 @@ identically to the manual loop across all result fields; stub cases
 prove halt, budget, and cost behavior.
 """
 
-import datetime
 import unittest
 
 from span.core import model as m
@@ -18,8 +17,6 @@ from span.ports.interpretation import (
     PendingInterpretation,
 )
 from span import service as ops
-from span.service.discovery import _inventory_snapshot, _read_units_within_bytes
-from span.service.resolution import _resolve_query_subject
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
 from span.shell.evidence import FixtureEvidenceSource
@@ -42,15 +39,17 @@ FILES = {
     "src/main.py": "VALUE = 1\n",
 }
 
-SUBJECTS = (
-    InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),
-)
+SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -59,7 +58,8 @@ def _bounds(**overrides):
 
 def _sid():
     return m.SubjectId(
-        repository_id=REPO, subject_kind=m.SubjectKind.COMPONENT,
+        repository_id=REPO,
+        subject_kind=m.SubjectKind.COMPONENT,
         canonical_locator="src/main.py",
     )
 
@@ -77,7 +77,8 @@ def _ref(path):
 def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-main",
-        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        subject=_sid(),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=(_ref("README.md"), _ref("src/main.py")),
@@ -121,7 +122,9 @@ def _harness():
             authority_seeds=(),
         ),
         repository_id=REPO,
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
     return structural, evidence, store
 
@@ -146,14 +149,21 @@ class DriverServiceTest(unittest.TestCase):
             agent = _agent(complete_questions=True)
             driven = drive(
                 lambda: ops.explain(
-                    _explain_request(), structural=structural,
-                    evidence=evidence, store=store,
-                    continuations=cont, authority_seeds=seeds,
+                    _explain_request(),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont,
+                    authority_seeds=seeds,
                 ),
                 agent.perform,
                 submit=lambda c, r: ops.submit_interpretation(
-                    c, r, structural=structural, evidence=evidence,
-                    store=store, continuations=cont,
+                    c,
+                    r,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont,
                 ),
                 max_rounds=8,
             )
@@ -161,15 +171,21 @@ class DriverServiceTest(unittest.TestCase):
             self.assertIsInstance(driven.answer, m.SemanticAnswer)
             cont2 = ContinuationStore()
             pending = ops.explain(
-                _explain_request(), structural=structural2,
-                evidence=evidence2, store=store2,
-                continuations=cont2, authority_seeds=seeds,
+                _explain_request(),
+                structural=structural2,
+                evidence=evidence2,
+                store=store2,
+                continuations=cont2,
+                authority_seeds=seeds,
             )
             self.assertIsInstance(pending, PendingInterpretation)
             manual = ops.submit_interpretation(
-                pending.continuation, agent.perform(pending.request),
-                structural=structural2, evidence=evidence2,
-                store=store2, continuations=cont2,
+                pending.continuation,
+                agent.perform(pending.request),
+                structural=structural2,
+                evidence=evidence2,
+                store=store2,
+                continuations=cont2,
             )
             self.assertIsInstance(manual, m.SemanticAnswer)
             # Same validated material field for field.
@@ -179,10 +195,12 @@ class DriverServiceTest(unittest.TestCase):
                 [c.claim_id for c in manual.content.claims],
             )
             self.assertEqual(
-                driven.answer.content.evidence if hasattr(
-                    driven.answer.content, "evidence") else (),
-                manual.content.evidence if hasattr(
-                    manual.content, "evidence") else (),
+                (
+                    driven.answer.content.evidence
+                    if hasattr(driven.answer.content, "evidence")
+                    else ()
+                ),
+                manual.content.evidence if hasattr(manual.content, "evidence") else (),
             )
             self.assertEqual(
                 driven.answer.resolution_requirements,
@@ -200,9 +218,12 @@ class DriverServiceTest(unittest.TestCase):
             cont = ContinuationStore()
             seeds = (_ref("README.md"),)
             pending = ops.explain(
-                _explain_request(), structural=structural,
-                evidence=evidence, store=store,
-                continuations=cont, authority_seeds=seeds,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=cont,
+                authority_seeds=seeds,
             )
             self.assertIsInstance(pending, PendingInterpretation)
 
@@ -211,8 +232,9 @@ class DriverServiceTest(unittest.TestCase):
                     claims=(
                         m.CandidateSemanticClaim(
                             candidate_key="bad",
-                            subject=_sid(), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                            subject=_sid(),
+                            kind=m.ClaimKind.PURPOSE,
+                            assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.PurposeValue("no evidence", ()),
                             evidence=(),
                             candidate_authority=None,
@@ -230,9 +252,12 @@ class DriverServiceTest(unittest.TestCase):
 
             try:
                 ops.submit_interpretation(
-                    pending.continuation, _bad(pending.request),
-                    structural=structural, evidence=evidence,
-                    store=store, continuations=cont,
+                    pending.continuation,
+                    _bad(pending.request),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont,
                 )
                 direct = ()
             except _InterpretationUnitRejected as exc:
@@ -242,14 +267,21 @@ class DriverServiceTest(unittest.TestCase):
             cont2 = ContinuationStore()
             driven = drive(
                 lambda: ops.explain(
-                    _explain_request(), structural=structural,
-                    evidence=evidence, store=store,
-                    continuations=cont2, authority_seeds=seeds,
+                    _explain_request(),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont2,
+                    authority_seeds=seeds,
                 ),
                 _bad,
                 submit=lambda c, r: ops.submit_interpretation(
-                    c, r, structural=structural, evidence=evidence,
-                    store=store, continuations=cont2,
+                    c,
+                    r,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    continuations=cont2,
                 ),
                 max_rounds=8,
             )
@@ -266,16 +298,21 @@ class DriverMechanicsTest(unittest.TestCase):
         structural, evidence, store = _harness()
         cont = ContinuationStore()
         pending = ops.explain(
-            _explain_request(), structural=structural,
-            evidence=evidence, store=store,
-            continuations=cont, authority_seeds=(_ref("README.md"),),
+            _explain_request(),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=cont,
+            authority_seeds=(_ref("README.md"),),
         )
         self.assertIsInstance(pending, PendingInterpretation)
         answer = ops.submit_interpretation(
             pending.continuation,
             _agent(complete_questions=True).perform(pending.request),
-            structural=structural, evidence=evidence,
-            store=store, continuations=cont,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=cont,
         )
         self.assertIsInstance(answer, m.SemanticAnswer)
         store.close()
@@ -301,7 +338,8 @@ class DriverMechanicsTest(unittest.TestCase):
     def test_round_budget_halts(self):
         pending, _ = self._stubs()
         other = PendingInterpretation(
-            continuation="cont-x", request=pending.request,
+            continuation="cont-x",
+            request=pending.request,
         )
         result = drive(
             lambda: pending,
@@ -317,7 +355,8 @@ class DriverMechanicsTest(unittest.TestCase):
         pending, answer = self._stubs()
         with self.assertRaises(ValueError):
             drive(
-                lambda: answer, lambda _r: _agent().perform(pending.request),
+                lambda: answer,
+                lambda _r: _agent().perform(pending.request),
                 submit=lambda _c, _r: answer,
                 max_rounds=0,
             )

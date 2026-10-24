@@ -22,20 +22,20 @@ from span.service.resolution import (
 )
 
 __all__ = [
-    '_question_identity_key',
-    'filter_views_by_scope',
-    'effective_trace_slice',
-    'effective_impact_slice',
-    'derive_service_question',
-    'effective_question_view',
-    'question_coverage_check',
-    '_question_local_missing',
-    '_missing_subjects',
-    '_stale_question_scopes',
-    '_question_views_for_scope',
-    '_paged_question_views',
-    '_question_class_for_intent',
-    '_REQUIRED_QUESTION_CLASS',
+    "_question_identity_key",
+    "filter_views_by_scope",
+    "effective_trace_slice",
+    "effective_impact_slice",
+    "derive_service_question",
+    "effective_question_view",
+    "question_coverage_check",
+    "_question_local_missing",
+    "_missing_subjects",
+    "_stale_question_scopes",
+    "_question_views_for_scope",
+    "_paged_question_views",
+    "_question_class_for_intent",
+    "_REQUIRED_QUESTION_CLASS",
 ]
 
 
@@ -47,9 +47,10 @@ def filter_views_by_scope(
     if scope is None:
         return views
     key = _question_identity_key(scope)
-    return tuple(
-        v for v in views if _question_identity_key(v.question) == key
-    ) or views[:0]
+    return (
+        tuple(v for v in views if _question_identity_key(v.question) == key)
+        or views[:0]
+    )
 
 
 def _question_identity_key(
@@ -80,18 +81,16 @@ def effective_trace_slice(
     explicitly empty tuple encodes as NONE, so different traversal
     parameters never share one persisted identity.
     """
-    direction_value = (
-        direction.value
-        if hasattr(direction, "value")
-        else str(direction)
-    )
+    direction_value = direction.value if hasattr(direction, "value") else str(direction)
     if relationship_filter is None:
         filter_part = "ALL"
     elif not relationship_filter:
         filter_part = "NONE"
     else:
         filter_part = ",".join(
-            sorted(k.value if hasattr(k, "value") else str(k) for k in relationship_filter)
+            sorted(
+                k.value if hasattr(k, "value") else str(k) for k in relationship_filter
+            )
         )
     boundary_part = "1" if boundary_only else "0"
     return (
@@ -115,14 +114,10 @@ def effective_impact_slice(
     import hashlib as _hashlib
 
     kind_value = (
-        change_kind.value
-        if hasattr(change_kind, "value")
-        else str(change_kind)
+        change_kind.value if hasattr(change_kind, "value") else str(change_kind)
     )
     if change_description:
-        desc_part = _hashlib.sha256(
-            change_description.encode("utf-8")
-        ).hexdigest()[:16]
+        desc_part = _hashlib.sha256(change_description.encode("utf-8")).hexdigest()[:16]
     else:
         desc_part = "-"
     ref_values: list[str] = []
@@ -132,8 +127,7 @@ def effective_impact_slice(
             ref_values.append(str(ref_id))
     affected_part = ",".join(sorted(ref_values)) if ref_values else "-"
     return (
-        f"{host_slice}|kind={kind_value}"
-        f"|desc={desc_part}|affected={affected_part}"
+        f"{host_slice}|kind={kind_value}" f"|desc={desc_part}|affected={affected_part}"
     )
 
 
@@ -176,15 +170,16 @@ def derive_service_question(
     )
     return scope, anchors
 
+
 def effective_question_view(
     coverage: m.InterpretationCoverage,
     *,
     evidence: EvidenceSource | None = None,
     store: SemanticStore | None = None,
     repository_id: str = "",
-    precomputed_snapshots: Mapping[
-        m.EvidenceScope, tuple[str, dict[str, str]]
-    ] | None = None,
+    precomputed_snapshots: (
+        Mapping[m.EvidenceScope, tuple[str, dict[str, str]]] | None
+    ) = None,
     live_states: dict[str, m.FreshnessState] | None = None,
 ) -> m.SemanticQuestionCoverageView:
     recorded = coverage.disposition
@@ -199,9 +194,7 @@ def effective_question_view(
     # stored freshness so the returned view agrees without a prior write.
     if store is not None and repository_id and coverage.result_refs:
         try:
-            items = store.load_by_refs(
-                repository_id, tuple(coverage.result_refs)
-            )
+            items = store.load_by_refs(repository_id, tuple(coverage.result_refs))
         except ValueError:
             items = ()
             effective = m.SemanticQuestionDisposition.PENDING
@@ -217,15 +210,9 @@ def effective_question_view(
                     else item.relationship_id.value
                 )
                 live_state = (
-                    live_states.get(item_id)
-                    if live_states is not None
-                    else None
+                    live_states.get(item_id) if live_states is not None else None
                 )
-                state = (
-                    live_state
-                    if live_state is not None
-                    else item.freshness.state
-                )
+                state = live_state if live_state is not None else item.freshness.state
                 if state is not m.FreshnessState.CURRENT:
                     if recorded in (
                         m.SemanticQuestionDisposition.ANSWERED,
@@ -285,7 +272,8 @@ def effective_question_view(
         except Exception:
             dep_coverages = ()
         mine = [
-            cov for cov in dep_coverages
+            cov
+            for cov in dep_coverages
             if cov.question is not None
             and _question_identity_key(cov.question)
             == _question_identity_key(coverage.question)
@@ -309,9 +297,7 @@ def effective_question_view(
                     ),
                     precomputed=precomputed_snapshot,
                 )
-                discovery = _freshness.classify_coverage(
-                    latest, inventory_fp, seed_map
-                )
+                discovery = _freshness.classify_coverage(latest, inventory_fp, seed_map)
             except Exception:
                 discovery = m.Freshness(
                     state=m.FreshnessState.UNVERIFIABLE,
@@ -330,8 +316,7 @@ def effective_question_view(
                         discovery.supporting_revision_or_fingerprint
                     ),
                     reason=(
-                        "question discovery scope changed; reassessment "
-                        "required"
+                        "question discovery scope changed; reassessment " "required"
                     ),
                 )
     if recorded is m.SemanticQuestionDisposition.PENDING:
@@ -354,6 +339,7 @@ def effective_question_view(
         resolution_requirements=requirements,
     )
 
+
 def question_coverage_check(
     repository_id: str,
     coverages: tuple[m.InterpretationCoverage, ...],
@@ -374,16 +360,18 @@ def question_coverage_check(
         if coverage.question is None:
             continue
         view = effective_question_view(
-            coverage, evidence=evidence, store=store,
+            coverage,
+            evidence=evidence,
+            store=store,
             repository_id=repository_id,
         )
         if (
             view.effective_disposition is m.SemanticQuestionDisposition.PENDING
-            and coverage.disposition
-            is not m.SemanticQuestionDisposition.PENDING
+            and coverage.disposition is not m.SemanticQuestionDisposition.PENDING
         ) or view.freshness.state is not m.FreshnessState.CURRENT:
             stale.append(coverage)
     return tuple(stale)
+
 
 def _question_class_for_intent(
     intent: m.SemanticIntent, establish_baseline: bool = False
@@ -400,6 +388,7 @@ def _question_class_for_intent(
         return m.SemanticQuestionClass.CQ_09
     return m.SemanticQuestionClass.CQ_01
 
+
 _REQUIRED_QUESTION_CLASS: dict[m.SemanticIntent, m.SemanticQuestionClass] = {
     m.SemanticIntent.EXPLAIN: m.SemanticQuestionClass.CQ_01,
     m.SemanticIntent.TRACE: m.SemanticQuestionClass.CQ_04,
@@ -407,6 +396,7 @@ _REQUIRED_QUESTION_CLASS: dict[m.SemanticIntent, m.SemanticQuestionClass] = {
     m.SemanticIntent.AUTHORITY: m.SemanticQuestionClass.CQ_06,
     m.SemanticIntent.STATUS: m.SemanticQuestionClass.CQ_09,
 }
+
 
 def _question_local_missing(
     repository_id: str,
@@ -432,17 +422,23 @@ def _question_local_missing(
     sid = subject.subject_id
     try:
         coverages = store.load_all_question_coverages(
-            repository_id, None, (sid,),
+            repository_id,
+            None,
+            (sid,),
         )
     except Exception:
         try:
             coverages = store.load_question_coverages(
-                repository_id, None, (sid,), bounds,
+                repository_id,
+                None,
+                (sid,),
+                bounds,
             )
         except Exception:
             coverages = ()
     mine = [
-        cov for cov in coverages
+        cov
+        for cov in coverages
         if cov.question is not None and cov.question.subject == sid
     ]
     primary = _REQUIRED_QUESTION_CLASS[intent]
@@ -454,7 +450,10 @@ def _question_local_missing(
         # noncurrent views; reassessment belongs to explicit refresh.
         if not mine:
             claims, relationships, _, _ = _load_subject_state(
-                repository_id, sid, store=store, bounds=bounds,
+                repository_id,
+                sid,
+                store=store,
+                bounds=bounds,
             )
             if not claims and not relationships:
                 return m.SemanticQuestionScope(
@@ -474,10 +473,7 @@ def _question_local_missing(
             question_slice=m.QUESTION_CLASS_DEFAULT_SLICE[primary],
             materiality_basis=f"{intent.value} question-local",
         )
-    primary_covs = [
-        cov for cov in mine
-        if cov.question.question_class is primary
-    ]
+    primary_covs = [cov for cov in mine if cov.question.question_class is primary]
     if not primary_covs:
         # Claims of other questions never satisfy this unexamined one.
         return m.SemanticQuestionScope(
@@ -494,6 +490,7 @@ def _question_local_missing(
         ):
             return cov.question
     return None
+
 
 def _stale_question_scopes(
     repository_id: str,
@@ -526,8 +523,11 @@ def _stale_question_scopes(
     sid = subject.subject_id
     try:
         coverages = _load_all_coverages_or_defer(
-            repository_id, None, (sid,),
-            store=store, bounds=bounds,
+            repository_id,
+            None,
+            (sid,),
+            store=store,
+            bounds=bounds,
             purpose="stale question enumeration",
         )
     except Exception:
@@ -550,24 +550,22 @@ def _stale_question_scopes(
             continue
         try:
             view = effective_question_view(
-                cov, evidence=evidence, store=store,
+                cov,
+                evidence=evidence,
+                store=store,
                 repository_id=repository_id,
             )
         except Exception:
             continue
         if (
-            view.effective_disposition
-            is m.SemanticQuestionDisposition.PENDING
+            view.effective_disposition is m.SemanticQuestionDisposition.PENDING
             or view.freshness.state is not m.FreshnessState.CURRENT
         ):
             stale.append(cov.question)
-    pending.sort(
-        key=lambda q: (q.question_class.value, q.question_slice)
-    )
-    stale.sort(
-        key=lambda q: (q.question_class.value, q.question_slice)
-    )
+    pending.sort(key=lambda q: (q.question_class.value, q.question_slice))
+    stale.sort(key=lambda q: (q.question_class.value, q.question_slice))
     return pending + stale
+
 
 def _question_views_for_scope(
     repository_id: str,
@@ -581,7 +579,10 @@ def _question_views_for_scope(
 ) -> tuple[m.SemanticQuestionCoverageView, ...]:
     try:
         coverages = store.load_question_coverages(
-            repository_id, scope_root, subject_ids, bounds,
+            repository_id,
+            scope_root,
+            subject_ids,
+            bounds,
         )
     except Exception:
         return ()
@@ -592,7 +593,9 @@ def _question_views_for_scope(
         try:
             views.append(
                 effective_question_view(
-                    cov, evidence=evidence, store=store,
+                    cov,
+                    evidence=evidence,
+                    store=store,
                     repository_id=repository_id,
                     live_states=live_states,
                 )
@@ -607,6 +610,7 @@ def _question_views_for_scope(
         )
     )
     return tuple(views)
+
 
 def _paged_question_views(
     repository_id: str,
@@ -624,16 +628,21 @@ def _paged_question_views(
 
     _, _, qskip = _paging.parse_service_token(page_token)
     all_views = _question_views_for_scope(
-        repository_id, scope_root, subject_ids,
-        store=store, bounds=bounds, evidence=evidence,
+        repository_id,
+        scope_root,
+        subject_ids,
+        store=store,
+        bounds=bounds,
+        evidence=evidence,
         live_states=live_states,
     )
     # Reserve budget: questions share max_results with claims/rels.
     # Simple policy: show up to remaining budget after caller slices
     # claims/rels; here return windowed slice, caller decides budget.
-    kept = all_views[qskip:qskip + bounds.max_results]
+    kept = all_views[qskip : qskip + bounds.max_results]
     remaining = max(0, len(all_views) - (qskip + len(kept)))
     return kept, len(kept), remaining
+
 
 def _missing_subjects(
     repository_id: str,
@@ -654,8 +663,12 @@ def _missing_subjects(
         if subject.subject_id.canonical_locator in suspended:
             continue
         missing = _question_local_missing(
-            repository_id, subject, m.SemanticIntent.STATUS,
-            store=store, evidence=evidence, bounds=bounds,
+            repository_id,
+            subject,
+            m.SemanticIntent.STATUS,
+            store=store,
+            evidence=evidence,
+            bounds=bounds,
         )
         if missing is not None:
             return subject

@@ -67,14 +67,10 @@ class DiscoveryScopeLocalityTest(unittest.TestCase):
         # remains meaningful for initialization and inventory
         # operations, never for persisted task coverage.
         inventory_scope = m.EvidenceScope()
-        before, _ = _inventory_snapshot(
-            REPO, inventory_scope, evidence=_evidence()
-        )
+        before, _ = _inventory_snapshot(REPO, inventory_scope, evidence=_evidence())
         grown = dict(FILES)
         grown["other/z.py"] = "Z = 9\n"
-        after, _ = _inventory_snapshot(
-            REPO, inventory_scope, evidence=_evidence(grown)
-        )
+        after, _ = _inventory_snapshot(REPO, inventory_scope, evidence=_evidence(grown))
         self.assertNotEqual(before, after)
 
     def test_post_adoption_coverage_carries_its_scope(self):
@@ -146,9 +142,7 @@ class DiscoveryScopeLocalityTest(unittest.TestCase):
         scope_other = m.EvidenceScope(paths=("other",))
         dependencies = []
         coverages = []
-        for subject, scope in zip(
-            subjects, (scope_mod, scope_mod, scope_other)
-        ):
+        for subject, scope in zip(subjects, (scope_mod, scope_mod, scope_other)):
             question = m.SemanticQuestionScope(
                 scope_root=subject.subject_id,
                 subject=subject.subject_id,
@@ -300,10 +294,12 @@ class StoreHealthAggregateTest(unittest.TestCase):
             )
             unresolved = m.TargetInventoryAccount(
                 evidence_ref=ref,
-                resolution_requirements=(m.ResolutionRequirement(
-                    kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                    description="unresolved mapping",
-                ),),
+                resolution_requirements=(
+                    m.ResolutionRequirement(
+                        kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                        description="unresolved mapping",
+                    ),
+                ),
             )
             accounted = m.TargetInventoryAccount(
                 evidence_ref=m.EvidenceRef(
@@ -327,12 +323,8 @@ class StoreHealthAggregateTest(unittest.TestCase):
                 m.CanonicalIndexBatch(target_associations=(association,))
             )
             self.assertEqual(store.count_target_associations("r"), 1)
-            self.assertEqual(
-                store.count_target_inventory_outcomes("r"), (1, 1)
-            )
-            self.assertEqual(
-                store.load_active_target_associations("r"), (association,)
-            )
+            self.assertEqual(store.count_target_inventory_outcomes("r"), (1, 1))
+            self.assertEqual(store.load_active_target_associations("r"), (association,))
         finally:
             store.close()
 

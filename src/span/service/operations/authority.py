@@ -52,9 +52,10 @@ from span.service.resolution import (
 )
 
 __all__ = [
-    '_compose_authority_answer',
-    'authority',
+    "_compose_authority_answer",
+    "authority",
 ]
+
 
 def _compose_authority_answer(
     repository_id: str,
@@ -71,26 +72,33 @@ def _compose_authority_answer(
     target_key: str | None = None,
 ) -> m.SemanticAnswer:
     sid = subject.subject_id
-    _target = target_key or (
-        f"{sid.subject_kind.value}:{sid.canonical_locator}"
-    )
+    _target = target_key or (f"{sid.subject_kind.value}:{sid.canonical_locator}")
     _digest = _query_digest(
-        "AUTHORITY", repository_id, _target, question_key, bounds,
+        "AUTHORITY",
+        repository_id,
+        _target,
+        question_key,
+        bounds,
     )
     _validate_service_token(page_token, _digest)
     claims, relationships, claims_token, rels_token = _load_subject_state(
-        repository_id, sid, store=store, bounds=bounds,
+        repository_id,
+        sid,
+        store=store,
+        bounds=bounds,
         page_token=page_token,
     )
     claims, relationships = _refresh_view(
-        repository_id, claims, relationships,
-        evidence=evidence, store=store, bounds=bounds,
+        repository_id,
+        claims,
+        relationships,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
     bindings = tuple(
         claim.authority for claim in claims if claim.authority is not None
-    ) + tuple(
-        rel.authority for rel in relationships if rel.authority is not None
-    )
+    ) + tuple(rel.authority for rel in relationships if rel.authority is not None)
     supersession = tuple(
         m.RelationshipRef(id=rel.relationship_id)
         for rel in relationships
@@ -101,9 +109,7 @@ def _compose_authority_answer(
         for binding in bindings
         if binding.declared_precedence is not None
     )
-    conflicts = _conflicts_for(
-        repository_id, claims, relationships, store=store
-    )
+    conflicts = _conflicts_for(repository_id, claims, relationships, store=store)
     requirements = (
         list(_answers.requirements_for_resolution(resolution))
         if resolution is not None
@@ -112,24 +118,30 @@ def _compose_authority_answer(
     for claim in claims:
         requirements.extend(_answers.requirements_for_claim(claim))
     unresolved_all = tuple(
-        r for r in requirements
-        if r.kind is m.ResolutionKind.MISSING_AUTHORITY
+        r for r in requirements if r.kind is m.ResolutionKind.MISSING_AUTHORITY
     )
-    (kept_conflicts, kept_unresolved, kept_bindings, kept_super, kept_prec), truncated, category, token = (
-        _answers.truncate_fields(
-            (
-                (conflicts, "conflicts"),
-                (unresolved_all, "unresolved"),
-                (bindings, "bindings"),
-                (supersession, "supersession"),
-                (precedence, "precedence"),
-            ),
-            bounds.max_results,
-        )
+    (
+        (kept_conflicts, kept_unresolved, kept_bindings, kept_super, kept_prec),
+        truncated,
+        category,
+        token,
+    ) = _answers.truncate_fields(
+        (
+            (conflicts, "conflicts"),
+            (unresolved_all, "unresolved"),
+            (bindings, "bindings"),
+            (supersession, "supersession"),
+            (precedence, "precedence"),
+        ),
+        bounds.max_results,
     )
     views, qshown, qremaining = _paged_question_views(
-        repository_id, sid, (sid,),
-        store=store, bounds=bounds, page_token=page_token,
+        repository_id,
+        sid,
+        (sid,),
+        store=store,
+        bounds=bounds,
+        page_token=page_token,
         evidence=evidence,
     )
     if qremaining > 0:
@@ -146,33 +158,39 @@ def _compose_authority_answer(
         question_coverage=views,
     )
     return m.SemanticAnswer(
-        answer_id=_answer_id(
-            "aut", repository_id, sid.canonical_locator
-        ),
+        answer_id=_answer_id("aut", repository_id, sid.canonical_locator),
         intent=m.SemanticIntent.AUTHORITY,
         repository_state=state,
         subject_resolution=resolution,
         content=content,
-        evidence=tuple(
-            binding.evidence_ref for binding in kept_bindings
-        ),
+        evidence=tuple(binding.evidence_ref for binding in kept_bindings),
         resolution_requirements=tuple(requirements),
         bound_info=_bound_info(
-            bounds, len(kept_bindings), truncated, category,
+            bounds,
+            len(kept_bindings),
+            truncated,
+            category,
             _next_service_token(
-                page_token, claims, relationships, claims, relationships,
-                claims_token, rels_token,
+                page_token,
+                claims,
+                relationships,
+                claims,
+                relationships,
+                claims_token,
+                rels_token,
                 questions_skip=qshown,
                 questions_remaining=qremaining,
                 query_digest=_digest,
             ),
         ),
         state_explanation=state_explanation_for(
-            tuple(claims), tuple(relationships),
+            tuple(claims),
+            tuple(relationships),
             coverage=coverage_counts_for(views),
             bounds=(bounds.max_results, truncated),
         ),
     )
+
 
 def authority(
     request: SemanticAuthorityRequest,
@@ -200,22 +218,23 @@ def authority(
         bounds = _resolve_bounds(request.bounds, hook=False)
         state = structural.repository_state(request.repository_id)
         try:
-            (item,) = store.load_by_refs(
-                request.repository_id, (request.target,)
-            )
+            (item,) = store.load_by_refs(request.repository_id, (request.target,))
         except ValueError as exc:
             raise AuthorityTargetError(str(exc)) from None
         if not isinstance(item, m.SemanticClaim):
             raise AuthorityTargetError("claim ref did not resolve to a claim")
-        subjects = store.load_subjects(
-            request.repository_id, (item.subject,)
-        )
+        subjects = store.load_subjects(request.repository_id, (item.subject,))
         if not subjects:
             raise AuthorityTargetError("claim subject is not indexed")
         return _compose_authority_answer(
-            request.repository_id, subjects[0], None,
-            structural=structural, evidence=evidence, store=store,
-            bounds=bounds, state=state,
+            request.repository_id,
+            subjects[0],
+            None,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
             target_key=f"claim:{request.target.id.value}",
         )
     bounds = _resolve_bounds(request.bounds, hook=False)
@@ -225,17 +244,22 @@ def authority(
             m.SemanticIntent.AUTHORITY, request.repository_id, bounds, state
         )
     resolution = _resolve_query_subject(
-        request.repository_id, request.target, structural=structural,
-        store=store, bounds=bounds,
+        request.repository_id,
+        request.target,
+        structural=structural,
+        store=store,
+        bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         requirements = _answers.requirements_for_resolution(
-            resolution, repository_id=request.repository_id,
+            resolution,
+            repository_id=request.repository_id,
             name_or_locator=request.target.name_or_locator,
         )
         return m.SemanticAnswer(
             answer_id=_answer_id(
-                "aut", request.repository_id,
+                "aut",
+                request.repository_id,
                 request.target.name_or_locator or "unknown",
             ),
             intent=m.SemanticIntent.AUTHORITY,
@@ -260,14 +284,13 @@ def authority(
             scope_root=subject.subject_id,
             question_class=m.SemanticQuestionClass.CQ_06,
             selection=request.question_selection,
-            default_slice=m.QUESTION_CLASS_DEFAULT_SLICE[
-                m.SemanticQuestionClass.CQ_06
-            ],
+            default_slice=m.QUESTION_CLASS_DEFAULT_SLICE[m.SemanticQuestionClass.CQ_06],
             default_basis="AUTHORITY question-local",
         )
         try:
             _existing = store.load_all_question_coverages(
-                request.repository_id, _sel_scope.scope_root,
+                request.repository_id,
+                _sel_scope.scope_root,
                 (_sel_scope.subject,),
             )
         except Exception:
@@ -282,8 +305,12 @@ def authority(
         )
         if not _found:
             task = prepare_interpretation_task(
-                request.repository_id, subject, structural=structural,
-                evidence=evidence, bounds=bounds, state=state,
+                request.repository_id,
+                subject,
+                structural=structural,
+                evidence=evidence,
+                bounds=bounds,
+                state=state,
                 authority_seeds=authority_seeds,
                 operation_intent=m.SemanticIntent.AUTHORITY,
                 question_slice=_sel_scope.question_slice,
@@ -294,9 +321,14 @@ def authority(
                 question_terms=_sel_anchors,
             )
             return _suspend(
-                op="authority", repository_id=request.repository_id,
-                subject=subject, task=task, seeds=authority_seeds,
-                bounds=bounds, state=state, resolution=resolution,
+                op="authority",
+                repository_id=request.repository_id,
+                subject=subject,
+                task=task,
+                seeds=authority_seeds,
+                bounds=bounds,
+                state=state,
+                resolution=resolution,
                 continuations=continuations,
                 operation_intent="AUTHORITY",
                 question_slice=_sel_scope.question_slice,
@@ -310,27 +342,38 @@ def authority(
         )
 
         _ans = _compose_authority_answer(
-            request.repository_id, subject, resolution,
-            structural=structural, evidence=evidence, store=store,
-            bounds=bounds, state=state, page_token=request.page_token,
+            request.repository_id,
+            subject,
+            resolution,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
+            page_token=request.page_token,
             question_key=(
-                f"{_sel_scope.question_class.value}:"
-                f"{_sel_scope.question_slice}"
+                f"{_sel_scope.question_class.value}:" f"{_sel_scope.question_slice}"
             ),
         )
-        _filtered = _filter_views(
-            _ans.content.question_coverage, _sel_scope
-        )
+        _filtered = _filter_views(_ans.content.question_coverage, _sel_scope)
         _content = _dc.replace(_ans.content, question_coverage=_filtered)
         return _dc.replace(_ans, content=_content)
     missing_question = _question_local_missing(
-        request.repository_id, subject, m.SemanticIntent.AUTHORITY,
-        store=store, evidence=evidence, bounds=bounds,
+        request.repository_id,
+        subject,
+        m.SemanticIntent.AUTHORITY,
+        store=store,
+        evidence=evidence,
+        bounds=bounds,
     )
     if missing_question is not None:
         task = prepare_interpretation_task(
-            request.repository_id, subject, structural=structural,
-            evidence=evidence, bounds=bounds, state=state,
+            request.repository_id,
+            subject,
+            structural=structural,
+            evidence=evidence,
+            bounds=bounds,
+            state=state,
             authority_seeds=authority_seeds,
             operation_intent=m.SemanticIntent.AUTHORITY,
             question_slice=missing_question.question_slice,
@@ -340,15 +383,26 @@ def authority(
             materiality_basis=missing_question.materiality_basis,
         )
         return _suspend(
-            op="authority", repository_id=request.repository_id,
-            subject=subject, task=task, seeds=authority_seeds,
-            bounds=bounds, state=state, resolution=resolution,
+            op="authority",
+            repository_id=request.repository_id,
+            subject=subject,
+            task=task,
+            seeds=authority_seeds,
+            bounds=bounds,
+            state=state,
+            resolution=resolution,
             continuations=continuations,
             operation_intent="AUTHORITY",
             question_slice=missing_question.question_slice,
         )
     return _compose_authority_answer(
-        request.repository_id, subject, resolution,
-        structural=structural, evidence=evidence, store=store,
-        bounds=bounds, state=state, page_token=request.page_token,
+        request.repository_id,
+        subject,
+        resolution,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
+        page_token=request.page_token,
     )

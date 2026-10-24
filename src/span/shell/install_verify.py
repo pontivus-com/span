@@ -65,9 +65,7 @@ def _build_identity() -> dict:
         import span as _span_pkg
         import pathlib as _pl
 
-        _packaged = (
-            _pl.Path(_span_pkg.__file__).resolve().parent / "BUILD_IDENTITY"
-        )
+        _packaged = _pl.Path(_span_pkg.__file__).resolve().parent / "BUILD_IDENTITY"
         _text = _packaged.read_text(encoding="utf-8").strip()
         try:
             import json as _json
@@ -89,12 +87,16 @@ def _build_identity() -> dict:
             _root = _pl.Path(__file__).resolve().parents[2]
             _rev = _sp.check_output(
                 ["git", "-C", str(_root), "rev-parse", "HEAD"],
-                text=True, timeout=5,
-            ).strip()
-            _dirty = _sp.call(
-                ["git", "-C", str(_root), "diff", "--quiet"],
+                text=True,
                 timeout=5,
-            ) != 0
+            ).strip()
+            _dirty = (
+                _sp.call(
+                    ["git", "-C", str(_root), "diff", "--quiet"],
+                    timeout=5,
+                )
+                != 0
+            )
             _revision = _rev + ("-dirty" if _dirty else "")
             _origin = "git"
         except Exception:
@@ -125,9 +127,7 @@ def main(argv=None):
                 ),
             )
         except ValueError as exc:
-            raise SystemExit(
-                f"repository setup failed for {target}: {exc}"
-            ) from None
+            raise SystemExit(f"repository setup failed for {target}: {exc}") from None
         if result.readiness.value != "READY":
             raise SystemExit(
                 f"repository not READY: {target}: {result.readiness.value}"
@@ -136,9 +136,7 @@ def main(argv=None):
             ops.SemanticStatusRequest(
                 repository_id=result.repository_id,
                 target=None,
-                bounds=(
-                    DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
-                ),
+                bounds=(DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds),
             ),
             structural=context.structural,
             evidence=context.evidence,

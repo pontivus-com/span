@@ -96,9 +96,7 @@ def _seed(data_dir, content):
         evidence=(ref,),
         trust=m.TrustState.PARTIAL,
         freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
-        basis=m.SemanticBasis(
-            m.DerivationKind.SEMANTIC_INTERPRETATION, "t"
-        ),
+        basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION, "t"),
     )
     store.write_index_batch(
         m.CanonicalIndexBatch(
@@ -154,9 +152,7 @@ class HookRunnerTest(unittest.TestCase):
         _seed(self.data_dir, CONTENT_V1)
         with self._with_context(CONTENT_V1):
             self.assertEqual(
-                self._run(
-                    hooks.cmd_session_start, self.data_dir, str(self.root)
-                ),
+                self._run(hooks.cmd_session_start, self.data_dir, str(self.root)),
                 "",
             )
 
@@ -164,9 +160,7 @@ class HookRunnerTest(unittest.TestCase):
         # The real opener, not a fixture: an ordinary hook on a
         # repository explicit initialization never provisioned must not
         # create `<data-dir>/<id>.db` or its schema.
-        out = self._run(
-            hooks.cmd_session_start, self.data_dir, str(self.root)
-        )
+        out = self._run(hooks.cmd_session_start, self.data_dir, str(self.root))
         self.assertIn("UNINITIALIZED", out)
         self.assertIn("initialize_repository", out)
         self.assertFalse((self.data_dir / f"{self.root.name}.db").exists())
@@ -179,9 +173,7 @@ class HookRunnerTest(unittest.TestCase):
         _seed(self.data_dir, CONTENT_V1)
         target = str(self.root / "src" / "a.py")
         with self._with_context(CONTENT_V2):
-            out = self._run(
-                hooks.cmd_source_changed, self.data_dir, [target]
-            )
+            out = self._run(hooks.cmd_source_changed, self.data_dir, [target])
         self.assertIn(f"span: {REPO_ID} needs attention (1 stale)", out)
         self.assertIn("run refresh with an exact SubjectSelector", out)
         self.assertIn("src/a.py", out)
@@ -191,9 +183,7 @@ class HookRunnerTest(unittest.TestCase):
         target = str(self.root / "src" / "a.py")
         with self._with_context(CONTENT_V1):
             self.assertEqual(
-                self._run(
-                    hooks.cmd_source_changed, self.data_dir, [target]
-                ),
+                self._run(hooks.cmd_source_changed, self.data_dir, [target]),
                 "",
             )
 
@@ -212,26 +202,19 @@ class HookRunnerTest(unittest.TestCase):
     def test_session_stop_reports_host_supplied_scope(self):
         _seed(self.data_dir, CONTENT_V1)
         target = str(self.root / "src" / "a.py")
-        stream = io.StringIO(
-            json.dumps({"tool_input": {"file_path": target}})
-        )
-        with self._with_context(CONTENT_V2), patch.object(
-            sys, "stdin", stream
-        ):
-            out = self._run(
-                hooks.cmd_session_stop, self.data_dir, str(self.root)
-            )
+        stream = io.StringIO(json.dumps({"tool_input": {"file_path": target}}))
+        with self._with_context(CONTENT_V2), patch.object(sys, "stdin", stream):
+            out = self._run(hooks.cmd_session_stop, self.data_dir, str(self.root))
         self.assertIn(f"span: {REPO_ID} close: 1 stale", out)
 
     def test_session_stop_without_paths_is_silent(self):
         _seed(self.data_dir, CONTENT_V1)
-        with self._with_context(CONTENT_V1), patch.object(
-            sys, "stdin", io.StringIO("")
+        with (
+            self._with_context(CONTENT_V1),
+            patch.object(sys, "stdin", io.StringIO("")),
         ):
             self.assertEqual(
-                self._run(
-                    hooks.cmd_session_stop, self.data_dir, str(self.root)
-                ),
+                self._run(hooks.cmd_session_stop, self.data_dir, str(self.root)),
                 "",
             )
 
@@ -272,11 +255,11 @@ class HookRunnerTest(unittest.TestCase):
             seen.append(request)
             return notice
 
-        with patch.object(hooks.ops, "status", side_effect=fake_status), \
-                self._with_context(CONTENT_V1):
-            self._run(
-                hooks.cmd_session_start, self.data_dir, str(self.root)
-            )
+        with (
+            patch.object(hooks.ops, "status", side_effect=fake_status),
+            self._with_context(CONTENT_V1),
+        ):
+            self._run(hooks.cmd_session_start, self.data_dir, str(self.root))
         self.assertEqual(len(seen), 1)
         request = seen[0]
         self.assertIsInstance(request, ops.SemanticStatusRequest)

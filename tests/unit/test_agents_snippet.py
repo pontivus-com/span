@@ -80,8 +80,12 @@ class AgentsSnippetTest(unittest.TestCase):
     def test_uncertainty_preservation_present(self):
         text = _text(SNIPPET)
         for state in (
-            "PARTIAL", "AMBIGUOUS", "CONFLICTED",
-            "UNRESOLVED", "STALE", "UNVERIFIABLE",
+            "PARTIAL",
+            "AMBIGUOUS",
+            "CONFLICTED",
+            "UNRESOLVED",
+            "STALE",
+            "UNVERIFIABLE",
         ):
             self.assertIn(state, text, state)
         self.assertIn("verbatim", text.lower())
@@ -157,9 +161,7 @@ class AgentsSnippetTest(unittest.TestCase):
 
 class AgentsRuleDeployTest(unittest.TestCase):
     def _run(self, span_repo, target):
-        return install.ensure_agents_rule(
-            span_repo, target, dry_run=False
-        )
+        return install.ensure_agents_rule(span_repo, target, dry_run=False)
 
     def test_deploys_verbatim_and_converges(self):
         import tempfile
@@ -173,9 +175,11 @@ class AgentsRuleDeployTest(unittest.TestCase):
             content = dst.read_text(encoding="utf-8")
             self.assertIn(install.AGENTS_START, content)
             self.assertIn(install.AGENTS_END, content)
-            inner = content.split(install.AGENTS_START)[1].split(
-                install.AGENTS_END
-            )[0].strip("\n")
+            inner = (
+                content.split(install.AGENTS_START)[1]
+                .split(install.AGENTS_END)[0]
+                .strip("\n")
+            )
             self.assertEqual(inner, _text(SNIPPET).rstrip("\n"))
             self.assertIn("No status preflight is required", inner)
             self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
@@ -213,13 +217,9 @@ class AgentsRuleDeployTest(unittest.TestCase):
             content = dst.read_text(encoding="utf-8")
             self.assertTrue(content.startswith("# Existing\n"))
             self.assertIn("## Span lifecycle", content)
-            self.assertFalse(
-                dst.with_name("AGENTS.md.bak-span").exists()
-            )
+            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
             self.assertEqual(
-                sorted(
-                    path.name for path in target.iterdir()
-                ),
+                sorted(path.name for path in target.iterdir()),
                 ["AGENTS.md", "other.txt"],
             )
 
@@ -231,8 +231,11 @@ class AgentsRuleDeployTest(unittest.TestCase):
             target.mkdir()
             dst = target / "AGENTS.md"
             dst.write_text(
-                "# Top\n\n" + install.AGENTS_START + "\nSTALE\n"
-                + install.AGENTS_END + "\n\n## Next\n",
+                "# Top\n\n"
+                + install.AGENTS_START
+                + "\nSTALE\n"
+                + install.AGENTS_END
+                + "\n\n## Next\n",
                 encoding="utf-8",
             )
             self._run(REPO_ROOT, target)
@@ -250,24 +253,22 @@ class AgentsRuleDeployTest(unittest.TestCase):
             target.mkdir()
             dst = target / "AGENTS.md"
             original = (
-                install.AGENTS_START + "\nA\n"
-                + install.AGENTS_END + "\n"
-                + install.AGENTS_START + "\nB\n"
-                + install.AGENTS_END + "\n"
+                install.AGENTS_START
+                + "\nA\n"
+                + install.AGENTS_END
+                + "\n"
+                + install.AGENTS_START
+                + "\nB\n"
+                + install.AGENTS_END
+                + "\n"
             )
             dst.write_text(original, encoding="utf-8")
-            before = sorted(
-                path.name for path in target.iterdir()
-            )
+            before = sorted(path.name for path in target.iterdir())
             with self.assertRaises(SystemExit):
                 self._run(REPO_ROOT, target)
             self.assertEqual(dst.read_text(encoding="utf-8"), original)
-            self.assertEqual(
-                sorted(path.name for path in target.iterdir()), before
-            )
-            self.assertFalse(
-                dst.with_name("AGENTS.md.bak-span").exists()
-            )
+            self.assertEqual(sorted(path.name for path in target.iterdir()), before)
+            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
 
     def test_malformed_markers_fail_closed_without_writing(self):
         import tempfile
@@ -278,18 +279,12 @@ class AgentsRuleDeployTest(unittest.TestCase):
             dst = target / "AGENTS.md"
             original = "# Existing\n" + install.AGENTS_START + "\n"
             dst.write_text(original, encoding="utf-8")
-            before = sorted(
-                path.name for path in target.iterdir()
-            )
+            before = sorted(path.name for path in target.iterdir())
             with self.assertRaises(SystemExit):
                 self._run(REPO_ROOT, target)
             self.assertEqual(dst.read_text(encoding="utf-8"), original)
-            self.assertEqual(
-                sorted(path.name for path in target.iterdir()), before
-            )
-            self.assertFalse(
-                dst.with_name("AGENTS.md.bak-span").exists()
-            )
+            self.assertEqual(sorted(path.name for path in target.iterdir()), before)
+            self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
 
     def test_dry_run_writes_nothing(self):
         import tempfile
@@ -297,9 +292,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = pathlib.Path(tmp) / "proj"
             target.mkdir()
-            result = install.ensure_agents_rule(
-                REPO_ROOT, target, dry_run=True
-            )
+            result = install.ensure_agents_rule(REPO_ROOT, target, dry_run=True)
             self.assertEqual(result["status"], "skipped")
             self.assertFalse((target / "AGENTS.md").exists())
 
@@ -310,11 +303,12 @@ class AgentsRuleDeployTest(unittest.TestCase):
             target = pathlib.Path(tmp) / "proj"
             target.mkdir()
             empty_repo = pathlib.Path(tmp) / "span"
-            empty_repo.mkdir()
+            # A checkout is identified by src/span; the snippet then has
+            # to come from that checkout and is missing, so the install
+            # must fail closed rather than resolve an unrelated asset.
+            (empty_repo / "src" / "span").mkdir(parents=True)
             with self.assertRaises(SystemExit):
-                install.ensure_agents_rule(
-                    empty_repo, target, dry_run=False
-                )
+                install.ensure_agents_rule(empty_repo, target, dry_run=False)
 
     def test_no_agents_flag_rejected(self):
         with self.assertRaises(SystemExit):

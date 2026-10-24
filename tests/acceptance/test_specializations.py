@@ -30,13 +30,10 @@ REPO = "spec-svc"
 
 FILES = {
     "docs/terminology.md": (
-        "# Terminology\n\nCanonical wire unit is cents. "
-        "Display shows dollars.\n"
+        "# Terminology\n\nCanonical wire unit is cents. " "Display shows dollars.\n"
     ),
     "src/money.py": "# display surface rendering\nDOLLARS = True\n",
-    "RELEASE.md": (
-        "# Release 1.0\n\nTerminal. Downstream use is copy-only.\n"
-    ),
+    "RELEASE.md": ("# Release 1.0\n\nTerminal. Downstream use is copy-only.\n"),
     "src/publish.py": "# release-1.0 publisher\nRELEASED = True\n",
 }
 
@@ -44,36 +41,28 @@ SUBJECTS = (
     InMemorySubject("cap/amount", m.SubjectKind.CAPABILITY, "amount"),
     InMemorySubject("rep/wire", m.SubjectKind.REPRESENTATION, "wire"),
     InMemorySubject("rep/display", m.SubjectKind.REPRESENTATION, "display"),
-    InMemorySubject(
-        "docs/terminology", m.SubjectKind.DOCUMENT, "terminology"
-    ),
+    InMemorySubject("docs/terminology", m.SubjectKind.DOCUMENT, "terminology"),
     InMemorySubject("src/money.py", m.SubjectKind.COMPONENT, "money"),
-    InMemorySubject(
-        "contract/release-1.0", m.SubjectKind.CONTRACT, "release"
-    ),
+    InMemorySubject("contract/release-1.0", m.SubjectKind.CONTRACT, "release"),
     InMemorySubject("src/publish.py", m.SubjectKind.COMPONENT, "publish"),
 )
 
-EDGES = (
-    InMemoryEdge(
-        "src/money.py", m.StructuralEdgeKind.DEFINES, "rep/display"
-    ),
-)
+EDGES = (InMemoryEdge("src/money.py", m.StructuralEdgeKind.DEFINES, "rep/display"),)
 
 
 def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(
-        repository_id=REPO, subject_kind=kind, canonical_locator=locator
-    )
+    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
 
 
 def _ref(path):
     return m.EvidenceRef(
         evidence_id=m.EvidenceId(f"ev-{path}"),
         repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.DOCUMENTATION
-        if path.endswith(".md")
-        else m.EvidenceSourceKind.SOURCE_CODE,
+        source_kind=(
+            m.EvidenceSourceKind.DOCUMENTATION
+            if path.endswith(".md")
+            else m.EvidenceSourceKind.SOURCE_CODE
+        ),
         locator=path,
         revision_or_fingerprint=fingerprint_content(FILES[path]),
     )
@@ -135,7 +124,8 @@ def _candidates():
                     evidence=(term_ref,),
                     candidate_authority=accepted_term,
                     basis=m.SemanticBasis(
-                        interp, "terminology governs the money concept",
+                        interp,
+                        "terminology governs the money concept",
                     ),
                 ),
             ),
@@ -148,13 +138,15 @@ def _candidates():
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
                     assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
-                        "wire-cents", None,
+                        "wire-cents",
+                        None,
                         m.RepresentationDirection.SOURCE,
                     ),
                     evidence=(term_ref,),
                     candidate_authority=accepted_term,
                     basis=m.SemanticBasis(
-                        interp, "terminology governs the wire representation",
+                        interp,
+                        "terminology governs the wire representation",
                     ),
                 ),
             ),
@@ -162,11 +154,12 @@ def _candidates():
                 m.CandidateSemanticRelationship(
                     source=wire,
                     kind=m.RelationshipKind.TRANSFORMS_TO,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     target=display,
                     evidence=(term_ref,),
                     basis=m.SemanticBasis(
-                        interp, "terminology shows the wire-to-display transform",
+                        interp,
+                        "terminology shows the wire-to-display transform",
                     ),
                 ),
             ),
@@ -179,13 +172,15 @@ def _candidates():
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
                     assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
-                        "display-dollars", None,
+                        "display-dollars",
+                        None,
                         m.RepresentationDirection.DESTINATION,
                     ),
                     evidence=(term_ref,),
                     candidate_authority=accepted_term,
                     basis=m.SemanticBasis(
-                        interp, "terminology governs the display representation",
+                        interp,
+                        "terminology governs the display representation",
                     ),
                 ),
                 # Conflicting implementation representation: no authority.
@@ -195,12 +190,14 @@ def _candidates():
                     kind=m.ClaimKind.REPRESENTATION_CONTRACT,
                     assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
-                        "raw-dollars", None,
+                        "raw-dollars",
+                        None,
                         m.RepresentationDirection.DESTINATION,
                     ),
                     evidence=(_ref("src/money.py"),),
                     basis=m.SemanticBasis(
-                        interp, "money source shows the observed representation",
+                        interp,
+                        "money source shows the observed representation",
                     ),
                 ),
             ),
@@ -220,30 +217,33 @@ def _candidates():
         "contract/release-1.0": FixtureCandidates(
             claims=(
                 m.CandidateSemanticClaim(
-                    subject=release, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=release,
+                    kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("release 1.0 contract", ()),
                     evidence=(_ref("RELEASE.md"),),
                     candidate_authority=_release_authority(),
                     basis=m.SemanticBasis(
-                        interp, "release record states the contract purpose",
+                        interp,
+                        "release record states the contract purpose",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=release, kind=m.ClaimKind.LIFECYCLE_STATE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                    value=m.LifecycleStateValue(
-                        m.LifecyclePhase.TERMINAL, "published"
-                    ),
+                    subject=release,
+                    kind=m.ClaimKind.LIFECYCLE_STATE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    value=m.LifecycleStateValue(m.LifecyclePhase.TERMINAL, "published"),
                     evidence=(_ref("RELEASE.md"),),
                     candidate_authority=_release_authority(),
                     basis=m.SemanticBasis(
-                        interp, "release record shows terminal publication",
+                        interp,
+                        "release record shows terminal publication",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=release, kind=m.ClaimKind.VERIFICATION,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=release,
+                    kind=m.ClaimKind.VERIFICATION,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
                         _sid("src/publish.py"),
                         m.VerificationKind.TEST,
@@ -251,12 +251,14 @@ def _candidates():
                     ),
                     evidence=(_ref("src/publish.py"),),
                     basis=m.SemanticBasis(
-                        interp, "publisher is a verification candidate",
+                        interp,
+                        "publisher is a verification candidate",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=release, kind=m.ClaimKind.VERIFICATION,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=release,
+                    kind=m.ClaimKind.VERIFICATION,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
                         _sid("src/publish.py"),
                         m.VerificationKind.GATE,
@@ -266,12 +268,14 @@ def _candidates():
                     evidence=(_ref("src/publish.py"), _ref("RELEASE.md")),
                     candidate_authority=_release_authority(),
                     basis=m.SemanticBasis(
-                        interp, "release gate passed at the observed revision",
+                        interp,
+                        "release gate passed at the observed revision",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=release, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                    subject=release,
+                    kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                    assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.OwnershipCustodyValue(
                         _sid(
                             "downstream/mirror",
@@ -283,31 +287,34 @@ def _candidates():
                     evidence=(_ref("RELEASE.md"),),
                     candidate_authority=_release_authority(),
                     basis=m.SemanticBasis(
-                        interp, "release record names the downstream custodian",
+                        interp,
+                        "release record names the downstream custodian",
                     ),
                 ),
                 m.CandidateSemanticClaim(
                     candidate_key="invariant-copy-only",
-                    subject=release, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                    subject=release,
+                    kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+                    assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.InvariantConstraintValue("copy-only downstream"),
                     evidence=(_ref("RELEASE.md"),),
                     candidate_authority=_release_authority(),
                     basis=m.SemanticBasis(
-                        interp, "release record states copy-only custody",
+                        interp,
+                        "release record states copy-only custody",
                     ),
                 ),
                 # Attempted downstream recomputation: the negative case.
                 m.CandidateSemanticClaim(
                     candidate_key="invariant-recompute",
-                    subject=release, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
-        assertion_nature=m.AssertionNature.NORMATIVE,
-                    value=m.InvariantConstraintValue(
-                        "downstream may recompute"
-                    ),
+                    subject=release,
+                    kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+                    assertion_nature=m.AssertionNature.NORMATIVE,
+                    value=m.InvariantConstraintValue("downstream may recompute"),
                     evidence=(_ref("src/publish.py"),),
                     basis=m.SemanticBasis(
-                        interp, "publisher shows the recomputation attempt",
+                        interp,
+                        "publisher shows the recomputation attempt",
                     ),
                 ),
             ),
@@ -356,12 +363,16 @@ def _seeds():
     return (_ref("docs/terminology.md"), _ref("RELEASE.md"))
 
 
-def _exchange(request, op, structural, evidence, store, agent,
-              continuations=None, max_rounds=8):
+def _exchange(
+    request, op, structural, evidence, store, agent, continuations=None, max_rounds=8
+):
     continuations = continuations or ContinuationStore()
     current = op(
-        request, structural=structural, evidence=evidence,
-        store=store, continuations=continuations,
+        request,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
         authority_seeds=_seeds(),
     )
     for _ in range(max_rounds):
@@ -370,8 +381,12 @@ def _exchange(request, op, structural, evidence, store, agent,
         assert isinstance(current, PendingInterpretation), type(current)
         result = agent.perform(current.request)
         current = ops.submit_interpretation(
-            current.continuation, result, structural=structural,
-            evidence=evidence, store=store, continuations=continuations,
+            current.continuation,
+            result,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=continuations,
         )
     raise AssertionError("exchange did not settle")
 
@@ -390,7 +405,11 @@ class S01TerminologyTest(unittest.TestCase):
         try:
             answer = _exchange(
                 _request(ops.SemanticExplainRequest, "rep/display"),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             kinds = {c.kind for c in answer.content.claims}
             self.assertIn(m.ClaimKind.REPRESENTATION_CONTRACT, kinds)
@@ -408,7 +427,11 @@ class S01TerminologyTest(unittest.TestCase):
                     boundary_only=False,
                     bounds=_bounds(),
                 ),
-                ops.trace, structural, evidence, store, agent,
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertIn(
                 m.RelationshipKind.TRANSFORMS_TO,
@@ -417,11 +440,13 @@ class S01TerminologyTest(unittest.TestCase):
             # Governing terminology authority + declared precedence.
             auth = _exchange(
                 _request(ops.SemanticAuthorityRequest, "rep/display"),
-                ops.authority, structural, evidence, store, agent,
+                ops.authority,
+                structural,
+                evidence,
+                store,
+                agent,
             )
-            kinds = {
-                b.authority_kind for b in auth.content.governing_bindings
-            }
+            kinds = {b.authority_kind for b in auth.content.governing_bindings}
             self.assertIn(m.AuthorityKind.TERMINOLOGY, kinds)
             self.assertTrue(auth.content.precedence)
             self.assertTrue(
@@ -439,10 +464,12 @@ class S02CustodyTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             answer = _exchange(
-                _request(
-                    ops.SemanticExplainRequest, "contract/release-1.0"
-                ),
-                ops.explain, structural, evidence, store, agent,
+                _request(ops.SemanticExplainRequest, "contract/release-1.0"),
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             kinds = {c.kind for c in answer.content.claims}
             self.assertTrue(
@@ -451,7 +478,8 @@ class S02CustodyTest(unittest.TestCase):
                     m.ClaimKind.VERIFICATION,
                     m.ClaimKind.OWNERSHIP_CUSTODY,
                     m.ClaimKind.INVARIANT_CONSTRAINT,
-                } <= kinds
+                }
+                <= kinds
             )
             phases = {
                 c.value.phase
@@ -480,17 +508,18 @@ class S02CustodyTest(unittest.TestCase):
                     ):
                         statements.add(claim.value.statement)
             self.assertTrue(
-                {"copy-only downstream", "downstream may recompute"}
-                <= statements
+                {"copy-only downstream", "downstream may recompute"} <= statements
             )
             # Verification currency distinguishes candidate from pass.
             status = _exchange(
                 _request(ops.SemanticStatusRequest, "contract/release-1.0"),
-                ops.status, structural, evidence, store, agent,
+                ops.status,
+                structural,
+                evidence,
+                store,
+                agent,
             )
-            currencies = {
-                v.currency for v in status.content.verification_currency
-            }
+            currencies = {v.currency for v in status.content.verification_currency}
             self.assertEqual(
                 currencies,
                 {
@@ -500,9 +529,7 @@ class S02CustodyTest(unittest.TestCase):
             )
             for claim in answer.content.claims:
                 self.assertIsInstance(claim.trust, m.TrustState)
-                self.assertIsInstance(
-                    claim.freshness.state, m.FreshnessState
-                )
+                self.assertIsInstance(claim.freshness.state, m.FreshnessState)
         finally:
             store.close()
 

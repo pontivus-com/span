@@ -26,8 +26,12 @@ REPO = "f-nav"
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -37,15 +41,21 @@ def _bounds(**overrides):
 def _wiring(files, edges=()):
     nodes = []
     for path, content in files.items():
-        nodes.append({
-            "id": path, "name": path.rsplit("/", 1)[-1],
-            "kind": "file", "path": path, "span": None,
-            "signature": None,
-            "body_hash": fingerprint_content(content),
-        })
-    return {"nodes": nodes, "edges": [
-        {"source": s, "target": t, "relation": r} for s, t, r in edges
-    ]}
+        nodes.append(
+            {
+                "id": path,
+                "name": path.rsplit("/", 1)[-1],
+                "kind": "file",
+                "path": path,
+                "span": None,
+                "signature": None,
+                "body_hash": fingerprint_content(content),
+            }
+        )
+    return {
+        "nodes": nodes,
+        "edges": [{"source": s, "target": t, "relation": r} for s, t, r in edges],
+    }
 
 
 def _write_repo(files):
@@ -76,9 +86,7 @@ def _write_wiring(tmp, wiring):
 def _harness(tmp, files, wiring=None):
     if wiring is not None:
         _write_wiring(tmp, wiring)
-    structural = GraftStructuralSource(
-        REPO, tmp, artifact_dir=_repo_cache(tmp)
-    )
+    structural = GraftStructuralSource(REPO, tmp, artifact_dir=_repo_cache(tmp))
     evidence = FixtureEvidenceSource(REPO, dict(files))
     store = SqliteSemanticStore(":memory:")
     ops.initialize_repository(
@@ -86,7 +94,9 @@ def _harness(tmp, files, wiring=None):
             repository_locator=str(tmp),
             authority_seeds=(),
         ),
-        repository_id=REPO, structural=structural, evidence=evidence,
+        repository_id=REPO,
+        structural=structural,
+        evidence=evidence,
         store=store,
     )
     return structural, evidence, store
@@ -94,13 +104,17 @@ def _harness(tmp, files, wiring=None):
 
 def _locate_symbol(structural, evidence, store, query, **overrides):
     base = dict(
-        repository_id=REPO, mode=m.StructuralLocateMode.SYMBOL,
-        bounds=_bounds(), query=query,
+        repository_id=REPO,
+        mode=m.StructuralLocateMode.SYMBOL,
+        bounds=_bounds(),
+        query=query,
     )
     base.update(overrides)
     return ops.locate(
         ops.SemanticStructuralLocateRequest(**base),
-        structural=structural, evidence=evidence, store=store,
+        structural=structural,
+        evidence=evidence,
+        store=store,
     )
 
 
@@ -109,18 +123,15 @@ class StaleAdversarialTest(unittest.TestCase):
         files = {"a.py": "A = 1\n", "b.py": "B = 2\n"}
         tmp = _write_repo(files)
         try:
-            structural, evidence, store = _harness(
-                tmp, files, _wiring(files))
+            structural, evidence, store = _harness(tmp, files, _wiring(files))
             try:
                 with open(os.path.join(tmp, "a.py"), "w") as handle:
                     handle.write("A = 999\n")
-                ans = _locate_symbol(
-                    structural, evidence, store, "a.py")
+                ans = _locate_symbol(structural, evidence, store, "a.py")
                 locs = [e.evidence_ref.locator for e in ans.entries]
                 self.assertNotIn("a.py", locs)
                 self.assertGreaterEqual(ans.stale_omitted, 1)
-                self.assertEqual(
-                    ans.coverage, m.ScopeCoverage.UNVERIFIED)
+                self.assertEqual(ans.coverage, m.ScopeCoverage.UNVERIFIED)
             finally:
                 store.close()
         finally:
@@ -130,18 +141,15 @@ class StaleAdversarialTest(unittest.TestCase):
         files = {"a.py": "A = 1\n"}
         tmp = _write_repo(files)
         try:
-            structural, evidence, store = _harness(
-                tmp, files, _wiring(files))
+            structural, evidence, store = _harness(tmp, files, _wiring(files))
             try:
                 with open(os.path.join(tmp, "c.py"), "w") as handle:
                     handle.write("import a\nprint(a.A)\n")
-                ans = _locate_symbol(
-                    structural, evidence, store, "c.py")
+                ans = _locate_symbol(structural, evidence, store, "c.py")
                 # The index never contained c.py: nothing returned, and
                 # the empty page must not read as absence.
                 self.assertEqual(ans.entries, ())
-                self.assertEqual(
-                    ans.coverage, m.ScopeCoverage.UNVERIFIED)
+                self.assertEqual(ans.coverage, m.ScopeCoverage.UNVERIFIED)
             finally:
                 store.close()
         finally:
@@ -154,8 +162,7 @@ class StaleAdversarialTest(unittest.TestCase):
         try:
             structural, evidence, store = _harness(tmp, files)
             try:
-                before = _locate_symbol(
-                    structural, evidence, store, "b.py")
+                before = _locate_symbol(structural, evidence, store, "b.py")
                 self.assertEqual(before.entries, ())
                 grown = dict(files)
                 grown["b.py"] = "B = 2\n"
@@ -163,8 +170,7 @@ class StaleAdversarialTest(unittest.TestCase):
                     handle.write(grown["b.py"])
                 with open(wiring_path, "w", encoding="utf-8") as handle:
                     handle.write(json.dumps(_wiring(grown)))
-                after = _locate_symbol(
-                    structural, evidence, store, "b.py")
+                after = _locate_symbol(structural, evidence, store, "b.py")
                 self.assertEqual(len(after.entries), 1)
             finally:
                 store.close()
@@ -179,7 +185,10 @@ class StaleAdversarialTest(unittest.TestCase):
             structural, evidence, store = _harness(tmp, files)
             try:
                 first = _locate_symbol(
-                    structural, evidence, store, ".py",
+                    structural,
+                    evidence,
+                    store,
+                    ".py",
                     match=m.StructuralLocateMatch.CONTAINS,
                     bounds=_bounds(max_results=1),
                 )
@@ -187,11 +196,13 @@ class StaleAdversarialTest(unittest.TestCase):
                 token = first.bound_info.continuation_token
                 assert token is not None
                 with open(wiring_path, "w", encoding="utf-8") as handle:
-                    handle.write(json.dumps(
-                        _wiring(dict(files, extra="E = 1\n"))))
+                    handle.write(json.dumps(_wiring(dict(files, extra="E = 1\n"))))
                 with self.assertRaises(StaleContinuationError):
                     _locate_symbol(
-                        structural, evidence, store, ".py",
+                        structural,
+                        evidence,
+                        store,
+                        ".py",
                         match=m.StructuralLocateMatch.CONTAINS,
                         bounds=_bounds(max_results=1),
                         page_token=token,
@@ -209,8 +220,7 @@ class HighDegreeRecoveryTest(unittest.TestCase):
         edges = [("hub.py", f"leaf{i}.py", "calls") for i in range(8)]
         tmp = _write_repo(files)
         try:
-            structural, evidence, store = _harness(
-                tmp, files, _wiring(files, edges))
+            structural, evidence, store = _harness(tmp, files, _wiring(files, edges))
             try:
                 ans = ops.neighbors(
                     ops.SemanticStructuralNeighborsRequest(
@@ -221,19 +231,19 @@ class HighDegreeRecoveryTest(unittest.TestCase):
                                 subject_kind=m.SubjectKind.COMPONENT,
                                 canonical_locator="hub.py",
                             ),
-                            name_or_locator=None, expected_kinds=(),
+                            name_or_locator=None,
+                            expected_kinds=(),
                             retrieval_scope_hint=None,
                         ),
                         direction=StructuralDirection.DOWNSTREAM,
                         bounds=_bounds(max_results=3),
                     ),
-                    structural=structural, store=store,
+                    structural=structural,
+                    store=store,
                 )
                 # Adjacency pages hold 3, but traversal exhausts them:
                 # all 8 branches recovered (possibly across segments).
-                seen = {
-                    e.target.canonical_locator for e in ans.edges
-                }
+                seen = {e.target.canonical_locator for e in ans.edges}
                 token = ans.bound_info.continuation_token
                 while ans.bound_info.truncated:
                     assert token is not None
@@ -246,23 +256,22 @@ class HighDegreeRecoveryTest(unittest.TestCase):
                                     subject_kind=m.SubjectKind.COMPONENT,
                                     canonical_locator="hub.py",
                                 ),
-                                name_or_locator=None, expected_kinds=(),
+                                name_or_locator=None,
+                                expected_kinds=(),
                                 retrieval_scope_hint=None,
                             ),
                             direction=StructuralDirection.DOWNSTREAM,
                             bounds=_bounds(max_results=3),
                             page_token=token,
                         ),
-                        structural=structural, store=store,
+                        structural=structural,
+                        store=store,
                     )
-                    new = {
-                        e.target.canonical_locator for e in ans.edges
-                    }
+                    new = {e.target.canonical_locator for e in ans.edges}
                     self.assertFalse(seen & new)
                     seen |= new
                     token = ans.bound_info.continuation_token
-                self.assertEqual(
-                    seen, {f"leaf{i}.py" for i in range(8)})
+                self.assertEqual(seen, {f"leaf{i}.py" for i in range(8)})
             finally:
                 store.close()
         finally:
@@ -288,12 +297,11 @@ class NonIndexedMemberTest(unittest.TestCase):
                             evidence_refs=(),
                         ),
                     ),
-                    structural=structural, evidence=evidence,
+                    structural=structural,
+                    evidence=evidence,
                     store=store,
                 )
-                by_loc = {
-                    e.evidence_ref.locator: e for e in ans.entries
-                }
+                by_loc = {e.evidence_ref.locator: e for e in ans.entries}
                 self.assertEqual(set(by_loc), {"a.py", "notes.txt"})
                 self.assertIsNotNone(by_loc["a.py"].subject)
                 self.assertIsNone(by_loc["notes.txt"].subject)
@@ -304,8 +312,7 @@ class NonIndexedMemberTest(unittest.TestCase):
 
 
 class VerifiedCoverageGitTest(unittest.TestCase):
-    @unittest.skipUnless(
-        shutil.which("git"), "git required for VERIFIED coverage")
+    @unittest.skipUnless(shutil.which("git"), "git required for VERIFIED coverage")
     def test_clean_tree_newer_index_verifies(self):
         import subprocess
 
@@ -314,28 +321,40 @@ class VerifiedCoverageGitTest(unittest.TestCase):
         try:
             wiring_path = _write_wiring(tmp, _wiring(files))
             subprocess.run(
-                ["git", "init", "-q"], cwd=tmp, check=True,
+                ["git", "init", "-q"],
+                cwd=tmp,
+                check=True,
                 capture_output=True,
             )
             subprocess.run(
-                ["git", "add", "-A"], cwd=tmp, check=True,
+                ["git", "add", "-A"],
+                cwd=tmp,
+                check=True,
                 capture_output=True,
             )
             subprocess.run(
-                ["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                 "commit", "-qm", "init"],
-                cwd=tmp, check=True, capture_output=True,
+                [
+                    "git",
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-qm",
+                    "init",
+                ],
+                cwd=tmp,
+                check=True,
+                capture_output=True,
             )
             # Index rewritten after HEAD: it saw exactly this tree.
             with open(wiring_path, "w", encoding="utf-8") as handle:
                 handle.write(json.dumps(_wiring(files)))
             structural, evidence, store = _harness(tmp, files)
             try:
-                ans = _locate_symbol(
-                    structural, evidence, store, "a.py")
+                ans = _locate_symbol(structural, evidence, store, "a.py")
                 self.assertEqual(len(ans.entries), 1)
-                self.assertEqual(
-                    ans.coverage, m.ScopeCoverage.VERIFIED)
+                self.assertEqual(ans.coverage, m.ScopeCoverage.VERIFIED)
             finally:
                 store.close()
         finally:

@@ -99,9 +99,7 @@ def provision_repository(
             )
     evidence = FilesystemEvidenceSource(repository_id, root)
     config.data_dir.mkdir(parents=True, exist_ok=True)
-    store = SqliteSemanticStore(
-        str(config.data_dir / f"{repository_id}.db")
-    )
+    store = SqliteSemanticStore(str(config.data_dir / f"{repository_id}.db"))
     resolved_request = request
     if request.authority_seeds:
         # Only an explicit non-empty tuple needs locator resolution.
@@ -116,8 +114,7 @@ def provision_repository(
             DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
         )
         by_locator = {
-            item.evidence_ref.locator: item.evidence_ref
-            for item in inventory.items
+            item.evidence_ref.locator: item.evidence_ref for item in inventory.items
         }
         resolved_seeds: list[m.EvidenceRef] = []
         for seed in request.authority_seeds:
@@ -125,8 +122,7 @@ def provision_repository(
                 resolved_seeds.append(by_locator[seed.locator])
             except KeyError:
                 raise ValueError(
-                    "unknown authority seed locator: "
-                    f"{seed.locator}"
+                    "unknown authority seed locator: " f"{seed.locator}"
                 ) from None
         resolved_request = _dataclasses.replace(
             request, authority_seeds=tuple(resolved_seeds)
@@ -143,9 +139,7 @@ def provision_repository(
         evidence=evidence,
         store=store,
         continuations=ContinuationStore(),
-        authority_seeds=store.load_repository_authority_seeds(
-            repository_id
-        ),
+        authority_seeds=store.load_repository_authority_seeds(repository_id),
     )
     return context, result
 
@@ -171,18 +165,20 @@ def open_repository_context(
 #: Repository-scoped tools (Addendum H §7): their descriptions carry
 #: the currently registered canonical repository IDs at list time so
 #: agents discover identity before the first repository-scoped call.
-_REPO_SCOPED_TOOLS = frozenset({
-    "initialize_target",
-    "explain",
-    "impact",
-    "trace",
-    "authority",
-    "status",
-    "refresh",
-    "submit_interpretation",
-    "locate",
-    "neighbors",
-})
+_REPO_SCOPED_TOOLS = frozenset(
+    {
+        "initialize_target",
+        "explain",
+        "impact",
+        "trace",
+        "authority",
+        "status",
+        "refresh",
+        "submit_interpretation",
+        "locate",
+        "neighbors",
+    }
+)
 
 
 def handle_list_tools(adapter: McpAdapter) -> list[dict]:
@@ -195,13 +191,10 @@ def handle_list_tools(adapter: McpAdapter) -> list[dict]:
     """
     registered = list(adapter.registered_repository_ids())
     if registered:
-        scope_note = (
-            " Registered repositories: " + ", ".join(registered) + "."
-        )
+        scope_note = " Registered repositories: " + ", ".join(registered) + "."
     else:
         scope_note = (
-            " No repositories registered yet; call "
-            "initialize_repository first."
+            " No repositories registered yet; call " "initialize_repository first."
         )
     specs = []
     for name in TOOL_NAMES:
@@ -269,12 +262,8 @@ def build_server(adapter: McpAdapter):
             isError=is_error,
         )
 
-    server.add_request_handler(
-        "tools/list", _types.PaginatedRequestParams, _list_tools
-    )
-    server.add_request_handler(
-        "tools/call", _types.CallToolRequestParams, _call_tool
-    )
+    server.add_request_handler("tools/list", _types.PaginatedRequestParams, _list_tools)
+    server.add_request_handler("tools/call", _types.CallToolRequestParams, _call_tool)
     return server
 
 
@@ -313,9 +302,7 @@ def main(argv: list[str] | None = None) -> None:
     config = ServerConfig(data_dir=_pathlib.Path(args.data_dir))
     adapter = McpAdapter(
         provisioner=lambda request: provision_repository(config, request),
-        context_loader=lambda locator: open_repository_context(
-            config, locator
-        )[1],
+        context_loader=lambda locator: open_repository_context(config, locator)[1],
     )
     # Startup registration is transport-only: it advertises canonical
     # repository identity before serving MCP and performs no provider

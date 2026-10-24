@@ -67,9 +67,7 @@ class InitializationContractTest(unittest.TestCase):
                 if in_provision:
                     continue
                 if "initialize_repository(" in line or "auto_init" in line:
-                    offenders.append(
-                        f"{path.relative_to(REPO_ROOT)}:{lineno}"
-                    )
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}")
         for path in sorted((REPO_ROOT / "integrations").rglob("*.py")):
             for lineno, line in enumerate(
                 path.read_text(encoding="utf-8").splitlines(), 1
@@ -77,9 +75,7 @@ class InitializationContractTest(unittest.TestCase):
                 if "initialize_repository(" in line and not line.strip().startswith(
                     "def initialize_repository("
                 ):
-                    offenders.append(
-                        f"{path.relative_to(REPO_ROOT)}:{lineno}"
-                    )
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}")
         self.assertEqual(offenders, [], f"implicit bootstrap sites: {offenders}")
 
 

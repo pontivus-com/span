@@ -39,12 +39,11 @@ macOS and Windows paths are reserved but are not currently verified.
 
 ## Install
 
-Clone Span, then run the installer from the checkout:
+Install the package, then run the installer:
 
 ```bash
-git clone https://github.com/pontivus-com/span.git
-cd span
-python3 scripts/install-span.py \
+pipx install span-mcp        # or: pip install span-mcp
+span-install \
   --repo <TARGET_REPO> \
   --data-dir <DATA_DIR>
 ```
@@ -62,13 +61,26 @@ On Linux:
 Preview installation without changing anything:
 
 ```bash
-python3 scripts/install-span.py \
+span-install \
   --repo <TARGET_REPO> \
   --dry-run
 ```
 
-If you run the installer from outside the checkout, pass
-`--span-repo /path/to/span`.
+### From a source checkout
+
+Contributors, and anyone pinning to a commit, install from the repository root:
+
+```bash
+git clone https://github.com/pontivus-com/span.git
+cd span
+python3 scripts/install-span.py \
+  --repo <TARGET_REPO> \
+  --data-dir <DATA_DIR>
+```
+
+A checkout installs the runtime from that source. A package install installs the
+same released version into Span's runtime environment and reads the skills and
+lifecycle snippet bundled in the package instead of the repository copies.
 
 Installation establishes operational readiness only.
 
@@ -79,13 +91,37 @@ It does **not** mean Span already understands your repository.
 ## Supported hosts
 
 Span works with any MCP-capable agent. Managed setup — registration, skills,
-and lifecycle hooks — is implemented for Codex and OpenCode today; other hosts
-connect manually. Span never invokes an LLM, chooses a model, stores provider
-credentials, edits source code, runs tests, or autonomously reinterprets your
-repository. Its state lives in a data directory outside the repositories it
-analyzes.
+and lifecycle hooks — is implemented for Claude Code, Codex, and OpenCode
+today; other hosts connect manually. Span never invokes an LLM, chooses a
+model, stores provider credentials, edits source code, runs tests, or
+autonomously reinterprets your repository. Its state lives in a data
+directory outside the repositories it analyzes.
 
 ## Connect your coding agent
+
+### Claude Code
+
+The installer configures Claude Code automatically when the `claude` CLI is
+present: a user-scope stdio registration, skills in `~/.claude/skills`, and
+report-only lifecycle hooks in `~/.claude/settings.json`. Pass `--no-claude`
+to skip all of it. Hooks are added to an existing settings file and never
+created from nothing; if `~/.claude/settings.json` does not exist yet, start
+Claude Code once and re-run the installer to wire them.
+
+Register manually at user scope:
+
+```bash
+claude mcp add --scope user --transport stdio span -- \
+  span-mcp \
+  --data-dir <DATA_DIR> \
+  --repo <TARGET_REPO>
+```
+
+Then verify:
+
+```bash
+claude mcp list
+```
 
 ### Codex
 

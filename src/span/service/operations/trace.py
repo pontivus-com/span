@@ -57,12 +57,13 @@ from span.service.resolution import (
 )
 
 __all__ = [
-    '_trace_endpoints',
-    '_trace_drive',
-    '_compose_trace_answer',
-    'trace',
-    '_resume_trace',
+    "_trace_endpoints",
+    "_trace_drive",
+    "_compose_trace_answer",
+    "trace",
+    "_resume_trace",
 ]
+
 
 def _trace_endpoints(
     current: str,
@@ -84,6 +85,7 @@ def _trace_endpoints(
     if direction is StructuralDirection.UPSTREAM:
         return [edge.source] if edge.target.canonical_locator == current else []
     return [edge.source, edge.target]
+
 
 def _trace_drive(
     repository_id: str,
@@ -123,7 +125,6 @@ def _trace_drive(
     Page deep results through narrower targets.
     """
     from span.service.questions import (
-        derive_service_question as _derive,
         effective_trace_slice as _eff_slice,
     )
 
@@ -131,9 +132,7 @@ def _trace_drive(
     # Derive effective question identity for the primary target.
     if question_selection is not None:
         _host_slice = question_selection.question_slice
-        _basis = (
-            question_selection.materiality_basis or "TRACE question-local"
-        )
+        _basis = question_selection.materiality_basis or "TRACE question-local"
         _anchors = tuple(question_selection.question_anchors)
     else:
         _host_slice = target.subject_id.canonical_locator
@@ -155,9 +154,7 @@ def _trace_drive(
         else tuple(m.RelationshipKind)
     )
     if boundary_only:
-        kinds = tuple(
-            k for k in kinds if k is m.RelationshipKind.CROSSES_BOUNDARY
-        )
+        kinds = tuple(k for k in kinds if k is m.RelationshipKind.CROSSES_BOUNDARY)
     visited: list[m.SubjectId] = []
     rels: list[m.SemanticRelationship] = []
     claims: list[m.SemanticClaim] = []
@@ -174,8 +171,12 @@ def _trace_drive(
         window = None if target_windowed else page_token
         target_windowed = True
         loaded_claims, loaded_rels, _, _ = _load_subject_state(
-            repository_id, sid, store=store, bounds=bounds,
-            direction=direction, page_token=window,
+            repository_id,
+            sid,
+            store=store,
+            bounds=bounds,
+            direction=direction,
+            page_token=window,
         )
         # S4: question-aware gate (Addendum B B.7). The frontier
         # subject's derived question (original root, class, exact slice,
@@ -191,7 +192,9 @@ def _trace_drive(
         )
         try:
             _covs = store.load_all_question_coverages(
-                repository_id, _root, (sid,),
+                repository_id,
+                _root,
+                (sid,),
             )
         except Exception:
             _covs = ()
@@ -199,11 +202,9 @@ def _trace_drive(
             _c.question is not None
             and _c.question.scope_root == _root
             and _c.question.subject == sid
-            and _c.question.question_class
-            is m.SemanticQuestionClass.CQ_04
+            and _c.question.question_class is m.SemanticQuestionClass.CQ_04
             and _c.question.question_slice == _effective_slice
-            and _c.disposition
-            is not m.SemanticQuestionDisposition.PENDING
+            and _c.disposition is not m.SemanticQuestionDisposition.PENDING
             for _c in _covs
         )
         if not _covered and sid not in suspended:
@@ -220,8 +221,12 @@ def _trace_drive(
                 full = _stored[0] if _stored else None
             if full is not None:
                 task = prepare_interpretation_task(
-                    repository_id, full, structural=structural,
-                    evidence=evidence, bounds=bounds, state=state,
+                    repository_id,
+                    full,
+                    structural=structural,
+                    evidence=evidence,
+                    bounds=bounds,
+                    state=state,
                     authority_seeds=seeds,
                     operation_intent=m.SemanticIntent.TRACE,
                     question_slice=_effective_slice,
@@ -232,16 +237,24 @@ def _trace_drive(
                     question_terms=_anchors,
                 )
                 return _suspend(
-                    op="trace", repository_id=repository_id, subject=full,
-                    task=task, seeds=seeds, bounds=bounds, state=state,
-                    resolution=resolution, scope=(target,),
+                    op="trace",
+                    repository_id=repository_id,
+                    subject=full,
+                    task=task,
+                    seeds=seeds,
+                    bounds=bounds,
+                    state=state,
+                    resolution=resolution,
+                    scope=(target,),
                     suspended=suspended + (sid,),
                     operation_intent="TRACE",
                     question_slice=_effective_slice,
                     trace_direction=direction.value,
-                    trace_filter=tuple(relationship_filter)
-                    if relationship_filter is not None
-                    else (),
+                    trace_filter=(
+                        tuple(relationship_filter)
+                        if relationship_filter is not None
+                        else ()
+                    ),
                     trace_filter_set=relationship_filter is not None,
                     trace_boundary=boundary_only,
                     continuations=continuations,
@@ -255,30 +268,31 @@ def _trace_drive(
                 rels.append(rel)
         if depth >= bounds.max_depth:
             continue
-        page = structural.edges(
-            repository_id, sid, (), direction, bounds
-        )
+        page = structural.edges(repository_id, sid, (), direction, bounds)
         for edge in page.items:
             sedges.append(edge)
-            for endpoint in _trace_endpoints(
-                locator, edge=edge, direction=direction
-            ):
+            for endpoint in _trace_endpoints(locator, edge=edge, direction=direction):
                 queue.append((endpoint, depth + 1))
         for rel in loaded_rels:
-            for endpoint in _trace_endpoints(
-                locator, rel=rel, direction=direction
-            ):
+            for endpoint in _trace_endpoints(locator, rel=rel, direction=direction):
                 queue.append((endpoint, depth + 1))
     if queue:
         truncated_walk = True
     return _compose_trace_answer(
-        repository_id, target, resolution,
-        structural=structural, evidence=evidence, store=store,
-        bounds=bounds, state=state,
-        relationships=tuple(rels), claims=tuple(claims),
+        repository_id,
+        target,
+        resolution,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
+        relationships=tuple(rels),
+        claims=tuple(claims),
         structural_edges=tuple(sedges[: bounds.max_results]),
         truncated_walk=truncated_walk,
     )
+
 
 def _compose_trace_answer(
     repository_id: str,
@@ -309,11 +323,16 @@ def _compose_trace_answer(
         if freshness is None:
             return claim
         return m.SemanticClaim(
-            claim_id=claim.claim_id, subject=claim.subject, kind=claim.kind,
-            value=claim.value, assertion_nature=claim.assertion_nature,
+            claim_id=claim.claim_id,
+            subject=claim.subject,
+            kind=claim.kind,
+            value=claim.value,
+            assertion_nature=claim.assertion_nature,
             evidence=claim.evidence,
-            authority=claim.authority, trust=claim.trust,
-            freshness=freshness, basis=claim.basis,
+            authority=claim.authority,
+            trust=claim.trust,
+            freshness=freshness,
+            basis=claim.basis,
         )
 
     def _fresh_rel(rel: m.SemanticRelationship) -> m.SemanticRelationship:
@@ -321,27 +340,24 @@ def _compose_trace_answer(
         if freshness is None:
             return rel
         return m.SemanticRelationship(
-            relationship_id=rel.relationship_id, source=rel.source,
-            kind=rel.kind, target=rel.target,
+            relationship_id=rel.relationship_id,
+            source=rel.source,
+            kind=rel.kind,
+            target=rel.target,
             assertion_nature=rel.assertion_nature,
             evidence=rel.evidence,
-            authority=rel.authority, trust=rel.trust,
-            freshness=freshness, basis=rel.basis,
+            authority=rel.authority,
+            trust=rel.trust,
+            freshness=freshness,
+            basis=rel.basis,
         )
 
     claims = tuple(_fresh_claim(c) for c in claims)
     relationships = tuple(_fresh_rel(r) for r in relationships)
-    conflicts_all = _conflicts_for(
-        repository_id, claims, relationships, store=store
-    )
+    conflicts_all = _conflicts_for(repository_id, claims, relationships, store=store)
     kept_claims, kept_rels, kept_conf, items_truncated, items_category = (
-        _select_answer_items(
-            claims, relationships, conflicts_all, bounds.max_results
-        )
+        _select_answer_items(claims, relationships, conflicts_all, bounds.max_results)
     )
-    kept_ids = {c.claim_id.value for c in kept_claims} | {
-        r.relationship_id.value for r in kept_rels
-    }
     boundary_ids: list[m.SubjectId] = []
     lifecycle_refs: list[m.ClaimRef | m.RelationshipRef] = []
     for claim in kept_claims:
@@ -356,9 +372,7 @@ def _compose_trace_answer(
         if rel.kind is m.RelationshipKind.CROSSES_BOUNDARY:
             boundary_ids.extend((rel.source, rel.target))
     if boundary_ids:
-        loaded = store.load_subjects(
-            repository_id, tuple(dict.fromkeys(boundary_ids))
-        )
+        loaded = store.load_subjects(repository_id, tuple(dict.fromkeys(boundary_ids)))
         boundary_ids = [
             s.subject_id
             for s in loaded
@@ -378,22 +392,24 @@ def _compose_trace_answer(
         requirements.extend(_answers.requirements_for_relationship(rel))
     for claim in kept_claims:
         requirements.extend(_answers.requirements_for_claim(claim))
-    (kept_boundary, kept_edges), truncated, category, token = (
-        _answers.truncate_fields(
-            (
-                (tuple(boundary_ids), "boundary_context"),
-                (structural_edges, "structural_edges"),
-            ),
-            max(0, bounds.max_results - len(kept_conf) - len(kept_rels)),
-        )
+    (kept_boundary, kept_edges), truncated, category, token = _answers.truncate_fields(
+        (
+            (tuple(boundary_ids), "boundary_context"),
+            (structural_edges, "structural_edges"),
+        ),
+        max(0, bounds.max_results - len(kept_conf) - len(kept_rels)),
     )
     truncated = truncated or items_truncated
     if category is None:
         category = items_category
     sid = subject.subject_id
     views, _, qremaining = _paged_question_views(
-        repository_id, sid, (sid,),
-        store=store, bounds=bounds, page_token=page_token,
+        repository_id,
+        sid,
+        (sid,),
+        store=store,
+        bounds=bounds,
+        page_token=page_token,
         evidence=evidence,
     )
     if qremaining > 0:
@@ -409,8 +425,11 @@ def _compose_trace_answer(
         question_coverage=views,
     )
     returned = (
-        len(kept_conf) + len(kept_rels) + len(lifecycle_refs)
-        + len(kept_boundary) + len(kept_edges)
+        len(kept_conf)
+        + len(kept_rels)
+        + len(lifecycle_refs)
+        + len(kept_boundary)
+        + len(kept_edges)
     )
     return m.SemanticAnswer(
         answer_id=_answer_id(
@@ -423,15 +442,20 @@ def _compose_trace_answer(
         evidence=tuple(ref for r in kept_rels for ref in r.evidence),
         resolution_requirements=tuple(requirements),
         bound_info=_bound_info(
-            bounds, returned, truncated or truncated_walk,
-            category or ("walk" if truncated_walk else None), None,
+            bounds,
+            returned,
+            truncated or truncated_walk,
+            category or ("walk" if truncated_walk else None),
+            None,
         ),
         state_explanation=state_explanation_for(
-            tuple(kept_claims), tuple(kept_rels),
+            tuple(kept_claims),
+            tuple(kept_rels),
             coverage=coverage_counts_for(views),
             bounds=(bounds.max_results, truncated or truncated_walk),
         ),
     )
+
 
 def trace(
     request: SemanticTraceRequest,
@@ -459,43 +483,53 @@ def trace(
             m.SemanticIntent.TRACE, request.repository_id, bounds, state
         )
     resolution = _resolve_query_subject(
-        request.repository_id, request.target, structural=structural,
-        store=store, bounds=bounds,
+        request.repository_id,
+        request.target,
+        structural=structural,
+        store=store,
+        bounds=bounds,
     )
     if request.target.exact_subject_id is None:
         use_direct = False
         if resolution.ambiguity is m.ResolutionAmbiguity.RESOLVED:
             if resolution.candidates and _has_established_semantic_state(
-                request.repository_id, resolution.candidates[0].subject,
-                store=store, bounds=bounds,
+                request.repository_id,
+                resolution.candidates[0].subject,
+                store=store,
+                bounds=bounds,
             ):
                 use_direct = True
         elif resolution.ambiguity is m.ResolutionAmbiguity.AMBIGUOUS:
             for candidate in resolution.candidates:
                 if _has_established_semantic_state(
-                    request.repository_id, candidate.subject,
-                    store=store, bounds=bounds,
+                    request.repository_id,
+                    candidate.subject,
+                    store=store,
+                    bounds=bounds,
                 ):
                     use_direct = True
                     break
         if not use_direct:
             _, trace_root = _resolve_contextual_subjects(
-                request.repository_id, request.target,
-                structural=structural, evidence=evidence,
-                store=store, bounds=bounds,
+                request.repository_id,
+                request.target,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
             )
             if trace_root.ambiguity is not m.ResolutionAmbiguity.NOT_FOUND:
                 resolution = trace_root
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         requirements = _answers.requirements_for_resolution(
-            resolution, repository_id=request.repository_id,
+            resolution,
+            repository_id=request.repository_id,
             name_or_locator=request.target.name_or_locator,
         )
         if (
             resolution.ambiguity is m.ResolutionAmbiguity.AMBIGUOUS
             and resolution.bound_info.truncated
-            and resolution.bound_info.truncated_category
-            in ("inventory", "context")
+            and resolution.bound_info.truncated_category in ("inventory", "context")
         ):
             requirements = requirements + (
                 m.ResolutionRequirement(
@@ -510,7 +544,8 @@ def trace(
             )
         return m.SemanticAnswer(
             answer_id=_answer_id(
-                "trc", request.repository_id,
+                "trc",
+                request.repository_id,
                 request.target.name_or_locator or "unknown",
             ),
             intent=m.SemanticIntent.TRACE,
@@ -522,17 +557,25 @@ def trace(
             bound_info=_bound_info(bounds, 0, False, None),
         )
     return _trace_drive(
-        request.repository_id, resolution.candidates[0].subject, resolution,
-        structural=structural, evidence=evidence, store=store,
-        continuations=continuations, bounds=bounds, state=state,
+        request.repository_id,
+        resolution.candidates[0].subject,
+        resolution,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+        bounds=bounds,
+        state=state,
         direction=request.direction,
         relationship_filter=request.relationship_filter,
         boundary_only=request.boundary_only,
-        seeds=authority_seeds, suspended=(),
+        seeds=authority_seeds,
+        suspended=(),
         page_token=request.page_token,
         question_selection=request.question_selection,
         root_subject=resolution.candidates[0].subject.subject_id,
     )
+
 
 def _resume_trace(
     record: SuspendedOperation,
@@ -549,13 +592,17 @@ def _resume_trace(
     if record.subject.subject_id not in resumed:
         resumed = resumed + (record.subject.subject_id,)
     return _trace_drive(
-        record.repository_id, target, record.resolution,
-        structural=structural, evidence=evidence, store=store,
-        continuations=continuations, bounds=bounds, state=state,
+        record.repository_id,
+        target,
+        record.resolution,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+        bounds=bounds,
+        state=state,
         direction=StructuralDirection(record.trace_direction or "BOTH"),
-        relationship_filter=(
-            record.trace_filter if record.trace_filter_set else None
-        ),
+        relationship_filter=(record.trace_filter if record.trace_filter_set else None),
         boundary_only=record.trace_boundary,
         seeds=record.seeds,
         suspended=resumed,

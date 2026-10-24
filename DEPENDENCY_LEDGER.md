@@ -15,7 +15,7 @@ Status values: `UNSELECTED` (candidate only) · `VERIFYING` · `VERIFIED` ·
 | `setuptools>=61` | Build backend | SELECTED | Build-time only; never imported by `span` at runtime. OSI-approved. |
 | MCP Python SDK (`mcp==2.3.0`) | MCP transport | SELECTED | [modelcontextprotocol/python-sdk](https://github.com/modelcontextprotocol/python-sdk); MIT. Used only for protocol framing over stdio; it carries no semantic content. |
 | MCP SDK transitive closure | Transport support | SELECTED (with parent) | MIT/Apache-2.0/BSD-family licences; no copyleft. |
-| Graft (`@nanonets/graft@0.23.0`) | Structural source | SELECTED | [NanoNets/context-graph-engine](https://github.com/NanoNets/context-graph-engine); MIT. The installer provisions this pinned version into Span's tools directory; users do not install or name it. Node and npm are required at install time. |
+| Graft (`@nanonets/graft@0.25.0`) | Structural source | SELECTED | [NanoNets/context-graph-engine](https://github.com/NanoNets/context-graph-engine); MIT. The installer provisions this pinned version into Span's tools directory; users do not install or name it. Node and npm are required at install time. |
 | SQLite (`sqlite3`) | Persistence | SELECTED | Standard-library module; no third-party binding. |
 | `pytest` | Test runner | SELECTED | MIT. Tests also run under the standard-library `unittest` runner. |
 

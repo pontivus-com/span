@@ -19,15 +19,20 @@ from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
 
 def _sid(locator="src/a.py", kind=m.SubjectKind.COMPONENT):
     return m.SubjectId(
-        repository_id="repo-b", subject_kind=kind,
+        repository_id="repo-b",
+        subject_kind=kind,
         canonical_locator=locator,
     )
 
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -36,11 +41,15 @@ def _bounds(**overrides):
 
 def _claim_candidate(sid, key="k1", summary="does X"):
     ref = m.EvidenceRef(
-        evidence_id=m.EvidenceId("ev-a"), repository_id="repo-b",
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE, locator="src/a.py",
+        evidence_id=m.EvidenceId("ev-a"),
+        repository_id="repo-b",
+        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+        locator="src/a.py",
     )
     return m.CandidateSemanticClaim(
-        candidate_key=key, subject=sid, kind=m.ClaimKind.PURPOSE,
+        candidate_key=key,
+        subject=sid,
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue(summary, ()),
         evidence=(ref,),
@@ -53,7 +62,8 @@ def _claim_candidate(sid, key="k1", summary="does X"):
 class BaselineVsQuestionLocalTest(unittest.TestCase):
     def test_baseline_seed_slice_and_question(self):
         from span.shell.structural.memory import (
-            InMemoryStructuralSource, InMemorySubject,
+            InMemoryStructuralSource,
+            InMemorySubject,
         )
         from span.shell.evidence import FixtureEvidenceSource
 
@@ -62,16 +72,26 @@ class BaselineVsQuestionLocalTest(unittest.TestCase):
         )
         evidence = FixtureEvidenceSource("repo-b", {"src/a.py": "X = 1\n"})
         state = structural.repository_state("repo-b")
-        subject = structural.resolve_subject(
-            "repo-b", m.SubjectSelector(None, "src/a.py", (), None),
-            _bounds(),
-        ).candidates[0].subject
+        subject = (
+            structural.resolve_subject(
+                "repo-b",
+                m.SubjectSelector(None, "src/a.py", (), None),
+                _bounds(),
+            )
+            .candidates[0]
+            .subject
+        )
         task = ops.prepare_interpretation_task(
-            "repo-b", subject, structural=structural, evidence=evidence,
-            bounds=_bounds(), state=state,
+            "repo-b",
+            subject,
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(),
+            state=state,
             operation_intent=m.SemanticIntent.EXPLAIN,
             store=SqliteSemanticStore(":memory:"),
-            scope_root=subject.subject_id, establish_baseline=True,
+            scope_root=subject.subject_id,
+            establish_baseline=True,
         )
         assert task.request.question is not None
         self.assertIs(
@@ -94,7 +114,10 @@ class BaselineVsQuestionLocalTest(unittest.TestCase):
             evidence = FixtureEvidenceSource("repo-b", {"src/a.py": "X = 1\n"})
             self.assertFalse(
                 _baseline_sufficient(
-                    "repo-b", sid, store=store, evidence=evidence,
+                    "repo-b",
+                    sid,
+                    store=store,
+                    evidence=evidence,
                     bounds=_bounds(),
                 )
             )
@@ -128,20 +151,26 @@ class SharedRetirementTest(unittest.TestCase):
             sid = _sid()
             root = _sid("cap/root", m.SubjectKind.CAPABILITY)
             claim = m.SemanticClaim(
-                claim_id=m.ClaimId("shared-1"), subject=sid,
+                claim_id=m.ClaimId("shared-1"),
+                subject=sid,
                 kind=m.ClaimKind.PURPOSE,
-                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("s", ()),
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.PurposeValue("s", ()),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
             q1 = m.SemanticQuestionScope(
-                scope_root=root, subject=sid,
+                scope_root=root,
+                subject=sid,
                 question_class=m.SemanticQuestionClass.CQ_01,
-                question_slice="q1", materiality_basis="m",
+                question_slice="q1",
+                materiality_basis="m",
             )
             q2 = m.SemanticQuestionScope(
-                scope_root=root, subject=sid,
+                scope_root=root,
+                subject=sid,
                 question_class=m.SemanticQuestionClass.CQ_02,
-                question_slice="q2", materiality_basis="m",
+                question_slice="q2",
+                materiality_basis="m",
             )
             store.write_index_batch(
                 m.CanonicalIndexBatch(
@@ -149,15 +178,19 @@ class SharedRetirementTest(unittest.TestCase):
                     claims=(claim,),
                     coverage=(
                         m.InterpretationCoverage(
-                            subjects=(sid,), question_slice="q1",
-                            declared_complete=True, question=q1,
+                            subjects=(sid,),
+                            question_slice="q1",
+                            declared_complete=True,
+                            question=q1,
                             disposition=m.SemanticQuestionDisposition.ANSWERED,
                             result_refs=(m.ClaimRef(id=claim.claim_id),),
                             disposition_basis="b",
                         ),
                         m.InterpretationCoverage(
-                            subjects=(sid,), question_slice="q2",
-                            declared_complete=True, question=q2,
+                            subjects=(sid,),
+                            question_slice="q2",
+                            declared_complete=True,
+                            question=q2,
                             disposition=m.SemanticQuestionDisposition.ANSWERED,
                             result_refs=(m.ClaimRef(id=claim.claim_id),),
                             disposition_basis="b",
@@ -165,13 +198,11 @@ class SharedRetirementTest(unittest.TestCase):
                     ),
                 )
             )
-            refs = store.load_question_coverages(
-                "repo-b", root, (sid,), _bounds()
-            )
+            refs = store.load_question_coverages("repo-b", root, (sid,), _bounds())
             owners = [
-                cov for cov in refs
-                if claim.claim_id.value
-                in {r.id.value for r in cov.result_refs}
+                cov
+                for cov in refs
+                if claim.claim_id.value in {r.id.value for r in cov.result_refs}
             ]
             self.assertEqual(len(owners), 2)
         finally:
@@ -184,20 +215,24 @@ class PremiseStalenessTest(unittest.TestCase):
         try:
             sid = _sid()
             premise = m.SemanticClaim(
-                claim_id=m.ClaimId("prem-1"), subject=sid,
+                claim_id=m.ClaimId("prem-1"),
+                subject=sid,
                 kind=m.ClaimKind.PURPOSE,
-                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("p", ()),
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.PurposeValue("p", ()),
                 freshness=m.Freshness(m.FreshnessState.STALE, reason="src changed"),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
             dep = m.SemanticClaim(
-                claim_id=m.ClaimId("dep-1"), subject=sid,
+                claim_id=m.ClaimId("dep-1"),
+                subject=sid,
                 kind=m.ClaimKind.RESPONSIBILITY,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.ResponsibilityValue("r"),
                 freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
                 basis=m.SemanticBasis(
-                    m.DerivationKind.SEMANTIC_INTERPRETATION, "uses premise",
+                    m.DerivationKind.SEMANTIC_INTERPRETATION,
+                    "uses premise",
                     input_refs=(m.ClaimRef(id=premise.claim_id),),
                 ),
             )
@@ -211,8 +246,11 @@ class PremiseStalenessTest(unittest.TestCase):
 
             evidence = FixtureEvidenceSource("repo-b", {"src/a.py": "X=1"})
             updates = ops.preflight(
-                "repo-b", (m.ClaimRef(id=dep.claim_id),),
-                evidence=evidence, store=store, bounds=_bounds(),
+                "repo-b",
+                (m.ClaimRef(id=dep.claim_id),),
+                evidence=evidence,
+                store=store,
+                bounds=_bounds(),
             )
             self.assertTrue(
                 any(
@@ -242,16 +280,20 @@ class EffectiveDispositionTest(unittest.TestCase):
     def test_recorded_answered_noncurrent_is_effective_pending(self):
         sid = _sid()
         q = m.SemanticQuestionScope(
-            scope_root=sid, subject=sid,
+            scope_root=sid,
+            subject=sid,
             question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="q", materiality_basis="m",
+            question_slice="q",
+            materiality_basis="m",
         )
         store = SqliteSemanticStore(":memory:")
         try:
             claim = m.SemanticClaim(
-                claim_id=m.ClaimId("c-eff"), subject=sid,
+                claim_id=m.ClaimId("c-eff"),
+                subject=sid,
                 kind=m.ClaimKind.PURPOSE,
-                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("s", ()),
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.PurposeValue("s", ()),
                 freshness=m.Freshness(m.FreshnessState.STALE, reason="changed"),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
@@ -261,15 +303,15 @@ class EffectiveDispositionTest(unittest.TestCase):
                 )
             )
             cov = m.InterpretationCoverage(
-                subjects=(sid,), question_slice="q", declared_complete=True,
+                subjects=(sid,),
+                question_slice="q",
+                declared_complete=True,
                 question=q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(m.ClaimRef(id=claim.claim_id),),
                 disposition_basis="b",
             )
-            view = ops.effective_question_view(
-                cov, store=store, repository_id="repo-b"
-            )
+            view = ops.effective_question_view(cov, store=store, repository_id="repo-b")
             self.assertIs(
                 view.recorded_disposition,
                 m.SemanticQuestionDisposition.ANSWERED,
@@ -290,9 +332,11 @@ class CurrentSchemaTest(unittest.TestCase):
             self.assertEqual(store.schema_version(), m.SchemaVersion(7))
             sid = _sid()
             claim = m.SemanticClaim(
-                claim_id=m.ClaimId("leg-1"), subject=sid,
+                claim_id=m.ClaimId("leg-1"),
+                subject=sid,
                 kind=m.ClaimKind.PURPOSE,
-                assertion_nature=m.AssertionNature.DESCRIPTIVE, value=m.PurposeValue("s", ()),
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.PurposeValue("s", ()),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE, "b"),
             )
             store.write_index_batch(
@@ -300,9 +344,7 @@ class CurrentSchemaTest(unittest.TestCase):
                     subjects=(m.Subject(sid, "a", None),), claims=(claim,)
                 )
             )
-            covs = store.load_question_coverages(
-                "repo-b", sid, (sid,), _bounds()
-            )
+            covs = store.load_question_coverages("repo-b", sid, (sid,), _bounds())
             self.assertEqual(covs, ())
         finally:
             store.close()

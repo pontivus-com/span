@@ -59,9 +59,10 @@ from span.service.resolution import (
 )
 
 __all__ = [
-    '_compose_refresh_answer',
-    'refresh',
+    "_compose_refresh_answer",
+    "refresh",
 ]
+
 
 def _currency_note(
     currency: m.Freshness,
@@ -101,31 +102,34 @@ def _compose_refresh_answer(
     reloaded_rels: list[m.SemanticRelationship] = []
     for subject in subjects:
         claims, relationships, _, _ = _load_subject_state(
-            repository_id, subject.subject_id,
-            store=store, bounds=bounds,
+            repository_id,
+            subject.subject_id,
+            store=store,
+            bounds=bounds,
         )
         reloaded_claims.extend(claims)
         reloaded_rels.extend(relationships)
     claims_t, rels_t = tuple(reloaded_claims), tuple(reloaded_rels)
     claims_t, rels_t = _refresh_view(
-        repository_id, claims_t, rels_t,
-        evidence=evidence, store=store, bounds=bounds,
+        repository_id,
+        claims_t,
+        rels_t,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
     )
-    conflicts_all = _conflicts_for(
-        repository_id, claims_t, rels_t, store=store
+    conflicts_all = _conflicts_for(repository_id, claims_t, rels_t, store=store)
+    kept_claims, kept_rels, kept_conf, truncated, category = _select_answer_items(
+        claims_t, rels_t, conflicts_all, bounds.max_results
     )
-    kept_claims, kept_rels, kept_conf, truncated, category = (
-        _select_answer_items(
-            claims_t, rels_t, conflicts_all, bounds.max_results
-        )
-    )
-    scope_paths = tuple(
-        s.subject_id.canonical_locator for s in subjects
-    )
+    scope_paths = tuple(s.subject_id.canonical_locator for s in subjects)
     views = _question_views_for_scope(
-        repository_id, None,
+        repository_id,
+        None,
         tuple(s.subject_id for s in subjects),
-        store=store, bounds=bounds, evidence=evidence,
+        store=store,
+        bounds=bounds,
+        evidence=evidence,
     )
     content = m.StatusContent(
         readiness=m.RepositoryReadiness.READY,
@@ -138,17 +142,16 @@ def _compose_refresh_answer(
         conflicts=kept_conf,
         unresolved=tuple(
             req for c in kept_claims for req in _answers.requirements_for_claim(c)
-        ) + tuple(
-            req for r in kept_rels
-            for req in _answers.requirements_for_relationship(r)
-        ) + tuple(extra_unresolved),
+        )
+        + tuple(
+            req for r in kept_rels for req in _answers.requirements_for_relationship(r)
+        )
+        + tuple(extra_unresolved),
         question_coverage=views,
     )
     evidence_refs = tuple(ref for c in kept_claims for ref in c.evidence)
     return m.SemanticAnswer(
-        answer_id=_answer_id(
-            "rfr", repository_id, ",".join(scope_paths)
-        ),
+        answer_id=_answer_id("rfr", repository_id, ",".join(scope_paths)),
         intent=m.SemanticIntent.STATUS,
         repository_state=state,
         subject_resolution=None,
@@ -158,14 +161,18 @@ def _compose_refresh_answer(
         bound_info=_bound_info(
             bounds,
             len(kept_claims) + len(kept_rels) + len(kept_conf),
-            truncated, category, None,
+            truncated,
+            category,
+            None,
         ),
         state_explanation=state_explanation_for(
-            tuple(kept_claims), tuple(kept_rels),
+            tuple(kept_claims),
+            tuple(kept_rels),
             coverage=coverage_counts_for(views),
             bounds=(bounds.max_results, truncated),
         ),
     )
+
 
 def refresh(
     request: SemanticRefreshRequest,
@@ -197,8 +204,11 @@ def refresh(
             "remains valid only for ordinary scoped stale refresh"
         )
     subjects, ambiguity = _resolve_scope_subjects(
-        request.repository_id, request.target,
-        structural=structural, store=store, bounds=bounds,
+        request.repository_id,
+        request.target,
+        structural=structural,
+        store=store,
+        bounds=bounds,
         evidence=evidence,
     )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
@@ -213,9 +223,7 @@ def refresh(
                 ),
             )
         return m.SemanticAnswer(
-            answer_id=_answer_id(
-                "rfr", request.repository_id, "scope"
-            ),
+            answer_id=_answer_id("rfr", request.repository_id, "scope"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
             subject_resolution=None,
@@ -242,41 +250,53 @@ def refresh(
         currency_notes.append(note)
     # Collect stale premise ids first for dependent expansion.
     stale_premise_ids: set[str] = set()
-    subject_items: dict[str, tuple[
-        object,
-        tuple[m.ClaimRef | m.RelationshipRef, ...],
-    ]] = {}
+    subject_items: dict[
+        str,
+        tuple[
+            object,
+            tuple[m.ClaimRef | m.RelationshipRef, ...],
+        ],
+    ] = {}
     for subject in subjects:
         claims, relationships, _, _ = _load_subject_state(
-            request.repository_id, subject.subject_id,
-            store=store, bounds=bounds,
+            request.repository_id,
+            subject.subject_id,
+            store=store,
+            bounds=bounds,
         )
         ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
             _claim_ref(c) for c in claims
         ) + tuple(_relationship_ref(r) for r in relationships)
         subject_items[subject.subject_id.canonical_locator] = (
-            subject, ids,
+            subject,
+            ids,
         )
         if not ids:
             affected.append(subject)
             continue
-        dependencies = store.load_evidence_dependencies(
-            request.repository_id, ids
-        )
+        dependencies = store.load_evidence_dependencies(request.repository_id, ids)
         updates = preflight(
-            request.repository_id, ids, evidence=evidence,
-            store=store, bounds=bounds,
+            request.repository_id,
+            ids,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
         )
         coverage_updates = coverage_check(
-            request.repository_id, tuple(claims) + tuple(relationships),
-            evidence=evidence, store=store,
+            request.repository_id,
+            tuple(claims) + tuple(relationships),
+            evidence=evidence,
+            store=store,
         )
         # B.4/B-06: stale persisted questions — including zero-result
         # OPEN/NOT_APPLICABLE whose discovery/evidence moved — mark the
         # subject affected even when no item update fired above.
         stale_questions = _stale_question_scopes(
-            request.repository_id, subject,
-            store=store, evidence=evidence, bounds=bounds,
+            request.repository_id,
+            subject,
+            store=store,
+            evidence=evidence,
+            bounds=bounds,
             suspended=continuations.live_question_keys(),
         )
         if updates or coverage_updates or stale_questions:
@@ -284,8 +304,7 @@ def refresh(
                 updated = {u.semantic_id.id.value for u in updates}
                 stale_premise_ids.update(updated)
                 changed_deps.extend(
-                    dep for dep in dependencies
-                    if dep.semantic_id.id.value in updated
+                    dep for dep in dependencies if dep.semantic_id.id.value in updated
                 )
             affected.append(subject)
         elif not request.stale_only:
@@ -301,7 +320,8 @@ def refresh(
             dependents: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
             try:
                 dependents = store.load_premise_dependents(
-                    request.repository_id, tuple(premise_refs),
+                    request.repository_id,
+                    tuple(premise_refs),
                 )
             except Exception:
                 dependents = ()
@@ -312,7 +332,8 @@ def refresh(
                     for pid in sorted(stale_premise_ids)
                 )
                 extra = store.load_premise_dependents(
-                    request.repository_id, rel_refs,
+                    request.repository_id,
+                    rel_refs,
                 )
                 dependents = tuple(dict.fromkeys((*dependents, *extra)))
             except Exception:
@@ -321,7 +342,8 @@ def refresh(
                 dep_ids = {d.id.value for d in dependents}
                 try:
                     dep_items = store.load_by_refs(
-                        request.repository_id, tuple(dependents),
+                        request.repository_id,
+                        tuple(dependents),
                     )
                 except ValueError:
                     dep_items = ()
@@ -343,8 +365,13 @@ def refresh(
             pass
     if not affected:
         return _compose_refresh_answer(
-            request.repository_id, subjects, structural=structural,
-            evidence=evidence, store=store, bounds=bounds, state=state,
+            request.repository_id,
+            subjects,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
             changed=tuple(changed_deps),
             extra_unresolved=tuple(currency_notes),
         )
@@ -354,8 +381,11 @@ def refresh(
     # baseline expansion. Only subjects with no persisted questions
     # fall back to a STATUS question-local unit.
     first_stale = _stale_question_scopes(
-        request.repository_id, first,
-        store=store, evidence=evidence, bounds=bounds,
+        request.repository_id,
+        first,
+        store=store,
+        evidence=evidence,
+        bounds=bounds,
         suspended=continuations.live_question_keys(),
     )
     first_scope = first_stale[0] if first_stale else None
@@ -369,7 +399,9 @@ def refresh(
     if first_scope is None and not request.stale_only:
         try:
             existing_coverages = store.load_all_question_coverages(
-                request.repository_id, None, (first.subject_id,),
+                request.repository_id,
+                None,
+                (first.subject_id,),
             )
         except Exception:
             existing_coverages = ()
@@ -393,23 +425,25 @@ def refresh(
                 continue
             seen_identities.add(identity)
             candidates.append(existing.question)
-        candidates.sort(
-            key=lambda q: (q.question_class.value, q.question_slice)
-        )
+        candidates.sort(key=lambda q: (q.question_class.value, q.question_slice))
         correction_candidates = tuple(candidates)
     task = prepare_interpretation_task(
-        request.repository_id, first, structural=structural,
-        evidence=evidence, bounds=bounds, state=state,
+        request.repository_id,
+        first,
+        structural=structural,
+        evidence=evidence,
+        bounds=bounds,
+        state=state,
         authority_seeds=authority_seeds,
         operation_intent=m.SemanticIntent.STATUS,
         question_slice=(
-            first_scope.question_slice if first_scope is not None
+            first_scope.question_slice
+            if first_scope is not None
             else first.subject_id.canonical_locator
         ),
         store=store,
         scope_root=(
-            first_scope.scope_root if first_scope is not None
-            else first.subject_id
+            first_scope.scope_root if first_scope is not None else first.subject_id
         ),
         question_class=(
             first_scope.question_class if first_scope is not None else None
@@ -426,14 +460,16 @@ def refresh(
                 task.request,
                 brief=_dataclasses.replace(
                     brief,
-                    scope_boundaries=brief.scope_boundaries + tuple(
+                    scope_boundaries=brief.scope_boundaries
+                    + tuple(
                         "challenged-question candidate "
                         f"{candidate.question_class.value} "
                         f"'{candidate.question_slice}' (scope root "
                         f"'{candidate.scope_root.canonical_locator}')"
                         for candidate in correction_candidates
                     ),
-                    submission_rules=brief.submission_rules + (
+                    submission_rules=brief.submission_rules
+                    + (
                         "Correction mode: nominate exactly one "
                         "already-persisted original question from the "
                         "challenged-question candidates via one "
@@ -445,10 +481,18 @@ def refresh(
             ),
         )
     return _suspend(
-        op="refresh", repository_id=request.repository_id, subject=first,
-        task=task, seeds=authority_seeds, bounds=bounds, state=state,
-        resolution=None, scope=subjects, remaining=rest,
-        changed=tuple(changed_deps), continuations=continuations,
+        op="refresh",
+        repository_id=request.repository_id,
+        subject=first,
+        task=task,
+        seeds=authority_seeds,
+        bounds=bounds,
+        state=state,
+        resolution=None,
+        scope=subjects,
+        remaining=rest,
+        changed=tuple(changed_deps),
+        continuations=continuations,
         operation_intent="STATUS",
         question_slice=task.request.question_slice,
         declared_complete=True,

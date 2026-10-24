@@ -66,12 +66,28 @@ skill-driven procedure; where a host cannot enforce closeout, that
 limitation is stated by the agent in its closeout report rather than
 assumed away.
 
-## claude (fallback-only; no hook wiring claimed)
+## claude (managed: MCP registration, skills, report-only hooks)
 
-No Span hook wiring is claimed for Claude Code sessions (neither target
-`.claude/settings.json` nor any host-level entry). The agent follows the
-same skill-driven lifecycle and states the limitation in its closeout
-report rather than assuming it away.
+When the Claude Code CLI is present, the installer registers Span at user
+scope (`claude mcp add --scope user --transport stdio`), so the server is
+available in every project rather than only where the installer ran. It
+deploys skills to `~/.claude/skills` and appends report-only entries to
+`~/.claude/settings.json` for the three events the Claude-style adapter
+maps: `SessionStart` (readiness and baseline), post-edit `PostToolUse`
+(`Write`, `Edit`, `MultiEdit` → changed-path scope), and `Stop` (session
+closeout scope). Hooks are added to an existing settings file and never
+created from nothing; when `~/.claude/settings.json` is absent the wiring
+is reported as skipped and re-running after Claude Code has created the
+file wires them. The file is backed up once to `settings.json.bak-span`,
+foreign hooks and every other setting are preserved, and re-running the
+installer adds no duplicates. Registration is skipped with `--no-claude`
+or when the CLI is absent; installation never fails because Claude's own
+configuration is broken.
+
+Closeout remains the agent's obligation: hooks report, they never
+initialize, interpret, refresh, or expand. Where a host cannot enforce
+closeout, the agent states that limitation in its closeout report rather
+than assuming it away.
 
 ## Out of scope for every host
 

@@ -12,7 +12,6 @@ import unittest
 from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span.ports.structural import StructuralDirection
-from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span import service as ops
 from span.service.answers import _select_answer_items
 from span.shell.agent_exchange.continuations import ContinuationStore
@@ -41,35 +40,26 @@ FILES = {
 SUBJECTS = (
     InMemorySubject("cap/flow", m.SubjectKind.CAPABILITY, "flow-cap"),
     InMemorySubject("src/flow.py", m.SubjectKind.COMPONENT, "flow"),
-    InMemorySubject(
-        "src/flow.py:Pipe", m.SubjectKind.CODE_SYMBOL, "Pipe"
-    ),
+    InMemorySubject("src/flow.py:Pipe", m.SubjectKind.CODE_SYMBOL, "Pipe"),
     InMemorySubject("src/store.py", m.SubjectKind.COMPONENT, "store"),
     InMemorySubject("conf/workers", m.SubjectKind.CONFIGURATION, "workers"),
     InMemorySubject("contract/api", m.SubjectKind.CONTRACT, "api"),
-    InMemorySubject(
-        "test/test_flow.py", m.SubjectKind.TEST_OR_GATE, "flow-test"
-    ),
+    InMemorySubject("test/test_flow.py", m.SubjectKind.TEST_OR_GATE, "flow-test"),
 )
 
 EDGES = (
+    InMemoryEdge("src/flow.py:Pipe", m.StructuralEdgeKind.DEFINES, "src/flow.py"),
+    InMemoryEdge("src/flow.py", m.StructuralEdgeKind.REFERENCES, "src/store.py"),
     InMemoryEdge(
-        "src/flow.py:Pipe", m.StructuralEdgeKind.DEFINES, "src/flow.py"
-    ),
-    InMemoryEdge(
-        "src/flow.py", m.StructuralEdgeKind.REFERENCES, "src/store.py"
-    ),
-    InMemoryEdge(
-        "src/flow.py", m.StructuralEdgeKind.REFERENCES,
+        "src/flow.py",
+        m.StructuralEdgeKind.REFERENCES,
         "test/test_flow.py",
     ),
 )
 
 
 def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(
-        repository_id=REPO, subject_kind=kind, canonical_locator=locator
-    )
+    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
 
 
 def _ref(path):
@@ -122,20 +112,23 @@ def _candidates():
         "src/flow.py": FixtureCandidates(
             claims=(
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.PURPOSE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("moves records", (cap,)),
                     evidence=(_ref("README.md"),),
                     candidate_authority=_accepted(
                         "README.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
                     basis=m.SemanticBasis(
-                        interp, "README states the flow purpose",
+                        interp,
+                        "README states the flow purpose",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.CONFIGURATION_ENVIRONMENT,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.CONFIGURATION_ENVIRONMENT,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.ConfigurationEnvironmentValue(
                         "worker count",
                         _sid("conf/workers", m.SubjectKind.CONFIGURATION),
@@ -146,38 +139,46 @@ def _candidates():
                         m.AuthorityKind.CONFIGURATION_RUNTIME,
                     ),
                     basis=m.SemanticBasis(
-                        interp, "config declares the worker count",
+                        interp,
+                        "config declares the worker count",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.LIFECYCLE_STATE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.LIFECYCLE_STATE,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.LifecycleStateValue(m.LifecyclePhase.USE),
                     evidence=(_ref("src/flow.py"),),
                     candidate_authority=_accepted(
                         "src/flow.py", m.AuthorityKind.REPOSITORY_RULE
                     ),
                     basis=m.SemanticBasis(
-                        interp, "flow source shows active use",
+                        interp,
+                        "flow source shows active use",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.VERIFICATION,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.VERIFICATION,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
-                        test, m.VerificationKind.TEST,
+                        test,
+                        m.VerificationKind.TEST,
                         m.VerificationCurrency.CANDIDATE,
                     ),
                     evidence=(_ref("src/flow.py"),),
                     basis=m.SemanticBasis(
-                        interp, "flow test is a verification candidate",
+                        interp,
+                        "flow test is a verification candidate",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.VERIFICATION,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.VERIFICATION,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.VerificationValue(
-                        test, m.VerificationKind.GATE,
+                        test,
+                        m.VerificationKind.GATE,
                         m.VerificationCurrency.CURRENT_PASS,
                         observed_revision="fp-1",
                     ),
@@ -186,14 +187,17 @@ def _candidates():
                         "src/flow.py", m.AuthorityKind.REPOSITORY_RULE
                     ),
                     basis=m.SemanticBasis(
-                        interp, "flow gate passed at the observed revision",
+                        interp,
+                        "flow gate passed at the observed revision",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.OWNERSHIP_CUSTODY,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.OWNERSHIP_CUSTODY,
+                    assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.OwnershipCustodyValue(
-                        _sid("team/flow"), m.OwnershipRole.OWNER,
+                        _sid("team/flow"),
+                        m.OwnershipRole.OWNER,
                         m.OwnershipExclusivity.EXCLUSIVE,
                     ),
                     evidence=(_ref("OWNERSHIP.md"),),
@@ -201,24 +205,28 @@ def _candidates():
                         "OWNERSHIP.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
                     basis=m.SemanticBasis(
-                        interp, "ownership record names the flow owner",
+                        interp,
+                        "ownership record names the flow owner",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.INVARIANT_CONSTRAINT,
-        assertion_nature=m.AssertionNature.NORMATIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.INVARIANT_CONSTRAINT,
+                    assertion_nature=m.AssertionNature.NORMATIVE,
                     value=m.InvariantConstraintValue("records are immutable"),
                     evidence=(_ref("README.md"),),
                     candidate_authority=_accepted(
                         "README.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
                     basis=m.SemanticBasis(
-                        interp, "README states the immutability invariant",
+                        interp,
+                        "README states the immutability invariant",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.REPRESENTATION_CONTRACT,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.REPRESENTATION_CONTRACT,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.RepresentationContractValue(
                         "wire",
                         _sid("contract/api", m.SubjectKind.CONTRACT),
@@ -229,39 +237,46 @@ def _candidates():
                         "README.md", m.AuthorityKind.REPOSITORY_RULE
                     ),
                     basis=m.SemanticBasis(
-                        interp, "README states the wire representation contract",
+                        interp,
+                        "README states the wire representation contract",
                     ),
                 ),
                 m.CandidateSemanticClaim(
-                    subject=flow, kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    subject=flow,
+                    kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.CapabilityMembershipValue(cap),
                     evidence=(_ref("src/flow.py"),),
                     basis=m.SemanticBasis(
-                        interp, "flow source shows capability membership",
+                        interp,
+                        "flow source shows capability membership",
                     ),
                 ),
             ),
             relationships=(
                 m.CandidateSemanticRelationship(
-                    source=flow, kind=m.RelationshipKind.CROSSES_BOUNDARY,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    source=flow,
+                    kind=m.RelationshipKind.CROSSES_BOUNDARY,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     target=store,
                     evidence=(_ref("src/flow.py"),),
                     candidate_authority=_accepted(
                         "src/flow.py", m.AuthorityKind.REPOSITORY_RULE
                     ),
                     basis=m.SemanticBasis(
-                        interp, "flow source crosses into the store",
+                        interp,
+                        "flow source crosses into the store",
                     ),
                 ),
                 m.CandidateSemanticRelationship(
-                    source=test, kind=m.RelationshipKind.VERIFIED_BY,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    source=test,
+                    kind=m.RelationshipKind.VERIFIED_BY,
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     target=flow,
                     evidence=(_ref("src/flow.py"),),
                     basis=m.SemanticBasis(
-                        interp, "flow test verifies the flow",
+                        interp,
+                        "flow test verifies the flow",
                     ),
                 ),
             ),
@@ -269,9 +284,7 @@ def _candidates():
         "contract/api": FixtureCandidates(
             claims=(
                 m.CandidateSemanticClaim(
-                    subject=_sid(
-                        "contract/api", m.SubjectKind.CONTRACT
-                    ),
+                    subject=_sid("contract/api", m.SubjectKind.CONTRACT),
                     kind=m.ClaimKind.PURPOSE,
                     assertion_nature=m.AssertionNature.DESCRIPTIVE,
                     value=m.PurposeValue("public record API", ()),
@@ -282,7 +295,8 @@ def _candidates():
                         "public external API surface",
                     ),
                     basis=m.SemanticBasis(
-                        interp, "README states the public API purpose",
+                        interp,
+                        "README states the public API purpose",
                     ),
                 ),
             ),
@@ -316,8 +330,12 @@ def _harness(files=None):
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -328,16 +346,29 @@ def _seeds():
     return (_ref("README.md"), _ref("OWNERSHIP.md"), _ref("config.yaml"))
 
 
-def _exchange(request, op, structural, evidence, store, agent,
-              seeds=None, continuations=None, max_rounds=8):
+def _exchange(
+    request,
+    op,
+    structural,
+    evidence,
+    store,
+    agent,
+    seeds=None,
+    continuations=None,
+    max_rounds=8,
+):
     """Drive the client protocol to an answer: operate, and while Span
     suspends (chained continuations for multi-subject operations),
     have the test agent perform each task and submit each result."""
     continuations = continuations or ContinuationStore()
     seeds = _seeds() if seeds is None else seeds
     current = op(
-        request, structural=structural, evidence=evidence,
-        store=store, continuations=continuations, authority_seeds=seeds,
+        request,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+        authority_seeds=seeds,
     )
     for _ in range(max_rounds):
         if isinstance(current, m.SemanticAnswer):
@@ -345,8 +376,12 @@ def _exchange(request, op, structural, evidence, store, agent,
         assert isinstance(current, PendingInterpretation), type(current)
         result = agent.perform(current.request)
         current = ops.submit_interpretation(
-            current.continuation, result, structural=structural,
-            evidence=evidence, store=store, continuations=continuations,
+            current.continuation,
+            result,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=continuations,
         )
     raise AssertionError("exchange did not settle to an answer")
 
@@ -364,8 +399,7 @@ def _trace_request(**overrides):
     return ops.SemanticTraceRequest(**base)
 
 
-def _impact_request(kind=ops.ChangeKind.BEHAVIOR, description=None,
-                     affected=()):
+def _impact_request(kind=ops.ChangeKind.BEHAVIOR, description=None, affected=()):
     return ops.SemanticImpactRequest(
         repository_id=REPO,
         target=m.SubjectSelector(None, "src/flow.py", (), None),
@@ -382,7 +416,11 @@ class TraceTest(unittest.TestCase):
         try:
             answer = _exchange(
                 _trace_request(bounds=_bounds(max_results=1)),
-                ops.trace, structural, evidence, store, agent,
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertTrue(answer.bound_info.truncated)
             # A truncated trace is signposted, never handed a token its
@@ -395,8 +433,12 @@ class TraceTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             answer = _exchange(
-                _trace_request(), ops.trace,
-                structural, evidence, store, agent,
+                _trace_request(),
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             content = answer.content
             self.assertIsInstance(content, m.TraceContent)
@@ -414,7 +456,11 @@ class TraceTest(unittest.TestCase):
         try:
             answer = _exchange(
                 _trace_request(direction=StructuralDirection.UPSTREAM),
-                ops.trace, structural, evidence, store, agent,
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             # UPSTREAM from flow.py: only relationships pointing at flow
             # (direction-true traversal); structural routes stay possible.
@@ -431,16 +477,22 @@ class TraceTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             answer = _exchange(
-                _trace_request(
-                    relationship_filter=(m.RelationshipKind.VERIFIED_BY,)
-                ),
-                ops.trace, structural, evidence, store, agent,
+                _trace_request(relationship_filter=(m.RelationshipKind.VERIFIED_BY,)),
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             kinds = {r.kind for r in answer.content.relationships}
             self.assertEqual(kinds, {m.RelationshipKind.VERIFIED_BY})
             bounded = _exchange(
                 _trace_request(boundary_only=True),
-                ops.trace, structural, evidence, store, agent,
+                ops.trace,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             bkinds = {r.kind for r in bounded.content.relationships}
             self.assertEqual(bkinds, {m.RelationshipKind.CROSSES_BOUNDARY})
@@ -452,8 +504,11 @@ class TraceTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             pending = ops.trace(
-                _trace_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _trace_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=_seeds(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
@@ -480,12 +535,14 @@ class StatusTest(unittest.TestCase):
             _exchange(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "contract/api", (), None
-                    ),
+                    target=m.SubjectSelector(None, "contract/api", (), None),
                     bounds=_bounds(),
                 ),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             _exchange(
                 ops.SemanticExplainRequest(
@@ -493,11 +550,17 @@ class StatusTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             first = ops.status(
                 _status_request(target=None, bounds=_bounds(max_subjects=1)),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             token = first.bound_info.continuation_token
@@ -509,7 +572,9 @@ class StatusTest(unittest.TestCase):
                         bounds=_bounds(max_subjects=2),
                         page_token=token,
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
         finally:
@@ -528,20 +593,26 @@ class StatusTest(unittest.TestCase):
                 bounds=_bounds(),
             )
             _exchange(
-                _explain_req, _ops.explain,
-                structural, evidence, store, agent,
+                _explain_req,
+                _ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             answer = _exchange(
-                _status_request(), ops.status,
-                structural, evidence, store, agent,
+                _status_request(),
+                ops.status,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             content = answer.content
             self.assertIsInstance(content, m.StatusContent)
             self.assertTrue(content.freshness_items)
             # F-15: candidate and current-pass verification distinguished.
-            currencies = {
-                v.currency for v in content.verification_currency
-            }
+            currencies = {v.currency for v in content.verification_currency}
             self.assertEqual(
                 currencies,
                 {
@@ -558,7 +629,9 @@ class StatusTest(unittest.TestCase):
         try:
             answer = ops.status(
                 _status_request(target=None),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -583,7 +656,10 @@ class StatusTest(unittest.TestCase):
                     bounds=_bounds(),
                 ),
                 _ops.explain,
-                structural, evidence, store, agent,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             unassessed = _sid("persisted/unassessed")
             store.write_index_batch(
@@ -593,7 +669,9 @@ class StatusTest(unittest.TestCase):
             )
             answer = ops.status(
                 _status_request(target=None),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -602,7 +680,8 @@ class StatusTest(unittest.TestCase):
             self.assertGreater(report.persisted_subject_count, 0)
             self.assertGreater(report.returned_subject_count, 0)
             flow = next(
-                entry for entry in report.entries
+                entry
+                for entry in report.entries
                 if entry.subject.canonical_locator == "src/flow.py"
             )
             self.assertGreater(flow.semantic_item_count, 0)
@@ -618,8 +697,7 @@ class StatusTest(unittest.TestCase):
             )
             self.assertTrue(
                 any(
-                    entry.disposition
-                    is m.SemanticCoverageDisposition.UNASSESSED
+                    entry.disposition is m.SemanticCoverageDisposition.UNASSESSED
                     for entry in report.entries
                 )
             )
@@ -630,6 +708,7 @@ class StatusTest(unittest.TestCase):
         from span.service.operations.status import (
             _repository_coverage_entry,
         )
+
         structural, evidence, store, agent = _harness()
         try:
             from span import service as _ops
@@ -641,7 +720,10 @@ class StatusTest(unittest.TestCase):
                     bounds=_bounds(),
                 ),
                 _ops.explain,
-                structural, evidence, store, agent,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             unassessed = _sid("persisted/unassessed")
             store.write_index_batch(
@@ -650,10 +732,14 @@ class StatusTest(unittest.TestCase):
                 )
             )
             subjects = store.load_subjects(
-                REPO, (unassessed,),
+                REPO,
+                (unassessed,),
             )
             entry = _repository_coverage_entry(
-                REPO, subjects[0], evidence=evidence, store=store,
+                REPO,
+                subjects[0],
+                evidence=evidence,
+                store=store,
                 bounds=_bounds(),
             )
             self.assertIs(
@@ -668,12 +754,18 @@ class StatusTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             _exchange(
-                _status_request(), ops.status,
-                structural, evidence, store, agent,
+                _status_request(),
+                ops.status,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             answer = ops.status(
                 _status_request(target=None),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             entries = answer.content.coverage_report.entries
@@ -706,27 +798,33 @@ class StatusTest(unittest.TestCase):
             _exchange(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/flow.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             _exchange(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "contract/api", (), None
-                    ),
+                    target=m.SubjectSelector(None, "contract/api", (), None),
                     bounds=_bounds(),
                 ),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             bounds = _bounds(max_subjects=1)
             first = ops.status(
                 _status_request(target=None, bounds=bounds),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertTrue(first.bound_info.truncated)
@@ -741,7 +839,9 @@ class StatusTest(unittest.TestCase):
                     bounds=bounds,
                     page_token=token,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertNotEqual(
@@ -760,8 +860,10 @@ class StatusTest(unittest.TestCase):
             # No initialize call: every query path reports setup state
             # without starting initialization implicitly.
             answer = ops.status(
-                _status_request(), structural=structural,
-                evidence=evidence, store=store,
+                _status_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -778,32 +880,29 @@ class StatusTest(unittest.TestCase):
             notice = ops.status(
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/flow.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(),
                     mode=m.StatusMode.HOOK_FAST,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(notice, m.HookStatusNotice)
-            self.assertIs(
-                notice.readiness, m.RepositoryReadiness.UNINITIALIZED
-            )
-            self.assertIn("initialize_repository",
-                          notice.recommended_action)
+            self.assertIs(notice.readiness, m.RepositoryReadiness.UNINITIALIZED)
+            self.assertIn("initialize_repository", notice.recommended_action)
             # Still uninitialized: nothing was bootstrapped.
             self.assertIsNone(store.load_repository_state(REPO))
             explained = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/flow.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(explained, m.SemanticAnswer)
@@ -816,10 +915,10 @@ class StatusTest(unittest.TestCase):
         try:
             with self.assertRaises(ops.StatusTargetError):
                 ops.status(
-                    _status_request(
-                        target=m.ClaimRef(id=m.ClaimId("c-1"))
-                    ),
-                    structural=structural, evidence=evidence, store=store,
+                    _status_request(target=m.ClaimRef(id=m.ClaimId("c-1"))),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
         finally:
@@ -833,29 +932,35 @@ class StatusTest(unittest.TestCase):
             _exchange(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/flow.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             indexed = _exchange(
-                _status_request(), ops.status,
-                structural, evidence, store, agent,
+                _status_request(),
+                ops.status,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertTrue(indexed.content.claims)
             target = m.ClaimRef(id=indexed.content.claims[0].claim_id)
             answer = ops.status(
                 _status_request(target=target),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             self.assertIsInstance(answer.content, m.StatusContent)
-            carried = {
-                c.claim_id.value for c in answer.content.claims
-            }
+            carried = {c.claim_id.value for c in answer.content.claims}
             self.assertIn(target.id.value, carried)
         finally:
             store.close()
@@ -869,16 +974,22 @@ class StatusTest(unittest.TestCase):
             _exchange(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/flow.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             _exchange(
-                _status_request(), ops.status,
-                structural, evidence, store, agent,
+                _status_request(),
+                ops.status,
+                structural,
+                evidence,
+                store,
+                agent,
                 continuations=continuations,
             )
             changed = dict(FILES)
@@ -891,31 +1002,24 @@ class StatusTest(unittest.TestCase):
                     bounds=_bounds(),
                     mode=m.StatusMode.HOOK_FAST,
                 ),
-                structural=structural, evidence=evidence_v2, store=store,
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(notice, m.HookStatusNotice)
             self.assertIs(notice.readiness, m.RepositoryReadiness.READY)
             self.assertGreater(notice.stale_count, 0)
             self.assertTrue(notice.recommended_action)
-            self.assertIn("exact SubjectSelector",
-                          notice.recommended_action)
+            self.assertIn("exact SubjectSelector", notice.recommended_action)
             self.assertIn("src/flow.py", notice.recommended_action)
             self.assertNotIn("cont-", notice.recommended_action)
             # Read-only proof: the store still shows CURRENT (no mark).
-            page = store.load_claims(
-                REPO, (_sid("src/flow.py"),), (), _bounds()
-            )
-            current = [
-                c for c in page.items
-                if c.kind is m.ClaimKind.PURPOSE
-            ]
+            page = store.load_claims(REPO, (_sid("src/flow.py"),), (), _bounds())
+            current = [c for c in page.items if c.kind is m.ClaimKind.PURPOSE]
             self.assertTrue(current)
             self.assertTrue(
-                all(
-                    c.freshness.state is m.FreshnessState.CURRENT
-                    for c in current
-                )
+                all(c.freshness.state is m.FreshnessState.CURRENT for c in current)
             )
         finally:
             store.close()
@@ -925,10 +1029,14 @@ class StatusTest(unittest.TestCase):
         try:
             notice = ops.status(
                 ops.SemanticStatusRequest(
-                    repository_id=REPO, target=None, bounds=_bounds(),
+                    repository_id=REPO,
+                    target=None,
+                    bounds=_bounds(),
                     mode=m.StatusMode.HOOK_FAST,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(notice, m.HookStatusNotice)
@@ -945,7 +1053,8 @@ class SelectionAtomicityTest(unittest.TestCase):
             kind=m.ClaimKind.OWNERSHIP_CUSTODY,
             assertion_nature=m.AssertionNature.NORMATIVE,
             value=m.OwnershipCustodyValue(
-                _sid(owner), m.OwnershipRole.OWNER,
+                _sid(owner),
+                m.OwnershipRole.OWNER,
                 m.OwnershipExclusivity.EXCLUSIVE,
             ),
             evidence=(_ref("OWNERSHIP.md"),),
@@ -966,24 +1075,22 @@ class SelectionAtomicityTest(unittest.TestCase):
                 value=m.PurposeValue(f"s{n}", ()),
                 evidence=(_ref("README.md"),),
                 trust=m.TrustState.UNRESOLVED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
                 basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             for n in range(4)
         )
         claims = (a, b) + filler
-        conflicts = (m.SemanticConflict(
-            left=m.ClaimRef(id=a.claim_id),
-            right=m.ClaimRef(id=b.claim_id),
-        ),)
+        conflicts = (
+            m.SemanticConflict(
+                left=m.ClaimRef(id=a.claim_id),
+                right=m.ClaimRef(id=b.claim_id),
+            ),
+        )
         for budget in range(1, 8):
             with self.subTest(budget=budget):
-                kept_c, kept_r, kept_conf, truncated, _ = (
-                    _select_answer_items(
-                        claims, (), conflicts, budget
-                    )
+                kept_c, kept_r, kept_conf, truncated, _ = _select_answer_items(
+                    claims, (), conflicts, budget
                 )
                 kept_ids = {c.claim_id.value for c in kept_c}
                 for pair in kept_conf:
@@ -995,8 +1102,12 @@ class ImpactTest(unittest.TestCase):
     def _indexed(self):
         structural, evidence, store, agent = _harness()
         answer = _exchange(
-            _impact_request(), ops.impact,
-            structural, evidence, store, agent,
+            _impact_request(),
+            ops.impact,
+            structural,
+            evidence,
+            store,
+            agent,
         )
         return structural, evidence, store, agent, answer
 
@@ -1022,25 +1133,27 @@ class ImpactTest(unittest.TestCase):
             # name the invariant, an accepted authority claim, and the
             # boundary relationship explicitly (plan I-38).
             affected = (
-                self._refs_for(
-                    first, {m.ClaimKind.INVARIANT_CONSTRAINT}
-                )
+                self._refs_for(first, {m.ClaimKind.INVARIANT_CONSTRAINT})
                 + [
-                    ref for ref in self._refs_for(
-                        first, {
+                    ref
+                    for ref in self._refs_for(
+                        first,
+                        {
                             m.ClaimKind.PURPOSE,
                             m.ClaimKind.OWNERSHIP_CUSTODY,
-                        }
+                        },
                     )[:1]
                 ]
-                + self._refs_for(
-                    first, {m.RelationshipKind.CROSSES_BOUNDARY}
-                )
+                + self._refs_for(first, {m.RelationshipKind.CROSSES_BOUNDARY})
             )
             self.assertTrue(affected)
             answer = _exchange(
-                _impact_request(affected=affected), ops.impact,
-                structural, evidence, store, agent,
+                _impact_request(affected=affected),
+                ops.impact,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             conds = set(answer.content.change_conditions)
             self.assertIn(m.ChangeCondition.AUTHORITY_CHANGE, conds)
@@ -1051,19 +1164,14 @@ class ImpactTest(unittest.TestCase):
             self.assertIn(
                 m.ImpactEstablishment.SEMANTICALLY_ESTABLISHED, establishments
             )
-            self.assertIn(
-                m.ImpactEstablishment.STRUCTURAL_POSSIBILITY, establishments
-            )
+            self.assertIn(m.ImpactEstablishment.STRUCTURAL_POSSIBILITY, establishments)
             # Verification + requirements present; refs resolve in-answer.
             self.assertTrue(answer.content.verification)
-            carried = {
-                c.claim_id.value for c in answer.content.claims
-            } | {
+            carried = {c.claim_id.value for c in answer.content.claims} | {
                 r.relationship_id.value for r in answer.content.relationships
             }
-            for ref in (
-                list(answer.content.target_context)
-                + list(answer.content.verification)
+            for ref in list(answer.content.target_context) + list(
+                answer.content.verification
             ):
                 self.assertIn(ref.id.value, carried)
             self.assertTrue(
@@ -1082,13 +1190,15 @@ class ImpactTest(unittest.TestCase):
             self.assertNotIn(m.ChangeCondition.INVARIANT_CHANGE, bare)
             self.assertNotIn(m.ChangeCondition.AUTHORITY_CHANGE, bare)
             self.assertNotIn(m.ChangeCondition.BOUNDARY_CHANGE, bare)
-            invariant = self._refs_for(
-                first, {m.ClaimKind.INVARIANT_CONSTRAINT}
-            )
+            invariant = self._refs_for(first, {m.ClaimKind.INVARIANT_CONSTRAINT})
             self.assertTrue(invariant)
             named = _exchange(
-                _impact_request(affected=invariant), ops.impact,
-                structural, evidence, store, agent,
+                _impact_request(affected=invariant),
+                ops.impact,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertIn(
                 m.ChangeCondition.INVARIANT_CHANGE,
@@ -1101,15 +1211,20 @@ class ImpactTest(unittest.TestCase):
         structural, evidence, store, agent = _harness()
         try:
             continuations = ContinuationStore()
-            seeds = _seeds()
             by_kind = {}
             for kind in (
-                ops.ChangeKind.OWNERSHIP, ops.ChangeKind.REPRESENTATION,
-                ops.ChangeKind.CONFIGURATION, ops.ChangeKind.LIFECYCLE,
+                ops.ChangeKind.OWNERSHIP,
+                ops.ChangeKind.REPRESENTATION,
+                ops.ChangeKind.CONFIGURATION,
+                ops.ChangeKind.LIFECYCLE,
             ):
                 answer = _exchange(
-                    _impact_request(kind), ops.impact,
-                    structural, evidence, store, agent,
+                    _impact_request(kind),
+                    ops.impact,
+                    structural,
+                    evidence,
+                    store,
+                    agent,
                     continuations=continuations,
                 )
                 by_kind[kind] = set(answer.content.change_conditions)
@@ -1137,14 +1252,16 @@ class ImpactTest(unittest.TestCase):
                     change_description="swap helper",
                     bounds=_bounds(),
                 ),
-                ops.impact, structural, evidence, store, agent,
+                ops.impact,
+                structural,
+                evidence,
+                store,
+                agent,
                 continuations=continuations,
             )
             other_conds = set(other.content.change_conditions)
             # Pure kind-gated rows are suppressed under OTHER ...
-            self.assertNotIn(
-                m.ChangeCondition.OWNERSHIP_CHANGE, other_conds
-            )
+            self.assertNotIn(m.ChangeCondition.OWNERSHIP_CHANGE, other_conds)
             self.assertNotIn(
                 m.ChangeCondition.CANONICAL_REPRESENTATION_CHANGE,
                 other_conds,
@@ -1153,9 +1270,7 @@ class ImpactTest(unittest.TestCase):
             self.assertNotIn(m.ChangeCondition.AUTHORITY_CHANGE, other_conds)
             self.assertNotIn(m.ChangeCondition.INVARIANT_CHANGE, other_conds)
             # ... but independently established presence dimensions apply.
-            self.assertIn(
-                m.ChangeCondition.CONFIGURATION_CHANGE, other_conds
-            )
+            self.assertIn(m.ChangeCondition.CONFIGURATION_CHANGE, other_conds)
         finally:
             store.close()
 
@@ -1165,14 +1280,16 @@ class ImpactTest(unittest.TestCase):
             answer = _exchange(
                 ops.SemanticImpactRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "contract/api", (), None
-                    ),
+                    target=m.SubjectSelector(None, "contract/api", (), None),
                     change_kind=ops.ChangeKind.BEHAVIOR,
                     change_description=None,
                     bounds=_bounds(),
                 ),
-                ops.impact, structural, evidence, store, agent,
+                ops.impact,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             self.assertIn(
                 m.ChangeCondition.PUBLIC_CONTRACT_CHANGE,
@@ -1188,14 +1305,14 @@ class ImpactTest(unittest.TestCase):
                 ops.impact(
                     ops.SemanticImpactRequest(
                         repository_id=REPO,
-                        target=m.SubjectSelector(
-                            None, "src/flow.py", (), None
-                        ),
+                        target=m.SubjectSelector(None, "src/flow.py", (), None),
                         change_kind=ops.ChangeKind.OTHER,
                         change_description=None,
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                     authority_seeds=_seeds(),
                 )
@@ -1216,12 +1333,14 @@ class ImpactTest(unittest.TestCase):
             _exchange(
                 ops.SemanticExplainRequest(
                     repository_id=REPO,
-                    target=m.SubjectSelector(
-                        None, "src/flow.py", (), None
-                    ),
+                    target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(),
                 ),
-                ops.explain, structural, evidence, store, agent,
+                ops.explain,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             first = _exchange(
                 ops.SemanticStatusRequest(
@@ -1229,15 +1348,16 @@ class ImpactTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/flow.py", (), None),
                     bounds=_bounds(max_results=4),
                 ),
-                ops.status, structural, evidence, store, agent,
+                ops.status,
+                structural,
+                evidence,
+                store,
+                agent,
             )
             token = first.bound_info.continuation_token
             self.assertTrue(first.bound_info.truncated)
             self.assertTrue(token.startswith("pgq:"))
-            first_ids = {
-                item.item.id.value
-                for item in first.content.freshness_items
-            }
+            first_ids = {item.item.id.value for item in first.content.freshness_items}
             second = ops.status(
                 ops.SemanticStatusRequest(
                     repository_id=REPO,
@@ -1245,21 +1365,17 @@ class ImpactTest(unittest.TestCase):
                     bounds=_bounds(max_results=4),
                     page_token=token,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(second, m.SemanticAnswer)
-            second_ids = {
-                item.item.id.value
-                for item in second.content.freshness_items
-            }
+            second_ids = {item.item.id.value for item in second.content.freshness_items}
             self.assertFalse(first_ids & second_ids)
             self.assertTrue(second_ids)
-            carried = {
-                c.claim_id.value for c in second.content.claims
-            } | {
-                r.relationship_id.value
-                for r in second.content.relationships
+            carried = {c.claim_id.value for c in second.content.claims} | {
+                r.relationship_id.value for r in second.content.relationships
             }
             for item in second.content.freshness_items:
                 self.assertIn(item.item.id.value, carried)
@@ -1274,9 +1390,13 @@ class ContextualTraceTest(unittest.TestCase):
 
     def _bounds(self, **overrides):
         base = dict(
-            max_results=50, max_depth=5, max_subjects=8,
-            max_evidence_units=24, max_evidence_bytes=96_000,
-            max_candidate_claims=64, max_candidate_relationships=64,
+            max_results=50,
+            max_depth=5,
+            max_subjects=8,
+            max_evidence_units=24,
+            max_evidence_bytes=96_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
         )
         base.update(overrides)
         return m.QueryBounds(**base)
@@ -1313,127 +1433,146 @@ class ContextualTraceTest(unittest.TestCase):
 
     def _sid(self, locator, kind=m.SubjectKind.COMPONENT):
         return m.SubjectId(
-            repository_id=self.CTX, subject_kind=kind,
+            repository_id=self.CTX,
+            subject_kind=kind,
             canonical_locator=locator,
         )
 
     def _establish_execution(self, store, files, canon, root, term):
-        eref = self._ref(
-            "canonical_assembly/candidate_packager.py", files
-        )
-        fp = fingerprint_content(
-            files["canonical_assembly/candidate_packager.py"]
-        )
+        eref = self._ref("canonical_assembly/candidate_packager.py", files)
+        fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
         claim = m.SemanticClaim(
-            claim_id=m.ClaimId("c-purpose"), subject=canon,
+            claim_id=m.ClaimId("c-purpose"),
+            subject=canon,
             kind=m.ClaimKind.PURPOSE,
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            value=m.PurposeValue("packs", ()), evidence=(eref,),
+            value=m.PurposeValue("packs", ()),
+            evidence=(eref,),
             trust=m.TrustState.ESTABLISHED,
             freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
         )
         mem = m.SemanticRelationship(
-            relationship_id=m.RelationshipId("r-mem"), source=canon,
-            kind=m.RelationshipKind.MEMBER_OF, target=root,
+            relationship_id=m.RelationshipId("r-mem"),
+            source=canon,
+            kind=m.RelationshipKind.MEMBER_OF,
+            target=root,
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            evidence=(eref,), trust=m.TrustState.ESTABLISHED,
+            evidence=(eref,),
+            trust=m.TrustState.ESTABLISHED,
             freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
         )
         exec_rel = m.SemanticRelationship(
-            relationship_id=m.RelationshipId("r-exec"), source=root,
-            kind=m.RelationshipKind.PRODUCES, target=term,
+            relationship_id=m.RelationshipId("r-exec"),
+            source=root,
+            kind=m.RelationshipKind.PRODUCES,
+            target=term,
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            evidence=(eref,), trust=m.TrustState.ESTABLISHED,
+            evidence=(eref,),
+            trust=m.TrustState.ESTABLISHED,
             freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
         )
         from span.service.questions import effective_trace_slice
+
         qslice = effective_trace_slice(
-            root.canonical_locator, StructuralDirection.BOTH, None,
+            root.canonical_locator,
+            StructuralDirection.BOTH,
+            None,
             False,
         )
 
         def _cov(subj, ref):
             q = m.SemanticQuestionScope(
-                scope_root=root, subject=subj,
+                scope_root=root,
+                subject=subj,
                 question_class=m.SemanticQuestionClass.CQ_04,
                 question_slice=qslice,
                 materiality_basis="TRACE question-local",
             )
             return m.InterpretationCoverage(
-                subjects=(subj,), question_slice=qslice,
-                declared_complete=True, question=q,
+                subjects=(subj,),
+                question_slice=qslice,
+                declared_complete=True,
+                question=q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
-                result_refs=(ref,), disposition_basis="b",
+                result_refs=(ref,),
+                disposition_basis="b",
             )
 
-        store.write_index_batch(m.CanonicalIndexBatch(
-            subjects=(
-                m.Subject(canon, "Canonical Assembly", None),
-                m.Subject(root, "Review Workflow", None),
-                m.Subject(term, "Terminal", None),
-            ),
-            claims=(claim,), relationships=(mem, exec_rel),
-            evidence_dependencies=(
-                m.EvidenceDependency(
-                    m.ClaimRef(id=claim.claim_id), eref, fp
+        store.write_index_batch(
+            m.CanonicalIndexBatch(
+                subjects=(
+                    m.Subject(canon, "Canonical Assembly", None),
+                    m.Subject(root, "Review Workflow", None),
+                    m.Subject(term, "Terminal", None),
                 ),
-                m.EvidenceDependency(
-                    m.RelationshipRef(id=mem.relationship_id), eref, fp
+                claims=(claim,),
+                relationships=(mem, exec_rel),
+                evidence_dependencies=(
+                    m.EvidenceDependency(m.ClaimRef(id=claim.claim_id), eref, fp),
+                    m.EvidenceDependency(
+                        m.RelationshipRef(id=mem.relationship_id), eref, fp
+                    ),
+                    m.EvidenceDependency(
+                        m.RelationshipRef(id=exec_rel.relationship_id),
+                        eref,
+                        fp,
+                    ),
                 ),
-                m.EvidenceDependency(
-                    m.RelationshipRef(id=exec_rel.relationship_id),
-                    eref, fp,
+                coverage=(
+                    _cov(
+                        root,
+                        m.RelationshipRef(id=exec_rel.relationship_id),
+                    ),
+                    _cov(
+                        term,
+                        m.RelationshipRef(id=exec_rel.relationship_id),
+                    ),
+                    _cov(
+                        canon,
+                        m.RelationshipRef(id=mem.relationship_id),
+                    ),
                 ),
-            ),
-            coverage=(
-                _cov(
-                    root,
-                    m.RelationshipRef(id=exec_rel.relationship_id),
-                ),
-                _cov(
-                    term,
-                    m.RelationshipRef(id=exec_rel.relationship_id),
-                ),
-                _cov(
-                    canon,
-                    m.RelationshipRef(id=mem.relationship_id),
-                ),
-            ),
-        ))
+            )
+        )
         return qslice
 
     def test_trace_path_starts_from_established_root(self):
         from span.service.requests import SemanticTraceRequest
+
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid("canonical_assembly")
-            root = self._sid(
-                "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
+            root = self._sid("review_workflow", m.SubjectKind.SUBSYSTEM)
             term = self._sid("terminal")
             self._establish_execution(store, files, canon, root, term)
             answer = ops.trace(
                 SemanticTraceRequest(
                     repository_id=self.CTX,
                     target=m.SubjectSelector(
-                        None, "canonical_assembly/candidate_packager.py",
-                        (), None,
+                        None,
+                        "canonical_assembly/candidate_packager.py",
+                        (),
+                        None,
                     ),
                     direction=StructuralDirection.BOTH,
-                    relationship_filter=None, boundary_only=False,
+                    relationship_filter=None,
+                    boundary_only=False,
                     bounds=self._bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -1446,10 +1585,12 @@ class ContextualTraceTest(unittest.TestCase):
                 root,
             )
             kinds = {(r.source, r.kind) for r in answer.content.relationships}
-            self.assertTrue(any(
-                src == root and kind is m.RelationshipKind.PRODUCES
-                for src, kind in kinds
-            ))
+            self.assertTrue(
+                any(
+                    src == root and kind is m.RelationshipKind.PRODUCES
+                    for src, kind in kinds
+                )
+            )
             self.assertEqual(
                 answer.subject_resolution.candidates[0].subject.subject_id,
                 root,
@@ -1459,106 +1600,107 @@ class ContextualTraceTest(unittest.TestCase):
 
     def test_leaf_coverage_never_becomes_root_coverage(self):
         from span.service.requests import SemanticTraceRequest
+
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid("canonical_assembly")
-            root = self._sid(
-                "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
+            root = self._sid("review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref("canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = m.SemanticClaim(
-                claim_id=m.ClaimId("c-purpose"), subject=canon,
+                claim_id=m.ClaimId("c-purpose"),
+                subject=canon,
                 kind=m.ClaimKind.PURPOSE,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                value=m.PurposeValue("packs", ()), evidence=(eref,),
+                value=m.PurposeValue("packs", ()),
+                evidence=(eref,),
                 trust=m.TrustState.ESTABLISHED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE
-                ),
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             mem = m.SemanticRelationship(
                 relationship_id=m.RelationshipId("r-mem"),
-                source=canon, kind=m.RelationshipKind.MEMBER_OF,
+                source=canon,
+                kind=m.RelationshipKind.MEMBER_OF,
                 target=root,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                evidence=(eref,), trust=m.TrustState.ESTABLISHED,
-                freshness=m.Freshness(
-                    m.FreshnessState.CURRENT, reason="t"
-                ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.EXPLICIT_EVIDENCE
-                ),
+                evidence=(eref,),
+                trust=m.TrustState.ESTABLISHED,
+                freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
+                basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
             )
             from span.service.questions import effective_trace_slice
+
             leaf_slice = effective_trace_slice(
-                canon.canonical_locator, StructuralDirection.BOTH,
-                None, False,
+                canon.canonical_locator,
+                StructuralDirection.BOTH,
+                None,
+                False,
             )
             leaf_q = m.SemanticQuestionScope(
-                scope_root=canon, subject=canon,
+                scope_root=canon,
+                subject=canon,
                 question_class=m.SemanticQuestionClass.CQ_04,
                 question_slice=leaf_slice,
                 materiality_basis="TRACE question-local",
             )
             leaf_cov = m.InterpretationCoverage(
-                subjects=(canon,), question_slice=leaf_slice,
-                declared_complete=True, question=leaf_q,
+                subjects=(canon,),
+                question_slice=leaf_slice,
+                declared_complete=True,
+                question=leaf_q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
-                result_refs=(
-                    m.RelationshipRef(id=mem.relationship_id),
-                ),
+                result_refs=(m.RelationshipRef(id=mem.relationship_id),),
                 disposition_basis="b",
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(claim,), relationships=(mem,),
-                evidence_dependencies=(
-                    m.EvidenceDependency(
-                        m.ClaimRef(id=claim.claim_id), eref, fp
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                    m.EvidenceDependency(
-                        m.RelationshipRef(id=mem.relationship_id),
-                        eref, fp,
+                    claims=(claim,),
+                    relationships=(mem,),
+                    evidence_dependencies=(
+                        m.EvidenceDependency(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        m.EvidenceDependency(
+                            m.RelationshipRef(id=mem.relationship_id),
+                            eref,
+                            fp,
+                        ),
                     ),
-                ),
-                coverage=(leaf_cov,),
-            ))
+                    coverage=(leaf_cov,),
+                )
+            )
             pending = ops.trace(
                 SemanticTraceRequest(
                     repository_id=self.CTX,
                     target=m.SubjectSelector(
-                        None, "canonical_assembly/candidate_packager.py",
-                        (), None,
+                        None,
+                        "canonical_assembly/candidate_packager.py",
+                        (),
+                        None,
                     ),
                     direction=StructuralDirection.BOTH,
-                    relationship_filter=None, boundary_only=False,
+                    relationship_filter=None,
+                    boundary_only=False,
                     bounds=self._bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(pending, PendingInterpretation)
-            self.assertEqual(
-                pending.request.question.scope_root, root
-            )
+            self.assertEqual(pending.request.question.scope_root, root)
             self.assertIs(
                 pending.request.question.question_class,
                 m.SemanticQuestionClass.CQ_04,

@@ -30,7 +30,8 @@ class FixtureAgent:
     """Deterministic test agent over a canned candidate map."""
 
     def __init__(
-        self, mapping: dict[str, FixtureCandidates],
+        self,
+        mapping: dict[str, FixtureCandidates],
         complete_questions: bool = False,
     ) -> None:
         self._mapping = dict(mapping)
@@ -52,9 +53,7 @@ class FixtureAgent:
             canned = self._mapping.get(subject.subject_id.canonical_locator)
             if canned is None:
                 continue
-            claims.extend(
-                c for c in canned.claims if c.kind in allowed_claims
-            )
+            claims.extend(c for c in canned.claims if c.kind in allowed_claims)
             relationships.extend(
                 r for r in canned.relationships if r.kind in allowed_rels
             )

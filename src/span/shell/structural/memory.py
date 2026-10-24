@@ -206,7 +206,9 @@ class InMemoryStructuralSource:
                 requested_max_depth=0,
                 returned_results=len(kept),
                 truncated=len(kept) < len(candidates),
-                truncated_category="candidates" if len(kept) < len(candidates) else None,
+                truncated_category=(
+                    "candidates" if len(kept) < len(candidates) else None
+                ),
                 continuation_token=None,
             ),
         )
@@ -274,7 +276,7 @@ class InMemoryStructuralSource:
         category: str,
         version: str | None = None,
     ) -> tuple[tuple[object, ...], m.BoundInfo]:
-        kept = items[offset:offset + max_results]
+        kept = items[offset : offset + max_results]
         remaining = len(items) - (offset + len(kept))
         truncated = remaining > 0
         token_version = self._index_version() if version is None else version
@@ -285,10 +287,9 @@ class InMemoryStructuralSource:
             truncated=truncated,
             truncated_category=category if truncated else None,
             continuation_token=(
-                _paging.format_versioned_token(
-                    token_version, offset + len(kept)
-                )
-                if truncated else None
+                _paging.format_versioned_token(token_version, offset + len(kept))
+                if truncated
+                else None
             ),
         )
 
@@ -306,10 +307,7 @@ class InMemoryStructuralSource:
         """
         self._check_repository(repository_id)
         stale = sorted({p for p in dict.fromkeys(files) if p not in self._files})
-        coverage = (
-            m.ScopeCoverage.VERIFIED if not stale
-            else m.ScopeCoverage.UNVERIFIED
-        )
+        coverage = m.ScopeCoverage.VERIFIED if not stale else m.ScopeCoverage.UNVERIFIED
         detail = (
             "clean-verified"
             if coverage is m.ScopeCoverage.VERIFIED
@@ -340,7 +338,8 @@ class InMemoryStructuralSource:
         if match is m.StructuralLocateMatch.EXACT:
             ranked = [
                 (s, m.CandidateRankBasis.EXACT_LOCATOR)
-                for s in self._subjects if query == s.locator
+                for s in self._subjects
+                if query == s.locator
             ]
             if not ranked:
                 # Bare display names never equal a locator; fall
@@ -348,16 +347,9 @@ class InMemoryStructuralSource:
                 # the graft provider). Still exact-only, no substring.
                 for s in self._subjects:
                     if query == s.display_name:
-                        ranked.append(
-                            (s, m.CandidateRankBasis.EXACT_DECLARATION)
-                        )
-                    elif (
-                        query
-                        == s.locator.rsplit(":", 1)[-1].rsplit("/", 1)[-1]
-                    ):
-                        ranked.append(
-                            (s, m.CandidateRankBasis.EXACT_NAME)
-                        )
+                        ranked.append((s, m.CandidateRankBasis.EXACT_DECLARATION))
+                    elif query == s.locator.rsplit(":", 1)[-1].rsplit("/", 1)[-1]:
+                        ranked.append((s, m.CandidateRankBasis.EXACT_NAME))
         else:
             ranked = self._match_name(
                 m.SubjectSelector(
@@ -379,7 +371,8 @@ class InMemoryStructuralSource:
             # J-10: scope applied before ranking/pagination so an
             # out-of-scope global match can never consume a page.
             ranked = [
-                (s, rank) for s, rank in ranked
+                (s, rank)
+                for s, rank in ranked
                 if m.evidence_scope_allows(s.locator, scope)
             ]
         candidates = tuple(
@@ -423,7 +416,8 @@ class InMemoryStructuralSource:
         )
         if not members:
             coverage = (
-                m.ScopeCoverage.UNVERIFIED if locator in self._files
+                m.ScopeCoverage.UNVERIFIED
+                if locator in self._files
                 else m.ScopeCoverage.VERIFIED
             )
             kept, bound_info = self._versioned_page((), offset, 1, "outline")
@@ -505,21 +499,31 @@ class InMemoryStructuralSource:
         for edge in self._edges:
             if edge.kind not in kinds:
                 continue
-            if direction in (
-                StructuralDirection.DOWNSTREAM,
-                StructuralDirection.BOTH,
-            ) and edge.source_locator == locator:
+            if (
+                direction
+                in (
+                    StructuralDirection.DOWNSTREAM,
+                    StructuralDirection.BOTH,
+                )
+                and edge.source_locator == locator
+            ):
                 found.append(self._to_edge(edge))
-            elif direction in (
-                StructuralDirection.UPSTREAM,
-                StructuralDirection.BOTH,
-            ) and edge.target_locator == locator:
+            elif (
+                direction
+                in (
+                    StructuralDirection.UPSTREAM,
+                    StructuralDirection.BOTH,
+                )
+                and edge.target_locator == locator
+            ):
                 found.append(self._to_edge(edge))
-        found.sort(key=lambda e: (
-            e.kind.value,
-            e.source.canonical_locator,
-            e.target.canonical_locator,
-        ))
+        found.sort(
+            key=lambda e: (
+                e.kind.value,
+                e.source.canonical_locator,
+                e.target.canonical_locator,
+            )
+        )
         kept, bound_info = _paging.paginate(
             tuple(found), bounds.max_results, "edges", page_token
         )
@@ -569,10 +573,7 @@ class InMemoryStructuralSource:
         seen = {subject.canonical_locator}
         frontier = [subject.canonical_locator]
         nodes: list[m.StructuralReachNode] = []
-        via: dict[str, m.StructuralEdge | None] = {
-            subject.canonical_locator: None
-        }
-        truncated = False
+        via: dict[str, m.StructuralEdge | None] = {subject.canonical_locator: None}
         for depth in range(1, limit + 1):
             nxt: list[str] = []
             for current in frontier:
@@ -603,11 +604,12 @@ class InMemoryStructuralSource:
             if not frontier:
                 break
         kept, bound_info = _paging.paginate(
-            tuple(nodes), bounds.max_results, "reach", page_token,
+            tuple(nodes),
+            bounds.max_results,
+            "reach",
+            page_token,
             requested_max_depth=limit,
         )
-        if len(kept) < len(nodes):
-            truncated = True
         return m.StructuralReachPage(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),

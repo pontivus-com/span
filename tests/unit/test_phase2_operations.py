@@ -13,7 +13,6 @@ from span.ports.interpretation import (
     InterpretationUnavailable,
     PendingInterpretation,
 )
-from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span import service as ops
 from span.service.discovery import _inventory_snapshot, _read_units_within_bytes
 from span.service.resolution import _resolve_query_subject
@@ -31,8 +30,12 @@ from span.shell.structural.memory import (
 
 def _bounds(**overrides):
     base = dict(
-        max_results=50, max_depth=5, max_subjects=8, max_evidence_units=24,
-        max_evidence_bytes=96_000, max_candidate_claims=64,
+        max_results=50,
+        max_depth=5,
+        max_subjects=8,
+        max_evidence_units=24,
+        max_evidence_bytes=96_000,
+        max_candidate_claims=64,
         max_candidate_relationships=64,
     )
     base.update(overrides)
@@ -44,9 +47,7 @@ FILES = {
     "src/main.py": "VALUE = 1\n",
 }
 
-SUBJECTS = (
-    InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),
-)
+SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
 def _sid():
@@ -70,7 +71,8 @@ def _ref(path):
 def _candidate():
     return m.CandidateSemanticClaim(
         candidate_key="purpose-main",
-        subject=_sid(), kind=m.ClaimKind.PURPOSE,
+        subject=_sid(),
+        kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("does things", ()),
         evidence=(_ref("README.md"), _ref("src/main.py")),
@@ -102,11 +104,11 @@ def _agent(complete_questions=False):
 
 def _state():
     return m.RepositoryState(
-        repository_id="repo-1", revision_id="r1", dirty=False,
+        repository_id="repo-1",
+        revision_id="r1",
+        dirty=False,
         state_fingerprint="fp",
-        observed_at=datetime.datetime(
-            2026, 1, 1, tzinfo=datetime.timezone.utc
-        ),
+        observed_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
     )
 
 
@@ -154,19 +156,28 @@ def _explain_request():
     )
 
 
-def _run_exchange(explain_request, structural, evidence, store, agent,
-                  seeds=(), continuations=None):
+def _run_exchange(
+    explain_request, structural, evidence, store, agent, seeds=(), continuations=None
+):
     """Drive one full suspend→perform→submit cycle; returns the answer."""
     continuations = continuations or ContinuationStore()
     pending = ops.explain(
-        explain_request, structural=structural, evidence=evidence,
-        store=store, continuations=continuations, authority_seeds=seeds,
+        explain_request,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+        authority_seeds=seeds,
     )
     assert isinstance(pending, PendingInterpretation), type(pending)
     result = agent.perform(pending.request)
     return ops.submit_interpretation(
-        pending.continuation, result, structural=structural,
-        evidence=evidence, store=store, continuations=continuations,
+        pending.continuation,
+        result,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
     )
 
 
@@ -176,8 +187,11 @@ class ExchangeTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             self.assertIsInstance(pending, PendingInterpretation)
@@ -188,13 +202,18 @@ class ExchangeTest(unittest.TestCase):
                         m.SemanticQuestionDisposition.PENDING
                     ),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             second = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             self.assertIsInstance(second, PendingInterpretation)
@@ -206,16 +225,22 @@ class ExchangeTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             self.assertTrue(pending.continuation)
             self.assertEqual(len(continuations), 1)
             answer = ops.submit_interpretation(
-                pending.continuation, _agent().perform(pending.request),
-                structural=structural, evidence=evidence, store=store,
+                pending.continuation,
+                _agent().perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -231,7 +256,9 @@ class ExchangeTest(unittest.TestCase):
                 ops.submit_interpretation(
                     "cont-999",
                     m.SemanticInterpretationResult((), (), (), ()),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=ContinuationStore(),
                 )
         finally:
@@ -242,12 +269,13 @@ class ExchangeTest(unittest.TestCase):
         store_harness = _harness()
         structural, evidence, store = store_harness
         try:
-            continuations = ContinuationStore(
-                ttl_seconds=60, now=lambda: now[0]
-            )
+            continuations = ContinuationStore(ttl_seconds=60, now=lambda: now[0])
             pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             now[0] += datetime.timedelta(hours=1)
@@ -255,7 +283,9 @@ class ExchangeTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     _agent().perform(pending.request),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
         finally:
@@ -268,12 +298,11 @@ class ExchangeTest(unittest.TestCase):
     def test_naive_clock_abandons(self):
         from span.shell.agent_exchange.continuations import SuspendedOperation
 
-        naive = ContinuationStore(
-            now=lambda: datetime.datetime(2026, 1, 1)
-        )
+        naive = ContinuationStore(now=lambda: datetime.datetime(2026, 1, 1))
         token = naive.pend(
             SuspendedOperation(
-                op="explain", repository_id="repo-1",
+                op="explain",
+                repository_id="repo-1",
                 subject=m.Subject(_sid(), "main", None),
                 request=_bare_request(),
                 bounds=_bounds(),
@@ -290,13 +319,17 @@ class ExchangeTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             pending = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             bad = m.CandidateSemanticClaim(
-                subject=_sid(), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                subject=_sid(),
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("ghost", ()),
                 evidence=(
                     m.EvidenceRef(
@@ -306,9 +339,7 @@ class ExchangeTest(unittest.TestCase):
                         locator="ghost.py",
                     ),
                 ),
-                basis=m.SemanticBasis(
-                    m.DerivationKind.SEMANTIC_INTERPRETATION
-                ),
+                basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION),
             )
             from span.core.validation import InterpretationUnitRejected
 
@@ -316,7 +347,9 @@ class ExchangeTest(unittest.TestCase):
                 ops.submit_interpretation(
                     pending.continuation,
                     m.SemanticInterpretationResult((bad,), (), (), ()),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             # Continuation retained; nothing persisted.
@@ -325,16 +358,22 @@ class ExchangeTest(unittest.TestCase):
             self.assertEqual(page.items, ())
             # Corrected resubmission under the same continuation persists.
             answer = ops.submit_interpretation(
-                pending.continuation, _agent().perform(pending.request),
-                structural=structural, evidence=evidence, store=store,
+                pending.continuation,
+                _agent().perform(pending.request),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
             self.assertEqual(len(continuations), 0)
             with self.assertRaises(InterpretationUnavailable):
                 ops.submit_interpretation(
-                    pending.continuation, _agent().perform(pending.request),
-                    structural=structural, evidence=evidence, store=store,
+                    pending.continuation,
+                    _agent().perform(pending.request),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
         finally:
@@ -350,32 +389,39 @@ class ExchangeTest(unittest.TestCase):
                 bounds=_bounds(max_candidate_claims=1),
             )
             pending = ops.explain(
-                request, structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                request,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             overflow = m.SemanticInterpretationResult(
                 tuple(
                     m.CandidateSemanticClaim(
-                        subject=_sid(), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        subject=_sid(),
+                        kind=m.ClaimKind.PURPOSE,
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue(f"s-{n}", ()),
                         evidence=(_ref("README.md"),),
-                        basis=m.SemanticBasis(
-                            m.DerivationKind.SEMANTIC_INTERPRETATION
-                        ),
+                        basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION),
                     )
                     for n in range(3)
                 ),
-                (), (), (),
+                (),
+                (),
+                (),
             )
             from span.core.validation import InterpretationUnitRejected
 
             with self.assertRaises(InterpretationUnitRejected):
                 ops.submit_interpretation(
-                    pending.continuation, overflow,
-                    structural=structural, evidence=evidence, store=store,
+                    pending.continuation,
+                    overflow,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
         finally:
@@ -394,14 +440,8 @@ class MappingDiagnosticsTest(unittest.TestCase):
     def _doc_harness(self):
         structural = InMemoryStructuralSource(
             "repo-1",
-            tuple(
-                InMemoryFile(p, c) for p, c in self.DOC_FILES.items()
-            ),
-            (
-                InMemorySubject(
-                    "src/main.py", m.SubjectKind.COMPONENT, "main"
-                ),
-            ),
+            tuple(InMemoryFile(p, c) for p, c in self.DOC_FILES.items()),
+            (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),),
         )
         evidence = FixtureEvidenceSource("repo-1", dict(self.DOC_FILES))
         store = SqliteSemanticStore(":memory:")
@@ -419,14 +459,16 @@ class MappingDiagnosticsTest(unittest.TestCase):
 
     def _doc_area(self):
         return m.SubjectId(
-            repository_id="repo-1", subject_kind=m.SubjectKind.DOCUMENT,
+            repository_id="repo-1",
+            subject_kind=m.SubjectKind.DOCUMENT,
             canonical_locator="docs/guide.md",
         )
 
     def _doc_question(self):
         area = self._doc_area()
         return m.SemanticQuestionScope(
-            scope_root=area, subject=area,
+            scope_root=area,
+            subject=area,
             question_class=m.SemanticQuestionClass.CQ_01,
             question_slice="guide purpose",
             materiality_basis="mapping admits guide",
@@ -444,17 +486,17 @@ class MappingDiagnosticsTest(unittest.TestCase):
             section_or_span=None,
         )
 
-    def _mapping_pending(self, structural, evidence, store,
-                         continuations):
+    def _mapping_pending(self, structural, evidence, store, continuations):
         pending = ops.initialize_target(
             ops.SemanticInitializeTargetRequest(
                 repository_id="repo-1",
-                target=m.EvidenceScope(
-                    paths=("docs/guide.md",), evidence_refs=()
-                ),
-                objective="diagnostics probe", bounds=_bounds(),
+                target=m.EvidenceScope(paths=("docs/guide.md",), evidence_refs=()),
+                objective="diagnostics probe",
+                bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         self.assertIsInstance(pending, PendingInterpretation)
@@ -464,7 +506,8 @@ class MappingDiagnosticsTest(unittest.TestCase):
     def _new_area_result(self, item_ref, with_reuse):
         area = self._doc_area()
         return m.SemanticInterpretationResult(
-            claims=(), relationships=(),
+            claims=(),
+            relationships=(),
             candidate_subjects=(
                 m.CandidateSubject(
                     provisional_locator="docs/guide.md",
@@ -485,9 +528,7 @@ class MappingDiagnosticsTest(unittest.TestCase):
                     assigned_area_subjects=(area,),
                 ),
             ),
-            proposed_target_questions=(
-                (self._doc_question(),) if with_reuse else ()
-            ),
+            proposed_target_questions=((self._doc_question(),) if with_reuse else ()),
         )
 
     def test_missing_reuse_names_pending_coverage_field(self):
@@ -496,23 +537,20 @@ class MappingDiagnosticsTest(unittest.TestCase):
         structural, evidence, store = self._doc_harness()
         try:
             continuations = ContinuationStore()
-            pending = self._mapping_pending(
-                structural, evidence, store, continuations
-            )
-            item_ref = (
-                pending.request.target_inventory_items[0].evidence_ref
-            )
+            pending = self._mapping_pending(structural, evidence, store, continuations)
+            item_ref = pending.request.target_inventory_items[0].evidence_ref
             with self.assertRaises(InterpretationUnitRejected) as ctx:
                 ops.submit_interpretation(
                     pending.continuation,
                     self._new_area_result(item_ref, with_reuse=True),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             self.assertTrue(
                 any(
-                    "proposed_questions to create new PENDING "
-                    "coverage" in diagnostic
+                    "proposed_questions to create new PENDING " "coverage" in diagnostic
                     for diagnostic in ctx.exception.diagnostics
                 ),
                 ctx.exception.diagnostics,
@@ -525,34 +563,28 @@ class MappingDiagnosticsTest(unittest.TestCase):
         structural, evidence, store = self._doc_harness()
         try:
             continuations = ContinuationStore()
-            pending = self._mapping_pending(
-                structural, evidence, store, continuations
-            )
-            item_ref = (
-                pending.request.target_inventory_items[0].evidence_ref
-            )
+            pending = self._mapping_pending(structural, evidence, store, continuations)
+            item_ref = pending.request.target_inventory_items[0].evidence_ref
             # S4.4/J-5: a newly admitted area with no reusable current
             # target question no longer rejects; the service creates
             # exactly one PENDING CQ-01 first-admission seed.
             ops.submit_interpretation(
                 pending.continuation,
                 self._new_area_result(item_ref, with_reuse=False),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             area = self._doc_area()
-            rows = store.load_all_question_coverages(
-                "repo-1", area, (area,)
-            )
+            rows = store.load_all_question_coverages("repo-1", area, (area,))
             seeds = [
-                row for row in rows
+                row
+                for row in rows
                 if row.question is not None
-                and row.question.question_class
-                is m.SemanticQuestionClass.CQ_01
-                and row.disposition
-                is m.SemanticQuestionDisposition.PENDING
-                and row.disposition_basis
-                == "service-owned first-admission target seed"
+                and row.question.question_class is m.SemanticQuestionClass.CQ_01
+                and row.disposition is m.SemanticQuestionDisposition.PENDING
+                and row.disposition_basis == "service-owned first-admission target seed"
             ]
             self.assertEqual(len(seeds), 1)
         finally:
@@ -566,8 +598,12 @@ class DiscoveryTest(unittest.TestCase):
             subject = m.Subject(_sid(), "main", None)
             state = structural.repository_state("repo-1")
             selection = ops.discover_evidence(
-                "repo-1", subject, structural=structural, evidence=evidence,
-                bounds=_bounds(), state=state,
+                "repo-1",
+                subject,
+                structural=structural,
+                evidence=evidence,
+                bounds=_bounds(),
+                state=state,
                 authority_seeds=(_ref("README.md"),),
             )
             locators = {r.locator for r in selection.selected_refs}
@@ -583,12 +619,20 @@ class ReuseTest(unittest.TestCase):
             continuations = ContinuationStore()
             seeds = (_ref("README.md"),)
             answer = _run_exchange(
-                _explain_request(), structural, evidence, store,
-                _agent(complete_questions=True), seeds, continuations,
+                _explain_request(),
+                structural,
+                evidence,
+                store,
+                _agent(complete_questions=True),
+                seeds,
+                continuations,
             )
             second = ops.explain(
-                _explain_request(), structural=structural, evidence=evidence,
-                store=store, continuations=continuations,
+                _explain_request(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
                 authority_seeds=seeds,
             )
             self.assertIsInstance(second, m.SemanticAnswer)
@@ -605,25 +649,31 @@ class RefreshExchangeTest(unittest.TestCase):
         structural, evidence, store = _harness()
         continuations = continuations or ContinuationStore()
         answer = _run_exchange(
-            _explain_request(), structural, evidence, store,
-            _agent(), (_ref("README.md"),), continuations,
+            _explain_request(),
+            structural,
+            evidence,
+            store,
+            _agent(),
+            (_ref("README.md"),),
+            continuations,
         )
         return structural, evidence, store, continuations, answer
 
     def test_nothing_stale_answers_directly(self):
         structural, evidence, store, continuations, _ = self._indexed()
         try:
-            observed = fingerprint_content(FILES["src/main.py"])
             # G-15: drain admitted pendings first (refresh now resumes
             # them in order); the all-clear path must then answer
             # directly with nothing outstanding.
             for _ in range(4):
                 pending = [
-                    cov for cov in store.load_all_question_coverages(
-                        "repo-1", None, (_sid(),),
+                    cov
+                    for cov in store.load_all_question_coverages(
+                        "repo-1",
+                        None,
+                        (_sid(),),
                     )
-                    if cov.disposition
-                    is m.SemanticQuestionDisposition.PENDING
+                    if cov.disposition is m.SemanticQuestionDisposition.PENDING
                     and cov.question is not None
                 ]
                 if not pending:
@@ -632,11 +682,16 @@ class RefreshExchangeTest(unittest.TestCase):
                     ops.SemanticRefreshRequest(
                         repository_id="repo-1",
                         target=m.SubjectSelector(
-                            None, "src/main.py", (), None,
+                            None,
+                            "src/main.py",
+                            (),
+                            None,
                         ),
                         bounds=_bounds(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                     authority_seeds=(_ref("README.md"),),
                 )
@@ -644,13 +699,14 @@ class RefreshExchangeTest(unittest.TestCase):
                 ops.submit_interpretation(
                     unit.continuation,
                     m.SemanticInterpretationResult(
-                        claims=(), relationships=(),
-                        governing_source_refs=(), diagnostics=(),
-                        candidate_subjects=(), candidate_conflicts=(),
+                        claims=(),
+                        relationships=(),
+                        governing_source_refs=(),
+                        diagnostics=(),
+                        candidate_subjects=(),
+                        candidate_conflicts=(),
                         question_decision=m.SemanticQuestionDecision(
-                            disposition=(
-                                m.SemanticQuestionDisposition.NOT_APPLICABLE
-                            ),
+                            disposition=(m.SemanticQuestionDisposition.NOT_APPLICABLE),
                             evidence_scope=m.EvidenceScope(
                                 evidence_refs=(_ref("src/main.py"),)
                             ),
@@ -660,7 +716,9 @@ class RefreshExchangeTest(unittest.TestCase):
                         proposed_target_inventory_accounting=(),
                         proposed_target_questions=(),
                     ),
-                    structural=structural, evidence=evidence, store=store,
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     continuations=continuations,
                 )
             answer = ops.refresh(
@@ -669,7 +727,9 @@ class RefreshExchangeTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
@@ -690,14 +750,19 @@ class RefreshExchangeTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence_v2, store=store,
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
                 continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
             self.assertIsInstance(pending, PendingInterpretation)
             answer = ops.submit_interpretation(
-                pending.continuation, _agent().perform(pending.request),
-                structural=structural, evidence=evidence_v2, store=store,
+                pending.continuation,
+                _agent().perform(pending.request),
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -723,7 +788,9 @@ class RefreshExchangeTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "src/main.py", (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence_v2, store=store,
+                structural=structural,
+                evidence=evidence_v2,
+                store=store,
                 continuations=continuations,
                 authority_seeds=(_ref("README.md"),),
             )
@@ -731,32 +798,34 @@ class RefreshExchangeTest(unittest.TestCase):
             bad = m.SemanticInterpretationResult(
                 (
                     m.CandidateSemanticClaim(
-                        subject=_sid(), kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        subject=_sid(),
+                        kind=m.ClaimKind.PURPOSE,
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         value=m.PurposeValue("ghost", ()),
                         evidence=(
                             m.EvidenceRef(
                                 evidence_id=m.EvidenceId("ev-ghost"),
                                 repository_id="repo-1",
-                                source_kind=(
-                                    m.EvidenceSourceKind.SOURCE_CODE
-                                ),
+                                source_kind=(m.EvidenceSourceKind.SOURCE_CODE),
                                 locator="ghost.py",
                             ),
                         ),
-                        basis=m.SemanticBasis(
-                            m.DerivationKind.SEMANTIC_INTERPRETATION
-                        ),
+                        basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION),
                     ),
                 ),
-                (), (), (),
+                (),
+                (),
+                (),
             )
             from span.core.validation import InterpretationUnitRejected
 
             with self.assertRaises(InterpretationUnitRejected):
                 ops.submit_interpretation(
-                    pending.continuation, bad,
-                    structural=structural, evidence=evidence_v2, store=store,
+                    pending.continuation,
+                    bad,
+                    structural=structural,
+                    evidence=evidence_v2,
+                    store=store,
                     continuations=continuations,
                 )
             page = store.load_claims("repo-1", (_sid(),), (), _bounds())
@@ -799,13 +868,16 @@ class RefreshExchangeTest(unittest.TestCase):
         try:
             continuations = ContinuationStore()
             answer = _run_exchange(
-                _explain_request(), structural, evidence, store,
-                _agent(), (_ref("README.md"),), continuations,
+                _explain_request(),
+                structural,
+                evidence,
+                store,
+                _agent(),
+                (_ref("README.md"),),
+                continuations,
             )
             for claim in answer.content.claims:
-                self.assertIs(
-                    claim.freshness.state, m.FreshnessState.CURRENT
-                )
+                self.assertIs(claim.freshness.state, m.FreshnessState.CURRENT)
         finally:
             store.close()
 
@@ -825,16 +897,10 @@ class InitializeTest(unittest.TestCase):
                 store=store,
             )
             self.assertEqual(result.repository_id, "repo-1")
-            self.assertIs(
-                result.readiness, m.RepositoryReadiness.READY
-            )
+            self.assertIs(result.readiness, m.RepositoryReadiness.READY)
             self.assertEqual(result.structural_source_status, "ready")
-            self.assertTrue(
-                result.evidence_inventory_status.startswith("ready:")
-            )
-            self.assertTrue(
-                result.semantic_store_status.startswith("ready:schema-")
-            )
+            self.assertTrue(result.evidence_inventory_status.startswith("ready:"))
+            self.assertTrue(result.semantic_store_status.startswith("ready:schema-"))
             self.assertEqual(result.warnings, ())
             page = store.load_claims("repo-1", (_sid(),), (), _bounds())
             self.assertEqual(page.items, ())
@@ -847,9 +913,7 @@ class InitializeTest(unittest.TestCase):
         params = inspect.signature(ops.initialize_repository).parameters
         self.assertNotIn("interpreter", params)
         self.assertNotIn("agent", params)
-        fields = (
-            ops.SemanticInitializeRepositoryRequest.__dataclass_fields__
-        )
+        fields = ops.SemanticInitializeRepositoryRequest.__dataclass_fields__
         self.assertNotIn("semantic_provider_config", fields)
 
     def test_init_rejects_empty_locator(self):
@@ -888,14 +952,10 @@ class InitializeTest(unittest.TestCase):
                 store=store,
                 bounds=_bounds(max_evidence_units=1),
             )
-            self.assertIs(
-                result.readiness, m.RepositoryReadiness.READY
-            )
+            self.assertIs(result.readiness, m.RepositoryReadiness.READY)
             self.assertTrue(result.warnings)
             self.assertTrue(
-                result.evidence_inventory_status.startswith(
-                    "degraded:truncated-at-"
-                )
+                result.evidence_inventory_status.startswith("degraded:truncated-at-")
             )
         finally:
             store.close()
@@ -915,13 +975,12 @@ class InventorySnapshotTest(unittest.TestCase):
         token = None
         while True:
             page = evidence.inventory_evidence(
-                "repo-1", m.EvidenceScope(paths=(), evidence_refs=()),
-                bounds, token,
+                "repo-1",
+                m.EvidenceScope(paths=(), evidence_refs=()),
+                bounds,
+                token,
             )
-            ids.extend(
-                item.evidence_ref.evidence_id.value
-                for item in page.items
-            )
+            ids.extend(item.evidence_ref.evidence_id.value for item in page.items)
             token = page.bound_info.continuation_token
             if token is None:
                 break
@@ -939,8 +998,7 @@ class InventorySnapshotTest(unittest.TestCase):
             "repo-1",
             m.EvidenceScope(),
             evidence=evidence,
-            seeds=(("README.md", "ev-README.md"),
-                   ("nope.md", "ev-nope.md")),
+            seeds=(("README.md", "ev-README.md"), ("nope.md", "ev-nope.md")),
         )
         self.assertEqual(membership, expected)
         self.assertEqual(
@@ -987,8 +1045,10 @@ class BoundedEvidenceReadTest(unittest.TestCase):
 
     def _ref(self, locator):
         return m.EvidenceRef(
-            m.EvidenceId(f"ev-{locator}"), "repo-1",
-            m.EvidenceSourceKind.SOURCE_CODE, locator,
+            m.EvidenceId(f"ev-{locator}"),
+            "repo-1",
+            m.EvidenceSourceKind.SOURCE_CODE,
+            locator,
         )
 
     def test_keeps_fitting_prefix(self):
@@ -1001,18 +1061,14 @@ class BoundedEvidenceReadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             (root / "small.py").write_text("A = 1\n", encoding="utf-8")
-            (root / "big.py").write_text(
-                "X = '" + "y" * 200 + "'\n", encoding="utf-8"
-            )
+            (root / "big.py").write_text("X = '" + "y" * 200 + "'\n", encoding="utf-8")
             evidence = FilesystemEvidenceSource("repo-1", root)
             units = _read_units_within_bytes(
                 evidence,
                 (self._ref("small.py"), self._ref("big.py")),
                 _bounds(max_evidence_units=24, max_evidence_bytes=100),
             )
-            self.assertEqual(
-                [u.evidence_ref.locator for u in units], ["small.py"]
-            )
+            self.assertEqual([u.evidence_ref.locator for u in units], ["small.py"])
 
     def test_fail_closed_when_nothing_fits(self):
         import tempfile
@@ -1023,13 +1079,12 @@ class BoundedEvidenceReadTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            (root / "big.py").write_text(
-                "X = '" + "y" * 200 + "'\n", encoding="utf-8"
-            )
+            (root / "big.py").write_text("X = '" + "y" * 200 + "'\n", encoding="utf-8")
             evidence = FilesystemEvidenceSource("repo-1", root)
             with self.assertRaises(ValueError):
                 _read_units_within_bytes(
-                    evidence, (self._ref("big.py"),),
+                    evidence,
+                    (self._ref("big.py"),),
                     _bounds(max_evidence_units=24, max_evidence_bytes=10),
                 )
 
@@ -1068,25 +1123,22 @@ class StoreResolutionTest(unittest.TestCase):
             resolution = _resolve_query_subject(
                 "repo-1",
                 m.SubjectSelector(sid, None, (), None),
-                structural=structural, store=store, bounds=_bounds(),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED)
             candidate = resolution.candidates[0]
             self.assertEqual(
                 candidate.subject.subject_id.canonical_locator,
                 "workflows/tta",
             )
-            self.assertIs(
-                candidate.rank_basis, m.CandidateRankBasis.EXACT_LOCATOR
-            )
+            self.assertIs(candidate.rank_basis, m.CandidateRankBasis.EXACT_LOCATOR)
         finally:
             store.close()
 
     def test_store_subject_served_by_explain(self):
         from span.shell.evidence import FixtureEvidenceSource
-        from span.shell.sqlite_store import SqliteSemanticStore
 
         structural = self._empty_structural()
         evidence = FixtureEvidenceSource("repo-1", {})
@@ -1112,7 +1164,9 @@ class StoreResolutionTest(unittest.TestCase):
                     target=m.SubjectSelector(sid, None, (), None),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             # Reaches the subject (suspends for interpretation) instead
@@ -1137,11 +1191,11 @@ class StoreResolutionTest(unittest.TestCase):
             resolution = _resolve_query_subject(
                 "repo-1",
                 m.SubjectSelector(None, "dup", (), None),
-                structural=structural, store=store, bounds=_bounds(),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
         finally:
             store.close()
 
@@ -1154,11 +1208,11 @@ class StoreResolutionTest(unittest.TestCase):
             resolution = _resolve_query_subject(
                 "repo-1",
                 m.SubjectSelector(None, "tta workflow", (), None),
-                structural=structural, store=store, bounds=_bounds(),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.NOT_FOUND)
         finally:
             store.close()
 
@@ -1172,14 +1226,12 @@ class StoreResolutionTest(unittest.TestCase):
             resolution = _resolve_query_subject(
                 "repo-1",
                 m.SubjectSelector(None, "workflows/tta", (), None),
-                structural=structural, store=store, bounds=_bounds(),
+                structural=structural,
+                store=store,
+                bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                resolution.candidates[0].subject.subject_id, sid
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(resolution.candidates[0].subject.subject_id, sid)
             self.assertIs(
                 resolution.candidates[0].rank_basis,
                 m.CandidateRankBasis.EXACT_LOCATOR,
@@ -1198,9 +1250,7 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
         from span.shell.sqlite_store import SqliteSemanticStore
 
         store = SqliteSemanticStore(":memory:")
-        store.write_index_batch(
-            m.CanonicalIndexBatch(subjects=tuple(subjects))
-        )
+        store.write_index_batch(m.CanonicalIndexBatch(subjects=tuple(subjects)))
         return store
 
     def _subject(self, locator, kind, display="d"):
@@ -1226,21 +1276,15 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                 store=store,
                 bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.NOT_FOUND)
         finally:
             store.close()
 
     def test_same_locator_different_kinds_ambiguous(self):
         store = self._store_with(
             [
-                self._subject(
-                    "docs/guide.md", m.SubjectKind.DOCUMENT, "guide"
-                ),
-                self._subject(
-                    "docs/guide.md", m.SubjectKind.COMPONENT, "guide"
-                ),
+                self._subject("docs/guide.md", m.SubjectKind.DOCUMENT, "guide"),
+                self._subject("docs/guide.md", m.SubjectKind.COMPONENT, "guide"),
             ]
         )
         try:
@@ -1251,14 +1295,9 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                 store=store,
                 bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertEqual(len(resolution.candidates), 2)
-            kinds = [
-                c.subject.subject_id.subject_kind
-                for c in resolution.candidates
-            ]
+            kinds = [c.subject.subject_id.subject_kind for c in resolution.candidates]
             self.assertEqual(
                 kinds,
                 sorted(kinds, key=lambda k: k.value),
@@ -1269,12 +1308,8 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
     def test_kind_filtered_uniqueness(self):
         store = self._store_with(
             [
-                self._subject(
-                    "docs/guide.md", m.SubjectKind.DOCUMENT, "guide"
-                ),
-                self._subject(
-                    "docs/guide.md", m.SubjectKind.COMPONENT, "guide"
-                ),
+                self._subject("docs/guide.md", m.SubjectKind.DOCUMENT, "guide"),
+                self._subject("docs/guide.md", m.SubjectKind.COMPONENT, "guide"),
             ]
         )
         try:
@@ -1290,9 +1325,7 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                 store=store,
                 bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED)
             self.assertIs(
                 resolution.candidates[0].subject.subject_id.subject_kind,
                 m.SubjectKind.DOCUMENT,
@@ -1331,9 +1364,7 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
         structural = InMemoryStructuralSource(
             "repo-1",
             (InMemoryFile("a.py", "x\n"),),
-            (
-                InMemorySubject("a.py#dup", m.SubjectKind.CODE_SYMBOL, "dup"),
-            ),
+            (InMemorySubject("a.py#dup", m.SubjectKind.CODE_SYMBOL, "dup"),),
         )
         store = self._store_with(
             [self._subject("dup", m.SubjectKind.SUBSYSTEM, "dup area")]
@@ -1346,12 +1377,9 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                 store=store,
                 bounds=_bounds(),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.RESOLVED)
             self.assertEqual(
-                resolution.candidates[0]
-                .subject.subject_id.canonical_locator,
+                resolution.candidates[0].subject.subject_id.canonical_locator,
                 "dup",
             )
         finally:
@@ -1364,19 +1392,13 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                 InMemoryFile("a.py", "x\n"),
                 InMemoryFile("b.py", "x\n"),
             ),
-            (
-                InMemorySubject(
-                    "shared.md", m.SubjectKind.COMPONENT, "shared"
-                ),
-            ),
+            (InMemorySubject("shared.md", m.SubjectKind.COMPONENT, "shared"),),
         )
         # Force structural exact ambiguity by mirroring the stored locator
         # as an exact structural locator plus a second exact kind.
         store = self._store_with(
             [
-                self._subject(
-                    "shared.md", m.SubjectKind.DOCUMENT, "shared doc"
-                ),
+                self._subject("shared.md", m.SubjectKind.DOCUMENT, "shared doc"),
             ]
         )
         try:
@@ -1389,21 +1411,15 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
             )
             # Stored exact plus structural exact with different kinds:
             # multiple exact identities remain ambiguous.
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
         finally:
             store.close()
 
     def test_truncated_never_resolves(self):
         store = self._store_with(
             [
-                self._subject(
-                    "docs/guide.md", m.SubjectKind.DOCUMENT, "guide"
-                ),
-                self._subject(
-                    "docs/guide.md", m.SubjectKind.COMPONENT, "guide"
-                ),
+                self._subject("docs/guide.md", m.SubjectKind.DOCUMENT, "guide"),
+                self._subject("docs/guide.md", m.SubjectKind.COMPONENT, "guide"),
             ]
         )
         try:
@@ -1414,9 +1430,7 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                 store=store,
                 bounds=_bounds(max_subjects=1),
             )
-            self.assertIs(
-                resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(resolution.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(resolution.bound_info.truncated)
         finally:
             store.close()
@@ -1429,12 +1443,8 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
             store.write_index_batch(
                 m.CanonicalIndexBatch(
                     subjects=(
-                        self._subject(
-                            "a.py", m.SubjectKind.COMPONENT, "a"
-                        ),
-                        self._subject(
-                            "b.py", m.SubjectKind.COMPONENT, "b"
-                        ),
+                        self._subject("a.py", m.SubjectKind.COMPONENT, "a"),
+                        self._subject("b.py", m.SubjectKind.COMPONENT, "b"),
                     )
                 )
             )
@@ -1446,13 +1456,9 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
             text = " ".join(str(col) for row in plan for col in row)
             self.assertIn("SEARCH", text)
             self.assertNotIn("SCAN subjects", text)
-            page = store.load_subjects_by_locator(
-                "repo-1", "a.py", (), _bounds()
-            )
+            page = store.load_subjects_by_locator("repo-1", "a.py", (), _bounds())
             self.assertEqual(len(page.items), 1)
-            self.assertEqual(
-                page.items[0].subject_id.canonical_locator, "a.py"
-            )
+            self.assertEqual(page.items[0].subject_id.canonical_locator, "a.py")
         finally:
             store.close()
 
@@ -1487,9 +1493,7 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
             "repo-1",
             (InMemoryFile("src/a.py", "x\n"),),
             (
-                InMemorySubject(
-                    "src/a.py", m.SubjectKind.COMPONENT, "a.py"
-                ),
+                InMemorySubject("src/a.py", m.SubjectKind.COMPONENT, "a.py"),
                 InMemorySubject(
                     "src/a.py#sym",
                     m.SubjectKind.CODE_SYMBOL,
@@ -1497,18 +1501,10 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                 ),
             ),
         )
-        selector = m.SubjectSelector(
-            None, "sym", (m.SubjectKind.COMPONENT,), None
-        )
-        graft_res = graft.resolve_subject(
-            "repo-1", selector, _bounds()
-        )
-        memory_res = memory.resolve_subject(
-            "repo-1", selector, _bounds()
-        )
-        self.assertEqual(
-            graft_res.ambiguity, memory_res.ambiguity
-        )
+        selector = m.SubjectSelector(None, "sym", (m.SubjectKind.COMPONENT,), None)
+        graft_res = graft.resolve_subject("repo-1", selector, _bounds())
+        memory_res = memory.resolve_subject("repo-1", selector, _bounds())
+        self.assertEqual(graft_res.ambiguity, memory_res.ambiguity)
         self.assertEqual(
             [c.subject.subject_id.canonical_locator for c in graft_res.candidates],
             [c.subject.subject_id.canonical_locator for c in memory_res.candidates],
@@ -1543,7 +1539,8 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
                     )
                 }
             )
-            result = _dispatch(adapter, 
+            result = _dispatch(
+                adapter,
                 "explain",
                 {
                     "repository_id": "repo-1",
@@ -1603,8 +1600,10 @@ class CrossUnitCitationTest(unittest.TestCase):
 
     def _ref(self, path, fingerprint):
         return m.EvidenceRef(
-            m.EvidenceId(f"ev-{path}"), "repo-1",
-            m.EvidenceSourceKind.SOURCE_CODE, path,
+            m.EvidenceId(f"ev-{path}"),
+            "repo-1",
+            m.EvidenceSourceKind.SOURCE_CODE,
+            path,
             revision_or_fingerprint=fingerprint,
         )
 
@@ -1621,9 +1620,7 @@ class CrossUnitCitationTest(unittest.TestCase):
             value=m.PurposeValue(f"{locator} serves its module", ()),
             evidence=(ref,),
             candidate_authority=None,
-            basis=m.SemanticBasis(
-                m.DerivationKind.SEMANTIC_INTERPRETATION, "test"
-            ),
+            basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION, "test"),
         )
 
     def _submit_for(self, locator, result, structural, evidence, store):
@@ -1638,17 +1635,25 @@ class CrossUnitCitationTest(unittest.TestCase):
                 target=m.SubjectSelector(None, locator, (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         from span.ports.interpretation import PendingInterpretation
 
         self.assertIsInstance(pending, PendingInterpretation)
-        return ops.submit_interpretation(
-            pending.continuation, result, structural=structural,
-            evidence=evidence, store=store,
-            continuations=continuations,
-        ), pending
+        return (
+            ops.submit_interpretation(
+                pending.continuation,
+                result,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=continuations,
+            ),
+            pending,
+        )
 
     def test_cross_unit_citation_accepted_when_bytes_current(self):
         from span.shell.structural.memory import fingerprint_content
@@ -1670,7 +1675,9 @@ class CrossUnitCitationTest(unittest.TestCase):
                     candidate_subjects=(),
                     candidate_conflicts=(),
                 ),
-                structural, evidence, store,
+                structural,
+                evidence,
+                store,
             )
             self.assertIsInstance(first, m.SemanticAnswer)
             # Second unit cites a.py although its own task units cover
@@ -1690,7 +1697,9 @@ class CrossUnitCitationTest(unittest.TestCase):
                     candidate_subjects=(),
                     candidate_conflicts=(),
                 ),
-                structural, evidence, store,
+                structural,
+                evidence,
+                store,
             )
             self.assertIsInstance(second, m.SemanticAnswer)
             self.assertEqual(len(second.content.claims), 1)
@@ -1720,7 +1729,9 @@ class CrossUnitCitationTest(unittest.TestCase):
                     candidate_subjects=(),
                     candidate_conflicts=(),
                 ),
-                structural, evidence, store,
+                structural,
+                evidence,
+                store,
             )
             evidence._files["a.py"] = "ALPHA = 99\n"
             current_fp = fingerprint_content("ALPHA = 99\n")
@@ -1739,16 +1750,16 @@ class CrossUnitCitationTest(unittest.TestCase):
                     candidate_subjects=(),
                     candidate_conflicts=(),
                 ),
-                structural, evidence, store,
+                structural,
+                evidence,
+                store,
             )
             self.assertIsInstance(second, m.SemanticAnswer)
             self.assertEqual(len(second.content.claims), 1)
             persisted_ref = second.content.claims[0].evidence[0]
             self.assertEqual(persisted_ref.evidence_id.value, "ev-a.py")
             self.assertEqual(persisted_ref.locator, "a.py")
-            self.assertEqual(
-                persisted_ref.revision_or_fingerprint, current_fp
-            )
+            self.assertEqual(persisted_ref.revision_or_fingerprint, current_fp)
             deps = store.load_evidence_dependencies(
                 "repo-1",
                 (m.ClaimRef(id=second.content.claims[0].claim_id),),
@@ -1767,7 +1778,8 @@ class CrossUnitCitationTest(unittest.TestCase):
                     m.SemanticInterpretationResult(
                         claims=(
                             self._claim_for(
-                                "b.py", self._ref("ghost.py", "fp"),
+                                "b.py",
+                                self._ref("ghost.py", "fp"),
                             ),
                         ),
                         relationships=(),
@@ -1776,7 +1788,9 @@ class CrossUnitCitationTest(unittest.TestCase):
                         candidate_subjects=(),
                         candidate_conflicts=(),
                     ),
-                    structural, evidence, store,
+                    structural,
+                    evidence,
+                    store,
                 )
             self.assertIn("ev-ghost.py", str(cm.exception))
         finally:
@@ -1793,9 +1807,7 @@ class SemanticOutcomeTest(unittest.TestCase):
     """
 
     FILES2 = {"a.py": "ALPHA = 1\n", "b.py": "BETA = 2\n"}
-    SUMMARY = (
-        "Alpha input configured with beta threshold."
-    )
+    SUMMARY = "Alpha input configured with beta threshold."
 
     def _harness2(self):
         from span.shell.evidence import FixtureEvidenceSource
@@ -1827,13 +1839,20 @@ class SemanticOutcomeTest(unittest.TestCase):
 
     def _ref(self, path, fingerprint):
         return m.EvidenceRef(
-            m.EvidenceId(f"ev-{path}"), "repo-1",
-            m.EvidenceSourceKind.SOURCE_CODE, path,
+            m.EvidenceId(f"ev-{path}"),
+            "repo-1",
+            m.EvidenceSourceKind.SOURCE_CODE,
+            path,
             revision_or_fingerprint=fingerprint,
         )
 
     def _exchange(
-        self, locator, result, structural, evidence, store,
+        self,
+        locator,
+        result,
+        structural,
+        evidence,
+        store,
         complete=False,
     ):
         from span.shell.agent_exchange.continuations import (
@@ -1848,14 +1867,15 @@ class SemanticOutcomeTest(unittest.TestCase):
                 target=m.SubjectSelector(None, locator, (), None),
                 bounds=_bounds(),
             ),
-            structural=structural, evidence=evidence, store=store,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
         self.assertIsInstance(pending, PendingInterpretation)
         if complete:
             # Addendum C C-05 cutover: explicit ANSWERED completion
             # intent for the bound question; the service derives refs.
-            question = pending.request.question
             result = m.SemanticInterpretationResult(
                 claims=result.claims,
                 relationships=result.relationships,
@@ -1870,8 +1890,11 @@ class SemanticOutcomeTest(unittest.TestCase):
                 candidate_withdrawals=result.candidate_withdrawals,
             )
         return ops.submit_interpretation(
-            pending.continuation, result, structural=structural,
-            evidence=evidence, store=store,
+            pending.continuation,
+            result,
+            structural=structural,
+            evidence=evidence,
+            store=store,
             continuations=continuations,
         )
 
@@ -1888,9 +1911,7 @@ class SemanticOutcomeTest(unittest.TestCase):
             value=m.PurposeValue(f"{locator} serves its module", ()),
             evidence=(ref,),
             candidate_authority=None,
-            basis=m.SemanticBasis(
-                m.DerivationKind.SEMANTIC_INTERPRETATION, "test"
-            ),
+            basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION, "test"),
         )
 
     def _result(self, claims, subjects=()):
@@ -1912,10 +1933,10 @@ class SemanticOutcomeTest(unittest.TestCase):
             fp_b = fingerprint_content("BETA = 2\n")
             self._exchange(
                 "a.py",
-                self._result(
-                    (self._purpose("a.py", self._ref("a.py", fp_a)),)
-                ),
-                structural, evidence, store,
+                self._result((self._purpose("a.py", self._ref("a.py", fp_a)),)),
+                structural,
+                evidence,
+                store,
                 complete=True,
             )
             workflow = m.CandidateSubject(
@@ -1935,7 +1956,9 @@ class SemanticOutcomeTest(unittest.TestCase):
                     (self._purpose("b.py", self._ref("b.py", fp_b)),),
                     (workflow,),
                 ),
-                structural, evidence, store,
+                structural,
+                evidence,
+                store,
                 complete=True,
             )
             synthesis = m.CandidateSemanticClaim(
@@ -1949,7 +1972,8 @@ class SemanticOutcomeTest(unittest.TestCase):
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue(self.SUMMARY, ()),
                 evidence=(
-                    self._ref("a.py", fp_a), self._ref("b.py", fp_b),
+                    self._ref("a.py", fp_a),
+                    self._ref("b.py", fp_b),
                 ),
                 candidate_authority=None,
                 basis=m.SemanticBasis(
@@ -1972,11 +1996,15 @@ class SemanticOutcomeTest(unittest.TestCase):
                             subject_kind=m.SubjectKind.SUBSYSTEM,
                             canonical_locator="workflows/tta",
                         ),
-                        None, (), None,
+                        None,
+                        (),
+                        None,
                     ),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(pending, PendingInterpretation)
@@ -1995,7 +2023,9 @@ class SemanticOutcomeTest(unittest.TestCase):
                     ),
                     candidate_withdrawals=(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=continuations,
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -2008,11 +2038,15 @@ class SemanticOutcomeTest(unittest.TestCase):
                             subject_kind=m.SubjectKind.SUBSYSTEM,
                             canonical_locator="workflows/tta",
                         ),
-                        None, (), None,
+                        None,
+                        (),
+                        None,
                     ),
                     bounds=_bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             ).content.claims
             self.assertEqual(served.value.summary, self.SUMMARY)
@@ -2021,9 +2055,7 @@ class SemanticOutcomeTest(unittest.TestCase):
                 {"a.py", "b.py"},
             )
             self.assertIs(served.trust, m.TrustState.UNRESOLVED)
-            self.assertIs(
-                served.freshness.state, m.FreshnessState.CURRENT
-            )
+            self.assertIs(served.freshness.state, m.FreshnessState.CURRENT)
         finally:
             store.close()
 
@@ -2035,9 +2067,13 @@ class ContextualResolutionTest(unittest.TestCase):
 
     def _bounds(self, **overrides):
         base = dict(
-            max_results=50, max_depth=5, max_subjects=8,
-            max_evidence_units=24, max_evidence_bytes=96_000,
-            max_candidate_claims=64, max_candidate_relationships=64,
+            max_results=50,
+            max_depth=5,
+            max_subjects=8,
+            max_evidence_units=24,
+            max_evidence_bytes=96_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
         )
         base.update(overrides)
         return m.QueryBounds(**base)
@@ -2074,15 +2110,19 @@ class ContextualResolutionTest(unittest.TestCase):
 
     def _sid(self, repo, locator, kind=m.SubjectKind.COMPONENT):
         return m.SubjectId(
-            repository_id=repo, subject_kind=kind,
+            repository_id=repo,
+            subject_kind=kind,
             canonical_locator=locator,
         )
 
     def _claim(self, cid, sid, value, eref, kind=m.ClaimKind.PURPOSE):
         return m.SemanticClaim(
-            claim_id=m.ClaimId(cid), subject=sid, kind=kind,
+            claim_id=m.ClaimId(cid),
+            subject=sid,
+            kind=kind,
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            value=value, evidence=(eref,),
+            value=value,
+            evidence=(eref,),
             trust=m.TrustState.ESTABLISHED,
             freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
@@ -2091,30 +2131,39 @@ class ContextualResolutionTest(unittest.TestCase):
     def _rel(self, rid, source, kind, target, eref):
         return m.SemanticRelationship(
             relationship_id=m.RelationshipId(rid),
-            source=source, kind=kind, target=target,
+            source=source,
+            kind=kind,
+            target=target,
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            evidence=(eref,), trust=m.TrustState.ESTABLISHED,
+            evidence=(eref,),
+            trust=m.TrustState.ESTABLISHED,
             freshness=m.Freshness(m.FreshnessState.CURRENT, reason="t"),
             basis=m.SemanticBasis(m.DerivationKind.EXPLICIT_EVIDENCE),
         )
 
     def _dep(self, ref, eref, fp):
         return m.EvidenceDependency(
-            semantic_id=ref, evidence_ref=eref,
+            semantic_id=ref,
+            evidence_ref=eref,
             observed_fingerprint=fp,
         )
 
     def _cq(self, scope_root, subject, qclass, qslice, refs):
         q = m.SemanticQuestionScope(
-            scope_root=scope_root, subject=subject,
-            question_class=qclass, question_slice=qslice,
+            scope_root=scope_root,
+            subject=subject,
+            question_class=qclass,
+            question_slice=qslice,
             materiality_basis="test",
         )
         return m.InterpretationCoverage(
-            subjects=(subject,), question_slice=qslice,
-            declared_complete=True, question=q,
+            subjects=(subject,),
+            question_slice=qslice,
+            declared_complete=True,
+            question=q,
             disposition=m.SemanticQuestionDisposition.ANSWERED,
-            result_refs=tuple(refs), disposition_basis="b",
+            result_refs=tuple(refs),
+            disposition_basis="b",
         )
 
     def test_structural_only_hit_falls_through(self):
@@ -2122,145 +2171,135 @@ class ContextualResolutionTest(unittest.TestCase):
             _resolve_contextual_subjects,
             _resolve_query_subject,
         )
+
         repo = self.CTX
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                repo, "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
-            claim = self._claim(
-                "c-purpose", canon, m.PurposeValue("packs", ()), eref
-            )
-            rel = self._rel(
-                "r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref
-            )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(claim,), relationships=(rel,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
+            claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
+            rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                ),
-            ))
+                    claims=(claim,),
+                    relationships=(rel,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(
+                            m.RelationshipRef(id=rel.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                    ),
+                )
+            )
             direct = _resolve_query_subject(
                 repo,
                 m.SubjectSelector(
-                    None, "canonical_assembly/candidate_packager.py",
-                    (), None,
+                    None,
+                    "canonical_assembly/candidate_packager.py",
+                    (),
+                    None,
                 ),
-                structural=structural, store=store,
+                structural=structural,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                direct.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
+            self.assertIs(direct.ambiguity, m.ResolutionAmbiguity.RESOLVED)
             orientation, trace_root = _resolve_contextual_subjects(
                 repo,
                 m.SubjectSelector(
-                    None, "canonical_assembly/candidate_packager.py",
-                    (), None,
+                    None,
+                    "canonical_assembly/candidate_packager.py",
+                    (),
+                    None,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, canon
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                trace_root.candidates[0].subject.subject_id, root
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(orientation.candidates[0].subject.subject_id, canon)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(trace_root.candidates[0].subject.subject_id, root)
         finally:
             store.close()
 
     def test_membership_claim_representation_identical(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                repo, "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
-            claim = self._claim(
-                "c-purpose", canon, m.PurposeValue("packs", ()), eref
-            )
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
+            claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
             membership = self._claim(
-                "c-mem", canon,
-                m.CapabilityMembershipValue(parent=root), eref,
+                "c-mem",
+                canon,
+                m.CapabilityMembershipValue(parent=root),
+                eref,
                 kind=m.ClaimKind.CAPABILITY_MEMBERSHIP,
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(claim, membership),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.ClaimRef(id=membership.claim_id), eref, fp
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                ),
-            ))
+                    claims=(claim, membership),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(m.ClaimRef(id=membership.claim_id), eref, fp),
+                    ),
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
                 repo,
                 m.SubjectSelector(
-                    None, "canonical_assembly/candidate_packager.py",
-                    (), None,
+                    None,
+                    "canonical_assembly/candidate_packager.py",
+                    (),
+                    None,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, canon
-            )
-            self.assertEqual(
-                trace_root.candidates[0].subject.subject_id, root
-            )
+            self.assertEqual(orientation.candidates[0].subject.subject_id, canon)
+            self.assertEqual(trace_root.candidates[0].subject.subject_id, root)
         finally:
             store.close()
 
     def test_multiple_areas_common_root(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {
             "workflow/composition/a.py": "a=1\n",
@@ -2270,144 +2309,145 @@ class ContextualResolutionTest(unittest.TestCase):
         try:
             comp = self._sid(repo, "composition")
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
             deps = []
             claims = []
             rels = []
-            for i, (path, sid) in enumerate((
-                ("workflow/composition/a.py", comp),
-                ("workflow/canonical_assembly/b.py", canon),
-            )):
+            for i, (path, sid) in enumerate(
+                (
+                    ("workflow/composition/a.py", comp),
+                    ("workflow/canonical_assembly/b.py", canon),
+                )
+            ):
                 eref = self._ref(repo, path, files)
                 fp = fingerprint_content(files[path])
-                claim = self._claim(
-                    f"c-{i}", sid, m.PurposeValue(f"p{i}", ()), eref
-                )
+                claim = self._claim(f"c-{i}", sid, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
-                    f"r-{i}", sid, m.RelationshipKind.MEMBER_OF,
-                    root, eref,
+                    f"r-{i}",
+                    sid,
+                    m.RelationshipKind.MEMBER_OF,
+                    root,
+                    eref,
                 )
                 claims.append(claim)
                 rels.append(rel)
-                deps.append(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp)
-                )
+                deps.append(self._dep(m.ClaimRef(id=claim.claim_id), eref, fp))
                 deps.append(
                     self._dep(
                         m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+                        eref,
+                        fp,
                     )
                 )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(comp, "Composition", None),
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=tuple(claims), relationships=tuple(rels),
-                evidence_dependencies=tuple(deps),
-            ))
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(comp, "Composition", None),
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
+                    ),
+                    claims=tuple(claims),
+                    relationships=tuple(rels),
+                    evidence_dependencies=tuple(deps),
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "workflow", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "workflow", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, root
-            )
-            self.assertEqual(
-                trace_root.candidates[0].subject.subject_id, root
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(orientation.candidates[0].subject.subject_id, root)
+            self.assertEqual(trace_root.candidates[0].subject.subject_id, root)
         finally:
             store.close()
 
     def test_multiple_unrelated_roots_ambiguous(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"shared/a.py": "a=1\n", "shared/b.py": "b=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             area_a = self._sid(repo, "area_a")
             area_b = self._sid(repo, "area_b")
-            root_x = self._sid(
-                repo, "feature_x", m.SubjectKind.SUBSYSTEM
-            )
-            root_y = self._sid(
-                repo, "feature_y", m.SubjectKind.SUBSYSTEM
-            )
+            root_x = self._sid(repo, "feature_x", m.SubjectKind.SUBSYSTEM)
+            root_y = self._sid(repo, "feature_y", m.SubjectKind.SUBSYSTEM)
             deps = []
             claims = []
             rels = []
-            for i, (path, area, root) in enumerate((
-                ("shared/a.py", area_a, root_x),
-                ("shared/b.py", area_b, root_y),
-            )):
+            for i, (path, area, root) in enumerate(
+                (
+                    ("shared/a.py", area_a, root_x),
+                    ("shared/b.py", area_b, root_y),
+                )
+            ):
                 eref = self._ref(repo, path, files)
                 fp = fingerprint_content(files[path])
-                claim = self._claim(
-                    f"c-{i}", area, m.PurposeValue(f"p{i}", ()), eref
-                )
+                claim = self._claim(f"c-{i}", area, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
-                    f"r-{i}", area, m.RelationshipKind.MEMBER_OF,
-                    root, eref,
+                    f"r-{i}",
+                    area,
+                    m.RelationshipKind.MEMBER_OF,
+                    root,
+                    eref,
                 )
                 claims.append(claim)
                 rels.append(rel)
-                deps.append(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp)
-                )
+                deps.append(self._dep(m.ClaimRef(id=claim.claim_id), eref, fp))
                 deps.append(
                     self._dep(
                         m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+                        eref,
+                        fp,
                     )
                 )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(area_a, "A", None),
-                    m.Subject(area_b, "B", None),
-                    m.Subject(root_x, "X", None),
-                    m.Subject(root_y, "Y", None),
-                ),
-                claims=tuple(claims), relationships=tuple(rels),
-                evidence_dependencies=tuple(deps),
-            ))
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(area_a, "A", None),
+                        m.Subject(area_b, "B", None),
+                        m.Subject(root_x, "X", None),
+                        m.Subject(root_y, "Y", None),
+                    ),
+                    claims=tuple(claims),
+                    relationships=tuple(rels),
+                    evidence_dependencies=tuple(deps),
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "shared", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "shared", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
         finally:
             store.close()
 
     def test_no_semantic_dependencies_not_found(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"lonely/file.py": "x=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "lonely/file.py", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "lonely/file.py", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.NOT_FOUND)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.NOT_FOUND)
         finally:
             store.close()
 
@@ -2415,27 +2455,23 @@ class ContextualResolutionTest(unittest.TestCase):
         repo = self.CTX
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         file_sid = m.SubjectId(
-            repository_id=repo, subject_kind=m.SubjectKind.COMPONENT,
+            repository_id=repo,
+            subject_kind=m.SubjectKind.COMPONENT,
             canonical_locator="canonical_assembly/candidate_packager.py",
         )
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                repo, "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             file_claim = self._claim(
                 "c-file", file_sid, m.PurposeValue("file", ()), eref
             )
@@ -2443,37 +2479,41 @@ class ContextualResolutionTest(unittest.TestCase):
                 "c-canon", canon, m.PurposeValue("canon", ()), eref
             )
             cov = self._cq(
-                file_sid, file_sid, m.SemanticQuestionClass.CQ_01,
+                file_sid,
+                file_sid,
+                m.SemanticQuestionClass.CQ_01,
                 file_sid.canonical_locator,
                 (m.ClaimRef(id=file_claim.claim_id),),
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(file_sid, "candidate_packager", None),
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(file_claim, canon_claim),
-                evidence_dependencies=(
-                    self._dep(
-                        m.ClaimRef(id=file_claim.claim_id), eref, fp
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(file_sid, "candidate_packager", None),
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                    self._dep(
-                        m.ClaimRef(id=canon_claim.claim_id), eref, fp
+                    claims=(file_claim, canon_claim),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=file_claim.claim_id), eref, fp),
+                        self._dep(m.ClaimRef(id=canon_claim.claim_id), eref, fp),
                     ),
-                ),
-                coverage=(cov,),
-            ))
+                    coverage=(cov,),
+                )
+            )
             answer = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=repo,
                     target=m.SubjectSelector(
-                        None, "canonical_assembly/candidate_packager.py",
-                        (), None,
+                        None,
+                        "canonical_assembly/candidate_packager.py",
+                        (),
+                        None,
                     ),
                     bounds=self._bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -2495,9 +2535,7 @@ class ContextualResolutionTest(unittest.TestCase):
                 def repository_state(self, repository_id):
                     return state
 
-                def resolve_subject(
-                    self, repository_id, target, bounds
-                ):
+                def resolve_subject(self, repository_id, target, bounds):
                     raise ValueError("structural boom")
 
             with self.assertRaises(ValueError):
@@ -2507,7 +2545,8 @@ class ContextualResolutionTest(unittest.TestCase):
                         target=m.SubjectSelector(None, "a.py", (), None),
                         bounds=self._bounds(),
                     ),
-                    structural=_FailingStructural(), evidence=evidence,
+                    structural=_FailingStructural(),
+                    evidence=evidence,
                     store=store,
                     continuations=ContinuationStore(),
                 )
@@ -2516,135 +2555,136 @@ class ContextualResolutionTest(unittest.TestCase):
 
     def test_most_specific_common_ancestor(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"feat/a.py": "a=1\n", "feat/b.py": "b=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             area_a = self._sid(repo, "area_a")
             area_b = self._sid(repo, "area_b")
-            review = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            system = self._sid(
-                repo, "larger_system", m.SubjectKind.SUBSYSTEM
-            )
+            review = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            system = self._sid(repo, "larger_system", m.SubjectKind.SUBSYSTEM)
             deps = []
             claims = []
             rels = []
-            for i, (path, area) in enumerate((
-                ("feat/a.py", area_a), ("feat/b.py", area_b),
-            )):
+            for i, (path, area) in enumerate(
+                (
+                    ("feat/a.py", area_a),
+                    ("feat/b.py", area_b),
+                )
+            ):
                 eref = self._ref(repo, path, files)
                 fp = fingerprint_content(files[path])
-                claim = self._claim(
-                    f"c-{i}", area, m.PurposeValue(f"p{i}", ()), eref
-                )
+                claim = self._claim(f"c-{i}", area, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
-                    f"r-{i}", area, m.RelationshipKind.MEMBER_OF,
-                    review, eref,
+                    f"r-{i}",
+                    area,
+                    m.RelationshipKind.MEMBER_OF,
+                    review,
+                    eref,
                 )
                 claims.append(claim)
                 rels.append(rel)
-                deps.append(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp)
-                )
+                deps.append(self._dep(m.ClaimRef(id=claim.claim_id), eref, fp))
                 deps.append(
                     self._dep(
                         m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+                        eref,
+                        fp,
                     )
                 )
             r_eref = self._ref(repo, "feat/a.py", files)
             r_fp = fingerprint_content(files["feat/a.py"])
             review_rel = self._rel(
-                "r-review", review, m.RelationshipKind.MEMBER_OF,
-                system, r_eref,
+                "r-review",
+                review,
+                m.RelationshipKind.MEMBER_OF,
+                system,
+                r_eref,
             )
             rels.append(review_rel)
             deps.append(
                 self._dep(
                     m.RelationshipRef(id=review_rel.relationship_id),
-                    r_eref, r_fp,
+                    r_eref,
+                    r_fp,
                 )
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(area_a, "A", None),
-                    m.Subject(area_b, "B", None),
-                    m.Subject(review, "Review", None),
-                    m.Subject(system, "System", None),
-                ),
-                claims=tuple(claims), relationships=tuple(rels),
-                evidence_dependencies=tuple(deps),
-            ))
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(area_a, "A", None),
+                        m.Subject(area_b, "B", None),
+                        m.Subject(review, "Review", None),
+                        m.Subject(system, "System", None),
+                    ),
+                    claims=tuple(claims),
+                    relationships=tuple(rels),
+                    evidence_dependencies=tuple(deps),
+                )
+            )
             orientation, _ = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "feat", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "feat", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, review
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(orientation.candidates[0].subject.subject_id, review)
         finally:
             store.close()
 
     def test_multi_parent_ambiguous(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"multi/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             area = self._sid(repo, "area_a")
-            feat_x = self._sid(
-                repo, "feature_x", m.SubjectKind.SUBSYSTEM
-            )
-            feat_y = self._sid(
-                repo, "feature_y", m.SubjectKind.SUBSYSTEM
-            )
+            feat_x = self._sid(repo, "feature_x", m.SubjectKind.SUBSYSTEM)
+            feat_y = self._sid(repo, "feature_y", m.SubjectKind.SUBSYSTEM)
             eref = self._ref(repo, "multi/a.py", files)
             fp = fingerprint_content(files["multi/a.py"])
-            claim = self._claim(
-                "c-a", area, m.PurposeValue("a", ()), eref
-            )
-            rel_x = self._rel(
-                "r-x", area, m.RelationshipKind.MEMBER_OF, feat_x, eref
-            )
-            rel_y = self._rel(
-                "r-y", area, m.RelationshipKind.MEMBER_OF, feat_y, eref
-            )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(area, "A", None),
-                    m.Subject(feat_x, "X", None),
-                    m.Subject(feat_y, "Y", None),
-                ),
-                claims=(claim,), relationships=(rel_x, rel_y),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.RelationshipRef(id=rel_x.relationship_id),
-                        eref, fp,
+            claim = self._claim("c-a", area, m.PurposeValue("a", ()), eref)
+            rel_x = self._rel("r-x", area, m.RelationshipKind.MEMBER_OF, feat_x, eref)
+            rel_y = self._rel("r-y", area, m.RelationshipKind.MEMBER_OF, feat_y, eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(area, "A", None),
+                        m.Subject(feat_x, "X", None),
+                        m.Subject(feat_y, "Y", None),
                     ),
-                    self._dep(
-                        m.RelationshipRef(id=rel_y.relationship_id),
-                        eref, fp,
+                    claims=(claim,),
+                    relationships=(rel_x, rel_y),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(
+                            m.RelationshipRef(id=rel_x.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                        self._dep(
+                            m.RelationshipRef(id=rel_y.relationship_id),
+                            eref,
+                            fp,
+                        ),
                     ),
-                ),
-            ))
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "multi/a.py", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "multi/a.py", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, area
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertEqual(orientation.candidates[0].subject.subject_id, area)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertEqual(len(trace_root.candidates), 2)
             self.assertFalse(trace_root.bound_info.truncated)
         finally:
@@ -2652,63 +2692,56 @@ class ContextualResolutionTest(unittest.TestCase):
 
     def test_parent_fanout_beyond_bounds_is_incomplete(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"multi/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             area = self._sid(repo, "area_a")
-            feat_x = self._sid(
-                repo, "feature_x", m.SubjectKind.SUBSYSTEM
-            )
-            feat_y = self._sid(
-                repo, "feature_y", m.SubjectKind.SUBSYSTEM
-            )
+            feat_x = self._sid(repo, "feature_x", m.SubjectKind.SUBSYSTEM)
+            feat_y = self._sid(repo, "feature_y", m.SubjectKind.SUBSYSTEM)
             eref = self._ref(repo, "multi/a.py", files)
             fp = fingerprint_content(files["multi/a.py"])
-            claim = self._claim(
-                "c-a", area, m.PurposeValue("a", ()), eref
-            )
-            rel_x = self._rel(
-                "r-x", area, m.RelationshipKind.MEMBER_OF, feat_x, eref
-            )
-            rel_y = self._rel(
-                "r-y", area, m.RelationshipKind.MEMBER_OF, feat_y, eref
-            )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(area, "A", None),
-                    m.Subject(feat_x, "X", None),
-                    m.Subject(feat_y, "Y", None),
-                ),
-                claims=(claim,), relationships=(rel_x, rel_y),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.RelationshipRef(id=rel_x.relationship_id),
-                        eref, fp,
+            claim = self._claim("c-a", area, m.PurposeValue("a", ()), eref)
+            rel_x = self._rel("r-x", area, m.RelationshipKind.MEMBER_OF, feat_x, eref)
+            rel_y = self._rel("r-y", area, m.RelationshipKind.MEMBER_OF, feat_y, eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(area, "A", None),
+                        m.Subject(feat_x, "X", None),
+                        m.Subject(feat_y, "Y", None),
                     ),
-                    self._dep(
-                        m.RelationshipRef(id=rel_y.relationship_id),
-                        eref, fp,
+                    claims=(claim,),
+                    relationships=(rel_x, rel_y),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(
+                            m.RelationshipRef(id=rel_x.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                        self._dep(
+                            m.RelationshipRef(id=rel_y.relationship_id),
+                            eref,
+                            fp,
+                        ),
                     ),
-                ),
-            ))
+                )
+            )
             bounds = self._bounds(max_subjects=1)
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "multi/a.py", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "multi/a.py", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=bounds,
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(trace_root.bound_info.truncated)
-            self.assertEqual(
-                trace_root.bound_info.truncated_category, "context"
-            )
+            self.assertEqual(trace_root.bound_info.truncated_category, "context")
             self.assertLessEqual(
                 trace_root.bound_info.returned_results,
                 trace_root.bound_info.requested_max_results,
@@ -2718,53 +2751,53 @@ class ContextualResolutionTest(unittest.TestCase):
 
     def test_contextual_candidates_use_non_exact_basis(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                repo, "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
-            claim = self._claim(
-                "c-purpose", canon, m.PurposeValue("packs", ()), eref
-            )
-            rel = self._rel(
-                "r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref
-            )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(claim,), relationships=(rel,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
+            claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
+            rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                ),
-            ))
+                    claims=(claim,),
+                    relationships=(rel,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(
+                            m.RelationshipRef(id=rel.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                    ),
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
                 repo,
                 m.SubjectSelector(
-                    None, "canonical_assembly/candidate_packager.py",
-                    (), None,
+                    None,
+                    "canonical_assembly/candidate_packager.py",
+                    (),
+                    None,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
             for resolution in (orientation, trace_root):
@@ -2778,21 +2811,21 @@ class ContextualResolutionTest(unittest.TestCase):
 
     def test_bound_exhaustion_ambiguous(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"big/a.py": "a=1\n", "big/b.py": "b=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "big", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "big", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(max_results=1),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(orientation.bound_info.truncated)
             self.assertIn(
                 orientation.bound_info.truncated_category,
@@ -2804,21 +2837,20 @@ class ContextualResolutionTest(unittest.TestCase):
                     target=m.SubjectSelector(None, "big", (), None),
                     bounds=self._bounds(max_results=1),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
-            kinds = {
-                req.kind for req in answer.resolution_requirements
-            }
-            self.assertIn(
-                m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE, kinds
-            )
+            kinds = {req.kind for req in answer.resolution_requirements}
+            self.assertIn(m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE, kinds)
         finally:
             store.close()
 
     def test_unknown_semantic_ref_fails_closed(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"g/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
@@ -2826,27 +2858,31 @@ class ContextualResolutionTest(unittest.TestCase):
             area = self._sid(repo, "area_g")
             eref = self._ref(repo, "g/a.py", files)
             fp = fingerprint_content(files["g/a.py"])
-            claim = self._claim(
-                "c-g", area, m.PurposeValue("g", ()), eref
-            )
+            claim = self._claim("c-g", area, m.PurposeValue("g", ()), eref)
             ghost = m.EvidenceDependency(
                 m.RelationshipRef(id=m.RelationshipId("r-ghost")),
-                eref, fp,
+                eref,
+                fp,
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(m.Subject(area, "G", None),),
-                claims=(claim,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    ghost,
-                ),
-            ))
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(m.Subject(area, "G", None),),
+                    claims=(claim,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        ghost,
+                    ),
+                )
+            )
             # Corrupt canonical state (dependency without its record)
             # must fail closed, never resolve from the surviving subset.
             with self.assertRaises(ValueError):
                 _resolve_contextual_subjects(
-                    repo, m.SubjectSelector(None, "g/a.py", (), None),
-                    structural=structural, evidence=evidence, store=store,
+                    repo,
+                    m.SubjectSelector(None, "g/a.py", (), None),
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
                     bounds=self._bounds(),
                 )
         finally:
@@ -2854,6 +2890,7 @@ class ContextualResolutionTest(unittest.TestCase):
 
     def test_missing_subject_row_does_not_collapse_ambiguity(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"m/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
@@ -2862,114 +2899,99 @@ class ContextualResolutionTest(unittest.TestCase):
             area_b = self._sid(repo, "area_b")
             eref = self._ref(repo, "m/a.py", files)
             fp = fingerprint_content(files["m/a.py"])
-            claim_a = self._claim(
-                "c-a", area_a, m.PurposeValue("a", ()), eref
-            )
-            claim_b = self._claim(
-                "c-b", area_b, m.PurposeValue("b", ()), eref
-            )
+            claim_a = self._claim("c-a", area_a, m.PurposeValue("a", ()), eref)
+            claim_b = self._claim("c-b", area_b, m.PurposeValue("b", ()), eref)
             # Only area_a gets a canonical Subject row; area_b is
             # referenced by a persisted claim without one.
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(m.Subject(area_a, "A", None),),
-                claims=(claim_a, claim_b),
-                evidence_dependencies=(
-                    self._dep(
-                        m.ClaimRef(id=claim_a.claim_id), eref, fp
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(m.Subject(area_a, "A", None),),
+                    claims=(claim_a, claim_b),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim_a.claim_id), eref, fp),
+                        self._dep(m.ClaimRef(id=claim_b.claim_id), eref, fp),
                     ),
-                    self._dep(
-                        m.ClaimRef(id=claim_b.claim_id), eref, fp
-                    ),
-                ),
-            ))
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "m/a.py", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "m/a.py", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(orientation.bound_info.truncated)
-            self.assertEqual(
-                orientation.bound_info.truncated_category, "context"
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertEqual(orientation.bound_info.truncated_category, "context")
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
         finally:
             store.close()
 
     def test_expected_kinds_blocks_single_parent_promotion(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                repo, "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
-            claim = self._claim(
-                "c-purpose", canon, m.PurposeValue("packs", ()), eref
-            )
-            rel = self._rel(
-                "r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref
-            )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(claim,), relationships=(rel,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
+            claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
+            rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                ),
-            ))
+                    claims=(claim,),
+                    relationships=(rel,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(
+                            m.RelationshipRef(id=rel.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                    ),
+                )
+            )
             selector = m.SubjectSelector(
-                None, "canonical_assembly/candidate_packager.py",
-                (m.SubjectKind.COMPONENT,), None,
+                None,
+                "canonical_assembly/candidate_packager.py",
+                (m.SubjectKind.COMPONENT,),
+                None,
             )
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, selector,
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                selector,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, canon
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(orientation.candidates[0].subject.subject_id, canon)
             # The SUBSYSTEM parent is outside expected_kinds: trace
             # must stay on the allowed local candidate.
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                trace_root.candidates[0].subject.subject_id, canon
-            )
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(trace_root.candidates[0].subject.subject_id, canon)
         finally:
             store.close()
 
     def test_expected_kinds_blocks_common_ancestor_resolution(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {
             "workflow/composition/a.py": "a=1\n",
@@ -2979,51 +3001,57 @@ class ContextualResolutionTest(unittest.TestCase):
         try:
             comp = self._sid(repo, "composition")
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
             deps = []
             claims = []
             rels = []
-            for i, (path, sid) in enumerate((
-                ("workflow/composition/a.py", comp),
-                ("workflow/canonical_assembly/b.py", canon),
-            )):
+            for i, (path, sid) in enumerate(
+                (
+                    ("workflow/composition/a.py", comp),
+                    ("workflow/canonical_assembly/b.py", canon),
+                )
+            ):
                 eref = self._ref(repo, path, files)
                 fp = fingerprint_content(files[path])
-                claim = self._claim(
-                    f"c-{i}", sid, m.PurposeValue(f"p{i}", ()), eref
-                )
+                claim = self._claim(f"c-{i}", sid, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
-                    f"r-{i}", sid, m.RelationshipKind.MEMBER_OF,
-                    root, eref,
+                    f"r-{i}",
+                    sid,
+                    m.RelationshipKind.MEMBER_OF,
+                    root,
+                    eref,
                 )
                 claims.append(claim)
                 rels.append(rel)
-                deps.append(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp)
-                )
+                deps.append(self._dep(m.ClaimRef(id=claim.claim_id), eref, fp))
                 deps.append(
                     self._dep(
                         m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+                        eref,
+                        fp,
                     )
                 )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(comp, "Composition", None),
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=tuple(claims), relationships=tuple(rels),
-                evidence_dependencies=tuple(deps),
-            ))
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(comp, "Composition", None),
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
+                    ),
+                    claims=tuple(claims),
+                    relationships=tuple(rels),
+                    evidence_dependencies=tuple(deps),
+                )
+            )
             selector = m.SubjectSelector(
                 None, "workflow", (m.SubjectKind.COMPONENT,), None
             )
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, selector,
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                selector,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
             # The common ancestor is a SUBSYSTEM: it may not resolve
@@ -3046,19 +3074,24 @@ class ContextualResolutionTest(unittest.TestCase):
     def test_fresh_token_stream_hits_paging_work_cap(self):
         import datetime
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"w/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             item = evidence.inventory_evidence(
-                repo, m.EvidenceScope(paths=("w/a.py",), evidence_refs=()),
+                repo,
+                m.EvidenceScope(paths=("w/a.py",), evidence_refs=()),
                 self._bounds(),
             ).items[0]
             calls = []
 
             class _FreshTokenEvidence:
                 def inventory_evidence(
-                    self, repository_id, scope, bounds,
+                    self,
+                    repository_id,
+                    scope,
+                    bounds,
                     page_token=None,
                 ):
                     calls.append(page_token)
@@ -3066,15 +3099,16 @@ class ContextualResolutionTest(unittest.TestCase):
                     return m.EvidenceInventoryPage(
                         items=(item,),
                         repository_state=m.RepositoryState(
-                            repository_id=repo, revision_id=None,
-                            dirty=False, state_fingerprint="fp",
-                            observed_at=datetime.datetime.now(
-                                datetime.timezone.utc
-                            ),
+                            repository_id=repo,
+                            revision_id=None,
+                            dirty=False,
+                            state_fingerprint="fp",
+                            observed_at=datetime.datetime.now(datetime.timezone.utc),
                         ),
                         bound_info=m.BoundInfo(
                             requested_max_results=24,
-                            requested_max_depth=0, returned_results=1,
+                            requested_max_depth=0,
+                            returned_results=1,
                             truncated=True,
                             truncated_category="inventory",
                             continuation_token=token,
@@ -3083,14 +3117,14 @@ class ContextualResolutionTest(unittest.TestCase):
 
             max_results = 3
             orientation, _ = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "w", (), None),
+                repo,
+                m.SubjectSelector(None, "w", (), None),
                 structural=structural,
-                evidence=_FreshTokenEvidence(), store=store,
+                evidence=_FreshTokenEvidence(),
+                store=store,
                 bounds=self._bounds(max_results=max_results),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(orientation.bound_info.truncated)
             # Distinct set stays at one forever; termination comes only
             # from the independent fetch-count ceiling.
@@ -3102,62 +3136,69 @@ class ContextualResolutionTest(unittest.TestCase):
     def test_truncated_without_token_is_unproven(self):
         import datetime
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"t/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             item = evidence.inventory_evidence(
-                repo, m.EvidenceScope(paths=("t/a.py",), evidence_refs=()),
+                repo,
+                m.EvidenceScope(paths=("t/a.py",), evidence_refs=()),
                 self._bounds(),
             ).items[0]
 
             class _NoTokenEvidence:
                 def inventory_evidence(
-                    self, repository_id, scope, bounds,
+                    self,
+                    repository_id,
+                    scope,
+                    bounds,
                     page_token=None,
                 ):
                     return m.EvidenceInventoryPage(
                         items=(item,),
                         repository_state=m.RepositoryState(
-                            repository_id=repo, revision_id=None,
-                            dirty=False, state_fingerprint="fp",
-                            observed_at=datetime.datetime.now(
-                                datetime.timezone.utc
-                            ),
+                            repository_id=repo,
+                            revision_id=None,
+                            dirty=False,
+                            state_fingerprint="fp",
+                            observed_at=datetime.datetime.now(datetime.timezone.utc),
                         ),
                         bound_info=m.BoundInfo(
                             requested_max_results=1,
-                            requested_max_depth=0, returned_results=1,
-                            truncated=True, truncated_category="inventory",
+                            requested_max_depth=0,
+                            returned_results=1,
+                            truncated=True,
+                            truncated_category="inventory",
                             continuation_token=None,
                         ),
                     )
 
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "t", (), None),
+                repo,
+                m.SubjectSelector(None, "t", (), None),
                 structural=structural,
-                evidence=_NoTokenEvidence(), store=store,
+                evidence=_NoTokenEvidence(),
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(orientation.bound_info.truncated)
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
         finally:
             store.close()
 
     def test_continuation_token_cycle_is_unproven(self):
         import datetime
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"c/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
         try:
             item = evidence.inventory_evidence(
-                repo, m.EvidenceScope(paths=("c/a.py",), evidence_refs=()),
+                repo,
+                m.EvidenceScope(paths=("c/a.py",), evidence_refs=()),
                 self._bounds(),
             ).items[0]
 
@@ -3165,18 +3206,18 @@ class ContextualResolutionTest(unittest.TestCase):
                 return m.EvidenceInventoryPage(
                     items=tuple(items),
                     repository_state=m.RepositoryState(
-                        repository_id=repo, revision_id=None,
-                        dirty=False, state_fingerprint="fp",
-                        observed_at=datetime.datetime.now(
-                            datetime.timezone.utc
-                        ),
+                        repository_id=repo,
+                        revision_id=None,
+                        dirty=False,
+                        state_fingerprint="fp",
+                        observed_at=datetime.datetime.now(datetime.timezone.utc),
                     ),
                     bound_info=m.BoundInfo(
-                        requested_max_results=24, requested_max_depth=0,
-                        returned_results=len(items), truncated=truncated,
-                        truncated_category=(
-                            "inventory" if truncated else None
-                        ),
+                        requested_max_results=24,
+                        requested_max_depth=0,
+                        returned_results=len(items),
+                        truncated=truncated,
+                        truncated_category=("inventory" if truncated else None),
                         continuation_token=token,
                     ),
                 )
@@ -3191,20 +3232,23 @@ class ContextualResolutionTest(unittest.TestCase):
 
             class _CyclingEvidence:
                 def inventory_evidence(
-                    self, repository_id, scope, bounds,
+                    self,
+                    repository_id,
+                    scope,
+                    bounds,
                     page_token=None,
                 ):
                     return pages[page_token]
 
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "c", (), None),
+                repo,
+                m.SubjectSelector(None, "c", (), None),
                 structural=structural,
-                evidence=_CyclingEvidence(), store=store,
+                evidence=_CyclingEvidence(),
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(orientation.bound_info.truncated)
         finally:
             store.close()
@@ -3212,6 +3256,7 @@ class ContextualResolutionTest(unittest.TestCase):
     def test_conflicting_evidence_identity_fails_closed(self):
         import datetime
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"k/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
@@ -3219,16 +3264,16 @@ class ContextualResolutionTest(unittest.TestCase):
             area = self._sid(repo, "area_k")
             eref = self._ref(repo, "k/a.py", files)
             fp = fingerprint_content(files["k/a.py"])
-            claim = self._claim(
-                "c-k", area, m.PurposeValue("k", ()), eref
+            claim = self._claim("c-k", area, m.PurposeValue("k", ()), eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(m.Subject(area, "K", None),),
+                    claims=(claim,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                    ),
+                )
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(m.Subject(area, "K", None),),
-                claims=(claim,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                ),
-            ))
 
             def _item(locator):
                 return m.EvidenceInventoryItem(
@@ -3244,35 +3289,40 @@ class ContextualResolutionTest(unittest.TestCase):
 
             class _ConflictingEvidence:
                 def inventory_evidence(
-                    self, repository_id, scope, bounds,
+                    self,
+                    repository_id,
+                    scope,
+                    bounds,
                     page_token=None,
                 ):
                     return m.EvidenceInventoryPage(
                         items=(_item("k/a.py"), _item("k/renamed.py")),
                         repository_state=m.RepositoryState(
-                            repository_id=repo, revision_id=None,
-                            dirty=False, state_fingerprint="fp",
-                            observed_at=datetime.datetime.now(
-                                datetime.timezone.utc
-                            ),
+                            repository_id=repo,
+                            revision_id=None,
+                            dirty=False,
+                            state_fingerprint="fp",
+                            observed_at=datetime.datetime.now(datetime.timezone.utc),
                         ),
                         bound_info=m.BoundInfo(
                             requested_max_results=24,
-                            requested_max_depth=0, returned_results=2,
-                            truncated=False, truncated_category=None,
+                            requested_max_depth=0,
+                            returned_results=2,
+                            truncated=False,
+                            truncated_category=None,
                             continuation_token=None,
                         ),
                     )
 
             orientation, _ = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "k", (), None),
+                repo,
+                m.SubjectSelector(None, "k", (), None),
                 structural=structural,
-                evidence=_ConflictingEvidence(), store=store,
+                evidence=_ConflictingEvidence(),
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertTrue(orientation.bound_info.truncated)
         finally:
             store.close()
@@ -3280,6 +3330,7 @@ class ContextualResolutionTest(unittest.TestCase):
     def test_identical_duplicate_identity_does_not_consume_budget(self):
         import datetime
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"d/a.py": "a=1\n"}
         structural, evidence, store = self._harness(files, ())
@@ -3287,60 +3338,65 @@ class ContextualResolutionTest(unittest.TestCase):
             area = self._sid(repo, "area_d")
             eref = self._ref(repo, "d/a.py", files)
             fp = fingerprint_content(files["d/a.py"])
-            claim = self._claim(
-                "c-d", area, m.PurposeValue("d", ()), eref
+            claim = self._claim("c-d", area, m.PurposeValue("d", ()), eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(m.Subject(area, "D", None),),
+                    claims=(claim,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                    ),
+                )
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(m.Subject(area, "D", None),),
-                claims=(claim,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                ),
-            ))
             item = evidence.inventory_evidence(
-                repo, m.EvidenceScope(paths=("d/a.py",), evidence_refs=()),
+                repo,
+                m.EvidenceScope(paths=("d/a.py",), evidence_refs=()),
                 self._bounds(),
             ).items[0]
 
             class _DuplicatingEvidence:
                 def inventory_evidence(
-                    self, repository_id, scope, bounds,
+                    self,
+                    repository_id,
+                    scope,
+                    bounds,
                     page_token=None,
                 ):
                     return m.EvidenceInventoryPage(
                         items=(item, item),
                         repository_state=m.RepositoryState(
-                            repository_id=repo, revision_id=None,
-                            dirty=False, state_fingerprint="fp",
-                            observed_at=datetime.datetime.now(
-                                datetime.timezone.utc
-                            ),
+                            repository_id=repo,
+                            revision_id=None,
+                            dirty=False,
+                            state_fingerprint="fp",
+                            observed_at=datetime.datetime.now(datetime.timezone.utc),
                         ),
                         bound_info=m.BoundInfo(
                             requested_max_results=24,
-                            requested_max_depth=0, returned_results=2,
-                            truncated=False, truncated_category=None,
+                            requested_max_depth=0,
+                            returned_results=2,
+                            truncated=False,
+                            truncated_category=None,
                             continuation_token=None,
                         ),
                     )
 
             orientation, _ = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "d/a.py", (), None),
+                repo,
+                m.SubjectSelector(None, "d/a.py", (), None),
                 structural=structural,
-                evidence=_DuplicatingEvidence(), store=store,
+                evidence=_DuplicatingEvidence(),
+                store=store,
                 bounds=self._bounds(max_results=1),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, area
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(orientation.candidates[0].subject.subject_id, area)
         finally:
             store.close()
 
     def test_arbitrary_endpoints_no_context(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"svc/local.py": "x=1\n"}
         structural, evidence, store = self._harness(files, ())
@@ -3350,96 +3406,95 @@ class ContextualResolutionTest(unittest.TestCase):
             eref = self._ref(repo, "svc/local.py", files)
             fp = fingerprint_content(files["svc/local.py"])
             rel = self._rel(
-                "r-dep", local, m.RelationshipKind.DEPENDS_ON,
-                shared, eref,
+                "r-dep",
+                local,
+                m.RelationshipKind.DEPENDS_ON,
+                shared,
+                eref,
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(local, "Local", None),
-                    m.Subject(shared, "Shared", None),
-                ),
-                relationships=(rel,),
-                evidence_dependencies=(
-                    self._dep(
-                        m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(local, "Local", None),
+                        m.Subject(shared, "Shared", None),
                     ),
-                ),
-            ))
+                    relationships=(rel,),
+                    evidence_dependencies=(
+                        self._dep(
+                            m.RelationshipRef(id=rel.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                    ),
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
-                repo, m.SubjectSelector(None, "svc/local.py", (), None),
-                structural=structural, evidence=evidence, store=store,
+                repo,
+                m.SubjectSelector(None, "svc/local.py", (), None),
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertIs(
-                orientation.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.NOT_FOUND
-            )
+            self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.NOT_FOUND)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.NOT_FOUND)
         finally:
             store.close()
 
     def test_noncurrent_membership_no_redirect(self):
         from span.service.resolution import _resolve_contextual_subjects
+
         repo = self.CTX
         files = {"canonical_assembly/candidate_packager.py": "x=1\n"}
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                repo, "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
-            claim = self._claim(
-                "c-purpose", canon, m.PurposeValue("packs", ()), eref
-            )
-            rel = self._rel(
-                "r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref
-            )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(claim,), relationships=(rel,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.RelationshipRef(id=rel.relationship_id),
-                        eref, "stale-fingerprint",
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
+            claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
+            rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                ),
-            ))
+                    claims=(claim,),
+                    relationships=(rel,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(
+                            m.RelationshipRef(id=rel.relationship_id),
+                            eref,
+                            "stale-fingerprint",
+                        ),
+                    ),
+                )
+            )
             orientation, trace_root = _resolve_contextual_subjects(
                 repo,
                 m.SubjectSelector(
-                    None, "canonical_assembly/candidate_packager.py",
-                    (), None,
+                    None,
+                    "canonical_assembly/candidate_packager.py",
+                    (),
+                    None,
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 bounds=self._bounds(),
             )
-            self.assertEqual(
-                orientation.candidates[0].subject.subject_id, canon
-            )
-            self.assertIs(
-                trace_root.ambiguity, m.ResolutionAmbiguity.RESOLVED
-            )
-            self.assertEqual(
-                trace_root.candidates[0].subject.subject_id, canon
-            )
+            self.assertEqual(orientation.candidates[0].subject.subject_id, canon)
+            self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.RESOLVED)
+            self.assertEqual(trace_root.candidates[0].subject.subject_id, canon)
         finally:
             store.close()
 
@@ -3449,57 +3504,58 @@ class ContextualResolutionTest(unittest.TestCase):
         subjects = (
             InMemorySubject(
                 "canonical_assembly/candidate_packager.py",
-                m.SubjectKind.COMPONENT, "candidate_packager",
+                m.SubjectKind.COMPONENT,
+                "candidate_packager",
             ),
         )
         structural, evidence, store = self._harness(files, subjects)
         try:
             canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(
-                repo, "review_workflow", m.SubjectKind.SUBSYSTEM
-            )
-            eref = self._ref(
-                repo, "canonical_assembly/candidate_packager.py", files
-            )
-            fp = fingerprint_content(
-                files["canonical_assembly/candidate_packager.py"]
-            )
-            claim = self._claim(
-                "c-purpose", canon, m.PurposeValue("packs", ()), eref
-            )
-            rel = self._rel(
-                "r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref
-            )
+            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
+            claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
+            rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
             cov = self._cq(
-                canon, canon, m.SemanticQuestionClass.CQ_01,
+                canon,
+                canon,
+                m.SemanticQuestionClass.CQ_01,
                 canon.canonical_locator,
                 (m.ClaimRef(id=claim.claim_id),),
             )
-            store.write_index_batch(m.CanonicalIndexBatch(
-                subjects=(
-                    m.Subject(canon, "Canonical Assembly", None),
-                    m.Subject(root, "Review Workflow", None),
-                ),
-                claims=(claim,), relationships=(rel,),
-                evidence_dependencies=(
-                    self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
-                    self._dep(
-                        m.RelationshipRef(id=rel.relationship_id),
-                        eref, fp,
+            store.write_index_batch(
+                m.CanonicalIndexBatch(
+                    subjects=(
+                        m.Subject(canon, "Canonical Assembly", None),
+                        m.Subject(root, "Review Workflow", None),
                     ),
-                ),
-                coverage=(cov,),
-            ))
+                    claims=(claim,),
+                    relationships=(rel,),
+                    evidence_dependencies=(
+                        self._dep(m.ClaimRef(id=claim.claim_id), eref, fp),
+                        self._dep(
+                            m.RelationshipRef(id=rel.relationship_id),
+                            eref,
+                            fp,
+                        ),
+                    ),
+                    coverage=(cov,),
+                )
+            )
             answer = ops.explain(
                 ops.SemanticExplainRequest(
                     repository_id=repo,
                     target=m.SubjectSelector(
-                        None, "canonical_assembly/candidate_packager.py",
-                        (), None,
+                        None,
+                        "canonical_assembly/candidate_packager.py",
+                        (),
+                        None,
                     ),
                     bounds=self._bounds(),
                 ),
-                structural=structural, evidence=evidence, store=store,
+                structural=structural,
+                evidence=evidence,
+                store=store,
                 continuations=ContinuationStore(),
             )
             self.assertIsInstance(answer, m.SemanticAnswer)
@@ -3508,9 +3564,7 @@ class ContextualResolutionTest(unittest.TestCase):
                 canon,
             )
             self.assertTrue(answer.content.claims)
-            kinds = {
-                r.kind for r in answer.content.relationships
-            }
+            kinds = {r.kind for r in answer.content.relationships}
             self.assertIn(m.RelationshipKind.MEMBER_OF, kinds)
         finally:
             store.close()
