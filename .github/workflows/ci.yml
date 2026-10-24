@@ -31,7 +31,10 @@ jobs:
         run: |
           version=$(grep -m1 'STRUCTURAL_INDEXER_VERSION = ' \
             src/span/shell/install.py | cut -d'"' -f2)
+          package=$(grep -m1 'STRUCTURAL_INDEXER_PACKAGE = ' \
+            src/span/shell/install.py | cut -d'"' -f2)
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
 
       - name: Cache the npm indexer download
         uses: actions/cache@v6
@@ -50,6 +53,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e '.[test,dev]'
+
+      # The installed-MCP lane drives a real install over stdio, so the
+      # managed structural indexer must exist before the tests run. The
+      # installer provisions it for end users; CI provisions the same
+      # pinned package and points the server at it through the documented
+      # SPAN_GRAFT_BIN override.
+      - name: Provision the managed structural indexer
+        run: |
+          npm install --prefix "$RUNNER_TEMP/span-tools" \
+            --no-audit --no-fund \
+            "${{ steps.indexer-pin.outputs.package }}@${{ steps.indexer-pin.outputs.version }}"
+          echo "SPAN_GRAFT_BIN=$RUNNER_TEMP/span-tools/node_modules/.bin/graft" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/span-tools/node_modules/.bin/graft" --version
 
       - name: Lint and format
         run: |
