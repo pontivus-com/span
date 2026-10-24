@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pontivus-com/span/master/assets/span-logo-full-color-dark.png">
-    <img src="https://raw.githubusercontent.com/pontivus-com/span/master/assets/span-logo-full-color-light.png" alt="Span" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/span-logo-full-color-dark.png">
+    <img src="assets/span-logo-full-color-light.png" alt="Span" width="360">
   </picture>
 </h1>
 
@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/pontivus-com/span/master/assets/span-product-concept-1600x900.png" alt="Repository evidence flows into Span, which returns CURRENT, STALE, or UNVERIFIABLE understanding" width="900">
+  <img src="assets/span-product-concept-1600x900.png" alt="Repository evidence flows into Span, which returns CURRENT, STALE, or UNVERIFIABLE understanding" width="900">
 </p>
 
 ## The problem
