@@ -2531,7 +2531,7 @@ class ServiceBoundsPolicy:
     default_query_bounds: QueryBounds
     maximum_query_bounds: QueryBounds
     hook_fast_bounds: QueryBounds
-    max_delivered_evidence_bytes: int = 96_000
+    max_delivered_evidence_bytes: int = 16_000
 
 
 # ---------------------------------------------------------------------------

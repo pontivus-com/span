@@ -7,6 +7,7 @@ module path changed.
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
 from collections.abc import Mapping
 
 from span.core import answers as _answers
@@ -14,7 +15,10 @@ from span.core import model as m
 from span.ports.evidence import EvidenceSource
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
-from span.shell.agent_exchange.continuations import ContinuationStore
+from span.shell.agent_exchange.continuations import (
+    ContinuationStore,
+    SuspendedOperation,
+)
 
 from span.service.answers import (
     _answer_id,
@@ -58,6 +62,7 @@ from span.service.requests import (
 )
 from span.service.resolution import (
     _load_subject_state,
+    _resolve_query_subject,
     _resolve_scope_subjects,
 )
 from span.shell import paging as _paging
@@ -67,6 +72,408 @@ __all__ = [
     "_compose_status_answer",
     "status",
 ]
+
+
+def _pending_exchange_requirements(
+    repository_id: str,
+    views: tuple[m.SemanticQuestionCoverageView, ...],
+    continuations: ContinuationStore,
+    *,
+    recovery_operation: str | None = None,
+) -> tuple[m.ResolutionRequirement, ...]:
+    """Project persisted pending questions against live exchange records."""
+    live = continuations.live_records()
+    requirements: list[m.ResolutionRequirement] = []
+    for view in views:
+        if view.effective_disposition is not m.SemanticQuestionDisposition.PENDING:
+            continue
+        question = view.question
+        matches = tuple(
+            record
+            for record in live
+            if record.repository_id == repository_id
+            and record.request.question is not None
+            and record.request.question.scope_root == question.scope_root
+            and record.request.question.subject == question.subject
+            and record.request.question.question_class == question.question_class
+            and record.request.question.question_slice == question.question_slice
+        )
+        subject = question.subject.canonical_locator
+        if matches:
+            operation = matches[0].op
+            description = (
+                f"{question.question_class.value} '{question.question_slice}' "
+                f"for '{subject}' has a live {operation} interpretation unit; "
+                f"continue with the continuation returned by that {operation} "
+                "call and pass it unchanged"
+            )
+        elif recovery_operation is not None:
+            description = (
+                f"{question.question_class.value} '{question.question_slice}' "
+                f"for '{subject}' has no live continuation in the current "
+                f"continuation store; re-run the original {recovery_operation} "
+                "request with the same target inputs; do not synthesize a "
+                "continuation"
+            )
+        else:
+            description = (
+                f"{question.question_class.value} '{question.question_slice}' "
+                f"for '{subject}' has no live continuation in the current "
+                "continuation store; the persisted question identity does not "
+                "record its originating operation; repeat the original "
+                "idempotent request with the same inputs and do not synthesize "
+                "a continuation"
+            )
+        requirements.append(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+                subject_or_claim=question.subject,
+                description=description,
+                supporting_context=(),
+            )
+        )
+    return tuple(requirements)
+
+
+def _live_question_records(
+    repository_id: str,
+    subjects: tuple[m.Subject, ...] | None,
+    continuations: ContinuationStore,
+) -> tuple[SuspendedOperation, ...]:
+    """Return live semantic records for the requested status scope."""
+    subject_ids = (
+        None if subjects is None else {subject.subject_id for subject in subjects}
+    )
+    return tuple(
+        record
+        for record in continuations.live_records()
+        if record.repository_id == repository_id
+        and record.request.question is not None
+        and (subject_ids is None or record.request.question.subject in subject_ids)
+    )
+
+
+def _live_requirement(record: SuspendedOperation) -> m.ResolutionRequirement:
+    """Project one live question without exposing its continuation token."""
+    question = record.request.question
+    assert question is not None
+    scope_root = (
+        f"{question.scope_root.subject_kind.value}:"
+        f"{question.scope_root.canonical_locator}"
+    )
+    return m.ResolutionRequirement(
+        kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+        subject_or_claim=question.subject,
+        description=(
+            f"{question.question_class.value} '{question.question_slice}' "
+            f"under scope root '{scope_root}' for "
+            f"'{question.subject.canonical_locator}' has a live "
+            f"{record.op} interpretation unit; continue with the "
+            f"continuation returned by that {record.op} call and pass it "
+            "unchanged"
+        ),
+        supporting_context=(),
+    )
+
+
+def _live_subject_requirements(
+    repository_id: str,
+    subjects: tuple[m.Subject, ...],
+    continuations: ContinuationStore,
+) -> tuple[m.ResolutionRequirement, ...]:
+    """Project live question work even before its first persisted row."""
+    return tuple(
+        _live_requirement(record)
+        for record in _live_question_records(repository_id, subjects, continuations)
+    )
+
+
+def _repository_live_requirements(
+    repository_id: str,
+    continuations: ContinuationStore,
+) -> tuple[m.ResolutionRequirement, ...]:
+    """Expose first-time live semantic work in repository status."""
+    return tuple(
+        _live_requirement(record)
+        for record in _live_question_records(repository_id, None, continuations)
+    )
+
+
+def _project_pending_coverage_requirements(
+    entries: tuple[m.SemanticCoverageEntry, ...],
+    pending_requirements: tuple[m.ResolutionRequirement, ...],
+) -> tuple[m.SemanticCoverageEntry, ...]:
+    """Replace generic pending continuation wording with exact recovery."""
+    by_subject: dict[m.SubjectId, list[m.ResolutionRequirement]] = {}
+    for requirement in pending_requirements:
+        if isinstance(requirement.subject_or_claim, m.SubjectId):
+            by_subject.setdefault(requirement.subject_or_claim, []).append(requirement)
+    projected: list[m.SemanticCoverageEntry] = []
+    for entry in entries:
+        pending = tuple(by_subject.get(entry.subject, ()))
+        if not pending:
+            projected.append(entry)
+            continue
+        requirements = tuple(
+            requirement
+            for requirement in entry.resolution_requirements
+            if not (
+                requirement.kind is m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE
+                and requirement.subject_or_claim == entry.subject
+                and "continuation returned by the suspending operation"
+                in requirement.description
+            )
+        )
+        projected.append(
+            _dataclasses.replace(
+                entry,
+                resolution_requirements=tuple(dict.fromkeys((*requirements, *pending))),
+            )
+        )
+    return tuple(projected)
+
+
+def _is_generic_live_action(
+    requirement: m.ResolutionRequirement,
+    entry: m.SemanticCoverageEntry,
+    operations: frozenset[str],
+) -> bool:
+    if requirement.subject_or_claim != entry.subject:
+        return False
+    if (
+        entry.disposition is m.SemanticCoverageDisposition.UNASSESSED
+        and "explain" in operations
+        and requirement.kind is m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
+        and "run question-local explain" in requirement.description
+    ):
+        return True
+    if "refresh" in operations and requirement.kind in (
+        m.ResolutionKind.STALE_EVIDENCE,
+        m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+    ):
+        return "exact SubjectSelector" in requirement.description
+    return (
+        requirement.kind is m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE
+        and "continuation returned by the suspending operation"
+        in requirement.description
+    )
+
+
+def _project_live_coverage_requirements(
+    entries: tuple[m.SemanticCoverageEntry, ...],
+    live_records: tuple[SuspendedOperation, ...],
+) -> tuple[m.SemanticCoverageEntry, ...]:
+    """Replace generic status actions when their owning operation is live."""
+    by_subject: dict[m.SubjectId, list[SuspendedOperation]] = {}
+    for record in live_records:
+        question = record.request.question
+        assert question is not None
+        by_subject.setdefault(question.subject, []).append(record)
+    projected: list[m.SemanticCoverageEntry] = []
+    for entry in entries:
+        live = tuple(by_subject.get(entry.subject, ()))
+        if not live:
+            projected.append(entry)
+            continue
+        operations = frozenset(record.op for record in live)
+        live_requirements = tuple(_live_requirement(record) for record in live)
+        requirements = tuple(
+            requirement
+            for requirement in entry.resolution_requirements
+            if not _is_generic_live_action(requirement, entry, operations)
+        )
+        projected.append(
+            _dataclasses.replace(
+                entry,
+                resolution_requirements=tuple(
+                    dict.fromkeys((*requirements, *live_requirements))
+                ),
+            )
+        )
+    return tuple(projected)
+
+
+def _status_state_explanation(
+    base: tuple[str, ...],
+    content: m.StatusContent,
+) -> tuple[str, ...]:
+    """Add status-only readiness, coverage, target, and authority qualifiers."""
+    lines = list(base)
+    if content.readiness is m.RepositoryReadiness.READY:
+        lines.insert(
+            0,
+            "repository readiness: READY means the Span semantic store is "
+            "available; semantic coverage and currency are reported separately",
+        )
+    report = content.coverage_report
+    if report is not None:
+        lines.append(
+            "semantic coverage "
+            f"({report.subject_disposition_scope.value.lower()} scope): "
+            f"{report.current_subject_count} current, "
+            f"{report.incomplete_subject_count} incomplete, "
+            f"{report.stale_subject_count} stale, "
+            f"{report.unverifiable_subject_count} unverifiable, "
+            f"{report.unassessed_subject_count} unassessed subjects; "
+            f"{report.pending_question_count} persisted pending and "
+            f"{report.open_question_count} persisted open questions "
+            f"({report.question_disposition_scope.value.lower()} counts)"
+        )
+    if content.target_disposition is not None:
+        lines.append("target disposition: " + content.target_disposition.value)
+    if any(
+        req.kind is m.ResolutionKind.MISSING_AUTHORITY for req in content.unresolved
+    ):
+        lines.append("governing authority remains unresolved for this result")
+    return tuple(lines)
+
+
+def _repository_pending_requirements(
+    repository_id: str,
+    entries: tuple[m.SemanticCoverageEntry, ...],
+    *,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    continuations: ContinuationStore,
+) -> tuple[m.ResolutionRequirement, ...]:
+    """Project pending coverage for the subjects on one repository page."""
+    subjects = tuple(entry.subject for entry in entries)
+    coverages = store.load_all_question_coverages(repository_id, None, ())
+    views = tuple(
+        effective_question_view(
+            coverage,
+            evidence=evidence,
+            store=store,
+            repository_id=repository_id,
+        )
+        for coverage in coverages
+        if coverage.question is not None
+        and coverage.question.subject in subjects
+        and coverage.disposition is m.SemanticQuestionDisposition.PENDING
+    )
+    return _pending_exchange_requirements(repository_id, views, continuations)
+
+
+def _target_live_requirements(
+    repository_id: str,
+    target_id: m.TargetId,
+    association: m.TargetAssociation,
+    *,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    continuations: ContinuationStore,
+) -> tuple[m.ResolutionRequirement, ...]:
+    """Project live target-mapping and target-question exchange state."""
+    requirements: list[m.ResolutionRequirement] = []
+    for record in continuations.live_records():
+        if record.repository_id != repository_id or record.target_id != target_id:
+            continue
+        if record.request.question is not None:
+            continue
+        requirements.append(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+                subject_or_claim=record.subject.subject_id,
+                description=(
+                    f"target '{target_id.value}' has a live initialize_target "
+                    "mapping unit; continue with the continuation returned "
+                    "by that initialize_target call and pass it unchanged"
+                ),
+                supporting_context=(),
+            )
+        )
+    pending_views: list[m.SemanticQuestionCoverageView] = []
+    for question in association.target_questions:
+        coverages = store.load_all_question_coverages(
+            repository_id, question.scope_root, (question.subject,)
+        )
+        pending_views.extend(
+            effective_question_view(
+                coverage,
+                evidence=evidence,
+                store=store,
+                repository_id=repository_id,
+            )
+            for coverage in coverages
+            if coverage.question == question
+            and coverage.disposition is m.SemanticQuestionDisposition.PENDING
+        )
+    requirements.extend(
+        _pending_exchange_requirements(
+            repository_id,
+            tuple(pending_views),
+            continuations,
+            recovery_operation="initialize_target",
+        )
+    )
+    return tuple(dict.fromkeys(requirements))
+
+
+def _resolve_status_subjects(
+    repository_id: str,
+    target: m.SubjectSelector | m.EvidenceScope,
+    *,
+    structural: StructuralSource,
+    store: SemanticStore,
+    evidence: EvidenceSource,
+    bounds: m.QueryBounds,
+) -> tuple[tuple[m.Subject, ...], m.ResolutionAmbiguity, m.SubjectResolution | None]:
+    """Resolve selector targets without discarding canonical candidates."""
+    if isinstance(target, m.SubjectSelector):
+        resolution = _resolve_query_subject(
+            repository_id,
+            target,
+            structural=structural,
+            store=store,
+            bounds=bounds,
+        )
+        return (
+            tuple(candidate.subject for candidate in resolution.candidates),
+            resolution.ambiguity,
+            resolution,
+        )
+    subjects, ambiguity = _resolve_scope_subjects(
+        repository_id,
+        target,
+        structural=structural,
+        store=store,
+        bounds=bounds,
+        evidence=evidence,
+    )
+    return subjects, ambiguity, None
+
+
+def _unresolved_status_answer(
+    repository_id: str,
+    target: m.SubjectSelector | m.EvidenceScope,
+    resolution: m.SubjectResolution | None,
+    *,
+    state: m.RepositoryState,
+    bounds: m.QueryBounds,
+) -> m.SemanticAnswer:
+    requirements = (
+        _answers.requirements_for_resolution(
+            resolution,
+            repository_id=repository_id,
+            name_or_locator=(
+                target.name_or_locator
+                if isinstance(target, m.SubjectSelector)
+                else None
+            ),
+        )
+        if resolution is not None
+        else ()
+    )
+    return m.SemanticAnswer(
+        answer_id=_answer_id("stt", repository_id, "scope"),
+        intent=m.SemanticIntent.STATUS,
+        repository_state=state,
+        subject_resolution=resolution,
+        content=m.StatusContent(),
+        evidence=(),
+        resolution_requirements=requirements,
+        bound_info=_bound_info(bounds, 0, False, None),
+    )
 
 
 def _hook_fast(
@@ -423,18 +830,16 @@ def _repository_coverage_entry(
         # evidence inventory reads UNVERIFIABLE with an explicit
         # absence requirement (restore, re-anchor, or retire the
         # record). Provider-agnostic inventory membership — never
-        # filesystem walks. Inventory failure must not fake a ghost.
-        try:
-            present = evidence.inventory_evidence(
-                repository_id,
-                m.EvidenceScope(paths=(file_part,), evidence_refs=()),
-                bounds,
-            )
-            ghost = not any(
-                item.evidence_ref.locator == file_part for item in present.items
-            )
-        except Exception:
-            ghost = False
+        # filesystem walks. Inventory failure must not fake a ghost, so
+        # a provider error propagates instead of reading as presence.
+        present = evidence.inventory_evidence(
+            repository_id,
+            m.EvidenceScope(paths=(file_part,), evidence_refs=()),
+            bounds,
+        )
+        ghost = not any(
+            item.evidence_ref.locator == file_part for item in present.items
+        )
         if ghost:
             disposition = m.SemanticCoverageDisposition.UNVERIFIABLE
             requirements.append(
@@ -483,20 +888,15 @@ def _coverage_entries_for_subjects(
     # Current persisted coverage always records a non-empty discovery
     # scope; an empty scope means whole-repository inventory only.
     # Snapshots are scoped to this status call and never shared across
-    # operations.
-    try:
-        coverages = store.load_coverage_dependencies(
-            repository_id,
-            tuple(s.subject_id for s in subjects),
-        )
-    except Exception:
-        coverages = ()
-    try:
-        scope_snapshots = _coverage_scope_snapshots(
-            repository_id, coverages, evidence=evidence
-        )
-    except Exception:
-        scope_snapshots = {}
+    # operations. A store or provider failure here publishes no status:
+    # an unread obligation would otherwise read as an absent one.
+    coverages = store.load_coverage_dependencies(
+        repository_id,
+        tuple(s.subject_id for s in subjects),
+    )
+    scope_snapshots = _coverage_scope_snapshots(
+        repository_id, coverages, evidence=evidence
+    )
     return tuple(
         _repository_coverage_entry(
             repository_id,
@@ -596,6 +996,7 @@ def _compose_repository_status_answer(
     store: SemanticStore,
     bounds: m.QueryBounds,
     state: m.RepositoryState,
+    continuations: ContinuationStore,
     subject_offset: int = 0,
     mode: str = "NORMAL",
     page_token: str | None = None,
@@ -613,6 +1014,18 @@ def _compose_repository_status_answer(
         store=store,
         bounds=bounds,
     )
+    live_records = _live_question_records(repository_id, None, continuations)
+    repository_pending_requirements = _repository_pending_requirements(
+        repository_id,
+        entries,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+    )
+    entries = _project_pending_coverage_requirements(
+        entries, repository_pending_requirements
+    )
+    entries = _project_live_coverage_requirements(entries, live_records)
     # Addendum G §4.2b within-page display order only: deterministic by
     # (coverage-rank, open desc, pending desc, locator, kind). Pagination
     # stays locator order; truncation follows retention priority.
@@ -662,6 +1075,18 @@ def _compose_repository_status_answer(
         requirement
         for entry in entries
         for requirement in entry.resolution_requirements
+    )
+    repository_live_requirements = _repository_live_requirements(
+        repository_id, continuations
+    )
+    requirements = tuple(
+        dict.fromkeys(
+            (
+                *repository_live_requirements,
+                *requirements,
+                *repository_pending_requirements,
+            )
+        )
     )[: bounds.max_results]
     truncated = subject_page.bound_info.truncated or any(
         entry.truncated for entry in entries
@@ -680,6 +1105,11 @@ def _compose_repository_status_answer(
         else "semantic_frontier" if truncated else None
     )
     returned = len(entries) + len(requirements)
+    content = m.StatusContent(
+        readiness=m.RepositoryReadiness.READY,
+        unresolved=requirements,
+        coverage_report=report,
+    )
     return m.SemanticAnswer(
         answer_id=_answer_id(
             "stt",
@@ -689,18 +1119,13 @@ def _compose_repository_status_answer(
         intent=m.SemanticIntent.STATUS,
         repository_state=state,
         subject_resolution=None,
-        content=m.StatusContent(
-            readiness=m.RepositoryReadiness.READY,
-            unresolved=requirements,
-            coverage_report=report,
-        ),
+        content=content,
         evidence=(),
         resolution_requirements=requirements,
         bound_info=_bound_info(bounds, returned, truncated, category, next_token),
-        state_explanation=state_explanation_for(
-            (),
-            (),
-            bounds=(bounds.max_results, truncated),
+        state_explanation=_status_state_explanation(
+            state_explanation_for((), (), bounds=(bounds.max_results, truncated)),
+            content,
         ),
     )
 
@@ -712,6 +1137,7 @@ def _repository_status_page(
     store: SemanticStore,
     bounds: m.QueryBounds,
     state: m.RepositoryState,
+    continuations: ContinuationStore,
 ) -> m.SemanticAnswer:
     """Resolve the normal no-target repository report page."""
     try:
@@ -743,6 +1169,7 @@ def _repository_status_page(
         store=store,
         bounds=bounds,
         state=state,
+        continuations=continuations,
         subject_offset=subject_skip,
         mode=request.mode.value,
         page_token=request.page_token,
@@ -757,31 +1184,10 @@ def _target_status_answer(
     store: SemanticStore,
     bounds: m.QueryBounds,
     state: m.RepositoryState,
+    continuations: ContinuationStore,
 ) -> m.SemanticAnswer:
     """Campaign readback: absent → UNASSESSED, then UNVERIFIABLE→STALE→INCOMPLETE→CURRENT."""
-    assoc: m.TargetAssociation | None = None
-    try:
-        assoc = store.load_target_association(repository_id, target_id)
-    except Exception:
-        # Store failure is not absence: without the durable association
-        # the campaign cannot be evaluated.
-        content = m.StatusContent(
-            target_association=None,
-            target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
-            target_total_count=None,
-            target_accounted_count=None,
-            target_unaccounted_count=None,
-        )
-        return m.SemanticAnswer(
-            answer_id=_answer_id("stt", repository_id, "target"),
-            intent=m.SemanticIntent.STATUS,
-            repository_state=state,
-            subject_resolution=None,
-            content=content,
-            evidence=(),
-            resolution_requirements=(),
-            bound_info=_bound_info(bounds, 0, False, None),
-        )
+    assoc = store.load_target_association(repository_id, target_id)
     if assoc is None:
         content = m.StatusContent(
             target_association=None,
@@ -799,6 +1205,10 @@ def _target_status_answer(
             evidence=(),
             resolution_requirements=(),
             bound_info=_bound_info(bounds, 0, False, None),
+            state_explanation=_status_state_explanation(
+                state_explanation_for((), (), bounds=(bounds.max_results, False)),
+                content,
+            ),
         )
     try:
         from span.service.discovery import enumerate_target_inventory
@@ -809,7 +1219,11 @@ def _target_status_answer(
             evidence=evidence,
             bounds=bounds,
         )
-    except (ValueError, Exception):
+    except ValueError:
+        # The provider refuses to establish the bounded live observation
+        # for this scope. That is a fact about the repository, so the
+        # campaign reads UNVERIFIABLE; any other failure is a defect and
+        # propagates rather than borrowing a semantic status.
         content = m.StatusContent(
             target_association=assoc,
             target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
@@ -826,6 +1240,10 @@ def _target_status_answer(
             evidence=(),
             resolution_requirements=(),
             bound_info=_bound_info(bounds, 0, False, None),
+            state_explanation=_status_state_explanation(
+                state_explanation_for((), (), bounds=(bounds.max_results, False)),
+                content,
+            ),
         )
     current_fp = m.target_inventory_fingerprint(inv_items)
     if len(assoc.inventory_accounting) > bounds.max_results:
@@ -848,6 +1266,10 @@ def _target_status_answer(
             evidence=(),
             resolution_requirements=(),
             bound_info=_bound_info(bounds, 0, False, None),
+            state_explanation=_status_state_explanation(
+                state_explanation_for((), (), bounds=(bounds.max_results, False)),
+                content,
+            ),
         )
     if current_fp != assoc.inventory_fingerprint:
         current_ids = {item.evidence_ref.evidence_id.value for item in inv_items}
@@ -885,6 +1307,10 @@ def _target_status_answer(
                 ),
             ),
             bound_info=_bound_info(bounds, 0, False, None),
+            state_explanation=_status_state_explanation(
+                state_explanation_for((), (), bounds=(bounds.max_results, False)),
+                content,
+            ),
         )
     accounted = {
         acc.evidence_ref.evidence_id.value: acc for acc in assoc.inventory_accounting
@@ -900,14 +1326,47 @@ def _target_status_answer(
     saw_stale = False
     saw_incomplete = False
     residual: list[m.ResolutionRequirement] = []
+    live_requirements = _target_live_requirements(
+        repository_id,
+        target_id,
+        assoc,
+        evidence=evidence,
+        store=store,
+        continuations=continuations,
+    )
+    residual.extend(live_requirements)
+    live_mapping = any(
+        record.repository_id == repository_id
+        and record.target_id == target_id
+        and record.request.question is None
+        for record in continuations.live_records()
+    )
+    saw_incomplete = bool(live_requirements)
+    unaccounted = False
     for item in inv_items:
         eid = item.evidence_ref.evidence_id.value
         if eid not in accounted:
             saw_incomplete = True
+            unaccounted = True
             continue
         if accounted[eid].resolution_requirements:
             saw_incomplete = True
             residual.extend(accounted[eid].resolution_requirements)
+    if unaccounted and not live_mapping:
+        residual.append(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
+                subject_or_claim=None,
+                description=(
+                    f"target '{target_id.value}' has unaccounted inventory "
+                    "and no live initialize_target continuation; rerun "
+                    "initialize_target with the same exact target scope and "
+                    f"objective '{assoc.objective}'; do not synthesize a "
+                    "continuation"
+                ),
+                supporting_context=(),
+            )
+        )
     questions_by_area: dict[m.SubjectId, list[m.SemanticQuestionScope]] = {}
     for q in assoc.target_questions:
         questions_by_area.setdefault(q.scope_root, []).append(q)
@@ -915,10 +1374,7 @@ def _target_status_answer(
         if area not in questions_by_area:
             saw_incomplete = True
     for q in assoc.target_questions:
-        try:
-            anchors = store.load_subjects(repository_id, (q.subject,))
-        except Exception:
-            anchors = None
+        anchors = store.load_subjects(repository_id, (q.subject,))
         anchor_requirement = None
         if anchors is not None and not anchors:
             # §4C.6D amendment (answerability, 2026-10-11): an admitted
@@ -935,15 +1391,11 @@ def _target_status_answer(
                 ),
                 supporting_context=(),
             )
-        try:
-            coverages = store.load_all_question_coverages(
-                repository_id,
-                q.scope_root,
-                (q.subject,),
-            )
-        except Exception:
-            saw_unverifiable = True
-            continue
+        coverages = store.load_all_question_coverages(
+            repository_id,
+            q.scope_root,
+            (q.subject,),
+        )
         match = None
         for cov in coverages:
             if cov.question is None:
@@ -962,16 +1414,12 @@ def _target_status_answer(
                 residual.append(anchor_requirement)
             continue
         # Canonical freshness: effective disposition + dependency state.
-        try:
-            view = effective_question_view(
-                match,
-                evidence=evidence,
-                store=store,
-                repository_id=repository_id,
-            )
-        except Exception:
-            saw_unverifiable = True
-            continue
+        view = effective_question_view(
+            match,
+            evidence=evidence,
+            store=store,
+            repository_id=repository_id,
+        )
         if view.freshness.state is m.FreshnessState.UNVERIFIABLE:
             saw_unverifiable = True
         elif view.freshness.state is m.FreshnessState.STALE:
@@ -1012,6 +1460,15 @@ def _target_status_answer(
         target_accounted_count=accounted_count,
         target_unaccounted_count=unaccounted_count,
     )
+    if live_requirements:
+        content = m.StatusContent(
+            target_association=content.target_association,
+            target_disposition=content.target_disposition,
+            target_total_count=content.target_total_count,
+            target_accounted_count=content.target_accounted_count,
+            target_unaccounted_count=content.target_unaccounted_count,
+            unresolved=tuple(dict.fromkeys((*content.unresolved, *live_requirements))),
+        )
     return m.SemanticAnswer(
         answer_id=_answer_id("stt", repository_id, "target"),
         intent=m.SemanticIntent.STATUS,
@@ -1019,10 +1476,11 @@ def _target_status_answer(
         subject_resolution=None,
         content=content,
         evidence=(),
-        resolution_requirements=tuple(residual) if saw_incomplete else (),
+        resolution_requirements=content.unresolved,
         bound_info=_bound_info(bounds, 0, False, None),
-        state_explanation=state_explanation_for(
-            (), (), bounds=(bounds.max_results, False)
+        state_explanation=_status_state_explanation(
+            state_explanation_for((), (), bounds=(bounds.max_results, False)),
+            content,
         ),
     )
 
@@ -1036,6 +1494,7 @@ def _compose_status_answer(
     store: SemanticStore,
     bounds: m.QueryBounds,
     state: m.RepositoryState,
+    continuations: ContinuationStore,
     page_token: str | None = None,
 ) -> m.SemanticAnswer:
     if len(subjects) == 1:
@@ -1212,6 +1671,14 @@ def _compose_status_answer(
     if qremaining > 0:
         truncated = True
         category = category or "question_coverage"
+    pending_requirements = tuple(
+        dict.fromkeys(
+            (
+                *_pending_exchange_requirements(repository_id, views, continuations),
+                *_live_subject_requirements(repository_id, subjects, continuations),
+            )
+        )
+    )
     # Whole-frontier accounting for the exact scope (Addendum E E-13):
     # one typed disposition per frontier subject, UNASSESSED where no
     # coverage was adopted. Read-time projection over persisted state;
@@ -1223,6 +1690,13 @@ def _compose_status_answer(
         evidence=evidence,
         store=store,
         bounds=bounds,
+    )
+    frontier_entries = _project_pending_coverage_requirements(
+        frontier_entries, pending_requirements
+    )
+    live_records = _live_question_records(repository_id, subjects, continuations)
+    frontier_entries = _project_live_coverage_requirements(
+        frontier_entries, live_records
     )
     (
         persisted_target_accounted_count,
@@ -1251,6 +1725,7 @@ def _compose_status_answer(
             bounded_live_target_unaccounted_count,
         ),
     )
+    unresolved = tuple(dict.fromkeys((*unresolved, *pending_requirements)))
     content = m.StatusContent(
         readiness=m.RepositoryReadiness.READY,
         freshness_items=_freshness_items_for(kept_claims, kept_rels),
@@ -1262,7 +1737,7 @@ def _compose_status_answer(
         claims=kept_claims,
         relationships=kept_rels,
         conflicts=kept_conf,
-        unresolved=tuple(unresolved),
+        unresolved=unresolved,
         question_coverage=views,
         coverage_report=frontier_report,
     )
@@ -1284,13 +1759,16 @@ def _compose_status_answer(
         subject_resolution=None,
         content=content,
         evidence=tuple(ref for c in kept_claims for ref in c.evidence),
-        resolution_requirements=tuple(unresolved),
+        resolution_requirements=unresolved,
         bound_info=_bound_info(bounds, returned, truncated, category, token),
-        state_explanation=state_explanation_for(
-            tuple(kept_claims),
-            tuple(kept_rels),
-            coverage=coverage_counts_for(views),
-            bounds=(bounds.max_results, truncated),
+        state_explanation=_status_state_explanation(
+            state_explanation_for(
+                tuple(kept_claims),
+                tuple(kept_rels),
+                coverage=coverage_counts_for(views),
+                bounds=(bounds.max_results, truncated),
+            ),
+            content,
         ),
     )
 
@@ -1344,6 +1822,7 @@ def status(
             store=store,
             bounds=bounds,
             state=state,
+            continuations=continuations,
         )
     if request.mode is m.StatusMode.HOOK_FAST:
         return _hook_fast(
@@ -1379,6 +1858,7 @@ def status(
             store=store,
             bounds=bounds,
             state=state,
+            continuations=continuations,
             page_token=request.page_token,
         )
     state = structural.repository_state(request.repository_id)
@@ -1393,35 +1873,23 @@ def status(
             store=store,
             bounds=bounds,
             state=state,
+            continuations=continuations,
         )
-    subjects, ambiguity = _resolve_scope_subjects(
+    subjects, ambiguity, resolution = _resolve_status_subjects(
         request.repository_id,
         request.target,
         structural=structural,
         store=store,
-        bounds=bounds,
         evidence=evidence,
+        bounds=bounds,
     )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
-        requirements: tuple[m.ResolutionRequirement, ...] = ()
-        if ambiguity is m.ResolutionAmbiguity.AMBIGUOUS:
-            requirements = (
-                m.ResolutionRequirement(
-                    kind=m.ResolutionKind.AMBIGUOUS_IDENTITY,
-                    subject_or_claim=None,
-                    description="status target is ambiguous",
-                    supporting_context=(),
-                ),
-            )
-        return m.SemanticAnswer(
-            answer_id=_answer_id("stt", request.repository_id, "scope"),
-            intent=m.SemanticIntent.STATUS,
-            repository_state=state,
-            subject_resolution=None,
-            content=m.StatusContent(),
-            evidence=(),
-            resolution_requirements=requirements,
-            bound_info=_bound_info(bounds, 0, False, None),
+        return _unresolved_status_answer(
+            request.repository_id,
+            request.target,
+            resolution,
+            state=state,
+            bounds=bounds,
         )
     # S2 §5.2 observational status: never suspend, never persist.
     # Unexamined subjects return explicit missing coverage with
@@ -1435,5 +1903,6 @@ def status(
         store=store,
         bounds=bounds,
         state=state,
+        continuations=continuations,
         page_token=request.page_token,
     )

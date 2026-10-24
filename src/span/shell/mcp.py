@@ -30,6 +30,7 @@ from span.core import schema as _schema
 from span.ports.evidence import EvidenceSource
 from span.ports.interpretation import (
     InterpretationUnavailable,
+    PendingInterpretation,
 )
 from span.ports.store import SemanticStore
 from span.ports.structural import StaleContinuationError
@@ -48,6 +49,7 @@ except Exception:  # pragma: no cover - import-time fallback
 __all__ = [
     "TOOL_NAMES",
     "TOOL_SCHEMAS",
+    "TOOL_OUTPUT_SCHEMAS",
     "TOOL_DESCRIPTIONS",
     "ToolResult",
     "ServiceContext",
@@ -73,6 +75,7 @@ class ToolResult:
     """One tool invocation outcome (transport envelope, not semantics)."""
 
     content: str
+    structured_content: dict | None = None
     is_error: bool = False
 
 
@@ -130,10 +133,13 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "coverage: current, incomplete, stale/unverifiable, and "
         "unassessed subjects. Entry guidance names the next exact step: "
         "stale or unverifiable work uses refresh with an exact "
-        "SubjectSelector; unassessed work uses a question-local explain; "
+        "SubjectSelector; unassessed work uses a question-local explain only "
+        "when no owning operation is live; otherwise continue its returned "
+        "continuation. "
         "pending question work continues only through the continuation "
         "returned by the suspending operation. Exact targets report "
-        "detailed freshness; HOOK_FAST "
+        "detailed freshness; readiness READY means Span storage/runtime "
+        "availability only, not semantic completeness. HOOK_FAST "
         "returns a compact notice only: event-local scope, never "
         "repository inventory, so READY 0/0 never means clean."
     ),
@@ -141,7 +147,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Explicitly reinterpret a scoped semantic target. For stale "
         "work, use an exact SubjectSelector or EvidenceScope. Challenging "
         "an otherwise CURRENT subject requires stale_only=false with an "
-        "exact SubjectSelector. Never automatic."
+        "exact SubjectSelector and an already-persisted question. "
+        "UNASSESSED subjects require question-local explain only when no "
+        "owning operation is live. Never automatic."
     ),
     "submit_interpretation": (
         "Submit the host-produced typed interpretation result for a "
@@ -373,6 +381,25 @@ def _generated_tool_schemas() -> dict[str, dict]:
 
 TOOL_SCHEMAS: dict[str, dict] = _generated_tool_schemas()
 
+TOOL_OUTPUT_TYPES: dict[str, object] = {
+    "initialize_repository": ops.SemanticInitializeRepositoryResult,
+    "initialize_target": m.SemanticAnswer | PendingInterpretation,
+    "explain": m.SemanticAnswer | PendingInterpretation,
+    "impact": m.SemanticAnswer | PendingInterpretation,
+    "trace": m.SemanticAnswer | PendingInterpretation,
+    "authority": m.SemanticAnswer | PendingInterpretation,
+    "status": m.SemanticAnswer | m.HookStatusNotice,
+    "refresh": m.SemanticAnswer | PendingInterpretation,
+    "submit_interpretation": m.SemanticAnswer | PendingInterpretation,
+    "locate": m.StructuralLocateResult,
+    "neighbors": m.StructuralNeighborsResult,
+}
+
+TOOL_OUTPUT_SCHEMAS: dict[str, dict] = {
+    name: _schema.schema_for_result(result_type)
+    for name, result_type in TOOL_OUTPUT_TYPES.items()
+}
+
 TOOL_NAMES: tuple[str, ...] = (
     "initialize_repository",
     "initialize_target",
@@ -440,6 +467,14 @@ def _decode_init(arguments: dict) -> ops.SemanticInitializeRepositoryRequest:
         raise ValueError(f"invalid initialize_repository arguments: {exc}") from None
 
 
+def canonical_result_payload(result: object) -> dict:
+    """Build the one canonical wire object used by both MCP result channels."""
+    compact = _schema.to_wire_root(type(result), m.to_canonical(result))
+    if isinstance(compact, dict) and compact.get("$type") == ("PendingInterpretation"):
+        compact = _omit_static_profile(compact)
+    return compact
+
+
 def encode_result(result: object) -> str:
     """Deterministic compact JSON for the discriminated result (S6.4/S7).
 
@@ -448,10 +483,7 @@ def encode_result(result: object) -> str:
     vocabularies, default bounds, and base task-brief rules are omitted
     when they equal the profile defaults.
     """
-    compact = _schema.to_wire_root(type(result), m.to_canonical(result))
-    if isinstance(compact, dict) and compact.get("$type") == ("PendingInterpretation"):
-        compact = _omit_static_profile(compact)
-    return _json.dumps(compact, sort_keys=True)
+    return _json.dumps(canonical_result_payload(result), sort_keys=True)
 
 
 def _omit_static_profile(compact: dict) -> dict:
@@ -517,6 +549,7 @@ def _omit_static_brief(brief: object) -> object:
 def _error(kind: str, message: str) -> ToolResult:
     return ToolResult(
         content=_json.dumps({"error": kind, "message": message}, sort_keys=True),
+        structured_content=None,
         is_error=True,
     )
 
@@ -748,7 +781,12 @@ class McpAdapter:
                 return _error("unavailable", str(exc))
             raise
         try:
-            return ToolResult(content=encode_result(result))
+            payload = canonical_result_payload(result)
+            return ToolResult(
+                content=_json.dumps(payload, sort_keys=True),
+                structured_content=payload,
+                is_error=False,
+            )
         except (TypeError, ValueError) as exc:
             return _error("transport", f"cannot encode result: {exc}")
 
@@ -767,4 +805,9 @@ class McpAdapter:
         except ValueError as exc:
             return _error("rejected", str(exc))
         self.register(result.repository_id, context)
-        return ToolResult(content=encode_result(result))
+        payload = canonical_result_payload(result)
+        return ToolResult(
+            content=_json.dumps(payload, sort_keys=True),
+            structured_content=payload,
+            is_error=False,
+        )

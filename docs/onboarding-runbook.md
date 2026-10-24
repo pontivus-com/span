@@ -182,6 +182,10 @@ interpretation. Retrieval never invents, widens, or substitutes an answer.
 After source changes, call scoped `refresh`, inspect stale/unverifiable
 coverage, and repeat the same quality card for affected areas. A stale
 answer is not presented as current; `refresh` alone manufactures nothing.
+An `UNASSESSED` subject uses question-local `explain` only when no owning
+operation is live; otherwise continue its returned continuation. Refresh
+never establishes its first semantic question. An explicit CURRENT challenge uses
+`stale_only=false` only against an already-persisted question.
 
 To challenge a `CURRENT` explanation without a source change, resolve
 the exact persisted question from `status`/`explain` question coverage,

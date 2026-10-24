@@ -1241,6 +1241,7 @@ class ServerWiringTest(unittest.TestCase):
             result = asyncio.run(entry.handler(None, _types.PaginatedRequestParams()))
             self.assertIsInstance(result, _types.ListToolsResult)
             self.assertEqual(len(result.tools), 11)
+            self.assertTrue(all(tool.output_schema for tool in result.tools))
             json.loads(result.model_dump_json(by_alias=True))
         finally:
             adapter.contexts[REPO].store.close()
@@ -1287,8 +1288,109 @@ class ServerWiringTest(unittest.TestCase):
             self.assertFalse(result.is_error)
             sdk_body = json.loads(result.content[0].text)
             self.assertEqual(sdk_body["$type"], "HookStatusNotice")
+            self.assertEqual(result.structured_content, sdk_body)
         finally:
             adapter.contexts[REPO].store.close()
+
+    def test_structured_content_conforms_to_advertised_output_schema(self):
+        import jsonschema
+
+        from span.shell.mcp import TOOL_OUTPUT_SCHEMAS
+
+        adapter, _ = _harness()
+        try:
+            cases = (
+                (
+                    "status",
+                    {
+                        "repository_id": REPO,
+                        "target": None,
+                        "mode": "HOOK_FAST",
+                    },
+                ),
+                ("status", {"repository_id": REPO, "target": None}),
+                (
+                    "locate",
+                    {
+                        "repository_id": REPO,
+                        "mode": "SYMBOL",
+                        "query": "src/tools.py",
+                    },
+                ),
+                (
+                    "neighbors",
+                    {
+                        "repository_id": REPO,
+                        "direction": "DOWNSTREAM",
+                        "target": _selector_args(),
+                    },
+                ),
+            )
+            for tool, arguments in cases:
+                with self.subTest(tool=tool, arguments=arguments):
+                    result = _dispatch(adapter, tool, arguments)
+                    self.assertFalse(result.is_error, result.content)
+                    jsonschema.validate(
+                        result.structured_content,
+                        TOOL_OUTPUT_SCHEMAS[tool],
+                    )
+        finally:
+            adapter.contexts[REPO].store.close()
+
+    def test_pending_and_initialize_payloads_conform_to_output_schema(self):
+        import jsonschema
+
+        from span.shell.mcp import TOOL_OUTPUT_SCHEMAS, canonical_result_payload
+
+        adapter, _ = _harness()
+        try:
+            context = adapter.contexts[REPO]
+            pending = ops.explain(
+                ops.SemanticExplainRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/tools.py", (), None),
+                    bounds=DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
+                ),
+                structural=context.structural,
+                evidence=context.evidence,
+                store=context.store,
+                continuations=context.continuations,
+                authority_seeds=(),
+            )
+            from span.ports.interpretation import PendingInterpretation
+
+            self.assertIsInstance(pending, PendingInterpretation)
+            jsonschema.validate(
+                canonical_result_payload(pending),
+                TOOL_OUTPUT_SCHEMAS["explain"],
+            )
+        finally:
+            adapter.contexts[REPO].store.close()
+
+        structural = InMemoryStructuralSource(
+            REPO,
+            tuple(InMemoryFile(p, c) for p, c in FILES.items()),
+            (InMemorySubject("src/tools.py", m.SubjectKind.COMPONENT, "t"),),
+        )
+        evidence = FixtureEvidenceSource(REPO, dict(FILES))
+        store = SqliteSemanticStore(":memory:")
+        try:
+            initialized = ops.initialize_repository(
+                ops.SemanticInitializeRepositoryRequest(
+                    repository_locator="fixture",
+                    authority_seeds=(),
+                ),
+                repository_id=REPO,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+            )
+            jsonschema.validate(
+                canonical_result_payload(initialized),
+                TOOL_OUTPUT_SCHEMAS["initialize_repository"],
+            )
+        finally:
+            store.close()
 
 
 @unittest.skipUnless(_HAS_MCP_SDK, "MCP SDK unavailable")

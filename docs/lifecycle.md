@@ -30,7 +30,7 @@ stale refresh:
 
 CURRENT/unchanged-source challenge:
   SubjectSelector only
-  stale_only=false
+  stale_only=false, but only against an already-persisted question
 ```
 
 An `EvidenceScope` with `stale_only=false` is rejected: it is not an
@@ -42,16 +42,22 @@ to accept either target type.
 Normal `status` names the next exact step in each non-current entry:
 
 - `STALE` or `UNVERIFIABLE` → `refresh` with the exact `SubjectSelector`
-  for that subject; an `UNVERIFIABLE` empty result proves nothing.
+  for that subject when no owning refresh operation is live; otherwise
+  continue its returned continuation. An `UNVERIFIABLE` empty result proves
+  nothing.
 - `UNASSESSED` (no adopted question coverage) → question-local `explain`
-  on that subject. A continuation exists only after that operation
-  suspends.
+  on that subject when no owning operation is live. If the operation has
+  already suspended, continue its returned continuation instead.
 - Pending or open question work → continue through the continuation
   returned by the operation that suspended. Pass it unchanged; never
   decode or synthesize it.
 
 Hooks report the same distinction in compact form and never allocate a
 continuation.
+
+Refresh never establishes a subject's first semantic question. `UNASSESSED`
+uses question-local `explain` unless that operation is already live; `STALE`
+or `UNVERIFIABLE` uses `refresh` unless that refresh is already live.
 
 ## Refresh ownership
 
@@ -163,6 +169,9 @@ semantic coverage and reports its bounded frontier; it never enumerates
 structural subjects or interprets them. Skills are guidance only, never
 semantic authority.
 
+`READY` means Span storage/runtime readiness only. It is not semantic
+completeness; coverage and currency are reported separately.
+
 ## Target mapping
 
 `initialize_target` binds a bounded, deterministic batch of unaccounted
@@ -170,3 +179,6 @@ inventory members per mapping unit; every bound member receives exactly one
 disposition (assignment, evidence-backed exclusion, or unresolved mapping),
 validated atomically. Newly admitted areas take a service-owned first
 `PENDING` CQ-01 seed when no reusable current question exists.
+Use `status(TargetId)` to distinguish a live mapping unit, which continues
+through its returned continuation, from unaccounted work with no live unit,
+which reruns `initialize_target` with the same target scope and objective.

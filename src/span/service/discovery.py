@@ -335,6 +335,8 @@ def _read_units_within_bytes(
     units: list[m.EvidenceUnit] = []
     total = 0
     for ref in refs:
+        if len(units) >= bounds.max_evidence_units:
+            break
         try:
             (unit,) = evidence.read_evidence((ref,), bounds)
         except ValueError:

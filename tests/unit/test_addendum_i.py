@@ -1771,7 +1771,15 @@ class S7ExcerptTest(unittest.TestCase):
     def test_delivery_budget_frozen(self):
         self.assertEqual(
             DEFAULT_SERVICE_BOUNDS_POLICY.max_delivered_evidence_bytes,
+            16_000,
+        )
+        self.assertEqual(
+            DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds.max_evidence_bytes,
             96_000,
+        )
+        self.assertEqual(
+            DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds.max_evidence_bytes,
+            384_000,
         )
 
     def _big_ref(self, fingerprint="fp-big"):
@@ -1862,6 +1870,245 @@ class S7ExcerptTest(unittest.TestCase):
         # delivery requirement, not silent omission.
         self.assertEqual(len(requirements), 1)
         self.assertIs(requirements[0].kind, m.ResolutionKind.MISSING_EVIDENCE)
+
+    def test_large_no_anchor_source_is_omitted_at_delivery_ceiling(self):
+        from span.service.interpretation import _project_excerpts
+
+        content = "unrelated\n" + ("x" * 16_500) + "\n"
+        projected, omissions, requirements = _project_excerpts(
+            (self._big_unit(content),),
+            ("not-present",),
+            self._big_subject(),
+            DEFAULT_SERVICE_BOUNDS_POLICY.max_delivered_evidence_bytes,
+        )
+        self.assertEqual(projected, ())
+        self.assertTrue(any("0 hits unexamined" in line for line in omissions))
+        self.assertEqual(len(requirements), 1)
+        self.assertIs(requirements[0].kind, m.ResolutionKind.MISSING_EVIDENCE)
+
+    def test_prepare_combines_explicit_refs_before_one_delivery_projection(self):
+        from span.service.interpretation import prepare_interpretation_task
+
+        mapping_content = "m" * 10_000
+        required_content = "r" * 10_000
+        discovered_content = "main\n"
+        files = {
+            "mapping.md": mapping_content,
+            "required.md": required_content,
+            "src/main.py": discovered_content,
+        }
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            tuple(InMemoryFile(path, content) for path, content in files.items()),
+            (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),),
+        )
+        evidence = FixtureEvidenceSource("repo-1", files)
+
+        def ref(path, source_kind):
+            content = files[path]
+            return m.EvidenceRef(
+                evidence_id=m.EvidenceId(f"ev-{path}"),
+                repository_id="repo-1",
+                source_kind=source_kind,
+                locator=path,
+                revision_or_fingerprint=fingerprint_content(content),
+            )
+
+        mapping_ref = ref("mapping.md", m.EvidenceSourceKind.DOCUMENTATION)
+        required_ref = ref("required.md", m.EvidenceSourceKind.DOCUMENTATION)
+        task = prepare_interpretation_task(
+            "repo-1",
+            m.Subject(
+                _sid(),
+                "main",
+                None,
+            ),
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(),
+            state=structural.repository_state("repo-1"),
+            target_scope=m.EvidenceScope(paths=("mapping.md", "required.md")),
+            target_inventory_items=(
+                m.EvidenceInventoryItem(
+                    evidence_ref=mapping_ref,
+                    content_fingerprint=fingerprint_content(mapping_content),
+                ),
+            ),
+            mapping_mode=True,
+            required_evidence_refs=(required_ref,),
+        )
+        delivered = task.request.evidence_units
+        self.assertLessEqual(
+            sum(len(unit.content.encode("utf-8")) for unit in delivered),
+            DEFAULT_SERVICE_BOUNDS_POLICY.max_delivered_evidence_bytes,
+        )
+        self.assertIn("mapping.md", {unit.evidence_ref.locator for unit in delivered})
+        self.assertTrue(
+            any(
+                requirement.kind is m.ResolutionKind.MISSING_EVIDENCE
+                and "required.md" in requirement.description
+                for requirement in task.request.brief.open_requirements
+            )
+        )
+        delivered_ids = tuple(
+            (unit.evidence_ref.evidence_id.value, unit.content_fingerprint)
+            for unit in delivered
+        )
+        self.assertEqual(task.fingerprints, delivered_ids)
+        self.assertIn("Evidence examined:", task.request.brief.evidence_authority[0])
+        self.assertNotIn("required.md", task.request.brief.evidence_authority[0])
+
+    def test_mandatory_refs_omitted_by_source_unit_bound_are_named(self):
+        from span.service.interpretation import prepare_interpretation_task
+
+        files = {
+            "mapping-a.md": "mapping a\n",
+            "mapping-b.md": "mapping b\n",
+            "required.md": "required\n",
+            "src/main.py": "main\n",
+        }
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            tuple(InMemoryFile(path, content) for path, content in files.items()),
+            (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),),
+        )
+        evidence = FixtureEvidenceSource("repo-1", files)
+
+        def ref(path):
+            return m.EvidenceRef(
+                evidence_id=m.EvidenceId(f"ev-{path}"),
+                repository_id="repo-1",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator=path,
+                revision_or_fingerprint=fingerprint_content(files[path]),
+            )
+
+        mapping_a = ref("mapping-a.md")
+        mapping_b = ref("mapping-b.md")
+        required = ref("required.md")
+        task = prepare_interpretation_task(
+            "repo-1",
+            m.Subject(_sid(), "main", None),
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(max_evidence_units=1),
+            state=structural.repository_state("repo-1"),
+            target_scope=m.EvidenceScope(paths=("mapping-a.md", "mapping-b.md")),
+            target_inventory_items=tuple(
+                m.EvidenceInventoryItem(
+                    evidence_ref=ref_value,
+                    content_fingerprint=fingerprint_content(files[ref_value.locator]),
+                )
+                for ref_value in (mapping_a, mapping_b)
+            ),
+            mapping_mode=True,
+            required_evidence_refs=(required,),
+        )
+        requirements = task.request.brief.open_requirements
+        descriptions = " ".join(requirement.description for requirement in requirements)
+        self.assertIn("mapping-b.md", descriptions)
+        self.assertIn("required.md", descriptions)
+        self.assertTrue(
+            all(
+                requirement.kind is m.ResolutionKind.MISSING_EVIDENCE
+                for requirement in requirements
+            )
+        )
+
+    def test_failed_mandatory_read_does_not_consume_unit_bound(self):
+        from span.service.interpretation import prepare_interpretation_task
+
+        files = {
+            "mapping-a.md": "mapping a\n",
+            "mapping-b.md": "mapping b\n",
+            "mapping-c.md": "mapping c\n",
+            "src/main.py": "main\n",
+        }
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            tuple(InMemoryFile(path, content) for path, content in files.items()),
+            (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),),
+        )
+
+        class FailFirstEvidence(FixtureEvidenceSource):
+            def read_evidence(self, refs, bounds):
+                if any(ref.locator == "mapping-a.md" for ref in refs):
+                    raise ValueError("mapping-a is unavailable")
+                return super().read_evidence(refs, bounds)
+
+        evidence = FailFirstEvidence("repo-1", files)
+
+        def ref(path):
+            return m.EvidenceRef(
+                evidence_id=m.EvidenceId(f"ev-{path}"),
+                repository_id="repo-1",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator=path,
+                revision_or_fingerprint=fingerprint_content(files[path]),
+            )
+
+        refs = tuple(
+            ref(path) for path in ("mapping-a.md", "mapping-b.md", "mapping-c.md")
+        )
+        task = prepare_interpretation_task(
+            "repo-1",
+            m.Subject(_sid(), "main", None),
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(max_evidence_units=2),
+            state=structural.repository_state("repo-1"),
+            target_scope=m.EvidenceScope(paths=tuple(ref.locator for ref in refs)),
+            target_inventory_items=tuple(
+                m.EvidenceInventoryItem(
+                    evidence_ref=ref_value,
+                    content_fingerprint=fingerprint_content(files[ref_value.locator]),
+                )
+                for ref_value in refs
+            ),
+            mapping_mode=True,
+        )
+        delivered = {unit.evidence_ref.locator for unit in task.request.evidence_units}
+        self.assertEqual(delivered, {"mapping-b.md", "mapping-c.md"})
+        self.assertIn(
+            "mapping-a.md",
+            " ".join(
+                requirement.description
+                for requirement in task.request.brief.open_requirements
+            ),
+        )
+
+    def test_mandatory_read_failure_returns_unresolved_task(self):
+        from span.service.interpretation import prepare_interpretation_task
+
+        structural = InMemoryStructuralSource(
+            "repo-1",
+            tuple(InMemoryFile(path, content) for path, content in FILES.items()),
+            SUBJECTS,
+        )
+
+        class NoEvidenceRead(FixtureEvidenceSource):
+            def read_evidence(self, refs, bounds):
+                raise ValueError("bounded source unavailable")
+
+        evidence = NoEvidenceRead("repo-1", dict(FILES))
+        required = _ref("README.md")
+        task = prepare_interpretation_task(
+            "repo-1",
+            m.Subject(_sid(), "main", None),
+            structural=structural,
+            evidence=evidence,
+            bounds=_bounds(max_evidence_bytes=1),
+            state=structural.repository_state("repo-1"),
+            required_evidence_refs=(required,),
+        )
+        self.assertEqual(task.request.evidence_units, ())
+        self.assertTrue(
+            any(
+                requirement.kind is m.ResolutionKind.MISSING_EVIDENCE
+                and "README.md" in requirement.description
+                for requirement in task.request.brief.open_requirements
+            )
+        )
 
     def test_distant_matches_deliver_prefix(self):
         from span.service.interpretation import _project_excerpts

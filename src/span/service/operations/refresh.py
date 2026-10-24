@@ -55,6 +55,7 @@ from span.service.requests import (
 )
 from span.service.resolution import (
     _load_subject_state,
+    _resolve_query_subject,
     _resolve_scope_subjects,
 )
 
@@ -165,13 +166,92 @@ def _compose_refresh_answer(
             category,
             None,
         ),
-        state_explanation=state_explanation_for(
-            tuple(kept_claims),
-            tuple(kept_rels),
-            coverage=coverage_counts_for(views),
-            bounds=(bounds.max_results, truncated),
+        state_explanation=(
+            "repository readiness: READY means the Span semantic store is "
+            "available; semantic coverage and currency are reported separately",
+            *state_explanation_for(
+                tuple(kept_claims),
+                tuple(kept_rels),
+                coverage=coverage_counts_for(views),
+                bounds=(bounds.max_results, truncated),
+            ),
         ),
     )
+
+
+def _refresh_subject_admission(
+    repository_id: str,
+    subject: m.Subject,
+    *,
+    stale_only: bool,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    suspended: frozenset[tuple[str, str, str, str]],
+) -> tuple[bool, bool, tuple[m.FreshnessUpdate, ...], tuple[m.EvidenceDependency, ...]]:
+    """Classify one subject for refresh without creating first coverage."""
+    claims, relationships, _, _ = _load_subject_state(
+        repository_id,
+        subject.subject_id,
+        store=store,
+        bounds=bounds,
+    )
+    ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
+        _claim_ref(c) for c in claims
+    ) + tuple(_relationship_ref(r) for r in relationships)
+    stale_questions = _stale_question_scopes(
+        repository_id,
+        subject,
+        store=store,
+        evidence=evidence,
+        bounds=bounds,
+        suspended=suspended,
+    )
+    try:
+        coverages = store.load_all_question_coverages(
+            repository_id, None, (subject.subject_id,)
+        )
+    except Exception:
+        coverages = ()
+    has_question = any(coverage.question is not None for coverage in coverages)
+    if not stale_only and not has_question:
+        # An explicit challenge reinterprets an existing question. Semantic
+        # rows alone are not a question and must never authorize correction.
+        return False, True, (), ()
+    if not ids and not has_question:
+        return False, True, (), ()
+    dependencies = store.load_evidence_dependencies(repository_id, ids) if ids else ()
+    updates = (
+        preflight(
+            repository_id,
+            ids,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+        )
+        if ids
+        else ()
+    )
+    coverage_updates = (
+        coverage_check(
+            repository_id,
+            tuple(claims) + tuple(relationships),
+            evidence=evidence,
+            store=store,
+        )
+        if ids
+        else ()
+    )
+    admitted = bool(updates or coverage_updates or stale_questions)
+    if not stale_only and has_question:
+        admitted = True
+    changed = tuple(
+        dependency
+        for dependency in dependencies
+        if dependency.semantic_id.id.value
+        in {update.semantic_id.id.value for update in updates}
+    )
+    return admitted, False, updates, changed
 
 
 def refresh(
@@ -203,30 +283,45 @@ def refresh(
             "and requires an exact SubjectSelector; EvidenceScope "
             "remains valid only for ordinary scoped stale refresh"
         )
-    subjects, ambiguity = _resolve_scope_subjects(
-        request.repository_id,
-        request.target,
-        structural=structural,
-        store=store,
-        bounds=bounds,
-        evidence=evidence,
-    )
+    resolution = None
+    if isinstance(request.target, m.SubjectSelector):
+        resolution = _resolve_query_subject(
+            request.repository_id,
+            request.target,
+            structural=structural,
+            store=store,
+            bounds=bounds,
+        )
+        subjects = tuple(candidate.subject for candidate in resolution.candidates)
+        ambiguity = resolution.ambiguity
+    else:
+        subjects, ambiguity = _resolve_scope_subjects(
+            request.repository_id,
+            request.target,
+            structural=structural,
+            store=store,
+            bounds=bounds,
+            evidence=evidence,
+        )
     if ambiguity is not m.ResolutionAmbiguity.RESOLVED or not subjects:
-        requirements = ()
-        if ambiguity is m.ResolutionAmbiguity.AMBIGUOUS:
-            requirements = (
-                m.ResolutionRequirement(
-                    kind=m.ResolutionKind.AMBIGUOUS_IDENTITY,
-                    subject_or_claim=None,
-                    description="refresh target is ambiguous",
-                    supporting_context=(),
+        requirements = (
+            _answers.requirements_for_resolution(
+                resolution,
+                repository_id=request.repository_id,
+                name_or_locator=(
+                    request.target.name_or_locator
+                    if isinstance(request.target, m.SubjectSelector)
+                    else None
                 ),
             )
+            if resolution is not None
+            else ()
+        )
         return m.SemanticAnswer(
             answer_id=_answer_id("rfr", request.repository_id, "scope"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
-            subject_resolution=None,
+            subject_resolution=resolution,
             content=m.StatusContent(),
             evidence=(),
             resolution_requirements=requirements,
@@ -250,65 +345,25 @@ def refresh(
         currency_notes.append(note)
     # Collect stale premise ids first for dependent expansion.
     stale_premise_ids: set[str] = set()
-    subject_items: dict[
-        str,
-        tuple[
-            object,
-            tuple[m.ClaimRef | m.RelationshipRef, ...],
-        ],
-    ] = {}
+    unassessed: list[m.Subject] = []
+    suspended_keys = continuations.live_question_keys()
     for subject in subjects:
-        claims, relationships, _, _ = _load_subject_state(
+        admitted, is_unassessed, updates, changed = _refresh_subject_admission(
             request.repository_id,
-            subject.subject_id,
+            subject,
+            stale_only=request.stale_only,
+            evidence=evidence,
             store=store,
             bounds=bounds,
+            suspended=suspended_keys,
         )
-        ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
-            _claim_ref(c) for c in claims
-        ) + tuple(_relationship_ref(r) for r in relationships)
-        subject_items[subject.subject_id.canonical_locator] = (
-            subject,
-            ids,
-        )
-        if not ids:
-            affected.append(subject)
+        if is_unassessed:
+            unassessed.append(subject)
             continue
-        dependencies = store.load_evidence_dependencies(request.repository_id, ids)
-        updates = preflight(
-            request.repository_id,
-            ids,
-            evidence=evidence,
-            store=store,
-            bounds=bounds,
-        )
-        coverage_updates = coverage_check(
-            request.repository_id,
-            tuple(claims) + tuple(relationships),
-            evidence=evidence,
-            store=store,
-        )
-        # B.4/B-06: stale persisted questions — including zero-result
-        # OPEN/NOT_APPLICABLE whose discovery/evidence moved — mark the
-        # subject affected even when no item update fired above.
-        stale_questions = _stale_question_scopes(
-            request.repository_id,
-            subject,
-            store=store,
-            evidence=evidence,
-            bounds=bounds,
-            suspended=continuations.live_question_keys(),
-        )
-        if updates or coverage_updates or stale_questions:
-            if updates:
-                updated = {u.semantic_id.id.value for u in updates}
-                stale_premise_ids.update(updated)
-                changed_deps.extend(
-                    dep for dep in dependencies if dep.semantic_id.id.value in updated
-                )
+        if admitted:
             affected.append(subject)
-        elif not request.stale_only:
-            affected.append(subject)
+            stale_premise_ids.update(u.semantic_id.id.value for u in updates)
+            changed_deps.extend(changed)
     # B-05/B-06: expand to semantically dependent questions whose
     # premises went stale, even when their own files are unchanged.
     if stale_premise_ids:
@@ -364,6 +419,19 @@ def refresh(
         except Exception:
             pass
     if not affected:
+        missing = tuple(
+            m.ResolutionRequirement(
+                kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                subject_or_claim=subject.subject_id,
+                description=(
+                    "no adopted question coverage is persisted for this "
+                    f"semantic subject; run question-local explain for "
+                    f"'{subject.subject_id.canonical_locator}'"
+                ),
+                supporting_context=(),
+            )
+            for subject in unassessed
+        )
         return _compose_refresh_answer(
             request.repository_id,
             subjects,
@@ -373,13 +441,12 @@ def refresh(
             bounds=bounds,
             state=state,
             changed=tuple(changed_deps),
-            extra_unresolved=tuple(currency_notes),
+            extra_unresolved=tuple(currency_notes) + missing,
         )
     first, rest = affected[0], affected[1:]
     # B.3/B-06: refresh re-examines under the persisted stale question
-    # scope — never a fresh generic question and never a silent
-    # baseline expansion. Only subjects with no persisted questions
-    # fall back to a STATUS question-local unit.
+    # scope — never a fresh generic question and never a silent baseline
+    # expansion. Unassessed subjects were excluded above.
     first_stale = _stale_question_scopes(
         request.repository_id,
         first,
