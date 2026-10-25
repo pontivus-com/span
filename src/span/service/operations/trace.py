@@ -442,13 +442,6 @@ def _compose_trace_answer(
         conflicts=kept_conf,
         question_coverage=views,
     )
-    returned = (
-        len(kept_conf)
-        + len(kept_rels)
-        + len(lifecycle_refs)
-        + len(kept_boundary)
-        + len(kept_edges)
-    )
     return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id(
             "trc", repository_id, subject.subject_id.canonical_locator

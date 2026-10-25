@@ -17,7 +17,6 @@ from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
     InMemorySubject,
-    fingerprint_content,
 )
 
 REPO = "frontier-fixture"

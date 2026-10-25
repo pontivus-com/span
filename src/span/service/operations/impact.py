@@ -590,14 +590,6 @@ def _compose_impact_answer(
         conflicts=kept_conf,
         question_coverage=views,
     )
-    returned = (
-        len(kept_conf)
-        + len(unresolved)
-        + len(kept_impacts)
-        + len(kept_context)
-        + len(kept_ver)
-        + len(kept_conds)
-    )
     return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id(
             "imp",

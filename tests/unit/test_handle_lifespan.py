@@ -19,7 +19,6 @@ from span.shell.sqlite_store import SqliteSemanticStore
 from tests.support.agent_exchange import (
     REPO,
     _bounds,
-    _exchange,
     _harness,
 )
 

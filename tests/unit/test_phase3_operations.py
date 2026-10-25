@@ -16,7 +16,6 @@ from span.ports.structural import StructuralDirection
 from span import service as ops
 from span.service.answers import _select_answer_items
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent
 from span.shell.evidence import FixtureEvidenceSource
 from span.shell import paging as _paging
 from span.shell.sqlite_store import SqliteSemanticStore
@@ -28,13 +27,9 @@ from span.shell.structural.memory import (
 )
 
 from tests.support.agent_exchange import (
-    EDGES,
     FILES,
     REPO,
-    SUBJECTS,
-    _accepted,
     _bounds,
-    _candidates,
     _exchange,
     _harness,
     _ref,

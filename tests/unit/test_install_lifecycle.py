@@ -13,7 +13,6 @@ import tempfile
 import unittest
 from unittest import mock
 
-from span.core import model as m
 from span.shell import install
 from span.shell.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore

@@ -15,7 +15,6 @@ from tests.support.agent_exchange import (
     REPO,
     _bounds,
     _establish,
-    _exchange,
     _harness,
 )
 

@@ -7,7 +7,6 @@ module path changed.
 
 from __future__ import annotations
 
-import dataclasses as _dataclasses
 from collections.abc import Mapping
 
 from span.core import answers as _answers
@@ -1132,16 +1131,13 @@ def _compose_repository_status_answer(
     kept_requirements: list[m.ResolutionRequirement] = list(
         repository_live_requirements
     )
-    oversized_unit = False
     for entry in entries:
         unit = by_subject.get(entry.subject, [])
         if len(unit) > remaining and kept_entries:
             break
-        if len(unit) > remaining:
-            # One atomic unit alone exceeds the ceiling. It is emitted whole —
-            # an item is never separated from its requirements — and the
-            # caller learns the ceiling could not hold it. Declared in D1.
-            oversized_unit = True
+        # One atomic unit alone exceeds the ceiling. It is emitted whole — an
+        # item is never separated from its requirements — and the caller learns
+        # the ceiling could not hold it. Declared in D1.
         kept_entries.append(entry)
         kept_requirements.extend(unit)
         remaining -= len(unit)

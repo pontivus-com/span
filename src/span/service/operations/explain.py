@@ -310,7 +310,6 @@ def _compose_explain_answer(
         conflicts=kept_conf,
         question_coverage=views,
     )
-    returned = len(kept_claims) + len(kept_rels) + len(kept_locs)
     return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id("ans", repository_id, sid.canonical_locator),
         intent=m.SemanticIntent.EXPLAIN,
