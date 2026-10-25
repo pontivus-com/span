@@ -73,6 +73,26 @@ submit it under the project licence. There is no separate CLA.
 `DEPENDENCY_LEDGER.md` is authoritative. Do not add a runtime dependency
 without a verified identity, a compatible licence, and a ledger entry.
 
+## Releases
+
+The version lives in `src/span/__init__.py`; `pyproject.toml` reads it. A
+release is an ordinary pull request that bumps it.
+
+On merge to `master`, the `Release` workflow reads the version and acts only
+when `v<version>` does not exist yet:
+
+1. Build, attest, and publish `span-mcp` to PyPI.
+2. Only after PyPI accepts the version, create the tag and the GitHub Release.
+   The release body is the matching `## <version>` section of `CHANGELOG.md`,
+   so release notes are written once.
+3. Publish `server.json` to the MCP Registry from the same commit.
+
+A push whose version is already tagged is a no-op, and development versions
+containing `dev` are never tagged. A manual `v*` tag push runs the same path;
+the tag must equal `v<__version__>`. Use `workflow_dispatch` on the `Release`
+workflow to retry the resolve step, or re-run the failed job to retry a later
+stage without republishing.
+
 ## Publication and provenance
 
 No proprietary material belongs in the build, test fixtures, schemas, docs,

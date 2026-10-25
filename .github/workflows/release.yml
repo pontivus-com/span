@@ -2,18 +2,66 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.resolve.outputs.release }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the release version
+        id: resolve
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '__version__' src/span/__init__.py | cut -d'"' -f2)
+          tag="v${version}"
+          sha=$(git rev-parse HEAD)
+          if [[ "${REF_TYPE}" == "tag" ]]; then
+            if [[ "${REF_NAME}" != "${tag}" ]]; then
+              echo "tag ${REF_NAME} does not match package version ${version}" >&2
+              exit 1
+            fi
+            release=true
+          elif git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "${tag} already exists; no release"
+            release=false
+          elif [[ "${version}" == *dev* ]]; then
+            echo "development version ${version}; no release"
+            release=false
+          else
+            release=true
+          fi
+          {
+            echo "release=${release}"
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "sha=${sha}"
+          } >> "${GITHUB_OUTPUT}"
+
   build:
+    needs: resolve
+    if: needs.resolve.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -22,29 +70,12 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-
-      - name: Check the tag matches the package version
-        run: |
-          python - <<'PY'
-          import os
-          import pathlib
-          import re
-          import sys
-
-          text = pathlib.Path("src/span/__init__.py").read_text(encoding="utf-8")
-          match = re.search(r'__version__ = "([^"]+)"', text)
-          if match is None:
-              sys.exit("cannot read span.__version__")
-
-          version = match.group(1)
-          tag = os.environ["GITHUB_REF_NAME"]
-          if tag != f"v{version}":
-              sys.exit(f"tag {tag!r} does not match version {version!r}")
-          PY
 
       - name: Build sdist and wheel
         run: |
@@ -64,7 +95,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: build
+    needs: [resolve, build]
+    if: needs.resolve.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -83,3 +115,73 @@ jobs:
       # sends the PEP 740 attestation generated from the OIDC identity.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  tag:
+    needs: [resolve, publish]
+    if: needs.resolve.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          fetch-depth: 0
+
+      # The tag is created only after PyPI accepted the version, so a failed
+      # build or publish leaves the version untagged and re-runnable.
+      - name: Create the release tag
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "${TAG} already exists"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Span ${VERSION}"
+          git push origin "${TAG}"
+
+  github-release:
+    needs: [resolve, tag]
+    if: needs.resolve.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Extract the changelog section
+        run: python scripts/release_notes.py "${{ needs.resolve.outputs.version }}" > release-notes.md
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "release ${TAG} already exists"
+            exit 0
+          fi
+          args=(--verify-tag --title "Span ${VERSION}" --notes-file release-notes.md)
+          if [[ "${VERSION}" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${TAG}" "${args[@]}"
+
+  registry:
+    needs: [resolve, publish]
+    if: needs.resolve.outputs.release == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-mcp.yml
