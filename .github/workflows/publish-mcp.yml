@@ -1,10 +1,8 @@
 name: Publish to MCP Registry
 
 on:
+  workflow_call:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Release"]
-    types: [completed]
 
 permissions:
   contents: read
@@ -12,13 +10,12 @@ permissions:
 
 jobs:
   publish:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
 
       # One source of truth: the package version, not a second hand edit.
       - name: Set the registry version from the package
