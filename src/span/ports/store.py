@@ -5,6 +5,8 @@ The SQLite implementation (Phase 1.7) may normalize physically, but no
 second semantic model may be introduced.
 """
 
+import dataclasses as _dataclasses
+import enum as _enum
 import typing as _typing
 
 from span.core.model import (
@@ -15,6 +17,7 @@ from span.core.model import (
     CoverageDependency,
     EvidenceDependency,
     EvidenceRef,
+    EvidenceScope,
     FreshnessUpdate,
     InterpretationCoverage,
     QueryBounds,
@@ -33,8 +36,127 @@ from span.core.model import (
     SubjectId,
     TargetAssociation,
     TargetId,
+    VerificationRecord,
 )
 from span.ports.structural import StructuralDirection
+
+
+class FactKind(_enum.Enum):
+    """What kind of fact a stored row is (D17).
+
+    The kind fixes identity, what supersede means, and what the terminal
+    is. It is declared for every table and checked against the physical
+    schema, so a carrier cannot be added without answering the question.
+    """
+
+    OBSERVATION = "OBSERVATION"
+    STATE = "STATE"
+    HANDLE = "HANDLE"
+
+
+@_dataclasses.dataclass(frozen=True)
+class FactDeclaration:
+    """One table's declared fact kind, natural key, and writer.
+
+    ``key_columns`` is the natural key for a STATE and empty for an
+    OBSERVATION (content-addressed, no natural key). ``writer`` names the
+    store-port method that produces the row: the upsert for a STATE, the
+    insert for an OBSERVATION.
+    """
+
+    table: str
+    kind: FactKind
+    key_columns: tuple[str, ...]
+    writer: str
+
+
+#: Every table this store creates, with the kind of fact it holds.
+STORE_FACT_DECLARATIONS: tuple[FactDeclaration, ...] = (
+    FactDeclaration(
+        "repositories",
+        FactKind.STATE,
+        ("repository_id",),
+        "record_repository_initialization",
+    ),
+    FactDeclaration(
+        "subjects",
+        FactKind.STATE,
+        ("repository_id", "locator", "kind"),
+        "write_index_batch",
+    ),
+    FactDeclaration("claims", FactKind.OBSERVATION, (), "write_index_batch"),
+    FactDeclaration("relationships", FactKind.OBSERVATION, (), "write_index_batch"),
+    FactDeclaration(
+        "evidence_dependencies",
+        FactKind.STATE,
+        ("semantic_id", "evidence_id"),
+        "write_index_batch",
+    ),
+    FactDeclaration(
+        "coverage_dependencies", FactKind.OBSERVATION, (), "write_index_batch"
+    ),
+    FactDeclaration(
+        "question_coverages",
+        FactKind.STATE,
+        (
+            "repository_id",
+            "scope_root_locator",
+            "scope_root_kind",
+            "subject_locator",
+            "subject_kind",
+            "question_class",
+            "question_slice",
+        ),
+        "write_index_batch",
+    ),
+    FactDeclaration(
+        "premise_dependents",
+        FactKind.STATE,
+        ("repository_id", "premise_id", "dependent_id"),
+        "write_index_batch",
+    ),
+    FactDeclaration(
+        "question_result_refs",
+        FactKind.STATE,
+        (
+            "repository_id",
+            "scope_root_locator",
+            "scope_root_kind",
+            "subject_locator",
+            "subject_kind",
+            "question_class",
+            "question_slice",
+            "result_id",
+        ),
+        "write_index_batch",
+    ),
+    FactDeclaration(
+        "conflict_records",
+        FactKind.STATE,
+        ("repository_id", "subject_locator", "left_id", "right_id"),
+        "write_index_batch",
+    ),
+    # Store-owned operational state: the canonical root this store belongs
+    # to. Schema version lives beside it as bootstrap metadata.
+    FactDeclaration("meta", FactKind.STATE, ("key",), "record_repository_root"),
+    FactDeclaration(
+        "target_associations",
+        FactKind.STATE,
+        ("repository_id", "target_id"),
+        "write_index_batch",
+    ),
+    FactDeclaration(
+        "verification_records",
+        FactKind.STATE,
+        (
+            "repository_id",
+            "subject_locator",
+            "subject_kind",
+            "scope_fingerprint",
+        ),
+        "write_index_batch",
+    ),
+)
 
 
 @_typing.runtime_checkable
@@ -73,6 +195,56 @@ class SemanticStore(_typing.Protocol):
 
     def count_repository_subjects(self, repository_id: str) -> int:
         """Count persisted semantic subjects for report bounds."""
+        ...
+
+    def load_verification_record(
+        self,
+        repository_id: str,
+        subject: SubjectId,
+        scope_fingerprint: str,
+    ) -> VerificationRecord | None:
+        """The single current record for one (subject, verified scope)."""
+        ...
+
+    def repository_root(self, repository_id: str) -> str | None:
+        """The canonical root recorded for this store, if any.
+
+        One reader and one writer for provenance; no caller reads the store's
+        metadata table directly.
+        """
+        ...
+
+    def record_repository_root(self, repository_id: str, root: str) -> None:
+        """Bind this store to a canonical root, or fail on a different one."""
+        ...
+
+    def load_subjects_in_scope(
+        self,
+        repository_id: str,
+        scope: EvidenceScope,
+        bounds: QueryBounds,
+        after: tuple[str, str] | None = None,
+    ) -> SubjectPage:
+        """Load a bounded page of persisted subjects whose locator is in scope.
+
+        Membership is the canonical ``evidence_scope_allows`` predicate:
+        exact equality for evidence refs, and prefix membership on a path
+        segment boundary for paths. Ordering is ``(locator, kind)`` and
+        pagination is keyset, so consecutive pages are disjoint without an
+        offset that can drift.
+
+        ``after`` is the last ``(locator, kind)`` of the previous page; the
+        caller derives it from the page it already received. No token is
+        minted here: answer-level cursors belong to the service, which owns
+        the single cursor grammar (D8).
+
+        An empty scope is rejected. A scoped read is never a whole-repository
+        read; use ``load_repository_subjects`` for that.
+        """
+        ...
+
+    def count_subjects_in_scope(self, repository_id: str, scope: EvidenceScope) -> int:
+        """Count persisted subjects whose locator is in ``scope``."""
         ...
 
     def count_question_dispositions(self, repository_id: str) -> dict[str, int]:

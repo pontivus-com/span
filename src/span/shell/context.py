@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import pathlib as _pathlib
 
+from span.core import model as m
+
 from span.shell.agent_exchange.continuations import ContinuationStore
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import ServiceContext
@@ -51,6 +53,15 @@ def open_repository_context(
     evidence = FilesystemEvidenceSource(repository_id, root)
     store_path = data_root / f"{repository_id}.db"
     store = SqliteSemanticStore(str(store_path) if store_path.is_file() else ":memory:")
+    if store_path.is_file():
+        from span.shell.structural import canonical_root_from_config
+
+        canonical = canonical_root_from_config(repository_locator)
+        recorded = store.repository_root(repository_id)
+        if recorded is not None and recorded != canonical:
+            raise m.RepositoryIdentityConflict(
+                repository_id, recorded, canonical, store_path=str(store_path)
+            )
     context = ServiceContext(
         structural=structural,
         evidence=evidence,

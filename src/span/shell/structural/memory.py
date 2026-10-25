@@ -328,7 +328,7 @@ class InMemoryStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
         scope: m.EvidenceScope | None = None,
-    ) -> m.StructuralSearchPage:
+    ) -> m.StructuralResult[m.StructuralSearchHit]:
         """Paginated name/locator search (Addendum F §4.0 port; J-10)."""
         self._check_repository(repository_id)
         if not query:
@@ -390,7 +390,7 @@ class InMemoryStructuralSource:
         kept, bound_info = self._versioned_page(
             candidates, offset, bounds.max_results, "search", version=version
         )
-        return m.StructuralSearchPage(
+        return m.StructuralResult(
             items=kept,  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
@@ -406,7 +406,7 @@ class InMemoryStructuralSource:
         locator: str,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralOutlinePage:
+    ) -> m.StructuralResult[m.StructuralOutlineEntry]:
         """Symbols defined in one file (Addendum F §4.0 port)."""
         self._check_repository(repository_id)
         offset = self._versioned_offset(page_token)
@@ -421,7 +421,7 @@ class InMemoryStructuralSource:
                 else m.ScopeCoverage.VERIFIED
             )
             kept, bound_info = self._versioned_page((), offset, 1, "outline")
-            return m.StructuralOutlinePage(
+            return m.StructuralResult(
                 items=(),
                 repository_state=self.repository_state(repository_id),
                 bound_info=bound_info,
@@ -445,7 +445,7 @@ class InMemoryStructuralSource:
         kept, bound_info = self._versioned_page(
             entries, offset, bounds.max_results, "outline"
         )
-        return m.StructuralOutlinePage(
+        return m.StructuralResult(
             items=kept,  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
@@ -461,7 +461,7 @@ class InMemoryStructuralSource:
         subject: m.SubjectId,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralLocationPage:
+    ) -> m.StructuralResult[m.StructuralLocation]:
         self._check_repository(repository_id)
         path = _file_path(subject.canonical_locator)
         state = self.repository_state(repository_id)
@@ -476,11 +476,16 @@ class InMemoryStructuralSource:
         kept, bound_info = _paging.paginate(
             items, bounds.max_results, "locations", page_token
         )
-        return m.StructuralLocationPage(
+        coverage, detail = self._page_coverage(
+            tuple(item.location.locator for item in kept)
+        )
+        return m.StructuralResult(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=state,
             bound_info=bound_info,
             unsupported=False,
+            coverage=coverage,
+            coverage_detail=detail,
         )
 
     def edges(
@@ -491,7 +496,7 @@ class InMemoryStructuralSource:
         direction: StructuralDirection,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralEdgePage:
+    ) -> m.StructuralResult[m.StructuralEdge]:
         self._check_repository(repository_id)
         locator = subject.canonical_locator
         kinds = set(edge_kinds) if edge_kinds else set(m.StructuralEdgeKind)
@@ -527,11 +532,16 @@ class InMemoryStructuralSource:
         kept, bound_info = _paging.paginate(
             tuple(found), bounds.max_results, "edges", page_token
         )
-        return m.StructuralEdgePage(
+        coverage, detail = self._page_coverage(
+            tuple(edge.evidence.locator for edge in kept)
+        )
+        return m.StructuralResult(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
+            coverage=coverage,
+            coverage_detail=detail,
         )
 
     def reach(
@@ -543,7 +553,7 @@ class InMemoryStructuralSource:
         max_depth: int,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralReachPage:
+    ) -> m.StructuralResult[m.StructuralReachNode]:
         self._check_repository(repository_id)
         limit = min(max_depth, bounds.max_depth)
         kinds = set(edge_kinds) if edge_kinds else set(m.StructuralEdgeKind)
@@ -610,14 +620,32 @@ class InMemoryStructuralSource:
             page_token,
             requested_max_depth=limit,
         )
-        return m.StructuralReachPage(
+        coverage, detail = self._page_coverage(
+            tuple(node.via.evidence.locator for node in kept if node.via is not None)
+        )
+        return m.StructuralResult(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
+            coverage=coverage,
+            coverage_detail=detail,
         )
 
     # -- private --------------------------------------------------------
+
+    def _page_coverage(self, paths: tuple[str, ...]) -> tuple[m.ScopeCoverage, str]:
+        """Coverage for a closed-world page over in-memory evidence.
+
+        Memory content is authoritative: a cited file this source knows is
+        current, and one it does not know could never have been indexed.
+        """
+        stale = sorted(
+            {path for path in dict.fromkeys(paths) if path not in self._files}
+        )
+        if stale:
+            return m.ScopeCoverage.UNVERIFIED, "touched-file-mismatch"
+        return m.ScopeCoverage.VERIFIED, "clean-verified"
 
     def _check_repository(self, repository_id: str) -> None:
         if repository_id != self._repository_id:

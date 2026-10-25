@@ -24,6 +24,8 @@ __all__ = [
     "_resolve_exact_subject",
     "_resolve_query_subject",
     "_resolve_scope_subjects",
+    "resolve_scope_frontier",
+    "frontier_fingerprint",
     "_resolve_target_subjects",
 ]
 
@@ -363,26 +365,23 @@ def _fallback_target_kind(ref: m.EvidenceRef) -> m.SubjectKind:
     return m.SubjectKind.COMPONENT
 
 
-def _resolve_target_subjects(
+def _inventory_subjects(
     repository_id: str,
-    target: m.EvidenceScope,
+    scope: m.EvidenceScope,
     *,
     structural: StructuralSource,
     evidence: EvidenceSource,
-    store: SemanticStore,
     bounds: m.QueryBounds,
-) -> tuple[m.Subject, ...]:
-    """Enumerate current structural/evidence candidates in the exact scope.
+) -> dict[tuple[m.SubjectKind, str], m.Subject]:
+    """One subject per evidence-inventory item in the scope.
 
-    This is deterministic boundary discovery only. It must not be read as
-    one semantic subject per file or as proof of target understanding.
+    Structural resolution first; a fallback subject when the provider knows the
+    file but no semantic subject exists for it yet.
     """
-    if not target.paths and not target.evidence_refs:
-        raise ValueError("exact target scope must not be empty")
     items: list[m.EvidenceInventoryItem] = []
     page_token: str | None = None
     while True:
-        page = evidence.inventory_evidence(repository_id, target, bounds, page_token)
+        page = evidence.inventory_evidence(repository_id, scope, bounds, page_token)
         items.extend(page.items)
         next_token = page.bound_info.continuation_token
         if next_token is None:
@@ -421,29 +420,126 @@ def _resolve_target_subjects(
                 declared_kind=None,
             )
         found[(subject.subject_id.subject_kind, locator)] = subject
-    target_paths = tuple(
-        dict.fromkeys((*target.paths, *(ref.locator for ref in target.evidence_refs)))
-    )
-    subject_token: str | None = None
+    return found
+
+
+def _persisted_subjects_in_scope(
+    repository_id: str,
+    scope: m.EvidenceScope,
+    *,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> tuple[m.Subject, ...]:
+    """Every persisted subject in the scope, by keyset pages.
+
+    This is the query that replaced the repository-wide subject scan: the
+    store filters in SQL on the scope predicate.
+    """
+    subjects: list[m.Subject] = []
+    after: tuple[str, str] | None = None
     while True:
-        page = store.load_repository_subjects(
-            repository_id,
-            bounds,
-            offset=(int(subject_token[3:]) if subject_token else 0),
-        )
-        for subject in page.items:
-            locator = subject.subject_id.canonical_locator
-            if any(
-                locator == path
-                or locator.startswith(path.rstrip("/") + "/")
-                or locator.startswith(path.rstrip("/") + "#")
-                for path in target_paths
-            ):
-                found[(subject.subject_id.subject_kind, locator)] = subject
-        subject_token = page.bound_info.continuation_token
-        if subject_token is None:
+        page = store.load_subjects_in_scope(repository_id, scope, bounds, after)
+        subjects.extend(page.items)
+        if not page.bound_info.truncated or not page.items:
             break
-    return tuple(found[key] for key in sorted(found, key=lambda pair: pair[1]))
+        last = page.items[-1].subject_id
+        after = (last.canonical_locator, last.subject_kind.value)
+    return tuple(subjects)
+
+
+def _merged_scope_subjects(
+    repository_id: str,
+    scope: m.EvidenceScope,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> tuple[m.Subject, ...]:
+    """The scope frontier: persisted subjects plus evidence-derived ones.
+
+    Persisted subjects win over a fallback for the same locator. Ordered by
+    ``(locator, kind)`` so a page boundary is deterministic.
+    """
+    found = _inventory_subjects(
+        repository_id, scope, structural=structural, evidence=evidence, bounds=bounds
+    )
+    for subject in _persisted_subjects_in_scope(
+        repository_id, scope, store=store, bounds=bounds
+    ):
+        sid = subject.subject_id
+        found[(sid.subject_kind, sid.canonical_locator)] = subject
+    return tuple(
+        found[key] for key in sorted(found, key=lambda pair: (pair[1], pair[0].value))
+    )
+
+
+def frontier_fingerprint(subjects: tuple[m.Subject, ...]) -> str:
+    """Membership fingerprint binding a continuation to the exact frontier."""
+    import hashlib as _hashlib
+
+    payload = "\x00".join(
+        f"{subject.subject_id.subject_kind.value}:"
+        f"{subject.subject_id.canonical_locator}"
+        for subject in subjects
+    )
+    return _hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def resolve_scope_frontier(
+    repository_id: str,
+    scope: m.EvidenceScope,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+    offset: int = 0,
+) -> tuple[tuple[m.Subject, ...], int, str]:
+    """One frontier page plus the total and the membership fingerprint.
+
+    ``offset`` is a position in the ordered frontier. The fingerprint lets the
+    caller bind a continuation to the membership it was issued against, so a
+    changed scope restarts instead of silently skipping.
+    """
+    if offset < 0:
+        raise ValueError("scope offset must be non-negative")
+    merged = _merged_scope_subjects(
+        repository_id,
+        scope,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+    )
+    page = merged[offset : offset + bounds.max_subjects]
+    return tuple(page), len(merged), frontier_fingerprint(merged)
+
+
+def _resolve_target_subjects(
+    repository_id: str,
+    target: m.EvidenceScope,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    bounds: m.QueryBounds,
+) -> tuple[m.Subject, ...]:
+    """Enumerate current structural/evidence candidates in the exact scope.
+
+    Exhaustive by design: ``initialize_target`` needs the whole boundary. A
+    scoped read uses ``resolve_scope_frontier`` instead, which pages it.
+    """
+    if not target.paths and not target.evidence_refs:
+        raise ValueError("exact target scope must not be empty")
+    return _merged_scope_subjects(
+        repository_id,
+        target,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+    )
 
 
 def _subject_key(sid: m.SubjectId) -> tuple[str, str, str]:

@@ -162,12 +162,17 @@ class SemanticInitializeRepositoryRequest:
 @_dataclass(frozen=True)
 class SemanticInitializeRepositoryResult:
     repository_id: str
-    readiness: m.RepositoryReadiness
+    store_readiness: m.StoreReadiness
     structural_source_status: str
     evidence_inventory_status: str
     semantic_store_status: str
     warnings: tuple[str, ...]
     bound_info: m.BoundInfo
+    #: Canonical root the ID was bound to, and the containing registered root
+    #: when this one is nested. Both are None for callers that do not supply
+    #: identity (direct service use in tests).
+    canonical_root: str | None = None
+    nested_within: str | None = None
 
 
 class AuthorityTargetError(ValueError):

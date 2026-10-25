@@ -248,7 +248,7 @@ class HookRunnerTest(unittest.TestCase):
         self.assertIn("install receipt", err.getvalue())
 
     def test_every_command_uses_the_canonical_hook_fast_call(self):
-        notice = m.HookStatusNotice(readiness=m.RepositoryReadiness.READY)
+        notice = m.HookStatusNotice(store_readiness=m.StoreReadiness.READY)
         seen = []
 
         def fake_status(request, **kwargs):

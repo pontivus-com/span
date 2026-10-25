@@ -948,18 +948,10 @@ def _assign_candidate_keys(
         )
         for n, r in enumerate(result.relationships)
     )
-    return m.SemanticInterpretationResult(
+    return _dataclasses.replace(
+        result,
         claims=claims,
         relationships=relationships,
-        governing_source_refs=result.governing_source_refs,
-        diagnostics=result.diagnostics,
-        candidate_subjects=result.candidate_subjects,
-        candidate_conflicts=result.candidate_conflicts,
-        question_decision=result.question_decision,
-        proposed_questions=result.proposed_questions,
-        candidate_withdrawals=result.candidate_withdrawals,
-        proposed_target_inventory_accounting=result.proposed_target_inventory_accounting,
-        proposed_target_questions=result.proposed_target_questions,
     )
 
 
@@ -1280,14 +1272,14 @@ def _admit_cited_evidence(
         )
         for account in result.proposed_target_inventory_accounting
     )
-    normalized = m.SemanticInterpretationResult(
+    normalized = _dataclasses.replace(
+        result,
         claims=claims,
         relationships=relationships,
         governing_source_refs=tuple(
             _normalize(ref) if ref.evidence_id.value in canonical_refs else ref
             for ref in result.governing_source_refs
         ),
-        diagnostics=result.diagnostics,
         candidate_subjects=subjects,
         candidate_conflicts=conflicts,
         question_decision=(
@@ -1304,7 +1296,6 @@ def _admit_cited_evidence(
         ),
         candidate_withdrawals=withdrawals,
         proposed_target_inventory_accounting=accounts,
-        proposed_target_questions=result.proposed_target_questions,
     )
     return (
         _validation.ValidationContext(
@@ -1742,6 +1733,13 @@ def _materialize_unit(
         relationships.append(
             _validation.materialize_relationship(candidate, validation, state)
         )
+    try:
+        verification_records = _validation.validate_verification_records(
+            task.request.repository_id, result, tuple(claims)
+        )
+    except ValueError as exc:
+        failures.append(f"verification_records: {exc}")
+        verification_records = ()
     # B-03: duplicate substantive candidates fail; reordering is stable.
     seen_ids: set[str] = set()
     for item in (*claims, *relationships):
@@ -2959,6 +2957,7 @@ def _materialize_unit(
             retires_relationships=tuple(unique_retire_rels),
             conflicts=tuple(recorded),
             target_associations=updated_associations,
+            verification_records=verification_records,
         )
     )
 

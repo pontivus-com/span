@@ -1,6 +1,6 @@
 """Zero-legacy hard-cutover gates (HC-01..HC-10, AP-01..AP-10).
 
-These gates pin the current runtime contract only: schema 7 is the sole
+These gates pin the current runtime contract only: schema 8 is the sole
 supported store schema, no runtime migration or legacy decode path
 exists, current task coverage always carries a non-empty discovery
 scope, and configured authority seeds persist and rehydrate after a
@@ -104,7 +104,7 @@ def _initialize(
 
 class HC01SchemaVersionTest(unittest.TestCase):
     def test_only_schema_seven_is_supported(self):
-        self.assertEqual(SCHEMA_VERSION, 7)
+        self.assertEqual(SCHEMA_VERSION, 8)
 
 
 class HC02FreshStoreTest(unittest.TestCase):
@@ -112,7 +112,7 @@ class HC02FreshStoreTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = SqliteSemanticStore(str(pathlib.Path(tmp) / "fresh.db"))
             try:
-                self.assertEqual(store.schema_version(), m.SchemaVersion(7))
+                self.assertEqual(store.schema_version(), m.SchemaVersion(8))
                 columns = {
                     row[1]
                     for row in store._db.execute(
@@ -135,7 +135,7 @@ class HC03CurrentStoreTest(unittest.TestCase):
                 first.close()
             second = SqliteSemanticStore(path)
             try:
-                self.assertEqual(second.schema_version(), m.SchemaVersion(7))
+                self.assertEqual(second.schema_version(), m.SchemaVersion(8))
                 self.assertEqual(
                     second.load_repository_authority_seeds(_REPO),
                     (_seed(),),
@@ -161,7 +161,7 @@ class HC04VersionedStoreRejectedTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError,
                 "unsupported Span store schema version 6; migrate this "
-                "store to schema 7 before using this Span build",
+                "store to schema 8 before using this Span build",
             ):
                 SqliteSemanticStore(str(path))
             # Rejection never mutates the store.

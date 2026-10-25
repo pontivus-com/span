@@ -277,7 +277,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             "semantic initialization ran merely by process startup",
         )
         self.assertFalse(observed["initialize_error"])
-        self.assertEqual(observed["initialize"]["readiness"], "READY")
+        self.assertEqual(observed["initialize"]["store_readiness"], "READY")
         self.assertEqual(observed["initialize"]["repository_id"], "cold")
         self.assertTrue(
             observed["after_initialize"]["wiring"],

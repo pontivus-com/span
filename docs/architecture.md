@@ -127,9 +127,26 @@ Finding a source does not make it governing.
 
 Span does not create project authority because an AI interpretation sounds plausible.
 
+### Concurrency and shared state
+
+The semantic store is the shared durable medium; continuations are not shared.
+
+- Several processes may read one repository store. SQLite serializes writes; a
+  second writer waits for the single writer lock (`busy_timeout`) and fails
+  rather than corrupting state. One logical writer per repository is the
+  supported pattern.
+- Each process owns a private continuation store. A continuation is single-use,
+  process-local, and expires; a second session cannot resume it and re-runs the
+  originating operation, which is idempotent by contract.
+- Campaign handles (`TargetId`) are durable and repository-scoped, so a second
+  session can read campaign progress through `status`.
+- Page cursors are stateless and restart-safe; they carry no process state.
+
 ### Structural facts are evidence
 
 A call graph or symbol index can support reasoning without being semantic truth.
+Every structural page carries its coverage, so changed or unverifiable
+structure is presented as qualified evidence rather than current fact.
 
 ### Invalidate narrowly
 

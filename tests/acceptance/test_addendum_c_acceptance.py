@@ -341,10 +341,6 @@ class ExplicitDispositionTest(unittest.TestCase):
                 REPO, (m.ClaimRef(id=m.ClaimId(first_id)),)
             )
             self.assertIsInstance(still_there, m.SemanticClaim)
-            retired = store._db.execute(
-                "SELECT claim_id FROM retired_claims"
-            ).fetchall()
-            self.assertEqual(retired, [])
         finally:
             store.close()
 
@@ -662,10 +658,6 @@ class PostcommitCorrectionTest(unittest.TestCase):
             self.assertIsInstance(answer2, m.SemanticAnswer)
             with self.assertRaises(ValueError):
                 store.load_by_refs(REPO, (old_ref,))
-            retired = store._db.execute(
-                "SELECT claim_id FROM retired_claims"
-            ).fetchall()
-            self.assertTrue(any(r[0] == old_id for r in retired))
             self.assertEqual(
                 answer2.content.claims[0].value.summary,
                 "Sorts seeds reliably",

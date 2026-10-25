@@ -18,7 +18,7 @@ from span.shell.agent_exchange.continuations import ContinuationStore
 
 from span.service.answers import (
     _answer_id,
-    _bound_info,
+    ANSWER_ASSEMBLER,
     _conflicts_for,
     _freshness_items_for,
     _select_answer_items,
@@ -132,42 +132,39 @@ def _compose_refresh_answer(
         bounds=bounds,
         evidence=evidence,
     )
+    requirements = (
+        tuple(req for c in kept_claims for req in _answers.requirements_for_claim(c))
+        + tuple(
+            req for r in kept_rels for req in _answers.requirements_for_relationship(r)
+        )
+        + tuple(extra_unresolved)
+    )
     content = m.StatusContent(
-        readiness=m.RepositoryReadiness.READY,
+        resolved_mode=m.StatusResolvedMode.SCOPED,
+        store_readiness=m.StoreReadiness.READY,
         freshness_items=_freshness_items_for(kept_claims, kept_rels),
         changed_dependencies=changed,
-        verification_currency=(),
+        verification_status=(),
         refresh_scope=m.EvidenceScope(paths=scope_paths, evidence_refs=()),
         claims=kept_claims,
         relationships=kept_rels,
         conflicts=kept_conf,
-        unresolved=tuple(
-            req for c in kept_claims for req in _answers.requirements_for_claim(c)
-        )
-        + tuple(
-            req for r in kept_rels for req in _answers.requirements_for_relationship(r)
-        )
-        + tuple(extra_unresolved),
         question_coverage=views,
     )
     evidence_refs = tuple(ref for c in kept_claims for ref in c.evidence)
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id("rfr", repository_id, ",".join(scope_paths)),
         intent=m.SemanticIntent.STATUS,
         repository_state=state,
         subject_resolution=None,
         content=content,
         evidence=evidence_refs,
-        resolution_requirements=content.unresolved,
-        bound_info=_bound_info(
-            bounds,
-            len(kept_claims) + len(kept_rels) + len(kept_conf),
-            truncated,
-            category,
-            None,
-        ),
+        resolution_requirements=requirements,
+        bounds=bounds,
+        withheld_category=category,
+        continuation_token=None,
         state_explanation=(
-            "repository readiness: READY means the Span semantic store is "
+            "repository store_readiness: READY means the Span semantic store is "
             "available; semantic coverage and currency are reported separately",
             *state_explanation_for(
                 tuple(kept_claims),
@@ -317,15 +314,19 @@ def refresh(
             if resolution is not None
             else ()
         )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id("rfr", request.repository_id, "scope"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
             subject_resolution=resolution,
-            content=m.StatusContent(),
+            content=m.StatusContent(
+                resolved_mode=m.StatusResolvedMode.UNRESOLVED,
+            ),
             evidence=(),
             resolution_requirements=requirements,
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
         )
     affected: list[m.Subject] = []
     changed_deps: list[m.EvidenceDependency] = []

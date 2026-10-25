@@ -18,7 +18,7 @@ from span.shell.agent_exchange.continuations import SuspendedOperation
 
 from span.service.answers import (
     _answer_id,
-    _bound_info,
+    ANSWER_ASSEMBLER,
     _conflicts_for,
     _select_answer_items,
     coverage_counts_for,
@@ -159,6 +159,8 @@ def _trace_drive(
     rels: list[m.SemanticRelationship] = []
     claims: list[m.SemanticClaim] = []
     sedges: list[m.StructuralEdge] = []
+    structural_coverage = m.ScopeCoverage.VERIFIED
+    structural_details: list[str | None] = []
     queue: list[tuple[m.SubjectId, int]] = [(target.subject_id, 0)]
     truncated_walk = False
     target_windowed = False
@@ -269,6 +271,9 @@ def _trace_drive(
         if depth >= bounds.max_depth:
             continue
         page = structural.edges(repository_id, sid, (), direction, bounds)
+        if page.coverage is not m.ScopeCoverage.VERIFIED:
+            structural_coverage = m.ScopeCoverage.UNVERIFIED
+        structural_details.append(page.coverage_detail)
         for edge in page.items:
             sedges.append(edge)
             for endpoint in _trace_endpoints(locator, edge=edge, direction=direction):
@@ -291,6 +296,10 @@ def _trace_drive(
         claims=tuple(claims),
         structural_edges=tuple(sedges[: bounds.max_results]),
         truncated_walk=truncated_walk,
+        structural_coverage=(
+            structural_coverage,
+            _answers.merge_coverage_detail(tuple(structural_details)),
+        ),
     )
 
 
@@ -308,6 +317,10 @@ def _compose_trace_answer(
     claims: tuple[m.SemanticClaim, ...],
     structural_edges: tuple[m.StructuralEdge, ...],
     truncated_walk: bool,
+    structural_coverage: tuple[m.ScopeCoverage, str | None] = (
+        m.ScopeCoverage.VERIFIED,
+        None,
+    ),
     page_token: str | None = None,
 ) -> m.SemanticAnswer:
     ids: tuple[m.ClaimRef | m.RelationshipRef, ...] = tuple(
@@ -386,6 +399,11 @@ def _compose_trace_answer(
                 deduped.append(i)
         boundary_ids = deduped
     requirements: list[m.ResolutionRequirement] = []
+    structural_requirement = _answers.structural_coverage_requirement(
+        "trace", structural_coverage[0], structural_coverage[1]
+    )
+    if structural_requirement is not None:
+        requirements.append(structural_requirement)
     if resolution is not None:
         requirements.extend(_answers.requirements_for_resolution(resolution))
     for rel in kept_rels:
@@ -424,14 +442,7 @@ def _compose_trace_answer(
         conflicts=kept_conf,
         question_coverage=views,
     )
-    returned = (
-        len(kept_conf)
-        + len(kept_rels)
-        + len(lifecycle_refs)
-        + len(kept_boundary)
-        + len(kept_edges)
-    )
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id(
             "trc", repository_id, subject.subject_id.canonical_locator
         ),
@@ -441,13 +452,9 @@ def _compose_trace_answer(
         content=content,
         evidence=tuple(ref for r in kept_rels for ref in r.evidence),
         resolution_requirements=tuple(requirements),
-        bound_info=_bound_info(
-            bounds,
-            returned,
-            truncated or truncated_walk,
-            category or ("walk" if truncated_walk else None),
-            None,
-        ),
+        bounds=bounds,
+        withheld_category=category or ("walk" if truncated_walk else None),
+        continuation_token=None,
         state_explanation=state_explanation_for(
             tuple(kept_claims),
             tuple(kept_rels),
@@ -542,7 +549,7 @@ def trace(
                     supporting_context=(),
                 ),
             )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id(
                 "trc",
                 request.repository_id,
@@ -554,7 +561,9 @@ def trace(
             content=m.TraceContent(),
             evidence=(),
             resolution_requirements=requirements,
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
         )
     return _trace_drive(
         request.repository_id,

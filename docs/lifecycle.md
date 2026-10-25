@@ -6,12 +6,32 @@ OFFLINE (dedicated setup session)
 
 NORMAL CODING SESSION (enter anywhere)
   ORIENT        explain (status only when status/freshness is the goal)
+                locate / neighbors for structural orientation
   PREPARE       impact  (material changes: always before editing)
   INVESTIGATE   trace / authority (where required)
   IMPLEMENT     external editing tools
-  VERIFY        status + external tests/review
+  VERIFY        status + external tests/review; record executions
+                so a pass can be derived, not asserted
   CLOSE         refresh + status
 ```
+
+## Status modes
+
+`status` is one operation with four shapes, and the response names the one that
+answered (`resolved_mode`):
+
+| Mode | Target | Answers |
+|---|---|---|
+| `REPOSITORY` | omitted | persisted coverage frontier plus repository totals |
+| `SCOPED` | selector, claim, relationship, or evidence scope | coverage for that scope |
+| `CAMPAIGN` | `TargetId` | progress of one target campaign |
+| `UNRESOLVED` | any target that did not resolve | why, and the next operation |
+
+`HOOK_FAST` returns a separate compact notice, never a status content.
+
+A campaign handle is durable for 90 days. When it is unknown or expired the
+response says so and names the recovery: re-run `initialize_target` with the
+same target scope and objective.
 
 Span never edits target code, generates patches, runs tests, or orchestrates
 workflows. The installer synchronizes the managed lifecycle block in the
@@ -82,7 +102,7 @@ does not add a second semantic state or quality model.
 ## Explicit target semantic establishment
 
 After the repository is identified and confirmed ready (initializing it only
-when readiness is `UNINITIALIZED`), an exact
+when `store_readiness` is `UNINITIALIZED`), an exact
 directory or repository path supplied by the user becomes a host-owned
 semantic campaign, not a stronger form of administrative readiness. That
 supplied path is the complete semantic boundary. The canonical entry point
@@ -116,7 +136,7 @@ exchange.
 
 Exact onboarding path: `docs/onboarding-runbook.md`.
 
-## Initialization and readiness
+## Initialization and store readiness
 
 Initialization is explicit and administrative: identity, repository
 state, provider-owned structural build when needed
@@ -157,8 +177,10 @@ or interpretation. This inventory is distinct from readiness. The installed-runt
   resolve blockers → edit → `status` → external tests →
   `refresh` → `status`. `refresh` reuses persisted question scope;
   it never starts a new baseline audit.
-- Test/review: `status` for verification currency (candidate vs
-  current pass/fail) — Span reports currency; it never runs tests.
+- Test/review: run the test externally, submit the verification link with
+  the execution record, then read `status` for the derived currency
+  (candidate/unknown vs current pass/fail/stale) — Span reports currency; it
+  never runs tests and never accepts an asserted pass.
 - Change-context: see `skills/span-change-context/SKILL.md`.
 
 Root selection uses existing repository context plus bounded
@@ -169,7 +191,7 @@ semantic coverage and reports its bounded frontier; it never enumerates
 structural subjects or interprets them. Skills are guidance only, never
 semantic authority.
 
-`READY` means Span storage/runtime readiness only. It is not semantic
+`store_readiness: READY` means Span storage/runtime readiness only. It is not semantic
 completeness; coverage and currency are reported separately.
 
 ## Target mapping

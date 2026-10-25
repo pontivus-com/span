@@ -141,9 +141,9 @@ def _notice(data_dir, root, scope_paths=None, close_prefix=False):
 
 
 def _render(repository_id, notice, close_prefix=False):
-    if notice.readiness is m.RepositoryReadiness.UNAVAILABLE:
+    if notice.store_readiness is m.StoreReadiness.UNAVAILABLE:
         return f"span: {repository_id} needs attention " f"(repository unavailable)."
-    if notice.readiness is m.RepositoryReadiness.UNINITIALIZED:
+    if notice.store_readiness is m.StoreReadiness.UNINITIALIZED:
         action = (
             notice.recommended_action
             or "run initialize_repository in a dedicated setup session"

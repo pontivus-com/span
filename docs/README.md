@@ -21,6 +21,8 @@ orchestrates workflows, or originates authority.
   from documentation, memory, search, and structural tools.
 - [FAQ](faq.md) — common questions about truth, readiness, storage, and
   autonomous behavior.
+- [Release notes](../CHANGELOG.md) — what changed in each version, including
+  migration.
 
 ## Design
 

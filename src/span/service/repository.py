@@ -13,7 +13,7 @@ from span.core import model as m
 from span.ports.evidence import EvidenceSource
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
-from span.service.answers import _answer_id, _bound_info
+from span.service.answers import ANSWER_ASSEMBLER, _answer_id
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.requests import (
     SemanticInitializeRepositoryRequest,
@@ -62,7 +62,10 @@ def _uninitialized_answer(
     """
     content: m.SemanticContent
     if intent is m.SemanticIntent.STATUS:
-        content = m.StatusContent(readiness=m.RepositoryReadiness.UNINITIALIZED)
+        content = m.StatusContent(
+            resolved_mode=m.StatusResolvedMode.UNRESOLVED,
+            store_readiness=m.StoreReadiness.UNINITIALIZED,
+        )
     elif intent is m.SemanticIntent.EXPLAIN:
         content = m.ExplainContent()
     elif intent is m.SemanticIntent.TRACE:
@@ -71,7 +74,7 @@ def _uninitialized_answer(
         content = m.ImpactContent()
     else:
         content = m.AuthorityContent()
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id("uninit", repository_id, intent.value),
         intent=intent,
         repository_state=state,
@@ -79,7 +82,9 @@ def _uninitialized_answer(
         content=content,
         evidence=(),
         resolution_requirements=(_setup_requirement(repository_id),),
-        bound_info=_bound_info(bounds, 0, False, None),
+        bounds=bounds,
+        withheld_category=None,
+        continuation_token=None,
         state_explanation=("returned assertions: none",),
     )
 
@@ -92,6 +97,8 @@ def initialize_repository(
     evidence: EvidenceSource,
     store: SemanticStore,
     bounds: m.QueryBounds | None = None,
+    canonical_root: str | None = None,
+    nested_within: str | None = None,
 ) -> SemanticInitializeRepositoryResult:
     """Explicit offline bootstrap lifecycle (plan §11.1).
 
@@ -115,6 +122,10 @@ def initialize_repository(
     )
     state = structural.repository_state(repository_id)
     store.record_repository_initialization(state, effective_seeds)
+    if canonical_root is not None:
+        # One writer for provenance. A store bound to another root fails here
+        # rather than being silently adopted.
+        store.record_repository_root(repository_id, canonical_root)
     inventory = evidence.inventory_evidence(
         repository_id,
         m.EvidenceScope(paths=(), evidence_refs=()),
@@ -135,10 +146,10 @@ def initialize_repository(
     # evidence_inventory_status and warnings, and the HOOK_FAST path
     # likewise reports READY once initialized (plan Q34: readiness
     # must not be confused with freshness/boundedness).
-    readiness = m.RepositoryReadiness.READY
+    readiness = m.StoreReadiness.READY
     return SemanticInitializeRepositoryResult(
         repository_id=repository_id,
-        readiness=readiness,
+        store_readiness=readiness,
         structural_source_status="ready",
         evidence_inventory_status=(
             f"ready:{inventory.bound_info.returned_results}items"
@@ -148,4 +159,6 @@ def initialize_repository(
         semantic_store_status=f"ready:schema-{version.value}",
         warnings=tuple(warnings),
         bound_info=inventory.bound_info,
+        canonical_root=canonical_root,
+        nested_within=nested_within,
     )

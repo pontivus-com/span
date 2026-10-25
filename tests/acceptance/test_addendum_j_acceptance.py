@@ -252,29 +252,42 @@ class StoreHealthAggregateTest(unittest.TestCase):
         try:
             self.assertEqual(store.count_question_dispositions("r"), {})
             self.assertEqual(store.count_target_associations("r"), 0)
-            report = m.SemanticCoverageReport(
-                pending_question_count=2,
-                open_question_count=1,
+            entry = m.SemanticCoverageEntry(
+                subject=m.SubjectId(
+                    repository_id="r",
+                    subject_kind=m.SubjectKind.COMPONENT,
+                    canonical_locator="src/a.py",
+                ),
+                disposition=m.SemanticCoverageDisposition.CURRENT,
                 stale_effective_question_count=1,
-                active_target_association_count=3,
-                persisted_target_accounted_count=4,
-                persisted_target_unresolved_count=2,
-                bounded_live_target_unaccounted_count=1,
             )
-            self.assertEqual(report.pending_question_count, 2)
-            self.assertEqual(report.open_question_count, 1)
-            self.assertEqual(report.stale_effective_question_count, 1)
-            self.assertEqual(report.active_target_association_count, 3)
-            self.assertEqual(report.persisted_target_accounted_count, 4)
-            self.assertEqual(report.persisted_target_unresolved_count, 2)
-            self.assertEqual(report.bounded_live_target_unaccounted_count, 1)
-            self.assertIs(
-                report.question_disposition_scope,
-                m.SemanticCoverageAggregateScope.PERSISTED_GLOBAL,
+            report = m.RepositoryCoverageReport(
+                repository=m.RepositoryTotals(
+                    pending_question_count=2,
+                    open_question_count=1,
+                    active_target_association_count=3,
+                    persisted_target_accounted_count=4,
+                    persisted_target_unresolved_count=2,
+                    bounded_live_target_unaccounted_count=1,
+                ),
+                page=m.CoveragePage(entries=(entry,)),
             )
-            self.assertIs(
-                report.target_burden_live_scope,
-                m.SemanticCoverageAggregateScope.BOUNDED_LIVE,
+            self.assertEqual(report.repository.pending_question_count, 2)
+            self.assertEqual(report.repository.open_question_count, 1)
+            self.assertEqual(report.page.stale_effective_question_count, 1)
+            self.assertEqual(report.repository.active_target_association_count, 3)
+            self.assertEqual(report.repository.persisted_target_accounted_count, 4)
+            self.assertEqual(report.repository.persisted_target_unresolved_count, 2)
+            self.assertEqual(report.repository.bounded_live_target_unaccounted_count, 1)
+            # The aggregate scope is a property of the carrier now: the
+            # repository totals cannot be read as page-local, and the scoped
+            # type has no repository field at all.
+            self.assertNotIn(
+                "persisted_target_accounted_count",
+                {
+                    f.name
+                    for f in __import__("dataclasses").fields(m.ScopedCoverageReport)
+                },
             )
         finally:
             store.close()
@@ -326,7 +339,16 @@ class StoreHealthAggregateTest(unittest.TestCase):
             )
             self.assertEqual(store.count_target_associations("r"), 1)
             self.assertEqual(store.count_target_inventory_outcomes("r"), (1, 1))
-            self.assertEqual(store.load_active_target_associations("r"), (association,))
+            (loaded,) = store.load_active_target_associations("r")
+            # The stored carrier carries the deadline the row is kept under, so
+            # a status answer can state the handle's retention.
+            self.assertIsNotNone(loaded.expires_at)
+            self.assertEqual(
+                __import__("dataclasses").replace(
+                    association, expires_at=loaded.expires_at
+                ),
+                loaded,
+            )
         finally:
             store.close()
 

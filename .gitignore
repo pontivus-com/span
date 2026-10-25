@@ -11,6 +11,10 @@ dist/
 .venv/
 .pypirc
 
+# Local working material (issue notes, remediation plans, investigations).
+# Working state, not Span documentation or a published contract.
+.context/
+
 # Test artifacts (installed-MCP acceptance record; never public input).
 tests/.artifacts/
 

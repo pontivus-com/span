@@ -227,8 +227,15 @@ class ClosedVocabularyTest(unittest.TestCase):
         self.assertEqual(len(m.OwnershipRole), 5)
         self.assertEqual(len(m.OwnershipExclusivity), 3)
         self.assertEqual(len(m.VerificationKind), 4)
-        self.assertEqual(len(m.VerificationCurrency), 5)
-        self.assertEqual(len(m.RepositoryReadiness), 5)
+        self.assertEqual(
+            {member.value for member in m.AttestedCurrency},
+            {"CANDIDATE", "UNKNOWN"},
+        )
+        self.assertEqual(
+            {member.value for member in m.DerivedCurrency},
+            {"CURRENT_PASS", "CURRENT_FAIL", "STALE", "UNKNOWN"},
+        )
+        self.assertEqual(len(m.StoreReadiness), 5)
         self.assertEqual({e.value for e in m.StatusMode}, {"NORMAL", "HOOK_FAST"})
         self.assertEqual(len(m.StructuralEdgeKind), 5)
         self.assertEqual(len(m.LifecyclePhase), 12)
@@ -349,7 +356,7 @@ class ConstructionValidationTest(unittest.TestCase):
             evidence=_evidence_ref(),
         )
         with self.assertRaises(ValueError):
-            m.StructuralEdgePage(
+            m.StructuralResult(
                 items=(edge,),
                 repository_state=_repository_state(),
                 bound_info=_bound_info(),
@@ -410,7 +417,7 @@ class ClaimValueMappingTest(unittest.TestCase):
             ),
             m.ClaimKind.LIFECYCLE_STATE: m.LifecycleStateValue(m.LifecyclePhase.USE),
             m.ClaimKind.VERIFICATION: m.VerificationValue(
-                sid, m.VerificationKind.TEST, m.VerificationCurrency.CANDIDATE
+                sid, m.VerificationKind.TEST, m.AttestedCurrency.CANDIDATE
             ),
         }
         for n, (kind, value) in enumerate(values.items()):
@@ -457,22 +464,22 @@ class AnswerCorrespondenceTest(unittest.TestCase):
         ]
         for n, (intent, content) in enumerate(pairs):
             answer = m.SemanticAnswer(
-                m.AnswerId(f"a-{n}"),
-                intent,
-                _repository_state(),
-                None,
-                content,
+                answer_id=m.AnswerId(f"a-{n}"),
+                intent=intent,
+                repository_state=_repository_state(),
+                content=content,
+                bound_info=m.BoundInfo(0, 0, 0, False),
             )
             self.assertIs(answer.intent, intent)
 
     def test_mismatched_content_rejected(self):
         with self.assertRaises(ValueError):
             m.SemanticAnswer(
-                m.AnswerId("a-x"),
-                m.SemanticIntent.EXPLAIN,
-                _repository_state(),
-                None,
-                m.TraceContent(),
+                answer_id=m.AnswerId("a-x"),
+                intent=m.SemanticIntent.EXPLAIN,
+                repository_state=_repository_state(),
+                content=m.TraceContent(),
+                bound_info=m.BoundInfo(0, 0, 0, False),
             )
 
 
@@ -527,12 +534,12 @@ class SerializationRoundTripTest(unittest.TestCase):
 
     def test_readiness_and_hook_notice(self):
         notice = m.HookStatusNotice(
-            m.RepositoryReadiness.READY, 2, 1, 0, (_subject_id(),), None
+            m.StoreReadiness.READY, 2, 1, 0, (_subject_id(),), None
         )
         self._round_trip(m.HookStatusNotice, notice)
 
     def test_hook_notice_scope_defaults_event_local(self):
-        notice = m.HookStatusNotice(readiness=m.RepositoryReadiness.READY)
+        notice = m.HookStatusNotice(store_readiness=m.StoreReadiness.READY)
         self.assertIs(notice.scope, m.HookNoticeScope.EVENT_LOCAL)
         self.assertIsNone(notice.recommended_action)
         self._round_trip(m.HookStatusNotice, notice)
@@ -562,16 +569,16 @@ class SerializationRoundTripTest(unittest.TestCase):
 
     def test_answer_envelope(self):
         answer = m.SemanticAnswer(
-            m.AnswerId("a-1"),
-            m.SemanticIntent.EXPLAIN,
-            _repository_state(),
-            None,
-            m.ExplainContent(
+            answer_id=m.AnswerId("a-1"),
+            intent=m.SemanticIntent.EXPLAIN,
+            repository_state=_repository_state(),
+            content=m.ExplainContent(
                 (_semantic_claim(),),
                 (_semantic_relationship(),),
                 (),
                 (),
             ),
+            bound_info=m.BoundInfo(0, 0, 0, False),
             resolution_requirements=(),
         )
         self._round_trip(m.SemanticAnswer, answer)
@@ -603,8 +610,9 @@ class SerializationRoundTripTest(unittest.TestCase):
         self._round_trip(
             m.EvidenceScope, m.EvidenceScope(("src/",), (_evidence_ref(),))
         )
-        page = m.StructuralEdgePage((edge,), _repository_state(), _bound_info())
-        self._round_trip(m.StructuralEdgePage, page)
+        # The structural envelope is a port projection parameterised by its
+        # item type; each item carrier round-trips above. Decoding the bare
+        # generic class is deliberately refused rather than guessed.
         inv = m.EvidenceInventoryPage(
             (m.EvidenceInventoryItem(_evidence_ref(), "fp"),),
             _repository_state(),
@@ -621,15 +629,24 @@ class SerializationRoundTripTest(unittest.TestCase):
             question_count=1,
             answered_question_count=1,
         )
-        report = m.SemanticCoverageReport(
-            entries=(entry,),
-            persisted_subject_count=1,
-            returned_subject_count=1,
-            current_subject_count=1,
+        page = m.CoveragePage(entries=(entry,))
+        report = m.RepositoryCoverageReport(
+            repository=m.RepositoryTotals(
+                persisted_subject_count=1,
+                pending_question_count=0,
+                open_question_count=0,
+            ),
+            page=page,
+        )
+        scoped = m.ScopedCoverageReport(
+            scope=m.ScopeTotals(persisted_subject_count=1), page=page
         )
         self._round_trip(m.SemanticCoverageEntry, entry)
-        self._round_trip(m.SemanticCoverageReport, report)
+        self._round_trip(m.CoveragePage, page)
+        self._round_trip(m.RepositoryCoverageReport, report)
+        self._round_trip(m.ScopedCoverageReport, scoped)
         self._round_trip(m.StatusContent, m.StatusContent(coverage_report=report))
+        self._round_trip(m.StatusContent, m.StatusContent(coverage_report=scoped))
         self._round_trip(
             m.SubjectPage,
             m.SubjectPage(

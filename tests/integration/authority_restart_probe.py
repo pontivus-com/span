@@ -82,7 +82,7 @@ async def _run(exe, repo, data_dir):
     )
     if first["is_error"]:
         raise AssertionError(f"first initialize_repository failed: {first['payload']}")
-    if first["payload"].get("readiness") != "READY":
+    if first["payload"].get("store_readiness") != "READY":
         raise AssertionError(
             "first initialize_repository was not READY: " f"{first['payload']!r}"
         )
@@ -127,7 +127,7 @@ async def _run(exe, repo, data_dir):
         "phase": "EC-31",
         "ok": True,
         "repository_id": repository_id,
-        "first_ready": first["payload"].get("readiness"),
+        "first_ready": first["payload"].get("store_readiness"),
         "restart_called_initialize": False,
         "pending": True,
         "question_slice": question_slice,

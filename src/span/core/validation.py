@@ -655,6 +655,78 @@ def materialize_claim(
     )
 
 
+def validate_verification_records(
+    repository_id: str,
+    result: m.SemanticInterpretationResult,
+    claims: tuple[m.SemanticClaim, ...],
+) -> tuple[m.VerificationRecord, ...]:
+    """Map an attested execution to the link that defines its scope.
+
+    The agent never supplies the natural-key fingerprint: the verified
+    scope is the matching verification link's evidence scope. Several
+    links for one subject are unambiguous when they share that scope (a
+    test and a gate over the same evidence); different scopes are
+    rejected rather than guessed.
+    """
+    links = [claim for claim in claims if isinstance(claim.value, m.VerificationValue)]
+    seen: set[tuple[str, str, str]] = set()
+    accepted: list[m.VerificationRecord] = []
+    for execution in result.verification_records:
+        if execution.repository_id != repository_id:
+            raise ValueError(
+                "execution names another repository: " + execution.repository_id
+            )
+        matching = [
+            claim
+            for claim in links
+            if claim.value.verification_ref == execution.subject
+        ]
+        if not matching:
+            raise ValueError(
+                "execution has no submitted verification link for "
+                f"{execution.subject.canonical_locator}"
+            )
+        scopes = {
+            m.evidence_scope_fingerprint(
+                m.EvidenceScope(
+                    paths=tuple(sorted({ref.locator for ref in claim.evidence})),
+                    evidence_refs=(),
+                )
+            )
+            for claim in matching
+        }
+        if len(scopes) != 1:
+            raise ValueError(
+                "ambiguous verification scope for "
+                f"{execution.subject.canonical_locator}; submit one "
+                "verification link per verified scope"
+            )
+        (scope_fingerprint,) = scopes
+        key = (
+            repository_id,
+            execution.subject.canonical_locator,
+            scope_fingerprint,
+        )
+        if key in seen:
+            raise ValueError(
+                "duplicate verification execution for one (subject, scope)"
+            )
+        seen.add(key)
+        accepted.append(
+            m.VerificationRecord(
+                repository_id=execution.repository_id,
+                subject=execution.subject,
+                scope_fingerprint=scope_fingerprint,
+                command=execution.command,
+                exit_status=execution.exit_status,
+                observed_revision=execution.observed_revision,
+                observed_at=execution.observed_at,
+                observer=execution.observer,
+            )
+        )
+    return tuple(accepted)
+
+
 def materialize_relationship(
     candidate: m.CandidateSemanticRelationship,
     validation: CandidateValidation,

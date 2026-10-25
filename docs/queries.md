@@ -12,7 +12,7 @@ returns a compact notice only).
 ## Self-containment (I-36)
 
 Every reference resolves to an item carried in the same answer;
-per-item freshness travels inline; status carries readiness. No
+per-item freshness travels inline; status carries store readiness. No
 second lookup is ever required to interpret an answer.
 
 ## Bounds (operational, never semantic)
@@ -21,8 +21,30 @@ second lookup is ever required to interpret an answer.
 defaults; over-maximum bounds are rejected, never clamped. Truncation
 follows retention priority (requested identities → qualifiers →
 governing evidence → direct claims → structural context → expansion);
-conflict pairs are atomic; `BoundInfo` states what was cut and whether
-continuation exists.
+conflict pairs are atomic.
+
+`returned_results` is counted from the answer itself — every leaf the
+content and the resolution requirements carry — never supplied by the
+operation, so it cannot disagree with the payload. A claim or relationship
+carries one freshness item, and that projection is not counted twice.
+Coverage entries are counted on the subject dimension: they are bounded by
+`max_subjects`, and a page that was cut is reported by the answer's
+`truncated` with category `semantic_subjects`.
+
+A scoped frontier is paginated by a membership-bound cursor. The token carries
+the scope's membership fingerprint, so a scope that changed between pages is
+rejected with a restart diagnostic instead of silently skipping or repeating
+subjects.
+
+Repository status admits entries while their own requirements fit the ceiling
+instead of building every entry and slicing the requirement list afterwards, so
+a cut entry returns on the next page rather than disappearing. On both status
+paths, `truncated: true` always comes with a continuation token.
+
+One exception is deliberate: an atomic unit — an item with its own requirements
+— is never split. When a single unit alone exceeds the ceiling it is emitted
+whole, the answer is not marked truncated because nothing was withheld, and the
+count shows the breach.
 
 ## Pagination vs continuation (I-39)
 

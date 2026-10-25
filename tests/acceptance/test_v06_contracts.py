@@ -257,9 +257,20 @@ class WithdrawalTest(unittest.TestCase):
             kinds = {c.kind for c in second.content.claims}
             self.assertNotIn(m.ClaimKind.OWNERSHIP_CUSTODY, kinds)
             self.assertIn(m.ClaimKind.PURPOSE, kinds)
-            # Retired history is preserved, never silently discarded.
-            rows = store._db.execute("SELECT claim_id FROM retired_claims").fetchall()
-            self.assertEqual(len(rows), 1)
+            # Retirement is deletion (D17): the superseded claim is gone.
+            with self.assertRaises(ValueError):
+                store.load_by_refs(
+                    REPO,
+                    (
+                        m.ClaimRef(
+                            id=next(
+                                c.claim_id
+                                for c in first.content.claims
+                                if c.kind is m.ClaimKind.OWNERSHIP_CUSTODY
+                            )
+                        ),
+                    ),
+                )
         finally:
             store.close()
 
@@ -740,8 +751,6 @@ class RetiredOwnerTest(unittest.TestCase):
                 if isinstance(value, m.TransformationOwnershipValue):
                     live_owners.add(value.transformer.canonical_locator)
             self.assertEqual(live_owners, {"team/billing"})
-            rows = store._db.execute("SELECT claim_id FROM retired_claims").fetchall()
-            self.assertEqual(len(rows), 1)
         finally:
             store.close()
 

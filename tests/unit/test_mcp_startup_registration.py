@@ -137,7 +137,7 @@ class StartupRegistrationTest(unittest.TestCase):
         self.addCleanup(context.store.close)
         result = ops.SemanticInitializeRepositoryResult(
             repository_id=REPO,
-            readiness=m.RepositoryReadiness.READY,
+            store_readiness=m.StoreReadiness.READY,
             structural_source_status="ready",
             evidence_inventory_status="ready:0items",
             semantic_store_status="ready:schema-6",
@@ -162,7 +162,7 @@ class StartupRegistrationTest(unittest.TestCase):
         provisioner.assert_called_once()
         self.assertIs(adapter.contexts[REPO], context)
         payload = json.loads(dispatched.content)
-        self.assertEqual(payload["readiness"], "READY")
+        self.assertEqual(payload["store_readiness"], "READY")
 
     def test_cs05_provisioning_replaces_lazy_state(self):
         lazy = _context()
@@ -172,7 +172,7 @@ class StartupRegistrationTest(unittest.TestCase):
         loader = mock.Mock(return_value=lazy)
         result = ops.SemanticInitializeRepositoryResult(
             repository_id=REPO,
-            readiness=m.RepositoryReadiness.READY,
+            store_readiness=m.StoreReadiness.READY,
             structural_source_status="ready",
             evidence_inventory_status="ready:0items",
             semantic_store_status="ready:schema-6",
@@ -265,7 +265,7 @@ class StartupRegistrationTest(unittest.TestCase):
                 )
             finally:
                 context.store.close()
-            self.assertIs(notice.readiness, m.RepositoryReadiness.UNINITIALIZED)
+            self.assertIs(notice.store_readiness, m.StoreReadiness.UNINITIALIZED)
             self.assertEqual(list(data_dir.iterdir()), [])
             self.assertFalse((data_dir / f"{repository_id}.db").exists())
 

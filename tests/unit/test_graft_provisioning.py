@@ -496,7 +496,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                         authority_seeds=(),
                     ),
                 )
-            self.assertEqual(result.readiness, m.RepositoryReadiness.READY)
+            self.assertEqual(result.store_readiness, m.StoreReadiness.READY)
             self.assertTrue(context.structural.has_index())
             # A provider-prefixed locator is not part of the public
             # surface: provisioning rejects it instead of interpreting it.

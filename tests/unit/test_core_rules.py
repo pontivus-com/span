@@ -282,8 +282,8 @@ class ConflictDetectionTest(unittest.TestCase):
 
     def test_structured_difference_conflicts(self):
         pair = (
-            self._verification("c-1", m.VerificationCurrency.CURRENT_PASS),
-            self._verification("c-2", m.VerificationCurrency.CURRENT_FAIL),
+            self._verification("c-1", m.AttestedCurrency.CANDIDATE),
+            self._verification("c-2", m.AttestedCurrency.UNKNOWN),
         )
         conflicts = v.find_conflicts(pair, ())
         self.assertEqual(len(conflicts), 1)
@@ -301,8 +301,8 @@ class ConflictDetectionTest(unittest.TestCase):
 
     def test_accepted_supersedes_resolves(self):
         pair = (
-            self._verification("c-1", m.VerificationCurrency.CURRENT_PASS),
-            self._verification("c-2", m.VerificationCurrency.CURRENT_FAIL),
+            self._verification("c-1", m.AttestedCurrency.CANDIDATE),
+            self._verification("c-2", m.AttestedCurrency.UNKNOWN),
         )
         sup = m.SemanticRelationship(
             relationship_id=m.RelationshipId("r-sup"),

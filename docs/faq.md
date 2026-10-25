@@ -43,7 +43,7 @@ Installation establishes operational readiness.
 
 Understanding must be established through normal queries or explicit bounded target campaigns.
 
-Coverage stays visible separately from readiness.
+Coverage stays visible separately from store readiness.
 
 ---
 
@@ -93,7 +93,7 @@ Span reduces the need to repeatedly reinterpret evidence that agents have alread
 
 No.
 
-`READY` is operational readiness.
+`store_readiness: READY` is operational readiness.
 
 Semantic coverage and freshness are separate.
 

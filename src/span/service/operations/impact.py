@@ -17,7 +17,7 @@ from span.shell.agent_exchange.continuations import ContinuationStore
 
 from span.service.answers import (
     _answer_id,
-    _bound_info,
+    ANSWER_ASSEMBLER,
     _conflicts_for,
     _select_answer_items,
     coverage_counts_for,
@@ -521,6 +521,12 @@ def _compose_impact_answer(
     kept_context = tuple(ref for ref in target_context if _ref_value(ref) in kept_ids)
     kept_ver = tuple(ref for ref in verification if _ref_value(ref) in kept_ids)
     unresolved: list[m.ResolutionRequirement] = []
+    if reach is not None:
+        structural_requirement = _answers.structural_coverage_requirement(
+            "impact", reach.coverage, reach.coverage_detail
+        )
+        if structural_requirement is not None:
+            unresolved.append(structural_requirement)
     if resolution is not None:
         unresolved.extend(_answers.requirements_for_resolution(resolution))
     for claim in kept_claims:
@@ -582,18 +588,9 @@ def _compose_impact_answer(
         claims=kept_claims,
         relationships=kept_rels,
         conflicts=kept_conf,
-        unresolved=tuple(unresolved),
         question_coverage=views,
     )
-    returned = (
-        len(kept_conf)
-        + len(unresolved)
-        + len(kept_impacts)
-        + len(kept_context)
-        + len(kept_ver)
-        + len(kept_conds)
-    )
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id(
             "imp",
             repository_id,
@@ -605,7 +602,9 @@ def _compose_impact_answer(
         content=content,
         evidence=tuple(ref for c in kept_claims for ref in c.evidence),
         resolution_requirements=tuple(unresolved),
-        bound_info=_bound_info(bounds, returned, truncated, category, None),
+        bounds=bounds,
+        withheld_category=category,
+        continuation_token=None,
         state_explanation=state_explanation_for(
             tuple(kept_claims),
             tuple(kept_rels),
@@ -657,7 +656,7 @@ def impact(
             repository_id=request.repository_id,
             name_or_locator=request.target.name_or_locator,
         )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id(
                 "imp",
                 request.repository_id,
@@ -669,7 +668,9 @@ def impact(
             content=m.ImpactContent(),
             evidence=(),
             resolution_requirements=requirements,
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
         )
     if request.change_kind is ChangeKind.OTHER and not request.change_description:
         raise ValueError("change_kind OTHER requires a change_description (§11.10)")

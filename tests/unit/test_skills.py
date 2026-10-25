@@ -110,9 +110,9 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "Never pass a filesystem path as",
             "canonical registered ID",
             "from MCP `tools/list`",
-            "If readiness is `UNINITIALIZED`",
+            "If `store_readiness` is `UNINITIALIZED`",
             "do not initialize it again",
-            "`READY` proves operational readiness only",
+            "`store_readiness: READY` proves operational readiness only",
         ):
             self.assertIn(required, text)
 

@@ -1084,11 +1084,13 @@ class RefreshAdmissionOrderTest(unittest.TestCase):
             )
             entry = next(
                 entry
-                for entry in answer.content.coverage_report.entries
+                for entry in answer.content.coverage_report.page.entries
                 if entry.subject.canonical_locator == "src/main.py"
             )
             descriptions = " ".join(
-                requirement.description for requirement in entry.resolution_requirements
+                requirement.description
+                for requirement in answer.resolution_requirements
+                if requirement.subject_or_claim == entry.subject
             )
             self.assertIn("live refresh", descriptions)
             self.assertNotIn(
@@ -1173,7 +1175,7 @@ class GhostSubjectTest(unittest.TestCase):
             # No records: pure-UNASSESSED subjects keep UNASSESSED;
             # the ghost rule only fires where positive display would
             # otherwise mislead.
-            bare = _repository_coverage_entry(
+            bare, bare_requirements = _repository_coverage_entry(
                 "repo-1",
                 ghost,
                 evidence=evidence,
@@ -1187,7 +1189,7 @@ class GhostSubjectTest(unittest.TestCase):
             self.assertFalse(
                 any(
                     "absent" in requirement.description
-                    for requirement in bare.resolution_requirements
+                    for requirement in bare_requirements
                 )
             )
             # With persisted records behind it, the same absent path
@@ -1218,7 +1220,7 @@ class GhostSubjectTest(unittest.TestCase):
                     ),
                 )
             )
-            entry = _repository_coverage_entry(
+            entry, requirements = _repository_coverage_entry(
                 "repo-1",
                 ghost,
                 evidence=evidence,
@@ -1230,13 +1232,10 @@ class GhostSubjectTest(unittest.TestCase):
                 m.SemanticCoverageDisposition.UNVERIFIABLE,
             )
             self.assertTrue(
-                any(
-                    "absent" in requirement.description
-                    for requirement in entry.resolution_requirements
-                )
+                any("absent" in requirement.description for requirement in requirements)
             )
             present = m.Subject(_sid(), "main", None)
-            control = _repository_coverage_entry(
+            _control, control_requirements = _repository_coverage_entry(
                 "repo-1",
                 present,
                 evidence=evidence,
@@ -1246,7 +1245,7 @@ class GhostSubjectTest(unittest.TestCase):
             self.assertFalse(
                 any(
                     "absent" in requirement.description
-                    for requirement in control.resolution_requirements
+                    for requirement in control_requirements
                 )
             )
         finally:

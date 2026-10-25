@@ -37,6 +37,8 @@ from span.shell.mcp import (
 )
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural import (
+    canonical_root_from_config,
+    containing_registered_root,
     repo_root_from_config,
     repository_id_from_config,
     structural_source_from_config,
@@ -128,12 +130,15 @@ def provision_repository(
         resolved_request = _dataclasses.replace(
             request, authority_seeds=tuple(resolved_seeds)
         )
+    canonical_root = canonical_root_from_config(request.repository_locator)
     result = ops.initialize_repository(
         resolved_request,
         repository_id=repository_id,
         structural=structural,
         evidence=evidence,
         store=store,
+        canonical_root=canonical_root,
+        nested_within=containing_registered_root(config.data_dir, canonical_root),
     )
     context = ServiceContext(
         structural=structural,

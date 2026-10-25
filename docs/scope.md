@@ -193,7 +193,7 @@ Span makes the resulting interpretation reusable.
 
 ---
 
-## Repository readiness is not repository understanding
+## Store readiness is not repository understanding
 
 A successful installation can report that Span is operational.
 
@@ -213,7 +213,7 @@ or:
 all codebase knowledge is complete
 ```
 
-Normal repository-level `status` reports bounded persisted semantic coverage separately from operational readiness.
+Normal repository-level `status` reports bounded persisted semantic coverage separately from operational store readiness.
 
 That can include:
 
@@ -224,7 +224,7 @@ That can include:
 - unresolved work;
 - unassessed scope within the bounded returned frontier.
 
-Coverage and readiness are intentionally separate.
+Coverage and store readiness are intentionally separate.
 
 ---
 

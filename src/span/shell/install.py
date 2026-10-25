@@ -306,6 +306,34 @@ def parse_args(argv=None):
         action="store_true",
         help="Skip install; verify an existing installation and exit.",
     )
+    parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Reverse install writes (host registration, hooks, managed "
+        "AGENTS.md block, deployed skills, receipt). Never touches "
+        "repository data. Idempotent.",
+    )
+    parser.add_argument(
+        "--purge",
+        default=None,
+        metavar="REPOSITORY_ID",
+        help="Remove one repository ID's data (`<id>.db` and "
+        "`<data-dir>/structural/<id>/`). Explicit ID only.",
+    )
+    parser.add_argument(
+        "--migrate-store",
+        default=None,
+        metavar="REPOSITORY_ID",
+        help="Explicitly upgrade one repository's store to the current "
+        "schema. Refuses an unknown version; idempotent at the current "
+        "version.",
+    )
+    parser.add_argument(
+        "--list-orphans",
+        action="store_true",
+        help="Report IDs present on disk and absent from the receipt. "
+        "Deletes nothing; absence from a receipt is evidence, not proof.",
+    )
     return parser.parse_args(argv)
 
 
@@ -897,6 +925,33 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
     }
 
 
+def remove_opencode_registration(config_path, dry_run=False):
+    """Remove only Span's own ``mcp.servers.span`` registration.
+
+    Foreign servers and every other key are preserved. A file without the
+    entry is already uninstalled, so the operation is idempotent and never
+    rewrites unrelated configuration.
+    """
+    print(f"+ remove opencode registration: {config_path}")
+    path = Path(config_path)
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    if not path.is_file():
+        return {"status": "absent", "config": str(path)}
+    try:
+        config = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"cannot read opencode config {config_path}: {exc}")
+    mcp = config.get("mcp")
+    servers = mcp.get("servers") if isinstance(mcp, dict) else None
+    if not isinstance(servers, dict) or "span" not in servers:
+        return {"status": "absent", "config": str(path)}
+    servers.pop("span")
+    path.write_text(json.dumps(config, indent=2) + "\n")
+    print(f"opencode registration removed: {path}")
+    return {"status": "removed", "config": str(path)}
+
+
 def register_codex(span_cmd, dry_run=False):
     if shutil.which("codex") is None:
         print("codex CLI absent; skipping codex registration.")
@@ -1115,6 +1170,114 @@ def wire_claude_hooks(hook_bin, data_dir, dry_run=False):
     return {"status": "wired", "added": added}
 
 
+def remove_codex_registration(dry_run=False):
+    """Remove the Span entry through the Codex CLI when it is present."""
+    if shutil.which("codex") is None:
+        return {"status": "absent", "reason": "codex CLI absent"}
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    proc = subprocess.run(
+        ["codex", "mcp", "remove", "span"], capture_output=True, text=True
+    )
+    if proc.returncode != 0:
+        # An absent entry is the normal already-uninstalled case.
+        return {"status": "absent"}
+    return {"status": "removed"}
+
+
+def remove_claude_registration(dry_run=False):
+    """Remove the Span entry through the Claude Code CLI when present."""
+    if shutil.which("claude") is None:
+        return {"status": "absent", "reason": "claude CLI absent"}
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    proc = subprocess.run(
+        ["claude", "mcp", "remove", "span", "--scope", "user"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return {"status": "absent"}
+    return {"status": "removed"}
+
+
+def _span_hook_command(command: object) -> bool:
+    """True for a command that invokes the Span hook binary."""
+    if not isinstance(command, str) or not command.strip():
+        return False
+    executable = command.split()[0]
+    return Path(executable).name == "span-hooks"
+
+
+def _remove_span_hooks(path, dry_run=False):
+    """Strip Span hook entries from one host configuration file.
+
+    Span owns every command invoking the hook binary; foreign hooks,
+    matchers, and unrelated settings are preserved. An empty event or
+    ``hooks`` map is removed so a pre-install shape is restored.
+    """
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    if not path.is_file():
+        return {"status": "absent"}
+    try:
+        config = json.loads(path.read_text())
+    except ValueError as exc:
+        raise SystemExit(f"cannot parse {path}: {exc}")
+    hooks = config.get("hooks")
+    if not isinstance(hooks, dict):
+        return {"status": "absent"}
+    removed = 0
+    for event in list(hooks):
+        group = hooks.get(event)
+        if not isinstance(group, list):
+            continue
+        kept_blocks = []
+        for block in group:
+            if not isinstance(block, dict):
+                kept_blocks.append(block)
+                continue
+            block_hooks = block.get("hooks", [])
+            if not isinstance(block_hooks, list):
+                kept_blocks.append(block)
+                continue
+            kept = [
+                hook
+                for hook in block_hooks
+                if not _span_hook_command(hook.get("command"))
+            ]
+            removed += len(block_hooks) - len(kept)
+            if kept:
+                kept_blocks.append({**block, "hooks": kept})
+        if kept_blocks:
+            hooks[event] = kept_blocks
+        else:
+            hooks.pop(event)
+    if not hooks:
+        config.pop("hooks", None)
+    if not removed:
+        return {"status": "absent"}
+    path.write_text(json.dumps(config, indent=2) + "\n")
+    backup = path.with_suffix(".json.bak-span")
+    if backup.exists():
+        backup.unlink()
+    print(f"span hooks removed from {path} ({removed} entries).")
+    return {"status": "removed", "removed": removed}
+
+
+def remove_codex_hooks(dry_run=False):
+    return _remove_span_hooks(
+        Path(os.path.expanduser("~")) / ".codex" / "hooks.json", dry_run=dry_run
+    )
+
+
+def remove_claude_hooks(dry_run=False):
+    return _remove_span_hooks(
+        Path(os.path.expanduser("~")) / ".claude" / "settings.json",
+        dry_run=dry_run,
+    )
+
+
 def wire_opencode_plugin(span_repo, project_dir, dry_run=False):
     """Refuse per-target plugin deployment (Addendum E §3/E-02).
 
@@ -1191,6 +1354,46 @@ def ensure_agents_rule(span_repo, target, dry_run=False):
     return {"status": "wired", "path": str(dst)}
 
 
+def remove_agents_block(target, dry_run=False):
+    """Remove the managed Span block from a target ``AGENTS.md``.
+
+    Only the block between Span's own markers is removed; surrounding
+    content is preserved byte for byte apart from trailing newlines. A
+    file that contained nothing else is deleted, restoring the pre-install
+    state. Malformed or duplicated markers are left untouched for review —
+    never guessed at.
+    """
+    dst = Path(target) / "AGENTS.md"
+    print(f"+ remove agents rule: {dst}")
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run", "path": str(dst)}
+    if not dst.is_file():
+        return {"status": "absent", "path": str(dst)}
+    existing = dst.read_text()
+    if existing.count(AGENTS_START) != 1 or existing.count(AGENTS_END) != 1:
+        return {
+            "status": "absent",
+            "path": str(dst),
+            "reason": "markers absent or ambiguous; left untouched",
+        }
+    start = existing.find(AGENTS_START)
+    end = existing.find(AGENTS_END)
+    if end < start:
+        return {
+            "status": "absent",
+            "path": str(dst),
+            "reason": "markers out of order; left untouched",
+        }
+    remaining = (existing[:start] + existing[end + len(AGENTS_END) :]).rstrip("\n")
+    if not remaining.strip():
+        dst.unlink()
+        print(f"agents rule removed; empty file deleted: {dst}")
+        return {"status": "removed", "path": str(dst), "deleted": True}
+    dst.write_text(remaining + "\n")
+    print(f"agents rule removed: {dst}")
+    return {"status": "removed", "path": str(dst), "deleted": False}
+
+
 def deploy_agents_rules(span_repo, targets, dry_run=False):
     """Synchronize the managed lifecycle block for every target."""
     return {
@@ -1206,6 +1409,191 @@ def write_receipt(data_dir, payload, dry_run=False):
         return
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def read_receipt(data_dir):
+    """Read the install receipt, or None when absent/unreadable."""
+    try:
+        return json.loads((Path(data_dir) / "install.json").read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def remove_deployed_skills(dry_run=False):
+    """Remove host skill directories Span deployed, marked by its origin file.
+
+    Only directories carrying Span's own ``.span-origin.json`` marker are
+    removed; a user-authored skill of the same name is never touched.
+    """
+    home = Path(os.path.expanduser("~"))
+    removed = []
+    for host_root in (home / ".config" / "opencode", home / ".codex", home / ".claude"):
+        dest_root = host_root / "skills"
+        if not dest_root.is_dir():
+            continue
+        removed_here = 0
+        for candidate in sorted(dest_root.iterdir()):
+            if (
+                not candidate.is_dir()
+                or not (candidate / ".span-origin.json").is_file()
+            ):
+                continue
+            print(f"+ remove skill {candidate}")
+            if not dry_run:
+                shutil.rmtree(candidate)
+            removed.append(str(candidate))
+            removed_here += 1
+        if removed_here and not dry_run:
+            # Install created this directory when it was absent. Leave a
+            # pre-existing one alone, but do not leave an empty artifact.
+            try:
+                if not any(dest_root.iterdir()):
+                    dest_root.rmdir()
+            except OSError:
+                pass
+    return {"status": "removed" if removed else "absent", "removed": removed}
+
+
+def uninstall(data_dir, targets, opencode_config, dry_run=False):
+    """Reverse every host-side write install performs.
+
+    Registration, hook entries, the managed ``AGENTS.md`` block, deployed
+    skills, and the receipt are removed. Repository data — stores and
+    structural indexes — is never touched; ``--purge`` owns that, one
+    explicit ID at a time. Each step tolerates an already-absent artifact,
+    so a second run is a no-op.
+    """
+    receipt = read_receipt(data_dir) or {}
+    registered = [Path(repo) for repo in receipt.get("repos", [])]
+    effective_targets = list(dict.fromkeys([*targets, *registered]))
+    config = opencode_config
+    if config is None:
+        registration = receipt.get("host_registration", {})
+        opencode = (
+            registration.get("opencode", {}) if isinstance(registration, dict) else {}
+        )
+        if isinstance(opencode, dict) and opencode.get("config"):
+            config = opencode["config"]
+    report = {
+        "opencode": (
+            remove_opencode_registration(config, dry_run=dry_run)
+            if config is not None
+            else {"status": "absent", "reason": "no opencode config known"}
+        ),
+        "codex": remove_codex_registration(dry_run=dry_run),
+        "claude": remove_claude_registration(dry_run=dry_run),
+        "hooks": {
+            "codex": remove_codex_hooks(dry_run=dry_run),
+            "claude": remove_claude_hooks(dry_run=dry_run),
+        },
+        "skills": remove_deployed_skills(dry_run=dry_run),
+        "agents": {
+            str(target): remove_agents_block(target, dry_run=dry_run)
+            for target in effective_targets
+        },
+        "receipt": {"status": "absent"},
+    }
+    receipt_path = Path(data_dir) / "install.json"
+    if receipt_path.is_file():
+        print(f"+ remove receipt: {receipt_path}")
+        if not dry_run:
+            receipt_path.unlink()
+        report["receipt"] = {"status": "removed", "path": str(receipt_path)}
+    print("uninstall complete.")
+    return report
+
+
+def _valid_repository_id(repository_id):
+    """One directory name: no separators, no traversal."""
+    if not repository_id or repository_id in (".", ".."):
+        return False
+    if "/" in repository_id or "\\" in repository_id:
+        return False
+    if os.sep in repository_id or (
+        os.altsep is not None and os.altsep in repository_id
+    ):
+        return False
+    return True
+
+
+def purge_repository(data_dir, repository_id, dry_run=False):
+    """Remove exactly one repository ID's store and structural index.
+
+    Explicit ID only. Nothing else in the data directory is touched, and
+    an already-absent artifact is not an error.
+    """
+    if not _valid_repository_id(repository_id):
+        raise SystemExit(
+            f"invalid repository id {repository_id!r}: one directory name, "
+            "no separators"
+        )
+    data = Path(data_dir)
+    candidates = [
+        data / f"{repository_id}.db",
+        data / f"{repository_id}.db-wal",
+        data / f"{repository_id}.db-shm",
+        data / f"{repository_id}.db-journal",
+    ]
+    index_dir = data / "structural" / repository_id
+    removed = []
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        print(f"+ purge {candidate}")
+        if not dry_run:
+            candidate.unlink()
+        removed.append(str(candidate))
+    if index_dir.is_dir():
+        print(f"+ purge {index_dir}")
+        if not dry_run:
+            shutil.rmtree(index_dir)
+        removed.append(str(index_dir))
+    print(
+        f"purge {repository_id}: {len(removed)} artifact(s) removed."
+        if removed
+        else f"purge {repository_id}: nothing to remove."
+    )
+    return {"repository_id": repository_id, "removed": removed}
+
+
+def _present_repository_ids(data_dir):
+    data = Path(data_dir)
+    ids = {path.stem for path in data.glob("*.db")}
+    structural = data / "structural"
+    if structural.is_dir():
+        ids |= {path.name for path in structural.iterdir() if path.is_dir()}
+    return ids
+
+
+def list_orphans(data_dir):
+    """Report IDs on disk that the receipt does not name. Deletes nothing.
+
+    A repository can be registered through ``--repo`` alone, so absence
+    from a receipt is evidence of an unreceipted ID, not proof that the
+    data is unused.
+    """
+    receipt = read_receipt(data_dir)
+    registered = (
+        {Path(repo).name for repo in receipt.get("repos", [])}
+        if receipt is not None
+        else set()
+    )
+    present = sorted(_present_repository_ids(data_dir))
+    orphans = sorted(set(present) - registered)
+    print(
+        f"orphans: {len(orphans)} of {len(present)} id(s) are absent from "
+        "the receipt (report only; no deletion)."
+    )
+    for orphan in orphans:
+        print(f"  {orphan}")
+    if receipt is None:
+        print("no receipt found; every id is unreceipted, not necessarily unused.")
+    return {
+        "present": present,
+        "registered": sorted(registered),
+        "orphans": orphans,
+        "receipt_present": receipt is not None,
+    }
 
 
 def git_rev(span_repo):
@@ -1540,13 +1928,13 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     report = verify_installation(venv_python, data_dir, repos, dry_run)
     print(f"runtime verification: span-mcp={resolved}")
     readiness = report.get("repos", []) if isinstance(report, dict) else []
-    print(f"repository readiness: {readiness}")
+    print(f"repository store_readiness: {readiness}")
     return {
         "runtime_verification": {
             "span_mcp": resolved,
             "dry_run": bool(dry_run),
         },
-        "repository_readiness": report,
+        "store_readiness": report,
         "opencode_registration": opencode_state,
         "codex_registration": codex_state,
         "claude_registration": claude_state,
@@ -1568,6 +1956,44 @@ def main(argv=None):
             raise SystemExit(
                 f"data dir must live outside every target repo: {data_dir}"
             )
+
+    if args.list_orphans:
+        list_orphans(data_dir)
+        return
+
+    if args.migrate_store is not None:
+        if dry:
+            print(
+                f"+ migrate store {args.migrate_store} (dry-run, skipped): "
+                f"{data_dir}"
+            )
+            return
+        out = _run(
+            [
+                sys.executable,
+                "-m",
+                "span.shell.store_migration",
+                "--data-dir",
+                str(data_dir),
+                "--repository-id",
+                args.migrate_store,
+            ]
+        )
+        print(out.strip())
+        return
+
+    if args.uninstall:
+        uninstall(
+            data_dir,
+            targets,
+            args.opencode_config,
+            dry_run=dry,
+        )
+        return
+
+    if args.purge is not None:
+        purge_repository(data_dir, args.purge, dry_run=dry)
+        return
 
     if args.verify_only:
         venv_python = venv_dir / "bin" / "python"

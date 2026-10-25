@@ -897,7 +897,7 @@ class InitializeTest(unittest.TestCase):
                 store=store,
             )
             self.assertEqual(result.repository_id, "repo-1")
-            self.assertIs(result.readiness, m.RepositoryReadiness.READY)
+            self.assertIs(result.store_readiness, m.StoreReadiness.READY)
             self.assertEqual(result.structural_source_status, "ready")
             self.assertTrue(result.evidence_inventory_status.startswith("ready:"))
             self.assertTrue(result.semantic_store_status.startswith("ready:schema-"))
@@ -952,7 +952,7 @@ class InitializeTest(unittest.TestCase):
                 store=store,
                 bounds=_bounds(max_evidence_units=1),
             )
-            self.assertIs(result.readiness, m.RepositoryReadiness.READY)
+            self.assertIs(result.store_readiness, m.StoreReadiness.READY)
             self.assertTrue(result.warnings)
             self.assertTrue(
                 result.evidence_inventory_status.startswith("degraded:truncated-at-")
@@ -2822,7 +2822,7 @@ class ContextualResolutionTest(unittest.TestCase):
                 structural=structural,
                 evidence=evidence,
                 store=store,
-                bounds=self._bounds(max_results=1),
+                bounds=self._bounds(max_results=1, max_subjects=1),
             )
             self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
             self.assertIs(trace_root.ambiguity, m.ResolutionAmbiguity.AMBIGUOUS)
@@ -2835,7 +2835,7 @@ class ContextualResolutionTest(unittest.TestCase):
                 ops.SemanticExplainRequest(
                     repository_id=repo,
                     target=m.SubjectSelector(None, "big", (), None),
-                    bounds=self._bounds(max_results=1),
+                    bounds=self._bounds(max_results=1, max_subjects=1),
                 ),
                 structural=structural,
                 evidence=evidence,
@@ -3387,7 +3387,7 @@ class ContextualResolutionTest(unittest.TestCase):
                 structural=structural,
                 evidence=_DuplicatingEvidence(),
                 store=store,
-                bounds=self._bounds(max_results=1),
+                bounds=self._bounds(max_results=1, max_subjects=1),
             )
             self.assertIs(orientation.ambiguity, m.ResolutionAmbiguity.RESOLVED)
             self.assertEqual(orientation.candidates[0].subject.subject_id, area)

@@ -182,9 +182,47 @@ span-install --verify-only
 span-mcp --help
 ```
 
-The doctor is read-only. It reports runtime verification, repository readiness,
+The doctor is read-only. It reports runtime verification, store readiness,
 and supported host-registration observability. OpenCode is inspected from its
 JSON config when one is available; Codex registration is reported as `manual`
 because Span's read-only contract cannot deterministically inspect it.
 Installation establishes operational readiness only; it does not mean Span
 already understands your repository. Continue with the [usage guide](usage.md).
+
+---
+
+## Remove or purge
+
+Installation has an explicit terminal. Nothing is removed automatically.
+
+```bash
+span-install --uninstall
+span-install --purge <repository-id>
+span-install --list-orphans
+```
+
+`--uninstall` reverses only the host-side writes: the OpenCode/Codex/Claude MCP
+entry, Span's hook entries, the managed `AGENTS.md` block in each registered
+target, deployed skills carrying Span's origin marker, and the receipt. It never
+touches repository data (stores, structural indexes), and running it twice is a
+no-op. A malformed or duplicated `AGENTS.md` marker pair is left untouched for
+review rather than guessed at.
+
+`--purge <repository-id>` removes exactly that ID's
+`<data-dir>/<id>.db` (with any SQLite sidecars) and
+`<data-dir>/structural/<id>/`. The ID is one directory name; separators and
+traversal are rejected. Nothing else in the data directory is touched, so
+purging an unattributable store is also the recovery path for a repository
+identity conflict: re-initialize the same root afterwards.
+
+`--list-orphans` reports IDs present on disk and absent from the receipt. It
+deletes nothing. A repository can be registered through `--repo` alone, so
+absence from a receipt is evidence of an unreceipted ID, not proof that its
+data is unused.
+
+`span-install --migrate-store <repository-id>` upgrades that ID's store from
+schema 7 to schema 8 in one transaction: it adds the verification-record table,
+removes the retired-claim archives, and rewrites stored verification payloads
+to the link-only shape. It is idempotent at the current version and refuses any
+other version rather than guessing. The server never migrates at open; a
+version mismatch fails closed until this command is run.

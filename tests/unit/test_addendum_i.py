@@ -181,7 +181,6 @@ class S2ObservationalStatusTest(unittest.TestCase):
             self.assertTrue(
                 second.content.coverage_report is not None
                 or second.resolution_requirements
-                or second.content.unresolved
             )
         finally:
             store.close()
@@ -2513,11 +2512,13 @@ class S8ExplanationTest(unittest.TestCase):
             value=m.VerificationValue(
                 _sid(),
                 m.VerificationKind.TEST,
-                m.VerificationCurrency.CURRENT_PASS,
+                m.AttestedCurrency.UNKNOWN,
             ),
             assertion_nature=m.AssertionNature.DESCRIPTIVE,
         )
-        sentences = state_explanation_for((verified,), ())
+        sentences = state_explanation_for(
+            (verified,), (), derived_currencies=("current pass",)
+        )
         self.assertIn("verification: current pass", sentences)
 
     def test_correction_preserves_unrelated_open_reason(self):

@@ -49,30 +49,21 @@ class FixtureAgent:
         allowed_rels = set(request.allowed_relationship_kinds)
         claims: list[m.CandidateSemanticClaim] = []
         relationships: list[m.CandidateSemanticRelationship] = []
-        for subject in request.subjects:
-            canned = self._mapping.get(subject.subject_id.canonical_locator)
-            if canned is None:
-                continue
-            claims.extend(c for c in canned.claims if c.kind in allowed_claims)
-            relationships.extend(
-                r for r in canned.relationships if r.kind in allowed_rels
-            )
-        subjects = list(
-            self._mapping.get(
-                subject.subject_id.canonical_locator,
-                FixtureCandidates(),
-            ).subjects
-            for subject in request.subjects
-        )
-        candidate_subjects = [s for group in subjects for s in group]
-        conflicts = [
-            c
-            for subject in request.subjects
-            for c in self._mapping.get(
-                subject.subject_id.canonical_locator,
-                FixtureCandidates(),
-            ).conflicts
-        ]
+        candidate_subjects: list[m.CandidateSubject] = []
+        conflicts: list[m.CandidateSemanticConflict] = []
+        # A mapping unit is whole-target inventory accounting, not a
+        # semantic unit: its contract carries accounts, never claims.
+        if not request.target_inventory_items:
+            for subject in request.subjects:
+                canned = self._mapping.get(subject.subject_id.canonical_locator)
+                if canned is None:
+                    continue
+                claims.extend(c for c in canned.claims if c.kind in allowed_claims)
+                relationships.extend(
+                    r for r in canned.relationships if r.kind in allowed_rels
+                )
+                candidate_subjects.extend(canned.subjects)
+                conflicts.extend(canned.conflicts)
         if len(claims) > request.bounds.max_candidate_claims:
             raise ValueError(
                 "fixture claims exceed max_candidate_claims "
@@ -107,6 +98,23 @@ class FixtureAgent:
                 if r.candidate_authority is not None
             }
         )
+        # A mapping unit must account for every bound inventory item.
+        # The fixture does not examine them, so it states that rather
+        # than silently leaving the batch unaccounted.
+        inventory_accounts = tuple(
+            m.CandidateTargetInventoryAccount(
+                evidence_id=item.evidence_ref.evidence_id,
+                resolution_requirements=(
+                    m.ResolutionRequirement(
+                        kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+                        subject_or_claim=None,
+                        description="fixture did not examine this member",
+                        supporting_context=(),
+                    ),
+                ),
+            )
+            for item in request.target_inventory_items
+        )
         question_decision: m.SemanticQuestionDecision | None = None
         if self._complete_questions and request.question is not None:
             question_decision = m.SemanticQuestionDecision(
@@ -126,4 +134,5 @@ class FixtureAgent:
             ),
             candidate_subjects=tuple(candidate_subjects),
             candidate_conflicts=tuple(conflicts),
+            proposed_target_inventory_accounting=inventory_accounts,
         )

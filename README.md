@@ -194,6 +194,9 @@ Windows paths are reserved but not verified. The public operation surface is
 eleven MCP operations; see the [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md). Recorded acceptance
 runs are in [acceptance evidence](https://github.com/pontivus-com/span/blob/master/docs/acceptance-evidence/).
 
+Latest: **0.7.0** — bounded answers, labeled staleness, recorded verification.
+See the [changelog](CHANGELOG.md).
+
 If Span is useful to you, a star helps other developers find it. Feedback and
 issues are welcome.
 

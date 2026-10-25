@@ -108,9 +108,9 @@ One complete target campaign over the eleven tools (exact carriers in
 `docs/onboarding-runbook.md`):
 
 1. Discover the registered canonical `repository_id` through `tools/list`.
-   If readiness is `UNINITIALIZED`, call `initialize_repository` once in its
+   If `store_readiness` is `UNINITIALIZED`, call `initialize_repository` once in its
    dedicated setup session and reuse the returned ID; an already initialized
-   repository is used directly. `READY` is operational storage readiness
+   repository is used directly. `store_readiness: READY` is operational storage readiness
    only; `READY != semantic completeness`. Use coverage and disposition for
    semantic currency.
 2. `initialize_target` with the exact `EvidenceScope` and objective →
@@ -209,7 +209,7 @@ Eleven operations, retained because their contracts differ. Grouped by
 agent intent; setup is separate from ordinary queries:
 
 - Setup: `initialize_repository` (dedicated setup session, storage
-  readiness only; never semantic completion).
+  store readiness only; never semantic completion).
 - Structural discovery: `locate` (file, symbol, or member list),
   `neighbors` (structural callers, callees, adjacency as evidence).
 - Semantic investigation: `explain` (what a subject does),
@@ -267,12 +267,28 @@ page one. Canonical decode failures carry dotted field paths with
 indices. Validation failures name `collection[index] (key=...)` and keep
 whole-unit atomic rejection.
 
+## Verification
+
+A verification claim is a link: which subject is verified, by what kind, and
+whether the agent attests `CANDIDATE` or `UNKNOWN`. The execution record is a
+separate State carrying the command, exit status, observed revision, time, and
+observer. Its verified scope is the link's evidence scope, so the agent never
+supplies an internal fingerprint. Status derives `CURRENT_PASS`,
+`CURRENT_FAIL`, `STALE`, or `UNKNOWN` from that record; an asserted pass cannot
+be submitted.
+
 ## Freshness transparency
 
-Structural pages carry `coverage` plus `coverage_detail` (closed tokens:
+Structural tool results (`locate`, `neighbors`) carry `coverage` plus
+`coverage_detail` (closed tokens:
 `non-git-tree`, `injected-index`, `dirty-tree`, `touched-file-mismatch`,
 `unverifiable-file`, `index-older-than-head`,
-`repository-population-unverified`, `clean-verified`). Missing or
+`repository-population-unverified`, `clean-verified`). The claim is
+type-enforced by `StructuralPageCoverageTest`, which enrolls every
+structural tool result from the output map. When the page behind
+`impact` or `trace` is not current, the answer carries a resolution
+requirement naming the reason and `refresh`, so stale structure is
+never presented as current. Missing or
 unparseable indexes fail closed with no
 report. Repository `status` orders its current page deterministically
 and guarantees every non-current repository entry carries an actionable
@@ -324,7 +340,7 @@ Span exposes eleven canonical MCP operations. No semantic_* aliases exist.
 | Assess what a proposed change may affect | `impact` |
 | Follow established producer → transformation → consumer semantics | `trace` |
 | Determine what governs something | `authority` |
-| Inspect readiness, coverage, and currency | `status` |
+| Inspect store readiness, coverage, and currency | `status` |
 | Re-check established understanding | `refresh` |
 | Submit agent interpretation | `submit_interpretation` |
 | Find files, symbols, outlines, or target members | `locate` |
