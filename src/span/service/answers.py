@@ -10,6 +10,9 @@ changed.
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
+import typing as _typing
+
 from span.core import model as m
 from span.core import validation as _validation
 from span.ports.store import SemanticStore
@@ -22,7 +25,9 @@ from span.service.refs import (
 
 __all__ = [
     "_answer_id",
-    "_bound_info",
+    "ANSWER_ASSEMBLER",
+    "ResponseBudget",
+    "AnswerAssembler",
     "_recorded_conflicts",
     "_conflicts_for",
     "_select_answer_items",
@@ -34,6 +39,7 @@ __all__ = [
     "coverage_counts_for",
     "state_explanation_for",
     "verification_currencies_for",
+    "currency_literal",
 ]
 
 
@@ -161,21 +167,105 @@ def _next_service_token(
     )
 
 
-def _bound_info(
-    bounds: m.QueryBounds,
-    returned: int,
-    truncated: bool,
-    category: str | None,
-    token: str | None = None,
-) -> m.BoundInfo:
-    return m.BoundInfo(
-        requested_max_results=bounds.max_results,
-        requested_max_depth=bounds.max_depth,
-        returned_results=returned,
-        truncated=truncated,
-        truncated_category=category,
-        continuation_token=token,
-    )
+@_dataclasses.dataclass(frozen=True)
+class ResponseBudget:
+    """Accounting for one answer.
+
+    ``returned`` is what the answer actually carries — counted from the
+    content and the envelope's requirements, never supplied by the operation.
+    ``withheld_category`` names what the operation did not emit; the
+    continuation token says whether that remainder is resumable. The atomic
+    admission rule (an item is emitted only if its requirements fit with it)
+    is applied by the steps that bound production (06 and 07); this carrier
+    is what they will draw from and what every answer reports.
+    """
+
+    requested_max_results: int
+    requested_max_depth: int
+    returned: int
+    withheld_category: str | None = None
+    continuation_token: str | None = None
+
+    @property
+    def truncated(self) -> bool:
+        return self.withheld_category is not None or self.continuation_token is not None
+
+
+#: Tuple-valued fields that project an already-counted item rather than
+#: carrying independent information. ``freshness_items`` mirrors the freshness
+#: already on each returned claim and relationship; counting it would report the
+#: same fact twice and halve the usable ceiling.
+_PROJECTION_FIELDS = frozenset({"freshness_items"})
+
+
+def _leaf_count(content: m.SemanticContent, requirements: int) -> int:
+    """Count the leaves an answer carries, from the content itself.
+
+    Every tuple-valued field carries independent leaves except the declared
+    projections. No stored count is trusted, so the reported number cannot
+    disagree with the payload.
+    """
+    count = requirements
+    hints = _typing.get_type_hints(type(content))
+    for field in _dataclasses.fields(content):
+        if field.name in _PROJECTION_FIELDS:
+            continue
+        if _typing.get_origin(hints[field.name]) is tuple:
+            count += len(getattr(content, field.name) or ())
+    return count
+
+
+class AnswerAssembler:
+    """The only constructor of ``SemanticAnswer``.
+
+    Operations hand over content, evidence, requirements, and what they
+    withheld. The assembler computes the count and derives truncation, so no
+    call site can misreport either.
+    """
+
+    def build(
+        self,
+        *,
+        answer_id: m.AnswerId,
+        intent: m.SemanticIntent,
+        repository_state: m.RepositoryState,
+        content: m.SemanticContent,
+        bounds: m.QueryBounds,
+        subject_resolution: m.SubjectResolution | None = None,
+        evidence: tuple[m.EvidenceRef, ...] = (),
+        resolution_requirements: tuple[m.ResolutionRequirement, ...] = (),
+        withheld_category: str | None = None,
+        continuation_token: str | None = None,
+        state_explanation: tuple[str, ...] = (),
+    ) -> m.SemanticAnswer:
+        budget = ResponseBudget(
+            requested_max_results=bounds.max_results,
+            requested_max_depth=bounds.max_depth,
+            returned=_leaf_count(content, len(resolution_requirements)),
+            withheld_category=withheld_category,
+            continuation_token=continuation_token,
+        )
+        return m.SemanticAnswer(
+            answer_id=answer_id,
+            intent=intent,
+            repository_state=repository_state,
+            subject_resolution=subject_resolution,
+            content=content,
+            evidence=tuple(evidence),
+            resolution_requirements=tuple(resolution_requirements),
+            bound_info=m.BoundInfo(
+                requested_max_results=budget.requested_max_results,
+                requested_max_depth=budget.requested_max_depth,
+                returned_results=budget.returned,
+                truncated=budget.truncated,
+                truncated_category=budget.withheld_category,
+                continuation_token=budget.continuation_token,
+            ),
+            state_explanation=tuple(state_explanation),
+        )
+
+
+ANSWER_ASSEMBLER = AnswerAssembler()
 
 
 def _recorded_conflicts(
@@ -335,29 +425,39 @@ def _freshness_items_for(
     )
 
 
-#: Verification currency literals for state explanation (Addendum I S8
-#: §5.8): the enum meaning in words. `current pass` / `current fail`
-#: use a space, matching the adopted contract vocabulary.
+#: Currency literals for state explanation (Addendum I S8 §5.8).
+#: Attested values say only what the agent could know without execution;
+#: derived values come from a VerificationRecord.
 _CURRENCY_LITERAL = {
-    m.VerificationCurrency.CANDIDATE: "candidate",
-    m.VerificationCurrency.CURRENT_PASS: "current pass",
-    m.VerificationCurrency.CURRENT_FAIL: "current fail",
-    m.VerificationCurrency.STALE: "stale",
-    m.VerificationCurrency.UNKNOWN: "unknown",
+    m.AttestedCurrency.CANDIDATE: "candidate",
+    m.AttestedCurrency.UNKNOWN: "unknown",
+    m.DerivedCurrency.CURRENT_PASS: "current pass",
+    m.DerivedCurrency.CURRENT_FAIL: "current fail",
+    m.DerivedCurrency.STALE: "stale",
 }
+
+
+def currency_literal(
+    value: m.AttestedCurrency | m.DerivedCurrency,
+) -> str:
+    """Plain-language literal for one currency member."""
+    return _CURRENCY_LITERAL.get(value, "unknown")
 
 
 def verification_currencies_for(
     claims: tuple[m.SemanticClaim, ...],
 ) -> tuple[str, ...]:
-    """Distinct verification currency literals over carried VERIFICATION
-    values, sorted. Empty when the page carries no verification."""
+    """Attested currency literals over carried VERIFICATION links.
+
+    Operations without a record reader report what the agent attested.
+    ``status`` supplies derived literals instead.
+    """
     found: set[str] = set()
     for claim in claims:
         if claim.kind is m.ClaimKind.VERIFICATION and isinstance(
             claim.value, m.VerificationValue
         ):
-            found.add(_CURRENCY_LITERAL.get(claim.value.currency, "unknown"))
+            found.add(_CURRENCY_LITERAL.get(claim.value.attested_currency, "unknown"))
     return tuple(sorted(found))
 
 
@@ -405,6 +505,7 @@ def state_explanation_for(
     *,
     coverage: tuple[int, int, int] | None = None,
     bounds: tuple[int, bool] | None = None,
+    derived_currencies: tuple[str, ...] | None = None,
 ) -> tuple[str, ...]:
     """Project plain-language state explanation (Addendum I S8 §5.8).
 
@@ -485,7 +586,11 @@ def state_explanation_for(
             ),
         ),
     ]
-    currencies = verification_currencies_for(tuple(claims))
+    currencies = (
+        tuple(sorted(derived_currencies))
+        if derived_currencies is not None
+        else verification_currencies_for(tuple(claims))
+    )
     if not currencies:
         sentences.append("no current passing verification carried for this scope")
     elif len(currencies) == 1:

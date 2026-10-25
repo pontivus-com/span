@@ -128,9 +128,9 @@ def main(argv=None):
             )
         except ValueError as exc:
             raise SystemExit(f"repository setup failed for {target}: {exc}") from None
-        if result.readiness.value != "READY":
+        if result.store_readiness.value != "READY":
             raise SystemExit(
-                f"repository not READY: {target}: {result.readiness.value}"
+                f"repository not READY: {target}: {result.store_readiness.value}"
             )
         answer = ops.status(
             ops.SemanticStatusRequest(
@@ -148,7 +148,7 @@ def main(argv=None):
             {
                 "locator": target,
                 "repository_id": result.repository_id,
-                "readiness": result.readiness.value,
+                "store_readiness": result.store_readiness.value,
                 "store": result.semantic_store_status,
                 "answer": answer.content.__class__.__name__,
             }

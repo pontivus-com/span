@@ -16,7 +16,7 @@ from span.shell.agent_exchange.continuations import ContinuationStore
 
 from span.service.answers import (
     _answer_id,
-    _bound_info,
+    ANSWER_ASSEMBLER,
     _conflicts_for,
     _next_service_token,
     _query_digest,
@@ -154,10 +154,9 @@ def _compose_authority_answer(
         claims=claims,
         relationships=relationships,
         conflicts=kept_conflicts,  # type: ignore[arg-type]
-        unresolved=kept_unresolved,  # type: ignore[arg-type]
         question_coverage=views,
     )
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id("aut", repository_id, sid.canonical_locator),
         intent=m.SemanticIntent.AUTHORITY,
         repository_state=state,
@@ -165,23 +164,19 @@ def _compose_authority_answer(
         content=content,
         evidence=tuple(binding.evidence_ref for binding in kept_bindings),
         resolution_requirements=tuple(requirements),
-        bound_info=_bound_info(
-            bounds,
-            len(kept_bindings),
-            truncated,
-            category,
-            _next_service_token(
-                page_token,
-                claims,
-                relationships,
-                claims,
-                relationships,
-                claims_token,
-                rels_token,
-                questions_skip=qshown,
-                questions_remaining=qremaining,
-                query_digest=_digest,
-            ),
+        bounds=bounds,
+        withheld_category=category,
+        continuation_token=_next_service_token(
+            page_token,
+            claims,
+            relationships,
+            claims,
+            relationships,
+            claims_token,
+            rels_token,
+            questions_skip=qshown,
+            questions_remaining=qremaining,
+            query_digest=_digest,
         ),
         state_explanation=state_explanation_for(
             tuple(claims),
@@ -256,7 +251,7 @@ def authority(
             repository_id=request.repository_id,
             name_or_locator=request.target.name_or_locator,
         )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id(
                 "aut",
                 request.repository_id,
@@ -268,7 +263,9 @@ def authority(
             content=m.AuthorityContent(),
             evidence=(),
             resolution_requirements=requirements,
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
         )
     subject = resolution.candidates[0].subject
     # S4 §5.4 narrowed selection: host slice/basis/anchors only; service

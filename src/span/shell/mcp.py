@@ -21,6 +21,7 @@ the agent resubmits the corrected result under the same continuation.
 from __future__ import annotations
 
 import json as _json
+import pathlib as _pathlib
 from collections.abc import Callable as _Callable
 from dataclasses import dataclass as _dataclass
 from dataclasses import field as _field
@@ -138,8 +139,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "continuation. "
         "pending question work continues only through the continuation "
         "returned by the suspending operation. Exact targets report "
-        "detailed freshness; readiness READY means Span storage/runtime "
-        "availability only, not semantic completeness. HOOK_FAST "
+        "detailed freshness; store_readiness READY means Span "
+        "storage/runtime availability only, not semantic completeness. "
+        "HOOK_FAST "
         "returns a compact notice only: event-local scope, never "
         "repository inventory, so READY 0/0 never means clean."
     ),
@@ -163,7 +165,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "exclusion_basis, or resolution_requirements. An OPEN "
         "question_decision carries resolution_requirements; ANSWERED "
         "requires validated material and Span derives completion; "
-        "NOT_APPLICABLE carries a basis and no result refs."
+        "NOT_APPLICABLE carries a basis and no result refs. A "
+        "verification link is the claim; an execution record carries the "
+        "run (command, exit status, observed revision/time) and takes its "
+        "verified scope from that link, so never send a scope fingerprint."
     ),
     "locate": (
         "Read-only structural find, file outline, or target member "
@@ -600,6 +605,15 @@ class McpAdapter:
         """
         if not repository_id or not repository_locator:
             raise ValueError("repository identity and locator must be non-empty")
+        canonical = str(_pathlib.Path(repository_locator).resolve())
+        existing = self.repository_locators.get(repository_id)
+        if existing is not None:
+            existing_canonical = str(_pathlib.Path(existing).resolve())
+            if existing_canonical != canonical:
+                raise m.RepositoryIdentityConflict(
+                    repository_id, existing_canonical, canonical
+                )
+            return
         self.repository_locators[repository_id] = repository_locator
 
     def registered_repository_ids(self) -> tuple[str, ...]:

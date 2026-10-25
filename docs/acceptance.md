@@ -16,7 +16,9 @@ proprietary material is required.
 - **D — authority conflict.** Observed behaviour and declared authority are
   separate; declared precedence is used, never invented.
 - **E — verification.** Candidate evidence and current pass/fail are
-  distinguished; nothing is presented as passed without an executed record.
+  distinguished; nothing is presented as passed unless an execution record
+  for the verified scope still matches the current revision. A submission can
+  attest `CANDIDATE` or `UNKNOWN`; a pass is derived, never asserted.
 - **F — lifecycle.** State is created, used, terminal, failed, abandoned,
   replayed, and reaped; persistence points are explicit.
 - **G — non-local impact.** Structural possibility is separated from

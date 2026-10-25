@@ -247,7 +247,7 @@ def _candidates():
                     value=m.VerificationValue(
                         _sid("src/publish.py"),
                         m.VerificationKind.TEST,
-                        m.VerificationCurrency.CANDIDATE,
+                        m.AttestedCurrency.CANDIDATE,
                     ),
                     evidence=(_ref("src/publish.py"),),
                     basis=m.SemanticBasis(
@@ -262,8 +262,7 @@ def _candidates():
                     value=m.VerificationValue(
                         _sid("src/publish.py"),
                         m.VerificationKind.GATE,
-                        m.VerificationCurrency.CURRENT_PASS,
-                        observed_revision="fp-1",
+                        m.AttestedCurrency.UNKNOWN,
                     ),
                     evidence=(_ref("src/publish.py"), _ref("RELEASE.md")),
                     candidate_authority=_release_authority(),
@@ -452,7 +451,7 @@ class S01TerminologyTest(unittest.TestCase):
             self.assertTrue(
                 any(
                     r.kind is m.ResolutionKind.MISSING_AUTHORITY
-                    for r in auth.content.unresolved
+                    for r in auth.resolution_requirements
                 )
             )
         finally:
@@ -519,14 +518,10 @@ class S02CustodyTest(unittest.TestCase):
                 store,
                 agent,
             )
-            currencies = {v.currency for v in status.content.verification_currency}
-            self.assertEqual(
-                currencies,
-                {
-                    m.VerificationCurrency.CANDIDATE,
-                    m.VerificationCurrency.CURRENT_PASS,
-                },
-            )
+            # No execution record exists, so both links read UNKNOWN;
+            # the fixture's attested values never become a published pass.
+            currencies = {v.currency for v in status.content.verification_status}
+            self.assertEqual(currencies, {m.DerivedCurrency.UNKNOWN})
             for claim in answer.content.claims:
                 self.assertIsInstance(claim.trust, m.TrustState)
                 self.assertIsInstance(claim.freshness.state, m.FreshnessState)

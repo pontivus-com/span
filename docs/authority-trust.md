@@ -63,9 +63,12 @@ Can show what the implementation currently does.
 
 ### Tests
 
-Can provide observed verification evidence when actually executed and recorded as such.
+Can provide observed verification evidence when actually executed and recorded
+as a verification record keyed to the verified scope.
 
 The mere existence of a test is not equivalent to a passing verification result.
+A recorded pass also stops reading as current when the revision or verified scope
+moves.
 
 ### Configuration
 

@@ -436,7 +436,7 @@ async def lane(exe, work, data_dir, transcript):
             {"repository_locator": str(work)},
         )
         assert not is_error, setup
-        assert setup["readiness"] == "READY", setup
+        assert setup["store_readiness"] == "READY", setup
         assert setup["repository_id"] == repo_id, setup
         submit_schema = by_name["submit_interpretation"].input_schema
         assert "$defs" in submit_schema
@@ -507,7 +507,7 @@ async def lane(exe, work, data_dir, transcript):
             "status", {"repository_id": repo_id, "target": None}
         )
         assert not is_error, payload
-        assert payload["content"].get("readiness") == "READY", payload
+        assert payload["content"].get("store_readiness") == "READY", payload
 
         # EC-09: trace with only required arguments (defaults omitted).
         payload, is_error = await wire.call(
@@ -1011,7 +1011,7 @@ async def lane(exe, work, data_dir, transcript):
             {"repository_locator": str(work)},
         )
         assert not is_error, payload
-        assert payload["readiness"] == "READY", payload
+        assert payload["store_readiness"] == "READY", payload
         assert payload["repository_id"] == repo_id, payload
         _phase(transcript, "EC-21", repository_id=repo_id)
     finally:
@@ -1203,7 +1203,8 @@ async def lane(exe, work, data_dir, transcript):
         else:
             assert "content" in again, again
             assert again["content"].get("target_disposition") != "CURRENT", again
-            assert again["content"].get("unresolved"), again
+            # Requirements have one owner: the answer envelope.
+            assert again.get("resolution_requirements"), again
         _phase(transcript, "EC-24", non_progressing=True)
     finally:
         await stack.aclose()

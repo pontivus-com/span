@@ -33,6 +33,8 @@ class PendingInterpretation:
 
     continuation: str
     request: m.SemanticInterpretationRequest
+    #: Ephemeral, process-scoped, recovered by re-running the operation.
+    lifespan: m.HandleLifespan = m.CONTINUATION_LIFESPAN
 
     def __post_init__(self) -> None:
         if not self.continuation:

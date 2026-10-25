@@ -599,7 +599,7 @@ class NeighborsServiceTest(unittest.TestCase):
                 page_token=None,
             ):
                 self._check_repository(repository_id)
-                return m.StructuralEdgePage(
+                return m.StructuralResult(
                     items=(),
                     repository_state=self.repository_state(repository_id),
                     bound_info=m.BoundInfo(bounds.max_results, 0, 0, False, None, None),
