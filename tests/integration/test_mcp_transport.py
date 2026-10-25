@@ -573,9 +573,11 @@ class DispatchTest(unittest.TestCase):
             self.assertEqual(body["$type"], "SemanticAnswer")
             self.assertEqual(body["intent"], "STATUS")
             report = body["content"]["coverage_report"]
-            self.assertEqual(report["persisted_subject_count"], 0)
-            self.assertEqual(report["returned_subject_count"], 0)
-            self.assertEqual(report["entries"], [])
+            self.assertEqual(report["$type"], "RepositoryCoverageReport")
+            self.assertEqual(report["repository"]["persisted_subject_count"], 0)
+            self.assertEqual(report["page"]["entries"], [])
+            # Derived counts are properties, not wire fields.
+            self.assertNotIn("returned_subject_count", report["page"])
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -1476,7 +1478,7 @@ class ProvisionPathTest(unittest.TestCase):
             context, result = mcp_server.provision_repository(config, request)
             try:
                 self.assertEqual(result.repository_id, "order-svc")
-                self.assertIs(result.readiness, m.RepositoryReadiness.READY)
+                self.assertIs(result.store_readiness, m.StoreReadiness.READY)
                 adapter = _Adapter(
                     provisioner=(
                         lambda req: mcp_server.provision_repository(config, req)
@@ -1494,7 +1496,7 @@ class ProvisionPathTest(unittest.TestCase):
                 )
                 self.assertFalse(status.is_error)
                 notice = json.loads(status.content)
-                self.assertEqual(notice["readiness"], "READY")
+                self.assertEqual(notice["store_readiness"], "READY")
             finally:
                 context.store.close()
         finally:

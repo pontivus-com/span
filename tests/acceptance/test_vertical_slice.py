@@ -461,7 +461,7 @@ class VerticalSliceTest(unittest.TestCase):
             self.assertIn(m.AuthorityStatus.ACCEPTED, statuses)
             locators = {b.evidence_ref.locator for b in content.governing_bindings}
             self.assertTrue({"README.md", "OWNERSHIP.md"} <= locators)
-            kinds = {r.kind for r in content.unresolved}
+            kinds = {r.kind for r in answer.resolution_requirements}
             self.assertIn(m.ResolutionKind.MISSING_AUTHORITY, kinds)
             self.assertEqual(len(content.conflicts), 1)
         finally:

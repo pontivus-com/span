@@ -15,14 +15,15 @@ from span.core.model import (
     QueryBounds,
     RepositoryState,
     ScopeCoverage,  # noqa: F401
+    StructuralEdge,
     StructuralEdgeKind,
-    StructuralEdgePage,
     StructuralFreshnessReport,  # noqa: F401
     StructuralLocateMatch,  # noqa: F401
-    StructuralLocationPage,
-    StructuralOutlinePage,  # noqa: F401
-    StructuralReachPage,
-    StructuralSearchPage,  # noqa: F401
+    StructuralLocation,
+    StructuralOutlineEntry,
+    StructuralReachNode,
+    StructuralResult,
+    StructuralSearchHit,
     SubjectId,
     SubjectResolution,
     SubjectSelector,
@@ -66,7 +67,7 @@ class StructuralSource(_typing.Protocol):
         subject: SubjectId,
         bounds: QueryBounds,
         page_token: str | None = None,
-    ) -> StructuralLocationPage:
+    ) -> StructuralResult[StructuralLocation]:
         """Implementation locations for one subject."""
         ...
 
@@ -78,7 +79,7 @@ class StructuralSource(_typing.Protocol):
         direction: StructuralDirection,
         bounds: QueryBounds,
         page_token: str | None = None,
-    ) -> StructuralEdgePage:
+    ) -> StructuralResult[StructuralEdge]:
         """Structural edges for one subject in the given direction."""
         ...
 
@@ -91,7 +92,7 @@ class StructuralSource(_typing.Protocol):
         max_depth: int,
         bounds: QueryBounds,
         page_token: str | None = None,
-    ) -> StructuralReachPage:
+    ) -> StructuralResult[StructuralReachNode]:
         """Bounded structural reach expansion (no semantic judgment)."""
         ...
 
@@ -103,7 +104,7 @@ class StructuralSource(_typing.Protocol):
         bounds: QueryBounds,
         page_token: str | None = None,
         scope: EvidenceScope | None = None,
-    ) -> StructuralSearchPage:
+    ) -> StructuralResult[StructuralSearchHit]:
         """Paginated name/locator search (Addendum F §4.0; J-10).
 
         Provider match order, real continuation tokens (never the
@@ -123,7 +124,7 @@ class StructuralSource(_typing.Protocol):
         locator: str,
         bounds: QueryBounds,
         page_token: str | None = None,
-    ) -> StructuralOutlinePage:
+    ) -> StructuralResult[StructuralOutlineEntry]:
         """Symbols defined in one file, deterministic order (F §4.0).
 
         Unknown file yields empty entries, never error. Tokens are

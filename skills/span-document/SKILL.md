@@ -7,14 +7,14 @@ description: Build evidence-backed understanding of one scope level by level wit
 
 Use this specialization for directory, subsystem, workflow, or governed
 document understanding. The primary `skills/span/SKILL.md` is authoritative
-for operation selection, repository identity, readiness, evidence admission,
+for operation selection, repository identity, store readiness, evidence admission,
 continuation recovery, target accounting, freshness, and closeout. This file
 adds only the documentation-area procedure.
 
 ## Procedure
 
 1. If the user supplied an exact directory, preserve that complete target boundary. Do not ask for a smaller representative root or silently narrow
-   the work. Follow the primary skill's readiness and `initialize_target`
+   the work. Follow the primary skill's store readiness and `initialize_target`
    path; an `UNINITIALIZED` repository needs `initialize_repository` in its
    dedicated setup session.
 2. Map the target structurally before assigning meaning. Use `locate` for the

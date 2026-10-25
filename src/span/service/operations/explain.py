@@ -16,7 +16,7 @@ from span.shell.agent_exchange.continuations import ContinuationStore
 
 from span.service.answers import (
     _answer_id,
-    _bound_info,
+    ANSWER_ASSEMBLER,
     _conflicts_for,
     _next_service_token,
     _query_digest,
@@ -311,7 +311,7 @@ def _compose_explain_answer(
         question_coverage=views,
     )
     returned = len(kept_claims) + len(kept_rels) + len(kept_locs)
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id("ans", repository_id, sid.canonical_locator),
         intent=m.SemanticIntent.EXPLAIN,
         repository_state=state,
@@ -319,23 +319,19 @@ def _compose_explain_answer(
         content=content,
         evidence=tuple(ref for c in kept_claims for ref in c.evidence),
         resolution_requirements=tuple(requirements),
-        bound_info=_bound_info(
-            bounds,
-            returned,
-            truncated,
-            category,
-            _next_service_token(
-                page_token,
-                kept_claims,
-                kept_rels,
-                claims,
-                relationships,
-                claims_token,
-                rels_token,
-                questions_skip=qshown,
-                questions_remaining=qremaining,
-                query_digest=_digest,
-            ),
+        bounds=bounds,
+        withheld_category=category,
+        continuation_token=_next_service_token(
+            page_token,
+            kept_claims,
+            kept_rels,
+            claims,
+            relationships,
+            claims_token,
+            rels_token,
+            questions_skip=qshown,
+            questions_remaining=qremaining,
+            query_digest=_digest,
         ),
         state_explanation=state_explanation_for(
             tuple(kept_claims),
@@ -427,7 +423,7 @@ def explain(
                     supporting_context=(),
                 ),
             )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id(
                 "ans",
                 request.repository_id,
@@ -439,7 +435,9 @@ def explain(
             content=m.ExplainContent(),
             evidence=(),
             resolution_requirements=requirements,
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
             state_explanation=("returned assertions: none",),
         )
     subject = resolution.candidates[0].subject

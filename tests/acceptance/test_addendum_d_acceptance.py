@@ -261,8 +261,8 @@ class EstablishmentTest(unittest.TestCase):
                     continuations=ContinuationStore(),
                 )
                 self.assertIs(
-                    readiness.content.readiness,
-                    m.RepositoryReadiness.READY,
+                    readiness.content.store_readiness,
+                    m.StoreReadiness.READY,
                 )
                 self.assertEqual(readiness.content.claims, ())
 

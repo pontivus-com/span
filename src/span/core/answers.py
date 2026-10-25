@@ -15,6 +15,8 @@ __all__ = [
     "requirements_for_claim",
     "requirements_for_relationship",
     "requirements_for_resolution",
+    "structural_coverage_requirement",
+    "merge_coverage_detail",
     "truncate_fields",
 ]
 
@@ -208,3 +210,61 @@ def truncate_fields(
             remaining = 0
     token = f"trunc:{category}:{dropped}" if truncated else None
     return tuple(kept), truncated, category, token
+
+
+#: Coverage tokens that mean the structure moved under the index.
+_STALE_COVERAGE_TOKENS = frozenset(
+    {"dirty-tree", "touched-file-mismatch", "index-older-than-head"}
+)
+
+
+def merge_coverage_detail(details: tuple[str | None, ...]) -> str | None:
+    """Union of provider coverage tokens, in the canonical fixed order.
+
+    Mechanical projection only: unknown tokens are ignored rather than
+    interpreted, and ``clean-verified`` never survives alongside a reason.
+    """
+    tokens = {
+        token
+        for detail in details
+        if detail
+        for token in detail.split("+")
+        if token in m.COVERAGE_DETAIL_TOKENS
+    }
+    tokens.discard("clean-verified")
+    if not tokens:
+        return None
+    return "+".join(token for token in m.COVERAGE_DETAIL_TOKENS if token in tokens)
+
+
+def structural_coverage_requirement(
+    operation: str,
+    coverage: m.ScopeCoverage,
+    coverage_detail: str | None,
+) -> m.ResolutionRequirement | None:
+    """Qualify structural facts that are not current (D6).
+
+    The verdict is projected from the provider, never recomputed. A
+    VERIFIED page is silent; an UNVERIFIED page names why and the
+    operation that can restore currency. An empty UNVERIFIED page still
+    qualifies: absence over changed structure proves nothing.
+    """
+    if coverage is m.ScopeCoverage.VERIFIED:
+        return None
+    tokens = frozenset((coverage_detail or "").split("+"))
+    kind = (
+        m.ResolutionKind.STALE_EVIDENCE
+        if tokens & _STALE_COVERAGE_TOKENS
+        else m.ResolutionKind.UNVERIFIABLE_FRESHNESS
+    )
+    reason = coverage_detail or "coverage could not be established"
+    return m.ResolutionRequirement(
+        kind=kind,
+        subject_or_claim=None,
+        description=(
+            f"{operation} used structural facts that are not current "
+            f"({reason}); run `refresh` for the affected scope before "
+            "treating them as current"
+        ),
+        supporting_context=(),
+    )

@@ -83,8 +83,12 @@ __all__ = [
     "LifecyclePhase",
     "LifecycleStateValue",
     "VerificationKind",
-    "VerificationCurrency",
+    "AttestedCurrency",
+    "DerivedCurrency",
+    "VerificationStatus",
     "VerificationValue",
+    "ExecutedVerification",
+    "VerificationRecord",
     "TypedClaimValue",
     "CLAIM_VALUE_TYPE",
     # §4.5 relationships
@@ -117,7 +121,9 @@ __all__ = [
     "SemanticConflict",
     "RecordedConflict",
     # §4.8 readiness / hooks
-    "RepositoryReadiness",
+    "StoreReadiness",
+    "RepositoryIdentity",
+    "RepositoryIdentityConflict",
     "HookStatusNotice",
     # §4.9 basis / resolution / change
     "ResolutionKind",
@@ -131,9 +137,12 @@ __all__ = [
     "CandidateSemanticWithdrawal",
     "SemanticQuestionCoverageView",
     "SemanticCoverageDisposition",
-    "SemanticCoverageAggregateScope",
     "SemanticCoverageEntry",
-    "SemanticCoverageReport",
+    "CoveragePage",
+    "RepositoryTotals",
+    "ScopeTotals",
+    "RepositoryCoverageReport",
+    "ScopedCoverageReport",
     "ChangeKind",
     "ProposedChange",
     "ChangeCondition",
@@ -166,10 +175,14 @@ __all__ = [
     "evidence_scope_allows",
     "evidence_scope_fingerprint",
     "StatusMode",
+    "CONTINUATION_LIFESPAN",
+    "CURSOR_LIFESPAN",
+    "HandleLifespan",
+    "HandleRecovery",
+    "HandleScope",
+    "HandleKind",
+    "StatusResolvedMode",
     "SubjectPage",
-    "StructuralLocationPage",
-    "StructuralEdgePage",
-    "StructuralReachPage",
     "EvidenceInventoryItem",
     "EvidenceInventoryPage",
     "EvidenceSelection",
@@ -213,9 +226,8 @@ __all__ = [
     "StructuralLocateResult",
     "StructuralNeighborsResult",
     "StructuralSearchHit",
-    "StructuralSearchPage",
     "StructuralOutlineEntry",
-    "StructuralOutlinePage",
+    "StructuralResult",
     "StructuralFreshnessReport",
     "CanonicalIndexBatch",
     "StoreWriteResult",
@@ -509,8 +521,20 @@ class VerificationKind(_enum.Enum):
     OTHER = "OTHER"
 
 
-class VerificationCurrency(_enum.Enum):
+class AttestedCurrency(_enum.Enum):
+    """What an agent may say about a verification it did not execute.
+
+    A pass cannot be expressed: the only choices are "candidate" and
+    "unknown". Currency is derived from an execution record instead.
+    """
+
     CANDIDATE = "CANDIDATE"
+    UNKNOWN = "UNKNOWN"
+
+
+class DerivedCurrency(_enum.Enum):
+    """Currency projected from a VerificationRecord against current state."""
+
     CURRENT_PASS = "CURRENT_PASS"
     CURRENT_FAIL = "CURRENT_FAIL"
     STALE = "STALE"
@@ -519,10 +543,80 @@ class VerificationCurrency(_enum.Enum):
 
 @_dataclass(frozen=True)
 class VerificationValue:
+    """The link: a claim that something is verified, not that it passed."""
+
     verification_ref: SubjectId
     kind: VerificationKind
-    currency: VerificationCurrency
-    observed_revision: str | None = None
+    attested_currency: AttestedCurrency = AttestedCurrency.CANDIDATE
+
+
+@_dataclass(frozen=True)
+class VerificationStatus:
+    """One carried verification link with its derived currency."""
+
+    verification_ref: SubjectId
+    kind: VerificationKind
+    currency: DerivedCurrency
+
+
+@_dataclass(frozen=True)
+class ExecutedVerification:
+    """An agent-attested execution, before its scope identity is derived.
+
+    The verified scope is the matching verification link's evidence scope,
+    so the agent supplies facts it observed and never an internal
+    fingerprint. Validation maps this candidate to one
+    :class:`VerificationRecord` or rejects it.
+    """
+
+    repository_id: str
+    subject: SubjectId
+    command: str | None
+    exit_status: int
+    observed_revision: str | None
+    observed_at: _datetime.datetime
+    observer: str | None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("repository_id", self.repository_id)
+        if self.subject.repository_id != self.repository_id:
+            raise ValueError("execution subject belongs to another repository")
+        if isinstance(self.exit_status, bool) or not isinstance(self.exit_status, int):
+            raise ValueError("exit_status must be an integer")
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("observed_at must be timezone-aware")
+
+
+@_dataclass(frozen=True)
+class VerificationRecord:
+    """One executed verification run for a (subject, verified scope).
+
+    A State, not an observation: the natural key is
+    ``(repository_id, subject, scope_fingerprint)`` and a rerun is an
+    upsert on that key. Currency is derived by comparing the recorded
+    revision and scope to current state; it is never stored here.
+    """
+
+    repository_id: str
+    subject: SubjectId
+    scope_fingerprint: str
+    command: str | None
+    exit_status: int
+    observed_revision: str | None
+    observed_at: _datetime.datetime
+    observer: str | None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("repository_id", self.repository_id)
+        _require_non_empty("scope_fingerprint", self.scope_fingerprint)
+        if self.subject.repository_id != self.repository_id:
+            raise ValueError(
+                "verification record subject belongs to another repository"
+            )
+        if isinstance(self.exit_status, bool) or not isinstance(self.exit_status, int):
+            raise ValueError("exit_status must be an integer")
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("observed_at must be timezone-aware")
 
 
 TypedClaimValue = _typing.Union[
@@ -859,7 +953,45 @@ class RecordedConflict:
 # ---------------------------------------------------------------------------
 
 
-class RepositoryReadiness(_enum.Enum):
+@_dataclass(frozen=True)
+class RepositoryIdentity:
+    """Canonical identity of one repository root.
+
+    ``repositories`` are keyed by ``repository_id``; ``canonical_root`` is the
+    realpath the ID was derived from, so two roots that share a basename can be
+    told apart after the fact.
+    """
+
+    repository_id: str
+    canonical_root: str
+    nested_within: str | None = None
+
+
+class RepositoryIdentityConflict(ValueError):
+    """Two roots resolve to one ID, or a store belongs to another root."""
+
+    def __init__(
+        self,
+        repository_id: str,
+        existing_root: str,
+        incoming_root: str,
+        *,
+        store_path: str | None = None,
+    ) -> None:
+        self.repository_id = repository_id
+        self.existing_root = existing_root
+        self.incoming_root = incoming_root
+        self.store_path = store_path
+        where = f" (store {store_path})" if store_path else ""
+        super().__init__(
+            f"repository id {repository_id!r} is already bound to "
+            f"{existing_root!r}{where}; incoming root {incoming_root!r} "
+            "conflicts. Purge the unattributable store and re-initialize, or "
+            "resolve the root collision."
+        )
+
+
+class StoreReadiness(_enum.Enum):
     UNINITIALIZED = "UNINITIALIZED"
     INITIALIZING = "INITIALIZING"
     READY = "READY"
@@ -881,7 +1013,7 @@ class HookNoticeScope(_enum.Enum):
 
 @_dataclass(frozen=True)
 class HookStatusNotice:
-    readiness: RepositoryReadiness
+    store_readiness: StoreReadiness
     affected_count: int = 0
     stale_count: int = 0
     unverifiable_count: int = 0
@@ -1028,17 +1160,14 @@ class SemanticCoverageDisposition(_enum.Enum):
     UNASSESSED = "UNASSESSED"
 
 
-class SemanticCoverageAggregateScope(_enum.Enum):
-    """Provenance for repository coverage aggregates (D-10/S8)."""
-
-    PERSISTED_GLOBAL = "PERSISTED_GLOBAL"
-    BOUNDED_LIVE = "BOUNDED_LIVE"
-    UNKNOWN = "UNKNOWN"
-
-
 @_dataclass(frozen=True)
 class SemanticCoverageEntry:
-    """Bounded read projection for one persisted semantic subject."""
+    """Bounded read projection for one persisted semantic subject.
+
+    Carries no requirements. A requirement belongs to the page-level list and
+    names its subject through ``ResolutionRequirement.subject_or_claim``, so
+    there is one owner and no nested copy to disagree with it.
+    """
 
     subject: SubjectId
     disposition: SemanticCoverageDisposition
@@ -1052,7 +1181,6 @@ class SemanticCoverageEntry:
     open_question_count: int = 0
     not_applicable_question_count: int = 0
     stale_effective_question_count: int = 0
-    resolution_requirements: tuple[ResolutionRequirement, ...] = ()
     truncated: bool = False
 
     def __post_init__(self) -> None:
@@ -1072,59 +1200,67 @@ class SemanticCoverageEntry:
 
 
 @_dataclass(frozen=True)
-class SemanticCoverageReport:
-    """Bounded repository-level semantic coverage inventory.
+class CoveragePage:
+    """The frontier subjects one answer carries, and nothing else.
 
-    The report describes persisted semantic subjects only. It never implies
-    that structural subjects outside the persisted frontier were enumerated.
+    Every count is derived from ``entries``, so no stored number can disagree
+    with the payload. Whether the frontier was cut is stated by the answer's
+    ``bound_info``, not by a second flag here.
     """
 
     entries: tuple[SemanticCoverageEntry, ...] = ()
+
+    def _disposition_count(self, disposition: SemanticCoverageDisposition) -> int:
+        return sum(1 for entry in self.entries if entry.disposition is disposition)
+
+    @property
+    def returned_subject_count(self) -> int:
+        return len(self.entries)
+
+    @property
+    def current_subject_count(self) -> int:
+        return self._disposition_count(SemanticCoverageDisposition.CURRENT)
+
+    @property
+    def incomplete_subject_count(self) -> int:
+        return self._disposition_count(SemanticCoverageDisposition.INCOMPLETE)
+
+    @property
+    def stale_subject_count(self) -> int:
+        return self._disposition_count(SemanticCoverageDisposition.STALE)
+
+    @property
+    def unverifiable_subject_count(self) -> int:
+        return self._disposition_count(SemanticCoverageDisposition.UNVERIFIABLE)
+
+    @property
+    def unassessed_subject_count(self) -> int:
+        return self._disposition_count(SemanticCoverageDisposition.UNASSESSED)
+
+    @property
+    def stale_effective_question_count(self) -> int:
+        return sum(entry.stale_effective_question_count for entry in self.entries)
+
+
+@_dataclass(frozen=True)
+class RepositoryTotals:
+    """Repository-wide numbers. Exact (SQL) unless a name says otherwise."""
+
     persisted_subject_count: int = 0
-    returned_subject_count: int = 0
-    current_subject_count: int = 0
-    incomplete_subject_count: int = 0
-    stale_subject_count: int = 0
-    unverifiable_subject_count: int = 0
-    unassessed_subject_count: int = 0
-    # D-10/S8: persisted question and target burden aggregates. Persisted
-    # values are global and exact (SQL); the subject disposition counts
-    # above are the bounded-live classification over the returned frontier.
     pending_question_count: int = 0
     open_question_count: int = 0
-    stale_effective_question_count: int = 0
     active_target_association_count: int = 0
     persisted_target_accounted_count: int = 0
     persisted_target_unresolved_count: int = 0
-    bounded_live_target_unaccounted_count: int | None = 0
-    subject_disposition_scope: SemanticCoverageAggregateScope = (
-        SemanticCoverageAggregateScope.BOUNDED_LIVE
-    )
-    question_disposition_scope: SemanticCoverageAggregateScope = (
-        SemanticCoverageAggregateScope.PERSISTED_GLOBAL
-    )
-    stale_effective_question_scope: SemanticCoverageAggregateScope = (
-        SemanticCoverageAggregateScope.BOUNDED_LIVE
-    )
-    target_burden_persisted_scope: SemanticCoverageAggregateScope = (
-        SemanticCoverageAggregateScope.PERSISTED_GLOBAL
-    )
-    target_burden_live_scope: SemanticCoverageAggregateScope = (
-        SemanticCoverageAggregateScope.BOUNDED_LIVE
-    )
+    #: Repository-wide, bounded-live. ``None`` means the live observation
+    #: could not be established; the name carries the qualification.
+    bounded_live_target_unaccounted_count: int | None = None
 
     def __post_init__(self) -> None:
         for name in (
             "persisted_subject_count",
-            "returned_subject_count",
-            "current_subject_count",
-            "incomplete_subject_count",
-            "stale_subject_count",
-            "unverifiable_subject_count",
-            "unassessed_subject_count",
             "pending_question_count",
             "open_question_count",
-            "stale_effective_question_count",
             "active_target_association_count",
             "persisted_target_accounted_count",
             "persisted_target_unresolved_count",
@@ -1135,6 +1271,38 @@ class SemanticCoverageReport:
                 "bounded_live_target_unaccounted_count",
                 self.bounded_live_target_unaccounted_count,
             )
+
+
+@_dataclass(frozen=True)
+class ScopeTotals:
+    """Scope-wide numbers. Exact (scoped SQL) for the requested scope."""
+
+    persisted_subject_count: int = 0
+
+    def __post_init__(self) -> None:
+        _require_non_negative_int(
+            "persisted_subject_count", self.persisted_subject_count
+        )
+
+
+@_dataclass(frozen=True)
+class RepositoryCoverageReport:
+    """Repository coverage: global totals plus the current frontier page."""
+
+    repository: RepositoryTotals = _field(default_factory=RepositoryTotals)
+    page: CoveragePage = _field(default_factory=CoveragePage)
+
+
+@_dataclass(frozen=True)
+class ScopedCoverageReport:
+    """Scoped coverage: scope totals plus the current frontier page.
+
+    Has no repository-global field by construction, so a scoped answer cannot
+    publish a repository-wide number.
+    """
+
+    scope: ScopeTotals = _field(default_factory=ScopeTotals)
+    page: CoveragePage = _field(default_factory=CoveragePage)
 
 
 class ChangeKind(_enum.Enum):
@@ -1255,7 +1423,6 @@ class ImpactContent:
     claims: tuple[SemanticClaim, ...] = ()
     relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
-    unresolved: tuple[ResolutionRequirement, ...] = ()
     question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
 
 
@@ -1267,28 +1434,41 @@ class AuthorityContent:
     claims: tuple[SemanticClaim, ...] = ()
     relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
-    unresolved: tuple[ResolutionRequirement, ...] = ()
     question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
+
+
+class StatusResolvedMode(_enum.Enum):
+    """Which status behaviour produced this content.
+
+    The operation has one name and several shapes; the response says which one
+    answered so a caller never has to infer it from field presence.
+    """
+
+    REPOSITORY = "REPOSITORY"
+    SCOPED = "SCOPED"
+    CAMPAIGN = "CAMPAIGN"
+    UNRESOLVED = "UNRESOLVED"
 
 
 @_dataclass(frozen=True)
 class StatusContent:
-    readiness: RepositoryReadiness = RepositoryReadiness.READY
+    resolved_mode: StatusResolvedMode = StatusResolvedMode.UNRESOLVED
+    store_readiness: StoreReadiness = StoreReadiness.READY
     freshness_items: tuple[FreshnessItem, ...] = ()
     changed_dependencies: tuple[EvidenceDependency, ...] = ()
-    verification_currency: tuple[VerificationValue, ...] = ()
+    verification_status: tuple[VerificationStatus, ...] = ()
     refresh_scope: EvidenceScope | None = None
     claims: tuple[SemanticClaim, ...] = ()
     relationships: tuple[SemanticRelationship, ...] = ()
     conflicts: tuple[SemanticConflict, ...] = ()
-    unresolved: tuple[ResolutionRequirement, ...] = ()
     question_coverage: tuple[SemanticQuestionCoverageView, ...] = ()
-    coverage_report: SemanticCoverageReport | None = None
+    coverage_report: RepositoryCoverageReport | ScopedCoverageReport | None = None
     target_association: TargetAssociation | None = None
     target_disposition: SemanticCoverageDisposition | None = None
     target_total_count: int | None = None
     target_accounted_count: int | None = None
     target_unaccounted_count: int | None = None
+    target_handle_lifespan: HandleLifespan | None = None
     """Read-only campaign counts from the disposition snapshot
     (Addendum H §7): total/current-accounted/unaccounted inventory.
     ``None`` exactly on UNVERIFIABLE/UNASSESSED (unavailable, never
@@ -1319,11 +1499,11 @@ class SemanticAnswer:
     answer_id: AnswerId
     intent: SemanticIntent
     repository_state: RepositoryState
-    subject_resolution: SubjectResolution | None
     content: SemanticContent
+    bound_info: BoundInfo
+    subject_resolution: SubjectResolution | None = None
     evidence: tuple[EvidenceRef, ...] = ()
     resolution_requirements: tuple[ResolutionRequirement, ...] = ()
-    bound_info: BoundInfo = _field(default_factory=lambda: BoundInfo(0, 0, 0, False))
     state_explanation: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -1468,6 +1648,64 @@ class StructuralReachNode:
         _require_non_negative_int("depth", self.depth)
 
 
+class HandleKind(_enum.Enum):
+    """Whether a pointer survives the process that issued it."""
+
+    EPHEMERAL = "EPHEMERAL"
+    DURABLE = "DURABLE"
+
+
+class HandleScope(_enum.Enum):
+    """What the pointer is meaningful within."""
+
+    PROCESS = "PROCESS"
+    REPOSITORY = "REPOSITORY"
+
+
+class HandleRecovery(_enum.Enum):
+    """What a caller does when the handle is gone or stale."""
+
+    REISSUE_OPERATION = "REISSUE_OPERATION"
+    RESTART_LISTING = "RESTART_LISTING"
+    REINITIALIZE_TARGET = "REINITIALIZE_TARGET"
+
+
+@_dataclass(frozen=True)
+class HandleLifespan:
+    """What kind of pointer this is, and what happens when it is lost.
+
+    A page cursor is a position: durable, repository-scoped, restarted on
+    drift. An interpretation continuation is an assignment: ephemeral,
+    process-scoped, recovered by re-running the originating operation. A
+    campaign handle is durable with a retention window.
+
+    The carrier states which one it is so a caller never infers it, and so a
+    restart cannot be mistaken for a resumable page.
+    """
+
+    kind: HandleKind
+    scope: HandleScope
+    expires_at: str | None
+    recovery: HandleRecovery
+
+
+#: Cursor lifespan: stateless position, restart-safe.
+CURSOR_LIFESPAN = HandleLifespan(
+    kind=HandleKind.DURABLE,
+    scope=HandleScope.REPOSITORY,
+    expires_at=None,
+    recovery=HandleRecovery.RESTART_LISTING,
+)
+
+#: Continuation lifespan: process-local, single use, 30 minutes.
+CONTINUATION_LIFESPAN = HandleLifespan(
+    kind=HandleKind.EPHEMERAL,
+    scope=HandleScope.PROCESS,
+    expires_at=None,
+    recovery=HandleRecovery.REISSUE_OPERATION,
+)
+
+
 @_dataclass(frozen=True)
 class BoundInfo:
     requested_max_results: int
@@ -1476,6 +1714,7 @@ class BoundInfo:
     truncated: bool
     truncated_category: str | None = None
     continuation_token: str | None = None
+    lifespan: HandleLifespan = CURSOR_LIFESPAN
 
 
 @_dataclass(frozen=True)
@@ -1525,43 +1764,6 @@ def evidence_scope_fingerprint(scope: EvidenceScope) -> str:
 class StatusMode(_enum.Enum):
     NORMAL = "NORMAL"
     HOOK_FAST = "HOOK_FAST"
-
-
-@_dataclass(frozen=True)
-class StructuralLocationPage:
-    items: tuple[StructuralLocation, ...]
-    repository_state: RepositoryState
-    bound_info: BoundInfo
-    unsupported: bool = False
-
-    def __post_init__(self) -> None:
-        # §4.11: unsupported:true requires empty items.
-        if self.unsupported and self.items:
-            raise ValueError("unsupported page must carry empty items")
-
-
-@_dataclass(frozen=True)
-class StructuralEdgePage:
-    items: tuple[StructuralEdge, ...]
-    repository_state: RepositoryState
-    bound_info: BoundInfo
-    unsupported: bool = False
-
-    def __post_init__(self) -> None:
-        if self.unsupported and self.items:
-            raise ValueError("unsupported page must carry empty items")
-
-
-@_dataclass(frozen=True)
-class StructuralReachPage:
-    items: tuple[StructuralReachNode, ...]
-    repository_state: RepositoryState
-    bound_info: BoundInfo
-    unsupported: bool = False
-
-    def __post_init__(self) -> None:
-        if self.unsupported and self.items:
-            raise ValueError("unsupported page must carry empty items")
 
 
 class StructuralLocateMode(_enum.Enum):
@@ -1712,25 +1914,6 @@ class StructuralSearchHit:
 
 
 @_dataclass(frozen=True)
-class StructuralSearchPage:
-    """Paginated name/locator search page (Addendum F §4.0 port)."""
-
-    items: tuple[StructuralSearchHit, ...]
-    repository_state: RepositoryState
-    bound_info: BoundInfo
-    unsupported: bool = False
-    stale_omitted: int = 0
-    coverage: ScopeCoverage = ScopeCoverage.UNVERIFIED
-    coverage_detail: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.unsupported and self.items:
-            raise ValueError("unsupported page must carry empty items")
-        _require_non_negative_int("stale_omitted", self.stale_omitted)
-        _validate_coverage_detail("coverage_detail", self.coverage_detail)
-
-
-@_dataclass(frozen=True)
 class StructuralOutlineEntry:
     """One file-outline member: subject plus transcribed provider strings."""
 
@@ -1739,11 +1922,21 @@ class StructuralOutlineEntry:
     signature_text: str | None = None
 
 
-@_dataclass(frozen=True)
-class StructuralOutlinePage:
-    """Paginated file-outline page (Addendum F §4.0 port)."""
+_StructuralItemT = _typing.TypeVar("_StructuralItemT")
 
-    items: tuple[StructuralOutlineEntry, ...]
+
+@_dataclass(frozen=True)
+class StructuralResult(_typing.Generic[_StructuralItemT]):
+    """One bounded structural page: items plus provenance and coverage.
+
+    Every port page operation returns this envelope. Coverage is therefore
+    part of the port contract rather than a per-operation convention: an
+    operation cannot return items without stating how current the structure
+    behind them is. ``stale_omitted`` counts entries the provider withheld
+    as stale; operations that never withhold entries leave it at zero.
+    """
+
+    items: tuple[_StructuralItemT, ...]
     repository_state: RepositoryState
     bound_info: BoundInfo
     unsupported: bool = False
@@ -1752,6 +1945,7 @@ class StructuralOutlinePage:
     coverage_detail: str | None = None
 
     def __post_init__(self) -> None:
+        # §4.11: unsupported:true requires empty items.
         if self.unsupported and self.items:
             raise ValueError("unsupported page must carry empty items")
         _require_non_negative_int("stale_omitted", self.stale_omitted)
@@ -1890,6 +2084,9 @@ class TargetAssociation:
     inventory_accounting: tuple[TargetInventoryAccount, ...] = ()
     inventory_fingerprint: str = ""
     observed_repository_state_fingerprint: str = ""
+    #: Retention deadline for this handle, as stored. None on a carrier built
+    #: before a write assigns it.
+    expires_at: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty("repository_id", self.repository_id)
@@ -2384,6 +2581,8 @@ class SemanticInterpretationResult:
         CandidateTargetInventoryAccount, ...
     ] = ()
     proposed_target_questions: tuple[SemanticQuestionScope, ...] = ()
+    #: Executed verification runs submitted with the links they support.
+    verification_records: tuple[ExecutedVerification, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -2487,6 +2686,7 @@ class CanonicalIndexBatch:
     retires_relationships: tuple[RelationshipRef, ...] = ()
     conflicts: tuple[RecordedConflict, ...] = ()
     target_associations: tuple[TargetAssociation, ...] = ()
+    verification_records: tuple[VerificationRecord, ...] = ()
 
 
 @_dataclass(frozen=True)

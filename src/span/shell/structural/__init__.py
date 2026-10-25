@@ -23,6 +23,8 @@ __all__ = [
     "default_artifact_dir",
     "repo_root_from_config",
     "repository_id_from_config",
+    "canonical_root_from_config",
+    "containing_registered_root",
     "structural_source_from_config",
 ]
 
@@ -45,6 +47,15 @@ def repo_root_from_config(config: str) -> _pathlib.Path:
 def repository_id_from_config(config: str) -> str:
     """Deterministic repository identity from the locator (plan §8.2.1)."""
     return repo_root_from_config(config).name
+
+
+def canonical_root_from_config(config: str) -> str:
+    """Absolute, symlink-resolved root for identity provenance.
+
+    Identity is still the basename; this is what proves *which* root a store
+    belongs to when two directories share a name.
+    """
+    return str(repo_root_from_config(config).resolve())
 
 
 def structural_source_from_config(
@@ -88,3 +99,38 @@ def structural_source_from_config(
         GraftStructuralSource(repository_id, repo_path, artifact_dir=artifact),
         repository_id,
     )
+
+
+def containing_registered_root(data_dir: str | _pathlib.Path, root: str) -> str | None:
+    """Deepest other root already recorded in this data directory.
+
+    Provenance is the only place a root is bound to an ID, so it is the only
+    honest source for "nested within". Read-only: a store that cannot be read
+    contributes nothing.
+    """
+    import sqlite3 as _sqlite3
+
+    target = _pathlib.Path(root)
+    best: str | None = None
+    for db in sorted(_pathlib.Path(data_dir).glob("*.db")):
+        try:
+            connection = _sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            try:
+                rows = connection.execute(
+                    "SELECT value FROM meta WHERE key LIKE 'repository_root:%'"
+                ).fetchall()
+            finally:
+                connection.close()
+        except _sqlite3.Error:
+            continue
+        for (value,) in rows:
+            candidate = _pathlib.Path(str(value))
+            if candidate == target:
+                continue
+            try:
+                target.relative_to(candidate)
+            except ValueError:
+                continue
+            if best is None or len(candidate.parts) > len(_pathlib.Path(best).parts):
+                best = str(value)
+    return best

@@ -283,8 +283,8 @@ class SqliteStoreTest(unittest.TestCase):
     def test_schema_version(self):
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(7))
-            self.assertEqual(SCHEMA_VERSION, 7)
+            self.assertEqual(store.schema_version(), m.SchemaVersion(8))
+            self.assertEqual(SCHEMA_VERSION, 8)
         finally:
             store.close()
 
@@ -411,8 +411,9 @@ class SqliteStoreTest(unittest.TestCase):
             )
             page = store.load_claims("repo-1", (claim.subject,), (), _bounds())
             self.assertEqual([c.claim_id.value for c in page.items], ["c-10"])
-            rows = store._db.execute("SELECT claim_id FROM retired_claims").fetchall()
-            self.assertEqual([r[0] for r in rows], ["c-9"])
+            # D17: retirement is deletion, not a write-only archive.
+            with self.assertRaises(ValueError):
+                store.load_by_refs("repo-1", (m.ClaimRef(id=claim.claim_id),))
             with self.assertRaises(ValueError):
                 store.write_index_batch(
                     m.CanonicalIndexBatch(

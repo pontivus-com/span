@@ -728,3 +728,147 @@ class DottedModuleMappingTest(unittest.TestCase):
             [self._edge("a.py", "b.py")],
         )
         self.assertIn(("a.py", "b.py", "imports"), src._edges)
+
+
+class StructuralCoverageConformanceTest(unittest.TestCase):
+    """Step 10: every port page states how current its structure is.
+
+    The envelope makes coverage part of the port contract. These cases drive
+    each page operation through the three verdicts the provider can express:
+    verified, stale (a cited file changed), and unverifiable (a cited file has
+    no recorded hash).
+    """
+
+    _CALLS = {
+        "locations": lambda src, locator: src.locations(
+            "repo-1",
+            m.SubjectId("repo-1", m.SubjectKind.CODE_SYMBOL, locator),
+            _bounds(),
+        ),
+        "edges": lambda src, locator: src.edges(
+            "repo-1",
+            m.SubjectId("repo-1", m.SubjectKind.CODE_SYMBOL, locator),
+            (),
+            StructuralDirection.BOTH,
+            _bounds(),
+        ),
+        "reach": lambda src, locator: src.reach(
+            "repo-1",
+            m.SubjectId("repo-1", m.SubjectKind.CODE_SYMBOL, locator),
+            (),
+            StructuralDirection.BOTH,
+            2,
+            _bounds(),
+        ),
+        "search_symbols": lambda src, locator: src.search_symbols(
+            "repo-1", locator, m.StructuralLocateMatch.EXACT, _bounds()
+        ),
+        "file_outline": lambda src, locator: src.file_outline(
+            "repo-1", locator.split("#")[0], _bounds()
+        ),
+    }
+
+    def _source(self, root, *, unrecorded: str | None = None):
+        import hashlib
+
+        bodies = {
+            "src/a.js": "export function a() {}\n",
+            "src/b.js": "export function b() {}\n",
+            "src/c.js": "export function c() {}\n",
+        }
+        for path, body in bodies.items():
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            (root / path).write_text(body, encoding="utf-8")
+        nodes = []
+        for path, body in bodies.items():
+            digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+            if path == unrecorded:
+                digest = None
+            stem = pathlib.Path(path).stem
+            nodes.append(
+                {
+                    "id": path,
+                    "name": pathlib.Path(path).name,
+                    "kind": "file",
+                    "path": path,
+                    "body_hash": digest,
+                }
+            )
+            nodes.append(
+                {
+                    "id": f"{path}#{stem}",
+                    "name": stem,
+                    "kind": "function",
+                    "path": path,
+                    "span": "L1-L1",
+                    "signature": f"function {stem}()",
+                    "body_hash": digest,
+                }
+            )
+        return g.GraftStructuralSource(
+            "repo-1",
+            root,
+            wiring={
+                "nodes": nodes,
+                "edges": [
+                    {
+                        "source": "src/a.js#a",
+                        "target": "src/b.js#b",
+                        "relation": "calls",
+                    },
+                    {
+                        "source": "src/b.js#b",
+                        "target": "src/c.js#c",
+                        "relation": "calls",
+                    },
+                    {
+                        "source": "src/c.js#c",
+                        "target": "src/a.js#a",
+                        "relation": "calls",
+                    },
+                ],
+            },
+        )
+
+    def test_clean_structure_is_verified(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self._source(pathlib.Path(tmp))
+            for name, call in self._CALLS.items():
+                with self.subTest(operation=name):
+                    page = call(source, "src/a.js#a")
+                    if name == "search_symbols":
+                        # Injected wiring cannot prove repository population;
+                        # the verdict is honest rather than assumed.
+                        self.assertIs(page.coverage, m.ScopeCoverage.UNVERIFIED)
+                        self.assertIn("injected-index", page.coverage_detail)
+                    else:
+                        self.assertIs(page.coverage, m.ScopeCoverage.VERIFIED)
+                        self.assertEqual(page.coverage_detail, "clean-verified")
+
+    def test_changed_cited_file_reads_stale(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            source = self._source(root)
+            (root / "src/a.js").write_text(
+                "export function a() { return 1; }\n", encoding="utf-8"
+            )
+            for name, call in self._CALLS.items():
+                with self.subTest(operation=name):
+                    page = call(source, "src/a.js#a")
+                    self.assertIs(page.coverage, m.ScopeCoverage.UNVERIFIED)
+                    self.assertIn("touched-file-mismatch", page.coverage_detail)
+
+    def test_unrecorded_cited_file_reads_unverifiable(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self._source(pathlib.Path(tmp), unrecorded="src/c.js")
+            for name, call in self._CALLS.items():
+                with self.subTest(operation=name):
+                    page = call(source, "src/c.js#c")
+                    self.assertIs(page.coverage, m.ScopeCoverage.UNVERIFIED)
+                    self.assertIn("unverifiable-file", page.coverage_detail)

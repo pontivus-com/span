@@ -9,7 +9,7 @@ Use this specialization when a proposed change is material: it crosses a
 boundary, changes ownership or representation, affects configuration or
 lifecycle, changes a public contract, or touches an unfamiliar component.
 The primary `skills/span/SKILL.md` is authoritative for operation selection,
-repository identity, readiness, evidence admission, continuation recovery,
+repository identity, store readiness, evidence admission, continuation recovery,
 target accounting, freshness, and closeout.
 
 ## Before editing

@@ -22,7 +22,7 @@ from span.shell.agent_exchange.continuations import (
 
 from span.service.answers import (
     _answer_id,
-    _bound_info,
+    ANSWER_ASSEMBLER,
     _conflicts_for,
     _freshness_items_for,
     _next_service_token,
@@ -30,6 +30,7 @@ from span.service.answers import (
     _validate_service_token,
     _select_answer_items,
     coverage_counts_for,
+    currency_literal,
     state_explanation_for,
 )
 from span.service.bounds import (
@@ -64,8 +65,41 @@ from span.service.resolution import (
     _load_subject_state,
     _resolve_query_subject,
     _resolve_scope_subjects,
+    resolve_scope_frontier,
 )
+from span.ports.structural import StaleContinuationError
 from span.shell import paging as _paging
+
+
+def _scope_page_offset(page_token: str | None) -> int:
+    """Read the offset from a scope cursor without validating its version.
+
+    The version binds the membership fingerprint, which is only known after
+    the frontier is resolved; the offset is safe to read first.
+    """
+    if page_token is None:
+        return 0
+    if not page_token.startswith("pgv:"):
+        raise StaleContinuationError(
+            "page token is invalid for this request; restart pagination from "
+            "the first page with page_token omitted"
+        )
+    body = page_token[len("pgv:") :]
+    _, _, offset_text = body.rpartition(":")
+    try:
+        offset = int(offset_text)
+    except ValueError:
+        raise StaleContinuationError(
+            "page token is invalid for this request; restart pagination from "
+            "the first page with page_token omitted"
+        ) from None
+    if offset < 0:
+        raise StaleContinuationError(
+            "page token is invalid for this request; restart pagination from "
+            "the first page with page_token omitted"
+        )
+    return offset
+
 
 __all__ = [
     "_hook_fast",
@@ -199,38 +233,40 @@ def _repository_live_requirements(
     )
 
 
-def _project_pending_coverage_requirements(
-    entries: tuple[m.SemanticCoverageEntry, ...],
+def _project_pending_requirements(
+    requirements: tuple[m.ResolutionRequirement, ...],
     pending_requirements: tuple[m.ResolutionRequirement, ...],
-) -> tuple[m.SemanticCoverageEntry, ...]:
+) -> tuple[m.ResolutionRequirement, ...]:
     """Replace generic pending continuation wording with exact recovery."""
     by_subject: dict[m.SubjectId, list[m.ResolutionRequirement]] = {}
     for requirement in pending_requirements:
         if isinstance(requirement.subject_or_claim, m.SubjectId):
             by_subject.setdefault(requirement.subject_or_claim, []).append(requirement)
-    projected: list[m.SemanticCoverageEntry] = []
-    for entry in entries:
-        pending = tuple(by_subject.get(entry.subject, ()))
-        if not pending:
-            projected.append(entry)
+    if not by_subject:
+        return requirements
+
+    kept: list[m.ResolutionRequirement] = []
+    replaced: set[m.SubjectId] = set()
+    for requirement in requirements:
+        subject = requirement.subject_or_claim
+        pending = by_subject.get(subject) if isinstance(subject, m.SubjectId) else None
+        generic = (
+            pending is not None
+            and requirement.kind is m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE
+            and "continuation returned by the suspending operation"
+            in requirement.description
+        )
+        if generic:
+            if subject not in replaced:
+                replaced.add(subject)
+                kept.extend(pending)
             continue
-        requirements = tuple(
-            requirement
-            for requirement in entry.resolution_requirements
-            if not (
-                requirement.kind is m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE
-                and requirement.subject_or_claim == entry.subject
-                and "continuation returned by the suspending operation"
-                in requirement.description
-            )
-        )
-        projected.append(
-            _dataclasses.replace(
-                entry,
-                resolution_requirements=tuple(dict.fromkeys((*requirements, *pending))),
-            )
-        )
-    return tuple(projected)
+        kept.append(requirement)
+
+    for subject, pending in by_subject.items():
+        if subject not in replaced:
+            kept.extend(pending)
+    return tuple(dict.fromkeys(kept))
 
 
 def _is_generic_live_action(
@@ -259,71 +295,87 @@ def _is_generic_live_action(
     )
 
 
-def _project_live_coverage_requirements(
+def _project_live_requirements(
     entries: tuple[m.SemanticCoverageEntry, ...],
+    requirements: tuple[m.ResolutionRequirement, ...],
     live_records: tuple[SuspendedOperation, ...],
-) -> tuple[m.SemanticCoverageEntry, ...]:
+) -> tuple[m.ResolutionRequirement, ...]:
     """Replace generic status actions when their owning operation is live."""
     by_subject: dict[m.SubjectId, list[SuspendedOperation]] = {}
     for record in live_records:
         question = record.request.question
         assert question is not None
         by_subject.setdefault(question.subject, []).append(record)
-    projected: list[m.SemanticCoverageEntry] = []
-    for entry in entries:
-        live = tuple(by_subject.get(entry.subject, ()))
-        if not live:
-            projected.append(entry)
+    if not by_subject:
+        return requirements
+
+    entry_by_subject = {entry.subject: entry for entry in entries}
+    kept: list[m.ResolutionRequirement] = []
+    replaced: set[m.SubjectId] = set()
+    for requirement in requirements:
+        subject = requirement.subject_or_claim
+        if not isinstance(subject, m.SubjectId):
+            kept.append(requirement)
             continue
-        operations = frozenset(record.op for record in live)
-        live_requirements = tuple(_live_requirement(record) for record in live)
-        requirements = tuple(
-            requirement
-            for requirement in entry.resolution_requirements
-            if not _is_generic_live_action(requirement, entry, operations)
-        )
-        projected.append(
-            _dataclasses.replace(
-                entry,
-                resolution_requirements=tuple(
-                    dict.fromkeys((*requirements, *live_requirements))
-                ),
-            )
-        )
-    return tuple(projected)
+        live = by_subject.get(subject)
+        entry = entry_by_subject.get(subject)
+        if live and entry is not None:
+            operations = frozenset(record.op for record in live)
+            if _is_generic_live_action(requirement, entry, operations):
+                if subject not in replaced:
+                    replaced.add(subject)
+                    kept.extend(_live_requirement(record) for record in live)
+                continue
+        kept.append(requirement)
+
+    for subject, live in by_subject.items():
+        if subject not in replaced:
+            kept.extend(_live_requirement(record) for record in live)
+    return tuple(dict.fromkeys(kept))
 
 
 def _status_state_explanation(
     base: tuple[str, ...],
     content: m.StatusContent,
+    requirements: tuple[m.ResolutionRequirement, ...],
 ) -> tuple[str, ...]:
     """Add status-only readiness, coverage, target, and authority qualifiers."""
     lines = list(base)
-    if content.readiness is m.RepositoryReadiness.READY:
+    if content.store_readiness is m.StoreReadiness.READY:
         lines.insert(
             0,
-            "repository readiness: READY means the Span semantic store is "
+            "repository store_readiness: READY means the Span semantic store is "
             "available; semantic coverage and currency are reported separately",
         )
     report = content.coverage_report
-    if report is not None:
+    if isinstance(report, m.RepositoryCoverageReport):
+        page = report.page
+        totals = report.repository
         lines.append(
-            "semantic coverage "
-            f"({report.subject_disposition_scope.value.lower()} scope): "
-            f"{report.current_subject_count} current, "
-            f"{report.incomplete_subject_count} incomplete, "
-            f"{report.stale_subject_count} stale, "
-            f"{report.unverifiable_subject_count} unverifiable, "
-            f"{report.unassessed_subject_count} unassessed subjects; "
-            f"{report.pending_question_count} persisted pending and "
-            f"{report.open_question_count} persisted open questions "
-            f"({report.question_disposition_scope.value.lower()} counts)"
+            "semantic coverage (page scope): "
+            f"{page.current_subject_count} current, "
+            f"{page.incomplete_subject_count} incomplete, "
+            f"{page.stale_subject_count} stale, "
+            f"{page.unverifiable_subject_count} unverifiable, "
+            f"{page.unassessed_subject_count} unassessed subjects; "
+            f"{totals.pending_question_count} persisted pending and "
+            f"{totals.open_question_count} persisted open questions "
+            "(repository counts)"
+        )
+    elif isinstance(report, m.ScopedCoverageReport):
+        page = report.page
+        lines.append(
+            "semantic coverage (page scope): "
+            f"{page.current_subject_count} current, "
+            f"{page.incomplete_subject_count} incomplete, "
+            f"{page.stale_subject_count} stale, "
+            f"{page.unverifiable_subject_count} unverifiable, "
+            f"{page.unassessed_subject_count} unassessed subjects; "
+            f"{report.scope.persisted_subject_count} persisted subjects in scope"
         )
     if content.target_disposition is not None:
         lines.append("target disposition: " + content.target_disposition.value)
-    if any(
-        req.kind is m.ResolutionKind.MISSING_AUTHORITY for req in content.unresolved
-    ):
+    if any(req.kind is m.ResolutionKind.MISSING_AUTHORITY for req in requirements):
         lines.append("governing authority remains unresolved for this result")
     return tuple(lines)
 
@@ -464,15 +516,19 @@ def _unresolved_status_answer(
         if resolution is not None
         else ()
     )
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id("stt", repository_id, "scope"),
         intent=m.SemanticIntent.STATUS,
         repository_state=state,
         subject_resolution=resolution,
-        content=m.StatusContent(),
+        content=m.StatusContent(
+            resolved_mode=m.StatusResolvedMode.UNRESOLVED,
+        ),
         evidence=(),
         resolution_requirements=requirements,
-        bound_info=_bound_info(bounds, 0, False, None),
+        bounds=bounds,
+        withheld_category=None,
+        continuation_token=None,
     )
 
 
@@ -495,18 +551,18 @@ def _hook_fast(
         structural.repository_state(repository_id)
     except Exception:
         return m.HookStatusNotice(
-            readiness=m.RepositoryReadiness.UNAVAILABLE,
+            store_readiness=m.StoreReadiness.UNAVAILABLE,
             recommended_action="verify repository availability",
         )
     if not _is_initialized(repository_id, store=store):
         return m.HookStatusNotice(
-            readiness=m.RepositoryReadiness.UNINITIALIZED,
+            store_readiness=m.StoreReadiness.UNINITIALIZED,
             recommended_action=(
                 "run initialize_repository in a dedicated " "setup session"
             ),
         )
     if target is None:
-        return m.HookStatusNotice(readiness=m.RepositoryReadiness.READY)
+        return m.HookStatusNotice(store_readiness=m.StoreReadiness.READY)
     if (
         isinstance(target, m.EvidenceScope)
         and not target.paths
@@ -515,7 +571,21 @@ def _hook_fast(
         # Empty event scope carries no subjects. Hooks stay silent
         # (I-32); strict empty-scope rejection lives on NORMAL paths.
         subjects: tuple[m.Subject, ...] = ()
+    elif isinstance(target, m.EvidenceScope):
+        # One bounded frontier page. Hooks never allocate a continuation, so
+        # the remainder is deliberately unseen (I-32 silence): work is
+        # proportional to the page, not to the scope.
+        subjects, _total, _fingerprint = resolve_scope_frontier(
+            repository_id,
+            target,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+        )
     else:
+        # A selector resolves its own candidates, already bounded by
+        # ``max_subjects``.
         subjects, _ = _resolve_scope_subjects(
             repository_id,
             target,
@@ -604,7 +674,7 @@ def _hook_fast(
             f"({stale} stale, {unverifiable} unverifiable items)"
         )
     return m.HookStatusNotice(
-        readiness=m.RepositoryReadiness.READY,
+        store_readiness=m.StoreReadiness.READY,
         affected_count=len(affected),
         stale_count=stale,
         unverifiable_count=unverifiable,
@@ -623,7 +693,7 @@ def _repository_coverage_entry(
     precomputed_snapshots: (
         Mapping[m.EvidenceScope, tuple[str, dict[str, str]]] | None
     ) = None,
-) -> m.SemanticCoverageEntry:
+) -> tuple[m.SemanticCoverageEntry, tuple[m.ResolutionRequirement, ...]]:
     """Build one report entry from persisted semantic state only.
 
     G-16: path-like subjects absent from the evidence inventory read
@@ -856,7 +926,7 @@ def _repository_coverage_entry(
                     supporting_context=(),
                 )
             )
-    return m.SemanticCoverageEntry(
+    entry = m.SemanticCoverageEntry(
         subject=subject.subject_id,
         disposition=disposition,
         semantic_item_count=len(semantic_ids),
@@ -869,9 +939,9 @@ def _repository_coverage_entry(
         open_question_count=open_count,
         not_applicable_question_count=not_applicable_count,
         stale_effective_question_count=stale_effective_question_count,
-        resolution_requirements=tuple(requirements[: bounds.max_results]),
         truncated=truncated,
     )
+    return entry, tuple(requirements)
 
 
 def _coverage_entries_for_subjects(
@@ -881,8 +951,8 @@ def _coverage_entries_for_subjects(
     evidence: EvidenceSource,
     store: SemanticStore,
     bounds: m.QueryBounds,
-) -> tuple[m.SemanticCoverageEntry, ...]:
-    """One coverage entry per frontier subject from persisted state only."""
+) -> tuple[tuple[m.SemanticCoverageEntry, ...], tuple[m.ResolutionRequirement, ...]]:
+    """One coverage entry per frontier subject, and the page-level requirements."""
     # J-1/S1.5: group loaded dependencies by exact recorded discovery
     # scope. Each distinct scope receives one fresh membership walk.
     # Current persisted coverage always records a non-empty discovery
@@ -897,7 +967,7 @@ def _coverage_entries_for_subjects(
     scope_snapshots = _coverage_scope_snapshots(
         repository_id, coverages, evidence=evidence
     )
-    return tuple(
+    built = tuple(
         _repository_coverage_entry(
             repository_id,
             subject,
@@ -908,16 +978,24 @@ def _coverage_entries_for_subjects(
         )
         for subject in subjects
     )
+    return (
+        tuple(entry for entry, _requirements in built),
+        tuple(
+            requirement
+            for _entry, requirements in built
+            for requirement in requirements
+        ),
+    )
 
 
-def _coverage_report(
+def _repository_report(
     entries: tuple[m.SemanticCoverageEntry, ...],
     *,
     persisted_subject_count: int,
-    returned_subject_count: int,
     question_counts: tuple[int, int] = (0, 0),
     target_counts: tuple[int, int, int, int | None] = (0, 0, 0, 0),
-) -> m.SemanticCoverageReport:
+) -> m.RepositoryCoverageReport:
+    """Repository coverage: exact totals in ``repository``, page in ``page``."""
     pending_question_count, open_question_count = question_counts
     (
         active_target_association_count,
@@ -925,33 +1003,35 @@ def _coverage_report(
         persisted_target_unresolved_count,
         bounded_live_target_unaccounted_count,
     ) = target_counts
-    counts = {
-        disposition: sum(entry.disposition is disposition for entry in entries)
-        for disposition in m.SemanticCoverageDisposition
-    }
-    return m.SemanticCoverageReport(
-        entries=entries,
-        persisted_subject_count=persisted_subject_count,
-        returned_subject_count=returned_subject_count,
-        current_subject_count=counts[m.SemanticCoverageDisposition.CURRENT],
-        incomplete_subject_count=counts[m.SemanticCoverageDisposition.INCOMPLETE],
-        stale_subject_count=counts[m.SemanticCoverageDisposition.STALE],
-        unverifiable_subject_count=counts[m.SemanticCoverageDisposition.UNVERIFIABLE],
-        unassessed_subject_count=counts[m.SemanticCoverageDisposition.UNASSESSED],
-        pending_question_count=pending_question_count,
-        open_question_count=open_question_count,
-        stale_effective_question_count=sum(
-            entry.stale_effective_question_count for entry in entries
+    return m.RepositoryCoverageReport(
+        repository=m.RepositoryTotals(
+            persisted_subject_count=persisted_subject_count,
+            pending_question_count=pending_question_count,
+            open_question_count=open_question_count,
+            active_target_association_count=active_target_association_count,
+            persisted_target_accounted_count=persisted_target_accounted_count,
+            persisted_target_unresolved_count=persisted_target_unresolved_count,
+            bounded_live_target_unaccounted_count=(
+                bounded_live_target_unaccounted_count
+            ),
         ),
-        active_target_association_count=active_target_association_count,
-        persisted_target_accounted_count=persisted_target_accounted_count,
-        persisted_target_unresolved_count=persisted_target_unresolved_count,
-        bounded_live_target_unaccounted_count=(bounded_live_target_unaccounted_count),
-        target_burden_live_scope=(
-            m.SemanticCoverageAggregateScope.BOUNDED_LIVE
-            if bounded_live_target_unaccounted_count is not None
-            else m.SemanticCoverageAggregateScope.UNKNOWN
-        ),
+        page=m.CoveragePage(entries=entries),
+    )
+
+
+def _scoped_report(
+    entries: tuple[m.SemanticCoverageEntry, ...],
+    *,
+    persisted_subject_count: int,
+) -> m.ScopedCoverageReport:
+    """Scoped coverage: scope totals in ``scope``, page in ``page``.
+
+    No repository-global field exists on this type, so a scoped answer cannot
+    publish one even by mistake.
+    """
+    return m.ScopedCoverageReport(
+        scope=m.ScopeTotals(persisted_subject_count=persisted_subject_count),
+        page=m.CoveragePage(entries=entries),
     )
 
 
@@ -1007,7 +1087,7 @@ def _compose_repository_status_answer(
     )
     _validate_service_token(page_token, _digest)
     subject_page = store.load_repository_subjects(repository_id, bounds, subject_offset)
-    entries = _coverage_entries_for_subjects(
+    entries, requirements = _coverage_entries_for_subjects(
         repository_id,
         subject_page.items,
         evidence=evidence,
@@ -1022,10 +1102,53 @@ def _compose_repository_status_answer(
         store=store,
         continuations=continuations,
     )
-    entries = _project_pending_coverage_requirements(
-        entries, repository_pending_requirements
+    requirements = _project_pending_requirements(
+        requirements, repository_pending_requirements
     )
-    entries = _project_live_coverage_requirements(entries, live_records)
+    requirements = _project_live_requirements(entries, requirements, live_records)
+    _qdisp = store.count_question_dispositions(repository_id)
+    (
+        persisted_target_accounted_count,
+        persisted_target_unresolved_count,
+        bounded_live_target_unaccounted_count,
+    ) = _target_burden_aggregates(
+        repository_id, evidence=evidence, store=store, bounds=bounds
+    )
+
+    # A requirement belongs to the entry it describes. Admit entries while
+    # their requirements fit the answer's ceiling instead of building every
+    # entry and slicing the flattened requirement list afterwards: that slice
+    # was silent, and the entries it cut never came back on the next page.
+    by_subject: dict[m.SubjectId, list[m.ResolutionRequirement]] = {}
+    for requirement in (*requirements, *repository_pending_requirements):
+        if isinstance(requirement.subject_or_claim, m.SubjectId):
+            by_subject.setdefault(requirement.subject_or_claim, []).append(requirement)
+
+    repository_live_requirements = _repository_live_requirements(
+        repository_id, continuations
+    )
+    remaining = max(0, bounds.max_results - len(repository_live_requirements))
+    kept_entries: list[m.SemanticCoverageEntry] = []
+    kept_requirements: list[m.ResolutionRequirement] = list(
+        repository_live_requirements
+    )
+    oversized_unit = False
+    for entry in entries:
+        unit = by_subject.get(entry.subject, [])
+        if len(unit) > remaining and kept_entries:
+            break
+        if len(unit) > remaining:
+            # One atomic unit alone exceeds the ceiling. It is emitted whole —
+            # an item is never separated from its requirements — and the
+            # caller learns the ceiling could not hold it. Declared in D1.
+            oversized_unit = True
+        kept_entries.append(entry)
+        kept_requirements.extend(unit)
+        remaining -= len(unit)
+    page_cut = len(kept_entries) < len(entries)
+
+    entries = tuple(kept_entries)
+    requirements = tuple(dict.fromkeys(kept_requirements))
     # Addendum G §4.2b within-page display order only: deterministic by
     # (coverage-rank, open desc, pending desc, locator, kind). Pagination
     # stays locator order; truncation follows retention priority.
@@ -1048,18 +1171,9 @@ def _compose_repository_status_answer(
             ),
         )
     )
-    _qdisp = store.count_question_dispositions(repository_id)
-    (
-        persisted_target_accounted_count,
-        persisted_target_unresolved_count,
-        bounded_live_target_unaccounted_count,
-    ) = _target_burden_aggregates(
-        repository_id, evidence=evidence, store=store, bounds=bounds
-    )
-    report = _coverage_report(
+    report = _repository_report(
         entries,
         persisted_subject_count=store.count_repository_subjects(repository_id),
-        returned_subject_count=len(entries),
         question_counts=(
             _qdisp.get("PENDING", 0),
             _qdisp.get("OPEN", 0),
@@ -1071,28 +1185,15 @@ def _compose_repository_status_answer(
             bounded_live_target_unaccounted_count,
         ),
     )
-    requirements = tuple(
-        requirement
-        for entry in entries
-        for requirement in entry.resolution_requirements
-    )
-    repository_live_requirements = _repository_live_requirements(
-        repository_id, continuations
-    )
-    requirements = tuple(
-        dict.fromkeys(
-            (
-                *repository_live_requirements,
-                *requirements,
-                *repository_pending_requirements,
-            )
-        )
-    )[: bounds.max_results]
-    truncated = subject_page.bound_info.truncated or any(
-        entry.truncated for entry in entries
-    )
+    # Answer-level truncation describes the answer. An entry that reports its
+    # own scan was cut carries ``entry.truncated``; folding that into the
+    # answer produced ``truncated: true`` with no answer cursor, which is the
+    # non-resumable shape this release removes.
+    # ``oversized_unit`` does not set truncation: the unit was emitted whole,
+    # so nothing was withheld. The ceiling breach is visible in the count.
+    truncated = subject_page.bound_info.truncated or page_cut
     next_token = None
-    if subject_page.bound_info.truncated:
+    if subject_page.bound_info.truncated or page_cut:
         next_token = _paging.format_service_token(
             subject_offset + len(entries),
             None,
@@ -1102,15 +1203,14 @@ def _compose_repository_status_answer(
     category = (
         subject_page.bound_info.truncated_category
         if subject_page.bound_info.truncated
-        else "semantic_frontier" if truncated else None
+        else "semantic_frontier" if page_cut else None
     )
-    returned = len(entries) + len(requirements)
     content = m.StatusContent(
-        readiness=m.RepositoryReadiness.READY,
-        unresolved=requirements,
+        resolved_mode=m.StatusResolvedMode.REPOSITORY,
+        store_readiness=m.StoreReadiness.READY,
         coverage_report=report,
     )
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id(
             "stt",
             repository_id,
@@ -1122,10 +1222,13 @@ def _compose_repository_status_answer(
         content=content,
         evidence=(),
         resolution_requirements=requirements,
-        bound_info=_bound_info(bounds, returned, truncated, category, next_token),
+        bounds=bounds,
+        withheld_category=category,
+        continuation_token=next_token,
         state_explanation=_status_state_explanation(
             state_explanation_for((), (), bounds=(bounds.max_results, truncated)),
             content,
+            requirements,
         ),
     )
 
@@ -1176,6 +1279,16 @@ def _repository_status_page(
     )
 
 
+def _campaign_lifespan(association: m.TargetAssociation) -> m.HandleLifespan:
+    """The handle exists, so it states its own retention and recovery."""
+    return m.HandleLifespan(
+        kind=m.HandleKind.DURABLE,
+        scope=m.HandleScope.REPOSITORY,
+        expires_at=association.expires_at,
+        recovery=m.HandleRecovery.REINITIALIZE_TARGET,
+    )
+
+
 def _target_status_answer(
     repository_id: str,
     target_id: m.TargetId,
@@ -1189,25 +1302,40 @@ def _target_status_answer(
     """Campaign readback: absent → UNASSESSED, then UNVERIFIABLE→STALE→INCOMPLETE→CURRENT."""
     assoc = store.load_target_association(repository_id, target_id)
     if assoc is None:
+        # Unknown and expired look the same in storage: the row is reaped. Say
+        # both and name the recovery instead of reporting a bare UNASSESSED.
+        expired_requirement = m.ResolutionRequirement(
+            kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
+            subject_or_claim=None,
+            description=(
+                "campaign handle is unknown or expired; re-run "
+                "initialize_target with the same target scope and objective"
+            ),
+            supporting_context=(),
+        )
         content = m.StatusContent(
+            resolved_mode=m.StatusResolvedMode.CAMPAIGN,
             target_association=None,
             target_disposition=m.SemanticCoverageDisposition.UNASSESSED,
             target_total_count=None,
             target_accounted_count=None,
             target_unaccounted_count=None,
         )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id("stt", repository_id, "target"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
             subject_resolution=None,
             content=content,
             evidence=(),
-            resolution_requirements=(),
-            bound_info=_bound_info(bounds, 0, False, None),
+            resolution_requirements=(expired_requirement,),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
             state_explanation=_status_state_explanation(
                 state_explanation_for((), (), bounds=(bounds.max_results, False)),
                 content,
+                (),
             ),
         )
     try:
@@ -1225,13 +1353,15 @@ def _target_status_answer(
         # campaign reads UNVERIFIABLE; any other failure is a defect and
         # propagates rather than borrowing a semantic status.
         content = m.StatusContent(
+            resolved_mode=m.StatusResolvedMode.CAMPAIGN,
             target_association=assoc,
             target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
             target_total_count=None,
             target_accounted_count=None,
             target_unaccounted_count=None,
+            target_handle_lifespan=_campaign_lifespan(assoc),
         )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id("stt", repository_id, "target"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
@@ -1239,10 +1369,13 @@ def _target_status_answer(
             content=content,
             evidence=(),
             resolution_requirements=(),
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
             state_explanation=_status_state_explanation(
                 state_explanation_for((), (), bounds=(bounds.max_results, False)),
                 content,
+                (),
             ),
         )
     current_fp = m.target_inventory_fingerprint(inv_items)
@@ -1251,13 +1384,15 @@ def _target_status_answer(
         # → STALE → INCOMPLETE → CURRENT): completeness cannot be
         # proven within bounds, even when membership also drifted.
         content = m.StatusContent(
+            resolved_mode=m.StatusResolvedMode.CAMPAIGN,
             target_association=assoc,
             target_disposition=m.SemanticCoverageDisposition.UNVERIFIABLE,
             target_total_count=None,
             target_accounted_count=None,
             target_unaccounted_count=None,
+            target_handle_lifespan=_campaign_lifespan(assoc),
         )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id("stt", repository_id, "target"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
@@ -1265,10 +1400,13 @@ def _target_status_answer(
             content=content,
             evidence=(),
             resolution_requirements=(),
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
             state_explanation=_status_state_explanation(
                 state_explanation_for((), (), bounds=(bounds.max_results, False)),
                 content,
+                (),
             ),
         )
     if current_fp != assoc.inventory_fingerprint:
@@ -1279,13 +1417,15 @@ def _target_status_answer(
             if acc.evidence_ref.evidence_id.value in current_ids
         )
         content = m.StatusContent(
+            resolved_mode=m.StatusResolvedMode.CAMPAIGN,
             target_association=assoc,
             target_disposition=m.SemanticCoverageDisposition.STALE,
             target_total_count=len(inv_items),
             target_accounted_count=accounted_now,
             target_unaccounted_count=len(inv_items) - accounted_now,
+            target_handle_lifespan=_campaign_lifespan(assoc),
         )
-        return m.SemanticAnswer(
+        return ANSWER_ASSEMBLER.build(
             answer_id=_answer_id("stt", repository_id, "target"),
             intent=m.SemanticIntent.STATUS,
             repository_state=state,
@@ -1306,10 +1446,13 @@ def _target_status_answer(
                     supporting_context=(),
                 ),
             ),
-            bound_info=_bound_info(bounds, 0, False, None),
+            bounds=bounds,
+            withheld_category=None,
+            continuation_token=None,
             state_explanation=_status_state_explanation(
                 state_explanation_for((), (), bounds=(bounds.max_results, False)),
                 content,
+                (),
             ),
         )
     accounted = {
@@ -1453,35 +1596,73 @@ def _target_status_answer(
         accounted_count = sum(1 for eid in accounted if eid in current_ids)
         unaccounted_count = total_count - accounted_count
     content = m.StatusContent(
+        resolved_mode=m.StatusResolvedMode.CAMPAIGN,
         target_association=assoc,
         target_disposition=disposition,
-        unresolved=tuple(residual) if saw_incomplete else (),
         target_total_count=total_count,
         target_accounted_count=accounted_count,
         target_unaccounted_count=unaccounted_count,
+        target_handle_lifespan=_campaign_lifespan(assoc),
     )
+    requirements = tuple(residual) if saw_incomplete else ()
     if live_requirements:
-        content = m.StatusContent(
-            target_association=content.target_association,
-            target_disposition=content.target_disposition,
-            target_total_count=content.target_total_count,
-            target_accounted_count=content.target_accounted_count,
-            target_unaccounted_count=content.target_unaccounted_count,
-            unresolved=tuple(dict.fromkeys((*content.unresolved, *live_requirements))),
-        )
-    return m.SemanticAnswer(
+        requirements = tuple(dict.fromkeys((*requirements, *live_requirements)))
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id("stt", repository_id, "target"),
         intent=m.SemanticIntent.STATUS,
         repository_state=state,
         subject_resolution=None,
         content=content,
         evidence=(),
-        resolution_requirements=content.unresolved,
-        bound_info=_bound_info(bounds, 0, False, None),
+        resolution_requirements=requirements,
+        bounds=bounds,
+        withheld_category=None,
+        continuation_token=None,
         state_explanation=_status_state_explanation(
             state_explanation_for((), (), bounds=(bounds.max_results, False)),
             content,
+            requirements,
         ),
+    )
+
+
+def _derived_verification_status(
+    repository_id: str,
+    state: m.RepositoryState,
+    claim: m.SemanticClaim,
+    *,
+    store: SemanticStore,
+) -> m.VerificationStatus:
+    """Project one verification link's currency from its execution record.
+
+    The record key is the evaluated scope of the link's own evidence, so
+    the read agrees with the write by construction. No record → UNKNOWN;
+    a record from another revision → STALE; otherwise the exit status
+    decides PASS or FAIL.
+    """
+    link = claim.value
+    assert isinstance(link, m.VerificationValue)
+    scope = m.EvidenceScope(
+        paths=tuple(sorted({ref.locator for ref in claim.evidence})),
+        evidence_refs=(),
+    )
+    record = store.load_verification_record(
+        repository_id,
+        link.verification_ref,
+        m.evidence_scope_fingerprint(scope),
+    )
+    if record is None:
+        currency = m.DerivedCurrency.UNKNOWN
+    elif record.observed_revision != state.revision_id:
+        currency = m.DerivedCurrency.STALE
+    elif record.exit_status == 0:
+        currency = m.DerivedCurrency.CURRENT_PASS
+    else:
+        currency = m.DerivedCurrency.CURRENT_FAIL
+    return m.VerificationStatus(
+        verification_ref=link.verification_ref,
+        kind=link.kind,
+        currency=currency,
     )
 
 
@@ -1496,6 +1677,10 @@ def _compose_status_answer(
     state: m.RepositoryState,
     continuations: ContinuationStore,
     page_token: str | None = None,
+    scope: m.EvidenceScope | None = None,
+    frontier_total: int | None = None,
+    frontier_offset: int = 0,
+    frontier: str = "",
 ) -> m.SemanticAnswer:
     if len(subjects) == 1:
         _sid = subjects[0].subject_id
@@ -1509,7 +1694,19 @@ def _compose_status_answer(
             )
         )
     _digest = _query_digest("STATUS", repository_id, _target_key, "", bounds)
-    _validate_service_token(page_token, _digest)
+    if page_token is not None and page_token.startswith("pgv:"):
+        # A frontier cursor binds the exact membership; drift restarts.
+        if not frontier:
+            raise StaleContinuationError(
+                "page token is invalid for this request; restart pagination "
+                "from the first page with page_token omitted"
+            )
+        try:
+            _paging.parse_versioned_token(page_token, version=_digest + frontier)
+        except ValueError as exc:
+            raise StaleContinuationError(str(exc)) from None
+    else:
+        _validate_service_token(page_token, _digest)
     all_claims: list[m.SemanticClaim] = []
     all_rels: list[m.SemanticRelationship] = []
     first_claims_token: str | None = None
@@ -1598,7 +1795,7 @@ def _compose_status_answer(
     claims_t = tuple(_with_live_claim(c) for c in all_claims)
     rels_t = tuple(_with_live_rel(r) for r in all_rels)
     verification_all = tuple(
-        claim.value
+        _derived_verification_status(repository_id, state, claim, store=store)
         for claim in claims_t
         if claim.kind is m.ClaimKind.VERIFICATION
         and isinstance(claim.value, m.VerificationValue)
@@ -1684,71 +1881,75 @@ def _compose_status_answer(
     # coverage was adopted. Read-time projection over persisted state;
     # no new store, no second writer. Answer-level unresolved/truncation
     # math below is unchanged.
-    frontier_entries = _coverage_entries_for_subjects(
+    frontier_entries, frontier_requirements = _coverage_entries_for_subjects(
         repository_id,
         subjects,
         evidence=evidence,
         store=store,
         bounds=bounds,
     )
-    frontier_entries = _project_pending_coverage_requirements(
-        frontier_entries, pending_requirements
+    frontier_requirements = _project_pending_requirements(
+        frontier_requirements, pending_requirements
     )
     live_records = _live_question_records(repository_id, subjects, continuations)
-    frontier_entries = _project_live_coverage_requirements(
-        frontier_entries, live_records
+    frontier_requirements = _project_live_requirements(
+        frontier_entries, frontier_requirements, live_records
     )
-    (
-        persisted_target_accounted_count,
-        persisted_target_unresolved_count,
-        bounded_live_target_unaccounted_count,
-    ) = _target_burden_aggregates(
-        repository_id, evidence=evidence, store=store, bounds=bounds
-    )
-    _qdisp = store.count_question_dispositions(repository_id)
-    frontier_report = _coverage_report(
+    frontier_report = _scoped_report(
         frontier_entries,
-        persisted_subject_count=sum(
-            1
-            for entry in frontier_entries
-            if entry.semantic_item_count or entry.question_count
-        ),
-        returned_subject_count=len(frontier_entries),
-        question_counts=(
-            _qdisp.get("PENDING", 0),
-            _qdisp.get("OPEN", 0),
-        ),
-        target_counts=(
-            store.count_target_associations(repository_id),
-            persisted_target_accounted_count,
-            persisted_target_unresolved_count,
-            bounded_live_target_unaccounted_count,
+        persisted_subject_count=(
+            store.count_subjects_in_scope(repository_id, scope)
+            if scope is not None
+            else len(subjects)
         ),
     )
-    unresolved = tuple(dict.fromkeys((*unresolved, *pending_requirements)))
+    unresolved = tuple(
+        dict.fromkeys((*unresolved, *pending_requirements, *frontier_requirements))
+    )
+    # One ceiling over the answer's leaves. Item-shaped leaves were selected
+    # against max_results already; everything else is fitted to what remains.
+    # A claim or relationship carries one freshness item, so each costs two.
+    fixed = len(kept_claims) + len(kept_rels) + len(kept_conf)
+    remaining = max(0, bounds.max_results - fixed)
+    kept_views = views[:remaining]
+    remaining -= len(kept_views)
+    kept_unresolved = unresolved[:remaining]
+    remaining -= len(kept_unresolved)
+    kept_changed = kept_changed[:remaining]
+    remaining -= len(kept_changed)
+    kept_ver = kept_ver[:remaining]
+    leaves_dropped = (
+        len(kept_views) < len(views)
+        or len(kept_unresolved) < len(unresolved)
+        or len(kept_changed) < len(changed_kept)
+        or len(kept_ver) < len(verification_all)
+    )
+    if leaves_dropped and category is None:
+        category = "unresolved"
+    progress = frontier_offset + len(subjects)
+    frontier_truncated = frontier_total is not None and progress < frontier_total
+    if frontier_truncated:
+        truncated = True
+        category = category or "semantic_subjects"
+        token = _paging.format_versioned_token(_digest + frontier, progress)
+    if leaves_dropped:
+        truncated = True
     content = m.StatusContent(
-        readiness=m.RepositoryReadiness.READY,
+        resolved_mode=m.StatusResolvedMode.SCOPED,
+        store_readiness=m.StoreReadiness.READY,
         freshness_items=_freshness_items_for(kept_claims, kept_rels),
         changed_dependencies=kept_changed,  # type: ignore[arg-type]
-        verification_currency=kept_ver,  # type: ignore[arg-type]
+        verification_status=kept_ver,  # type: ignore[arg-type]
         refresh_scope=m.EvidenceScope(
             paths=tuple(sorted(stale_evidence)), evidence_refs=()
         ),
         claims=kept_claims,
         relationships=kept_rels,
         conflicts=kept_conf,
-        unresolved=unresolved,
-        question_coverage=views,
+        question_coverage=kept_views,
         coverage_report=frontier_report,
     )
-    returned = (
-        len(kept_conf)
-        + len(unresolved)
-        + len(kept_claims)
-        + len(kept_changed)
-        + len(kept_ver)
-    )
-    return m.SemanticAnswer(
+    return ANSWER_ASSEMBLER.build(
         answer_id=_answer_id(
             "stt",
             repository_id,
@@ -1759,16 +1960,22 @@ def _compose_status_answer(
         subject_resolution=None,
         content=content,
         evidence=tuple(ref for c in kept_claims for ref in c.evidence),
-        resolution_requirements=unresolved,
-        bound_info=_bound_info(bounds, returned, truncated, category, token),
+        resolution_requirements=kept_unresolved,
+        bounds=bounds,
+        withheld_category=category,
+        continuation_token=token,
         state_explanation=_status_state_explanation(
             state_explanation_for(
                 tuple(kept_claims),
                 tuple(kept_rels),
-                coverage=coverage_counts_for(views),
+                coverage=coverage_counts_for(kept_views),
                 bounds=(bounds.max_results, truncated),
+                derived_currencies=tuple(
+                    sorted({currency_literal(status.currency) for status in kept_ver})
+                ),
             ),
             content,
+            kept_unresolved,
         ),
     )
 
@@ -1803,7 +2010,9 @@ def status(
             "answer envelopes are not persisted; status serves "
             "subject, claim, relationship, and evidence-scope targets"
         )
-    bounds = _resolve_bounds(request.bounds, hook=False)
+    bounds = _resolve_bounds(
+        request.bounds, hook=request.mode is m.StatusMode.HOOK_FAST
+    )
     if isinstance(request.target, m.TargetId):
         if request.mode is m.StatusMode.HOOK_FAST:
             raise StatusTargetError("campaign status requires StatusMode.NORMAL")
@@ -1895,6 +2104,34 @@ def status(
     # Unexamined subjects return explicit missing coverage with
     # next-operation guidance from _compose_status_answer; absent,
     # ambiguous, unexamined, stale, and unverifiable stay distinct.
+    if isinstance(request.target, m.EvidenceScope):
+        offset = 0
+        if request.page_token is not None and request.page_token.startswith("pgv:"):
+            offset = _scope_page_offset(request.page_token)
+        subjects, total, fingerprint = resolve_scope_frontier(
+            request.repository_id,
+            request.target,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            offset=offset,
+        )
+        return _compose_status_answer(
+            request.repository_id,
+            subjects,
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            bounds=bounds,
+            state=state,
+            continuations=continuations,
+            page_token=request.page_token,
+            scope=request.target,
+            frontier_total=total,
+            frontier_offset=offset,
+            frontier=fingerprint,
+        )
     return _compose_status_answer(
         request.repository_id,
         subjects,

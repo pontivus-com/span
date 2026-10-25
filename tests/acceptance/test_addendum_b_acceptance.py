@@ -351,8 +351,8 @@ class FirstContactTest(unittest.TestCase):
                 )
                 self.assertIsInstance(state_answer.content, m.StatusContent)
                 self.assertIs(
-                    state_answer.content.readiness,
-                    m.RepositoryReadiness.READY,
+                    state_answer.content.store_readiness,
+                    m.StoreReadiness.READY,
                 )
                 self.assertEqual(state_answer.content.claims, ())
 
@@ -1857,7 +1857,7 @@ CREATE TABLE meta(
 
 
 class CurrentSchemaOnlyTest(unittest.TestCase):
-    """B.11 K: only schema 7 is served; older stores fail closed."""
+    """B.11 K: only schema 8 is served; older stores fail closed."""
 
     def test_v2_store_rejected_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1885,7 +1885,7 @@ class CurrentSchemaOnlyTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError,
                 "unsupported Span store schema version 2; migrate this "
-                "store to schema 7",
+                "store to schema 8",
             ):
                 SqliteSemanticStore(db)
             con = sqlite3.connect(db)

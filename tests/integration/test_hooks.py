@@ -143,7 +143,7 @@ class HookSafetyTest(unittest.TestCase):
                 bounds=_bounds(),
             )
             self.assertIsInstance(notice, m.HookStatusNotice)
-            self.assertIs(notice.readiness, m.RepositoryReadiness.UNINITIALIZED)
+            self.assertIs(notice.store_readiness, m.StoreReadiness.UNINITIALIZED)
             self.assertIn("initialize_repository", notice.recommended_action)
             # No implicit bootstrap happened.
             self.assertIsNone(store.load_repository_state(REPO))
@@ -183,7 +183,7 @@ class HookSafetyTest(unittest.TestCase):
                 bounds=_bounds(),
             )
             self.assertIsInstance(notice, m.HookStatusNotice)
-            self.assertIs(notice.readiness, m.RepositoryReadiness.READY)
+            self.assertIs(notice.store_readiness, m.StoreReadiness.READY)
         finally:
             store.close()
 

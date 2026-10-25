@@ -326,10 +326,10 @@ class EffectiveDispositionTest(unittest.TestCase):
 
 class CurrentSchemaTest(unittest.TestCase):
     def test_schema_7_and_absent_coverage(self):
-        self.assertEqual(SCHEMA_VERSION, 7)
+        self.assertEqual(SCHEMA_VERSION, 8)
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(7))
+            self.assertEqual(store.schema_version(), m.SchemaVersion(8))
             sid = _sid()
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("leg-1"),

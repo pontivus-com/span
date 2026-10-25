@@ -823,6 +823,29 @@ class GraftStructuralSource:
             return "clean-verified"
         return "+".join(tokens)
 
+    def _closed_world_coverage(
+        self, repository_id: str, paths: tuple[str, ...]
+    ) -> tuple[m.ScopeCoverage, str]:
+        """Coverage for a closed-world page: verify the files its items cite.
+
+        No repository-global gate: a changed unrelated file cannot alter
+        ``locations``/``edges``/``reach`` for one identity. Per-file
+        fingerprints are compared instead, which is both cheaper and the
+        stronger claim. An empty page proves nothing, so it stays
+        UNVERIFIED rather than reading as a verified absence.
+        """
+        del repository_id  # the verdict is about the cited files only
+        unique = tuple(dict.fromkeys(paths))
+        if not unique:
+            return (
+                m.ScopeCoverage.UNVERIFIED,
+                "repository-population-unverified",
+            )
+        stale, unverifiable = self._verify_exact_files(unique)
+        if stale or unverifiable:
+            return m.ScopeCoverage.UNVERIFIED, self._file_detail(stale, unverifiable)
+        return m.ScopeCoverage.VERIFIED, "clean-verified"
+
     def _join_detail(self, tokens: list[str] | tuple[str, ...]) -> str:
         """Join diagnostic tokens in the closed fixed order (J-11)."""
         order = {
@@ -958,7 +981,7 @@ class GraftStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
         scope: m.EvidenceScope | None = None,
-    ) -> m.StructuralSearchPage:
+    ) -> m.StructuralResult[m.StructuralSearchHit]:
         """Paginated name/locator search (Addendum F §4.0 port; J-10)."""
         self._check_repository(repository_id)
         self._ensure_fresh()
@@ -1097,7 +1120,7 @@ class GraftStructuralSource:
                 detail = self._join_detail(tokens)
             else:
                 detail = self._coverage_detail(stale, unverifiable)
-        return m.StructuralSearchPage(
+        return m.StructuralResult(
             items=live_items,  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
@@ -1116,7 +1139,7 @@ class GraftStructuralSource:
         locator: str,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralOutlinePage:
+    ) -> m.StructuralResult[m.StructuralOutlineEntry]:
         """Symbols defined in one file (Addendum F §4.0 port)."""
         self._check_repository(repository_id)
         self._ensure_fresh()
@@ -1142,7 +1165,7 @@ class GraftStructuralSource:
                 detail: str | None = "clean-verified"
             else:
                 detail = "unverifiable-file"
-            return m.StructuralOutlinePage(
+            return m.StructuralResult(
                 items=(),
                 repository_state=self.repository_state(repository_id),
                 bound_info=bound_info,
@@ -1183,7 +1206,7 @@ class GraftStructuralSource:
         else:
             coverage = m.ScopeCoverage.VERIFIED
             detail = "clean-verified"
-        return m.StructuralOutlinePage(
+        return m.StructuralResult(
             items=tuple(live_items),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
@@ -1628,7 +1651,7 @@ class GraftStructuralSource:
         subject: m.SubjectId,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralLocationPage:
+    ) -> m.StructuralResult[m.StructuralLocation]:
         self._check_repository(repository_id)
         self._ensure_fresh()
         self._require_index()
@@ -1644,11 +1667,17 @@ class GraftStructuralSource:
         kept, bound_info = _paging.paginate(
             items, bounds.max_results, "locations", page_token
         )
-        return m.StructuralLocationPage(
+        coverage, detail = self._closed_world_coverage(
+            repository_id,
+            tuple(item.location.locator for item in kept),
+        )
+        return m.StructuralResult(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
+            coverage=coverage,
+            coverage_detail=detail,
         )
 
     def edges(
@@ -1659,7 +1688,7 @@ class GraftStructuralSource:
         direction: StructuralDirection,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralEdgePage:
+    ) -> m.StructuralResult[m.StructuralEdge]:
         self._check_repository(repository_id)
         self._ensure_fresh()
         self._require_index()
@@ -1698,11 +1727,17 @@ class GraftStructuralSource:
         kept, bound_info = _paging.paginate(
             tuple(found), bounds.max_results, "edges", page_token
         )
-        return m.StructuralEdgePage(
+        coverage, detail = self._closed_world_coverage(
+            repository_id,
+            tuple(edge.evidence.locator for edge in kept),
+        )
+        return m.StructuralResult(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
+            coverage=coverage,
+            coverage_detail=detail,
         )
 
     def _all_edges(
@@ -1749,7 +1784,7 @@ class GraftStructuralSource:
         max_depth: int,
         bounds: m.QueryBounds,
         page_token: str | None = None,
-    ) -> m.StructuralReachPage:
+    ) -> m.StructuralResult[m.StructuralReachNode]:
         self._check_repository(repository_id)
         self._ensure_fresh()
         self._require_index()
@@ -1767,11 +1802,14 @@ class GraftStructuralSource:
                 page_token,
                 requested_max_depth=limit,
             )
-            return m.StructuralReachPage(
+            coverage, detail = self._closed_world_coverage(repository_id, ())
+            return m.StructuralResult(
                 items=tuple(kept),  # type: ignore[arg-type]
                 repository_state=self.repository_state(repository_id),
                 bound_info=bound_info,
                 unsupported=False,
+                coverage=coverage,
+                coverage_detail=detail,
             )
         seen = {subject.canonical_locator}
         via: dict[str, m.StructuralEdge | None] = {subject.canonical_locator: None}
@@ -1838,9 +1876,15 @@ class GraftStructuralSource:
                 truncated_category="reach",
                 continuation_token=bound_info.continuation_token,
             )
-        return m.StructuralReachPage(
+        coverage, detail = self._closed_world_coverage(
+            repository_id,
+            tuple(node.via.evidence.locator for node in kept if node.via is not None),
+        )
+        return m.StructuralResult(
             items=tuple(kept),  # type: ignore[arg-type]
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
+            coverage=coverage,
+            coverage_detail=detail,
         )

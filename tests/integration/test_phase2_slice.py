@@ -205,7 +205,7 @@ class Phase2SliceTest(unittest.TestCase):
                 evidence=evidence,
                 store=store,
             )
-            self.assertIs(init.readiness, m.RepositoryReadiness.READY)
+            self.assertIs(init.store_readiness, m.StoreReadiness.READY)
             self.assertEqual(init.warnings, ())
 
             sid = m.SubjectId(

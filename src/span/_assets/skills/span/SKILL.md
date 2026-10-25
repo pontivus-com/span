@@ -17,11 +17,12 @@ Use this path for every non-trivial Span interaction:
 1. Discover the exact registered `repository_id` from MCP `tools/list` (or
    from a successful `initialize_repository` result). A filesystem path is
    never a repository ID; preserve the registered ID unchanged.
-2. Semantic operations check readiness and return canonical
+2. Semantic operations check store readiness and return canonical
    uninitialized/unavailable results themselves. Call normal `status` only
-   when readiness, coverage, or freshness is the actual objective. `READY`
-   means operational storage readiness, not semantic coverage.
-3. If readiness is `UNINITIALIZED`, run `initialize_repository` once in its
+   when store readiness, coverage, or freshness is the actual objective.
+   `store_readiness: READY` means operational storage readiness, not
+   semantic coverage.
+3. If `store_readiness` is `UNINITIALIZED`, run `initialize_repository` once in its
    dedicated setup workflow. If the repository is already initialized, do not initialize it again just to orient a session.
 4. For an exact user-supplied directory plus objective, call
    `initialize_target` with that complete exact boundary. For ordinary
@@ -116,11 +117,11 @@ Pick one branch before making a semantic call:
 If the MCP runtime returns `UNINITIALIZED`, stop normal work and use the
 dedicated repository setup workflow first. An automatic `HOOK_FAST` notice
 is event-local by design. A normal `status` or semantic operation that
-returns readiness only where coverage is expected is unexpected: record it,
+returns store readiness only where coverage is expected is unexpected: record it,
 do not infer that semantic knowledge is absent, and do not treat it as
 cleanliness.
 
-## Repository identity and readiness
+## Repository identity and store readiness
 
 `repository_locator` identifies a repository during setup. It is not the
 value used by repository-scoped operations. Never pass a filesystem path as
@@ -132,16 +133,17 @@ global identifiers. Do not add aliases or translate paths to IDs.
 The lifecycle is:
 
 1. Discover the registered canonical identity.
-2. Determine readiness.
+2. Determine store readiness.
 3. Use the registered repository directly when it is initialized.
 4. If it is `UNINITIALIZED`, perform `initialize_repository` in its dedicated
    setup session.
 5. Begin the requested semantic operation or exact-target campaign only
-   after readiness is established.
+   after store readiness is established.
 
 Initialization provisions identity, structural source, evidence inventory,
 authority seeds, and store schema. It performs no semantic interpretation.
-`READY` proves operational readiness only; it does not prove semantic
+`store_readiness: READY` proves operational readiness only; it does not
+prove semantic
 coverage, correctness, target accounting, or completeness.
 
 ## Exact-target establishment and accounting
@@ -331,7 +333,7 @@ nothing.
 
 The full lifecycle is:
 
-`orientation → readiness → establishment or question-local investigation →
+`orientation → store readiness → establishment or question-local investigation →
 evidence interpretation → canonical submission → validation/recovery →
 persisted readback → material-change assessment when applicable → scoped
 `status` → external implementation/verification → explicit refresh and
