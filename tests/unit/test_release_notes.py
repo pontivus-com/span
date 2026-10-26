@@ -24,6 +24,15 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertIn("Bounded answers, labeled staleness", result.stdout)
         self.assertNotIn("## 0.6.2", result.stdout)
 
+    def test_the_shipped_version_has_release_notes(self):
+        # The release workflow extracts the section for the package version,
+        # so a version bump without a changelog entry fails at release time.
+        from span import __version__
+
+        result = self._run(__version__)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith(f"## {__version__}"))
+
     def test_missing_version_fails_closed(self):
         result = self._run("9.9.9")
         self.assertEqual(result.returncode, 2)

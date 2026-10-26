@@ -3,7 +3,7 @@
   "name": "io.github.pontivus-com/span",
   "title": "Span",
   "description": "Codebase understanding stored with its evidence, marked stale when that evidence changes.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "repository": {
     "url": "https://github.com/pontivus-com/span",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "span-mcp",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "transport": {
         "type": "stdio"
       }

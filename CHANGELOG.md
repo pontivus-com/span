@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.7.1 — 2026-10-26
+
+**Pagination resumes; failures name their cause.**
+
+Patch release for four defects confirmed against 0.7.0 in real agent sessions.
+No operation was added or renamed, no carrier changed shape, and the store
+schema is unchanged (schema 8), so no migration is needed.
+
+### Fixes
+
+- **Scoped `status` resumes.** The page cursor was checked against a digest
+  built from the page it had just returned, so the next call resolved different
+  subjects and every resume was rejected as `stale_continuation`. The cursor is
+  now bound to the scope's fingerprint; membership drift still restarts the
+  listing, so a changed scope cannot silently skip members.
+- **A scope cursor is decoded only by the scope path.** The frontier cursor is
+  no longer handed to per-list readers that accept only `pgq:` cursors, so a
+  scoped page cannot fail inside claim, relationship, or question paging.
+- **`NOT_FOUND` stops diagnosing the caller.** The requirement stated that
+  locators are relative to the repository root, "not the workspace root",
+  without inspecting the locator. It now states the rule and leaves the cause
+  to the evidence.
+- **A byte-budget failure names the budget.** The provider's precise error —
+  `evidence exceeds max_evidence_bytes (N)` — is kept instead of being replaced
+  by a selection message, and the remedy lists raising the bound as well as
+  narrowing the target.
+- **Ingress errors name the accepted alternatives.** A missing `$type` lists
+  the members the position accepts; an unexpected `$type` names the shape the
+  position takes. The arity rule is unchanged: one accepted type forbids the
+  tag, a union requires it.
+
+Cursors issued before 0.7.1 by scoped `status` are invalid. They never resumed,
+so nothing is lost: restart the listing with `page_token: null`.
+
 ## 0.7.0 — 2026-10-25
 
 **Bounded answers, labeled staleness, recorded verification.**
