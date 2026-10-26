@@ -58,7 +58,6 @@ def _commit_prepared(
                 question=task.request.question,
                 discovery_scope=task.request.discovery_scope,
             ),
-            declared_complete=acquired.declared_complete,
             retire_scope=tuple(subject.subject_id for subject in task.request.subjects),
             target_id=prepared.target.target_id,
             target_association=prepared.target.association,

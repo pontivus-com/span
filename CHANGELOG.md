@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.8.1 — 2026-10-26
+
+**The defects 0.8.0's own gate exposed.**
+
+The gate recorded five tasks, three arms, two hosts. Its result for 0.8.0 was
+**not solved**: T2, T3, T4, and T7 failed. This release fixes the defects that
+produced that result. It does not claim the economics; a probe and a re-run are
+still owed.
+
+### Wire contract
+
+- **One schema projector.** The top-level request schema was projected by a
+  second, reduced copy that omitted the `$type` guidance and the defaults. The
+  decoder required a rule the schema never stated, which produced 13 rejected
+  calls at `target` in a 48-call session. Root and `$defs` now use one
+  per-field projection.
+- **Bounds advertise their ceiling.** `QueryBounds` properties carry the
+  `maximum` the service enforces, read from the same policy object, so the two
+  cannot drift.
+- **The path rule is stated.** `EvidenceScope.paths` says repository-relative;
+  a leading `/` fails closed.
+- **A redundant `$type` is accepted when it names the only candidate carrier.**
+  A tag naming anything else still fails. The wire rule is unchanged where
+  ambiguity exists.
+
+### Refresh
+
+- **No partial refresh.** A refresh scope is a set of subjects, not a frontier,
+  so a cut item list has no honest cursor. An oversized scope now fails closed
+  with `RefreshScopeError` naming the ceiling and the remedy. It never returns
+  `truncated` without a continuation.
+- `SemanticRefreshRequest.page_token` is removed; it was accepted and never read.
+
+### Assertion yield
+
+- **The brief states the completion rule.** A claim supported by cited file
+  evidence is a complete assertion; missing governing authority is recorded as a
+  resolution requirement on the claim, not a reason to withhold the assertion or
+  leave the question `OPEN`. Same wording in the shipped skill.
+
+### Internal
+
+- Removed the unused `declared_complete` parameter path
+  (`suspend` → `SuspendedOperation` → `materialize`). The field remains on the
+  coverage carrier; it is derived at every construction site.
+- `scripts/build_identity.py` excludes its own output from the digest, so the
+  identity is idempotent and a checkout install reports the revision it built.
+- A retired `pgq:` cursor grammar is no longer documented as live.
+
+### Verification
+
+- `938 passed, 1 skipped`; ruff, black, and the typing ratchet (84) clean.
+- New `tests/unit/test_schema_contract.py`: multi-tag guidance, bounds maxima,
+  the path rule, honest refresh truncation, and redundant-tag handling. It fails
+  on 0.8.0 and passes here.
+- The code-budget gate holds; the only baseline movement is the new test file.
+
+### Breaking
+
+- `refresh` no longer accepts `page_token` (it was ignored).
+- A redundant `$type` at an unambiguous position is accepted instead of
+  rejected. This is additive for callers; it removes one error class.
+
 ## 0.8.0 — 2026-10-26
 
 **One architecture, one behaviour: the establishment root cause removed.**

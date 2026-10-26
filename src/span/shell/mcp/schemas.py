@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
+
 from span.core import model as m
 from span.core import schema as _schema
 from span.ports.interpretation import PendingInterpretation
@@ -178,6 +180,29 @@ def _with_transport_fields(tool: str, generated: dict[str, object]) -> None:
         generated["properties"] = properties
 
 
+def _with_bound_maxima(generated: dict[str, object]) -> None:
+    """Advertise the ceiling the decoder enforces, from the same policy object.
+
+    A bound that is rejected above a maximum the schema never states teaches
+    the caller by failing. The value is read from
+    ``maximum_query_bounds`` so the two cannot drift.
+    """
+    defs = _mapping(generated.get("$defs"))
+    bounds = defs.get("QueryBounds")
+    if not isinstance(bounds, dict):
+        return
+    properties = _mapping(bounds.get("properties"))
+    maximum = DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds
+    limits = _dataclasses.asdict(maximum)
+    for name, limit in limits.items():
+        prop = properties.get(name)
+        if isinstance(prop, dict):
+            properties[name] = {**prop, "maximum": limit}
+    bounds = {**bounds, "properties": properties}
+    defs["QueryBounds"] = bounds
+    generated["$defs"] = defs
+
+
 def _claim_definitions() -> tuple[str, ...]:
     return (
         "CandidateSemanticClaim",
@@ -310,6 +335,7 @@ def _generated_tool_schemas() -> dict[str, dict[str, object]]:
         # never serve a degraded schema.
         generated = _schema.schema_for_request(cls, description=TOOL_DESCRIPTIONS[tool])
         _with_transport_fields(tool, generated)
+        _with_bound_maxima(generated)
         _with_claim_value_unions(generated)
         _with_question_guidance(generated)
         out[tool] = generated

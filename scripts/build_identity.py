@@ -19,6 +19,11 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE_SET = ("src", "pyproject.toml", "README.md")
+#: The generator's own output. It is excluded from the digest because a file
+#: cannot hash itself: including it made every run depend on the previous run's
+#: content, so the "source digest" drifted on every invocation and a checkout
+#: install could never match a clean build.
+IDENTITY_PATH = pathlib.Path("src") / "span" / "BUILD_IDENTITY"
 
 
 def tree_digest() -> str:
@@ -29,6 +34,8 @@ def tree_digest() -> str:
             for child in sorted(path.rglob("*")):
                 if child.is_file() and child.suffix not in {".pyc", ".pyo"}:
                     if "__pycache__" not in child.parts:
+                        if child.relative_to(ROOT) == IDENTITY_PATH:
+                            continue
                         files.append(child)
         elif path.is_file():
             files.append(path)

@@ -235,7 +235,7 @@ class S3SchemaTest(unittest.TestCase):
                 {
                     "repository_id": "r",
                     "target": {
-                        "$type": "EvidenceScope",
+                        "$type": "SubjectSelector",
                         "paths": [],
                         "evidence_refs": [],
                         "bogus": 1,
