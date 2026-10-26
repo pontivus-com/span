@@ -166,7 +166,6 @@ def _resume_refresh_cycle(
         continuations=continuations,
         operation_intent="STATUS",
         question_slice=task.request.question_slice,
-        declared_complete=True,
     )
 
 

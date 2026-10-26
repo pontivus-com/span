@@ -62,7 +62,6 @@ class SuspendedOperation:
     operation_intent: str = "EXPLAIN"
     objective: str = ""
     question_slice: str = ""
-    declared_complete: bool = False
     trace_direction: str | None = None
     trace_filter: tuple[RelationshipKind, ...] = ()
     trace_filter_set: bool = False

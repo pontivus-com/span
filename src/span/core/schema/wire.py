@@ -70,7 +70,9 @@ def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) ->
     fields = {field.name: field for field in _dataclasses.fields(cls)}
     at = f"{path}: " if path else ""
     faults: list[str] = []
-    if "$type" in value and not keep_tag:
+    if "$type" in value and not keep_tag and value["$type"] != cls.__name__:
+        # A redundant tag that names the only candidate carrier is accepted:
+        # it carries no ambiguity. A tag naming anything else is a mistake.
         faults.append(
             f"unexpected $type at unambiguous position: {path or cls.__name__}; "
             f"this position accepts {cls.__name__} without a $type"

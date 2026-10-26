@@ -156,8 +156,6 @@ class CompactCommandTest(unittest.TestCase):
             self.assertEqual(coverage.question_slice, bound.question_slice)
             self.assertEqual(coverage.subjects, (bound.subject,))
             self.assertIs(coverage.disposition, m.SemanticQuestionDisposition.ANSWERED)
-            # declared_complete is a deterministic consequence of ANSWERED.
-            self.assertTrue(coverage.declared_complete)
             self.assertEqual(len(coverage.result_refs), 1)
             self.assertIsInstance(coverage.result_refs[0], m.ClaimRef)
             # Span derives question evidence from admitted canonical evidence.
@@ -202,7 +200,6 @@ class CompactCommandTest(unittest.TestCase):
             )
             opened = _coverage(store, pending.request.question)
             self.assertIs(opened.disposition, m.SemanticQuestionDisposition.OPEN)
-            self.assertFalse(opened.declared_complete)
             self.assertEqual(opened.result_refs, ())
             self.assertEqual(opened.resolution_requirements, (requirement,))
             self.assertTrue(opened.question_evidence)
@@ -235,7 +232,6 @@ class CompactCommandTest(unittest.TestCase):
                 na.disposition,
                 m.SemanticQuestionDisposition.NOT_APPLICABLE,
             )
-            self.assertFalse(na.declared_complete)
             self.assertEqual(na.result_refs, ())
             self.assertTrue(na.disposition_basis)
             # Direct evidence support keeps it freshness-trackable/reopenable.

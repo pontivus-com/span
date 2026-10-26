@@ -117,6 +117,52 @@ def _tag_names(schema: dict) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+def _project_field(
+    cls: type,
+    field: _dataclasses.Field,
+    hints: dict[str, object],
+    defs: dict[str, dict],
+    seen: set[str],
+) -> tuple[dict, bool]:
+    """Project one field the same way at the root and inside ``$defs``.
+
+    Returns ``(schema, required)``. Both callers must use this: the top-level
+    request and the nested carrier are the same field, and when this logic was
+    duplicated the root silently lost the tag guidance and the defaults.
+    """
+    field_schema = _project_hint(hints.get(field.name, str), defs, seen)
+    tags = _tag_names(field_schema)
+    if len(tags) >= 2:
+        field_schema = {
+            **field_schema,
+            "description": ("Allowed $type values: " + ", ".join(tags) + "."),
+        }
+    if cls.__name__ == "EvidenceScope" and field.name == "paths":
+        # The decoder rejects a leading '/'; the schema has to say so.
+        field_schema = {
+            **field_schema,
+            "description": (
+                "Repository-relative paths. A leading '/' is rejected; "
+                "an absolute path fails closed."
+            ),
+        }
+    has_default = (
+        field.default is not _dataclasses.MISSING
+        or field.default_factory is not _dataclasses.MISSING  # type: ignore[misc]
+    )
+    if has_default and field.default is not _dataclasses.MISSING:
+        try:
+            default = field.default
+            if isinstance(default, _enum.Enum):
+                default = default.value
+            elif isinstance(default, tuple):
+                default = list(default)
+            field_schema = {**field_schema, "default": default}
+        except Exception:
+            pass
+    return field_schema, not has_default
+
+
 def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
     name = cls.__name__
     if name in defs or name in seen:
@@ -129,30 +175,8 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
     properties: dict[str, dict] = {}
     required: list[str] = []
     for field in _dataclasses.fields(cls):
-        field_schema = _project_hint(hints.get(field.name, str), defs, seen)
-        tags = _tag_names(field_schema)
-        if len(tags) >= 2:
-            field_schema = {
-                **field_schema,
-                "description": ("Allowed $type values: " + ", ".join(tags) + "."),
-            }
-        # Defaults advertised equal canonical decoder defaults.
-        if (
-            field.default is not _dataclasses.MISSING
-            or field.default_factory is not _dataclasses.MISSING  # type: ignore[misc]
-        ):
-            if field.default is not _dataclasses.MISSING:
-                try:
-                    default = field.default
-                    if isinstance(default, _enum.Enum):
-                        default = default.value
-                    elif isinstance(default, tuple):
-                        default = list(default)
-                    field_schema = dict(field_schema)
-                    field_schema["default"] = default
-                except Exception:
-                    pass
-        else:
+        field_schema, is_required = _project_field(cls, field, hints, defs, seen)
+        if is_required:
             required.append(field.name)
         properties[field.name] = field_schema
     # J-8/S6.2: the tag is a property of the field POSITION, not the
@@ -222,14 +246,9 @@ def schema_for_request(
     properties: dict[str, dict] = {}
     required: list[str] = []
     for field in _dataclasses.fields(root):
-        field_schema = _project_hint(hints.get(field.name, str), defs, set())
-        # Merge nested defs discovered during projection.
-        # _project_hint populates a throwaway defs; re-collect via closure.
+        field_schema, is_required = _project_field(root, field, hints, defs, set())
         properties[field.name] = field_schema
-        if (
-            field.default is _dataclasses.MISSING
-            and field.default_factory is _dataclasses.MISSING  # type: ignore[misc]
-        ):
+        if is_required:
             required.append(field.name)
     # Collect reachable defs from all field types.
     full_defs: dict[str, dict] = {}

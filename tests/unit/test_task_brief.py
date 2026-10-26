@@ -160,6 +160,12 @@ class TaskBriefTest(unittest.TestCase):
             m.SemanticQuestionDisposition.PENDING,
         )
 
+    def test_brief_states_that_a_supported_claim_completes_a_question(self):
+        task = self._task()
+        rules = " ".join(task.request.brief.submission_rules)
+        self.assertIn("complete assertion", rules)
+        self.assertIn("resolution requirement", rules)
+
     def test_brief_exposes_the_complete_compact_quality_card(self):
         task = self._task()
         brief = task.request.brief

@@ -71,10 +71,10 @@ def _load_subject_state(
 ]:
     """Load one subject's state window plus per-list next tokens.
 
-    The answer-level token carries per-list offsets
-    (``pgq:<digest>:<claims_skip>:<rels_skip>:<questions_skip>``); each load windows
-    from its own offset, so every item is reachable exactly once across
-    pages. The returned tokens are the raw store cursors (``None`` =
+    The answer-level cursor is the version-bound scope grammar
+    (``pgv:<version>:<frontier>:<claims>:<rels>:<questions>``); each load
+    windows from its own offset, so every item is reachable exactly once
+    across pages. The returned tokens are the raw store cursors (``None`` =
     exhausted).
     """
     claims_skip, rels_skip, _ = _paging.parse_service_token(page_token)

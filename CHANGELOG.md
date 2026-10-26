@@ -1,5 +1,95 @@
 # Changelog
 
+## 0.8.1 — 2026-10-26
+
+**The defects 0.8.0's own gate exposed.**
+
+The gate recorded five tasks, three arms, two hosts. Its result for 0.8.0 was
+**not solved**: T2 (cold start costs 1.81× no Span) and T4 (zero assertions
+stored) failed. T3 and T7 are **void**, not failed: the warm arm is defined
+over subjects the first session asserted, and the first session asserted
+nothing, so recall was never measured. This release fixes the defects that
+produced the two valid failures. It does not claim the economics; a probe and a
+re-run with the populated-store prerequisite are still owed.
+
+### Wire contract
+
+- **One schema projector.** The top-level request schema was projected by a
+  second, reduced copy that omitted the `$type` guidance and the defaults. The
+  decoder required a rule the schema never stated, which produced 13 rejected
+  calls at `target` in a 48-call session. Root and `$defs` now use one
+  per-field projection.
+- **Bounds advertise their ceiling.** `QueryBounds` properties carry the
+  `maximum` the service enforces, read from the same policy object, so the two
+  cannot drift.
+- **The path rule is stated.** `EvidenceScope.paths` says repository-relative;
+  a leading `/` fails closed.
+- **A redundant `$type` is accepted when it names the only candidate carrier.**
+  A tag naming anything else still fails. The wire rule is unchanged where
+  ambiguity exists.
+
+### Refresh
+
+- **No partial refresh.** A refresh scope is a set of subjects, not a frontier,
+  so a cut item list has no honest cursor. An oversized scope now fails closed
+  with `RefreshScopeError` naming the ceiling and the remedy. It never returns
+  `truncated` without a continuation.
+- `SemanticRefreshRequest.page_token` is removed; it was accepted and never read.
+
+### Assertion yield
+
+- **The brief states the completion rule.** A claim supported by cited file
+  evidence is a complete assertion; missing governing authority is recorded as a
+  resolution requirement on the claim, not a reason to withhold the assertion or
+  leave the question `OPEN`. Same wording in the shipped skill.
+
+### Internal
+
+- Removed `declared_complete` entirely: the field, its two guards, the
+  parameter path (`suspend` → `SuspendedOperation` → `materialize`), and the
+  construction arguments. Completion is the disposition; the derive stage's
+  material check is the rule that actually rejects an empty `ANSWERED`.
+- The schema shaper is one ordered entry point (`_shape_tool_schema`) rather
+  than four steps at one call site, so a step cannot be skipped.
+- The duplicate-body gate now treats a body that is a single call as a
+  delegation to the rule's owner, not as a second copy. The two remaining
+  reports were one-line `__post_init__` validators; the count is now zero by
+  definition, and multi-statement duplication is still caught.
+- `scripts/build_identity.py` excludes its own output from the digest, so the
+  identity is idempotent and a checkout install reports the revision it built.
+- A retired `pgq:` cursor grammar is no longer documented as live.
+
+### Verification
+
+- `939 passed, 1 skipped`; ruff, black, and the typing ratchet (84) clean.
+- New `tests/unit/test_schema_contract.py` pins the multi-tag guidance, the
+  bounds maxima, the path rule, honest refresh truncation, and redundant-tag
+  handling. These are the contracts 0.8.0 did not meet; the path assertion was
+  observed failing before the fix.
+- The code-budget gate holds: zero duplicate source bodies, zero mutable module
+  tables, zero functions over 150 lines.
+
+### Breaking
+
+- `refresh` no longer accepts `page_token` (it was ignored).
+- A redundant `$type` at an unambiguous position is accepted instead of
+  rejected. This is additive for callers; it removes one error class.
+
+### Retained
+
+- **Host-authored `question_selection` is retained.** Removing it deletes the
+  cursor-binding acceptance phase (EC-13), which proves a page token issued for
+  one question is rejected for another. The zero-assertion result is a brief and
+  behaviour question, not a reason to remove a tested capability.
+
+### Not claimed
+
+- The economics: T2 and T4 were recorded against 0.8.0 and are not re-measured
+  here. T3/T7 were void, not failed.
+- That the brief wording changes agent behaviour; the probe is still owed.
+- Establishment cost (B3) and the second establishment entry `initialize_target`
+  (B4) are untouched; they are design changes, not defects.
+
 ## 0.8.0 — 2026-10-26
 
 **One architecture, one behaviour: the establishment root cause removed.**

@@ -179,5 +179,4 @@ def refresh(
         continuations=continuations,
         operation_intent="STATUS",
         question_slice=task.request.question_slice,
-        declared_complete=True,
     )

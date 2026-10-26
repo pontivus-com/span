@@ -29,6 +29,9 @@ from span.service.freshness import (
 from span.service.questions import (
     _question_views_for_scope,
 )
+from span.service.requests import (
+    RefreshScopeError,
+)
 from span.service.resolution import (
     _load_subject_state,
 )
@@ -52,6 +55,22 @@ def _currency_note(
             f"currency matters"
         ),
         supporting_context=(),
+    )
+
+
+def _refuse_truncated_refresh(truncated: bool, ceiling: int) -> None:
+    """A refresh never returns a partial answer it cannot resume.
+
+    The scope is a set of subjects, not a frontier, so there is no honest
+    cursor for a cut item list. Returning ``truncated: true`` with no token
+    would violate the one contract every answer shares, so an oversized
+    scope fails closed with the remedy named.
+    """
+    if not truncated:
+        return
+    raise RefreshScopeError(
+        f"refresh scope exceeds the answer ceiling ({ceiling}); narrow the "
+        "scope or raise the bounds; a partial refresh is never returned"
     )
 
 
@@ -91,6 +110,7 @@ def _compose_refresh_answer(
     kept_claims, kept_rels, kept_conf, truncated, category = _select_answer_items(
         claims_t, rels_t, conflicts_all, bounds.max_results
     )
+    _refuse_truncated_refresh(truncated, bounds.max_results)
     scope_paths = tuple(s.subject_id.canonical_locator for s in subjects)
     views = _question_views_for_scope(
         repository_id,
