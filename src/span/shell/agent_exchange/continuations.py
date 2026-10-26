@@ -13,9 +13,8 @@ import datetime as _datetime
 import threading as _threading
 from collections.abc import Callable as _Callable
 from dataclasses import dataclass as _dataclass
-from dataclasses import field as _field
 
-from span.core import model as m
+from span.core.continuations import SuspendedOperation
 
 __all__ = [
     "DEFAULT_CONTINUATION_TTL_SECONDS",
@@ -25,56 +24,6 @@ __all__ = [
 
 #: Default continuation lifetime (plan §11.12, product configuration).
 DEFAULT_CONTINUATION_TTL_SECONDS = 30 * 60
-
-
-@_dataclass(frozen=True)
-class SuspendedOperation:
-    """Record of one suspended indexing step (exchange state, not semantics)."""
-
-    op: str
-    repository_id: str
-    subject: m.Subject
-    request: m.SemanticInterpretationRequest
-    bounds: m.QueryBounds
-    state: m.RepositoryState
-    scope: tuple[m.Subject, ...] = ()
-    remaining: tuple[m.Subject, ...] = ()
-    changed: tuple[m.EvidenceDependency, ...] = ()
-    resolution: m.SubjectResolution | None = None
-    fingerprints: tuple[tuple[str, str], ...] = ()
-    known_subject_ids: tuple[m.SubjectId, ...] = ()
-    seeds: tuple[m.EvidenceRef, ...] = ()
-    # Frontier subjects already suspended, as full canonical identities:
-    # two distinct SubjectIds never suppress each other even when they
-    # share a locator string.
-    suspended: tuple[m.SubjectId, ...] = ()
-    change_kind: str | None = None
-    change_description: str | None = None
-    affected_assertions: tuple[m.ClaimRef | m.RelationshipRef, ...] = ()
-    operation_intent: str = "EXPLAIN"
-    objective: str = ""
-    question_slice: str = ""
-    declared_complete: bool = False
-    trace_direction: str | None = None
-    trace_filter: tuple[m.RelationshipKind, ...] = ()
-    trace_filter_set: bool = False
-    trace_boundary: bool = False
-    establish_baseline: bool = False
-    target_scope: m.EvidenceScope = _field(default_factory=m.EvidenceScope)
-    target_id: m.TargetId | None = None
-    root_question: m.SemanticQuestionScope | None = None
-    question_selection: m.SemanticQuestionSelection | None = None
-
-    def __post_init__(self) -> None:
-        if self.op not in (
-            "explain",
-            "authority",
-            "refresh",
-            "trace",
-            "impact",
-            "initialize_target",
-        ):
-            raise ValueError(f"unknown suspended op: {self.op}")
 
 
 @_dataclass
@@ -144,7 +93,7 @@ class ContinuationStore:
             return token
 
     def peek(self, continuation: str) -> SuspendedOperation | None:
-        """Read a live continuation without consuming it (Addendum H §4).
+        """Read a live continuation without consuming it ([design note H](docs/design-references.md#h) §4).
 
         Unknown or expired yields None. Never marks in-flight; never
         pops. Submit preparation uses this; ownership for the

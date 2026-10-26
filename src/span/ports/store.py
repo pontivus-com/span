@@ -172,7 +172,7 @@ class SemanticStore(_typing.Protocol):
         expected_kinds: tuple[SubjectKind, ...],
         bounds: QueryBounds,
     ) -> SubjectPage:
-        """Exact canonical-locator lookup (Addendum I S1).
+        """Exact canonical-locator lookup ([design note I](docs/design-references.md#i) S1).
 
         Exact string equality against the stored canonical locator only.
         No normalization, no fuzzy matching. Kinds filtered before
@@ -255,10 +255,6 @@ class SemanticStore(_typing.Protocol):
         """Count active target associations (S8/D-10)."""
         ...
 
-    def count_target_inventory_outcomes(self, repository_id: str) -> tuple[int, int]:
-        """Count persisted accounted and unresolved target members."""
-        ...
-
     def load_active_target_associations(
         self, repository_id: str
     ) -> tuple[TargetAssociation, ...]:
@@ -324,7 +320,7 @@ class SemanticStore(_typing.Protocol):
         subject_ids: tuple[SubjectId, ...],
         bounds: QueryBounds,
     ) -> tuple[InterpretationCoverage, ...]:
-        """Exact root/subject/question coverage reads (Addendum B B-01)."""
+        """Exact root/subject/question coverage reads ([design note B](docs/design-references.md#b) B-01)."""
         ...
 
     def load_all_question_coverages(
@@ -338,7 +334,7 @@ class SemanticStore(_typing.Protocol):
         Query/paging paths must use the bounded variant. Retirement and
         withdrawal fanout must use this variant so no owning question
         is silently missed; callers defer when the total exceeds the
-        operation bounds (Addendum B B-03).
+        operation bounds ([design note B](docs/design-references.md#b) B-03).
         """
         ...
 

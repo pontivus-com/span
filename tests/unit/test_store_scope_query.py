@@ -11,6 +11,11 @@ import unittest
 from span.core import model as m
 from span.shell.sqlite_store import SqliteSemanticStore, _scope_range_queries
 
+from functools import partial as _partial
+from tests.support.factories import query_bounds
+
+from tests.support.factories import evidence_ref
+
 REPO = "scope-fixture"
 
 LOCATORS = (
@@ -26,25 +31,10 @@ LOCATORS = (
 )
 
 
-def _bounds(max_subjects: int = 100) -> m.QueryBounds:
-    return m.QueryBounds(
-        max_results=50,
-        max_depth=0,
-        max_subjects=max_subjects,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
+_bounds = _partial(query_bounds, max_depth=0, max_subjects=100)
 
 
-def _ref(locator: str) -> m.EvidenceRef:
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{locator}"),
-        repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=locator,
-    )
+_ref = _partial(evidence_ref, repository_id=REPO)
 
 
 def _store() -> SqliteSemanticStore:

@@ -1,4 +1,4 @@
-"""Span service structural locate operation (Addendum F §4.1).
+"""Span service structural locate operation ([design note F](docs/design-references.md#f) §4.1).
 
 Read-only structural find/outline/member-listing over the existing
 ports. No semantic interpretation, no persistence, no continuations:
@@ -16,16 +16,12 @@ from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralSource
 from span.service.bounds import resolve_bounds as _resolve_bounds
 from span.service.discovery import enumerate_target_inventory
+from span.service.operations.listing import listing_version
 from span.service.repository import _is_initialized
 from span.service.requests import SemanticStructuralLocateRequest
-from span.shell import paging as _paging
+from span.core import paging as _paging
 
 __all__ = ["locate"]
-
-
-def _listing_version(structural: StructuralSource, repository_id: str) -> str:
-    """Listing version binding locate page tokens (Addendum F §4.3)."""
-    return structural.repository_state(repository_id).state_fingerprint
 
 
 def locate(
@@ -192,7 +188,7 @@ def _locate_members(
         )
     except ValueError as exc:
         raise ValueError(f"target inventory unverifiable: {exc}") from None
-    version = _listing_version(structural, repository_id)
+    version = listing_version(structural, repository_id)
     try:
         offset = _paging.parse_versioned_token(page_token, version=version)
     except ValueError as exc:

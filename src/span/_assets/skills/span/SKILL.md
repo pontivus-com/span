@@ -150,43 +150,36 @@ coverage, correctness, target accounting, or completeness.
 
 An exact directory supplied by the user remains the complete target boundary,
 even when it is large. Structural anchors are execution aids and never grant
-permission to narrow that boundary. `initialize_target` returns a bounded
-frontier. Partition it into coherent material areas outside the MCP call and
-account for every current inventory member. A mapping unit has
-`question=None`; it is not itself a semantic question.
+permission to narrow that boundary.
 
-Each member gets exactly one target-accounting outcome:
+`initialize_target` admits the target deterministically: Span enumerates
+every current inventory member, assigns each to the target's area subject,
+records the membership, and returns the area's first semantic question. Membership is
+computed from the provider manifest; it is never submitted and never asked for
+as a model unit. There is no mapping unit and no mapping payload.
 
-- assign its current `evidence_ref` to one or more admitted area subjects;
-- provide an evidence-backed exclusion using `exclusion_basis`; or
-- keep it explicitly unresolved with typed `resolution_requirements`.
+The result components have different jobs:
 
-The three related result components have different jobs:
-
-- `proposed_target_inventory_accounting` accounts for target inventory
-  members;
+- `question_decision` answers the bound semantic question. `ANSWERED` requires
+  at least one claim or relationship; `NOT_APPLICABLE` with a basis is the
+  terminal form for "no assertion is warranted".
 - `proposed_questions` admits or updates genuinely additional semantic
-  questions; Span creates the first-admission CQ-01 seed for a newly
-  admitted area itself;
+  questions; Span creates the first-admission CQ-01 seed itself.
 - `proposed_target_questions` associates an identical already-persisted
   `SemanticQuestionScope` with the target.
 
-For example, during exact-target onboarding, a newly discovered material
-area is admitted with an evidence-backed subject; Span creates the
-first-admission `PENDING` CQ-01. If another area already has the exact same persisted question scope, reuse that scope in
-`proposed_target_questions`; do not manufacture a duplicate question. If an
-inventory member cannot yet be assigned or excluded with evidence, submit
-its current `evidence_ref` with an explicit mapping requirement. A question's
-`NOT_APPLICABLE` disposition answers only that semantic question; it is not a
-target-inventory exclusion.
+For example, during exact-target onboarding Span admits the area and asks its
+purpose. If another target already has the exact same persisted question scope, reuse
+that scope in `proposed_target_questions`; do not manufacture a duplicate
+question. A question's `NOT_APPLICABLE` disposition answers only
+that semantic question.
 
 Use `status(TargetId)` in `NORMAL` mode for the campaign snapshot. Its
-`target_total_count`, `target_accounted_count`, and
-`target_unaccounted_count` are read-only counts from the same disposition
-snapshot; they are `None` when the disposition is `UNVERIFIABLE` or
-`UNASSESSED`, never fabricated zeros. Do not count a campaign by walking
-`locate` pages. `CURRENT` requires both complete target accounting and
-complete, current, verifiable semantic coverage.
+`target_total_count` and `target_association` are read-only projections of the
+same disposition snapshot; the total is `None` when the disposition is
+`UNVERIFIABLE` or `UNASSESSED`, never a fabricated zero. Do not count a
+campaign by walking `locate` pages. `CURRENT` requires complete, current,
+verifiable semantic coverage over the admitted members.
 
 ## Pending interpretation, evidence, and submission
 
@@ -200,11 +193,8 @@ Build an admissible submission as follows:
 1. Inspect the pending `request`, including `evidence_units`, subjects,
    question scope, structural observations, identity bindings, and task
    brief.
-2. For a semantic question, extract the canonical `EvidenceRef` values from
-   the admitted evidence units. For a target-mapping task
-   (`question=None`), use each `target_inventory_items` member's stable
-   `evidence_id` and submit a `CandidateTargetInventoryAccount`; do not
-   author its provider-owned locator, kind, or fingerprint.
+2. Extract the canonical `EvidenceRef` values from the admitted evidence
+   units; every unit is a semantic question, so cite the evidence you read.
 3. Cite current source files directly for observed behavior where applicable.
    Use only references admitted by the provider and task scope. Preserve the
    provider's identity and provenance; Span resolves canonical target
@@ -215,8 +205,7 @@ Build an admissible submission as follows:
    previously persisted by Span. Submitted fingerprints are not authority.
 5. Construct the existing typed `SemanticInterpretationResult` with its
    candidate claims/relationships/subjects as applicable, and include the
-   explicit `question_decision` or target-accounting outcome required by this
-   unit. Authority claims require qualifying authority evidence; source code
+   explicit `question_decision` required by this unit. Authority claims require qualifying authority evidence; source code
    evidence supports observed behavior but does not become normative merely
    by being nearby.
 6. Review the result before submitting: check alternate owners, omitted
@@ -230,7 +219,7 @@ Build an admissible submission as follows:
 
 ### Worked typed submission excerpt
 
-This is adapted from the accepted Addendum H exchange test for a semantic
+This is adapted from the accepted exchange contract test for a semantic
 question unit, not a target-inventory mapping unit. The evidence identity is
 taken from the pending request, the claim cites that evidence, and the
 decision binds the result to the request's exact question. Identity,
@@ -240,7 +229,7 @@ supplies only the disposition and basis. The submission boundary is the typed
 
 ```python
 request = pending.request
-evidence_ref = request.evidence_units[0].evidence_ref
+evidence_ref = request.task_evidence.evidence_units[0].evidence_ref
 subject = request.subjects[0].subject_id
 
 claim = m.CandidateSemanticClaim(
@@ -378,12 +367,11 @@ identity, evidence submission, recovery, and the lifecycle above to this
 skill. The runbook and MCP reference are supporting procedures, not alternate
 contracts.
 
-## Addendum J note
+## Scoped pagination note
 
 Requests use a compact grammar: supply `$type` only where a field is a
 genuine dataclass union; omit it elsewhere (a redundant tag is rejected).
-Pending units carry an `interpretation_profile` naming the immutable SA
-obligations. Target mapping submits `CandidateTargetInventoryAccount`
-(stable `EvidenceId` + one outcome); Span derives the durable account and the
-first-admission question. Mapping binds a bounded batch — disposition every
-bound member in one atomic unit.
+The immutable SA obligations live in the tool contract. Target admission is
+deterministic: Span assigns every inventory member, writes the
+first-admission question, and returns it. Submit assertions, never
+membership.

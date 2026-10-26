@@ -14,14 +14,14 @@ from span import service as ops
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.core import model as m
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
-from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
-    InMemoryFile,
-    InMemoryStructuralSource,
     InMemorySubject,
 )
+
+from functools import partial as _partial
+
+from tests.support.factories import semantic_harness
 
 REPO = "hook-fixture"
 COUNT = 20
@@ -32,30 +32,18 @@ def _files() -> dict[str, str]:
     return {f"big/f{index}.py": f"v{index} = {index}\n" for index in range(COUNT)}
 
 
-def _harness():
-    files = _files()
-    subjects = tuple(
-        InMemorySubject(locator, m.SubjectKind.COMPONENT, locator) for locator in files
-    )
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(path, text) for path, text in files.items()),
-        subjects,
-        (InMemoryEdge("big/f0.py", m.StructuralEdgeKind.REFERENCES, "big/f1.py"),),
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(files))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+_HARNESS_FILES = _files()
+_HARNESS_SUBJECTS = tuple(
+    InMemorySubject(locator, m.SubjectKind.COMPONENT, locator)
+    for locator in _HARNESS_FILES
+)
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    _HARNESS_FILES,
+    subjects=_HARNESS_SUBJECTS,
+    edges=(InMemoryEdge("big/f0.py", m.StructuralEdgeKind.REFERENCES, "big/f1.py"),),
+)
 
 
 class HookBoundednessTest(unittest.TestCase):
@@ -63,7 +51,7 @@ class HookBoundednessTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             calls = []
-            from span.service.operations import status as status_module
+            from span.service.operations.status import hooks as status_module
 
             original = status_module._load_subject_state
 
@@ -100,7 +88,7 @@ class HookBoundednessTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             calls = []
-            from span.service.operations import status as status_module
+            from span.service.operations.status import hooks as status_module
 
             original = status_module._load_subject_state
 

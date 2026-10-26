@@ -1,4 +1,4 @@
-"""Explicit offline store migration (schema 7 → 8).
+"""Explicit offline store migration (schema 7/8 → 9).
 
 Invoked by ``span-install --migrate-store <repository-id>`` under the
 installed interpreter. The store itself never migrates at open: a version

@@ -36,7 +36,7 @@ __all__ = [
 
 @_dataclass(frozen=True)
 class SemanticStructuralLocateRequest:
-    """Structural locate contract (Addendum F §4.1)."""
+    """Structural locate contract ([design note F](docs/design-references.md#f) §4.1)."""
 
     repository_id: str
     mode: m.StructuralLocateMode
@@ -49,7 +49,7 @@ class SemanticStructuralLocateRequest:
 
 @_dataclass(frozen=True)
 class SemanticStructuralNeighborsRequest:
-    """Structural neighbors contract (Addendum F §4.2)."""
+    """Structural neighbors contract ([design note F](docs/design-references.md#f) §4.2)."""
 
     repository_id: str
     target: m.SubjectSelector

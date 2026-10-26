@@ -135,7 +135,6 @@ def _check_host_artifacts(
         assert required in text, required
     for forbidden in (
         "reissue_interpretation",
-        "pgq:",
         "pgv:",
         "pgn:",
         "cont-*",

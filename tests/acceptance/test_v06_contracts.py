@@ -19,15 +19,19 @@ from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span import service as ops
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.agent_fixture import FixtureAgent, FixtureCandidates
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
     InMemorySubject,
-    fingerprint_content,
 )
+
+from tests.support.factories import evidence_ref
+
+from functools import partial as _partial
+from tests.support.factories import query_bounds, semantic_harness, subject_id
 
 REPO = "v06-svc"
 
@@ -37,24 +41,20 @@ FILES = {
     "src/billing.py": "CHARGE = 1\n",
 }
 
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    FILES,
+    subjects=(InMemorySubject("src/billing.py", m.SubjectKind.COMPONENT, "b"),),
+)
 
-def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
+_ref = _partial(evidence_ref, repository_id=REPO, files=FILES)
 
 
-def _ref(path, files=None):
-    files = FILES if files is None else files
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=(
-            m.EvidenceSourceKind.DOCUMENTATION
-            if path.endswith(".md")
-            else m.EvidenceSourceKind.SOURCE_CODE
-        ),
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(files[path]),
-    )
+_bounds = query_bounds
+
+
+_sid = _partial(subject_id, repository_id=REPO)
 
 
 def _authority(path, quote):
@@ -119,45 +119,6 @@ def _billing_claims(with_ownership=True):
     return tuple(claims)
 
 
-def _harness(files=None, claims=None, complete_questions=True):
-    files = FILES if files is None else files
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in files.items()),
-        (InMemorySubject("src/billing.py", m.SubjectKind.COMPONENT, "b"),),
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(files))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    agent = FixtureAgent(
-        {
-            "src/billing.py": FixtureCandidates(
-                claims=(_billing_claims() if claims is None else claims),
-                relationships=(),
-            )
-        },
-        # Addendum C C-05 cutover: fixture completes the bound
-        # question explicitly; claims alone never complete.
-        complete_questions=complete_questions,
-    )
-    return structural, evidence, store, agent
-
-
-def _bounds():
-    from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
-
-    return DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
-
-
 def _exchange(request, op, structural, evidence, store, agent, seeds=(), rounds=0):
     continuations = ContinuationStore()
     current = op(
@@ -206,7 +167,15 @@ def _explain_request():
 
 class WithdrawalTest(unittest.TestCase):
     def test_successful_refresh_withdraws_old_claim(self):
-        structural, evidence, store, agent = _harness()
+        structural, evidence, store = _harness()
+        agent = FixtureAgent(
+            {
+                "src/billing.py": FixtureCandidates(
+                    claims=_billing_claims(), relationships=()
+                )
+            },
+            complete_questions=True,
+        )
         try:
             first, _ = _exchange(
                 _explain_request(),
@@ -281,7 +250,15 @@ class SupersedingEvidenceTest(unittest.TestCase):
         a new out-of-scope file does not invalidate coverage (J-A1), while
         a changed *cited* source stales exactly its dependents (J-A3,
         MI-07 partial staleness). Explicit refresh recovers."""
-        structural, evidence, store, agent = _harness()
+        structural, evidence, store = _harness()
+        agent = FixtureAgent(
+            {
+                "src/billing.py": FixtureCandidates(
+                    claims=_billing_claims(), relationships=()
+                )
+            },
+            complete_questions=True,
+        )
         try:
             first, _ = _exchange(
                 _explain_request(),
@@ -394,7 +371,15 @@ class SupersedingEvidenceTest(unittest.TestCase):
 
 class DocumentationOnlySubjectTest(unittest.TestCase):
     def test_register_and_query_doc_only_capability(self):
-        structural, evidence, store, _ = _harness()
+        structural, evidence, store = _harness()
+        agent = FixtureAgent(
+            {
+                "src/billing.py": FixtureCandidates(
+                    claims=_billing_claims(), relationships=()
+                )
+            },
+            complete_questions=True,
+        )
         cap_subject = m.CandidateSubject(
             provisional_locator="cap/billing",
             kind=m.SubjectKind.CAPABILITY,
@@ -521,7 +506,8 @@ class MultiUnitChainTest(unittest.TestCase):
                 "src/billing.py": FixtureCandidates(
                     claims=_billing_claims(), relationships=()
                 )
-            }
+            },
+            complete_questions=True,
         )
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
@@ -594,7 +580,8 @@ class MultiUnitChainTest(unittest.TestCase):
                 "src/billing.py": FixtureCandidates(
                     claims=_billing_claims(), relationships=()
                 )
-            }
+            },
+            complete_questions=True,
         )
         ops.initialize_repository(
             ops.SemanticInitializeRepositoryRequest(
@@ -657,7 +644,15 @@ class RetiredOwnerTest(unittest.TestCase):
         claim may then name the retired owner in any owner-like role,
         while retired history preserves the prior assertion.
         """
-        structural, evidence, store, agent = _harness()
+        structural, evidence, store = _harness()
+        agent = FixtureAgent(
+            {
+                "src/billing.py": FixtureCandidates(
+                    claims=_billing_claims(), relationships=()
+                )
+            },
+            complete_questions=True,
+        )
         try:
             first, _ = _exchange(
                 _explain_request(),
@@ -691,10 +686,10 @@ class RetiredOwnerTest(unittest.TestCase):
                     m.OwnershipRole.OWNER,
                     m.OwnershipExclusivity.EXCLUSIVE,
                 ),
-                evidence=(_ref("OWNERSHIP.md", changed),),
+                evidence=(_ref("OWNERSHIP.md", files=changed),),
                 candidate_authority=m.CandidateAuthority(
                     binding=m.AuthorityBinding(
-                        evidence_ref=_ref("OWNERSHIP.md", changed),
+                        evidence_ref=_ref("OWNERSHIP.md", files=changed),
                         authority_kind=m.AuthorityKind.REPOSITORY_RULE,
                         status=m.AuthorityStatus.ACCEPTED,
                     ),

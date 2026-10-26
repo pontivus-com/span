@@ -21,7 +21,7 @@ from span.ports.interpretation import (
 )
 from span import service as ops
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
@@ -30,6 +30,19 @@ from span.shell.structural.memory import (
     fingerprint_content,
 )
 
+from tests.support.factories import evidence_ref, query_bounds
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import semantic_harness
+
+from tests.support.factories import proposed_question
+
+from tests.support.factories import answered_decision
+
+from tests.support.factories import pending_suspension
+
 REPO = "h-svc"
 
 FILES = {
@@ -37,40 +50,13 @@ FILES = {
     "src/other.py": "OTHER = 2\n",
 }
 
-
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_ref = _partial(evidence_ref, repository_id=REPO, files=FILES)
 
 
-def _sid(locator="src/seed.py"):
-    return m.SubjectId(
-        repository_id=REPO,
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator=locator,
-    )
+_bounds = query_bounds
 
 
-def _ref(path, fingerprint=None, span=None):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=path,
-        revision_or_fingerprint=(
-            fingerprint if fingerprint is not None else fingerprint_content(FILES[path])
-        ),
-        section_or_span=span,
-    )
+_sid = _partial(subject_id, repository_id=REPO)
 
 
 def _fixture_sources(files=None):
@@ -87,46 +73,19 @@ def _fixture_sources(files=None):
     return structural, evidence
 
 
-def _harness(files=None):
-    files = dict(FILES) if files is None else files
-    structural, evidence = _fixture_sources(files)
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+_harness = _partial(semantic_harness, REPO, FILES)
 
 
-def _answer_current(request):
-    return m.SemanticQuestionDecision(
-        disposition=m.SemanticQuestionDisposition.ANSWERED,
-        disposition_basis="test explicit completion",
-    )
+_answer_current = answered_decision
 
 
-def _proposed(scope, disposition, *, requirements=(), basis=""):
-    """Test-only: express an authored question+decision as a proposal."""
-    return m.ProposedSemanticQuestion(
-        scope,
-        m.SemanticQuestionDecision(
-            disposition=disposition,
-            resolution_requirements=tuple(requirements),
-            disposition_basis=basis,
-        ),
-    )
+_proposed = proposed_question
 
 
 def _purpose_claim(summary="Sorts seeds"):
     return m.CandidateSemanticClaim(
         candidate_key="purpose",
-        subject=_sid(),
+        subject=_sid("src/seed.py"),
         kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue(summary, ()),
@@ -138,20 +97,7 @@ def _purpose_claim(summary="Sorts seeds"):
     )
 
 
-def _suspend(structural, evidence, store, continuations):
-    current = ops.explain(
-        ops.SemanticExplainRequest(
-            repository_id=REPO,
-            target=m.SubjectSelector(None, "src/seed.py", (), None),
-            bounds=_bounds(),
-        ),
-        structural=structural,
-        evidence=evidence,
-        store=store,
-        continuations=continuations,
-    )
-    assert isinstance(current, PendingInterpretation), type(current)
-    return current
+_suspend = _partial(pending_suspension, repository_id=REPO, locator="src/seed.py")
 
 
 def _crash_during_commit(db_path):
@@ -234,8 +180,10 @@ def _recover_after_commit_crash(db_path):
                 store=store,
                 continuations=continuations,
             )
-        page = store.load_claims(REPO, (_sid(),), (), _bounds())
-        coverages = store.load_question_coverages(REPO, _sid(), (_sid(),), _bounds())
+        page = store.load_claims(REPO, (_sid("src/seed.py"),), (), _bounds())
+        coverages = store.load_question_coverages(
+            REPO, _sid("src/seed.py"), (_sid("src/seed.py"),), _bounds()
+        )
         return fresh, page, coverages
     finally:
         store.close()
@@ -252,15 +200,14 @@ class ContinuationOwnershipTest(unittest.TestCase):
             SuspendedOperation(
                 op="explain",
                 repository_id=REPO,
-                subject=m.Subject(_sid(), "seed", None),
+                subject=m.Subject(_sid("src/seed.py"), "seed", None),
                 request=m.SemanticInterpretationRequest(
                     repository_id=REPO,
-                    subjects=(m.Subject(_sid(), "seed", None),),
-                    evidence_units=(),
-                    structural_observations=(),
-                    allowed_claim_kinds=tuple(m.ClaimKind),
-                    allowed_relationship_kinds=tuple(m.RelationshipKind),
-                    identity_bindings=(_sid(),),
+                    subjects=(m.Subject(_sid("src/seed.py"), "seed", None),),
+                    task_evidence=m.TaskEvidence(
+                        identity_bindings=(_sid("src/seed.py"),)
+                    ),
+                    allowed_kinds=m.AllowedKinds(),
                     brief=m.TaskBrief(),
                     bounds=_bounds(),
                 ),
@@ -331,7 +278,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
                     store=store,
                     continuations=continuations,
                 )
-            page = store.load_claims(REPO, (_sid(),), (), _bounds())
+            page = store.load_claims(REPO, (_sid("src/seed.py"),), (), _bounds())
             self.assertEqual(len(page.items), 1)
         finally:
             store.close()
@@ -383,15 +330,14 @@ class ContinuationOwnershipTest(unittest.TestCase):
             return SuspendedOperation(
                 op="explain",
                 repository_id=REPO,
-                subject=m.Subject(_sid(), "seed", None),
+                subject=m.Subject(_sid("src/seed.py"), "seed", None),
                 request=m.SemanticInterpretationRequest(
                     repository_id=REPO,
-                    subjects=(m.Subject(_sid(), "seed", None),),
-                    evidence_units=(),
-                    structural_observations=(),
-                    allowed_claim_kinds=tuple(m.ClaimKind),
-                    allowed_relationship_kinds=tuple(m.RelationshipKind),
-                    identity_bindings=(_sid(),),
+                    subjects=(m.Subject(_sid("src/seed.py"), "seed", None),),
+                    task_evidence=m.TaskEvidence(
+                        identity_bindings=(_sid("src/seed.py"),)
+                    ),
+                    allowed_kinds=m.AllowedKinds(),
                     brief=m.TaskBrief(),
                     bounds=_bounds(),
                 ),
@@ -482,7 +428,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
             finally:
                 store.write_index_batch = original
             self.assertEqual(len(continuations), 1)
-            page = store.load_claims(REPO, (_sid(),), (), _bounds())
+            page = store.load_claims(REPO, (_sid("src/seed.py"),), (), _bounds())
             self.assertEqual(page.items, ())
             answer = ops.submit_interpretation(
                 pending.continuation,
@@ -498,7 +444,7 @@ class ContinuationOwnershipTest(unittest.TestCase):
             store.close()
 
     def test_postcommit_failure_recovers_via_reissue(self):
-        import span.service.exchange as exchange_mod
+        import span.service.exchange.resume as exchange_mod
 
         structural, evidence, store = _harness()
         try:
@@ -931,7 +877,7 @@ class CorrectionBindingTest(unittest.TestCase):
                     for rule in challenged.request.brief.submission_rules
                 )
             )
-            seed_ref = challenged.request.evidence_units[0].evidence_ref
+            seed_ref = challenged.request.task_evidence.evidence_units[0].evidence_ref
             nominated = _proposed(
                 original_scope,
                 m.SemanticQuestionDisposition.ANSWERED,
@@ -1036,7 +982,7 @@ class CorrectionBindingTest(unittest.TestCase):
                 continuations=continuations,
             )
             self.assertIsInstance(corrected, m.SemanticAnswer)
-            rows = store.load_all_question_coverages(REPO, None, (_sid(),))
+            rows = store.load_all_question_coverages(REPO, None, (_sid("src/seed.py"),))
             original_rows = [
                 cov
                 for cov in rows
@@ -1173,7 +1119,7 @@ class TargetCountsTest(unittest.TestCase):
                 REPO, scope, "Establish seed areas."
             )
             target_id = m.derive_target_id(REPO, canonical_scope, canonical_objective)
-            area = _sid()
+            area = _sid("src/seed.py")
             assoc = m.TargetAssociation(
                 target_id=target_id,
                 repository_id=REPO,
@@ -1212,8 +1158,6 @@ class TargetCountsTest(unittest.TestCase):
                 m.SemanticCoverageDisposition.UNVERIFIABLE,
             )
             self.assertIsNone(over.content.target_total_count)
-            self.assertIsNone(over.content.target_accounted_count)
-            self.assertIsNone(over.content.target_unaccounted_count)
             # Control: roomy bounds still observe the membership drift
             # as STALE, with counts from the current enumeration.
             roomy = ops.status(
@@ -1233,8 +1177,9 @@ class TargetCountsTest(unittest.TestCase):
                 m.SemanticCoverageDisposition.STALE,
             )
             self.assertEqual(roomy.content.target_total_count, 2)
-            self.assertEqual(roomy.content.target_accounted_count, 2)
-            self.assertEqual(roomy.content.target_unaccounted_count, 0)
+            association = roomy.content.target_association
+            assert association is not None
+            self.assertEqual(len(association.inventory_accounting), 2)
         finally:
             store.close()
 
@@ -1248,7 +1193,7 @@ class TargetCountsTest(unittest.TestCase):
                 REPO, scope, "Establish seed areas."
             )
             target_id = m.derive_target_id(REPO, canonical_scope, canonical_objective)
-            area = _sid()
+            area = _sid("src/seed.py")
             assoc = m.TargetAssociation(
                 target_id=target_id,
                 repository_id=REPO,
@@ -1287,8 +1232,9 @@ class TargetCountsTest(unittest.TestCase):
                 m.SemanticCoverageDisposition.STALE,
             )
             self.assertEqual(answer.content.target_total_count, 2)
-            self.assertEqual(answer.content.target_accounted_count, 2)
-            self.assertEqual(answer.content.target_unaccounted_count, 0)
+            association = answer.content.target_association
+            assert association is not None
+            self.assertEqual(len(association.inventory_accounting), 2)
             self.assertTrue(
                 any(
                     "membership changed since campaign establishment"
@@ -1345,8 +1291,6 @@ class TargetCountsTest(unittest.TestCase):
                 m.SemanticCoverageDisposition.INCOMPLETE,
             )
             self.assertEqual(content.target_total_count, 2)
-            self.assertEqual(content.target_accounted_count, 0)
-            self.assertEqual(content.target_unaccounted_count, 2)
         finally:
             store.close()
 
@@ -1423,7 +1367,7 @@ class UnsupportedChallengeTest(unittest.TestCase):
                                         kind=(
                                             m.ResolutionKind.MISSING_SEMANTIC_COVERAGE
                                         ),
-                                        subject_or_claim=_sid(),
+                                        subject_or_claim=_sid("src/seed.py"),
                                         description=(
                                             "challenge lacks supporting " "evidence"
                                         ),
@@ -1539,7 +1483,7 @@ class CrashRecoveryTest(unittest.TestCase):
                 )
                 self.assertIsInstance(answer, m.SemanticAnswer)
                 self.assertEqual(len(answer.content.claims), 1)
-                page = store.load_claims(REPO, (_sid(),), (), _bounds())
+                page = store.load_claims(REPO, (_sid("src/seed.py"),), (), _bounds())
                 self.assertEqual(len(page.items), 1)
             finally:
                 store.close()
@@ -1657,7 +1601,9 @@ class FreshSessionTest(unittest.TestCase):
                     store=store,
                     continuations=continuations,
                 )
-                seed_ref = challenged.request.evidence_units[0].evidence_ref
+                seed_ref = challenged.request.task_evidence.evidence_units[
+                    0
+                ].evidence_ref
                 ops.submit_interpretation(
                     challenged.continuation,
                     m.SemanticInterpretationResult(
@@ -1723,9 +1669,12 @@ class FreshSessionTest(unittest.TestCase):
                 store.close()
 
 
-class DocumentMappingTest(unittest.TestCase):
-    """Workflow-issues §5: documentation members with no indexed subject
-    map to real admitted areas, never to a synthetic fallback."""
+class DocumentAdmissionTest(unittest.TestCase):
+    """Documentation members with no indexed subject join the target's area.
+
+    A document never becomes its own synthetic area and never needs a model
+    mapping unit: it is a member of the area the target names.
+    """
 
     DOC_FILES = {
         "src/app.py": "APP = 1\n",
@@ -1755,296 +1704,44 @@ class DocumentMappingTest(unittest.TestCase):
         )
         return structural, evidence, store
 
-    def _doc_area(self):
-        return m.SubjectId(
-            repository_id=REPO,
-            subject_kind=m.SubjectKind.DOCUMENT,
-            canonical_locator="docs/contract.md",
-        )
-
-    def _doc_question(self):
-        area = self._doc_area()
-        return m.SemanticQuestionScope(
-            scope_root=area,
-            subject=area,
-            question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="contract purpose",
-            materiality_basis="mapping admits contract",
-        )
-
-    def _doc_scope(self):
-        return m.EvidenceScope(
-            paths=(
-                "src/app.py",
-                "docs/contract.md",
-                "docs/notes.md",
-            ),
-            evidence_refs=(),
-        )
-
-    def _start_doc_campaign(self, structural, evidence, store, continuations):
-        pending = ops.initialize_target(
-            ops.SemanticInitializeTargetRequest(
-                repository_id=REPO,
-                target=self._doc_scope(),
-                objective="document mapping probe",
-                bounds=_bounds(),
-            ),
-            structural=structural,
-            evidence=evidence,
-            store=store,
-            continuations=continuations,
-        )
-        self.assertIsInstance(pending, PendingInterpretation)
-        return pending
-
-    def _map_current_item(self, structural, evidence, store, continuations, pending):
-        area = self._doc_area()
-        item = pending.request.target_inventory_items[0]
-        loc = item.evidence_ref.locator
-        if loc == "docs/contract.md":
-            result = m.SemanticInterpretationResult(
-                claims=(),
-                relationships=(),
-                candidate_subjects=(
-                    m.CandidateSubject(
-                        provisional_locator="docs/contract.md",
-                        kind=m.SubjectKind.DOCUMENT,
-                        display_name="contract",
-                        evidence=(item.evidence_ref,),
-                        basis=m.SemanticBasis(
-                            m.DerivationKind.SEMANTIC_INTERPRETATION,
-                            "contract readme is a coherent area",
-                        ),
-                    ),
-                ),
-                candidate_conflicts=(),
-                proposed_questions=(
-                    m.ProposedSemanticQuestion(
-                        self._doc_question(),
-                        m.SemanticQuestionDecision(
-                            disposition=(m.SemanticQuestionDisposition.PENDING),
-                            disposition_basis="admitted on mapping",
-                        ),
-                    ),
-                ),
-                candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.CandidateTargetInventoryAccount(
-                        evidence_id=item.evidence_ref.evidence_id,
-                        assigned_area_subjects=(area,),
-                    ),
-                ),
-                proposed_target_questions=(),
-            )
-        elif loc == "docs/notes.md":
-            result = m.SemanticInterpretationResult(
-                claims=(),
-                relationships=(),
-                candidate_subjects=(),
-                candidate_conflicts=(),
-                candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.CandidateTargetInventoryAccount(
-                        evidence_id=item.evidence_ref.evidence_id,
-                        resolution_requirements=(
-                            m.ResolutionRequirement(
-                                kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
-                                subject_or_claim=None,
-                                description="notes need owner triage",
-                                supporting_context=(),
-                            ),
-                        ),
-                    ),
-                ),
-                proposed_target_questions=(),
-            )
-        else:
-            result = m.SemanticInterpretationResult(
-                claims=(),
-                relationships=(),
-                candidate_subjects=(),
-                candidate_conflicts=(),
-                candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.CandidateTargetInventoryAccount(
-                        evidence_id=item.evidence_ref.evidence_id,
-                        assigned_area_subjects=(area,),
-                    ),
-                ),
-                proposed_target_questions=(),
-            )
-        from dataclasses import replace as _dc_replace
-
-        if result.proposed_target_inventory_accounting:
-            # S5/J-6: one unit accounts for the whole bound batch.
-            result = _dc_replace(
-                result,
-                proposed_target_inventory_accounting=_fill_batch(
-                    pending, result.proposed_target_inventory_accounting
-                ),
-            )
-        return ops.submit_interpretation(
-            pending.continuation,
-            result,
-            structural=structural,
-            evidence=evidence,
-            store=store,
-            continuations=continuations,
-        )
-
-    def _drain_doc_campaign(self, structural, evidence, store, continuations):
-        pending = self._start_doc_campaign(structural, evidence, store, continuations)
-        for _ in range(6):
-            self.assertIsInstance(pending, PendingInterpretation)
-            if pending.request.question is not None:
-                return pending
-            pending = self._map_current_item(
-                structural, evidence, store, continuations, pending
-            )
-        self.fail("mapping frontier did not reach a semantic question")
-
-    def _synthetic_sid(self, locator):
-        return m.SubjectId(
-            repository_id=REPO,
-            subject_kind=m.SubjectKind.OTHER,
-            canonical_locator=locator,
-        )
-
-    def test_partial_mapping_batch_named_and_atomic(self):
-        """SPMCP-04/H: a partial batch rejects by EvidenceId, writes no
-        accounting, and leaves the continuation live for correction."""
+    def test_documents_join_the_target_area(self):
         structural, evidence, store = self._doc_harness()
         try:
-            continuations = ContinuationStore()
-            pending = self._start_doc_campaign(
-                structural, evidence, store, continuations
+            scope = m.EvidenceScope(
+                paths=("src/app.py", "docs/contract.md", "docs/notes.md"),
+                evidence_refs=(),
             )
-            items = pending.request.target_inventory_items
-            self.assertEqual(len(items), 3)
-            partial = m.SemanticInterpretationResult(
-                claims=(),
-                relationships=(),
-                candidate_subjects=(),
-                candidate_conflicts=(),
-                candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(
-                    m.CandidateTargetInventoryAccount(
-                        evidence_id=items[0].evidence_ref.evidence_id,
-                        resolution_requirements=(
-                            m.ResolutionRequirement(
-                                kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
-                                subject_or_claim=None,
-                                description="not examined in this test",
-                                supporting_context=(),
-                            ),
-                        ),
-                    ),
+            pending = ops.initialize_target(
+                ops.SemanticInitializeTargetRequest(
+                    repository_id=REPO,
+                    target=scope,
+                    objective="document admission probe",
+                    bounds=_bounds(),
                 ),
-                proposed_target_questions=(),
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                continuations=ContinuationStore(),
             )
-            with self.assertRaises(InterpretationUnitRejected) as ctx:
-                ops.submit_interpretation(
-                    pending.continuation,
-                    partial,
-                    structural=structural,
-                    evidence=evidence,
-                    store=store,
-                    continuations=continuations,
-                )
-            message = str(ctx.exception)
-            for item in items[1:]:
-                self.assertIn(item.evidence_ref.evidence_id.value, message)
-            self.assertIn("bound mapping item has no accounting candidate", message)
+            self.assertIsInstance(pending, PendingInterpretation)
+            question = pending.request.question
+            assert question is not None
+            self.assertIs(question.subject.subject_kind, m.SubjectKind.OTHER)
+            self.assertEqual(question.subject.canonical_locator, ".")
             assoc = store.load_target_association(REPO, pending.request.target_id)
             assert assoc is not None
-            self.assertEqual(assoc.inventory_accounting, ())
-            self.assertEqual(len(continuations), 1)
-        finally:
-            store.close()
-
-    def test_subject_null_document_admits_real_area(self):
-        structural, evidence, store = self._doc_harness()
-        try:
-            continuations = ContinuationStore()
-            members = ops.locate(
-                ops.SemanticStructuralLocateRequest(
+            self.assertEqual(len(assoc.inventory_accounting), len(self.DOC_FILES))
+            self.assertEqual(
+                {acc.evidence_ref.locator for acc in assoc.inventory_accounting},
+                set(self.DOC_FILES),
+            )
+            for locator in ("docs/contract.md", "docs/notes.md"):
+                synthetic = m.SubjectId(
                     repository_id=REPO,
-                    mode=m.StructuralLocateMode.TARGET_MEMBERS,
-                    bounds=_bounds(),
-                    target=m.EvidenceScope(paths=("docs",), evidence_refs=()),
-                ),
-                structural=structural,
-                evidence=evidence,
-                store=store,
-            )
-            by_loc = {entry.evidence_ref.locator: entry for entry in members.entries}
-            self.assertIsNone(by_loc["docs/contract.md"].subject)
-            pending = self._drain_doc_campaign(
-                structural, evidence, store, continuations
-            )
-            self.assertIsNotNone(pending.request.question)
-            self.assertEqual(pending.request.question.scope_root, self._doc_area())
-            assoc = store.load_target_association(REPO, pending.request.target_id)
-            self.assertIn(self._doc_area(), assoc.area_subjects)
-            self.assertFalse(
-                store.load_subjects(REPO, (self._synthetic_sid("docs/contract.md"),))
-            )
-            self.assertFalse(
-                store.load_subjects(REPO, (self._synthetic_sid("cdg-workflow-area"),))
-            )
-        finally:
-            store.close()
-
-    def test_subject_null_mapping_task_explains_null(self):
-        from span.service.interpretation import (
-            prepare_interpretation_task,
-        )
-
-        structural, evidence, store = self._doc_harness()
-        try:
-            state = structural.repository_state(REPO)
-            anchor = m.Subject(
-                subject_id=self._synthetic_sid("docs/contract.md"),
-                display_name="docs/contract.md",
-                declared_kind="docs/contract.md",
-            )
-            item = m.EvidenceInventoryItem(
-                evidence_ref=m.EvidenceRef(
-                    evidence_id=m.EvidenceId("ev-docs/contract.md"),
-                    repository_id=REPO,
-                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
-                    locator="docs/contract.md",
-                    revision_or_fingerprint=fingerprint_content(
-                        self.DOC_FILES["docs/contract.md"]
-                    ),
-                    section_or_span=None,
-                ),
-                content_fingerprint=fingerprint_content(
-                    self.DOC_FILES["docs/contract.md"]
-                ),
-            )
-            task = prepare_interpretation_task(
-                REPO,
-                anchor,
-                structural=structural,
-                evidence=evidence,
-                bounds=_bounds(),
-                state=state,
-                store=store,
-                target_scope=m.EvidenceScope(
-                    paths=("docs/contract.md",), evidence_refs=()
-                ),
-                target_inventory_items=(item,),
-                mapping_mode=True,
-            )
-            text = " ".join(
-                task.request.brief.scope_boundaries
-                + task.request.brief.submission_rules
-            )
-            self.assertIn("subject: null", text)
-            self.assertIn("service-owned PENDING CQ-01 seed", text)
-            self.assertNotIn("requires at least one target question", text)
+                    subject_kind=m.SubjectKind.OTHER,
+                    canonical_locator=locator,
+                )
+                self.assertFalse(store.load_subjects(REPO, (synthetic,)))
         finally:
             store.close()
 
@@ -2056,7 +1753,7 @@ def _fill_batch(pending, accounts):
         return accounts
     have = {a.evidence_id.value for a in accounts}
     out = list(accounts)
-    for it in pending.request.target_inventory_items:
+    for it in pending.request.task_evidence.evidence_units:
         eid = it.evidence_ref.evidence_id.value
         if eid in have:
             continue

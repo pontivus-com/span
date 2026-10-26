@@ -8,7 +8,7 @@
 `REFERENCES/IMPORTS/DEPENDS_ON/CALLS/DEFINES` in
 `UPSTREAM/DOWNSTREAM/BOTH`. Every paginated read returns one
 `StructuralResult[T]` envelope carrying repository state, explicit
-truncation, redeemable `pg:` cursors, and `coverage` plus
+truncation, redeemable version-bound cursors, and `coverage` plus
 `coverage_detail` for the structure behind the items. Coverage is a
 property of the return type, not a per-operation convention.
 Unsupported capabilities return typed `unsupported:true` with empty

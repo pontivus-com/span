@@ -19,7 +19,7 @@ from span.core import model as m
 from span.service.discovery import _coverage_for_task
 from span.shell import install
 from span.shell.context import open_repository_context
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.mcp_server import ServerConfig, provision_repository
 from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
 from span.shell.structural import structural_source_from_config
@@ -31,28 +31,19 @@ from span.shell.structural.memory import (
     fingerprint_content,
 )
 
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
 _REPO = "hard-cutover-repo"
 _FILES = {"src/a.py": "VALUE = 1\n", "README.md": "# hard cutover\n"}
 
 
-def _bounds() -> m.QueryBounds:
-    return m.QueryBounds(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
+_bounds = query_bounds
 
 
-def _sid(locator: str = "src/a.py") -> m.SubjectId:
-    return m.SubjectId(
-        repository_id=_REPO,
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator=locator,
-    )
+_sid = _partial(subject_id, repository_id=_REPO)
 
 
 def _seed(locator: str = "README.md") -> m.EvidenceRef:
@@ -103,16 +94,18 @@ def _initialize(
 
 
 class HC01SchemaVersionTest(unittest.TestCase):
-    def test_only_schema_seven_is_supported(self):
-        self.assertEqual(SCHEMA_VERSION, 8)
+    def test_only_the_current_schema_is_supported(self):
+        self.assertEqual(SCHEMA_VERSION, 9)
 
 
 class HC02FreshStoreTest(unittest.TestCase):
-    def test_fresh_store_creates_schema_seven(self):
+    def test_fresh_store_creates_the_current_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = SqliteSemanticStore(str(pathlib.Path(tmp) / "fresh.db"))
             try:
-                self.assertEqual(store.schema_version(), m.SchemaVersion(8))
+                self.assertEqual(
+                    store.schema_version(), m.SchemaVersion(SCHEMA_VERSION)
+                )
                 columns = {
                     row[1]
                     for row in store._db.execute(
@@ -125,7 +118,7 @@ class HC02FreshStoreTest(unittest.TestCase):
 
 
 class HC03CurrentStoreTest(unittest.TestCase):
-    def test_existing_schema_seven_opens_normally(self):
+    def test_existing_current_schema_opens_normally(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = str(pathlib.Path(tmp) / "current.db")
             first = SqliteSemanticStore(path)
@@ -135,7 +128,9 @@ class HC03CurrentStoreTest(unittest.TestCase):
                 first.close()
             second = SqliteSemanticStore(path)
             try:
-                self.assertEqual(second.schema_version(), m.SchemaVersion(8))
+                self.assertEqual(
+                    second.schema_version(), m.SchemaVersion(SCHEMA_VERSION)
+                )
                 self.assertEqual(
                     second.load_repository_authority_seeds(_REPO),
                     (_seed(),),
@@ -161,7 +156,7 @@ class HC04VersionedStoreRejectedTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError,
                 "unsupported Span store schema version 6; migrate this "
-                "store to schema 8 before using this Span build",
+                "store to schema 9 before using this Span build",
             ):
                 SqliteSemanticStore(str(path))
             # Rejection never mutates the store.

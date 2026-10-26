@@ -75,6 +75,7 @@ interpretation, rebuild, or refresh; no whole-repository crawl.
 | Service operations and exchange | `tests/unit/`, `tests/integration/` |
 | MCP transport and installed process | `tests/integration/test_mcp_transport.py`, `tests/integration/test_installed_mcp.py` |
 | End-to-end semantics | `tests/acceptance/` |
+| Pinned submission outcomes | `tests/characterization/` |
 | Fixtures | `tests/fixtures/`, `docs/acceptance-evidence/` |
 
 Run the suite from the repository root:

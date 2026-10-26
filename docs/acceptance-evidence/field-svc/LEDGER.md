@@ -1,4 +1,4 @@
-# field-svc live session ledger (Addendum D adoption evidence)
+# field-svc live session ledger (target-establishment adoption evidence)
 
 Production-path session of 2026-10-08 against the real `span-mcp`
 stdio server (one process per host session), a real graft-indexed

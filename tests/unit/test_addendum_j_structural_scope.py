@@ -12,11 +12,13 @@ from span.shell.structural.memory import (
     InMemorySubject,
 )
 
+from functools import partial as _partial
+from tests.support.factories import query_bounds
+
 REPO = "scope-repo"
 
 
-def _bounds(max_results=10):
-    return m.QueryBounds(max_results, 5, 8, 24, 96_000, 64, 64)
+_bounds = _partial(query_bounds, max_results=10)
 
 
 def _source():

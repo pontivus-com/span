@@ -10,13 +10,7 @@ import pathlib
 import unittest
 
 from span.core import model as m
-from span import service as ops
-from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.shell.evidence import FixtureEvidenceSource
-from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
-    InMemoryFile,
-    InMemoryStructuralSource,
     InMemorySubject,
 )
 
@@ -31,6 +25,12 @@ from integrations.hooks.hosts.claude.adapter import (
     run_automatic_hook,
 )
 
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+
+from tests.support.factories import semantic_harness
+
 REPO = "hook-svc"
 
 FILES = {
@@ -39,30 +39,15 @@ FILES = {
 }
 
 
-def _bounds():
-    return DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds
+_bounds = query_bounds
 
 
-def _harness(initialized=True):
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in FILES.items()),
-        (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),),
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(FILES))
-    store = SqliteSemanticStore(":memory:")
-    if initialized:
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-                authority_seeds=(),
-            ),
-            repository_id=REPO,
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
-    return structural, evidence, store
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    FILES,
+    subjects=(InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),),
+)
 
 
 class ContractTest(unittest.TestCase):
@@ -132,7 +117,7 @@ class ClaudeMappingTest(unittest.TestCase):
 
 class HookSafetyTest(unittest.TestCase):
     def test_uninitialized_session_start_setup_notice(self):
-        structural, evidence, store = _harness(initialized=False)
+        structural, evidence, store = _harness(initialize=False)
         try:
             notice = run_automatic_hook(
                 {"hook": "SessionStart"},

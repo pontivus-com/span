@@ -9,7 +9,10 @@ changed.
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
+
 from span.core import model as m
+from span.core import requirements as _requirements
 from span.ports.evidence import EvidenceSource
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
@@ -30,8 +33,7 @@ __all__ = [
 
 def _setup_requirement(repository_id: str) -> m.ResolutionRequirement:
     """Deterministic resolver for uninitialized repositories (I-27)."""
-    return m.ResolutionRequirement(
-        kind=m.ResolutionKind.MISSING_EVIDENCE,
+    return _requirements.missing_evidence(
         subject_or_claim=None,
         description=(
             f"repository {repository_id} is not initialized; run "
@@ -89,6 +91,55 @@ def _uninitialized_answer(
     )
 
 
+@_dataclasses.dataclass
+class _RepositoryBootstrap:
+    """What one bootstrap decides to persist, before anything is written."""
+
+    state: m.RepositoryState
+    seeds: tuple[m.EvidenceRef, ...]
+    canonical_root: str | None
+
+
+def _plan_repository_bootstrap(
+    request: SemanticInitializeRepositoryRequest,
+    *,
+    repository_id: str,
+    structural: StructuralSource,
+    store: SemanticStore,
+    canonical_root: str | None,
+) -> _RepositoryBootstrap:
+    """Decide identity, current state, and effective seeds; write nothing.
+
+    Seed semantics: omitted (``None``) preserves already configured seeds, an
+    explicit empty tuple clears them, and a non-empty tuple replaces them.
+    """
+    if not request.repository_locator:
+        raise ValueError("repository_locator must be non-empty")
+    seeds = (
+        store.load_repository_authority_seeds(repository_id)
+        if request.authority_seeds is None
+        else request.authority_seeds
+    )
+    return _RepositoryBootstrap(
+        state=structural.repository_state(repository_id),
+        seeds=seeds,
+        canonical_root=canonical_root,
+    )
+
+
+def _write_repository_bootstrap(
+    store: SemanticStore,
+    repository_id: str,
+    bootstrap: _RepositoryBootstrap,
+) -> None:
+    """Persist one decided bootstrap: state, seeds, and root provenance."""
+    store.record_repository_initialization(bootstrap.state, bootstrap.seeds)
+    if bootstrap.canonical_root is not None:
+        # One writer for provenance. A store bound to another root fails here
+        # rather than being silently adopted.
+        store.record_repository_root(repository_id, bootstrap.canonical_root)
+
+
 def initialize_repository(
     request: SemanticInitializeRepositoryRequest,
     *,
@@ -112,20 +163,16 @@ def initialize_repository(
     semantic interpretation: there is no interpretation input by
     construction.
     """
-    if not request.repository_locator:
-        raise ValueError("repository_locator must be non-empty")
     policy_bounds = bounds or DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds
-    effective_seeds = (
-        store.load_repository_authority_seeds(repository_id)
-        if request.authority_seeds is None
-        else request.authority_seeds
+    bootstrap = _plan_repository_bootstrap(
+        request,
+        repository_id=repository_id,
+        structural=structural,
+        store=store,
+        canonical_root=canonical_root,
     )
-    state = structural.repository_state(repository_id)
-    store.record_repository_initialization(state, effective_seeds)
-    if canonical_root is not None:
-        # One writer for provenance. A store bound to another root fails here
-        # rather than being silently adopted.
-        store.record_repository_root(repository_id, canonical_root)
+    _write_repository_bootstrap(store, repository_id, bootstrap)
+    state = bootstrap.state
     inventory = evidence.inventory_evidence(
         repository_id,
         m.EvidenceScope(paths=(), evidence_refs=()),
