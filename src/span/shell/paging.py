@@ -19,6 +19,8 @@ __all__ = [
     "question_digest",
     "format_versioned_token",
     "parse_versioned_token",
+    "format_scope_token",
+    "parse_scope_token",
     "paginate",
 ]
 
@@ -247,6 +249,62 @@ def parse_versioned_token(
             f"{token_version!r} != current {version!r}"
         )
     return offset
+
+
+def format_scope_token(
+    version: str,
+    frontier_offset: int,
+    claims_offset: int = 0,
+    relationships_offset: int = 0,
+    questions_offset: int = 0,
+) -> str:
+    """Encode a scoped status cursor: frontier position plus item offsets.
+
+    A scope read can stop in two different places, so its cursor names both:
+    where the subject frontier resumes, and — when one subject's lists did
+    not fit on the page — how far into those lists the page reached. The
+    item half stays zero for a page that carried whole subjects.
+    """
+    return (
+        f"{_VERSIONED_PREFIX}{version}:{frontier_offset}:"
+        f"{claims_offset}:{relationships_offset}:{questions_offset}"
+    )
+
+
+def parse_scope_token(
+    page_token: str | None,
+    *,
+    version: str | None = None,
+) -> tuple[int, int, int, int]:
+    """Decode a scoped status cursor to (frontier, claims, rels, questions).
+
+    ``None`` starts at the first page. ``version`` binds the cursor to the
+    query and membership it was issued against; a different version fails
+    closed naming both, so a changed scope restarts instead of skipping.
+    A token from another listing operation has a different field count and
+    is rejected here rather than misread.
+    """
+    if page_token is None:
+        return (0, 0, 0, 0)
+    if not page_token.startswith(_VERSIONED_PREFIX):
+        raise ValueError(f"unknown page token: {page_token}")
+    body = page_token[len(_VERSIONED_PREFIX) :]
+    fields = body.split(":")
+    if len(fields) != 5:
+        raise ValueError(f"unknown page token: {page_token}")
+    token_version, *raw_offsets = fields
+    try:
+        offsets = tuple(int(part) for part in raw_offsets)
+    except ValueError:
+        raise ValueError(f"unknown page token: {page_token}") from None
+    if not token_version or any(offset < 0 for offset in offsets):
+        raise ValueError(f"unknown page token: {page_token}")
+    if version is not None and token_version != version:
+        raise ValueError(
+            f"stale listing continuation: token version "
+            f"{token_version!r} != current {version!r}"
+        )
+    return (offsets[0], offsets[1], offsets[2], offsets[3])
 
 
 def paginate(

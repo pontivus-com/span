@@ -33,6 +33,7 @@ __all__ = [
     "_select_answer_items",
     "_freshness_items_for",
     "_next_service_token",
+    "_next_service_offsets",
     "_query_digest",
     "_bounds_key",
     "_validate_service_token",
@@ -112,7 +113,7 @@ def _validate_service_token(
         )
 
 
-def _next_service_token(
+def _next_service_offsets(
     page_token: str | None,
     kept_claims: tuple[m.SemanticClaim, ...],
     kept_rels: tuple[m.SemanticRelationship, ...],
@@ -122,15 +123,13 @@ def _next_service_token(
     rels_token: str | None,
     questions_skip: int = 0,
     questions_remaining: int = 0,
-    query_digest: str = "default",
     expected_digest: str | None = None,
-) -> str | None:
-    """Answer-level next token from shown counts (plan I-39; I S4 pgq).
+) -> tuple[int, int, int] | None:
+    """Offsets of the next item page, or ``None`` when every list is done.
 
-    Binds pages to the selected question via query_digest. Rejects old
-    pg: service cursors upstream; emits pgq only. Each side advances
-    past shown items only. A side is exhausted when its load cursor is
-    done and everything loaded was shown.
+    Each side advances past shown items only, so every item is reachable
+    exactly once. A side is exhausted when its load cursor is done and
+    everything loaded was shown.
     """
     # Decode incoming offsets via pgq-aware parser (old pg: rejected).
     try:
@@ -159,12 +158,47 @@ def _next_service_token(
     questions_exhausted = questions_remaining <= 0
     if claims_exhausted and rels_exhausted and questions_exhausted:
         return None
-    return _paging.format_question_token(
-        query_digest,
+    return (
         claims_skip + len(kept_claims),
         rels_skip + len(kept_rels),
         (qskip + questions_skip) if not questions_exhausted else qskip,
     )
+
+
+def _next_service_token(
+    page_token: str | None,
+    kept_claims: tuple[m.SemanticClaim, ...],
+    kept_rels: tuple[m.SemanticRelationship, ...],
+    loaded_claims: tuple[m.SemanticClaim, ...],
+    loaded_rels: tuple[m.SemanticRelationship, ...],
+    claims_token: str | None,
+    rels_token: str | None,
+    questions_skip: int = 0,
+    questions_remaining: int = 0,
+    query_digest: str = "default",
+    expected_digest: str | None = None,
+) -> str | None:
+    """Answer-level next token from shown counts (plan I-39; I S4 pgq).
+
+    Binds pages to the selected question via query_digest. Rejects old
+    pg: service cursors upstream; emits pgq only. Each side advances
+    past shown items only.
+    """
+    offsets = _next_service_offsets(
+        page_token,
+        kept_claims,
+        kept_rels,
+        loaded_claims,
+        loaded_rels,
+        claims_token,
+        rels_token,
+        questions_skip=questions_skip,
+        questions_remaining=questions_remaining,
+        expected_digest=expected_digest,
+    )
+    if offsets is None:
+        return None
+    return _paging.format_question_token(query_digest, *offsets)
 
 
 @_dataclasses.dataclass(frozen=True)

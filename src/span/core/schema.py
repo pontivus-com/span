@@ -381,7 +381,11 @@ def _inject(hint: object, value: object, path: str) -> object:
         non_none = [a for a in args if a is not type(None)]
         if len(dms) >= 2:
             if not isinstance(value, dict) or not isinstance(value.get("$type"), str):
-                raise ValueError(f"missing $type discriminator at {path or 'root'}")
+                accepted = ", ".join(member.__name__ for member in dms)
+                raise ValueError(
+                    f"missing $type discriminator at {path or 'root'} "
+                    f"(accepted: {accepted})"
+                )
             tag = value["$type"]
             member = next((mm for mm in dms if mm.__name__ == tag), None)
             if member is None:
@@ -420,7 +424,8 @@ def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) ->
     faults: list[str] = []
     if "$type" in value and not keep_tag:
         faults.append(
-            "unexpected $type at unambiguous position: " f"{path or cls.__name__}"
+            f"unexpected $type at unambiguous position: {path or cls.__name__}; "
+            f"this position accepts {cls.__name__} without a $type"
         )
     # The tagging pass is the first ingress pass, so it also reports the
     # field-shape faults the strict decoder would raise later; otherwise

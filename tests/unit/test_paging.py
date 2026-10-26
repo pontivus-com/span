@@ -93,5 +93,56 @@ class ServiceTokenTest(unittest.TestCase):
         self.assertIsNone(request.proposed_change)
 
 
+class ScopeTokenTest(unittest.TestCase):
+    """A scope page can stop at a subject and inside that subject's lists.
+
+    The cursor carries both positions, so a page that cut its own items is
+    resumable instead of advancing the frontier past them.
+    """
+
+    def test_none_starts_at_the_first_subject(self):
+        self.assertEqual(paging.parse_scope_token(None), (0, 0, 0, 0))
+
+    def test_round_trip(self):
+        token = paging.format_scope_token("ab" * 16, 3, 4, 5, 6)
+        self.assertTrue(token.startswith("pgv:"))
+        self.assertEqual(paging.parse_scope_token(token), (3, 4, 5, 6))
+
+    def test_version_binds_the_cursor(self):
+        token = paging.format_scope_token("ab" * 16, 1)
+        self.assertEqual(
+            paging.parse_scope_token(token, version="ab" * 16), (1, 0, 0, 0)
+        )
+        with self.assertRaises(ValueError) as ctx:
+            paging.parse_scope_token(token, version="cd" * 16)
+        self.assertIn("stale listing continuation", str(ctx.exception))
+        self.assertIn("cd" * 16, str(ctx.exception))
+
+    def test_a_structural_cursor_is_not_a_scope_cursor(self):
+        # `locate`/`neighbors` use the same prefix with one offset. The two
+        # grammars are never interchanged.
+        structural = paging.format_versioned_token("ab" * 16, 2)
+        with self.assertRaises(ValueError):
+            paging.parse_scope_token(structural)
+        with self.assertRaises(ValueError):
+            paging.parse_versioned_token(
+                paging.format_scope_token("ab" * 16, 2), version="ab" * 16
+            )
+
+    def test_malformed_fails_closed(self):
+        for bad in (
+            "bogus",
+            "pg:1",
+            "pgv:",
+            "pgv:v",
+            "pgv:v:1:2:3",
+            "pgv:v:1:2:3:4:5",
+            "pgv:v:-1:0:0:0",
+            "pgv:v:1:x:0:0",
+        ):
+            with self.assertRaises(ValueError, msg=bad):
+                paging.parse_scope_token(bad)
+
+
 if __name__ == "__main__":
     unittest.main()
