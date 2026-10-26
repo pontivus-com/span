@@ -61,18 +61,34 @@ re-run with the populated-store prerequisite are still owed.
 
 ### Verification
 
-- `938 passed, 1 skipped`; ruff, black, and the typing ratchet (84) clean.
-- New `tests/unit/test_schema_contract.py`: multi-tag guidance, bounds maxima,
-  the path rule, honest refresh truncation, and redundant-tag handling. It fails
-  on 0.8.0 and passes here.
+- `939 passed, 1 skipped`; ruff, black, and the typing ratchet (84) clean.
+- New `tests/unit/test_schema_contract.py` pins the multi-tag guidance, the
+  bounds maxima, the path rule, honest refresh truncation, and redundant-tag
+  handling. These are the contracts 0.8.0 did not meet; the path assertion was
+  observed failing before the fix.
 - The code-budget gate holds: zero duplicate source bodies, zero mutable module
-tables, zero functions over 150 lines.
+  tables, zero functions over 150 lines.
 
 ### Breaking
 
 - `refresh` no longer accepts `page_token` (it was ignored).
 - A redundant `$type` at an unambiguous position is accepted instead of
   rejected. This is additive for callers; it removes one error class.
+
+### Retained
+
+- **Host-authored `question_selection` is retained.** Removing it deletes the
+  cursor-binding acceptance phase (EC-13), which proves a page token issued for
+  one question is rejected for another. The zero-assertion result is a brief and
+  behaviour question, not a reason to remove a tested capability.
+
+### Not claimed
+
+- The economics: T2 and T4 were recorded against 0.8.0 and are not re-measured
+  here. T3/T7 were void, not failed.
+- That the brief wording changes agent behaviour; the probe is still owed.
+- Establishment cost (B3) and the second establishment entry `initialize_target`
+  (B4) are untouched; they are design changes, not defects.
 
 ## 0.8.0 — 2026-10-26
 
