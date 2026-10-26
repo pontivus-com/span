@@ -6,7 +6,7 @@
   "concrete_carriers": 110,
   "core_layer_violations": 0,
   "duplicate_helper_bodies": 0,
-  "duplicate_source_groups": 2,
+  "duplicate_source_groups": 0,
   "evidence_select_implementations": 1,
   "functions_over_150": 0,
   "getattr": 15,
@@ -25,7 +25,7 @@
   "test_doubles_in_src": 0,
   "test_files": 73,
   "test_helper_definitions": 13,
-  "test_lines": 39215,
+  "test_lines": 39191,
   "type_ignore": 44,
   "untyped_defs": 84
 }

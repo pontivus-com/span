@@ -45,9 +45,16 @@ re-run with the populated-store prerequisite are still owed.
 
 ### Internal
 
-- Removed the unused `declared_complete` parameter path
-  (`suspend` → `SuspendedOperation` → `materialize`). The field remains on the
-  coverage carrier; it is derived at every construction site.
+- Removed `declared_complete` entirely: the field, its two guards, the
+  parameter path (`suspend` → `SuspendedOperation` → `materialize`), and the
+  construction arguments. Completion is the disposition; the derive stage's
+  material check is the rule that actually rejects an empty `ANSWERED`.
+- The schema shaper is one ordered entry point (`_shape_tool_schema`) rather
+  than four steps at one call site, so a step cannot be skipped.
+- The duplicate-body gate now treats a body that is a single call as a
+  delegation to the rule's owner, not as a second copy. The two remaining
+  reports were one-line `__post_init__` validators; the count is now zero by
+  definition, and multi-statement duplication is still caught.
 - `scripts/build_identity.py` excludes its own output from the digest, so the
   identity is idempotent and a checkout install reports the revision it built.
 - A retired `pgq:` cursor grammar is no longer documented as live.
@@ -58,7 +65,8 @@ re-run with the populated-store prerequisite are still owed.
 - New `tests/unit/test_schema_contract.py`: multi-tag guidance, bounds maxima,
   the path rule, honest refresh truncation, and redundant-tag handling. It fails
   on 0.8.0 and passes here.
-- The code-budget gate holds; the only baseline movement is the new test file.
+- The code-budget gate holds: zero duplicate source bodies, zero mutable module
+tables, zero functions over 150 lines.
 
 ### Breaking
 

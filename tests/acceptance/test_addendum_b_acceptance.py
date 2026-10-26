@@ -213,7 +213,6 @@ def _question_coverage(
         evidence_scope=m.EvidenceScope(
             paths=(), evidence_refs=tuple(_ref(p, files=files) for p in evidence_paths)
         ),
-        declared_complete=(disposition is m.SemanticQuestionDisposition.ANSWERED),
         question=scope,
         disposition=disposition,
         result_refs=tuple(refs),

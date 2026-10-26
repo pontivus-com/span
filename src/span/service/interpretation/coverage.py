@@ -172,7 +172,6 @@ def _coverage(
         subjects=subjects,
         question_slice=question.question_slice,
         evidence_scope=evidence_scope,
-        declared_complete=(disposition is m.SemanticQuestionDisposition.ANSWERED),
         question=question,
         disposition=disposition,
         result_refs=result_refs,

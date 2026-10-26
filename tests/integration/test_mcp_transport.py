@@ -576,7 +576,6 @@ class DispatchTest(unittest.TestCase):
                 subjects=(original_scope.subject,),
                 question_slice=original_scope.question_slice,
                 evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-                declared_complete=True,
                 question=original_scope,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(),
@@ -622,7 +621,6 @@ class DispatchTest(unittest.TestCase):
                 subjects=(wrong.subject,),
                 question_slice=wrong.question_slice,
                 evidence_scope=m.EvidenceScope(paths=(), evidence_refs=()),
-                declared_complete=True,
                 question=wrong,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(),
@@ -1437,7 +1435,6 @@ class ContextualPathSmokeTest(unittest.TestCase):
             coverage = m.InterpretationCoverage(
                 subjects=(area,),
                 question_slice=area.canonical_locator,
-                declared_complete=True,
                 question=question,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(m.ClaimRef(id=claim.claim_id),),

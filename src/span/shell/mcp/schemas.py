@@ -317,6 +317,20 @@ def _with_question_guidance(generated: dict[str, object]) -> None:
     generated["$defs"] = definitions
 
 
+def _shape_tool_schema(tool: str, generated: dict[str, object]) -> None:
+    """One entry point for every post-projection rule, in dependency order.
+
+    The projection states what the carrier states; these steps add what only
+    the boundary knows (transport fields, the enforced ceiling, claim value
+    prose, question guidance). Keeping one ordered entry point means a step
+    cannot be skipped at one call site.
+    """
+    _with_transport_fields(tool, generated)
+    _with_bound_maxima(generated)
+    _with_claim_value_unions(generated)
+    _with_question_guidance(generated)
+
+
 def _generated_tool_schemas() -> dict[str, dict[str, object]]:
     """Generate input schemas from canonical dataclasses ([design note I](docs/design-references.md#i) S3).
 
@@ -334,10 +348,7 @@ def _generated_tool_schemas() -> dict[str, dict[str, object]]:
         # generation failure is a programming defect and must break the build,
         # never serve a degraded schema.
         generated = _schema.schema_for_request(cls, description=TOOL_DESCRIPTIONS[tool])
-        _with_transport_fields(tool, generated)
-        _with_bound_maxima(generated)
-        _with_claim_value_unions(generated)
-        _with_question_guidance(generated)
+        _shape_tool_schema(tool, generated)
         out[tool] = generated
     return out
 
