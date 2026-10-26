@@ -396,7 +396,6 @@ class InterpretationCoverage:
     subjects: tuple[SubjectId, ...] = ()
     question_slice: str = ""
     evidence_scope: EvidenceScope = _field(default_factory=EvidenceScope)
-    declared_complete: bool = False
     question: SemanticQuestionScope | None = None
     disposition: SemanticQuestionDisposition = SemanticQuestionDisposition.PENDING
     result_refs: tuple[ClaimRef | RelationshipRef, ...] = ()
@@ -405,14 +404,6 @@ class InterpretationCoverage:
     question_evidence: tuple[QuestionEvidenceObservation, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.disposition is SemanticQuestionDisposition.ANSWERED:
-            # [design note C](docs/design-references.md#c) C-05: an explicit ANSWERED submission may carry
-            # empty result_refs as completion intent; the service derives
-            # refs from validated candidates before persisting, and the
-            # store rejects ANSWERED rows with empty refs. Only persisted
-            # ANSWERED rows with derived refs count as examined.
-            if not self.declared_complete:
-                raise ValueError("ANSWERED coverage requires declared_complete")
         if self.disposition is SemanticQuestionDisposition.OPEN:
             if not self.resolution_requirements:
                 raise ValueError("OPEN coverage requires resolution_requirements")

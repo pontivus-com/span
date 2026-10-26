@@ -99,6 +99,12 @@ def _body_key(node: ast.AST) -> str | None:
         for child in body
     ):
         return None
+    if len(body) == 1 and isinstance(body[0], ast.Expr):
+        call = body[0].value
+        if isinstance(call, ast.Call):
+            # A single delegation to another function. The logic lives in the
+            # callee; the call site is not a second copy of it.
+            return None
     payload = "\n".join(
         ast.dump(child, annotate_fields=False, include_attributes=False)
         for child in body

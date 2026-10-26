@@ -218,7 +218,6 @@ class ExplicitDispositionTest(unittest.TestCase):
                                 evidence_scope=m.EvidenceScope(
                                     paths=(), evidence_refs=()
                                 ),
-                                declared_complete=True,
                                 question=m.SemanticQuestionScope(
                                     scope_root=root,
                                     subject=root,

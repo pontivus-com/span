@@ -131,7 +131,6 @@ class SemanticRefreshRequest:
     target: m.SubjectSelector | m.EvidenceScope
     bounds: m.QueryBounds | None = None
     stale_only: bool = True
-    page_token: str | None = None
 
 
 @_dataclass(frozen=True)

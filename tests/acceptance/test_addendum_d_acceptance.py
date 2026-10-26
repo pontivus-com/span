@@ -157,7 +157,6 @@ def _question_coverage(
             paths=(),
             evidence_refs=tuple(_ref(p) for p in evidence_paths),
         ),
-        declared_complete=(disposition is m.SemanticQuestionDisposition.ANSWERED),
         question=scope,
         disposition=disposition,
         result_refs=tuple(refs),

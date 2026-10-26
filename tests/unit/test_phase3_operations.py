@@ -1536,7 +1536,6 @@ class ContextualTraceTest(unittest.TestCase):
             return m.InterpretationCoverage(
                 subjects=(subj,),
                 question_slice=qslice,
-                declared_complete=True,
                 question=q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(ref,),
@@ -1709,7 +1708,6 @@ class ContextualTraceTest(unittest.TestCase):
             leaf_cov = m.InterpretationCoverage(
                 subjects=(canon,),
                 question_slice=leaf_slice,
-                declared_complete=True,
                 question=leaf_q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(m.RelationshipRef(id=mem.relationship_id),),

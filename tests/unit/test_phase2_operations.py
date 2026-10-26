@@ -1862,7 +1862,6 @@ class ContextualResolutionTest(unittest.TestCase):
         return m.InterpretationCoverage(
             subjects=(subject,),
             question_slice=qslice,
-            declared_complete=True,
             question=q,
             disposition=m.SemanticQuestionDisposition.ANSWERED,
             result_refs=tuple(refs),

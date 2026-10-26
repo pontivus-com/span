@@ -168,7 +168,6 @@ class SharedRetirementTest(unittest.TestCase):
                         m.InterpretationCoverage(
                             subjects=(sid,),
                             question_slice="q1",
-                            declared_complete=True,
                             question=q1,
                             disposition=m.SemanticQuestionDisposition.ANSWERED,
                             result_refs=(m.ClaimRef(id=claim.claim_id),),
@@ -177,7 +176,6 @@ class SharedRetirementTest(unittest.TestCase):
                         m.InterpretationCoverage(
                             subjects=(sid,),
                             question_slice="q2",
-                            declared_complete=True,
                             question=q2,
                             disposition=m.SemanticQuestionDisposition.ANSWERED,
                             result_refs=(m.ClaimRef(id=claim.claim_id),),
@@ -293,7 +291,6 @@ class EffectiveDispositionTest(unittest.TestCase):
             cov = m.InterpretationCoverage(
                 subjects=(sid,),
                 question_slice="q",
-                declared_complete=True,
                 question=q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(m.ClaimRef(id=claim.claim_id),),

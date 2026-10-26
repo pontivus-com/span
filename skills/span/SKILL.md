@@ -161,8 +161,11 @@ as a model unit. There is no mapping unit and no mapping payload.
 The result components have different jobs:
 
 - `question_decision` answers the bound semantic question. `ANSWERED` requires
-  at least one claim or relationship; `NOT_APPLICABLE` with a basis is the
-  terminal form for "no assertion is warranted".
+  at least one claim or relationship; a claim supported by cited file evidence
+  is a complete assertion, and missing governing authority is recorded as a
+  resolution requirement rather than a reason to withhold it.
+  `NOT_APPLICABLE` with a basis is the terminal form for "no assertion is
+  warranted".
 - `proposed_questions` admits or updates genuinely additional semantic
   questions; Span creates the first-admission CQ-01 seed itself.
 - `proposed_target_questions` associates an identical already-persisted

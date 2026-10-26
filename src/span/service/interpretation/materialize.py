@@ -31,7 +31,6 @@ def _materialize_unit(
     state: m.RepositoryState,
     extra_known_subjects: tuple[m.SubjectId, ...] = (),
     coverage: m.CoverageDependency,
-    declared_complete: bool,
     retire_scope: tuple[m.SubjectId, ...],
     target_id: m.TargetId | None = None,
     target_association: m.TargetAssociation | None = None,

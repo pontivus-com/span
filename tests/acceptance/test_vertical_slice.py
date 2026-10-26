@@ -656,7 +656,6 @@ class FreshSessionPathReuseTest(unittest.TestCase):
             explain_cov = m.InterpretationCoverage(
                 subjects=(canon,),
                 question_slice=canon.canonical_locator,
-                declared_complete=True,
                 question=explain_q,
                 disposition=m.SemanticQuestionDisposition.ANSWERED,
                 result_refs=(m.ClaimRef(id=claim.claim_id),),
@@ -680,7 +679,6 @@ class FreshSessionPathReuseTest(unittest.TestCase):
                 return m.InterpretationCoverage(
                     subjects=(subj,),
                     question_slice=trace_slice,
-                    declared_complete=True,
                     question=q,
                     disposition=m.SemanticQuestionDisposition.ANSWERED,
                     result_refs=(ref,),

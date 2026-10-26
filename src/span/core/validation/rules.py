@@ -266,12 +266,6 @@ def validate_question_coverage(
         return f"{owner}: question subject is not run-bound"
     if question.scope_root not in ctx.known_subject_ids:
         return f"{owner}: question scope_root is not run-bound"
-    if coverage.disposition is m.SemanticQuestionDisposition.ANSWERED:
-        # [design note C](docs/design-references.md#c) C-05: explicit ANSWERED is completion intent; result
-        # refs are derived by the service from validated candidates before
-        # persisting (empty refs here do not count as examined output).
-        if not coverage.declared_complete:
-            return f"{owner}: ANSWERED requires declared_complete"
     if coverage.disposition is m.SemanticQuestionDisposition.OPEN:
         if not coverage.resolution_requirements:
             return f"{owner}: OPEN requires resolution requirements"

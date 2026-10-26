@@ -96,7 +96,6 @@ def _finalize_coverage(
         submitted,
         result_refs=result_refs,
         question_evidence=question_evidence,
-        declared_complete=(disposition is m.SemanticQuestionDisposition.ANSWERED),
     )
 
 

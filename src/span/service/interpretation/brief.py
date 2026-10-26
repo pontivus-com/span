@@ -76,6 +76,12 @@ def _build_task_brief(
     submission_example = _submission_template(bound_question)
     submission_rules = m.TASK_BRIEF_SUBMISSION_RULES + (
         (
+            "A disposition is your decision: a claim supported by cited file "
+            "evidence is a complete assertion. Missing governing authority is "
+            "recorded as a resolution requirement on the claim, not a reason "
+            "to withhold the assertion or leave the question OPEN."
+        ),
+        (
             submission_example
             if submission_example
             else "Submit one strict canonical result with an explicit "

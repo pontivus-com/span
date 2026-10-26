@@ -235,7 +235,7 @@ class S3SchemaTest(unittest.TestCase):
                 {
                     "repository_id": "r",
                     "target": {
-                        "$type": "EvidenceScope",
+                        "$type": "SubjectSelector",
                         "paths": [],
                         "evidence_refs": [],
                         "bogus": 1,
@@ -840,7 +840,6 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             subjects=(comp,),
                             question_slice=eff,
                             evidence_scope=m.EvidenceScope(),
-                            declared_complete=False,
                             question=m.SemanticQuestionScope(
                                 scope_root=comp,
                                 subject=comp,
@@ -984,7 +983,6 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             subjects=(_sid(),),
                             question_slice=trace_eff,
                             evidence_scope=m.EvidenceScope(),
-                            declared_complete=False,
                             question=m.SemanticQuestionScope(
                                 scope_root=_sid(),
                                 subject=_sid(),
@@ -1002,7 +1000,6 @@ class S4QuestionSelectionTest(unittest.TestCase):
                             subjects=(_sid(),),
                             question_slice=impact_eff,
                             evidence_scope=m.EvidenceScope(),
-                            declared_complete=False,
                             question=m.SemanticQuestionScope(
                                 scope_root=_sid(),
                                 subject=_sid(),
@@ -1274,7 +1271,6 @@ class S5ExecutionPathTest(unittest.TestCase):
             subjects=(sid,),
             question_slice=f"{stage} execution",
             evidence_scope=m.EvidenceScope(),
-            declared_complete=answered,
             question=m.SemanticQuestionScope(
                 scope_root=sid,
                 subject=sid,
@@ -1411,7 +1407,6 @@ class S5ExecutionPathTest(unittest.TestCase):
                 subjects=(by_stage[name],),
                 question_slice=_trace_eff,
                 evidence_scope=m.EvidenceScope(),
-                declared_complete=True,
                 question=m.SemanticQuestionScope(
                     scope_root=by_stage["audit"],
                     subject=by_stage[name],
@@ -2536,7 +2531,6 @@ class S8ExplanationTest(unittest.TestCase):
                             subjects=(sid,),
                             question_slice="ownership gap",
                             evidence_scope=m.EvidenceScope(),
-                            declared_complete=False,
                             question=scope,
                             disposition=m.SemanticQuestionDisposition.OPEN,
                             result_refs=(),
@@ -2659,7 +2653,6 @@ class S8ExplanationTest(unittest.TestCase):
                     subjects=(_sid(),),
                     question_slice=scope.question_slice,
                     evidence_scope=m.EvidenceScope(),
-                    declared_complete=True,
                     question=scope,
                     disposition=m.SemanticQuestionDisposition.ANSWERED,
                     result_refs=refs,
@@ -2681,7 +2674,6 @@ class S8ExplanationTest(unittest.TestCase):
                             subjects=(_sid(),),
                             question_slice="dependent question",
                             evidence_scope=m.EvidenceScope(),
-                            declared_complete=True,
                             question=scope_b,
                             disposition=(m.SemanticQuestionDisposition.ANSWERED),
                             result_refs=(
