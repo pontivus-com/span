@@ -142,7 +142,6 @@ class AgentsSnippetTest(unittest.TestCase):
             self.assertIn(required, text)
         for forbidden in (
             "reissue_interpretation",
-            "pgq:",
             "pgv:",
             "pgn:",
             "cont-*",
@@ -153,7 +152,7 @@ class AgentsSnippetTest(unittest.TestCase):
 
     def test_implementation_ignores_snippet(self):
         for path in (REPO_ROOT / "src").rglob("*.py"):
-            if path.name == "install.py":
+            if path.name == "install.py" or "shell/install" in path.as_posix():
                 continue
             content = path.read_text(encoding="utf-8")
             self.assertNotIn("agents-snippet", content, path)

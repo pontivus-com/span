@@ -20,12 +20,15 @@ import unittest
 from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span import service as ops
-from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.agent_fixture import FixtureAgent, FixtureCandidates
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural import structural_source_from_config
+
+from tests.support.factories import query_bounds
+
+from tests.support.factories import evidence_ref
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -49,8 +52,7 @@ WORK_DIR = E2E_ROOT / "order-svc"
 DB_PATH = E2E_ROOT / "span-order-svc.db"
 
 
-def _bounds():
-    return DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
+_bounds = query_bounds
 
 
 def _files(work):
@@ -62,18 +64,6 @@ def _files(work):
         and ".git" not in p.parts
         and not p.name.startswith(".")
     }
-
-
-def _ref(repo_id, path, files):
-    from span.shell.structural.memory import fingerprint_content
-
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=repo_id,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(files[path]),
-    )
 
 
 class Phase2SliceTest(unittest.TestCase):
@@ -196,8 +186,10 @@ class Phase2SliceTest(unittest.TestCase):
                 ops.SemanticInitializeRepositoryRequest(
                     repository_locator=str(WORK_DIR),
                     authority_seeds=(
-                        _ref(repo_id, "README.md", files),
-                        _ref(repo_id, "OWNERSHIP.md", files),
+                        evidence_ref("README.md", repository_id=repo_id, files=files),
+                        evidence_ref(
+                            "OWNERSHIP.md", repository_id=repo_id, files=files
+                        ),
                     ),
                 ),
                 repository_id=repo_id,
@@ -246,10 +238,18 @@ class Phase2SliceTest(unittest.TestCase):
                                 kind=m.ClaimKind.PURPOSE,
                                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                                 value=m.PurposeValue("takes orders", ()),
-                                evidence=(_ref(repo_id, "README.md", files),),
+                                evidence=(
+                                    evidence_ref(
+                                        "README.md", repository_id=repo_id, files=files
+                                    ),
+                                ),
                                 candidate_authority=m.CandidateAuthority(
                                     binding=m.AuthorityBinding(
-                                        evidence_ref=_ref(repo_id, "README.md", files),
+                                        evidence_ref=evidence_ref(
+                                            "README.md",
+                                            repository_id=repo_id,
+                                            files=files,
+                                        ),
                                         authority_kind=(
                                             m.AuthorityKind.REPOSITORY_RULE
                                         ),
@@ -278,11 +278,19 @@ class Phase2SliceTest(unittest.TestCase):
                                     m.OwnershipRole.OWNER,
                                     m.OwnershipExclusivity.EXCLUSIVE,
                                 ),
-                                evidence=(_ref(repo_id, "OWNERSHIP.md", files),),
+                                evidence=(
+                                    evidence_ref(
+                                        "OWNERSHIP.md",
+                                        repository_id=repo_id,
+                                        files=files,
+                                    ),
+                                ),
                                 candidate_authority=m.CandidateAuthority(
                                     binding=m.AuthorityBinding(
-                                        evidence_ref=_ref(
-                                            repo_id, "OWNERSHIP.md", files
+                                        evidence_ref=evidence_ref(
+                                            "OWNERSHIP.md",
+                                            repository_id=repo_id,
+                                            files=files,
                                         ),
                                         authority_kind=(
                                             m.AuthorityKind.REPOSITORY_RULE
@@ -306,8 +314,8 @@ class Phase2SliceTest(unittest.TestCase):
                 }
             )
             seeds = (
-                _ref(repo_id, "README.md", files),
-                _ref(repo_id, "OWNERSHIP.md", files),
+                evidence_ref("README.md", repository_id=repo_id, files=files),
+                evidence_ref("OWNERSHIP.md", repository_id=repo_id, files=files),
             )
             suspended = ops.explain(
                 ops.SemanticExplainRequest(
@@ -323,7 +331,7 @@ class Phase2SliceTest(unittest.TestCase):
             )
             # Span suspends (no stored semantics); the test agent performs.
             self.assertIsInstance(suspended, PendingInterpretation)
-            self.assertTrue(suspended.request.evidence_units)
+            self.assertTrue(suspended.request.task_evidence.evidence_units)
             answer = ops.submit_interpretation(
                 suspended.continuation,
                 agent.perform(suspended.request),

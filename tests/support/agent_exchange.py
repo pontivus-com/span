@@ -12,16 +12,18 @@ from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span import service as ops
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
-from span.shell.sqlite_store import SqliteSemanticStore
+from tests.support.agent_fixture import FixtureCandidates
 from span.shell.structural.memory import (
     InMemoryEdge,
-    InMemoryFile,
-    InMemoryStructuralSource,
     InMemorySubject,
-    fingerprint_content,
 )
+
+from tests.support.factories import query_bounds, semantic_harness
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
 
 REPO = "flow-svc"
 
@@ -54,22 +56,10 @@ EDGES = (
 )
 
 
-def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
+_sid = _partial(subject_id, repository_id=REPO)
 
 
-def _ref(path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=(
-            m.EvidenceSourceKind.DOCUMENTATION
-            if path.endswith((".md", ".yaml"))
-            else m.EvidenceSourceKind.SOURCE_CODE
-        ),
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES[path]),
-    )
+_ref = _partial(evidence_ref, repository_id=REPO, files=FILES)
 
 
 _QUOTES = {
@@ -300,41 +290,15 @@ def _candidates():
     }
 
 
-def _harness(files=None):
-    files = FILES if files is None else files
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in files.items()),
-        SUBJECTS,
-        EDGES,
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(files))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store, FixtureAgent(_candidates())
-
-
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    FILES,
+    subjects=SUBJECTS,
+    edges=EDGES,
+    with_agent=_candidates(),
+)
 
 
 def _seeds():

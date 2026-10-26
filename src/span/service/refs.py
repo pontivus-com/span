@@ -8,6 +8,7 @@ path changed.
 from __future__ import annotations
 
 from span.core import model as m
+from span.core.refs import ref_value
 
 __all__ = [
     "_claim_ref",
@@ -34,4 +35,4 @@ def _item_ref(
 
 
 def _ref_value(ref: m.ClaimRef | m.RelationshipRef) -> str:
-    return ref.id.value
+    return ref_value(ref)

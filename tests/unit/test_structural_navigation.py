@@ -13,10 +13,11 @@ from span.core import model as m
 from span import service as ops
 from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
-from span.shell import paging as _paging
+from span.core import paging as _paging
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
+from span.shell.structural.support import check_repository
 from span.shell.structural.memory import (
     InMemoryEdge,
     InMemoryFile,
@@ -24,6 +25,11 @@ from span.shell.structural.memory import (
     InMemorySubject,
     fingerprint_content,
 )
+
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
 
 REPO = "struct-nav-svc"
 
@@ -34,18 +40,7 @@ FILES = {
 }
 
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
 
 
 def _memory_harness(files=None, subjects=None, edges=()):
@@ -73,8 +68,7 @@ def _memory_harness(files=None, subjects=None, edges=()):
     return structural, evidence, store
 
 
-def _sid(loc, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=loc)
+_sid = _partial(subject_id, repository_id=REPO)
 
 
 class CarrierInvariantTest(unittest.TestCase):
@@ -598,7 +592,7 @@ class NeighborsServiceTest(unittest.TestCase):
                 bounds,
                 page_token=None,
             ):
-                self._check_repository(repository_id)
+                check_repository(repository_id, self._repository_id)
                 return m.StructuralResult(
                     items=(),
                     repository_state=self.repository_state(repository_id),

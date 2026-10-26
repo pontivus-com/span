@@ -18,19 +18,25 @@ from span.ports.interpretation import (
 )
 from span import service as ops
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
-from span.shell.sqlite_store import SqliteSemanticStore
+from tests.support.agent_fixture import FixtureAgent, FixtureCandidates
 from span.shell.structural.memory import (
-    InMemoryFile,
-    InMemoryStructuralSource,
     InMemorySubject,
-    fingerprint_content,
 )
 from integrations.hosts.exchange_driver import (
     DriveResult,
     drive,
 )
+
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import semantic_harness
+
+from tests.support.factories import candidate_claim
 
 REPO = "repo-1"
 
@@ -42,91 +48,22 @@ FILES = {
 SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
 
 
-def _sid():
-    return m.SubjectId(
-        repository_id=REPO,
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator="src/main.py",
-    )
+_sid = _partial(subject_id, "src/main.py", repository_id=REPO)
 
 
-def _ref(path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES[path]),
-    )
+_ref = _partial(evidence_ref, repository_id=REPO, files=FILES)
 
 
-def _candidate():
-    return m.CandidateSemanticClaim(
-        candidate_key="purpose-main",
-        subject=_sid(),
-        kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-        value=m.PurposeValue("does things", ()),
-        evidence=(_ref("README.md"), _ref("src/main.py")),
-        candidate_authority=m.CandidateAuthority(
-            binding=m.AuthorityBinding(
-                evidence_ref=_ref("README.md"),
-                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
-                status=m.AuthorityStatus.ACCEPTED,
-            ),
-            support=m.AuthoritySupport(
-                quoted_span="Does things",
-                status_section="README.md",
-                applicability_section=None,
-            ),
-        ),
-        basis=m.SemanticBasis(
-            m.DerivationKind.SEMANTIC_INTERPRETATION,
-            "README states the service purpose",
-        ),
-    )
+_candidate = _partial(candidate_claim, files=FILES, subject=_sid())
 
 
-def _agent(complete_questions=False):
-    return FixtureAgent(
-        {"src/main.py": FixtureCandidates((_candidate(),), ())},
-        complete_questions=complete_questions,
-    )
+_agent = _partial(FixtureAgent, {"src/main.py": FixtureCandidates((_candidate(),), ())})
 
 
-def _harness():
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in FILES.items()),
-        SUBJECTS,
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(FILES))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+_harness = _partial(semantic_harness, REPO, FILES, subjects=SUBJECTS)
 
 
 def _explain_request():

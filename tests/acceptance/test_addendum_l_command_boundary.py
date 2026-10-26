@@ -9,22 +9,28 @@ persistence ownership split does not change semantic outcomes.
 import unittest
 
 from span.core import model as m
-from span.core import schema as _schema
 from span.core.validation import InterpretationUnitRejected
 from span.ports.interpretation import PendingInterpretation
 from span import service as ops
 from span.service.questions import effective_question_view
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.mcp import TOOL_SCHEMAS, decode_request
-from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
-    InMemoryFile,
-    InMemoryStructuralSource,
     InMemorySubject,
     fingerprint_content,
 )
+
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import semantic_harness
 
 REPO = "cmd-boundary-svc"
 
@@ -35,34 +41,13 @@ FILES = {
 }
 
 
-def _bounds():
-    return m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64)
+_bounds = _partial(query_bounds, max_depth=2)
 
 
-def _sid(locator):
-    return m.SubjectId(
-        repository_id=REPO,
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator=locator,
-    )
+_sid = _partial(subject_id, repository_id=REPO)
 
 
-def _ref(path):
-    return _ref_from(FILES, path)
-
-
-def _ref_from(files, path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=(
-            m.EvidenceSourceKind.DOCUMENTATION
-            if path.endswith(".md")
-            else m.EvidenceSourceKind.SOURCE_CODE
-        ),
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(files[path]),
-    )
+_ref = _partial(evidence_ref, repository_id=REPO, files=FILES)
 
 
 def _changed_evidence(**changes):
@@ -71,32 +56,18 @@ def _changed_evidence(**changes):
     return files, FixtureEvidenceSource(REPO, files)
 
 
-def _harness():
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in FILES.items()),
-        (
-            InMemorySubject("src/router.py", m.SubjectKind.COMPONENT, "router"),
-            InMemorySubject("src/sink.py", m.SubjectKind.COMPONENT, "sink"),
-        ),
-        (
-            InMemoryEdge(
-                "src/router.py", m.StructuralEdgeKind.DEPENDS_ON, "src/sink.py"
-            ),
-        ),
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(FILES))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    FILES,
+    subjects=(
+        InMemorySubject("src/router.py", m.SubjectKind.COMPONENT, "router"),
+        InMemorySubject("src/sink.py", m.SubjectKind.COMPONENT, "sink"),
+    ),
+    edges=(
+        InMemoryEdge("src/router.py", m.StructuralEdgeKind.DEPENDS_ON, "src/sink.py"),
+    ),
+)
 
 
 def _purpose_claim():
@@ -334,37 +305,6 @@ class CompactCommandTest(unittest.TestCase):
 
 
 class WireCeremonyTest(unittest.TestCase):
-    def test_mapping_submission_template_decodes_every_bound_member(self):
-        import json
-
-        from span.service.interpretation import _mapping_submission_template
-
-        def _item(index):
-            return m.EvidenceInventoryItem(
-                evidence_ref=m.EvidenceRef(
-                    evidence_id=m.EvidenceId(f"ev-{index}"),
-                    repository_id="r",
-                    locator=f"src/f{index}.py",
-                    source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-                ),
-                content_fingerprint=f"fp-{index}",
-            )
-
-        text = _mapping_submission_template((_item(0), _item(1)))
-        self.assertNotIn("InterpretationCoverage", text)
-        payload = json.loads(text.split(": ", 1)[1])
-        self.assertNotIn("question_decision", payload)
-        decoded = _schema.from_wire(m.SemanticInterpretationResult, payload)
-        self.assertIsNone(decoded.question_decision)
-        self.assertEqual(
-            [
-                acc.evidence_id.value
-                for acc in decoded.proposed_target_inventory_accounting
-            ],
-            ["ev-0", "ev-1"],
-        )
-        # A mapping unit never pretends to answer a bound semantic question.
-        self.assertNotIn("question", payload)
 
     def test_selector_accepts_omitted_null_key(self):
         request = decode_request(
@@ -777,8 +717,10 @@ class PriorOwnershipTest(unittest.TestCase):
 
             _, changed_again = _changed_evidence(**{"README.md": "# changed again\n"})
             refresh = _refresh_pending(structural, changed_again, store, continuations)
-            new_ref = _ref_from(
-                dict(FILES, **{"README.md": "# changed again\n"}), "README.md"
+            new_ref = evidence_ref(
+                "README.md",
+                repository_id=REPO,
+                files=dict(FILES, **{"README.md": "# changed again\n"}),
             )
             ops.submit_interpretation(
                 refresh.continuation,
@@ -872,12 +814,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
         structural, evidence, store = _harness()
         try:
             continuations = ContinuationStore()
-            area = m.SubjectId(
-                repository_id=REPO,
-                subject_kind=m.SubjectKind.OTHER,
-                canonical_locator="routing-area",
-            )
-            mapped = ops.initialize_target(
+            first = ops.initialize_target(
                 ops.SemanticInitializeTargetRequest(
                     repository_id=REPO,
                     target=m.EvidenceScope(paths=("src",)),
@@ -889,53 +826,12 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                 store=store,
                 continuations=continuations,
             )
-            self.assertIsInstance(mapped, PendingInterpretation)
-            items = mapped.request.target_inventory_items
-            self.assertTrue(items)
-            ops.submit_interpretation(
-                mapped.continuation,
-                m.SemanticInterpretationResult(
-                    candidate_subjects=(
-                        m.CandidateSubject(
-                            provisional_locator="routing-area",
-                            kind=m.SubjectKind.OTHER,
-                            display_name="routing",
-                            declared_kind="routing",
-                            evidence=(items[0].evidence_ref,),
-                            basis=m.SemanticBasis(
-                                m.DerivationKind.SEMANTIC_INTERPRETATION,
-                                "src files form the routing area",
-                            ),
-                        ),
-                    ),
-                    proposed_target_inventory_accounting=tuple(
-                        m.CandidateTargetInventoryAccount(
-                            evidence_id=item.evidence_ref.evidence_id,
-                            assigned_area_subjects=(area,),
-                        )
-                        for item in items
-                    ),
-                ),
-                structural=structural,
-                evidence=evidence,
-                store=store,
-                continuations=continuations,
+            self.assertIsInstance(first, PendingInterpretation)
+            area = first.request.question.scope_root
+            refs = tuple(
+                unit.evidence_ref for unit in first.request.task_evidence.evidence_units
             )
-            semantic = ops.initialize_target(
-                ops.SemanticInitializeTargetRequest(
-                    repository_id=REPO,
-                    target=m.EvidenceScope(paths=("src",)),
-                    objective="Establish routing area semantics.",
-                    bounds=_bounds(),
-                ),
-                structural=structural,
-                evidence=evidence,
-                store=store,
-                continuations=continuations,
-            )
-            self.assertIsInstance(semantic, PendingInterpretation)
-            seed = semantic.request.question
-            self.assertIsNotNone(seed)
+            self.assertGreaterEqual(len(refs), 2)
             qa = m.SemanticQuestionScope(
                 scope_root=area,
                 subject=area,
@@ -951,7 +847,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                 materiality_basis="agent-owned target materiality",
             )
             answer = ops.submit_interpretation(
-                semantic.continuation,
+                first.continuation,
                 m.SemanticInterpretationResult(
                     claims=(
                         m.CandidateSemanticClaim(
@@ -960,7 +856,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                             kind=m.ClaimKind.PURPOSE,
                             assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.PurposeValue("Routes commands", ()),
-                            evidence=(items[0].evidence_ref,),
+                            evidence=(refs[0],),
                             basis=m.SemanticBasis(
                                 m.DerivationKind.SEMANTIC_INTERPRETATION,
                                 "routing area purpose",
@@ -977,7 +873,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                             m.SemanticQuestionDecision(
                                 disposition=(m.SemanticQuestionDisposition.PENDING),
                                 evidence_scope=m.EvidenceScope(
-                                    evidence_refs=(items[0].evidence_ref,)
+                                    evidence_refs=(refs[0],)
                                 ),
                                 disposition_basis="target follow-up",
                             ),
@@ -987,7 +883,7 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                             m.SemanticQuestionDecision(
                                 disposition=(m.SemanticQuestionDisposition.PENDING),
                                 evidence_scope=m.EvidenceScope(
-                                    evidence_refs=(items[1].evidence_ref,)
+                                    evidence_refs=(refs[1],)
                                 ),
                                 disposition_basis="target follow-up",
                             ),
@@ -1000,18 +896,14 @@ class TargetEvidenceIsolationTest(unittest.TestCase):
                 continuations=continuations,
             )
             self.assertIsInstance(answer, PendingInterpretation)
-            association = store.load_target_association(
-                REPO, semantic.request.target_id
-            )
+            association = store.load_target_association(REPO, first.request.target_id)
             self.assertIsNotNone(association)
-            self.assertEqual({qa, qb} - set(association.target_questions), set())
+            self.assertFalse({qa, qb} - set(association.target_questions))
             self.assertEqual(
-                _obs_ids(_coverage(store, qa)),
-                (items[0].evidence_ref.evidence_id.value,),
+                _obs_ids(_coverage(store, qa)), (refs[0].evidence_id.value,)
             )
             self.assertEqual(
-                _obs_ids(_coverage(store, qb)),
-                (items[1].evidence_ref.evidence_id.value,),
+                _obs_ids(_coverage(store, qb)), (refs[1].evidence_id.value,)
             )
         finally:
             store.close()

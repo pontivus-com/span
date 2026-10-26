@@ -17,8 +17,8 @@ from span import service as ops
 from span.service.discovery import _inventory_snapshot, _read_units_within_bytes
 from span.service.resolution import _resolve_query_subject
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.agent_fixture import FixtureAgent, FixtureCandidates
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
@@ -27,19 +27,20 @@ from span.shell.structural.memory import (
     fingerprint_content,
 )
 
+from tests.support.factories import query_bounds
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import semantic_harness
+
+from tests.support.factories import candidate_claim
+
+from tests.support.factories import candidate_claim_for
+
+_bounds = query_bounds
 
 
 FILES = {
@@ -50,56 +51,14 @@ FILES = {
 SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
-def _sid():
-    return m.SubjectId(
-        repository_id="repo-1",
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator="src/main.py",
-    )
+_ref = _partial(evidence_ref, repository_id="repo-1", files=FILES)
+_sid = _partial(subject_id, "src/main.py")
 
 
-def _ref(path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id="repo-1",
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES[path]),
-    )
+_candidate = _partial(candidate_claim, files=FILES, subject=_sid())
 
 
-def _candidate():
-    return m.CandidateSemanticClaim(
-        candidate_key="purpose-main",
-        subject=_sid(),
-        kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-        value=m.PurposeValue("does things", ()),
-        evidence=(_ref("README.md"), _ref("src/main.py")),
-        candidate_authority=m.CandidateAuthority(
-            binding=m.AuthorityBinding(
-                evidence_ref=_ref("README.md"),
-                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
-                status=m.AuthorityStatus.ACCEPTED,
-            ),
-            support=m.AuthoritySupport(
-                quoted_span="Does things",
-                status_section="README.md",
-                applicability_section=None,
-            ),
-        ),
-        basis=m.SemanticBasis(
-            m.DerivationKind.SEMANTIC_INTERPRETATION,
-            "README states the service purpose",
-        ),
-    )
-
-
-def _agent(complete_questions=False):
-    return FixtureAgent(
-        {"src/main.py": FixtureCandidates((_candidate(),), ())},
-        complete_questions=complete_questions,
-    )
+_agent = _partial(FixtureAgent, {"src/main.py": FixtureCandidates((_candidate(),), ())})
 
 
 def _state():
@@ -116,36 +75,14 @@ def _bare_request():
     return m.SemanticInterpretationRequest(
         repository_id="repo-1",
         subjects=(m.Subject(_sid(), "main", None),),
-        evidence_units=(),
-        structural_observations=(),
-        allowed_claim_kinds=tuple(m.ClaimKind),
-        allowed_relationship_kinds=tuple(m.RelationshipKind),
-        identity_bindings=(_sid(),),
+        task_evidence=m.TaskEvidence(identity_bindings=(_sid(),)),
+        allowed_kinds=m.AllowedKinds(),
         brief=m.TaskBrief(),
         bounds=_bounds(),
     )
 
 
-def _harness(files=None):
-    files = FILES if files is None else files
-    structural = InMemoryStructuralSource(
-        "repo-1",
-        tuple(InMemoryFile(p, c) for p, c in files.items()),
-        SUBJECTS,
-    )
-    evidence = FixtureEvidenceSource("repo-1", dict(files))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id="repo-1",
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+_harness = _partial(semantic_harness, "repo-1", FILES, subjects=SUBJECTS)
 
 
 def _explain_request():
@@ -428,169 +365,6 @@ class ExchangeTest(unittest.TestCase):
             store.close()
 
 
-class MappingDiagnosticsTest(unittest.TestCase):
-    """Workflow-issues §3: field-misuse diagnostics name the required
-    field without relaxing validation."""
-
-    DOC_FILES = {
-        "src/main.py": "VALUE = 1\n",
-        "docs/guide.md": "# Guide\n",
-    }
-
-    def _doc_harness(self):
-        structural = InMemoryStructuralSource(
-            "repo-1",
-            tuple(InMemoryFile(p, c) for p, c in self.DOC_FILES.items()),
-            (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),),
-        )
-        evidence = FixtureEvidenceSource("repo-1", dict(self.DOC_FILES))
-        store = SqliteSemanticStore(":memory:")
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-                authority_seeds=(),
-            ),
-            repository_id="repo-1",
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
-        return structural, evidence, store
-
-    def _doc_area(self):
-        return m.SubjectId(
-            repository_id="repo-1",
-            subject_kind=m.SubjectKind.DOCUMENT,
-            canonical_locator="docs/guide.md",
-        )
-
-    def _doc_question(self):
-        area = self._doc_area()
-        return m.SemanticQuestionScope(
-            scope_root=area,
-            subject=area,
-            question_class=m.SemanticQuestionClass.CQ_01,
-            question_slice="guide purpose",
-            materiality_basis="mapping admits guide",
-        )
-
-    def _doc_item_ref(self):
-        return m.EvidenceRef(
-            evidence_id=m.EvidenceId("ev-docs/guide.md"),
-            repository_id="repo-1",
-            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
-            locator="docs/guide.md",
-            revision_or_fingerprint=fingerprint_content(
-                self.DOC_FILES["docs/guide.md"]
-            ),
-            section_or_span=None,
-        )
-
-    def _mapping_pending(self, structural, evidence, store, continuations):
-        pending = ops.initialize_target(
-            ops.SemanticInitializeTargetRequest(
-                repository_id="repo-1",
-                target=m.EvidenceScope(paths=("docs/guide.md",), evidence_refs=()),
-                objective="diagnostics probe",
-                bounds=_bounds(),
-            ),
-            structural=structural,
-            evidence=evidence,
-            store=store,
-            continuations=continuations,
-        )
-        self.assertIsInstance(pending, PendingInterpretation)
-        self.assertIsNone(pending.request.question)
-        return pending
-
-    def _new_area_result(self, item_ref, with_reuse):
-        area = self._doc_area()
-        return m.SemanticInterpretationResult(
-            claims=(),
-            relationships=(),
-            candidate_subjects=(
-                m.CandidateSubject(
-                    provisional_locator="docs/guide.md",
-                    kind=m.SubjectKind.DOCUMENT,
-                    display_name="guide",
-                    evidence=(item_ref,),
-                    basis=m.SemanticBasis(
-                        m.DerivationKind.SEMANTIC_INTERPRETATION,
-                        "guide is a coherent area",
-                    ),
-                ),
-            ),
-            candidate_conflicts=(),
-            candidate_withdrawals=(),
-            proposed_target_inventory_accounting=(
-                m.CandidateTargetInventoryAccount(
-                    evidence_id=item_ref.evidence_id,
-                    assigned_area_subjects=(area,),
-                ),
-            ),
-            proposed_target_questions=((self._doc_question(),) if with_reuse else ()),
-        )
-
-    def test_missing_reuse_names_pending_coverage_field(self):
-        from span.core.validation import InterpretationUnitRejected
-
-        structural, evidence, store = self._doc_harness()
-        try:
-            continuations = ContinuationStore()
-            pending = self._mapping_pending(structural, evidence, store, continuations)
-            item_ref = pending.request.target_inventory_items[0].evidence_ref
-            with self.assertRaises(InterpretationUnitRejected) as ctx:
-                ops.submit_interpretation(
-                    pending.continuation,
-                    self._new_area_result(item_ref, with_reuse=True),
-                    structural=structural,
-                    evidence=evidence,
-                    store=store,
-                    continuations=continuations,
-                )
-            self.assertTrue(
-                any(
-                    "proposed_questions to create new PENDING " "coverage" in diagnostic
-                    for diagnostic in ctx.exception.diagnostics
-                ),
-                ctx.exception.diagnostics,
-            )
-            self.assertEqual(len(continuations), 1)
-        finally:
-            store.close()
-
-    def test_new_area_without_pending_creates_service_seed(self):
-        structural, evidence, store = self._doc_harness()
-        try:
-            continuations = ContinuationStore()
-            pending = self._mapping_pending(structural, evidence, store, continuations)
-            item_ref = pending.request.target_inventory_items[0].evidence_ref
-            # S4.4/J-5: a newly admitted area with no reusable current
-            # target question no longer rejects; the service creates
-            # exactly one PENDING CQ-01 first-admission seed.
-            ops.submit_interpretation(
-                pending.continuation,
-                self._new_area_result(item_ref, with_reuse=False),
-                structural=structural,
-                evidence=evidence,
-                store=store,
-                continuations=continuations,
-            )
-            area = self._doc_area()
-            rows = store.load_all_question_coverages("repo-1", area, (area,))
-            seeds = [
-                row
-                for row in rows
-                if row.question is not None
-                and row.question.question_class is m.SemanticQuestionClass.CQ_01
-                and row.disposition is m.SemanticQuestionDisposition.PENDING
-                and row.disposition_basis == "service-owned first-admission target seed"
-            ]
-            self.assertEqual(len(seeds), 1)
-        finally:
-            store.close()
-
-
 class DiscoveryTest(unittest.TestCase):
     def test_discovery_finds_identity_anchored_evidence(self):
         structural, evidence, store = _harness()
@@ -713,7 +487,6 @@ class RefreshExchangeTest(unittest.TestCase):
                             disposition_basis="drain test",
                         ),
                         candidate_withdrawals=(),
-                        proposed_target_inventory_accounting=(),
                         proposed_target_questions=(),
                     ),
                     structural=structural,
@@ -1043,14 +816,6 @@ class BoundedEvidenceReadTest(unittest.TestCase):
     failing a unit the agent could have answered partially.
     """
 
-    def _ref(self, locator):
-        return m.EvidenceRef(
-            m.EvidenceId(f"ev-{locator}"),
-            "repo-1",
-            m.EvidenceSourceKind.SOURCE_CODE,
-            locator,
-        )
-
     def test_keeps_fitting_prefix(self):
         import tempfile
 
@@ -1065,7 +830,10 @@ class BoundedEvidenceReadTest(unittest.TestCase):
             evidence = FilesystemEvidenceSource("repo-1", root)
             units = _read_units_within_bytes(
                 evidence,
-                (self._ref("small.py"), self._ref("big.py")),
+                (
+                    evidence_ref("small.py", repository_id="repo-1"),
+                    evidence_ref("big.py", repository_id="repo-1"),
+                ),
                 _bounds(max_evidence_units=24, max_evidence_bytes=100),
             )
             self.assertEqual([u.evidence_ref.locator for u in units], ["small.py"])
@@ -1084,7 +852,7 @@ class BoundedEvidenceReadTest(unittest.TestCase):
             with self.assertRaises(ValueError) as ctx:
                 _read_units_within_bytes(
                     evidence,
-                    (self._ref("big.py"),),
+                    (evidence_ref("big.py", repository_id="repo-1"),),
                     _bounds(max_evidence_units=24, max_evidence_bytes=10),
                 )
             # The provider's own reason must survive, and both remedies must
@@ -1145,7 +913,7 @@ class StoreResolutionTest(unittest.TestCase):
             store.close()
 
     def test_store_subject_served_by_explain(self):
-        from span.shell.evidence import FixtureEvidenceSource
+        from tests.support.evidence import FixtureEvidenceSource
 
         structural = self._empty_structural()
         evidence = FixtureEvidenceSource("repo-1", {})
@@ -1531,7 +1299,7 @@ class S1ExactLocatorEdgeTest(unittest.TestCase):
             def resolve_subject(self, repository_id, selector, bounds):
                 raise GraftUnavailableError("no usable structural index")
 
-        from span.shell.evidence import FixtureEvidenceSource
+        from tests.support.evidence import FixtureEvidenceSource
 
         evidence = FixtureEvidenceSource("repo-1", {})
         store = self._store_with([])
@@ -1577,58 +1345,7 @@ class CrossUnitCitationTest(unittest.TestCase):
 
     FILES2 = {"a.py": "ALPHA = 1\n", "b.py": "BETA = 2\n"}
 
-    def _harness2(self):
-        from span.shell.evidence import FixtureEvidenceSource
-        from span.shell.sqlite_store import SqliteSemanticStore
-
-        files = dict(self.FILES2)
-        subjects = (
-            InMemorySubject("a.py", m.SubjectKind.COMPONENT, "aaa"),
-            InMemorySubject("b.py", m.SubjectKind.COMPONENT, "bbb"),
-        )
-        structural = InMemoryStructuralSource(
-            "repo-1",
-            tuple(InMemoryFile(p, c) for p, c in files.items()),
-            subjects,
-        )
-        evidence = FixtureEvidenceSource("repo-1", files)
-        store = SqliteSemanticStore(":memory:")
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-                authority_seeds=(),
-            ),
-            repository_id="repo-1",
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
-        return structural, evidence, store
-
-    def _ref(self, path, fingerprint):
-        return m.EvidenceRef(
-            m.EvidenceId(f"ev-{path}"),
-            "repo-1",
-            m.EvidenceSourceKind.SOURCE_CODE,
-            path,
-            revision_or_fingerprint=fingerprint,
-        )
-
-    def _claim_for(self, locator, ref):
-        return m.CandidateSemanticClaim(
-            candidate_key="purpose",
-            subject=m.SubjectId(
-                repository_id="repo-1",
-                subject_kind=m.SubjectKind.COMPONENT,
-                canonical_locator=locator,
-            ),
-            kind=m.ClaimKind.PURPOSE,
-            assertion_nature=m.AssertionNature.DESCRIPTIVE,
-            value=m.PurposeValue(f"{locator} serves its module", ()),
-            evidence=(ref,),
-            candidate_authority=None,
-            basis=m.SemanticBasis(m.DerivationKind.SEMANTIC_INTERPRETATION, "test"),
-        )
+    _claim_for = staticmethod(candidate_claim_for)
 
     def _submit_for(self, locator, result, structural, evidence, store):
         from span.shell.agent_exchange.continuations import (
@@ -1665,7 +1382,14 @@ class CrossUnitCitationTest(unittest.TestCase):
     def test_cross_unit_citation_accepted_when_bytes_current(self):
         from span.shell.structural.memory import fingerprint_content
 
-        structural, evidence, store = self._harness2()
+        structural, evidence, store = semantic_harness(
+            "repo-1",
+            self.FILES2,
+            subjects=(
+                InMemorySubject("a.py", m.SubjectKind.COMPONENT, "aaa"),
+                InMemorySubject("b.py", m.SubjectKind.COMPONENT, "bbb"),
+            ),
+        )
         try:
             first, _ = self._submit_for(
                 "a.py",
@@ -1673,7 +1397,11 @@ class CrossUnitCitationTest(unittest.TestCase):
                     claims=(
                         self._claim_for(
                             "a.py",
-                            self._ref("a.py", fingerprint_content("ALPHA = 1\n")),
+                            evidence_ref(
+                                "a.py",
+                                repository_id="repo-1",
+                                fingerprint=fingerprint_content("ALPHA = 1\n"),
+                            ),
                         ),
                     ),
                     relationships=(),
@@ -1695,7 +1423,11 @@ class CrossUnitCitationTest(unittest.TestCase):
                     claims=(
                         self._claim_for(
                             "b.py",
-                            self._ref("a.py", fingerprint_content("ALPHA = 1\n")),
+                            evidence_ref(
+                                "a.py",
+                                repository_id="repo-1",
+                                fingerprint=fingerprint_content("ALPHA = 1\n"),
+                            ),
                         ),
                     ),
                     relationships=(),
@@ -1719,7 +1451,14 @@ class CrossUnitCitationTest(unittest.TestCase):
         fingerprint while the old row keeps its original observation."""
         from span.shell.structural.memory import fingerprint_content
 
-        structural, evidence, store = self._harness2()
+        structural, evidence, store = semantic_harness(
+            "repo-1",
+            self.FILES2,
+            subjects=(
+                InMemorySubject("a.py", m.SubjectKind.COMPONENT, "aaa"),
+                InMemorySubject("b.py", m.SubjectKind.COMPONENT, "bbb"),
+            ),
+        )
         try:
             self._submit_for(
                 "a.py",
@@ -1727,7 +1466,11 @@ class CrossUnitCitationTest(unittest.TestCase):
                     claims=(
                         self._claim_for(
                             "a.py",
-                            self._ref("a.py", fingerprint_content("ALPHA = 1\n")),
+                            evidence_ref(
+                                "a.py",
+                                repository_id="repo-1",
+                                fingerprint=fingerprint_content("ALPHA = 1\n"),
+                            ),
                         ),
                     ),
                     relationships=(),
@@ -1748,7 +1491,11 @@ class CrossUnitCitationTest(unittest.TestCase):
                     claims=(
                         self._claim_for(
                             "b.py",
-                            self._ref("a.py", fingerprint_content("ALPHA = 1\n")),
+                            evidence_ref(
+                                "a.py",
+                                repository_id="repo-1",
+                                fingerprint=fingerprint_content("ALPHA = 1\n"),
+                            ),
                         ),
                     ),
                     relationships=(),
@@ -1777,7 +1524,14 @@ class CrossUnitCitationTest(unittest.TestCase):
             store.close()
 
     def test_unknown_evidence_still_rejected(self):
-        structural, evidence, store = self._harness2()
+        structural, evidence, store = semantic_harness(
+            "repo-1",
+            self.FILES2,
+            subjects=(
+                InMemorySubject("a.py", m.SubjectKind.COMPONENT, "aaa"),
+                InMemorySubject("b.py", m.SubjectKind.COMPONENT, "bbb"),
+            ),
+        )
         try:
             with self.assertRaises(ops.InterpretationUnitRejected) as cm:
                 self._submit_for(
@@ -1786,7 +1540,9 @@ class CrossUnitCitationTest(unittest.TestCase):
                         claims=(
                             self._claim_for(
                                 "b.py",
-                                self._ref("ghost.py", "fp"),
+                                evidence_ref(
+                                    "ghost.py", repository_id="repo-1", fingerprint="fp"
+                                ),
                             ),
                         ),
                         relationships=(),
@@ -1815,43 +1571,6 @@ class SemanticOutcomeTest(unittest.TestCase):
 
     FILES2 = {"a.py": "ALPHA = 1\n", "b.py": "BETA = 2\n"}
     SUMMARY = "Alpha input configured with beta threshold."
-
-    def _harness2(self):
-        from span.shell.evidence import FixtureEvidenceSource
-        from span.shell.sqlite_store import SqliteSemanticStore
-
-        files = dict(self.FILES2)
-        subjects = (
-            InMemorySubject("a.py", m.SubjectKind.COMPONENT, "aaa"),
-            InMemorySubject("b.py", m.SubjectKind.COMPONENT, "bbb"),
-        )
-        structural = InMemoryStructuralSource(
-            "repo-1",
-            tuple(InMemoryFile(p, c) for p, c in files.items()),
-            subjects,
-        )
-        evidence = FixtureEvidenceSource("repo-1", files)
-        store = SqliteSemanticStore(":memory:")
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-                authority_seeds=(),
-            ),
-            repository_id="repo-1",
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
-        return structural, evidence, store
-
-    def _ref(self, path, fingerprint):
-        return m.EvidenceRef(
-            m.EvidenceId(f"ev-{path}"),
-            "repo-1",
-            m.EvidenceSourceKind.SOURCE_CODE,
-            path,
-            revision_or_fingerprint=fingerprint,
-        )
 
     def _exchange(
         self,
@@ -1934,13 +1653,29 @@ class SemanticOutcomeTest(unittest.TestCase):
     def test_workflow_synthesis_served_with_content(self):
         from span.shell.structural.memory import fingerprint_content
 
-        structural, evidence, store = self._harness2()
+        structural, evidence, store = semantic_harness(
+            "repo-1",
+            self.FILES2,
+            subjects=(
+                InMemorySubject("a.py", m.SubjectKind.COMPONENT, "aaa"),
+                InMemorySubject("b.py", m.SubjectKind.COMPONENT, "bbb"),
+            ),
+        )
         try:
             fp_a = fingerprint_content("ALPHA = 1\n")
             fp_b = fingerprint_content("BETA = 2\n")
             self._exchange(
                 "a.py",
-                self._result((self._purpose("a.py", self._ref("a.py", fp_a)),)),
+                self._result(
+                    (
+                        self._purpose(
+                            "a.py",
+                            evidence_ref(
+                                "a.py", repository_id="repo-1", fingerprint=fp_a
+                            ),
+                        ),
+                    )
+                ),
                 structural,
                 evidence,
                 store,
@@ -1951,7 +1686,9 @@ class SemanticOutcomeTest(unittest.TestCase):
                 kind=m.SubjectKind.SUBSYSTEM,
                 display_name="tta workflow",
                 declared_kind=None,
-                evidence=(self._ref("b.py", fp_b),),
+                evidence=(
+                    evidence_ref("b.py", repository_id="repo-1", fingerprint=fp_b),
+                ),
                 basis=m.SemanticBasis(
                     m.DerivationKind.SEMANTIC_INTERPRETATION,
                     "workflow owns both modules",
@@ -1960,7 +1697,14 @@ class SemanticOutcomeTest(unittest.TestCase):
             self._exchange(
                 "b.py",
                 self._result(
-                    (self._purpose("b.py", self._ref("b.py", fp_b)),),
+                    (
+                        self._purpose(
+                            "b.py",
+                            evidence_ref(
+                                "b.py", repository_id="repo-1", fingerprint=fp_b
+                            ),
+                        ),
+                    ),
                     (workflow,),
                 ),
                 structural,
@@ -1979,8 +1723,8 @@ class SemanticOutcomeTest(unittest.TestCase):
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue(self.SUMMARY, ()),
                 evidence=(
-                    self._ref("a.py", fp_a),
-                    self._ref("b.py", fp_b),
+                    evidence_ref("a.py", repository_id="repo-1", fingerprint=fp_a),
+                    evidence_ref("b.py", repository_id="repo-1", fingerprint=fp_b),
                 ),
                 candidate_authority=None,
                 basis=m.SemanticBasis(
@@ -2072,55 +1816,7 @@ class ContextualResolutionTest(unittest.TestCase):
 
     CTX = "ctx-repo"
 
-    def _bounds(self, **overrides):
-        base = dict(
-            max_results=50,
-            max_depth=5,
-            max_subjects=8,
-            max_evidence_units=24,
-            max_evidence_bytes=96_000,
-            max_candidate_claims=64,
-            max_candidate_relationships=64,
-        )
-        base.update(overrides)
-        return m.QueryBounds(**base)
-
-    def _harness(self, files, subjects, repo=None):
-        repo = repo or self.CTX
-        structural = InMemoryStructuralSource(
-            repo,
-            tuple(InMemoryFile(p, c) for p, c in files.items()),
-            tuple(subjects),
-        )
-        evidence = FixtureEvidenceSource(repo, dict(files))
-        store = SqliteSemanticStore(":memory:")
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-                authority_seeds=(),
-            ),
-            repository_id=repo,
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
-        return structural, evidence, store
-
-    def _ref(self, repo, path, files):
-        return m.EvidenceRef(
-            evidence_id=m.EvidenceId(f"ev-{path}"),
-            repository_id=repo,
-            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-            locator=path,
-            revision_or_fingerprint=fingerprint_content(files[path]),
-        )
-
-    def _sid(self, repo, locator, kind=m.SubjectKind.COMPONENT):
-        return m.SubjectId(
-            repository_id=repo,
-            subject_kind=kind,
-            canonical_locator=locator,
-        )
+    _bounds = staticmethod(query_bounds)
 
     def _claim(self, cid, sid, value, eref, kind=m.ClaimKind.PURPOSE):
         return m.SemanticClaim(
@@ -2188,11 +1884,19 @@ class ContextualResolutionTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=repo,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
             rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
@@ -2259,11 +1963,19 @@ class ContextualResolutionTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=repo,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
             membership = self._claim(
@@ -2312,11 +2024,13 @@ class ContextualResolutionTest(unittest.TestCase):
             "workflow/composition/a.py": "a=1\n",
             "workflow/canonical_assembly/b.py": "b=1\n",
         }
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            comp = self._sid(repo, "composition")
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            comp = subject_id("composition", repository_id=repo)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
             deps = []
             claims = []
             rels = []
@@ -2326,7 +2040,7 @@ class ContextualResolutionTest(unittest.TestCase):
                     ("workflow/canonical_assembly/b.py", canon),
                 )
             ):
-                eref = self._ref(repo, path, files)
+                eref = evidence_ref(path, repository_id=repo, files=files)
                 fp = fingerprint_content(files[path])
                 claim = self._claim(f"c-{i}", sid, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
@@ -2377,12 +2091,16 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"shared/a.py": "a=1\n", "shared/b.py": "b=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area_a = self._sid(repo, "area_a")
-            area_b = self._sid(repo, "area_b")
-            root_x = self._sid(repo, "feature_x", m.SubjectKind.SUBSYSTEM)
-            root_y = self._sid(repo, "feature_y", m.SubjectKind.SUBSYSTEM)
+            area_a = subject_id("area_a", repository_id=repo)
+            area_b = subject_id("area_b", repository_id=repo)
+            root_x = subject_id(
+                "feature_x", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            root_y = subject_id(
+                "feature_y", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
             deps = []
             claims = []
             rels = []
@@ -2392,7 +2110,7 @@ class ContextualResolutionTest(unittest.TestCase):
                     ("shared/b.py", area_b, root_y),
                 )
             ):
-                eref = self._ref(repo, path, files)
+                eref = evidence_ref(path, repository_id=repo, files=files)
                 fp = fingerprint_content(files[path])
                 claim = self._claim(f"c-{i}", area, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
@@ -2443,7 +2161,7 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"lonely/file.py": "x=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
             orientation, trace_root = _resolve_contextual_subjects(
                 repo,
@@ -2473,11 +2191,19 @@ class ContextualResolutionTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=repo,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             file_claim = self._claim(
                 "c-file", file_sid, m.PurposeValue("file", ()), eref
@@ -2534,7 +2260,7 @@ class ContextualResolutionTest(unittest.TestCase):
     def test_structural_failure_propagates(self):
         repo = self.CTX
         files = {"a.py": "x=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
             state = structural.repository_state(repo)
 
@@ -2565,12 +2291,16 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"feat/a.py": "a=1\n", "feat/b.py": "b=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area_a = self._sid(repo, "area_a")
-            area_b = self._sid(repo, "area_b")
-            review = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            system = self._sid(repo, "larger_system", m.SubjectKind.SUBSYSTEM)
+            area_a = subject_id("area_a", repository_id=repo)
+            area_b = subject_id("area_b", repository_id=repo)
+            review = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            system = subject_id(
+                "larger_system", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
             deps = []
             claims = []
             rels = []
@@ -2580,7 +2310,7 @@ class ContextualResolutionTest(unittest.TestCase):
                     ("feat/b.py", area_b),
                 )
             ):
-                eref = self._ref(repo, path, files)
+                eref = evidence_ref(path, repository_id=repo, files=files)
                 fp = fingerprint_content(files[path])
                 claim = self._claim(f"c-{i}", area, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
@@ -2600,7 +2330,7 @@ class ContextualResolutionTest(unittest.TestCase):
                         fp,
                     )
                 )
-            r_eref = self._ref(repo, "feat/a.py", files)
+            r_eref = evidence_ref("feat/a.py", repository_id=repo, files=files)
             r_fp = fingerprint_content(files["feat/a.py"])
             review_rel = self._rel(
                 "r-review",
@@ -2648,12 +2378,16 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"multi/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area = self._sid(repo, "area_a")
-            feat_x = self._sid(repo, "feature_x", m.SubjectKind.SUBSYSTEM)
-            feat_y = self._sid(repo, "feature_y", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "multi/a.py", files)
+            area = subject_id("area_a", repository_id=repo)
+            feat_x = subject_id(
+                "feature_x", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            feat_y = subject_id(
+                "feature_y", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref("multi/a.py", repository_id=repo, files=files)
             fp = fingerprint_content(files["multi/a.py"])
             claim = self._claim("c-a", area, m.PurposeValue("a", ()), eref)
             rel_x = self._rel("r-x", area, m.RelationshipKind.MEMBER_OF, feat_x, eref)
@@ -2702,12 +2436,16 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"multi/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area = self._sid(repo, "area_a")
-            feat_x = self._sid(repo, "feature_x", m.SubjectKind.SUBSYSTEM)
-            feat_y = self._sid(repo, "feature_y", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "multi/a.py", files)
+            area = subject_id("area_a", repository_id=repo)
+            feat_x = subject_id(
+                "feature_x", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            feat_y = subject_id(
+                "feature_y", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref("multi/a.py", repository_id=repo, files=files)
             fp = fingerprint_content(files["multi/a.py"])
             claim = self._claim("c-a", area, m.PurposeValue("a", ()), eref)
             rel_x = self._rel("r-x", area, m.RelationshipKind.MEMBER_OF, feat_x, eref)
@@ -2768,11 +2506,19 @@ class ContextualResolutionTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=repo,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
             rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
@@ -2821,7 +2567,7 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"big/a.py": "a=1\n", "big/b.py": "b=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
             orientation, trace_root = _resolve_contextual_subjects(
                 repo,
@@ -2860,10 +2606,10 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"g/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area = self._sid(repo, "area_g")
-            eref = self._ref(repo, "g/a.py", files)
+            area = subject_id("area_g", repository_id=repo)
+            eref = evidence_ref("g/a.py", repository_id=repo, files=files)
             fp = fingerprint_content(files["g/a.py"])
             claim = self._claim("c-g", area, m.PurposeValue("g", ()), eref)
             ghost = m.EvidenceDependency(
@@ -2900,11 +2646,11 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"m/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area_a = self._sid(repo, "area_a")
-            area_b = self._sid(repo, "area_b")
-            eref = self._ref(repo, "m/a.py", files)
+            area_a = subject_id("area_a", repository_id=repo)
+            area_b = subject_id("area_b", repository_id=repo)
+            eref = evidence_ref("m/a.py", repository_id=repo, files=files)
             fp = fingerprint_content(files["m/a.py"])
             claim_a = self._claim("c-a", area_a, m.PurposeValue("a", ()), eref)
             claim_b = self._claim("c-b", area_b, m.PurposeValue("b", ()), eref)
@@ -2947,11 +2693,19 @@ class ContextualResolutionTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=repo,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
             rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
@@ -3004,11 +2758,13 @@ class ContextualResolutionTest(unittest.TestCase):
             "workflow/composition/a.py": "a=1\n",
             "workflow/canonical_assembly/b.py": "b=1\n",
         }
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            comp = self._sid(repo, "composition")
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
+            comp = subject_id("composition", repository_id=repo)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
             deps = []
             claims = []
             rels = []
@@ -3018,7 +2774,7 @@ class ContextualResolutionTest(unittest.TestCase):
                     ("workflow/canonical_assembly/b.py", canon),
                 )
             ):
-                eref = self._ref(repo, path, files)
+                eref = evidence_ref(path, repository_id=repo, files=files)
                 fp = fingerprint_content(files[path])
                 claim = self._claim(f"c-{i}", sid, m.PurposeValue(f"p{i}", ()), eref)
                 rel = self._rel(
@@ -3084,7 +2840,7 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"w/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
             item = evidence.inventory_evidence(
                 repo,
@@ -3146,7 +2902,7 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"t/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
             item = evidence.inventory_evidence(
                 repo,
@@ -3201,7 +2957,7 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"c/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
             item = evidence.inventory_evidence(
                 repo,
@@ -3266,10 +3022,10 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"k/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area = self._sid(repo, "area_k")
-            eref = self._ref(repo, "k/a.py", files)
+            area = subject_id("area_k", repository_id=repo)
+            eref = evidence_ref("k/a.py", repository_id=repo, files=files)
             fp = fingerprint_content(files["k/a.py"])
             claim = self._claim("c-k", area, m.PurposeValue("k", ()), eref)
             store.write_index_batch(
@@ -3340,10 +3096,10 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"d/a.py": "a=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            area = self._sid(repo, "area_d")
-            eref = self._ref(repo, "d/a.py", files)
+            area = subject_id("area_d", repository_id=repo)
+            eref = evidence_ref("d/a.py", repository_id=repo, files=files)
             fp = fingerprint_content(files["d/a.py"])
             claim = self._claim("c-d", area, m.PurposeValue("d", ()), eref)
             store.write_index_batch(
@@ -3406,11 +3162,11 @@ class ContextualResolutionTest(unittest.TestCase):
 
         repo = self.CTX
         files = {"svc/local.py": "x=1\n"}
-        structural, evidence, store = self._harness(files, ())
+        structural, evidence, store = semantic_harness(self.CTX, files, subjects=())
         try:
-            local = self._sid(repo, "local_thing")
-            shared = self._sid(repo, "shared_service")
-            eref = self._ref(repo, "svc/local.py", files)
+            local = subject_id("local_thing", repository_id=repo)
+            shared = subject_id("shared_service", repository_id=repo)
+            eref = evidence_ref("svc/local.py", repository_id=repo, files=files)
             fp = fingerprint_content(files["svc/local.py"])
             rel = self._rel(
                 "r-dep",
@@ -3460,11 +3216,19 @@ class ContextualResolutionTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=repo,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
             rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)
@@ -3515,11 +3279,19 @@ class ContextualResolutionTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid(repo, "canonical_assembly")
-            root = self._sid(repo, "review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref(repo, "canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=repo)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=repo
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=repo,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = self._claim("c-purpose", canon, m.PurposeValue("packs", ()), eref)
             rel = self._rel("r-mem", canon, m.RelationshipKind.MEMBER_OF, root, eref)

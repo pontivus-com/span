@@ -659,11 +659,14 @@ class SerializationRoundTripTest(unittest.TestCase):
         req = m.SemanticInterpretationRequest(
             repository_id="repo-1",
             subjects=(m.Subject(_subject_id(), "E", None),),
-            evidence_units=(m.EvidenceUnit(_evidence_ref(), "c", "fp"),),
-            structural_observations=(),
-            allowed_claim_kinds=(m.ClaimKind.PURPOSE,),
-            allowed_relationship_kinds=(m.RelationshipKind.MEMBER_OF,),
-            identity_bindings=(_subject_id(),),
+            task_evidence=m.TaskEvidence(
+                evidence_units=(m.EvidenceUnit(_evidence_ref(), "c", "fp"),),
+                identity_bindings=(_subject_id(),),
+            ),
+            allowed_kinds=m.AllowedKinds(
+                claim_kinds=(m.ClaimKind.PURPOSE,),
+                relationship_kinds=(m.RelationshipKind.MEMBER_OF,),
+            ),
             brief=m.TaskBrief(),
             operation_intent=m.SemanticIntent.EXPLAIN,
             question_slice="src/a.py",

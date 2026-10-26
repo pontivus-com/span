@@ -15,6 +15,72 @@ NORMAL CODING SESSION (enter anywhere)
   CLOSE         refresh + status
 ```
 
+## Interaction across the lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Coding agent
+    participant S as Span MCP
+    participant R as Repository
+
+    Note over A,R: Setup — once per repository, offline
+    A->>S: status
+    S-->>A: UNINITIALIZED + setup requirement
+    A->>S: initialize_repository
+    S->>R: structural index · evidence inventory · authority seeds
+    S-->>A: READY (operational only)
+
+    Note over A,R: Normal session — enter at any phase
+
+    Note over A,S: ORIENT
+    A->>S: status / locate / neighbors
+    S-->>A: coverage, frontier, structure
+
+    Note over A,S: ASK · PREPARE · INVESTIGATE
+    A->>S: explain / impact / trace / authority
+    alt stored semantics sufficient
+        S-->>A: Answer
+    else interpretation needed
+        S-->>A: Pending(continuation, bounded task)
+        A->>A: interpret under SA-1..SA-7
+        A->>S: submit_interpretation(continuation, result)
+        alt more units remain
+            S-->>A: Pending(next)
+        else settled
+            S-->>A: Answer
+        end
+    end
+
+    Note over A,R: IMPLEMENT — outside Span
+    A->>R: edit code
+
+    Note over A,S: VERIFY
+    A->>A: run tests / review externally
+    Note right of S: A verification link and execution record enter<br/>with the interpretation unit that carries them.
+    A->>S: status
+    S-->>A: current / stale / unverifiable + next step
+
+    Note over A,S: CLOSE
+    A->>S: refresh(stale scope)
+    S-->>A: Pending → submit → Answer
+    A->>S: status
+    S-->>A: coverage for the scope
+
+    Note over A,S: Any truncated answer — same operation + page_token
+    Note over A,S: Hook events — compact notice, never a continuation
+```
+
+Every semantic operation has two possible outcomes: an answer, or a bounded
+pending task. A pending task is completed with `submit_interpretation`; that
+call returns the answer or the next task. This is why the exchange is a loop,
+not a single call.
+
+A truncated answer is continued with the **same operation** and its
+`page_token`. A continuation and a page token are not interchangeable: the
+first is an assignment, the second is a position. Hooks are outside this loop:
+they report, never interpret, and never allocate a continuation.
+
 ## Status modes
 
 `status` is one operation with four shapes, and the response names the one that

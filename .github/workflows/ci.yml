@@ -72,6 +72,10 @@ jobs:
           ruff check .
           black --check .
 
+      - name: Typing ratchet
+        run: |
+          python scripts/typecheck.py
+
       - name: Test
         run: |
           coverage run -m pytest -q

@@ -26,7 +26,7 @@ from span import service as ops
 from span.core import model as m
 from span.shell import hooks
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.mcp import ServiceContext
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (

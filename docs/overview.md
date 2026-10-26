@@ -33,7 +33,7 @@ semantic rules; `shell` owns every effect, including MCP transport and persisten
 
 ```text
 MCP tool call
-  → shell/mcp.py          parse once into a canonical request
+  → shell/mcp/            parse once into a canonical request
   → service/operations/*  pick the operation and its bounds
   → core/*                validate, reconcile, decide freshness
   → ports/*               store, structural source, evidence
@@ -57,7 +57,7 @@ Two outcomes are possible for an operation that needs interpretation:
 | Operation sequencing, bounds, request composition | `src/span/service/` |
 | Git, filesystem, SQLite, structural provider, MCP wire | `src/span/shell/` |
 | A public contract or its explanation | `docs/` and the matching tests |
-| Host setup or lifecycle hooks | `integrations/`, `skills/`, `src/span/shell/install.py` |
+| Host setup or lifecycle hooks | `integrations/`, `skills/`, `src/span/shell/install/` |
 
 ## Reading order
 

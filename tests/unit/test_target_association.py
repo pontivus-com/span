@@ -2,25 +2,22 @@
 
 import unittest
 
+from span import service as ops
 from span.core import model as m
 from span.shell.sqlite_store import SqliteSemanticStore
+from span.shell.structural.memory import InMemorySubject
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import semantic_harness
+
+_ref = _partial(evidence_ref, "a.py", repository_id="r1")
 
 
-def _ref(eid="ev-a", loc="a.py", repo="r1"):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(eid),
-        repository_id=repo,
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=loc,
-    )
-
-
-def _sid(loc="a", repo="r1"):
-    return m.SubjectId(
-        repository_id=repo,
-        subject_kind=m.SubjectKind.OTHER,
-        canonical_locator=loc,
-    )
+_sid = _partial(subject_id, "a", repository_id="r1", kind=m.SubjectKind.OTHER)
 
 
 class TargetIdentityTest(unittest.TestCase):
@@ -36,7 +33,12 @@ class TargetIdentityTest(unittest.TestCase):
         self.assertTrue(tid1.value.startswith("tgt-"))
 
     def test_union_and_section_reject(self):
-        scope = m.EvidenceScope(paths=("a.py",), evidence_refs=(_ref("ev-b", "b.py"),))
+        scope = m.EvidenceScope(
+            paths=("a.py",),
+            evidence_refs=(
+                evidence_ref("b.py", evidence_id="ev-b", repository_id="r1"),
+            ),
+        )
         cs, _ = m.canonicalize_target_scope("r1", scope, "goal")
         self.assertEqual(cs.paths, ("a.py",))
         self.assertEqual(len(cs.evidence_refs), 1)
@@ -52,29 +54,28 @@ class TargetIdentityTest(unittest.TestCase):
                 "r1", m.EvidenceScope(evidence_refs=(bad,)), "goal"
             )
 
-    def test_outcome_exclusivity(self):
+    def test_membership_requires_an_area(self):
         with self.assertRaises(ValueError):
             m.TargetInventoryAccount(evidence_ref=_ref())
-        with self.assertRaises(ValueError):
+        self.assertTrue(
             m.TargetInventoryAccount(
-                evidence_ref=_ref(),
-                assigned_area_subjects=(_sid(),),
-                exclusion_basis=m.SemanticBasis(
-                    derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
-                    summary="x",
-                ),
+                evidence_ref=_ref(), assigned_area_subjects=(_sid(),)
             )
+        )
 
     def test_inventory_fingerprint_membership_only(self):
         a = m.EvidenceInventoryItem(
-            evidence_ref=_ref("ev-a", "a.py"), content_fingerprint="c1"
+            evidence_ref=evidence_ref("a.py", evidence_id="ev-a", repository_id="r1"),
+            content_fingerprint="c1",
         )
         b = m.EvidenceInventoryItem(
-            evidence_ref=_ref("ev-b", "b.py"), content_fingerprint="c2"
+            evidence_ref=evidence_ref("b.py", evidence_id="ev-b", repository_id="r1"),
+            content_fingerprint="c2",
         )
         f1 = m.target_inventory_fingerprint((a, b))
         b2 = m.EvidenceInventoryItem(
-            evidence_ref=_ref("ev-b", "b.py"), content_fingerprint="CHANGED"
+            evidence_ref=evidence_ref("b.py", evidence_id="ev-b", repository_id="r1"),
+            content_fingerprint="CHANGED",
         )
         f2 = m.target_inventory_fingerprint((a, b2))
         self.assertEqual(f1, f2)
@@ -172,39 +173,9 @@ class TargetValidationTest(unittest.TestCase):
         from span.core import validation as v
 
         repo = "r1"
-        ref = m.EvidenceRef(
-            evidence_id=m.EvidenceId("ev-a"),
-            repository_id=repo,
-            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-            locator="a.py",
-        )
         sid = m.SubjectId(
             repository_id=repo, subject_kind=m.SubjectKind.OTHER, canonical_locator="a"
         )
-        ctx = v.ValidationContext(
-            allowed_claim_kinds=tuple(m.ClaimKind),
-            allowed_relationship_kinds=tuple(m.RelationshipKind),
-            known_evidence_ids=frozenset({"ev-a"}),
-            known_subject_ids=(sid,),
-            evidence_fingerprints={"ev-a": "fp"},
-        )
-        ok_acc = m.CandidateTargetInventoryAccount(
-            evidence_id=ref.evidence_id, assigned_area_subjects=(sid,)
-        )
-        ok = v.validate_target_inventory_account(
-            ok_acc,
-            ctx,
-            current_inventory_ids=frozenset({"ev-a"}),
-            expected_evidence_id="ev-a",
-            admitted_area_ids=(sid,),
-        )
-        self.assertTrue(ok.ok)
-        bad = v.validate_target_inventory_account(
-            ok_acc,
-            ctx,
-            current_inventory_ids=frozenset({"ev-other"}),
-        )
-        self.assertFalse(bad.ok)
         q = m.SemanticQuestionScope(
             scope_root=sid,
             subject=sid,
@@ -229,44 +200,22 @@ class TargetValidationTest(unittest.TestCase):
 
 
 class TargetStatusTest(unittest.TestCase):
-    def _harness(self):
-        from span import service as ops
-        from span.shell.agent_exchange.continuations import ContinuationStore
-        from span.shell.evidence import FixtureEvidenceSource
-        from span.shell.structural.memory import (
-            InMemoryFile,
-            InMemoryStructuralSource,
-            InMemorySubject,
-        )
-
-        repo = "tgt-status-1"
-        files = {"a.py": "A=1\n", "b.py": "B=2\n"}
-        structural = InMemoryStructuralSource(
-            repo,
-            tuple(InMemoryFile(p, c) for p, c in files.items()),
-            (
-                InMemorySubject("a.py", m.SubjectKind.COMPONENT, "a"),
-                InMemorySubject("b.py", m.SubjectKind.COMPONENT, "b"),
-            ),
-            (),
-        )
-        evidence = FixtureEvidenceSource(repo, dict(files))
-        store = SqliteSemanticStore(":memory:")
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-            ),
-            repository_id=repo,
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
-        return ops, structural, evidence, store, repo, ContinuationStore()
+    _harness = _partial(
+        semantic_harness,
+        "tgt-status-1",
+        {"a.py": "A=1\n", "b.py": "B=2\n"},
+        subjects=(
+            InMemorySubject("a.py", m.SubjectKind.COMPONENT, "a"),
+            InMemorySubject("b.py", m.SubjectKind.COMPONENT, "b"),
+        ),
+    )
 
     def test_unassessed_then_incomplete_and_hook_fast_reject(self):
         from span.shell.agent_exchange.continuations import ContinuationStore
 
-        ops, structural, evidence, store, repo, conts = self._harness()
+        structural, evidence, store = self._harness()
+        repo = "tgt-status-1"
+        conts = ContinuationStore()
         try:
             bounds = m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64)
             missing = m.TargetId("tgt-deadbeefdeadbeef")
@@ -333,8 +282,8 @@ class TargetStatusTest(unittest.TestCase):
             )
             self.assertTrue(
                 any(
-                    "no live initialize_target" in requirement.description
-                    and "same exact target scope and objective"
+                    "no live continuation" in requirement.description
+                    and "re-run the original initialize_target request"
                     in requirement.description
                     for requirement in no_live.resolution_requirements
                 )

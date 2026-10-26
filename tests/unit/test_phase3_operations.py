@@ -16,8 +16,8 @@ from span.ports.structural import StructuralDirection
 from span import service as ops
 from span.service.answers import _select_answer_items
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
-from span.shell import paging as _paging
+from tests.support.evidence import FixtureEvidenceSource
+from span.core import paging as _paging
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
@@ -36,6 +36,12 @@ from tests.support.agent_exchange import (
     _seeds,
     _sid,
 )
+
+from tests.support.factories import query_bounds, semantic_harness
+
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
 
 
 def _trace_request(**overrides):
@@ -517,7 +523,6 @@ class StatusTest(unittest.TestCase):
             store.close()
 
     def test_provider_failure_capturing_snapshot_is_an_error(self):
-        from span.service.operations import status as status_op
 
         structural, evidence, store, agent = _harness()
         try:
@@ -533,8 +538,10 @@ class StatusTest(unittest.TestCase):
                 store,
                 agent,
             )
+            from span.service.operations.status import coverage as status_coverage
+
             with mock.patch.object(
-                status_op,
+                status_coverage,
                 "_coverage_scope_snapshots",
                 side_effect=RuntimeError("provider down"),
             ):
@@ -1401,7 +1408,7 @@ class ImpactTest(unittest.TestCase):
     def test_second_page_retrieval(self):
         """Pagination is explicit and redeemable (plan I-39).
 
-        A bounded status over many claims returns a `pgq:` cursor;
+        A bounded status over many claims returns a `pgv:` cursor;
         resubmitting it yields the remaining items with no repeats and
         no dangling references.
         """
@@ -1435,7 +1442,7 @@ class ImpactTest(unittest.TestCase):
             )
             token = first.bound_info.continuation_token
             self.assertTrue(first.bound_info.truncated)
-            self.assertTrue(token.startswith("pgq:"))
+            self.assertTrue(token.startswith("pgv:"))
             first_ids = {item.item.id.value for item in first.content.freshness_items}
             second = ops.status(
                 ops.SemanticStatusRequest(
@@ -1467,58 +1474,14 @@ class ContextualTraceTest(unittest.TestCase):
 
     CTX = "ctx-trace"
 
-    def _bounds(self, **overrides):
-        base = dict(
-            max_results=50,
-            max_depth=5,
-            max_subjects=8,
-            max_evidence_units=24,
-            max_evidence_bytes=96_000,
-            max_candidate_claims=64,
-            max_candidate_relationships=64,
-        )
-        base.update(overrides)
-        return m.QueryBounds(**base)
-
-    def _harness(self, files, subjects):
-        repo = self.CTX
-        structural = InMemoryStructuralSource(
-            repo,
-            tuple(InMemoryFile(p, c) for p, c in files.items()),
-            tuple(subjects),
-        )
-        evidence = FixtureEvidenceSource(repo, dict(files))
-        store = SqliteSemanticStore(":memory:")
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-                authority_seeds=(),
-            ),
-            repository_id=repo,
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
-        return structural, evidence, store
-
-    def _ref(self, path, files):
-        return m.EvidenceRef(
-            evidence_id=m.EvidenceId(f"ev-{path}"),
-            repository_id=self.CTX,
-            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-            locator=path,
-            revision_or_fingerprint=fingerprint_content(files[path]),
-        )
-
-    def _sid(self, locator, kind=m.SubjectKind.COMPONENT):
-        return m.SubjectId(
-            repository_id=self.CTX,
-            subject_kind=kind,
-            canonical_locator=locator,
-        )
+    _bounds = staticmethod(query_bounds)
 
     def _establish_execution(self, store, files, canon, root, term):
-        eref = self._ref("canonical_assembly/candidate_packager.py", files)
+        eref = evidence_ref(
+            "canonical_assembly/candidate_packager.py",
+            repository_id=self.CTX,
+            files=files,
+        )
         fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
         claim = m.SemanticClaim(
             claim_id=m.ClaimId("c-purpose"),
@@ -1629,11 +1592,15 @@ class ContextualTraceTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid("canonical_assembly")
-            root = self._sid("review_workflow", m.SubjectKind.SUBSYSTEM)
-            term = self._sid("terminal")
+            canon = subject_id("canonical_assembly", repository_id=self.CTX)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=self.CTX
+            )
+            term = subject_id("terminal", repository_id=self.CTX)
             self._establish_execution(store, files, canon, root, term)
             answer = ops.trace(
                 SemanticTraceRequest(
@@ -1688,11 +1655,19 @@ class ContextualTraceTest(unittest.TestCase):
                 "candidate_packager",
             ),
         )
-        structural, evidence, store = self._harness(files, subjects)
+        structural, evidence, store = semantic_harness(
+            self.CTX, files, subjects=tuple(subjects)
+        )
         try:
-            canon = self._sid("canonical_assembly")
-            root = self._sid("review_workflow", m.SubjectKind.SUBSYSTEM)
-            eref = self._ref("canonical_assembly/candidate_packager.py", files)
+            canon = subject_id("canonical_assembly", repository_id=self.CTX)
+            root = subject_id(
+                "review_workflow", m.SubjectKind.SUBSYSTEM, repository_id=self.CTX
+            )
+            eref = evidence_ref(
+                "canonical_assembly/candidate_packager.py",
+                repository_id=self.CTX,
+                files=files,
+            )
             fp = fingerprint_content(files["canonical_assembly/candidate_packager.py"])
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("c-purpose"),

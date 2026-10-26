@@ -10,7 +10,7 @@ import unittest
 
 from span.core import model as m
 from span.service.resolution import frontier_fingerprint, resolve_scope_frontier
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
@@ -18,6 +18,9 @@ from span.shell.structural.memory import (
     InMemoryStructuralSource,
     InMemorySubject,
 )
+
+from functools import partial as _partial
+from tests.support.factories import query_bounds
 
 REPO = "frontier-fixture"
 
@@ -35,16 +38,7 @@ SUBJECTS = (
 )
 
 
-def _bounds(max_subjects: int = 10, max_results: int = 50) -> m.QueryBounds:
-    return m.QueryBounds(
-        max_results=max_results,
-        max_depth=2,
-        max_subjects=max_subjects,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
+_bounds = _partial(query_bounds, max_depth=2, max_subjects=10)
 
 
 class ScopeFrontierTest(unittest.TestCase):

@@ -322,7 +322,7 @@ def _pending_subject(pending):
 
 
 def _pending_evidence_ref(pending):
-    return pending["request"]["evidence_units"][0]["evidence_ref"]
+    return pending["request"]["task_evidence"]["evidence_units"][0]["evidence_ref"]
 
 
 async def _submit_answered(
@@ -1017,195 +1017,68 @@ async def lane(exe, work, data_dir, transcript):
     finally:
         await stack.aclose()
 
-    # -- phase 4: multi-member target mapping and service-owned CQ-01 ----
+    # -- phase 4: deterministic target admission -------------------------
     stack, session, _initialized, listed = await _session()
     try:
         wire = _wire(session, listed)
-        payload, is_error = await wire.call(
-            "initialize_target",
-            {
-                "repository_id": repo_id,
-                "target": {"paths": ["src"], "evidence_refs": []},
-                "objective": "wire target mapping",
-            },
-        )
-        assert not is_error, payload
-        assert "continuation" in payload, payload
-        items = payload["request"]["target_inventory_items"]
-        bound_ids = [item["evidence_ref"]["evidence_id"]["value"] for item in items]
-        assert len(bound_ids) >= 2, payload
-        template = submission_template_from_pending(payload)
-        template_ids = [
-            account["evidence_id"]["value"]
-            for account in template["proposed_target_inventory_accounting"]
-        ]
-        assert template_ids == bound_ids, (template_ids, bound_ids)
-        _phase(
-            transcript,
-            "EC-23",
-            bound_ids=bound_ids,
-            template_ids=template_ids,
-        )
-
-        # EC-25: evidence-supported area assignment. The client does not
-        # manufacture the default CQ-01.
-        area = {
-            "provisional_locator": "src",
-            "kind": "COMPONENT",
-            "display_name": "src",
-            "evidence": [items[0]["evidence_ref"]],
-            "basis": {
-                "derivation": "SEMANTIC_INTERPRETATION",
-                "summary": "wire acceptance maps the src area",
-            },
-        }
-        area_id = {
+        request = {
             "repository_id": repo_id,
-            "subject_kind": "COMPONENT",
-            "canonical_locator": "src",
+            "target": {"paths": ["src"], "evidence_refs": []},
+            "objective": "wire target admission",
         }
-        result = template
-        for account in result["proposed_target_inventory_accounting"]:
-            account.pop("resolution_requirements", None)
-            account["assigned_area_subjects"] = [area_id]
-        result["candidate_subjects"] = [area]
-        answer, is_error = await wire.call(
-            "submit_interpretation",
-            {
-                "continuation": payload["continuation"],
-                "result": result,
-                "repository_id": repo_id,
-            },
-        )
-        assert not is_error, answer
-        payload, is_error = await wire.call(
-            "initialize_target",
-            {
-                "repository_id": repo_id,
-                "target": {"paths": ["src"], "evidence_refs": []},
-                "objective": "wire target mapping",
-            },
-        )
+        payload, is_error = await wire.call("initialize_target", request)
         assert not is_error, payload
-        assert payload["request"]["question"]["question_class"] == "CQ_01", payload
-        assert "service-owned first-admission" in (
-            payload["request"]["question"]["materiality_basis"]
-        ), payload
-        seed_scope = payload["request"]["question"]
-        _phase(transcript, "EC-25", question_class="CQ_01")
-    finally:
-        await stack.aclose()
-
-    # -- phase 4a: existing target question reuse ------------------------
-    stack, session, _initialized, listed = await _session()
-    try:
-        wire = _wire(session, listed)
-        scope = {"paths": ["src/alpha.py"], "evidence_refs": []}
-        pending, is_error = await wire.call(
-            "initialize_target",
-            {
-                "repository_id": repo_id,
-                "target": scope,
-                "objective": "wire target question reuse",
-            },
-        )
-        assert not is_error, pending
-        # EC-27: the persisted CQ-01 exists, but it is not attached to a
-        # new target merely because it exists. Materiality is explicit.
-        assert pending["request"]["question"] is None, pending
-        items = pending["request"]["target_inventory_items"]
-        assert len(items) == 1, pending
-        result = submission_template_from_pending(pending)
-        accounts = result["proposed_target_inventory_accounting"]
-        assert len(accounts) == 1, result
-        accounts[0].pop("resolution_requirements", None)
-        accounts[0]["assigned_area_subjects"] = [area_id]
-        # EC-26: reuse the identical already-persisted target question.
-        result["proposed_target_questions"] = [seed_scope]
-        answer, is_error = await wire.call(
-            "submit_interpretation",
-            {
-                "continuation": pending["continuation"],
-                "result": result,
-                "repository_id": repo_id,
-            },
-        )
-        assert not is_error, answer
-        again, is_error = await wire.call(
-            "initialize_target",
-            {
-                "repository_id": repo_id,
-                "target": scope,
-                "objective": "wire target question reuse",
-            },
-        )
-        assert not is_error, again
-        assert again["request"]["question"]["question_slice"] == (
-            seed_scope["question_slice"]
-        ), again
-        _phase(transcript, "EC-26", question_slice=seed_scope["question_slice"])
-        _phase(transcript, "EC-27")
-    finally:
-        await stack.aclose()
-
-    # -- phase 4b: unresolved mapping is accepted but non-progressing ----
-    stack, session, _initialized, listed = await _session()
-    try:
-        wire = _wire(session, listed)
-        scope = {"paths": ["src/beta.py"], "evidence_refs": []}
-        pending, is_error = await wire.call(
-            "initialize_target",
-            {
-                "repository_id": repo_id,
-                "target": scope,
-                "objective": "wire unresolved mapping",
-            },
-        )
-        assert not is_error, pending
-        assert pending["request"]["question"] is None, pending
-        items = pending["request"]["target_inventory_items"]
-        assert items, pending
-        rules = " ".join(pending["request"]["brief"]["submission_rules"])
-        assert "non-progressing" in rules, rules
-        template = submission_template_from_pending(pending)
-        ids = [item["evidence_ref"]["evidence_id"]["value"] for item in items]
-        template_ids = [
-            account["evidence_id"]["value"]
-            for account in template["proposed_target_inventory_accounting"]
-        ]
-        assert template_ids == ids, (template_ids, ids)
-        # EC-24: submit the returned unresolved template unchanged.
-        answer, is_error = await wire.call(
-            "submit_interpretation",
-            {
-                "continuation": pending["continuation"],
-                "result": template,
-                "repository_id": repo_id,
-            },
-        )
-        assert not is_error, answer
-        again, is_error = await wire.call(
-            "initialize_target",
-            {
-                "repository_id": repo_id,
-                "target": scope,
-                "objective": "wire unresolved mapping",
-            },
-        )
-        assert not is_error, again
-        # Unresolved members keep the target incomplete: the frontier
-        # returns outstanding work or an explicitly incomplete target,
-        # never a falsely completed target.
-        if "request" in again:
-            assert again["request"]["question"] is None or (
-                again["request"]["question"]["question_class"] == "CQ_01"
-            ), again
+        target_id = None
+        if payload["$type"] == "PendingInterpretation":
+            task = payload["request"]
+            assert task["question"]["question_class"] == "CQ_01", payload
+            # EC-23: admission asks a question, never a mapping batch.
+            assert "target_inventory_items" not in task, payload
+            assert "service-owned first-admission" in (
+                task["question"]["materiality_basis"]
+            ), payload
+            target_id = task["target_id"]["value"]
+            _phase(transcript, "EC-23", unit="question")
         else:
-            assert "content" in again, again
-            assert again["content"].get("target_disposition") != "CURRENT", again
-            # Requirements have one owner: the answer envelope.
-            assert again.get("resolution_requirements"), again
-        _phase(transcript, "EC-24", non_progressing=True)
+            # An already-covered area is terminal, not a new mapping loop.
+            assert payload["content"]["resolved_mode"] == "CAMPAIGN", payload
+            target_id = payload["content"]["target_association"]["target_id"]["value"]
+            _phase(transcript, "EC-23", unit="terminal")
+        # EC-24: no unit binds the inventory for the model to account for.
+        _phase(transcript, "EC-24", inventory=0)
+
+        again, is_error = await wire.call("initialize_target", request)
+        assert not is_error, again
+        if again["$type"] == "PendingInterpretation":
+            assert again["request"]["question"]["question_class"] == "CQ_01", again
+            assert again["request"]["task_evidence"]["evidence_units"], again
+        else:
+            assert again["content"]["resolved_mode"] == "CAMPAIGN", again
+        # EC-25: re-admission is idempotent; it does not mint a second question.
+        _phase(transcript, "EC-25", readmission=True)
+
+        status_payload, is_error = await wire.call(
+            "status",
+            {
+                "repository_id": repo_id,
+                "target": {"$type": "TargetId", "value": target_id},
+            },
+        )
+        assert not is_error, status_payload
+        content = status_payload["content"]
+        # EC-26: the target reports a campaign disposition, not a mapping count.
+        assert content.get("target_disposition") is not None, status_payload
+        _phase(transcript, "EC-26", disposition=content["target_disposition"])
+
+        association = content.get("target_association") or {}
+        questions = association.get("target_questions") or []
+        accounts = association.get("inventory_accounting") or []
+        # EC-27: one deterministic admission, no duplicate question or member.
+        assert len(questions) <= 1, association
+        assert all(
+            account.get("assigned_area_subjects") for account in accounts
+        ), association
+        _phase(transcript, "EC-27", questions=len(questions), accounts=len(accounts))
     finally:
         await stack.aclose()
 
@@ -1249,7 +1122,7 @@ async def lane(exe, work, data_dir, transcript):
         def _assert_opaque(payload):
             message = payload.get("message", "")
             assert "page token is invalid" in message, payload
-            for forbidden in ("pgq:", "pgv:", "pgn:"):
+            for forbidden in ("pgv:", "pgn:"):
                 assert forbidden not in message, payload
             lowered = message.lower()
             for forbidden in ("digest", "offset", token):

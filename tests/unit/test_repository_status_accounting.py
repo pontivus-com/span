@@ -11,7 +11,7 @@ import unittest
 from span import service as ops
 from span.core import model as m
 from span.ports.structural import StaleContinuationError
-from span.shell import paging
+from span.core import paging
 from span.shell.agent_exchange.continuations import ContinuationStore
 from tests.support.agent_exchange import (
     REPO,

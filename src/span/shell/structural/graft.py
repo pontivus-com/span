@@ -35,12 +35,17 @@ import subprocess as _subprocess
 import threading as _threading
 
 from span.core import model as m
-from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
-from span.shell import paging as _paging
+from span.core import paging as _paging
 from span.shell.structural.memory import (
     evidence_kind_for_path,
     fingerprint_content,
+)
+from span.shell.structural.support import (
+    check_repository,
+    selected_edges,
+    versioned_offset,
+    versioned_page,
 )
 
 __all__ = [
@@ -681,7 +686,7 @@ class GraftStructuralSource:
         return True
 
     def _rebuild_file_hashes(self) -> dict[str, str | None]:
-        """Recorded whole-file hashes by path (Addendum F §4.0).
+        """Recorded whole-file hashes by path ([design note F](docs/design-references.md#f) §4.0).
 
         Only file-kind nodes carry a comparable hash; symbols are never
         compared against file bytes.
@@ -696,7 +701,7 @@ class GraftStructuralSource:
         return hashes
 
     def _compute_index_version(self) -> str:
-        """Listing version binding query cursors (Addendum F §4.3)."""
+        """Listing version binding query cursors ([design note F](docs/design-references.md#f) §4.3)."""
         return f"{self._wiring_mtime_ns or 0}-{self._state_fingerprint()[:16]}"
 
     def _ensure_fresh(self) -> None:
@@ -906,8 +911,8 @@ class GraftStructuralSource:
         repository_id: str,
         files: tuple[str, ...],
     ) -> m.StructuralFreshnessReport:
-        """File-set freshness verdict (Addendum F §4.0 port)."""
-        self._check_repository(repository_id)
+        """File-set freshness verdict ([design note F](docs/design-references.md#f) §4.0 port)."""
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         self._require_index()
         stale, unverifiable = self._verify_exact_files(files)
@@ -934,45 +939,6 @@ class GraftStructuralSource:
             return self._index_version
         return f"{self._index_version}|{m.evidence_scope_fingerprint(scope)}"
 
-    def _versioned_offset(
-        self, page_token: str | None, version: str | None = None
-    ) -> int:
-        """Decode a version-bound cursor; drift becomes StaleContinuation."""
-        try:
-            return _paging.parse_versioned_token(
-                page_token,
-                version=self._index_version if version is None else version,
-            )
-        except ValueError as exc:
-            if str(exc).startswith("stale listing continuation"):
-                raise StaleContinuationError(str(exc)) from None
-            raise
-
-    def _versioned_page(
-        self,
-        items: tuple[object, ...],
-        offset: int,
-        max_results: int,
-        category: str,
-        version: str | None = None,
-    ) -> tuple[tuple[object, ...], m.BoundInfo]:
-        kept = items[offset : offset + max_results]
-        remaining = len(items) - (offset + len(kept))
-        truncated = remaining > 0
-        token_version = self._index_version if version is None else version
-        return tuple(kept), m.BoundInfo(
-            requested_max_results=max_results,
-            requested_max_depth=0,
-            returned_results=len(kept),
-            truncated=truncated,
-            truncated_category=category if truncated else None,
-            continuation_token=(
-                _paging.format_versioned_token(token_version, offset + len(kept))
-                if truncated
-                else None
-            ),
-        )
-
     def search_symbols(
         self,
         repository_id: str,
@@ -982,56 +948,17 @@ class GraftStructuralSource:
         page_token: str | None = None,
         scope: m.EvidenceScope | None = None,
     ) -> m.StructuralResult[m.StructuralSearchHit]:
-        """Paginated name/locator search (Addendum F §4.0 port; J-10)."""
-        self._check_repository(repository_id)
+        """Paginated name/locator search ([design note F](docs/design-references.md#f) §4.0 port; J-10)."""
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         self._require_index()
         if not query:
             raise ValueError("search query must be non-empty")
         version = self._scoped_version(scope)
-        offset = self._versioned_offset(page_token, version=version)
-        if match is m.StructuralLocateMatch.EXACT:
-            locators = [query] if query in self._nodes else []
-            ranked = [(loc, m.CandidateRankBasis.EXACT_LOCATOR) for loc in locators]
-            if not ranked:
-                # Bare symbol names never equal a path#symbol node id;
-                # fall through to exact-name matching (F-01 recall fix).
-                # Still exact-only: no substring matching in this mode.
-                for node_id, node in self._nodes.items():
-                    name = str(node.get("name") or "")
-                    if query == name and query:
-                        rank = (
-                            m.CandidateRankBasis.EXACT_DECLARATION
-                            if node["kind"] != "file"
-                            else m.CandidateRankBasis.EXACT_NAME
-                        )
-                        ranked.append((node_id, rank))
-                        continue
-                    basename = node_id.split("#")[-1].rsplit("/", 1)[-1]
-                    if query == basename:
-                        ranked.append((node_id, m.CandidateRankBasis.EXACT_NAME))
-                order = {
-                    m.CandidateRankBasis.EXACT_LOCATOR: 0,
-                    m.CandidateRankBasis.EXACT_DECLARATION: 1,
-                    m.CandidateRankBasis.EXACT_NAME: 2,
-                }
-                ranked.sort(key=lambda x: (order[x[1]], x[0]))
-        else:
-            selector = m.SubjectSelector(
-                exact_subject_id=None,
-                name_or_locator=query,
-                expected_kinds=(),
-                retrieval_scope_hint=None,
-            )
-            ranked = [(loc, rank) for loc, rank in self._match_name(selector)]
-            order = {
-                m.CandidateRankBasis.EXACT_LOCATOR: 0,
-                m.CandidateRankBasis.EXACT_DECLARATION: 1,
-                m.CandidateRankBasis.EXACT_NAME: 2,
-                m.CandidateRankBasis.PARTIAL_NAME: 3,
-                m.CandidateRankBasis.STRUCTURAL_PROXIMITY: 4,
-            }
-            ranked.sort(key=lambda x: (order[x[1]], x[0]))
+        offset = versioned_offset(
+            page_token, index_version=self._index_version, version=version
+        )
+        ranked = self._ranked_candidates(query, match)
         if scope is not None:
             # J-10: filter the candidate population to the exact scope
             # BEFORE ranking materialisation and pagination so an
@@ -1059,8 +986,13 @@ class GraftStructuralSource:
             for loc, rank in ranked
             for node in (self._nodes[loc],)
         )
-        kept, bound_info = self._versioned_page(
-            candidates, offset, bounds.max_results, "search", version=version
+        kept, bound_info = versioned_page(
+            candidates,
+            offset,
+            bounds.max_results,
+            "search",
+            version=version,
+            index_version=self._index_version,
         )
         # Verify-then-exclude on the kept page: offsets advance over the
         # stable index list, so live drift only shrinks pages (counted),
@@ -1130,6 +1062,61 @@ class GraftStructuralSource:
             coverage_detail=detail,
         )
 
+    def _ranked_candidates(
+        self,
+        query: str,
+        match: m.StructuralLocateMatch,
+    ) -> list[tuple[str, m.CandidateRankBasis]]:
+        """Rank name/locator candidates for one search mode (F-01, F-02)."""
+        if not query:
+            raise ValueError("search query must be non-empty")
+        if match is m.StructuralLocateMatch.EXACT:
+            ranked: list[tuple[str, m.CandidateRankBasis]] = (
+                [(query, m.CandidateRankBasis.EXACT_LOCATOR)]
+                if query in self._nodes
+                else []
+            )
+            if not ranked:
+                # Bare symbol names never equal a path#symbol node id; fall
+                # through to exact-name matching (F-01 recall fix). Still
+                # exact-only: no substring matching in this mode.
+                for node_id, node in self._nodes.items():
+                    name = str(node.get("name") or "")
+                    if query == name and query:
+                        rank = (
+                            m.CandidateRankBasis.EXACT_DECLARATION
+                            if node["kind"] != "file"
+                            else m.CandidateRankBasis.EXACT_NAME
+                        )
+                        ranked.append((node_id, rank))
+                        continue
+                    basename = node_id.split("#")[-1].rsplit("/", 1)[-1]
+                    if query == basename:
+                        ranked.append((node_id, m.CandidateRankBasis.EXACT_NAME))
+                order = {
+                    m.CandidateRankBasis.EXACT_LOCATOR: 0,
+                    m.CandidateRankBasis.EXACT_DECLARATION: 1,
+                    m.CandidateRankBasis.EXACT_NAME: 2,
+                }
+                ranked.sort(key=lambda item: (order[item[1]], item[0]))
+            return ranked
+        selector = m.SubjectSelector(
+            exact_subject_id=None,
+            name_or_locator=query,
+            expected_kinds=(),
+            retrieval_scope_hint=None,
+        )
+        ranked = [(loc, rank) for loc, rank in self._match_name(selector)]
+        order = {
+            m.CandidateRankBasis.EXACT_LOCATOR: 0,
+            m.CandidateRankBasis.EXACT_DECLARATION: 1,
+            m.CandidateRankBasis.EXACT_NAME: 2,
+            m.CandidateRankBasis.PARTIAL_NAME: 3,
+            m.CandidateRankBasis.STRUCTURAL_PROXIMITY: 4,
+        }
+        ranked.sort(key=lambda item: (order[item[1]], item[0]))
+        return ranked
+
     def _node_path(self, locator: str) -> str:
         return str(self._nodes[locator]["path"])
 
@@ -1140,11 +1127,11 @@ class GraftStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralOutlineEntry]:
-        """Symbols defined in one file (Addendum F §4.0 port)."""
-        self._check_repository(repository_id)
+        """Symbols defined in one file ([design note F](docs/design-references.md#f) §4.0 port)."""
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         self._require_index()
-        offset = self._versioned_offset(page_token)
+        offset = versioned_offset(page_token, index_version=self._index_version)
         members = sorted(
             node_id
             for node_id, node in self._nodes.items()
@@ -1160,7 +1147,9 @@ class GraftStructuralSource:
             coverage = (
                 m.ScopeCoverage.UNVERIFIED if on_disk else m.ScopeCoverage.VERIFIED
             )
-            kept, bound_info = self._versioned_page((), offset, 1, "outline")
+            kept, bound_info = versioned_page(
+                (), offset, 1, "outline", index_version=self._index_version
+            )
             if coverage is m.ScopeCoverage.VERIFIED:
                 detail: str | None = "clean-verified"
             else:
@@ -1189,8 +1178,12 @@ class GraftStructuralSource:
             for node_id in members
             for node in (self._nodes[node_id],)
         )
-        kept, bound_info = self._versioned_page(
-            entries, offset, bounds.max_results, "outline"
+        kept, bound_info = versioned_page(
+            entries,
+            offset,
+            bounds.max_results,
+            "outline",
+            index_version=self._index_version,
         )
         report = self.verify_files(repository_id, (locator,))
         stale_set = set(report.stale_files)
@@ -1241,7 +1234,7 @@ class GraftStructuralSource:
     def _resolve_dotted(self, endpoint: str, file_ids: dict[str, str]) -> str | None:
         """Map a dotted module id to a known file node, or None.
 
-        Provider-local evidence join (Addendum G follow-up): import
+        Provider-local evidence join ([design note G](docs/design-references.md#g) follow-up): import
         edges recorded against dotted module ids (``pkg.mod``) attach
         to the file node they denote, so file-level traversal sees
         them. ``file_ids`` maps file paths to node ids, built once per
@@ -1396,14 +1389,10 @@ class GraftStructuralSource:
         )
         return digest
 
-    def _check_repository(self, repository_id: str) -> None:
-        if repository_id != self._repository_id:
-            raise ValueError(f"unknown repository: {repository_id}")
-
     # -- StructuralSource port --------------------------------------------
 
     def repository_state(self, repository_id: str) -> m.RepositoryState:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         import datetime as _datetime
 
@@ -1427,7 +1416,7 @@ class GraftStructuralSource:
         injected indexes report UNVERIFIABLE (completeness unprovable);
         an index older than HEAD reports STALE.
         """
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         if not self._loaded:
             return m.Freshness(
@@ -1514,7 +1503,7 @@ class GraftStructuralSource:
         never raise. Invoked only from `initialize_repository`
         provisioning and explicit `refresh`, never from ordinary reads.
         """
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         current = self.describe_current(repository_id)
         if current.state is m.FreshnessState.CURRENT:
             return current
@@ -1553,7 +1542,7 @@ class GraftStructuralSource:
         selector: m.SubjectSelector,
         bounds: m.QueryBounds,
     ) -> m.SubjectResolution:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         self._require_index()
         if selector.exact_subject_id is not None:
@@ -1652,7 +1641,7 @@ class GraftStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralLocation]:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         self._require_index()
         node = self._nodes.get(subject.canonical_locator)
@@ -1689,40 +1678,21 @@ class GraftStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralEdge]:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         self._require_index()
         locator = subject.canonical_locator
-        kinds = set(edge_kinds) if edge_kinds else set(m.StructuralEdgeKind)
-        found: list[m.StructuralEdge] = []
-        for source, target, relation in self._edges:
-            edge = self._to_edge(source, target, relation)
-            if edge.kind not in kinds:
-                continue
-            if (
-                direction
-                in (
-                    StructuralDirection.DOWNSTREAM,
-                    StructuralDirection.BOTH,
-                )
-                and source == locator
-            ):
-                found.append(edge)
-            elif (
-                direction
-                in (
-                    StructuralDirection.UPSTREAM,
-                    StructuralDirection.BOTH,
-                )
-                and target == locator
-            ):
-                found.append(edge)
-        found.sort(
-            key=lambda e: (
-                e.kind.value,
-                e.source.canonical_locator,
-                e.target.canonical_locator,
-            )
+        found = selected_edges(
+            locator,
+            edge_kinds,
+            direction,
+            (
+                (RELATION_EDGE_KIND[relation], source, target, relation)
+                for source, target, relation in self._edges
+            ),
+            lambda kind, source, target, relation: self._to_edge(
+                source, target, relation
+            ),
         )
         kept, bound_info = _paging.paginate(
             tuple(found), bounds.max_results, "edges", page_token
@@ -1748,7 +1718,7 @@ class GraftStructuralSource:
         direction: StructuralDirection,
         bounds: m.QueryBounds,
     ) -> list[m.StructuralEdge]:
-        """Consume every adjacency page for one node (Addendum F §4.2).
+        """Consume every adjacency page for one node ([design note F](docs/design-references.md#f) §4.2).
 
         Single-page reads silently drop branches past the page limit;
         traversal always exhausts continuations. Defensive against a
@@ -1785,7 +1755,7 @@ class GraftStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralReachNode]:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         self._ensure_fresh()
         self._require_index()
         limit = min(max_depth, bounds.max_depth)
@@ -1815,7 +1785,7 @@ class GraftStructuralSource:
         via: dict[str, m.StructuralEdge | None] = {subject.canonical_locator: None}
         frontier = [subject.canonical_locator]
         nodes: list[m.StructuralReachNode] = []
-        # Exhaustion rule (Addendum F §4.2): every adjacency page of
+        # Exhaustion rule ([design note F](docs/design-references.md#f) §4.2): every adjacency page of
         # every visited node is consumed — a single first page would
         # silently drop whole branches past the page limit. The visited
         # cap bounds total work; hitting it truncates explicitly.
