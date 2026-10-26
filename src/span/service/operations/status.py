@@ -1678,7 +1678,13 @@ def _compose_status_answer(
     frontier_offset: int = 0,
     frontier: str = "",
 ) -> m.SemanticAnswer:
-    if len(subjects) == 1:
+    if scope is not None:
+        # A scope cursor identifies the scope, never the page that returned
+        # it: every resume resolves a different page, so a page-derived key
+        # can never match the token it was issued with. Membership drift is
+        # still caught by ``frontier``, which is part of the version (J-10).
+        _target_key = "scope:" + m.evidence_scope_fingerprint(scope)
+    elif len(subjects) == 1:
         _sid = subjects[0].subject_id
         _target_key = f"{_sid.subject_kind.value}:{_sid.canonical_locator}"
     else:
@@ -1707,13 +1713,18 @@ def _compose_status_answer(
     all_rels: list[m.SemanticRelationship] = []
     first_claims_token: str | None = None
     first_rels_token: str | None = None
+    # A scope cursor addresses the frontier, never the per-subject lists: the
+    # two grammars are distinct and are never interchanged (Addendum I S4).
+    _subject_page_token = (
+        None if scope is not None or len(subjects) != 1 else page_token
+    )
     for position, subject in enumerate(subjects):
         claims, relationships, tok_c, tok_r = _load_subject_state(
             repository_id,
             subject.subject_id,
             store=store,
             bounds=bounds,
-            page_token=page_token if len(subjects) == 1 else None,
+            page_token=_subject_page_token,
         )
         all_claims.extend(claims)
         all_rels.extend(relationships)
@@ -1833,12 +1844,12 @@ def _compose_status_answer(
             tuple(s.subject_id for s in subjects),
             store=store,
             bounds=bounds,
-            page_token=page_token,
+            page_token=_subject_page_token,
             evidence=evidence,
             live_states=live_states,
         )
         token: str | None = _next_service_token(
-            page_token,
+            _subject_page_token,
             kept_claims,
             kept_rels,
             claims_t,

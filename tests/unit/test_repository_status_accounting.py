@@ -10,6 +10,7 @@ import unittest
 
 from span import service as ops
 from span.core import model as m
+from span.ports.structural import StaleContinuationError
 from span.shell.agent_exchange.continuations import ContinuationStore
 from tests.support.agent_exchange import (
     REPO,
@@ -19,10 +20,10 @@ from tests.support.agent_exchange import (
 )
 
 
-def _status(bounds, page_token=None):
+def _status(bounds, page_token=None, target=None):
     return ops.SemanticStatusRequest(
         repository_id=REPO,
-        target=None,
+        target=target,
         bounds=bounds,
         page_token=page_token,
     )
@@ -116,6 +117,63 @@ class RepositoryStatusAccountingTest(unittest.TestCase):
                 self.assertTrue(
                     answer.bound_info.truncated
                     or answer.bound_info.continuation_token is not None
+                )
+        finally:
+            store.close()
+
+
+class ScopedStatusPaginationTest(unittest.TestCase):
+    """A scoped status cursor resumes the frontier it was issued against.
+
+    The cursor identifies the scope, so replaying it must reach page two.
+    Deriving the digest from the returned page made every resume stale,
+    because page two resolves a different page of the same frontier.
+    """
+
+    def _scope(self, path="src"):
+        return m.EvidenceScope(paths=(path,), evidence_refs=())
+
+    def _call(self, structural, evidence, store, bounds, scope, token=None):
+        return ops.status(
+            _status(bounds, token, target=scope),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+        )
+
+    def test_a_scope_cursor_resumes_the_next_frontier_page(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _establish(structural, evidence, store, agent)
+            bounds = _bounds(max_subjects=1, max_results=50)
+            scope = self._scope()
+            seen: list[str] = []
+            token = None
+            for _ in range(10):
+                answer = self._call(structural, evidence, store, bounds, scope, token)
+                entries = answer.content.coverage_report.page.entries
+                seen.extend(e.subject.canonical_locator for e in entries)
+                if not answer.bound_info.truncated:
+                    break
+                token = answer.bound_info.continuation_token
+                self.assertIsNotNone(token)
+            self.assertGreaterEqual(len(seen), 2)
+            self.assertEqual(len(seen), len(set(seen)), "an entry appeared twice")
+        finally:
+            store.close()
+
+    def test_a_changed_scope_still_restarts_the_listing(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _establish(structural, evidence, store, agent)
+            bounds = _bounds(max_subjects=1, max_results=50)
+            first = self._call(structural, evidence, store, bounds, self._scope("src"))
+            token = first.bound_info.continuation_token
+            self.assertIsNotNone(token)
+            with self.assertRaises(StaleContinuationError):
+                self._call(
+                    structural, evidence, store, bounds, self._scope("conf"), token
                 )
         finally:
             store.close()
