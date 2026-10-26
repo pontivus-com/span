@@ -24,7 +24,7 @@ from span.service.answers import (
     ANSWER_ASSEMBLER,
     _conflicts_for,
     _freshness_items_for,
-    _next_service_token,
+    _next_service_offsets,
     _query_digest,
     _validate_service_token,
     _select_answer_items,
@@ -70,34 +70,20 @@ from span.ports.structural import StaleContinuationError
 from span.shell import paging as _paging
 
 
-def _scope_page_offset(page_token: str | None) -> int:
-    """Read the offset from a scope cursor without validating its version.
+def _scope_cursor(page_token: str | None) -> tuple[int, int, int, int]:
+    """Read a scope cursor's offsets without validating its version.
 
     The version binds the membership fingerprint, which is only known after
-    the frontier is resolved; the offset is safe to read first.
+    the frontier is resolved; the offsets are safe to read first. Returns
+    (frontier, claims, relationships, questions).
     """
-    if page_token is None:
-        return 0
-    if not page_token.startswith("pgv:"):
-        raise StaleContinuationError(
-            "page token is invalid for this request; restart pagination from "
-            "the first page with page_token omitted"
-        )
-    body = page_token[len("pgv:") :]
-    _, _, offset_text = body.rpartition(":")
     try:
-        offset = int(offset_text)
+        return _paging.parse_scope_token(page_token)
     except ValueError:
         raise StaleContinuationError(
             "page token is invalid for this request; restart pagination from "
             "the first page with page_token omitted"
         ) from None
-    if offset < 0:
-        raise StaleContinuationError(
-            "page token is invalid for this request; restart pagination from "
-            "the first page with page_token omitted"
-        )
-    return offset
 
 
 __all__ = [
@@ -1674,6 +1660,7 @@ def _compose_status_answer(
     continuations: ContinuationStore,
     page_token: str | None = None,
     scope: m.EvidenceScope | None = None,
+    item_cursor: tuple[int, int, int] = (0, 0, 0),
     frontier_total: int | None = None,
     frontier_offset: int = 0,
     frontier: str = "",
@@ -1696,28 +1683,33 @@ def _compose_status_answer(
             )
         )
     _digest = _query_digest("STATUS", repository_id, _target_key, "", bounds)
-    if page_token is not None and page_token.startswith("pgv:"):
-        # A frontier cursor binds the exact membership; drift restarts.
-        if not frontier:
-            raise StaleContinuationError(
-                "page token is invalid for this request; restart pagination "
-                "from the first page with page_token omitted"
-            )
-        try:
-            _paging.parse_versioned_token(page_token, version=_digest + frontier)
-        except ValueError as exc:
-            raise StaleContinuationError(str(exc)) from None
+    if scope is not None:
+        # The scope cursor names the frontier position and, when one subject
+        # did not fit, that subject's item offsets. Drift in membership or
+        # request restarts the listing; item offsets never substitute for a
+        # version check.
+        if page_token is not None:
+            if not frontier:
+                raise StaleContinuationError(
+                    "page token is invalid for this request; restart pagination "
+                    "from the first page with page_token omitted"
+                )
+            try:
+                _paging.parse_scope_token(page_token, version=_digest + frontier)
+            except ValueError as exc:
+                raise StaleContinuationError(str(exc)) from None
+        _subject_page_token = (
+            _paging.format_question_token(_digest, *item_cursor)
+            if any(item_cursor)
+            else None
+        )
     else:
         _validate_service_token(page_token, _digest)
+        _subject_page_token = page_token if len(subjects) == 1 else None
     all_claims: list[m.SemanticClaim] = []
     all_rels: list[m.SemanticRelationship] = []
     first_claims_token: str | None = None
     first_rels_token: str | None = None
-    # A scope cursor addresses the frontier, never the per-subject lists: the
-    # two grammars are distinct and are never interchanged (Addendum I S4).
-    _subject_page_token = (
-        None if scope is not None or len(subjects) != 1 else page_token
-    )
     for position, subject in enumerate(subjects):
         claims, relationships, tok_c, tok_r = _load_subject_state(
             repository_id,
@@ -1823,20 +1815,27 @@ def _compose_status_answer(
     for rel in kept_rels:
         unresolved.extend(_answers.requirements_for_relationship(rel))
     # Non-ref lists (evidence pointers and values, never semantic refs)
-    # take the remaining budget deterministically.
-    rest_budget = max(0, bounds.max_results - len(kept_conf) - len(kept_claims))
-    kept_unresolved = tuple(unresolved[:rest_budget])
-    kept_changed = changed_kept[: max(0, rest_budget - len(kept_unresolved))]
-    kept_ver = verification_all[
-        : max(0, rest_budget - len(kept_unresolved) - len(kept_changed))
-    ]
-    truncated = items_truncated or (
-        len(kept_unresolved) + len(kept_changed) + len(kept_ver)
-        < len(unresolved) + len(changed_kept) + len(verification_all)
-    )
-    category = items_category
-    if category is None and truncated:
-        category = "unresolved"
+    # take the remaining budget deterministically. A scope page that holds
+    # one subject carries them whole: they belong to its claims and entry,
+    # and a cursor cannot name a position inside them.
+    single_subject_scope = scope is not None and len(subjects) == 1
+    if single_subject_scope:
+        truncated = items_truncated
+        category = items_category
+    else:
+        rest_budget = max(0, bounds.max_results - len(kept_conf) - len(kept_claims))
+        kept_unresolved = tuple(unresolved[:rest_budget])
+        kept_changed = changed_kept[: max(0, rest_budget - len(kept_unresolved))]
+        kept_ver = verification_all[
+            : max(0, rest_budget - len(kept_unresolved) - len(kept_changed))
+        ]
+        truncated = items_truncated or (
+            len(kept_unresolved) + len(kept_changed) + len(kept_ver)
+            < len(unresolved) + len(changed_kept) + len(verification_all)
+        )
+        category = items_category
+        if category is None and truncated:
+            category = "unresolved"
     if len(subjects) == 1:
         views, qshown, qremaining = _paged_question_views(
             repository_id,
@@ -1848,7 +1847,7 @@ def _compose_status_answer(
             evidence=evidence,
             live_states=live_states,
         )
-        token: str | None = _next_service_token(
+        next_items = _next_service_offsets(
             _subject_page_token,
             kept_claims,
             kept_rels,
@@ -1858,8 +1857,14 @@ def _compose_status_answer(
             first_rels_token,
             questions_skip=qshown,
             questions_remaining=qremaining,
-            query_digest=_digest,
         )
+        if scope is not None:
+            # The scope branch mints a composite cursor below.
+            token: str | None = None
+        elif next_items is None:
+            token = None
+        else:
+            token = _paging.format_question_token(_digest, *next_items)
     else:
         views, _, qremaining = _paged_question_views(
             repository_id,
@@ -1871,6 +1876,7 @@ def _compose_status_answer(
             evidence=evidence,
             live_states=live_states,
         )
+        next_items = None
         token = None
     if qremaining > 0:
         truncated = True
@@ -1910,21 +1916,35 @@ def _compose_status_answer(
             else len(subjects)
         ),
     )
-    unresolved = tuple(
-        dict.fromkeys((*unresolved, *pending_requirements, *frontier_requirements))
-    )
+    if scope is not None and any(item_cursor):
+        # The coverage entry repeats while one subject's lists page; its
+        # requirements were delivered with that subject's first page.
+        unresolved = tuple(dict.fromkeys((*unresolved, *pending_requirements)))
+    else:
+        unresolved = tuple(
+            dict.fromkeys((*unresolved, *pending_requirements, *frontier_requirements))
+        )
     # One ceiling over the answer's leaves. Item-shaped leaves were selected
     # against max_results already; everything else is fitted to what remains.
     # A claim or relationship carries one freshness item, so each costs two.
+    # A single-subject scope page is one atomic unit: its requirements,
+    # changed dependencies, and verification travel with its claims instead
+    # of being cut where no cursor can name the position.
     fixed = len(kept_claims) + len(kept_rels) + len(kept_conf)
     remaining = max(0, bounds.max_results - fixed)
-    kept_views = views[:remaining]
-    remaining -= len(kept_views)
-    kept_unresolved = unresolved[:remaining]
-    remaining -= len(kept_unresolved)
-    kept_changed = kept_changed[:remaining]
-    remaining -= len(kept_changed)
-    kept_ver = kept_ver[:remaining]
+    if single_subject_scope:
+        kept_views = views
+        kept_unresolved = unresolved
+        kept_changed = changed_kept
+        kept_ver = verification_all
+    else:
+        kept_views = views[:remaining]
+        remaining -= len(kept_views)
+        kept_unresolved = unresolved[:remaining]
+        remaining -= len(kept_unresolved)
+        kept_changed = kept_changed[:remaining]
+        remaining -= len(kept_changed)
+        kept_ver = kept_ver[:remaining]
     leaves_dropped = (
         len(kept_views) < len(views)
         or len(kept_unresolved) < len(unresolved)
@@ -1933,12 +1953,28 @@ def _compose_status_answer(
     )
     if leaves_dropped and category is None:
         category = "unresolved"
-    progress = frontier_offset + len(subjects)
-    frontier_truncated = frontier_total is not None and progress < frontier_total
-    if frontier_truncated:
-        truncated = True
-        category = category or "semantic_subjects"
-        token = _paging.format_versioned_token(_digest + frontier, progress)
+    if scope is not None:
+        if next_items is not None:
+            # The page stopped inside one subject: the frontier must not
+            # advance until that subject's lists are exhausted.
+            truncated = True
+            category = category or "claims"
+            token = _paging.format_scope_token(
+                _digest + frontier, frontier_offset, *next_items
+            )
+        else:
+            progress = frontier_offset + len(subjects)
+            if frontier_total is not None and progress < frontier_total:
+                truncated = True
+                category = category or "semantic_subjects"
+                token = _paging.format_scope_token(_digest + frontier, progress)
+    else:
+        progress = frontier_offset + len(subjects)
+        frontier_truncated = frontier_total is not None and progress < frontier_total
+        if frontier_truncated:
+            truncated = True
+            category = category or "semantic_subjects"
+            token = _paging.format_versioned_token(_digest + frontier, progress)
     if leaves_dropped:
         truncated = True
     content = m.StatusContent(
@@ -1985,6 +2021,20 @@ def _compose_status_answer(
             kept_unresolved,
         ),
     )
+
+
+def _page_cut_unresumable_items(answer: m.SemanticAnswer) -> bool:
+    """Did this page cut content that a multi-subject cursor cannot name?
+
+    A frontier cursor names a subject position. Only an item cursor names a
+    claim, relationship, or question offset, and it can do that for exactly
+    one subject. A page that cut anything but the frontier therefore has to
+    shrink to one subject before its cursor can be honest.
+    """
+    bound = answer.bound_info
+    if not bound.truncated:
+        return False
+    return bound.truncated_category not in (None, "semantic_subjects")
 
 
 def status(
@@ -2112,9 +2162,10 @@ def status(
     # next-operation guidance from _compose_status_answer; absent,
     # ambiguous, unexamined, stale, and unverifiable stay distinct.
     if isinstance(request.target, m.EvidenceScope):
-        offset = 0
-        if request.page_token is not None and request.page_token.startswith("pgv:"):
-            offset = _scope_page_offset(request.page_token)
+        frontier_offset, claims_skip, rels_skip, questions_skip = _scope_cursor(
+            request.page_token
+        )
+        item_cursor = (claims_skip, rels_skip, questions_skip)
         subjects, total, fingerprint = resolve_scope_frontier(
             request.repository_id,
             request.target,
@@ -2122,11 +2173,23 @@ def status(
             evidence=evidence,
             store=store,
             bounds=bounds,
-            offset=offset,
+            offset=frontier_offset,
         )
-        return _compose_status_answer(
+        if any(item_cursor):
+            # A resumed item page names the subject the previous page stopped
+            # inside; the frontier may not move until its lists are exhausted.
+            if not subjects:
+                raise StaleContinuationError(
+                    "stale listing continuation: the subject at this offset no "
+                    "longer exists; restart the listing from page one with "
+                    "page_token omitted"
+                )
+            window = subjects[:1]
+        else:
+            window = subjects
+        answer = _compose_status_answer(
             request.repository_id,
-            subjects,
+            window,
             structural=structural,
             evidence=evidence,
             store=store,
@@ -2135,10 +2198,33 @@ def status(
             continuations=continuations,
             page_token=request.page_token,
             scope=request.target,
+            item_cursor=item_cursor,
             frontier_total=total,
-            frontier_offset=offset,
+            frontier_offset=frontier_offset,
             frontier=fingerprint,
         )
+        if len(window) > 1 and _page_cut_unresumable_items(answer):
+            # A page that has to cut its own items cannot carry a cursor for
+            # them while it also advances the frontier. Return one subject
+            # instead, so the item position has somewhere to live.
+            window = window[:1]
+            answer = _compose_status_answer(
+                request.repository_id,
+                window,
+                structural=structural,
+                evidence=evidence,
+                store=store,
+                bounds=bounds,
+                state=state,
+                continuations=continuations,
+                page_token=request.page_token,
+                scope=request.target,
+                item_cursor=(0, 0, 0),
+                frontier_total=total,
+                frontier_offset=frontier_offset,
+                frontier=fingerprint,
+            )
+        return answer
     return _compose_status_answer(
         request.repository_id,
         subjects,

@@ -10,14 +10,15 @@ schema is unchanged (schema 8), so no migration is needed.
 
 ### Fixes
 
-- **Scoped `status` resumes.** The page cursor was checked against a digest
-  built from the page it had just returned, so the next call resolved different
-  subjects and every resume was rejected as `stale_continuation`. The cursor is
-  now bound to the scope's fingerprint; membership drift still restarts the
-  listing, so a changed scope cannot silently skip members.
-- **A scope cursor is decoded only by the scope path.** The frontier cursor is
-  no longer handed to per-list readers that accept only `pgq:` cursors, so a
-  scoped page cannot fail inside claim, relationship, or question paging.
+- **Scoped `status` resumes where it stopped.** The page cursor was checked
+  against a digest built from the page it had just returned, so the next call
+  resolved different subjects and every resume was rejected as
+  `stale_continuation`. The cursor is now bound to the scope's fingerprint, and
+  it names two positions: where the subject frontier resumes and, when a page
+  had to cut its own items, how far into that subject's claims, relationships,
+  and questions it reached. A page that cuts items stays on its subject instead
+  of advancing the frontier past them, so nothing is skipped and membership
+  drift still restarts the listing.
 - **`NOT_FOUND` stops diagnosing the caller.** The requirement stated that
   locators are relative to the repository root, "not the workspace root",
   without inspecting the locator. It now states the rule and leaves the cause
@@ -33,6 +34,11 @@ schema is unchanged (schema 8), so no migration is needed.
 
 Cursors issued before 0.7.1 by scoped `status` are invalid. They never resumed,
 so nothing is lost: restart the listing with `page_token: null`.
+
+A page that carries one subject whole may exceed `max_results` by that
+subject's requirements. This is the same declared exception that has always
+admitted a coverage entry whole: a page is never cut where the cursor cannot
+name the position.
 
 ## 0.7.0 — 2026-10-25
 
