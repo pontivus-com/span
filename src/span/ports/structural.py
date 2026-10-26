@@ -32,7 +32,7 @@ from span.core.model import (
 
 class StaleContinuationError(ValueError):
     """A version-bound listing continuation no longer matches the listing
-    version (Addendum F §4.3). The caller restarts the listing from page
+    version ([design note F](docs/design-references.md#f) §4.3). The caller restarts the listing from page
     one; the error names the observed new version."""
 
 
@@ -105,7 +105,7 @@ class StructuralSource(_typing.Protocol):
         page_token: str | None = None,
         scope: EvidenceScope | None = None,
     ) -> StructuralResult[StructuralSearchHit]:
-        """Paginated name/locator search (Addendum F §4.0; J-10).
+        """Paginated name/locator search ([design note F](docs/design-references.md#f) §4.0; J-10).
 
         Provider match order, real continuation tokens (never the
         tokenless truncation of resolve_subject). Tokens are
@@ -137,7 +137,7 @@ class StructuralSource(_typing.Protocol):
         repository_id: str,
         files: tuple[str, ...],
     ) -> StructuralFreshnessReport:
-        """File-set freshness verdict (Addendum F §4.0).
+        """File-set freshness verdict ([design note F](docs/design-references.md#f) §4.0).
 
         Whole-file live fingerprints against recorded file hashes;
         symbol hashes are never compared against file bytes. Coverage
@@ -149,7 +149,7 @@ class StructuralSource(_typing.Protocol):
         self,
         repository_id: str,
     ) -> Freshness:
-        """Provider index currency verdict (Addendum G §4.8d).
+        """Provider index currency verdict ([design note G](docs/design-references.md#g) §4.8d).
 
         Whether this provider's structural view is current for the
         repository, with a provider-local reason string. Read-only:

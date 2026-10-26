@@ -28,12 +28,12 @@ adds only the documentation-area procedure.
    every material area. Split where ownership,
    authority, lifecycle, or material input-to-terminal paths diverge; merge
    only where one bounded analysis can substantiate the areas together.
-4. Account for every target inventory member through the canonical
-   `proposed_target_inventory_accounting` field. A member with no indexed
-   subject may have `subject: null`; keep it as a full inventory member and
-   assign, evidence-back exclude, or record an unresolved mapping requirement.
+4. Membership is admitted for you: `initialize_target` assigns every
+   inventory member to the target's area and returns its question. A member
+   with no indexed subject is still a member; do not invent a subject for it
+   and do not submit membership.
    Do not drop it because it lacks an anchor.
-5. Admit a new material area through target inventory accounting only.
+5. Admit a new material area through `proposed_questions` only.
    Span creates the area's first-admission `PENDING` CQ-01 seed itself; do
    not manufacture it. Use `proposed_questions` only for genuinely
    additional material questions the agent discovers, and

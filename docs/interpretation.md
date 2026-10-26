@@ -22,10 +22,10 @@ material-path, typed-result, adversarial-check, disposition, and fresh-readback
 guidance, plus C-04 material aspects and recorded OPEN/PENDING requirements.
 The exact user-directed `target_scope` is carried separately from the
 current structural anchor, so a bounded candidate is never mistaken for the
-whole semantic target. Target-mode work also carries typed target-inventory
-accounting proposals through the existing result exchange; these account for
-inventory assignment, evidence-backed target exclusion, or unresolved
-mapping. They are distinct from semantic-question `NOT_APPLICABLE` coverage.
+whole semantic target. Target-mode work carries the target association:
+membership is computed at admission from the provider inventory and is never
+submitted, so there is no inventory-accounting proposal in the result
+exchange. It is distinct from semantic-question `NOT_APPLICABLE` coverage.
 The brief is guidance, never validated content and never submitted back (the
 result carrier has no brief field). Nothing else crosses.
 
@@ -98,11 +98,10 @@ TTL-bounded (30 min default), never persisted, never authoritative.
 
 ## Interpretation profile
 
-- A pending unit carries an `interpretation_profile` (`SA_1_7_V1`); the
-  static SA obligations live in the tool contract, not in every unit.
-- Target mapping submits `CandidateTargetInventoryAccount` (stable
-  `EvidenceId` + one outcome); the durable `TargetInventoryAccount` is built
-  server-side from the provider snapshot.
+- The static SA obligations live in the tool contract, not in every unit.
+- Target admission computes `TargetInventoryAccount` from the provider
+  snapshot and assigns every member to the target's area; membership is never
+  an agent submission.
 - A newly admitted area with no reusable current question receives exactly
   one service-owned `PENDING` CQ-01 first-admission seed; the agent is never
   required to manufacture it.

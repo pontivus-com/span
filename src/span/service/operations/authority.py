@@ -12,7 +12,7 @@ from span.ports.evidence import EvidenceSource
 from span.ports.interpretation import PendingInterpretation
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
-from span.shell.agent_exchange.continuations import ContinuationStore
+from span.ports.continuation import ContinuationPort
 
 from span.service.answers import (
     _answer_id,
@@ -187,13 +187,237 @@ def _compose_authority_answer(
     )
 
 
+def _authority_claim_answer(
+    request: SemanticAuthorityRequest,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+) -> m.SemanticAnswer:
+    """Answer one exact claim reference without question-scoped examination."""
+    if request.question_selection is not None:
+        raise AuthorityTargetError(
+            "authority(target=ClaimRef, question_selection=...) is "
+            "rejected: the ClaimRef branch loads one exact claim and "
+            "performs no question-scoped examination"
+        )
+    bounds = _resolve_bounds(request.bounds, hook=False)
+    state = structural.repository_state(request.repository_id)
+    try:
+        (item,) = store.load_by_refs(request.repository_id, (request.target,))
+    except ValueError as exc:
+        raise AuthorityTargetError(str(exc)) from None
+    if not isinstance(item, m.SemanticClaim):
+        raise AuthorityTargetError("claim ref did not resolve to a claim")
+    subjects = store.load_subjects(request.repository_id, (item.subject,))
+    if not subjects:
+        raise AuthorityTargetError("claim subject is not indexed")
+    return _compose_authority_answer(
+        request.repository_id,
+        subjects[0],
+        None,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
+        target_key=f"claim:{request.target.id.value}",
+    )
+
+
+def _unresolved_authority_answer(
+    request: SemanticAuthorityRequest,
+    resolution: m.SubjectResolution,
+    *,
+    state: m.RepositoryState,
+    bounds: m.QueryBounds,
+) -> m.SemanticAnswer:
+    """The answer when the requested authority target does not resolve."""
+    requirements = _answers.requirements_for_resolution(
+        resolution,
+        repository_id=request.repository_id,
+        name_or_locator=request.target.name_or_locator,
+    )
+    return ANSWER_ASSEMBLER.build(
+        answer_id=_answer_id(
+            "aut",
+            request.repository_id,
+            request.target.name_or_locator or "unknown",
+        ),
+        intent=m.SemanticIntent.AUTHORITY,
+        repository_state=state,
+        subject_resolution=resolution,
+        content=m.AuthorityContent(),
+        evidence=(),
+        resolution_requirements=requirements,
+        bounds=bounds,
+        withheld_category=None,
+        continuation_token=None,
+    )
+
+
+def _selected_authority_scope(
+    request: SemanticAuthorityRequest,
+    subject: m.Subject,
+) -> tuple[m.SemanticQuestionScope | None, tuple[str, ...]]:
+    """Derive the service-owned scope for a narrowed question selection."""
+    if request.question_selection is None:
+        return None, ()
+    # S4 §5.4: host slice/basis/anchors only; service derives root/subject/class.
+    # Verbatim anchors forwarded as question_terms; the EXPLAIN/AUTHORITY
+    # discriminator is empty.
+    from span.service.questions import derive_service_question as _derive
+
+    return _derive(
+        subject=subject,
+        scope_root=subject.subject_id,
+        question_class=m.SemanticQuestionClass.CQ_06,
+        selection=request.question_selection,
+        default_slice=m.QUESTION_CLASS_DEFAULT_SLICE[m.SemanticQuestionClass.CQ_06],
+        default_basis="AUTHORITY question-local",
+    )
+
+
+def _authority_selected(
+    request: SemanticAuthorityRequest,
+    subject: m.Subject,
+    resolution: m.SubjectResolution,
+    scope: m.SemanticQuestionScope,
+    anchors: tuple[str, ...],
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    continuations: ContinuationPort,
+    bounds: m.QueryBounds,
+    state: m.RepositoryState,
+    authority_seeds: tuple[m.EvidenceRef, ...],
+) -> m.SemanticAnswer | PendingInterpretation:
+    """Answer one deliberately selected question, or suspend its first unit."""
+    try:
+        existing = store.load_all_question_coverages(
+            request.repository_id,
+            scope.scope_root,
+            (scope.subject,),
+        )
+    except Exception:
+        existing = ()
+    found = any(
+        coverage.question is not None
+        and coverage.question.scope_root == scope.scope_root
+        and coverage.question.subject == scope.subject
+        and coverage.question.question_class == scope.question_class
+        and coverage.question.question_slice == scope.question_slice
+        for coverage in existing
+    )
+    if not found:
+        task = prepare_interpretation_task(
+            request.repository_id,
+            subject,
+            structural=structural,
+            evidence=evidence,
+            bounds=bounds,
+            state=state,
+            authority_seeds=authority_seeds,
+            operation_intent=m.SemanticIntent.AUTHORITY,
+            question_slice=scope.question_slice,
+            store=store,
+            scope_root=scope.scope_root,
+            question_class=scope.question_class,
+            materiality_basis=scope.materiality_basis,
+            question_terms=anchors,
+        )
+        return _suspend(
+            op="authority",
+            repository_id=request.repository_id,
+            subject=subject,
+            task=task,
+            seeds=authority_seeds,
+            bounds=bounds,
+            state=state,
+            resolution=resolution,
+            continuations=continuations,
+            operation_intent="AUTHORITY",
+            question_slice=scope.question_slice,
+            root_question=scope,
+            question_selection=request.question_selection,
+        )
+    import dataclasses as _dc
+
+    from span.service.questions import (
+        filter_views_by_scope as _filter_views,
+    )
+
+    answer = _compose_authority_answer(
+        request.repository_id,
+        subject,
+        resolution,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=state,
+        page_token=request.page_token,
+        question_key=f"{scope.question_class.value}:{scope.question_slice}",
+    )
+    filtered = _filter_views(answer.content.question_coverage, scope)
+    return _dc.replace(
+        answer, content=_dc.replace(answer.content, question_coverage=filtered)
+    )
+
+
+def _suspend_missing_authority_question(
+    request: SemanticAuthorityRequest,
+    subject: m.Subject,
+    missing_question: m.SemanticQuestionScope,
+    resolution: m.SubjectResolution,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    continuations: ContinuationPort,
+    bounds: m.QueryBounds,
+    state: m.RepositoryState,
+    authority_seeds: tuple[m.EvidenceRef, ...],
+) -> PendingInterpretation:
+    """Suspend the subject's default question-local unit when it has none."""
+    task = prepare_interpretation_task(
+        request.repository_id,
+        subject,
+        structural=structural,
+        evidence=evidence,
+        bounds=bounds,
+        state=state,
+        authority_seeds=authority_seeds,
+        operation_intent=m.SemanticIntent.AUTHORITY,
+        question_slice=missing_question.question_slice,
+        store=store,
+        scope_root=missing_question.scope_root,
+        question_class=missing_question.question_class,
+        materiality_basis=missing_question.materiality_basis,
+    )
+    return _suspend(
+        op="authority",
+        repository_id=request.repository_id,
+        subject=subject,
+        task=task,
+        seeds=authority_seeds,
+        bounds=bounds,
+        state=state,
+        resolution=resolution,
+        continuations=continuations,
+        operation_intent="AUTHORITY",
+        question_slice=missing_question.question_slice,
+    )
+
+
 def authority(
     request: SemanticAuthorityRequest,
     *,
     structural: StructuralSource,
     evidence: EvidenceSource,
     store: SemanticStore,
-    continuations: ContinuationStore,
+    continuations: ContinuationPort,
     authority_seeds: tuple[m.EvidenceRef, ...] = (),
 ) -> m.SemanticAnswer | PendingInterpretation:
     """Authority/evidence operation (plan §11.7): governing sources,
@@ -201,36 +425,12 @@ def authority(
     side-by-side, missing authority as unresolved. Authority is never
     inferred — only explicit bindings are returned. Suspends via §11.12
     when interpretation is missing; never interprets inline."""
-    # S4 §5.4: question_selection permitted only for SubjectSelector
-    # authority targets; ClaimRef with selection deterministically rejected.
     if isinstance(request.target, m.ClaimRef):
-        if request.question_selection is not None:
-            raise AuthorityTargetError(
-                "authority(target=ClaimRef, question_selection=...) is "
-                "rejected: the ClaimRef branch loads one exact claim and "
-                "performs no question-scoped examination"
-            )
-        bounds = _resolve_bounds(request.bounds, hook=False)
-        state = structural.repository_state(request.repository_id)
-        try:
-            (item,) = store.load_by_refs(request.repository_id, (request.target,))
-        except ValueError as exc:
-            raise AuthorityTargetError(str(exc)) from None
-        if not isinstance(item, m.SemanticClaim):
-            raise AuthorityTargetError("claim ref did not resolve to a claim")
-        subjects = store.load_subjects(request.repository_id, (item.subject,))
-        if not subjects:
-            raise AuthorityTargetError("claim subject is not indexed")
-        return _compose_authority_answer(
-            request.repository_id,
-            subjects[0],
-            None,
+        return _authority_claim_answer(
+            request,
             structural=structural,
             evidence=evidence,
             store=store,
-            bounds=bounds,
-            state=state,
-            target_key=f"claim:{request.target.id.value}",
         )
     bounds = _resolve_bounds(request.bounds, hook=False)
     state = structural.repository_state(request.repository_id)
@@ -246,115 +446,26 @@ def authority(
         bounds=bounds,
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
-        requirements = _answers.requirements_for_resolution(
-            resolution,
-            repository_id=request.repository_id,
-            name_or_locator=request.target.name_or_locator,
-        )
-        return ANSWER_ASSEMBLER.build(
-            answer_id=_answer_id(
-                "aut",
-                request.repository_id,
-                request.target.name_or_locator or "unknown",
-            ),
-            intent=m.SemanticIntent.AUTHORITY,
-            repository_state=state,
-            subject_resolution=resolution,
-            content=m.AuthorityContent(),
-            evidence=(),
-            resolution_requirements=requirements,
-            bounds=bounds,
-            withheld_category=None,
-            continuation_token=None,
+        return _unresolved_authority_answer(
+            request, resolution, state=state, bounds=bounds
         )
     subject = resolution.candidates[0].subject
-    # S4 §5.4 narrowed selection: host slice/basis/anchors only; service
-    # derives root/subject/class. Verbatim anchors forwarded as
-    # question_terms. EXPLAIN/AUTHORITY discriminator empty.
-    _sel_anchors: tuple[str, ...] = ()
-    _sel_scope: m.SemanticQuestionScope | None = None
-    if request.question_selection is not None:
-        from span.service.questions import derive_service_question as _derive
-
-        _sel_scope, _sel_anchors = _derive(
-            subject=subject,
-            scope_root=subject.subject_id,
-            question_class=m.SemanticQuestionClass.CQ_06,
-            selection=request.question_selection,
-            default_slice=m.QUESTION_CLASS_DEFAULT_SLICE[m.SemanticQuestionClass.CQ_06],
-            default_basis="AUTHORITY question-local",
-        )
-        try:
-            _existing = store.load_all_question_coverages(
-                request.repository_id,
-                _sel_scope.scope_root,
-                (_sel_scope.subject,),
-            )
-        except Exception:
-            _existing = ()
-        _found = any(
-            _c.question is not None
-            and _c.question.scope_root == _sel_scope.scope_root
-            and _c.question.subject == _sel_scope.subject
-            and _c.question.question_class == _sel_scope.question_class
-            and _c.question.question_slice == _sel_scope.question_slice
-            for _c in _existing
-        )
-        if not _found:
-            task = prepare_interpretation_task(
-                request.repository_id,
-                subject,
-                structural=structural,
-                evidence=evidence,
-                bounds=bounds,
-                state=state,
-                authority_seeds=authority_seeds,
-                operation_intent=m.SemanticIntent.AUTHORITY,
-                question_slice=_sel_scope.question_slice,
-                store=store,
-                scope_root=_sel_scope.scope_root,
-                question_class=_sel_scope.question_class,
-                materiality_basis=_sel_scope.materiality_basis,
-                question_terms=_sel_anchors,
-            )
-            return _suspend(
-                op="authority",
-                repository_id=request.repository_id,
-                subject=subject,
-                task=task,
-                seeds=authority_seeds,
-                bounds=bounds,
-                state=state,
-                resolution=resolution,
-                continuations=continuations,
-                operation_intent="AUTHORITY",
-                question_slice=_sel_scope.question_slice,
-                root_question=_sel_scope,
-                question_selection=request.question_selection,
-            )
-        import dataclasses as _dc
-
-        from span.service.questions import (
-            filter_views_by_scope as _filter_views,
-        )
-
-        _ans = _compose_authority_answer(
-            request.repository_id,
+    selected_scope, anchors = _selected_authority_scope(request, subject)
+    if selected_scope is not None:
+        return _authority_selected(
+            request,
             subject,
             resolution,
+            selected_scope,
+            anchors,
             structural=structural,
             evidence=evidence,
             store=store,
+            continuations=continuations,
             bounds=bounds,
             state=state,
-            page_token=request.page_token,
-            question_key=(
-                f"{_sel_scope.question_class.value}:" f"{_sel_scope.question_slice}"
-            ),
+            authority_seeds=authority_seeds,
         )
-        _filtered = _filter_views(_ans.content.question_coverage, _sel_scope)
-        _content = _dc.replace(_ans.content, question_coverage=_filtered)
-        return _dc.replace(_ans, content=_content)
     missing_question = _question_local_missing(
         request.repository_id,
         subject,
@@ -364,33 +475,18 @@ def authority(
         bounds=bounds,
     )
     if missing_question is not None:
-        task = prepare_interpretation_task(
-            request.repository_id,
+        return _suspend_missing_authority_question(
+            request,
             subject,
+            missing_question,
+            resolution,
             structural=structural,
             evidence=evidence,
+            store=store,
+            continuations=continuations,
             bounds=bounds,
             state=state,
             authority_seeds=authority_seeds,
-            operation_intent=m.SemanticIntent.AUTHORITY,
-            question_slice=missing_question.question_slice,
-            store=store,
-            scope_root=missing_question.scope_root,
-            question_class=missing_question.question_class,
-            materiality_basis=missing_question.materiality_basis,
-        )
-        return _suspend(
-            op="authority",
-            repository_id=request.repository_id,
-            subject=subject,
-            task=task,
-            seeds=authority_seeds,
-            bounds=bounds,
-            state=state,
-            resolution=resolution,
-            continuations=continuations,
-            operation_intent="AUTHORITY",
-            question_slice=missing_question.question_slice,
         )
     return _compose_authority_answer(
         request.repository_id,

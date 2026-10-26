@@ -16,6 +16,10 @@ from span.shell.sqlite_store import (
     SqliteSemanticStore,
 )
 
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+
 REPO = "shared-svc"
 
 
@@ -23,8 +27,7 @@ def _subject(locator):
     return m.Subject(m.SubjectId(REPO, m.SubjectKind.COMPONENT, locator), locator, None)
 
 
-def _bounds():
-    return m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64)
+_bounds = _partial(query_bounds, max_depth=2)
 
 
 class SharedStoreConcurrencyTest(unittest.TestCase):

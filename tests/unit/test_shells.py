@@ -10,8 +10,8 @@ import unittest
 
 from span.core import model as m
 from span.ports.structural import StructuralDirection
-from span.shell.evidence import FixtureEvidenceSource
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
+from tests.support.evidence import FixtureEvidenceSource
+from tests.support.agent_fixture import FixtureAgent, FixtureCandidates
 from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
@@ -21,19 +21,12 @@ from span.shell.structural.memory import (
     fingerprint_content,
 )
 
+from tests.support.factories import query_bounds
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+from functools import partial as _partial
+from tests.support.factories import evidence_ref
+
+_bounds = query_bounds
 
 
 def _repo():
@@ -141,14 +134,7 @@ def _files():
     }
 
 
-def _ref(path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id="repo-1",
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(_files()[path]),
-    )
+_ref = _partial(evidence_ref, repository_id="repo-1")
 
 
 class FixtureEvidenceTest(unittest.TestCase):
@@ -196,11 +182,8 @@ class FixtureAgentTest(unittest.TestCase):
         return m.SemanticInterpretationRequest(
             repository_id="repo-1",
             subjects=(m.Subject(sid, "payments", None),),
-            evidence_units=(),
-            structural_observations=(),
-            allowed_claim_kinds=tuple(m.ClaimKind),
-            allowed_relationship_kinds=tuple(m.RelationshipKind),
-            identity_bindings=(sid,),
+            task_evidence=m.TaskEvidence(identity_bindings=(sid,)),
+            allowed_kinds=m.AllowedKinds(),
             brief=m.TaskBrief(),
             bounds=_bounds(),
         )
@@ -247,11 +230,11 @@ class FixtureAgentTest(unittest.TestCase):
         narrow = m.SemanticInterpretationRequest(
             repository_id=base.repository_id,
             subjects=base.subjects,
-            evidence_units=base.evidence_units,
-            structural_observations=base.structural_observations,
-            allowed_claim_kinds=(m.ClaimKind.RESPONSIBILITY,),
-            allowed_relationship_kinds=base.allowed_relationship_kinds,
-            identity_bindings=base.identity_bindings,
+            task_evidence=base.task_evidence,
+            allowed_kinds=m.AllowedKinds(
+                claim_kinds=(m.ClaimKind.RESPONSIBILITY,),
+                relationship_kinds=base.allowed_kinds.relationship_kinds,
+            ),
             brief=base.brief,
             bounds=base.bounds,
         )
@@ -283,8 +266,8 @@ class SqliteStoreTest(unittest.TestCase):
     def test_schema_version(self):
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(8))
-            self.assertEqual(SCHEMA_VERSION, 8)
+            self.assertEqual(store.schema_version(), m.SchemaVersion(SCHEMA_VERSION))
+            self.assertEqual(SCHEMA_VERSION, 9)
         finally:
             store.close()
 

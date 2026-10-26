@@ -30,9 +30,9 @@ jobs:
         id: indexer-pin
         run: |
           version=$(grep -m1 'STRUCTURAL_INDEXER_VERSION = ' \
-            src/span/shell/install.py | cut -d'"' -f2)
+            src/span/shell/install/constants.py | cut -d'"' -f2)
           package=$(grep -m1 'STRUCTURAL_INDEXER_PACKAGE = ' \
-            src/span/shell/install.py | cut -d'"' -f2)
+            src/span/shell/install/constants.py | cut -d'"' -f2)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "package=$package" >> "$GITHUB_OUTPUT"
 
@@ -71,6 +71,10 @@ jobs:
         run: |
           ruff check .
           black --check .
+
+      - name: Typing ratchet
+        run: |
+          python scripts/typecheck.py
 
       - name: Test
         run: |

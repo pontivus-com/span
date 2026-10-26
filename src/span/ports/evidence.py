@@ -31,7 +31,7 @@ class EvidenceSource(_typing.Protocol):
     ) -> EvidenceInventoryPage:
         """Bounded evidence inventory (fingerprints, not judgments).
 
-        Stable-identity contract (Addendum E §4C.6B): for one logical
+        Stable-identity contract ([design note E](docs/design-references.md#e) §4C.6B): for one logical
         inventory member in one repository, EvidenceId is stable across
         repeated calls, restarts, and content changes. A rename/move may
         legitimately appear as removal of the old identity and admission

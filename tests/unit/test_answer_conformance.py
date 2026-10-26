@@ -236,7 +236,7 @@ def _answer_tools() -> set[str]:
 
 
 def _answer(tool: str, request: object, populate: bool) -> m.SemanticAnswer:
-    structural, evidence, store, agent = _harness()
+    structural, evidence, store, agent = _harness(complete_questions=True)
     try:
         if populate:
             _establish(structural, evidence, store, agent)

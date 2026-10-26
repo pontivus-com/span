@@ -18,9 +18,14 @@ import hashlib as _hashlib
 from dataclasses import dataclass as _dataclass
 
 from span.core import model as m
-from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
-from span.shell import paging as _paging
+from span.core import paging as _paging
+from span.shell.structural.support import (
+    check_repository,
+    selected_edges,
+    versioned_offset,
+    versioned_page,
+)
 
 __all__ = [
     "InMemoryFile",
@@ -131,7 +136,7 @@ class InMemoryStructuralSource:
     # -- StructuralSource port --------------------------------------------
 
     def repository_state(self, repository_id: str) -> m.RepositoryState:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         return m.RepositoryState(
             repository_id=self._repository_id,
             revision_id=self._revision,
@@ -145,7 +150,7 @@ class InMemoryStructuralSource:
         repository_id: str,
     ) -> m.Freshness:
         """In-memory source has no separate index: always current."""
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         return m.Freshness(
             state=m.FreshnessState.CURRENT,
             reason="in-memory source has no separate index",
@@ -164,7 +169,7 @@ class InMemoryStructuralSource:
         selector: m.SubjectSelector,
         bounds: m.QueryBounds,
     ) -> m.SubjectResolution:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         if selector.exact_subject_id is not None:
             matches = [
                 (s, m.CandidateRankBasis.EXACT_LOCATOR)
@@ -241,7 +246,7 @@ class InMemoryStructuralSource:
         return matches
 
     def _index_version(self) -> str:
-        """Listing version binding cursors (Addendum F §4.3).
+        """Listing version binding cursors ([design note F](docs/design-references.md#f) §4.3).
 
         In-memory content is the index: any mutation replaces the
         instance, so the content fingerprint is a stable version.
@@ -255,57 +260,19 @@ class InMemoryStructuralSource:
             return base
         return f"{base}|{m.evidence_scope_fingerprint(scope)}"
 
-    def _versioned_offset(
-        self, page_token: str | None, version: str | None = None
-    ) -> int:
-        try:
-            return _paging.parse_versioned_token(
-                page_token,
-                version=self._index_version() if version is None else version,
-            )
-        except ValueError as exc:
-            if str(exc).startswith("stale listing continuation"):
-                raise StaleContinuationError(str(exc)) from None
-            raise
-
-    def _versioned_page(
-        self,
-        items: tuple[object, ...],
-        offset: int,
-        max_results: int,
-        category: str,
-        version: str | None = None,
-    ) -> tuple[tuple[object, ...], m.BoundInfo]:
-        kept = items[offset : offset + max_results]
-        remaining = len(items) - (offset + len(kept))
-        truncated = remaining > 0
-        token_version = self._index_version() if version is None else version
-        return tuple(kept), m.BoundInfo(
-            requested_max_results=max_results,
-            requested_max_depth=0,
-            returned_results=len(kept),
-            truncated=truncated,
-            truncated_category=category if truncated else None,
-            continuation_token=(
-                _paging.format_versioned_token(token_version, offset + len(kept))
-                if truncated
-                else None
-            ),
-        )
-
     def verify_files(
         self,
         repository_id: str,
         files: tuple[str, ...],
     ) -> m.StructuralFreshnessReport:
-        """File-set freshness verdict (Addendum F §4.0 port).
+        """File-set freshness verdict ([design note F](docs/design-references.md#f) §4.0 port).
 
         In-memory content is authoritatively present: known files verify,
         unknown files are stale. Coverage is VERIFIED exactly when
         nothing is stale or unverifiable — there is no index/file split
         to drift.
         """
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         stale = sorted({p for p in dict.fromkeys(files) if p not in self._files})
         coverage = m.ScopeCoverage.VERIFIED if not stale else m.ScopeCoverage.UNVERIFIED
         detail = (
@@ -329,12 +296,14 @@ class InMemoryStructuralSource:
         page_token: str | None = None,
         scope: m.EvidenceScope | None = None,
     ) -> m.StructuralResult[m.StructuralSearchHit]:
-        """Paginated name/locator search (Addendum F §4.0 port; J-10)."""
-        self._check_repository(repository_id)
+        """Paginated name/locator search ([design note F](docs/design-references.md#f) §4.0 port; J-10)."""
+        check_repository(repository_id, self._repository_id)
         if not query:
             raise ValueError("search query must be non-empty")
         version = self._scoped_version(scope)
-        offset = self._versioned_offset(page_token, version=version)
+        offset = versioned_offset(
+            page_token, index_version=self._index_version(), version=version
+        )
         if match is m.StructuralLocateMatch.EXACT:
             ranked = [
                 (s, m.CandidateRankBasis.EXACT_LOCATOR)
@@ -387,8 +356,13 @@ class InMemoryStructuralSource:
             )
             for s, rank in ranked
         )
-        kept, bound_info = self._versioned_page(
-            candidates, offset, bounds.max_results, "search", version=version
+        kept, bound_info = versioned_page(
+            candidates,
+            offset,
+            bounds.max_results,
+            "search",
+            index_version=self._index_version(),
+            version=version,
         )
         return m.StructuralResult(
             items=kept,  # type: ignore[arg-type]
@@ -407,9 +381,9 @@ class InMemoryStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralOutlineEntry]:
-        """Symbols defined in one file (Addendum F §4.0 port)."""
-        self._check_repository(repository_id)
-        offset = self._versioned_offset(page_token)
+        """Symbols defined in one file ([design note F](docs/design-references.md#f) §4.0 port)."""
+        check_repository(repository_id, self._repository_id)
+        offset = versioned_offset(page_token, index_version=self._index_version())
         members = sorted(
             (s for s in self._subjects if _file_path(s.locator) == locator),
             key=lambda s: s.locator,
@@ -420,7 +394,9 @@ class InMemoryStructuralSource:
                 if locator in self._files
                 else m.ScopeCoverage.VERIFIED
             )
-            kept, bound_info = self._versioned_page((), offset, 1, "outline")
+            kept, bound_info = versioned_page(
+                (), offset, 1, "outline", index_version=self._index_version()
+            )
             return m.StructuralResult(
                 items=(),
                 repository_state=self.repository_state(repository_id),
@@ -442,8 +418,12 @@ class InMemoryStructuralSource:
             )
             for s in members
         )
-        kept, bound_info = self._versioned_page(
-            entries, offset, bounds.max_results, "outline"
+        kept, bound_info = versioned_page(
+            entries,
+            offset,
+            bounds.max_results,
+            "outline",
+            index_version=self._index_version(),
         )
         return m.StructuralResult(
             items=kept,  # type: ignore[arg-type]
@@ -462,7 +442,7 @@ class InMemoryStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralLocation]:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         path = _file_path(subject.canonical_locator)
         state = self.repository_state(repository_id)
         if path not in self._files:
@@ -497,37 +477,17 @@ class InMemoryStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralEdge]:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         locator = subject.canonical_locator
-        kinds = set(edge_kinds) if edge_kinds else set(m.StructuralEdgeKind)
-        found: list[m.StructuralEdge] = []
-        for edge in self._edges:
-            if edge.kind not in kinds:
-                continue
-            if (
-                direction
-                in (
-                    StructuralDirection.DOWNSTREAM,
-                    StructuralDirection.BOTH,
-                )
-                and edge.source_locator == locator
-            ):
-                found.append(self._to_edge(edge))
-            elif (
-                direction
-                in (
-                    StructuralDirection.UPSTREAM,
-                    StructuralDirection.BOTH,
-                )
-                and edge.target_locator == locator
-            ):
-                found.append(self._to_edge(edge))
-        found.sort(
-            key=lambda e: (
-                e.kind.value,
-                e.source.canonical_locator,
-                e.target.canonical_locator,
-            )
+        found = selected_edges(
+            locator,
+            edge_kinds,
+            direction,
+            (
+                (edge.kind, edge.source_locator, edge.target_locator, edge)
+                for edge in self._edges
+            ),
+            lambda kind, source, target, edge: self._to_edge(edge),
         )
         kept, bound_info = _paging.paginate(
             tuple(found), bounds.max_results, "edges", page_token
@@ -554,7 +514,7 @@ class InMemoryStructuralSource:
         bounds: m.QueryBounds,
         page_token: str | None = None,
     ) -> m.StructuralResult[m.StructuralReachNode]:
-        self._check_repository(repository_id)
+        check_repository(repository_id, self._repository_id)
         limit = min(max_depth, bounds.max_depth)
         kinds = set(edge_kinds) if edge_kinds else set(m.StructuralEdgeKind)
         adjacency: dict[str, list[m.StructuralEdge]] = {}
@@ -646,10 +606,6 @@ class InMemoryStructuralSource:
         if stale:
             return m.ScopeCoverage.UNVERIFIED, "touched-file-mismatch"
         return m.ScopeCoverage.VERIFIED, "clean-verified"
-
-    def _check_repository(self, repository_id: str) -> None:
-        if repository_id != self._repository_id:
-            raise ValueError(f"unknown repository: {repository_id}")
 
     def _subject_id_of(self, spec: InMemorySubject) -> m.SubjectId:
         return m.SubjectId(

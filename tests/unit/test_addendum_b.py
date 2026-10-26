@@ -12,31 +12,19 @@ import unittest
 from span.core import model as m
 from span.core import validation as v
 from span import service as ops
-from span.service.operations.explain import _baseline_sufficient
-from span.shell import paging
+from span.service.establishment import _baseline_sufficient
+from span.core import paging
 from span.shell.sqlite_store import SCHEMA_VERSION, SqliteSemanticStore
 
+from tests.support.factories import query_bounds
 
-def _sid(locator="src/a.py", kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(
-        repository_id="repo-b",
-        subject_kind=kind,
-        canonical_locator=locator,
-    )
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+_sid = _partial(subject_id, repository_id="repo-b")
 
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
 
 
 def _claim_candidate(sid, key="k1", summary="does X"):
@@ -65,7 +53,7 @@ class BaselineVsQuestionLocalTest(unittest.TestCase):
             InMemoryStructuralSource,
             InMemorySubject,
         )
-        from span.shell.evidence import FixtureEvidenceSource
+        from tests.support.evidence import FixtureEvidenceSource
 
         structural = InMemoryStructuralSource(
             "repo-b", (), (InMemorySubject("src/a.py", m.SubjectKind.COMPONENT, "a"),)
@@ -101,7 +89,7 @@ class BaselineVsQuestionLocalTest(unittest.TestCase):
         self.assertIn("SA-5", " ".join(task.request.analysis_obligations))
 
     def test_question_local_does_not_claim_baseline(self):
-        from span.shell.evidence import FixtureEvidenceSource
+        from tests.support.evidence import FixtureEvidenceSource
 
         store = SqliteSemanticStore(":memory:")
         try:
@@ -242,7 +230,7 @@ class PremiseStalenessTest(unittest.TestCase):
                     claims=(premise, dep),
                 )
             )
-            from span.shell.evidence import FixtureEvidenceSource
+            from tests.support.evidence import FixtureEvidenceSource
 
             evidence = FixtureEvidenceSource("repo-b", {"src/a.py": "X=1"})
             updates = ops.preflight(
@@ -326,10 +314,10 @@ class EffectiveDispositionTest(unittest.TestCase):
 
 class CurrentSchemaTest(unittest.TestCase):
     def test_schema_7_and_absent_coverage(self):
-        self.assertEqual(SCHEMA_VERSION, 8)
+        self.assertEqual(SCHEMA_VERSION, 9)
         store = SqliteSemanticStore(":memory:")
         try:
-            self.assertEqual(store.schema_version(), m.SchemaVersion(8))
+            self.assertEqual(store.schema_version(), m.SchemaVersion(SCHEMA_VERSION))
             sid = _sid()
             claim = m.SemanticClaim(
                 claim_id=m.ClaimId("leg-1"),

@@ -14,29 +14,25 @@ from span.service.bounds import BoundsRejectedError, resolve_bounds
 from span.service.interpretation import _member_diagnostics
 from span.service.requests import RefreshScopeError, StatusTargetError
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.mcp import McpAdapter
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
     InMemorySubject,
-    fingerprint_content,
 )
 
+from tests.support.factories import query_bounds
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import semantic_harness
+
+_bounds = query_bounds
 
 
 FILES = {
@@ -47,44 +43,13 @@ FILES = {
 SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
-def _harness(files=None):
-    files = FILES if files is None else files
-    structural = InMemoryStructuralSource(
-        "repo-1",
-        tuple(InMemoryFile(p, c) for p, c in files.items()),
-        SUBJECTS,
-    )
-    evidence = FixtureEvidenceSource("repo-1", dict(files))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id="repo-1",
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+_harness = _partial(semantic_harness, "repo-1", FILES, subjects=SUBJECTS)
 
 
-def _sid():
-    return m.SubjectId(
-        repository_id="repo-1",
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator="src/main.py",
-    )
+_sid = _partial(subject_id, "src/main.py")
 
 
-def _ref(path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id="repo-1",
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES[path]),
-    )
+_ref = _partial(evidence_ref, repository_id="repo-1", files=FILES)
 
 
 def _explain_request():
@@ -972,7 +937,6 @@ class RefreshAdmissionOrderTest(unittest.TestCase):
                     disposition_basis="rotation test",
                 ),
                 candidate_withdrawals=(),
-                proposed_target_inventory_accounting=(),
                 proposed_target_questions=(),
             ),
             structural=structural,

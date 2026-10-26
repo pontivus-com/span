@@ -15,9 +15,9 @@ from span.ports.interpretation import PendingInterpretation
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span import service as ops
 from span.service.questions import effective_impact_slice, effective_trace_slice
-from span.shell import paging as _paging
+from span.core import paging as _paging
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
@@ -26,19 +26,18 @@ from span.shell.structural.memory import (
     fingerprint_content,
 )
 
+from tests.support.factories import query_bounds
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import semantic_harness
+
+from tests.support.factories import candidate_claim
+
+_bounds = query_bounds
 
 
 FILES = {
@@ -50,62 +49,22 @@ FILES = {
 SUBJECTS = (InMemorySubject("src/main.py", m.SubjectKind.COMPONENT, "main"),)
 
 
-def _sid():
-    return m.SubjectId(
-        repository_id="repo-1",
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator="src/main.py",
-    )
+_sid = _partial(subject_id, "src/main.py")
 
 
-def _ref(path):
-    kind = (
-        m.EvidenceSourceKind.DOCUMENTATION
-        if path.endswith((".md", ".rst", ".txt"))
-        else m.EvidenceSourceKind.SOURCE_CODE
-    )
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id="repo-1",
-        source_kind=kind,
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES[path]),
-    )
+_ref = _partial(evidence_ref, repository_id="repo-1", files=FILES)
 
 
-def _harness():
-    structural = InMemoryStructuralSource(
-        "repo-1",
-        tuple(InMemoryFile(p, c) for p, c in FILES.items()),
-        SUBJECTS,
-    )
-    evidence = FixtureEvidenceSource("repo-1", dict(FILES))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id="repo-1",
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+_harness = _partial(semantic_harness, "repo-1", FILES, subjects=SUBJECTS)
 
 
-def _candidate(slice_note="does things"):
-    return m.CandidateSemanticClaim(
-        candidate_key="purpose-main",
-        subject=_sid(),
-        kind=m.ClaimKind.PURPOSE,
-        value=m.PurposeValue(slice_note, ()),
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-        evidence=(_ref("README.md"), _ref("src/main.py")),
-        basis=m.SemanticBasis(
-            m.DerivationKind.SEMANTIC_INTERPRETATION, "README states purpose"
-        ),
-    )
+_candidate = _partial(
+    candidate_claim,
+    files=FILES,
+    subject=_sid(),
+    with_authority=False,
+    basis_reason="README states purpose",
+)
 
 
 class S1ExactLocatorTest(unittest.TestCase):
@@ -351,9 +310,8 @@ class S3SchemaTest(unittest.TestCase):
 
         text = TOOL_DESCRIPTIONS["submit_interpretation"]
         for rule in (
-            "exactly one outcome",
             "OPEN question_decision carries resolution_requirements",
-            "ANSWERED requires validated material",
+            "ANSWERED requires at least one claim or relationship",
             "NOT_APPLICABLE carries a basis and no result refs",
         ):
             self.assertIn(rule, text)
@@ -760,10 +718,10 @@ class S4QuestionSelectionTest(unittest.TestCase):
         empty = effective_impact_slice("s", m.ChangeKind.BEHAVIOR, None, ())
         self.assertIn("|desc=-|", empty)
 
-    def test_pgq_rejects_old_and_binds_question(self):
+    def test_answer_cursor_rejects_old_and_binds_question(self):
         digest = _paging.question_digest("TRACE", "r", "a.py", "slice", "CQ_04")
         token = _paging.format_question_token(digest, 1, 0, 0)
-        assert token is not None and token.startswith("pgq:")
+        assert token is not None and token.startswith("pgv:")
         got_digest, c, r, q = _paging.parse_question_token(token)
         self.assertEqual(got_digest, digest)
         with self.assertRaises(ValueError):
@@ -1101,7 +1059,7 @@ class S4QuestionSelectionTest(unittest.TestCase):
         # SubjectId and still examines the second kind (reached here
         # through a structural edge whose endpoint kind differs).
         from span.ports.structural import StructuralDirection
-        from span.shell.agent_exchange.fixture import (
+        from tests.support.agent_fixture import (
             FixtureAgent,
             FixtureCandidates,
         )
@@ -1946,16 +1904,9 @@ class S7ExcerptTest(unittest.TestCase):
             bounds=_bounds(),
             state=structural.repository_state("repo-1"),
             target_scope=m.EvidenceScope(paths=("mapping.md", "required.md")),
-            target_inventory_items=(
-                m.EvidenceInventoryItem(
-                    evidence_ref=mapping_ref,
-                    content_fingerprint=fingerprint_content(mapping_content),
-                ),
-            ),
-            mapping_mode=True,
-            required_evidence_refs=(required_ref,),
+            required_evidence_refs=(mapping_ref, required_ref),
         )
-        delivered = task.request.evidence_units
+        delivered = task.request.task_evidence.evidence_units
         self.assertLessEqual(
             sum(len(unit.content.encode("utf-8")) for unit in delivered),
             DEFAULT_SERVICE_BOUNDS_POLICY.max_delivered_evidence_bytes,
@@ -1973,8 +1924,9 @@ class S7ExcerptTest(unittest.TestCase):
             for unit in delivered
         )
         self.assertEqual(task.fingerprints, delivered_ids)
-        self.assertIn("Evidence examined:", task.request.brief.evidence_authority[0])
-        self.assertNotIn("required.md", task.request.brief.evidence_authority[0])
+        brief_text = " ".join(task.request.brief.evidence_authority)
+        self.assertIn("mapping.md", brief_text)
+        self.assertNotIn("required.md", brief_text)
 
     def test_mandatory_refs_omitted_by_source_unit_bound_are_named(self):
         from span.service.interpretation import prepare_interpretation_task
@@ -2012,15 +1964,7 @@ class S7ExcerptTest(unittest.TestCase):
             bounds=_bounds(max_evidence_units=1),
             state=structural.repository_state("repo-1"),
             target_scope=m.EvidenceScope(paths=("mapping-a.md", "mapping-b.md")),
-            target_inventory_items=tuple(
-                m.EvidenceInventoryItem(
-                    evidence_ref=ref_value,
-                    content_fingerprint=fingerprint_content(files[ref_value.locator]),
-                )
-                for ref_value in (mapping_a, mapping_b)
-            ),
-            mapping_mode=True,
-            required_evidence_refs=(required,),
+            required_evidence_refs=(mapping_a, mapping_b, required),
         )
         requirements = task.request.brief.open_requirements
         descriptions = " ".join(requirement.description for requirement in requirements)
@@ -2076,16 +2020,12 @@ class S7ExcerptTest(unittest.TestCase):
             bounds=_bounds(max_evidence_units=2),
             state=structural.repository_state("repo-1"),
             target_scope=m.EvidenceScope(paths=tuple(ref.locator for ref in refs)),
-            target_inventory_items=tuple(
-                m.EvidenceInventoryItem(
-                    evidence_ref=ref_value,
-                    content_fingerprint=fingerprint_content(files[ref_value.locator]),
-                )
-                for ref_value in refs
-            ),
-            mapping_mode=True,
+            required_evidence_refs=refs,
         )
-        delivered = {unit.evidence_ref.locator for unit in task.request.evidence_units}
+        delivered = {
+            unit.evidence_ref.locator
+            for unit in task.request.task_evidence.evidence_units
+        }
         self.assertEqual(delivered, {"mapping-b.md", "mapping-c.md"})
         self.assertIn(
             "mapping-a.md",
@@ -2119,7 +2059,7 @@ class S7ExcerptTest(unittest.TestCase):
             state=structural.repository_state("repo-1"),
             required_evidence_refs=(required,),
         )
-        self.assertEqual(task.request.evidence_units, ())
+        self.assertEqual(task.request.task_evidence.evidence_units, ())
         self.assertTrue(
             any(
                 requirement.kind is m.ResolutionKind.MISSING_EVIDENCE
@@ -2268,7 +2208,7 @@ class S7ExcerptTest(unittest.TestCase):
         )
         units = [
             u
-            for u in task.request.evidence_units
+            for u in task.request.task_evidence.evidence_units
             if u.evidence_ref.locator == "src/big.py"
         ]
         self.assertTrue(units)
@@ -2314,7 +2254,7 @@ class S7ExcerptTest(unittest.TestCase):
         # The agent quotes beyond the delivered excerpt. Full-source
         # validation admits it with full-source provenance; an
         # excerpt-only check would wrongly reject it.
-        from span.shell.agent_exchange.fixture import (
+        from tests.support.agent_fixture import (
             FixtureAgent,
             FixtureCandidates,
         )
@@ -2372,7 +2312,7 @@ class S7ExcerptTest(unittest.TestCase):
         # content. Submission rejects with a diagnostic while the live
         # continuation is retained for correction.
         from span.core.validation import InterpretationUnitRejected
-        from span.shell.agent_exchange.fixture import (
+        from tests.support.agent_fixture import (
             FixtureAgent,
             FixtureCandidates,
         )
@@ -2435,7 +2375,7 @@ class S7ExcerptTest(unittest.TestCase):
         # an actionable diagnostic instead of validating against the
         # excerpt; the continuation stays live for correction.
         from span.core.validation import InterpretationUnitRejected
-        from span.shell.agent_exchange.fixture import (
+        from tests.support.agent_fixture import (
             FixtureAgent,
             FixtureCandidates,
         )
@@ -2546,7 +2486,7 @@ class S8ExplanationTest(unittest.TestCase):
         # lifecycle rewrite). Establishes two questions, answers one,
         # leaves the other OPEN, then verifies the OPEN reason survives
         # a second answer on the first question.
-        from span.shell.agent_exchange.fixture import (
+        from tests.support.agent_fixture import (
             FixtureAgent,
             FixtureCandidates,
         )

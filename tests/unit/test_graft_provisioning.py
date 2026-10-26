@@ -18,19 +18,9 @@ from span.core import model as m
 from span.shell.structural import graft as g
 from span.shell.structural import structural_source_from_config
 
+from tests.support.factories import query_bounds
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
 
 
 def _write_wiring(wiring_path, nodes=(), edges=()):

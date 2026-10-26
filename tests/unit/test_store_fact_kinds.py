@@ -8,6 +8,7 @@ migrates only on explicit request.
 """
 
 import datetime
+import json
 import pathlib
 import sqlite3
 import tempfile
@@ -224,6 +225,48 @@ def _downgrade_to_seven(path):
         connection.close()
 
 
+def _downgrade_to_eight(path):
+    """Turn a current store into the schema-8 shape (mapping-era accounts)."""
+    connection = sqlite3.connect(str(path))
+    try:
+        with connection:
+            rows = connection.execute(
+                "SELECT target_id, canonical_json FROM target_associations"
+            ).fetchall()
+            for target_id, payload in rows:
+                data = json.loads(payload)
+                accounts = data.get("inventory_accounting") or []
+                legacy = []
+                for index, account in enumerate(accounts):
+                    adapted = dict(account)
+                    if index == 0:
+                        adapted["exclusion_basis"] = {
+                            "$type": "SemanticBasis",
+                            "derivation": "EXPLICIT_EVIDENCE",
+                            "summary": "legacy exclusion",
+                            "input_refs": [],
+                        }
+                        legacy.append(adapted)
+                    else:
+                        legacy.append(
+                            {
+                                "$type": "TargetInventoryAccount",
+                                "evidence_ref": account["evidence_ref"],
+                                "assigned_area_subjects": [],
+                                "resolution_requirements": [],
+                            }
+                        )
+                data["inventory_accounting"] = legacy
+                connection.execute(
+                    "UPDATE target_associations SET canonical_json=? "
+                    "WHERE target_id=?",
+                    (json.dumps(data), target_id),
+                )
+            connection.execute("UPDATE meta SET value='8' WHERE key='schema_version'")
+    finally:
+        connection.close()
+
+
 class MigrationTest(unittest.TestCase):
     def test_version_seven_fails_closed_then_migrates(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -244,7 +287,9 @@ class MigrationTest(unittest.TestCase):
 
             reopened = SqliteSemanticStore(str(path))
             try:
-                self.assertEqual(reopened.schema_version(), m.SchemaVersion(8))
+                self.assertEqual(
+                    reopened.schema_version(), m.SchemaVersion(SCHEMA_VERSION)
+                )
                 loaded = reopened.load_subjects(REPO, (_subject().subject_id,))
                 self.assertEqual(
                     [s.subject_id.canonical_locator for s in loaded], ["src/a.py"]
@@ -252,6 +297,68 @@ class MigrationTest(unittest.TestCase):
                 tables = _physical_tables(reopened._db)
                 self.assertIn("verification_records", tables)
                 self.assertNotIn("retired_claims", tables)
+            finally:
+                reopened.close()
+
+    def test_version_eight_rewrites_target_accounting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "store.db"
+            store = SqliteSemanticStore(str(path))
+            try:
+                subject = _subject()
+                refs = tuple(
+                    m.EvidenceRef(
+                        evidence_id=m.EvidenceId(f"ev-{index}"),
+                        repository_id=REPO,
+                        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                        locator=f"src/f{index}.py",
+                        revision_or_fingerprint="fp",
+                    )
+                    for index in range(2)
+                )
+                store.write_index_batch(
+                    m.CanonicalIndexBatch(
+                        subjects=(subject,),
+                        target_associations=(
+                            m.TargetAssociation(
+                                target_id=m.TargetId("target-8"),
+                                repository_id=REPO,
+                                target_scope=m.EvidenceScope(paths=("src",)),
+                                objective="migrate",
+                                area_subjects=(subject.subject_id,),
+                                inventory_accounting=tuple(
+                                    m.TargetInventoryAccount(
+                                        evidence_ref=ref,
+                                        assigned_area_subjects=(subject.subject_id,),
+                                    )
+                                    for ref in refs
+                                ),
+                            ),
+                        ),
+                    )
+                )
+            finally:
+                store.close()
+            _downgrade_to_eight(path)
+            report = migrate_store(path)
+            self.assertTrue(report["migrated"])
+            self.assertEqual((report["from"], report["to"]), (8, SCHEMA_VERSION))
+            self.assertEqual(report["rewritten_target_accounts"], 1)
+            self.assertEqual(report["dropped_target_accounts"], 1)
+            reopened = SqliteSemanticStore(str(path))
+            try:
+                self.assertEqual(
+                    reopened.schema_version(), m.SchemaVersion(SCHEMA_VERSION)
+                )
+                association = reopened.load_target_association(
+                    REPO, m.TargetId("target-8")
+                )
+                assert association is not None
+                self.assertEqual(len(association.inventory_accounting), 1)
+                self.assertEqual(
+                    association.inventory_accounting[0].assigned_area_subjects,
+                    (subject.subject_id,),
+                )
             finally:
                 reopened.close()
 

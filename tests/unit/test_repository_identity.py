@@ -12,7 +12,7 @@ from pathlib import Path
 from span.core import model as m
 from span.service import initialize_repository
 from span.service.requests import SemanticInitializeRepositoryRequest
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.mcp import McpAdapter
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (

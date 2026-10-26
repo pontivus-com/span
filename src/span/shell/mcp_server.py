@@ -168,7 +168,7 @@ def open_repository_context(
     return _open_context(config.data_dir, repository_locator)
 
 
-#: Repository-scoped tools (Addendum H §7): their descriptions carry
+#: Repository-scoped tools ([design note H](docs/design-references.md#h) §7): their descriptions carry
 #: the currently registered canonical repository IDs at list time so
 #: agents discover identity before the first repository-scoped call.
 _REPO_SCOPED_TOOLS = frozenset(

@@ -142,7 +142,7 @@ class SkillNonAuthorityTest(unittest.TestCase):
         text = _text(SKILLS[0])
         for required in (
             "Worked typed submission excerpt",
-            "request.evidence_units[0].evidence_ref",
+            "request.task_evidence.evidence_units[0].evidence_ref",
             "CandidateSemanticClaim",
             "SemanticQuestionDecision",
             "SemanticInterpretationResult",
@@ -165,11 +165,9 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "evidence_units",
             "provider-backed evidence",
             "SemanticInterpretationResult",
-            "proposed_target_inventory_accounting",
             "proposed_questions",
             "proposed_target_questions",
             "exact same persisted question scope",
-            "explicit mapping requirement",
             "NOT_APPLICABLE",
             "stale_only=False",
             "exact `SubjectSelector`",
@@ -291,7 +289,6 @@ class SkillNonAuthorityTest(unittest.TestCase):
             "coverage dependency storage",
             "SQLite",
             "result-ID materialization",
-            "pgq:",
             "pgv:",
             "pgn:",
             "cont-",

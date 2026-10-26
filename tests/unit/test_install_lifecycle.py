@@ -9,12 +9,13 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import tempfile
 import unittest
 from unittest import mock
 
 from span.shell import install
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryFile,
@@ -122,7 +123,7 @@ class _HostFixture:
 
 def _run_uninstall(fixture):
     with mock.patch.dict(os.environ, {"HOME": str(fixture.home)}):
-        with mock.patch.object(install.shutil, "which", return_value=None):
+        with mock.patch.object(shutil, "which", return_value=None):
             return install.uninstall(fixture.data, [], None)
 
 

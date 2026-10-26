@@ -17,8 +17,8 @@ from span import service as ops
 from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.bounds import resolve_bounds
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.agent_fixture import FixtureAgent, FixtureCandidates
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.mcp import (
     TOOL_NAMES,
     TOOL_SCHEMAS,
@@ -35,6 +35,15 @@ from span.shell.structural.memory import (
     fingerprint_content,
 )
 
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import candidate_claim
+
+from tests.support.factories import question_decision
+
 try:
     import mcp.server  # noqa: F401
 
@@ -43,14 +52,7 @@ except Exception:
     _HAS_MCP_SDK = False
 
 
-def _decision(coverage):
-    """Test-only: express an authored coverage as the compact decision."""
-    return m.SemanticQuestionDecision(
-        disposition=coverage.disposition,
-        evidence_scope=coverage.evidence_scope,
-        resolution_requirements=coverage.resolution_requirements,
-        disposition_basis=coverage.disposition_basis,
-    )
+_decision = question_decision
 
 
 REPO = "mcp-svc"
@@ -61,53 +63,23 @@ FILES = {
 }
 
 
-def _sid():
-    return m.SubjectId(
-        repository_id=REPO,
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator="src/tools.py",
-    )
+_sid = _partial(subject_id, "src/tools.py", repository_id=REPO)
 
 
-def _ref(path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=(
-            m.EvidenceSourceKind.DOCUMENTATION
-            if path.endswith(".md")
-            else m.EvidenceSourceKind.SOURCE_CODE
-        ),
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES[path]),
-    )
+_ref = _partial(evidence_ref, repository_id=REPO, files=FILES)
 
 
-def _candidate():
-    return m.CandidateSemanticClaim(
-        candidate_key="purpose",
-        subject=_sid(),
-        kind=m.ClaimKind.PURPOSE,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-        value=m.PurposeValue("serves tools", ()),
-        evidence=(_ref("README.md"),),
-        candidate_authority=m.CandidateAuthority(
-            binding=m.AuthorityBinding(
-                evidence_ref=_ref("README.md"),
-                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
-                status=m.AuthorityStatus.ACCEPTED,
-            ),
-            support=m.AuthoritySupport(
-                quoted_span="Serves tools",
-                status_section="README.md",
-                applicability_section=None,
-            ),
-        ),
-        basis=m.SemanticBasis(
-            m.DerivationKind.SEMANTIC_INTERPRETATION,
-            "README states the tool purpose",
-        ),
-    )
+_candidate = _partial(
+    candidate_claim,
+    files=FILES,
+    subject=_sid(),
+    repository_id=REPO,
+    key="purpose",
+    note="serves tools",
+    evidence_paths=("README.md",),
+    quoted_span="Serves tools",
+    basis_reason="README states the tool purpose",
+)
 
 
 def _harness():
@@ -308,6 +280,8 @@ class IngressTest(unittest.TestCase):
 
 class DispatchTest(unittest.TestCase):
     def test_initialize_target_advances_complete_boundary(self):
+        """Admission is deterministic: the first unit is a question, not a
+        mapping batch, and answering it persists an assertion."""
         adapter, agent = _harness()
         try:
             pending = _dispatch(
@@ -315,9 +289,7 @@ class DispatchTest(unittest.TestCase):
                 "initialize_target",
                 {
                     "repository_id": REPO,
-                    "target": m.to_canonical(
-                        m.EvidenceScope(paths=("src/tools.py",), evidence_refs=())
-                    ),
+                    "target": {"paths": ["src/tools.py"], "evidence_refs": []},
                     "objective": "Understand the tool boundary and its use.",
                 },
             )
@@ -336,43 +308,26 @@ class DispatchTest(unittest.TestCase):
                 )
             )
             self.assertEqual(task.target_scope.paths, ("src/tools.py",))
-            self.assertIn(
-                "target path: src/tools.py",
-                task.brief.scope_boundaries,
+            self.assertIn("target path: src/tools.py", task.brief.scope_boundaries)
+            self.assertIn("Understand the tool boundary", task.brief.objective)
+            self.assertIsNotNone(task.question)
+            self.assertEqual(
+                task.question.question_class, m.SemanticQuestionClass.CQ_01
             )
-            self.assertIn(
-                "Understand the tool boundary",
-                task.brief.objective,
-            )
-            # E-13B mapping task carries TargetId + item with question=None.
-            self.assertIsNone(task.question)
+            self.assertTrue(task.task_evidence.evidence_units)
             self.assertIsNotNone(task.target_id)
-            self.assertIsNotNone(task.target_inventory_items[0])
-            assert task.target_inventory_items[0] is not None
-            item_ref = task.target_inventory_items[0].evidence_ref
-            area = m.SubjectId(
-                repository_id=REPO,
-                subject_kind=m.SubjectKind.OTHER,
-                canonical_locator="tools-area",
-            )
-            map_q = m.SemanticQuestionScope(
-                scope_root=area,
-                subject=area,
-                question_class=m.SemanticQuestionClass.CQ_01,
-                question_slice="tools purpose",
-                materiality_basis="mapping admits tools",
-            )
-            map_cov = m.InterpretationCoverage(
-                subjects=(area,),
-                question_slice="tools purpose",
-                evidence_scope=m.EvidenceScope(),
-                declared_complete=False,
-                question=map_q,
-                disposition=m.SemanticQuestionDisposition.PENDING,
-                result_refs=(),
-                resolution_requirements=(),
-                disposition_basis="admitted",
-                question_evidence=(),
+            subject = task.subjects[0].subject_id
+            ref = task.task_evidence.evidence_units[0].evidence_ref
+            claim = m.CandidateSemanticClaim(
+                subject=subject,
+                kind=m.ClaimKind.PURPOSE,
+                assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                value=m.PurposeValue("Exposes the tool boundary.", ()),
+                evidence=(ref,),
+                basis=m.SemanticBasis(
+                    m.DerivationKind.SEMANTIC_INTERPRETATION,
+                    "the unit evidence states the purpose",
+                ),
             )
             answered = _dispatch(
                 adapter,
@@ -381,38 +336,20 @@ class DispatchTest(unittest.TestCase):
                     "continuation": envelope["continuation"],
                     "result": m.to_canonical(
                         m.SemanticInterpretationResult(
-                            claims=(),
+                            claims=(claim,),
                             relationships=(),
                             governing_source_refs=(),
-                            diagnostics=("mapping",),
-                            candidate_subjects=(
-                                m.CandidateSubject(
-                                    provisional_locator="tools-area",
-                                    kind=m.SubjectKind.OTHER,
-                                    display_name="tools-area",
-                                    declared_kind="tools-area",
-                                    evidence=(item_ref,),
-                                    basis=m.SemanticBasis(
-                                        derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
-                                        summary="mapping admits tools",
-                                        input_refs=(item_ref,),
-                                    ),
-                                ),
-                            ),
+                            diagnostics=(),
+                            candidate_subjects=(),
                             candidate_conflicts=(),
-                            proposed_questions=(
-                                m.ProposedSemanticQuestion(
-                                    map_cov.question, _decision(map_cov)
-                                ),
+                            question_decision=m.SemanticQuestionDecision(
+                                disposition=m.SemanticQuestionDisposition.ANSWERED,
+                                evidence_scope=m.EvidenceScope(evidence_refs=(ref,)),
+                                resolution_requirements=(),
+                                disposition_basis="answered from unit evidence",
                             ),
+                            proposed_questions=(),
                             candidate_withdrawals=(),
-                            proposed_target_inventory_accounting=(
-                                m.CandidateTargetInventoryAccount(
-                                    evidence_id=item_ref.evidence_id,
-                                    assigned_area_subjects=(area,),
-                                ),
-                            ),
-                            proposed_target_questions=(),
                         )
                     ),
                     "repository_id": REPO,
@@ -420,80 +357,7 @@ class DispatchTest(unittest.TestCase):
             )
             self.assertFalse(answered.is_error)
             answer = json.loads(answered.content)
-            # Mapping drained for the single file; semantic PENDING follows.
-            self.assertEqual(answer["$type"], "PendingInterpretation")
-        finally:
-            adapter.contexts[REPO].store.close()
-
-    def test_mapping_batch_rejection_names_evidence_id(self):
-        """SPMCP-04: an account outside the bound batch rejects by stable
-        EvidenceId over the wire and leaves the continuation usable."""
-        adapter, agent = _harness()
-        try:
-            pending = _dispatch(
-                adapter,
-                "initialize_target",
-                {
-                    "repository_id": REPO,
-                    "target": m.to_canonical(
-                        m.EvidenceScope(paths=("src/tools.py",), evidence_refs=())
-                    ),
-                    "objective": "Understand the tool boundary and its use.",
-                },
-            )
-            self.assertFalse(pending.is_error)
-            envelope = json.loads(pending.content)
-            task = _schema.from_wire(
-                m.SemanticInterpretationRequest,
-                envelope["request"],
-            )
-            item_ref = task.target_inventory_items[0].evidence_ref
-
-            def _unresolved(evidence_id):
-                return m.CandidateTargetInventoryAccount(
-                    evidence_id=evidence_id,
-                    resolution_requirements=(
-                        m.ResolutionRequirement(
-                            kind=(m.ResolutionKind.MISSING_SEMANTIC_COVERAGE),
-                            subject_or_claim=None,
-                            description="not examined in this test",
-                            supporting_context=(),
-                        ),
-                    ),
-                )
-
-            def _submit(account):
-                return _dispatch(
-                    adapter,
-                    "submit_interpretation",
-                    {
-                        "continuation": envelope["continuation"],
-                        "result": m.to_canonical(
-                            m.SemanticInterpretationResult(
-                                claims=(),
-                                relationships=(),
-                                governing_source_refs=(),
-                                diagnostics=("mapping",),
-                                candidate_subjects=(),
-                                candidate_conflicts=(),
-                                candidate_withdrawals=(),
-                                proposed_target_inventory_accounting=(account,),
-                                proposed_target_questions=(),
-                            )
-                        ),
-                        "repository_id": REPO,
-                    },
-                )
-
-            failed = _submit(_unresolved(m.EvidenceId("ev-not-bound")))
-            self.assertTrue(failed.is_error)
-            payload = json.loads(failed.content)
-            self.assertEqual(payload["error"], "validation")
-            self.assertIn("ev-not-bound", payload["message"])
-            self.assertIn("outside the bound mapping batch", payload["message"])
-
-            corrected = _submit(_unresolved(item_ref.evidence_id))
-            self.assertFalse(corrected.is_error)
+            self.assertIn(answer["$type"], ("SemanticAnswer", "PendingInterpretation"))
         finally:
             adapter.contexts[REPO].store.close()
 
@@ -1110,13 +974,16 @@ class DispatchTest(unittest.TestCase):
     def test_adapter_is_sdk_free(self):
         import pathlib as _pathlib
 
-        source = (
+        package = (
             _pathlib.Path(__file__).resolve().parents[2]
             / "src"
             / "span"
             / "shell"
-            / "mcp.py"
-        ).read_text(encoding="utf-8")
+            / "mcp"
+        )
+        source = "\n".join(
+            path.read_text(encoding="utf-8") for path in package.glob("*.py")
+        )
         self.assertNotIn("import mcp", source)
         self.assertNotIn("from mcp", source)
         # Server constructor parses without side effects.

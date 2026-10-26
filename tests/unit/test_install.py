@@ -6,8 +6,11 @@ platform logic, config merge, and dry-run planning only.
 """
 
 import ast
+import importlib
 import json
 import pathlib
+import shutil
+import subprocess
 import sys
 import unittest
 
@@ -15,14 +18,21 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
 
 from span.shell import install
 
+INSTALL_PACKAGE = pathlib.Path(install.__file__).parent
+
+
+def install_source() -> str:
+    return "\n".join(path.read_text() for path in INSTALL_PACKAGE.glob("*.py"))
+
 
 class NoSpanImportTest(unittest.TestCase):
     def test_top_level_imports_are_stdlib_only(self):
-        source = pathlib.Path(install.__file__).read_text()
+        source = install_source()
         tree = ast.parse(source)
         allowed_roots = {
             "__future__",
             "argparse",
+            "dataclasses",
             "datetime",
             "hashlib",
             "importlib",
@@ -41,6 +51,8 @@ class NoSpanImportTest(unittest.TestCase):
                     self.assertIn(root, allowed_roots, alias.name)
             elif isinstance(node, ast.ImportFrom):
                 if node.level == 0 and node.module:
+                    if node.module.startswith("span.shell.install"):
+                        continue
                     self.assertIn(
                         node.module.split(".")[0],
                         allowed_roots,
@@ -325,9 +337,9 @@ class PlanningTest(unittest.TestCase):
             repo = pathlib.Path(tmp) / "span"
             (repo / "src" / "span").mkdir(parents=True)
             with (
-                patch.object(install, "_has_venv_pip", return_value=False),
-                patch.object(install.shutil, "which", return_value="/uv"),
-                patch.object(install, "_run") as run,
+                patch("span.shell.install.venv._has_venv_pip", return_value=False),
+                patch.object(shutil, "which", return_value="/uv"),
+                patch("span.shell.install.venv._run") as run,
             ):
                 install.pip_install("/venv/bin/python", repo)
             run.assert_called_once_with(
@@ -350,10 +362,12 @@ class PlanningTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with (
-                patch.object(install, "_has_venv_pip", return_value=False),
-                patch.object(install.shutil, "which", return_value="/uv"),
-                patch.object(install, "distribution_version", return_value="0.6.0"),
-                patch.object(install, "_run") as run,
+                patch("span.shell.install.venv._has_venv_pip", return_value=False),
+                patch.object(shutil, "which", return_value="/uv"),
+                patch(
+                    "span.shell.install.venv.distribution_version", return_value="0.6.0"
+                ),
+                patch("span.shell.install.venv._run") as run,
             ):
                 install.pip_install("/venv/bin/python", tmp)
             run.assert_called_once_with(
@@ -416,7 +430,7 @@ class PlanningTest(unittest.TestCase):
         from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(install, "check_prereqs"):
+            with patch("span.shell.install.cli.check_prereqs"):
                 result = install.main(
                     [
                         "--dry-run",
@@ -608,13 +622,13 @@ class PlanningTest(unittest.TestCase):
         def fake_which(tool):
             return {"node": "/node", "npm": "/npm"}.get(tool)
 
-        with patch.object(install.shutil, "which", side_effect=fake_which):
+        with patch.object(shutil, "which", side_effect=fake_which):
             install.check_prereqs()  # must not raise
 
         def fake_which_missing_npm(tool):
             return {"node": "/node"}.get(tool)
 
-        with patch.object(install.shutil, "which", side_effect=fake_which_missing_npm):
+        with patch.object(shutil, "which", side_effect=fake_which_missing_npm):
             with self.assertRaises(SystemExit) as ctx:
                 install.check_prereqs()
             self.assertIn("npm", str(ctx.exception))
@@ -642,9 +656,8 @@ class PlanningTest(unittest.TestCase):
         # install path must not reference process inspection, MCP
         # registries, attestation, or coexistence handling. (Bare
         # "codex"/"mcp" still occur legitimately in span host wiring.)
-        import pathlib
 
-        source = pathlib.Path(install.__file__).read_text()
+        source = install_source()
         for forbidden in (
             "check_graft_isolation",
             "_active_graft_processes",
@@ -738,18 +751,20 @@ class Tier1MechanismTest(unittest.TestCase):
         from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(install, "distribution_version", return_value="0.6.0"):
+            with patch(
+                "span.shell.install.venv.distribution_version", return_value="0.6.0"
+            ):
                 match = subprocess.CompletedProcess(
                     args=[], returncode=0, stdout="0.6.0\n"
                 )
-                with patch.object(install.subprocess, "run", return_value=match):
+                with patch.object(subprocess, "run", return_value=match):
                     ok, detail = install.verify_installed(tmp, "/venv/bin/python")
                 self.assertTrue(ok)
                 self.assertIn("0.6.0", detail)
                 drift = subprocess.CompletedProcess(
                     args=[], returncode=0, stdout="0.5.0\n"
                 )
-                with patch.object(install.subprocess, "run", return_value=drift):
+                with patch.object(subprocess, "run", return_value=drift):
                     ok, detail = install.verify_installed(tmp, "/venv/bin/python")
                 self.assertFalse(ok)
                 self.assertIn("0.5.0", detail)
@@ -760,11 +775,13 @@ class Tier1MechanismTest(unittest.TestCase):
         from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(install, "distribution_version", return_value="0.6.0"):
+            with patch(
+                "span.shell.install.venv.distribution_version", return_value="0.6.0"
+            ):
                 match = subprocess.CompletedProcess(
                     args=[], returncode=0, stdout="0.6.0\n"
                 )
-                with patch.object(install.subprocess, "run", return_value=match):
+                with patch.object(subprocess, "run", return_value=match):
                     in_sync, _, extra = install.distribution_venv_in_sync(
                         pathlib.Path(tmp) / "python"
                     )
@@ -773,7 +790,7 @@ class Tier1MechanismTest(unittest.TestCase):
                 drift = subprocess.CompletedProcess(
                     args=[], returncode=0, stdout="0.5.0\n"
                 )
-                with patch.object(install.subprocess, "run", return_value=drift):
+                with patch.object(subprocess, "run", return_value=drift):
                     in_sync, _, _ = install.distribution_venv_in_sync(
                         pathlib.Path(tmp) / "python"
                     )
@@ -904,14 +921,14 @@ class Tier1MechanismTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = str(pathlib.Path(tmp) / "seeds.json")
             pathlib.Path(path).write_text(json.dumps([]))
-            real_import = install.importlib.import_module
+            real_import = importlib.import_module
 
             def _missing(name, *args, **kwargs):
                 if name == "span.core.model":
                     raise ImportError("no span.core.model in test")
                 return real_import(name, *args, **kwargs)
 
-            with patch.object(install.importlib, "import_module", side_effect=_missing):
+            with patch.object(importlib, "import_module", side_effect=_missing):
                 try:
                     install.load_seeds(path, dry_run=False)
                 except SystemExit as exc:
@@ -958,34 +975,6 @@ class HookWiringTest(unittest.TestCase):
                 install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
             finally:
                 os.path.expanduser = real_expanduser
-
-    def test_opencode_plugin_deploy_refused_target_write(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = pathlib.Path(tmp) / "span"
-            src = repo / "integrations" / "hosts" / "opencode"
-            src.mkdir(parents=True)
-            (src / "span-hooks.js").write_text("// plugin")
-            project = pathlib.Path(tmp) / "proj"
-            # Addendum E §3/E-02: per-target plugin deployment is removed.
-            with self.assertRaises(SystemExit):
-                install.wire_opencode_plugin(repo, project, dry_run=False)
-            self.assertFalse(
-                (project / ".opencode" / "plugins" / "span-hooks.js").exists()
-            )
-
-    def test_opencode_plugin_dry_run_skipped(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = pathlib.Path(tmp) / "span"
-            project = pathlib.Path(tmp) / "proj"
-            result = install.wire_opencode_plugin(repo, project, dry_run=True)
-            self.assertEqual(result["status"], "skipped")
-            self.assertFalse(
-                (project / ".opencode" / "plugins" / "span-hooks.js").exists()
-            )
 
 
 class SkillDeployTest(unittest.TestCase):
@@ -1260,9 +1249,9 @@ class ClaudeHostTest(unittest.TestCase):
         from unittest.mock import patch
 
         with (
-            patch.object(install.shutil, "which", return_value="/claude"),
-            patch.object(install.subprocess, "run") as remove,
-            patch.object(install, "_run") as run,
+            patch.object(shutil, "which", return_value="/claude"),
+            patch.object(subprocess, "run") as remove,
+            patch("span.shell.install.hosts._run") as run,
         ):
             install.register_claude(["/bin/span-mcp", "--data-dir", "/d"])
         self.assertEqual(
@@ -1290,7 +1279,7 @@ class ClaudeHostTest(unittest.TestCase):
     def test_register_claude_absent_skips(self):
         from unittest.mock import patch
 
-        with patch.object(install.shutil, "which", return_value=None):
+        with patch.object(shutil, "which", return_value=None):
             result = install.register_claude(["/bin/span-mcp"])
         self.assertEqual(result["status"], "skipped")
 
@@ -1298,9 +1287,9 @@ class ClaudeHostTest(unittest.TestCase):
         from unittest.mock import patch
 
         with (
-            patch.object(install.shutil, "which", return_value="/claude"),
-            patch.object(install.subprocess, "run") as remove,
-            patch.object(install, "_run") as run,
+            patch.object(shutil, "which", return_value="/claude"),
+            patch.object(subprocess, "run") as remove,
+            patch("span.shell.install.hosts._run") as run,
         ):
             result = install.register_claude(["/bin/span-mcp"], dry_run=True)
         remove.assert_not_called()
@@ -1542,11 +1531,12 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             path = self._config(tmp, expected)
             before = path.read_bytes()
             with (
-                patch.object(install.shutil, "which", return_value="/bin/span-mcp"),
-                patch.object(
-                    install, "verify_installation", return_value={"repos": []}
+                patch.object(shutil, "which", return_value="/bin/span-mcp"),
+                patch(
+                    "span.shell.install.verify.verify_installation",
+                    return_value={"repos": []},
                 ),
-                patch.object(install, "check_skills"),
+                patch("span.shell.install.verify.check_skills"),
             ):
                 report = install.doctor(
                     "/venv/bin/python",
@@ -1561,14 +1551,18 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         from unittest.mock import patch
 
         with (
-            patch.object(install.shutil, "which", return_value="/bin/span-mcp"),
-            patch.object(install, "verify_installation", return_value={"repos": []}),
-            patch.object(install, "check_skills"),
-            patch.object(
-                install, "detect_hosts", return_value={"opencode": True, "codex": True}
+            patch.object(shutil, "which", return_value="/bin/span-mcp"),
+            patch(
+                "span.shell.install.verify.verify_installation",
+                return_value={"repos": []},
+            ),
+            patch("span.shell.install.verify.check_skills"),
+            patch(
+                "span.shell.install.host_inspect.detect_hosts",
+                return_value={"opencode": True, "codex": True},
             ),
             patch.object(
-                install.subprocess,
+                subprocess,
                 "run",
                 side_effect=AssertionError("doctor must not query a registry"),
             ),
@@ -1589,11 +1583,15 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         from unittest.mock import patch
 
         with (
-            patch.object(install.shutil, "which", return_value="/bin/span-mcp"),
-            patch.object(install, "verify_installation", return_value={"repos": []}),
-            patch.object(install, "check_skills"),
-            patch.object(
-                install, "detect_hosts", return_value={"opencode": True, "codex": False}
+            patch.object(shutil, "which", return_value="/bin/span-mcp"),
+            patch(
+                "span.shell.install.verify.verify_installation",
+                return_value={"repos": []},
+            ),
+            patch("span.shell.install.verify.check_skills"),
+            patch(
+                "span.shell.install.host_inspect.detect_hosts",
+                return_value={"opencode": True, "codex": False},
             ),
         ):
             report = install.doctor(
@@ -1610,7 +1608,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         self.assertFalse(hasattr(args, "verify"))
         verification_keys = {key for key in vars(args).keys() if "verify" in key}
         self.assertEqual(verification_keys, {"verify_only"})
-        source = pathlib.Path(install.__file__).read_text()
+        source = install_source()
         self.assertNotIn('"--verify"', source)
         self.assertIn('"--verify-only"', source)
 

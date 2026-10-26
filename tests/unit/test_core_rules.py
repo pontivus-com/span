@@ -12,23 +12,13 @@ from span.core import freshness as fresh
 from span.core import model as m
 from span.core import validation as v
 
+from tests.support.factories import subject_id
 
-def _sid(locator="src/a.py"):
-    return m.SubjectId(
-        repository_id="repo-1",
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator=locator,
-    )
+from tests.support.factories import evidence_ref
 
+_ref = evidence_ref
 
-def _ref(eid="ev-src/a.py", locator="src/a.py"):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(eid),
-        repository_id="repo-1",
-        source_kind=m.EvidenceSourceKind.SOURCE_CODE,
-        locator=locator,
-        revision_or_fingerprint="fp-1",
-    )
+_sid = subject_id
 
 
 def _ctx(**overrides):
@@ -379,14 +369,18 @@ class FreshnessClassificationTest(unittest.TestCase):
 
     def test_classify_all_only_updates_non_current(self):
         dep_current = m.EvidenceDependency(
-            m.ClaimRef(id=m.ClaimId("c-1")), _ref("ev-a", "a.py"), "fp-a"
+            m.ClaimRef(id=m.ClaimId("c-1")),
+            evidence_ref("a.py", evidence_id="ev-a"),
+            "fp-a",
         )
         dep_stale = m.EvidenceDependency(
-            m.ClaimRef(id=m.ClaimId("c-2")), _ref("ev-b", "b.py"), "fp-old"
+            m.ClaimRef(id=m.ClaimId("c-2")),
+            evidence_ref("b.py", evidence_id="ev-b"),
+            "fp-old",
         )
         dep_gone = m.EvidenceDependency(
             m.RelationshipRef(id=m.RelationshipId("r-1")),
-            _ref("ev-c", "c.py"),
+            evidence_ref("c.py", evidence_id="ev-c"),
             "fp-c",
         )
         updates = fresh.classify_all(

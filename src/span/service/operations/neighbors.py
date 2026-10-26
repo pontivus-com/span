@@ -1,4 +1,4 @@
-"""Span service structural neighbors operation (Addendum F §4.2).
+"""Span service structural neighbors operation ([design note F](docs/design-references.md#f) §4.2).
 
 Read-only bounded adjacency over the StructuralSource port. No semantic
 interpretation, no persistence. Traversal consumes every adjacency page
@@ -20,6 +20,7 @@ from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
 from span.ports.structural import StructuralSource
 from span.service.bounds import resolve_bounds as _resolve_bounds
+from span.service.operations.listing import listing_version
 from span.service.repository import _is_initialized
 from span.service.requests import SemanticStructuralNeighborsRequest
 from span.service.resolution import _resolve_query_subject
@@ -32,7 +33,7 @@ _TOKEN_PREFIX = "pgn:"
 def encode_traversal_token(
     version: str, visited: tuple[str, ...], frontier: tuple[tuple[str, int], ...]
 ) -> str:
-    """Encode resumable BFS state (Addendum F §4.3).
+    """Encode resumable BFS state ([design note F](docs/design-references.md#f) §4.3).
 
     Visited count is bounded by the visited cap, so tokens stay small.
     Distinct format from offset tokens; never interchanged.
@@ -86,10 +87,6 @@ def decode_traversal_token(
     return visited, frontier
 
 
-def _listing_version(structural: StructuralSource, repository_id: str) -> str:
-    return structural.repository_state(repository_id).state_fingerprint
-
-
 def _all_edges(
     structural: StructuralSource,
     repository_id: str,
@@ -122,71 +119,67 @@ def _all_edges(
         seen_tokens.add(token)
 
 
-def neighbors(
+def _empty_neighbors_result(
+    resolution: m.SubjectResolution,
+    state: m.RepositoryState,
+    bounds: m.QueryBounds,
+    *,
+    unsupported: bool = False,
+) -> m.StructuralNeighborsResult:
+    """One empty result shape for unresolved, unsupported, or quiet traversals."""
+    return m.StructuralNeighborsResult(
+        resolution=resolution,
+        repository_state=state,
+        bound_info=m.BoundInfo(
+            requested_max_results=bounds.max_results,
+            requested_max_depth=bounds.max_depth,
+            returned_results=0,
+            truncated=False,
+            truncated_category=None,
+            continuation_token=None,
+        ),
+        unsupported=unsupported,
+    )
+
+
+def _walk_neighbors(
     request: SemanticStructuralNeighborsRequest,
     *,
     structural: StructuralSource,
-    store: SemanticStore,
-) -> m.StructuralNeighborsResult:
-    """Execute one structural neighbors traversal (read-only)."""
-    if not _is_initialized(request.repository_id, store=store):
-        raise ValueError(f"repository not initialized: {request.repository_id}")
-    if (
-        isinstance(request.max_depth, bool)
-        or not isinstance(request.max_depth, int)
-        or request.max_depth < 1
-    ):
-        raise ValueError("neighbors max_depth must be a positive integer")
-    bounds = _resolve_bounds(request.bounds, hook=False)
-    version = _listing_version(structural, request.repository_id)
-    try:
-        visited_token, frontier_token = decode_traversal_token(
-            request.page_token, version=version
-        )
-    except StaleContinuationError:
-        raise
-    except ValueError as exc:
-        raise ValueError(f"neighbors failed: {exc}") from None
-    resolution = _resolve_query_subject(
-        request.repository_id,
-        request.target,
-        structural=structural,
-        store=store,
-        bounds=bounds,
-    )
-    if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
-        state = structural.repository_state(request.repository_id)
-        return m.StructuralNeighborsResult(
-            resolution=resolution,
-            repository_state=state,
-            bound_info=m.BoundInfo(
-                requested_max_results=bounds.max_results,
-                requested_max_depth=bounds.max_depth,
-                returned_results=0,
-                truncated=False,
-                truncated_category=None,
-                continuation_token=None,
-            ),
-        )
-    limit = min(request.max_depth, bounds.max_depth)
+    bounds: m.QueryBounds,
+    root: str,
+    limit: int,
+    visited_token: tuple[str, ...],
+    frontier_token: tuple[tuple[str, int], ...],
+) -> tuple[
+    dict[tuple[str, str, str], m.StructuralEdge],
+    bool,
+    bool,
+    tuple[tuple[str, int], ...],
+    tuple[str, ...],
+]:
+    """Bounded BFS over complete per-node adjacency.
+
+    Returns the collected edges, whether the walk was truncated, whether the
+    provider reported unsupported edges, and the resume frontier.
+    """
     kinds = request.edge_kinds
     direction = request.direction
     seen: set[str] = set(visited_token)
     queue: _deque[tuple[str, int]] = _deque(frontier_token)
     if not queue:
-        root = resolution.candidates[0].subject.subject_id.canonical_locator
         seen.add(root)
         queue.append((root, 0))
     visit_cap = bounds.max_subjects
     collected: dict[tuple[str, str, str], m.StructuralEdge] = {}
     unsupported = False
     truncated = False
-    # Caps are per response segment, checked between node expansions so
-    # every expanded node contributes its complete adjacency (overshoot
-    # bounded by one node's degree). Visited/frontier state travels in
-    # the token, so resume continues the identical sequence: no
-    # duplicates, no replay, no deadlock (a total-seen cap would
-    # truncate every resume the moment it starts).
+    # Caps are per response segment, checked between node expansions so every
+    # expanded node contributes its complete adjacency (overshoot bounded by
+    # one node's degree). Visited/frontier state travels in the token, so
+    # resume continues the identical sequence: no duplicates, no replay, no
+    # deadlock (a total-seen cap would truncate every resume the moment it
+    # starts).
     expansions = 0
     while queue:
         if expansions >= visit_cap or len(collected) >= bounds.max_results:
@@ -229,36 +222,71 @@ def neighbors(
             if other not in seen:
                 seen.add(other)
                 queue.append((other, depth + 1))
+    return collected, truncated, unsupported, tuple(queue), tuple(sorted(seen))
+
+
+def neighbors(
+    request: SemanticStructuralNeighborsRequest,
+    *,
+    structural: StructuralSource,
+    store: SemanticStore,
+) -> m.StructuralNeighborsResult:
+    """Execute one structural neighbors traversal (read-only)."""
+    if not _is_initialized(request.repository_id, store=store):
+        raise ValueError(f"repository not initialized: {request.repository_id}")
+    if (
+        isinstance(request.max_depth, bool)
+        or not isinstance(request.max_depth, int)
+        or request.max_depth < 1
+    ):
+        raise ValueError("neighbors max_depth must be a positive integer")
+    bounds = _resolve_bounds(request.bounds, hook=False)
+    version = listing_version(structural, request.repository_id)
+    try:
+        visited_token, frontier_token = decode_traversal_token(
+            request.page_token, version=version
+        )
+    except StaleContinuationError:
+        raise
+    except ValueError as exc:
+        raise ValueError(f"neighbors failed: {exc}") from None
+    resolution = _resolve_query_subject(
+        request.repository_id,
+        request.target,
+        structural=structural,
+        store=store,
+        bounds=bounds,
+    )
+    if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
+        return _empty_neighbors_result(
+            resolution,
+            structural.repository_state(request.repository_id),
+            bounds,
+        )
+    collected, truncated, unsupported, resume_frontier, visited = _walk_neighbors(
+        request,
+        structural=structural,
+        bounds=bounds,
+        root=resolution.candidates[0].subject.subject_id.canonical_locator,
+        limit=min(request.max_depth, bounds.max_depth),
+        visited_token=visited_token,
+        frontier_token=frontier_token,
+    )
     state = structural.repository_state(request.repository_id)
     if unsupported:
-        return m.StructuralNeighborsResult(
-            resolution=resolution,
-            repository_state=state,
-            bound_info=m.BoundInfo(
-                requested_max_results=bounds.max_results,
-                requested_max_depth=bounds.max_depth,
-                returned_results=0,
-                truncated=False,
-                truncated_category=None,
-                continuation_token=None,
-            ),
-            unsupported=True,
-        )
+        return _empty_neighbors_result(resolution, state, bounds, unsupported=True)
     edges = tuple(collected.values())
-    # Edge currency follows each edge's evidence file; stale evidence
-    # excludes the edge (counted), never silently kept.
+    # Edge currency follows each edge's evidence file; stale evidence excludes
+    # the edge (counted), never silently kept.
     report = structural.verify_files(
         request.repository_id,
-        tuple(sorted({e.evidence.locator for e in edges})),
+        tuple(sorted({edge.evidence.locator for edge in edges})),
     )
     stale_set = set(report.stale_files)
-    live_edges = tuple(e for e in edges if e.evidence.locator not in stale_set)
+    live_edges = tuple(edge for edge in edges if edge.evidence.locator not in stale_set)
     stale_omitted = len(edges) - len(live_edges)
-    if queue:
+    if resume_frontier:
         truncated = True
-    # Frontier keeps queue order (insertion/BFS order), not sorted:
-    # resume must continue the identical traversal sequence.
-    resume_frontier = tuple(queue)
     return m.StructuralNeighborsResult(
         resolution=resolution,
         repository_state=state,
@@ -269,7 +297,7 @@ def neighbors(
             truncated=truncated,
             truncated_category="neighbors" if truncated else None,
             continuation_token=(
-                encode_traversal_token(version, tuple(sorted(seen)), resume_frontier)
+                encode_traversal_token(version, visited, resume_frontier)
                 if truncated
                 else None
             ),

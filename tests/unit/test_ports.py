@@ -20,19 +20,11 @@ from span.ports import (
 )
 from span import service as svc
 
+from tests.support.factories import query_bounds
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=2,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+from functools import partial as _partial
+
+_bounds = _partial(query_bounds, max_depth=2)
 
 
 class DirectionVocabularyTest(unittest.TestCase):
@@ -85,11 +77,8 @@ class PortShapeTest(unittest.TestCase):
             request=m.SemanticInterpretationRequest(
                 repository_id="repo-1",
                 subjects=(),
-                evidence_units=(),
-                structural_observations=(),
-                allowed_claim_kinds=(),
-                allowed_relationship_kinds=(),
-                identity_bindings=(),
+                task_evidence=m.TaskEvidence(),
+                allowed_kinds=m.AllowedKinds(claim_kinds=(), relationship_kinds=()),
                 brief=m.TaskBrief(),
                 bounds=self._bounds(),
             ),
@@ -100,16 +89,7 @@ class PortShapeTest(unittest.TestCase):
         self.assertTrue(issubclass(InterpretationUnavailable, Exception))
         self.assertFalse(hasattr(svc, "reissue_interpretation"))
 
-    def _bounds(self):
-        return m.QueryBounds(
-            max_results=50,
-            max_depth=2,
-            max_subjects=8,
-            max_evidence_units=24,
-            max_evidence_bytes=96_000,
-            max_candidate_claims=64,
-            max_candidate_relationships=64,
-        )
+    _bounds = staticmethod(_partial(query_bounds, max_depth=2))
 
     def test_store_methods(self):
         self._assert_methods(
@@ -127,7 +107,6 @@ class PortShapeTest(unittest.TestCase):
                 "count_repository_subjects",
                 "count_question_dispositions",
                 "count_target_associations",
-                "count_target_inventory_outcomes",
                 "load_active_target_associations",
                 "load_relationships",
                 "load_evidence_dependencies",

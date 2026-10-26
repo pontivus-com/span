@@ -20,18 +20,29 @@ from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span import service as ops
 from span.service.discovery import _coverage_for_task
-from span.service.operations.explain import _baseline_sufficient
+from span.service.establishment import _baseline_sufficient
 from span.service.resolution import _load_all_coverages_or_defer
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
-    InMemoryFile,
-    InMemoryStructuralSource,
     InMemorySubject,
     fingerprint_content,
 )
+
+from tests.support.factories import evidence_ref, query_bounds
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import semantic_harness
+
+from tests.support.factories import question_decision
+
+from tests.support.factories import proposed_questions
+
+from tests.support.factories import answered_decision
 
 REPO = "parcel-svc"
 
@@ -50,6 +61,8 @@ FILES = {
     "src/failures.py": "def dead_letter(e):\n    pass\n",
     "docs/notes.md": "misc\n",
 }
+
+_ref = _partial(evidence_ref, repository_id=REPO)
 
 TRUTH_OWNER = "team/parcel"
 TRUTH_PURPOSE = "Sorts parcels"
@@ -98,43 +111,16 @@ class FixtureTruth:
             )
 
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
 
 
-def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
-
-
-def _ref(path, files=None):
-    files = FILES if files is None else files
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=(
-            m.EvidenceSourceKind.DOCUMENTATION
-            if path.endswith(".md")
-            else m.EvidenceSourceKind.SOURCE_CODE
-        ),
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(files[path]),
-    )
+_sid = _partial(subject_id, repository_id=REPO)
 
 
 def _authority(path, quote, files=None):
     return m.CandidateAuthority(
         binding=m.AuthorityBinding(
-            evidence_ref=_ref(path, files),
+            evidence_ref=_ref(path, files=files),
             authority_kind=m.AuthorityKind.REPOSITORY_RULE,
             status=m.AuthorityStatus.ACCEPTED,
         ),
@@ -146,44 +132,24 @@ def _authority(path, quote, files=None):
     )
 
 
-def _harness(files=None, db_path=":memory:"):
-    files = dict(FILES) if files is None else dict(files)
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in files.items()),
-        (
-            InMemorySubject("src/parcel.py", m.SubjectKind.COMPONENT, "parcel"),
-            InMemorySubject("src/store.py", m.SubjectKind.COMPONENT, "store"),
-            InMemorySubject("src/events.py", m.SubjectKind.COMPONENT, "events"),
-            InMemorySubject("src/failures.py", m.SubjectKind.COMPONENT, "failures"),
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    FILES,
+    subjects=(
+        InMemorySubject("src/parcel.py", m.SubjectKind.COMPONENT, "parcel"),
+        InMemorySubject("src/store.py", m.SubjectKind.COMPONENT, "store"),
+        InMemorySubject("src/events.py", m.SubjectKind.COMPONENT, "events"),
+        InMemorySubject("src/failures.py", m.SubjectKind.COMPONENT, "failures"),
+    ),
+    edges=(
+        InMemoryEdge("src/parcel.py", m.StructuralEdgeKind.DEPENDS_ON, "src/store.py"),
+        InMemoryEdge("src/parcel.py", m.StructuralEdgeKind.CALLS, "src/events.py"),
+        InMemoryEdge(
+            "src/parcel.py", m.StructuralEdgeKind.REFERENCES, "src/failures.py"
         ),
-        (
-            InMemoryEdge(
-                "src/parcel.py",
-                m.StructuralEdgeKind.DEPENDS_ON,
-                "src/store.py",
-            ),
-            InMemoryEdge("src/parcel.py", m.StructuralEdgeKind.CALLS, "src/events.py"),
-            InMemoryEdge(
-                "src/parcel.py",
-                m.StructuralEdgeKind.REFERENCES,
-                "src/failures.py",
-            ),
-        ),
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(files))
-    store = SqliteSemanticStore(db_path)
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+    ),
+)
 
 
 def _explain_request(locator, baseline=False):
@@ -202,7 +168,7 @@ def _purpose_claim(files=None, key="purpose"):
         kind=m.ClaimKind.PURPOSE,
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         value=m.PurposeValue("Sorts parcels", ()),
-        evidence=(_ref("README.md", files),),
+        evidence=(_ref("README.md", files=files),),
         candidate_authority=_authority("README.md", "Sorts parcels", files),
         basis=m.SemanticBasis(
             m.DerivationKind.SEMANTIC_INTERPRETATION,
@@ -222,7 +188,7 @@ def _ownership_claim(files=None, key="ownership"):
             m.OwnershipRole.OWNER,
             m.OwnershipExclusivity.EXCLUSIVE,
         ),
-        evidence=(_ref("OWNERSHIP.md", files),),
+        evidence=(_ref("OWNERSHIP.md", files=files),),
         candidate_authority=_authority("OWNERSHIP.md", "Team parcel owns", files),
         basis=m.SemanticBasis(
             m.DerivationKind.SEMANTIC_INTERPRETATION,
@@ -245,7 +211,7 @@ def _question_coverage(
         subjects=(scope.subject,),
         question_slice=scope.question_slice,
         evidence_scope=m.EvidenceScope(
-            paths=(), evidence_refs=tuple(_ref(p, files) for p in evidence_paths)
+            paths=(), evidence_refs=tuple(_ref(p, files=files) for p in evidence_paths)
         ),
         declared_complete=(disposition is m.SemanticQuestionDisposition.ANSWERED),
         question=scope,
@@ -255,7 +221,7 @@ def _question_coverage(
         disposition_basis=basis or f"test {disposition.value}",
         question_evidence=tuple(
             m.QuestionEvidenceObservation(
-                evidence_ref=_ref(p, files),
+                evidence_ref=_ref(p, files=files),
                 observed_fingerprint=fingerprint_content(files[p]),
             )
             for p in evidence_paths
@@ -263,22 +229,10 @@ def _question_coverage(
     )
 
 
-def _decision(coverage):
-    """Test-only: express an authored coverage as the compact decision."""
-    return m.SemanticQuestionDecision(
-        disposition=coverage.disposition,
-        evidence_scope=coverage.evidence_scope,
-        resolution_requirements=coverage.resolution_requirements,
-        disposition_basis=coverage.disposition_basis,
-    )
+_decision = question_decision
 
 
-def _proposed(*coverages):
-    """Test-only: express authored coverages as proposed questions."""
-    return tuple(
-        m.ProposedSemanticQuestion(coverage.question, _decision(coverage))
-        for coverage in coverages
-    )
+_proposed = proposed_questions
 
 
 def _scope(root, subject, cls, slic, basis="test material"):
@@ -291,16 +245,7 @@ def _scope(root, subject, cls, slic, basis="test material"):
     )
 
 
-def _answer_current(request, basis="examined with validated candidates"):
-    """Explicit ANSWERED completion decision for the bound question.
-
-    Identity, completion, result refs, and question evidence are
-    Span-owned; the agent supplies only the disposition and basis.
-    """
-    return m.SemanticQuestionDecision(
-        disposition=m.SemanticQuestionDisposition.ANSWERED,
-        disposition_basis=basis,
-    )
+_answer_current = answered_decision
 
 
 def _drain(op_request, op, structural, evidence, store, build_result, seeds=()):
@@ -714,7 +659,7 @@ class SharedClaimRetirementTest(unittest.TestCase):
                 kind=m.ClaimKind.PURPOSE,
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 value=m.PurposeValue("Sorts parcels fast", ()),
-                evidence=(_ref("README.md", grown),),
+                evidence=(_ref("README.md", files=grown),),
                 basis=m.SemanticBasis(
                     m.DerivationKind.SEMANTIC_INTERPRETATION,
                     "README now states the fast parcel purpose",
@@ -1084,7 +1029,7 @@ class QuestionIsolationTest(unittest.TestCase):
                             kind=m.ClaimKind.PURPOSE,
                             assertion_nature=m.AssertionNature.DESCRIPTIVE,
                             value=m.PurposeValue("Sorts parcels", ()),
-                            evidence=(_ref("README.md", grown),),
+                            evidence=(_ref("README.md", files=grown),),
                             basis=m.SemanticBasis(
                                 m.DerivationKind.SEMANTIC_INTERPRETATION,
                                 "README states the parcel purpose",
@@ -1175,7 +1120,7 @@ class SemanticPremiseTest(unittest.TestCase):
             self.assertIsInstance(suspended, PendingInterpretation)
             units = {
                 u.evidence_ref.locator: u.evidence_ref
-                for u in suspended.request.evidence_units
+                for u in suspended.request.task_evidence.evidence_units
             }
             sid = _sid("src/store.py")
             auth_answer = ops.submit_interpretation(
@@ -1242,7 +1187,7 @@ class SemanticPremiseTest(unittest.TestCase):
                 evidence_v2,
                 store,
                 lambda req: self._premise_only(req, grown),
-                seeds=(_ref("README.md", grown),),
+                seeds=(_ref("README.md", files=grown),),
             )
             premise_new_id = next(
                 c.claim_id.value
@@ -1260,7 +1205,7 @@ class SemanticPremiseTest(unittest.TestCase):
                 evidence_v2,
                 store,
                 lambda req: self._consumer_only(req, grown, premise_new_id),
-                seeds=(_ref("README.md", grown),),
+                seeds=(_ref("README.md", files=grown),),
             )
             self.assertTrue(
                 all(
@@ -1273,7 +1218,10 @@ class SemanticPremiseTest(unittest.TestCase):
 
     @staticmethod
     def _consumer_only(request, files, premise_id):
-        units = {u.evidence_ref.locator: u.evidence_ref for u in request.evidence_units}
+        units = {
+            u.evidence_ref.locator: u.evidence_ref
+            for u in request.task_evidence.evidence_units
+        }
         sid = _sid("src/store.py")
         consumer = m.CandidateSemanticClaim(
             candidate_key="consumer",
@@ -1299,7 +1247,10 @@ class SemanticPremiseTest(unittest.TestCase):
 
     @staticmethod
     def _premise_only(request, files):
-        units = {u.evidence_ref.locator: u.evidence_ref for u in request.evidence_units}
+        units = {
+            u.evidence_ref.locator: u.evidence_ref
+            for u in request.task_evidence.evidence_units
+        }
         sid = _sid("src/store.py")
         premise = m.CandidateSemanticClaim(
             candidate_key="premise",
@@ -1340,7 +1291,7 @@ class CyclesBoundsTest(unittest.TestCase):
             self.assertIsInstance(suspended, PendingInterpretation)
             units = {
                 u.evidence_ref.locator: u.evidence_ref
-                for u in suspended.request.evidence_units
+                for u in suspended.request.task_evidence.evidence_units
             }
             sid = _sid("src/events.py")
             from span.core import validation as _v
@@ -1595,7 +1546,7 @@ class AuthorityConflictTest(unittest.TestCase):
             )
             units = {
                 u.evidence_ref.locator: u.evidence_ref
-                for u in suspended.request.evidence_units
+                for u in suspended.request.task_evidence.evidence_units
             }
             loc = "README.md" if "README.md" in units else next(iter(units))
             bad = m.CandidateSemanticClaim(
@@ -1685,7 +1636,7 @@ class PaginationContinuationTest(unittest.TestCase):
             )
             self.assertIsInstance(first, m.SemanticAnswer)
             token = first.bound_info.continuation_token
-            self.assertTrue(token.startswith("pgq:"))
+            self.assertTrue(token.startswith("pgv:"))
             self.assertEqual(len(token.split(":")), 5)
             seen = [c.claim_id.value for c in first.content.claims]
             while token is not None:
@@ -1857,7 +1808,7 @@ CREATE TABLE meta(
 
 
 class CurrentSchemaOnlyTest(unittest.TestCase):
-    """B.11 K: only schema 8 is served; older stores fail closed."""
+    """B.11 K: only the current schema is served; older stores fail closed."""
 
     def test_v2_store_rejected_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1885,7 +1836,7 @@ class CurrentSchemaOnlyTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError,
                 "unsupported Span store schema version 2; migrate this "
-                "store to schema 8",
+                "store to schema 9",
             ):
                 SqliteSemanticStore(db)
             con = sqlite3.connect(db)

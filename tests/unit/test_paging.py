@@ -1,16 +1,17 @@
-"""Paging mechanic tests (plan §5, I-39; Addendum I S4 §5.4 pgq).
+"""Paging mechanic tests (plan §5, I-39; Addendum I S4 §5.4).
 
-Listing cursors (`pg:<offset>`) paginate one truncated store listing.
-Answer-level cursors use the single grammar
-(`pgq:<digest>:<claims>:<rels>:<questions>`) bound to the selected
-question. Old `pg:` service cursors are rejected. Interpretation
-continuations are distinct and never appear here.
+Two cursor grammars exist. Listing cursors (`pg:<offset>`) paginate one
+truncated store listing. Every version-bound cursor uses one grammar,
+`pgv:<version>:<offset>[:<offset>...]`, carrying one to four offsets; an
+answer cursor binds its question digest as the version. Old `pgq:` cursors
+and plain `pg:` listings are rejected where a version-bound cursor is
+required. Interpretation continuations are distinct and never appear here.
 """
 
 import unittest
 
 from span.core import model as m
-from span.shell import paging
+from span.core import paging
 
 
 class PageTokenTest(unittest.TestCase):
@@ -50,7 +51,7 @@ class ServiceTokenTest(unittest.TestCase):
     def test_composite_round_trip(self):
         token = paging.format_service_token(3, 0, 0)
         assert token is not None
-        self.assertTrue(token.startswith("pgq:"))
+        self.assertTrue(token.startswith("pgv:"))
         self.assertEqual(paging.parse_service_token(token), (3, 0, 0))
 
     def test_question_token_binds_digest(self):
@@ -73,7 +74,7 @@ class ServiceTokenTest(unittest.TestCase):
         self.assertEqual(paging.parse_service_token(token), (5, 5, 2))
 
     def test_malformed_fails_closed(self):
-        for bad in ("bogus", "pg:", "pgq:", "pgq:bad", "pgq:d:1:2", "trunc:c:3"):
+        for bad in ("bogus", "pg:", "pgv:", "pgv:bad", "pgv:d:1:2", "trunc:c:3"):
             with self.assertRaises(ValueError, msg=bad):
                 paging.parse_service_token(bad)
 
@@ -81,11 +82,8 @@ class ServiceTokenTest(unittest.TestCase):
         request = m.SemanticInterpretationRequest(
             repository_id="r",
             subjects=(),
-            evidence_units=(),
-            structural_observations=(),
-            allowed_claim_kinds=(),
-            allowed_relationship_kinds=(),
-            identity_bindings=(),
+            task_evidence=m.TaskEvidence(),
+            allowed_kinds=m.AllowedKinds(claim_kinds=(), relationship_kinds=()),
             brief=m.TaskBrief(),
             bounds=m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64),
         )

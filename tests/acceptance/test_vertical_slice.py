@@ -29,16 +29,13 @@ from span.ports.interpretation import (
 from span.service import (
     SemanticAuthorityRequest,
     SemanticExplainRequest,
-    SemanticInitializeRepositoryRequest,
     authority,
     explain,
-    initialize_repository,
     submit_interpretation,
 )
-from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.agent_fixture import FixtureCandidates
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
@@ -47,6 +44,13 @@ from span.shell.structural.memory import (
     InMemorySubject,
     fingerprint_content,
 )
+
+from tests.support.factories import query_bounds, semantic_harness
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
 
 REPO = "pay-svc"
 
@@ -77,22 +81,10 @@ EDGES = (
 )
 
 
-def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
+_sid = _partial(subject_id, repository_id=REPO)
 
 
-def _ref(path):
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=(
-            m.EvidenceSourceKind.DOCUMENTATION
-            if path.endswith(".md")
-            else m.EvidenceSourceKind.SOURCE_CODE
-        ),
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES_V1[path]),
-    )
+_ref = _partial(evidence_ref, repository_id=REPO)
 
 
 _QUOTES = {
@@ -210,35 +202,18 @@ def _payments_candidates():
     )
 
 
-def _harness(files=None):
-    files = FILES_V1 if files is None else files
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in files.items()),
-        SUBJECTS,
-        EDGES,
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(files))
-    store = SqliteSemanticStore(":memory:")
-    initialize_repository(
-        SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    agent = FixtureAgent(
-        {"src/payments.py": _payments_candidates()},
-        complete_questions=True,
-    )
-    return structural, evidence, store, agent
+_bounds = query_bounds
 
 
-def _bounds():
-    return DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    FILES_V1,
+    subjects=SUBJECTS,
+    edges=EDGES,
+    with_agent={"src/payments.py": _payments_candidates()},
+    complete_questions=True,
+)
 
 
 def _seeds():
@@ -361,8 +336,8 @@ class VerticalSliceTest(unittest.TestCase):
             self.assertIsInstance(pending, PendingInterpretation)
             request = pending.request
             self.assertEqual(request.repository_id, REPO)
-            self.assertTrue(request.evidence_units)
-            self.assertTrue(request.allowed_claim_kinds)
+            self.assertTrue(request.task_evidence.evidence_units)
+            self.assertTrue(request.allowed_kinds.claim_kinds)
             # Nothing indexed by suspension alone.
             page = store.load_claims(REPO, (_sid("src/payments.py"),), (), _bounds())
             self.assertEqual(page.items, ())
@@ -581,16 +556,7 @@ class FreshSessionPathReuseTest(unittest.TestCase):
 
     CTX = "fresh-ctx"
 
-    def _bounds(self):
-        return m.QueryBounds(
-            50,
-            5,
-            8,
-            24,
-            96_000,
-            64,
-            64,
-        )
+    _bounds = staticmethod(query_bounds)
 
     def test_path_only_explain_and_trace(self):
         from span import service as ops

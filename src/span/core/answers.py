@@ -10,6 +10,7 @@ qualifier (plan §11.9 rules).
 from __future__ import annotations
 
 from span.core import model as m
+from span.core import requirements as _requirements
 
 __all__ = [
     "requirements_for_claim",
@@ -35,8 +36,7 @@ def requirements_for_claim(
     requirements: list[m.ResolutionRequirement] = []
     if claim.trust is m.TrustState.UNRESOLVED and claim.authority is None:
         requirements.append(
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.MISSING_AUTHORITY,
+            _requirements.missing_authority(
                 subject_or_claim=m.ClaimRef(id=claim.claim_id),
                 description=(
                     f"no authority binding established for "
@@ -47,8 +47,7 @@ def requirements_for_claim(
         )
     if claim.freshness.state is m.FreshnessState.STALE:
         requirements.append(
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.STALE_EVIDENCE,
+            _requirements.stale_evidence(
                 subject_or_claim=m.ClaimRef(id=claim.claim_id),
                 description=(
                     f"evidence changed since claim {claim.claim_id.value} "
@@ -59,8 +58,7 @@ def requirements_for_claim(
         )
     if claim.freshness.state is m.FreshnessState.UNVERIFIABLE:
         requirements.append(
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+            _requirements.unverifiable_freshness(
                 subject_or_claim=m.ClaimRef(id=claim.claim_id),
                 description=(
                     f"currency of claim {claim.claim_id.value} cannot be "
@@ -84,8 +82,7 @@ def requirements_for_relationship(
     requirements: list[m.ResolutionRequirement] = []
     if rel.trust is m.TrustState.UNRESOLVED and rel.authority is None:
         requirements.append(
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.MISSING_AUTHORITY,
+            _requirements.missing_authority(
                 subject_or_claim=m.RelationshipRef(id=rel.relationship_id),
                 description=(
                     f"no authority binding established for "
@@ -97,8 +94,7 @@ def requirements_for_relationship(
         )
     if rel.freshness.state is m.FreshnessState.STALE:
         requirements.append(
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.STALE_EVIDENCE,
+            _requirements.stale_evidence(
                 subject_or_claim=m.RelationshipRef(id=rel.relationship_id),
                 description=(
                     f"evidence changed since relationship "
@@ -110,8 +106,7 @@ def requirements_for_relationship(
         )
     if rel.freshness.state is m.FreshnessState.UNVERIFIABLE:
         requirements.append(
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.UNVERIFIABLE_FRESHNESS,
+            _requirements.unverifiable_freshness(
                 subject_or_claim=m.RelationshipRef(id=rel.relationship_id),
                 description=(
                     f"currency of relationship {rel.relationship_id.value} "
@@ -138,8 +133,7 @@ def requirements_for_resolution(
     """
     if resolution.ambiguity is m.ResolutionAmbiguity.AMBIGUOUS:
         return (
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.AMBIGUOUS_IDENTITY,
+            _requirements.ambiguous_identity(
                 subject_or_claim=None,
                 description=(
                     f"{len(resolution.candidates)} subjects match; "
@@ -156,8 +150,7 @@ def requirements_for_resolution(
         )
         scope = f" in repository {repository_id!r}" if repository_id else ""
         return (
-            m.ResolutionRequirement(
-                kind=m.ResolutionKind.MISSING_EVIDENCE,
+            _requirements.missing_evidence(
                 subject_or_claim=None,
                 description=(
                     f"{target}{scope}; locators resolve against that "
@@ -258,7 +251,7 @@ def structural_coverage_requirement(
         else m.ResolutionKind.UNVERIFIABLE_FRESHNESS
     )
     reason = coverage_detail or "coverage could not be established"
-    return m.ResolutionRequirement(
+    return _requirements.requirement(
         kind=kind,
         subject_or_claim=None,
         description=(

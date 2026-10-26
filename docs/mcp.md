@@ -114,20 +114,13 @@ One complete target campaign over the eleven tools (exact carriers in
    only; `READY != semantic completeness`. Use coverage and disposition for
    semantic currency.
 2. `initialize_target` with the exact `EvidenceScope` and objective →
-   deterministic `TargetId` plus a `PendingInterpretation` carrying one
-   `target_inventory_items` (`question=None`: mapping work, not a semantic
-   question). The batch members carry provider-enriched evidence for
-   orientation; their stable `EvidenceId` values are the agent's mapping
-   input.
-3. The host maps every batch member with a
-   `CandidateTargetInventoryAccount` (assignment, evidence-backed
-   exclusion, or unresolved mapping) and calls `submit_interpretation`.
-   Span resolves the provider-owned `EvidenceRef`, persists the durable
-   account, and creates the first-admission `PENDING` CQ-01 seed when no
-   reusable question exists.
-4. `initialize_target` then yields `PENDING` semantic questions per
-   admitted area; the host examines each slice with its own model and
-   submits `ANSWERED`/`OPEN`/`NOT_APPLICABLE`/`PENDING` question decisions
+   deterministic `TargetId`, the persisted `TargetAssociation`, and a
+   `PendingInterpretation` carrying the area's first semantic question.
+   Span enumerates the current inventory, assigns every member to the target's
+   area, and creates the first-admission `PENDING` CQ-01 seed when no reusable
+   question exists. Membership is never an agent submission.
+3. The host examines the bound question slice with its own model and submits
+   `ANSWERED`/`OPEN`/`NOT_APPLICABLE`/`PENDING` question decisions
    until an answer returns. Span derives the canonical persisted coverage.
 5. `status` with `target=TargetId` → `StatusContent` with
    `target_association`, `target_disposition`, and read-only
@@ -311,16 +304,14 @@ exposure is deferred until a proven consumer exists.
   tags are retained; nested unambiguous tags are compacted.
 - Omitted `bounds` uses the service default; repository-wide `status`
   accepts an omitted `target`.
-- Pending interpretation units carry an `interpretation_profile`
-  (`SA_1_7_V1`) naming the immutable SA-1..SA-7 obligations documented once in
-  the `submit_interpretation` tool description. The static handbook, the
-  default bounds, and the base task-brief rules are not repeated per unit;
-  dynamic question/evidence/requirements remain.
-- `submit_interpretation` maps target inventory with a
-  `CandidateTargetInventoryAccount` (stable `EvidenceId` + exactly one
-  semantic outcome). Span resolves the provider-canonical `EvidenceRef`,
-  constructs the durable account, and creates the service-owned
-  first-admission `PENDING` CQ-01 seed for a newly admitted area.
+- The immutable SA-1..SA-7 obligations are documented once in the
+  `submit_interpretation` tool description. The static handbook, the default
+  bounds, and the base task-brief rules are not repeated per unit; dynamic
+  question/evidence/requirements remain.
+- `initialize_target` admits membership deterministically: Span enumerates the
+  current inventory, assigns every member to the target's area, persists the
+  association, and creates the service-owned first-admission `PENDING` CQ-01
+  seed. Membership is never submitted by the agent.
 - Coverage shape is fixed per disposition: `OPEN` carries
   `resolution_requirements`, `ANSWERED` requires validated material and
   Span derives `declared_complete`, `result_refs`, and `question_evidence`,

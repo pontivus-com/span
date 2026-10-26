@@ -17,21 +17,15 @@ from span.shell.structural.memory import (
 )
 from integrations.hosts.roster import Roster, Territory, propose_territories
 
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
 REPO = "roster-svc"
 
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
 
 
 FILES = (
@@ -54,12 +48,7 @@ EDGES = (
 )
 
 
-def _sid(locator):
-    return m.SubjectId(
-        repository_id=REPO,
-        subject_kind=m.SubjectKind.COMPONENT,
-        canonical_locator=locator,
-    )
+_sid = _partial(subject_id, repository_id=REPO)
 
 
 def _structural():
@@ -155,7 +144,7 @@ class RosterTest(unittest.TestCase):
         from span.shell.agent_exchange.continuations import (
             ContinuationStore,
         )
-        from span.shell.evidence import FixtureEvidenceSource
+        from tests.support.evidence import FixtureEvidenceSource
         from span.shell.sqlite_store import SqliteSemanticStore
         from span.core import model as m
 

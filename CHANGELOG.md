@@ -1,5 +1,108 @@
 # Changelog
 
+## 0.8.0 — 2026-10-26
+
+**One architecture, one behaviour: the establishment root cause removed.**
+
+0.8.0 is the single release for the architecture remediation and the
+deterministic establishment design. It is a breaking release: the store schema
+moves to 9, question-bound page cursors change once, and the mapping-era surface
+is deleted. The eleven MCP operations keep their names and their request and
+response meanings.
+
+### Behaviour
+
+- **Target admission is deterministic.** Area membership is computed from the
+  admitted manifest; the model no longer maps inventory items to accounts.
+  Every admitted area receives a service-owned `CQ_01` seed when it has no
+  current question, and the returned unit is a question, not an accounting
+  template.
+- **`ANSWERED` must assert something.** An explicit `ANSWERED` decision is
+  completion intent, not completion proof; a unit with no validated assertion
+  cannot close a question. `NOT_APPLICABLE` remains the terminal disposition for
+  a question that genuinely needs no assertion.
+- **One establishment path.** `explain`, `initialize_target`, and both
+  submission resumes delegate to one establishment path instead of four
+  near-copies.
+- **One evidence body per task.** A task brief carries each evidence body once
+  per `(locator, fingerprint)`; omitted bodies are named rather than repeated.
+- **Question currency no longer fails silently.** A precomputed discovery
+  snapshot is consumed in the shape it is produced, so a currency check can no
+  longer fall through a broad exception to `UNVERIFIABLE`.
+- **Stale listings fail closed with a remedy.** Every version-bound cursor
+  names its version and offset count; a token bound to another query restarts
+  the listing instead of skipping.
+
+### Architecture
+
+- `core/model.py` is a package split by domain; `validation.py` and `schema.py`
+  are packages; no module carries mixed responsibilities.
+- `service/` is split into one-owner packages: `answers`, `resolution`,
+  `questions`, `freshness`, `discovery`, `interpretation`, `exchange`,
+  `establishment`, and the operation packages.
+- `shell/install.py`, `shell/mcp.py`, and `shell/sqlite_store.py` are packages.
+  The store has one writer per table group inside one batch transaction.
+- One evidence source (`shell/evidence_source.py`) owns inventory, selection,
+  and bounded reads over four storage seams; the test double supplies seams
+  only.
+- The two structural providers share repository binding, version-bound paging,
+  and the adjacency-selection skeleton in `shell/structural/support.py`.
+- The service depends on `ContinuationPort`, not the shell store;
+  `SuspendedOperation` lives in `core/continuations.py`; paging lives in
+  `core/paging.py`.
+- `core/requirements.py` owns requirement construction;
+  `freshness.with_freshness` is the one live-currency projection.
+- Historical design-note identifiers are resolved through
+  [`docs/design-references.md`](docs/design-references.md) rather than repeated
+  in code comments.
+
+### Breaking changes
+
+- **Store schema 8 → 9.** Persisted target accounts lose
+  `exclusion_basis` and `resolution_requirements`, which had no producer once
+  admission became deterministic. A store at any other version still fails
+  closed. Upgrade explicitly:
+  `span-install --migrate-store <repository-id>` (schema 7 and 8 are upgraded
+  in one transaction; the command is idempotent at schema 9).
+- **Question-bound page cursors.** The `pgq:` grammar is retired. Every
+  version-bound cursor now uses `pgv:<version>:<offset>[:<offset>…]`.
+  `0.7.x` question cursors are rejected with the restart diagnostic; restart
+  the listing with `page_token: null`.
+- **Removed mapping surface.** `count_target_inventory_outcomes` is gone from
+  the store port and implementation; `CandidateTargetInventoryAccount`,
+  `proposed_target_inventory_accounting`, and the mapping submission template
+  are gone; `TargetInventoryAccount` keeps membership and loses the two outcome
+  fields.
+- **Removed answer counts.** The two mapping-era target count fields are gone
+  from status content; current accounting is derived from the association and
+  the live diff.
+- **Test doubles moved out of the shipped package.** `FixtureEvidenceSource`,
+  `FixtureCandidates`, and `FixtureAgent` now live under `tests/support/`.
+- **Internal module paths changed.** `span.shell.install`, `span.shell.mcp`,
+  and `span.shell.sqlite_store` remain importable facades over their packages;
+  deep imports into the old single modules are not preserved.
+
+### Migration
+
+1. Merge or install 0.8.0.
+2. Upgrade each existing store before opening it:
+   `span-install --migrate-store <repository-id>`.
+3. Discard page tokens issued by `0.7.x` question listings and restart from
+   the first page. Tokens issued by 0.8.0 are stable for the listing that
+   produced them.
+4. Re-run the installer to refresh host entries and deployed skills.
+
+### Verification
+
+- `932 passed, 1 skipped` on the full suite; characterization pinned at 9/9.
+- `ruff` and `black` clean; typing ratchet at 84 errors (down from 120).
+- Code-budget gate green: zero source functions over 150 lines, zero duplicate
+  source bodies except the two declarative `__post_init__` validator
+  delegations, zero `service → shell` imports, zero mutable module tables.
+- The frozen five-task product gate (`GATE.md`) is the next step; its T1–T7
+  thresholds are ratified before that run. This release note claims
+  architecture and contract correctness, not a product-economics verdict.
+
 ## 0.7.1 — 2026-10-26
 
 **Pagination resumes; failures name their cause.**

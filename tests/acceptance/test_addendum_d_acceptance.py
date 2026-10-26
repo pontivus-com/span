@@ -18,10 +18,10 @@ from span.ports.interpretation import (
     PendingInterpretation,
 )
 from span import service as ops
-from span.service.operations.explain import _baseline_sufficient
+from span.service.establishment import _baseline_sufficient
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.agent_exchange.fixture import FixtureAgent, FixtureCandidates
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.agent_fixture import FixtureAgent, FixtureCandidates
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.memory import (
     InMemoryEdge,
@@ -30,6 +30,21 @@ from span.shell.structural.memory import (
     InMemorySubject,
     fingerprint_content,
 )
+
+from tests.support.factories import query_bounds
+
+from functools import partial as _partial
+from tests.support.factories import subject_id
+
+from tests.support.factories import evidence_ref
+
+from tests.support.factories import semantic_harness
+
+from tests.support.factories import question_decision
+
+from tests.support.factories import proposed_questions
+
+from tests.support.factories import answered_decision
 
 REPO = "ledger-svc"
 
@@ -76,34 +91,13 @@ class FixtureTruth:
                     )
 
 
-def _bounds(**overrides):
-    base = dict(
-        max_results=50,
-        max_depth=5,
-        max_subjects=8,
-        max_evidence_units=24,
-        max_evidence_bytes=96_000,
-        max_candidate_claims=64,
-        max_candidate_relationships=64,
-    )
-    base.update(overrides)
-    return m.QueryBounds(**base)
+_bounds = query_bounds
 
 
-def _sid(locator, kind=m.SubjectKind.COMPONENT):
-    return m.SubjectId(repository_id=REPO, subject_kind=kind, canonical_locator=locator)
+_sid = _partial(subject_id, repository_id=REPO)
 
 
-def _ref(path):
-    from span.shell.structural.memory import evidence_kind_for_path
-
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{path}"),
-        repository_id=REPO,
-        source_kind=evidence_kind_for_path(path),
-        locator=path,
-        revision_or_fingerprint=fingerprint_content(FILES[path]),
-    )
+_ref = _partial(evidence_ref, repository_id=REPO, files=FILES)
 
 
 def _authority(path, quote):
@@ -121,47 +115,26 @@ def _authority(path, quote):
     )
 
 
-def _harness(db_path=":memory:"):
-    structural = InMemoryStructuralSource(
-        REPO,
-        tuple(InMemoryFile(p, c) for p, c in FILES.items()),
-        (
-            InMemorySubject("src/postings.py", m.SubjectKind.COMPONENT, "postings"),
-            InMemorySubject("src/inventory.py", m.SubjectKind.COMPONENT, "inventory"),
-            InMemorySubject("src/settle.py", m.SubjectKind.COMPONENT, "settle"),
-            InMemorySubject("src/failures.py", m.SubjectKind.COMPONENT, "failures"),
+_harness = _partial(
+    semantic_harness,
+    REPO,
+    FILES,
+    subjects=(
+        InMemorySubject("src/postings.py", m.SubjectKind.COMPONENT, "postings"),
+        InMemorySubject("src/inventory.py", m.SubjectKind.COMPONENT, "inventory"),
+        InMemorySubject("src/settle.py", m.SubjectKind.COMPONENT, "settle"),
+        InMemorySubject("src/failures.py", m.SubjectKind.COMPONENT, "failures"),
+    ),
+    edges=(
+        InMemoryEdge(
+            "src/postings.py", m.StructuralEdgeKind.DEPENDS_ON, "src/inventory.py"
         ),
-        (
-            InMemoryEdge(
-                "src/postings.py",
-                m.StructuralEdgeKind.DEPENDS_ON,
-                "src/inventory.py",
-            ),
-            InMemoryEdge(
-                "src/postings.py",
-                m.StructuralEdgeKind.CALLS,
-                "src/settle.py",
-            ),
-            InMemoryEdge(
-                "src/postings.py",
-                m.StructuralEdgeKind.REFERENCES,
-                "src/failures.py",
-            ),
+        InMemoryEdge("src/postings.py", m.StructuralEdgeKind.CALLS, "src/settle.py"),
+        InMemoryEdge(
+            "src/postings.py", m.StructuralEdgeKind.REFERENCES, "src/failures.py"
         ),
-    )
-    evidence = FixtureEvidenceSource(REPO, dict(FILES))
-    store = SqliteSemanticStore(db_path)
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+    ),
+)
 
 
 def _scope(root, subject, cls, slic, basis="test material"):
@@ -200,11 +173,7 @@ def _question_coverage(
     )
 
 
-def _answer_current(request, basis="examined with validated candidates"):
-    return m.SemanticQuestionDecision(
-        disposition=m.SemanticQuestionDisposition.ANSWERED,
-        disposition_basis=basis,
-    )
+_answer_current = answered_decision
 
 
 def _purpose_claim():
@@ -674,22 +643,10 @@ def _answer_for(request):
     )
 
 
-def _decision(coverage):
-    """Test-only: express an authored coverage as the compact decision."""
-    return m.SemanticQuestionDecision(
-        disposition=coverage.disposition,
-        evidence_scope=coverage.evidence_scope,
-        resolution_requirements=coverage.resolution_requirements,
-        disposition_basis=coverage.disposition_basis,
-    )
+_decision = question_decision
 
 
-def _proposed(*coverages):
-    """Test-only: express authored coverages as proposed questions."""
-    return tuple(
-        m.ProposedSemanticQuestion(coverage.question, _decision(coverage))
-        for coverage in coverages
-    )
+_proposed = proposed_questions
 
 
 def _corrected_purpose_claim():

@@ -18,10 +18,15 @@ The core (`src/span/core/`) imports stdlib value modules only — no
 filesystem, network, database, provider, or MCP imports. Effects live
 in `src/span/shell/`; `src/span/ports/` holds typed interfaces only;
 `src/span/service/` coordinates ports and core but owns
-no semantic rules (v0.6 §14 Amendment A-01: package with one module
-per responsibility — bounds, requests, refs, answers, repository,
-resolution, discovery, freshness, questions, interpretation,
-exchange, operations/*).
+no semantic rules. Each responsibility is a package or module with one
+owner: `bounds`, `requests`, `refs`, `answers`, `repository`,
+`resolution`, `discovery`, `freshness`, `questions`, `interpretation`,
+`exchange`, `establishment`, and `operations/*`. Shell adapters follow
+the same rule: `install`, `mcp`, and `sqlite_store` are packages split by
+responsibility; the structural providers keep their adapter size exception
+while sharing cursor, repository-binding, and adjacency mechanics in
+`structural/support.py`; one `evidence_source.py` owns evidence retrieval
+over storage seams.
 
 ## Separation of concerns (exclusive ownership)
 

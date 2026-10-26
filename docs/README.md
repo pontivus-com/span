@@ -12,7 +12,8 @@ orchestrates workflows, or originates authority.
   OpenCode setup, verification.
 - [Using Span](usage.md) — first use, establishment, freshness, scoped
   re-checking, and the normal development workflow.
-- [Lifecycle](lifecycle.md) — how Span fits into coding-agent work.
+- [Lifecycle](lifecycle.md) — how Span fits into coding-agent work, including
+  the interaction diagram.
 - [MCP reference](mcp.md) — operations, request/response shapes, and the
   compact wire grammar.
 - [Onboarding runbook](onboarding-runbook.md) — establish reusable
@@ -28,6 +29,8 @@ orchestrates workflows, or originates authority.
 
 - [Architecture](architecture.md) — functional-core/imperative-shell
   ownership, responsibility boundaries, and design principles.
+- [Design references](design-references.md) — maps historical design-note
+  identifiers A–M to the documents that now own each subject.
 
 ## Contracts
 

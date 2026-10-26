@@ -19,7 +19,7 @@ from span.service.discovery import (
     _inventory_snapshot,
 )
 from span.shell.agent_exchange.continuations import ContinuationStore
-from span.shell.evidence import FixtureEvidenceSource
+from tests.support.evidence import FixtureEvidenceSource
 from span.shell.sqlite_store import SqliteSemanticStore
 
 REPO = "j-repo"
@@ -307,14 +307,9 @@ class StoreHealthAggregateTest(unittest.TestCase):
                 locator="src/a.py",
                 revision_or_fingerprint="fp-a",
             )
-            unresolved = m.TargetInventoryAccount(
+            first = m.TargetInventoryAccount(
                 evidence_ref=ref,
-                resolution_requirements=(
-                    m.ResolutionRequirement(
-                        kind=m.ResolutionKind.MISSING_SEMANTIC_COVERAGE,
-                        description="unresolved mapping",
-                    ),
-                ),
+                assigned_area_subjects=(subject,),
             )
             accounted = m.TargetInventoryAccount(
                 evidence_ref=m.EvidenceRef(
@@ -332,13 +327,12 @@ class StoreHealthAggregateTest(unittest.TestCase):
                 target_scope=m.EvidenceScope(paths=("src/",)),
                 objective="test target burden",
                 area_subjects=(subject,),
-                inventory_accounting=(accounted, unresolved),
+                inventory_accounting=(accounted, first),
             )
             store.write_index_batch(
                 m.CanonicalIndexBatch(target_associations=(association,))
             )
             self.assertEqual(store.count_target_associations("r"), 1)
-            self.assertEqual(store.count_target_inventory_outcomes("r"), (1, 1))
             (loaded,) = store.load_active_target_associations("r")
             # The stored carrier carries the deadline the row is kept under, so
             # a status answer can state the handle's retention.
