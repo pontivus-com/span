@@ -4,8 +4,9 @@
 
 **Pagination resumes; failures name their cause.**
 
-Patch release for four defects confirmed against 0.7.0 in real agent sessions.
-No operation was added or renamed, no carrier changed shape, and the store
+Patch release for the defects found by running 0.7.0 in real agent sessions,
+plus one more in the same pagination path found while fixing them. No
+operation was added or renamed, no carrier changed shape, and the store
 schema is unchanged (schema 8), so no migration is needed.
 
 ### Fixes
