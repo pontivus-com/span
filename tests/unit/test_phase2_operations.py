@@ -1081,12 +1081,19 @@ class BoundedEvidenceReadTest(unittest.TestCase):
             root = pathlib.Path(tmp)
             (root / "big.py").write_text("X = '" + "y" * 200 + "'\n", encoding="utf-8")
             evidence = FilesystemEvidenceSource("repo-1", root)
-            with self.assertRaises(ValueError):
+            with self.assertRaises(ValueError) as ctx:
                 _read_units_within_bytes(
                     evidence,
                     (self._ref("big.py"),),
                     _bounds(max_evidence_units=24, max_evidence_bytes=10),
                 )
+            # The provider's own reason must survive, and both remedies must
+            # stay visible: raising the bound is the direct fix.
+            text = str(ctx.exception)
+            self.assertIn("max_evidence_bytes", text)
+            self.assertIn("(10)", text)
+            self.assertIn("raise the bounds", text)
+            self.assertIn("narrow the target", text)
 
 
 class StoreResolutionTest(unittest.TestCase):

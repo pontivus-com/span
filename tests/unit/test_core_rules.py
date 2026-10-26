@@ -487,6 +487,9 @@ class AnswerHelpersTest(unittest.TestCase):
         self.assertIn("repo-1", reqs[0].description)
         self.assertIn("repository's root", reqs[0].description)
         self.assertIn("locate", reqs[0].description)
+        # The hint states the locator rule; it never diagnoses a
+        # workspace-root mistake, which the code does not inspect for.
+        self.assertNotIn("workspace root", reqs[0].description)
 
     def test_not_found_resolution_requirement_without_locator(self):
         resolution = m.SubjectResolution(

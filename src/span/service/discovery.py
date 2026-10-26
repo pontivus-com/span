@@ -334,12 +334,17 @@ def _read_units_within_bytes(
     """
     units: list[m.EvidenceUnit] = []
     total = 0
+    first_failure: str | None = None
     for ref in refs:
         if len(units) >= bounds.max_evidence_units:
             break
         try:
             (unit,) = evidence.read_evidence((ref,), bounds)
-        except ValueError:
+        except ValueError as exc:
+            # One unreadable ref is skipped so the rest of the selection can
+            # still be delivered; its reason is kept for the fail-closed case.
+            if first_failure is None:
+                first_failure = str(exc)
             continue
         size = len(unit.content.encode("utf-8"))
         if units and total + size > bounds.max_evidence_bytes:
@@ -349,8 +354,12 @@ def _read_units_within_bytes(
     if not units:
         if not refs:
             return ()
+        # The provider already names the exact budget that failed; reporting
+        # the cause keeps "raise the bound" visible next to "narrow the target".
+        if first_failure:
+            raise ValueError(f"{first_failure}; raise the bounds or narrow the target")
         raise ValueError(
-            "bounded evidence selection exceeds max_evidence_bytes "
-            f"({bounds.max_evidence_bytes}); narrow the target"
+            "no evidence unit fits the requested bounds; "
+            "raise the bounds or narrow the target"
         )
     return tuple(units)

@@ -286,7 +286,26 @@ class S3SchemaTest(unittest.TestCase):
         text = str(ctx.exception)
         self.assertIn("missing field 'objective'", text)
         self.assertIn("unexpected $type at unambiguous position: target", text)
+        self.assertIn("this position accepts EvidenceScope without a $type", text)
         self.assertIn("target: unknown fields for EvidenceScope: ['bogus']", text)
+
+    def test_missing_discriminator_names_the_accepted_alternatives(self):
+        # `authority.target` is a two-member union, so a discriminator is
+        # required; the error names the members rather than only the fault.
+        from span.shell.mcp import decode_request
+
+        with self.assertRaises(ValueError) as ctx:
+            decode_request(
+                "authority",
+                {
+                    "repository_id": "r",
+                    "target": {"name_or_locator": "pkg/mod.py"},
+                },
+            )
+        text = str(ctx.exception)
+        self.assertIn("missing $type discriminator at target", text)
+        self.assertIn("SubjectSelector", text)
+        self.assertIn("ClaimRef", text)
 
     def test_single_shape_fault_keeps_decoder_text(self):
         # Aggregation must not alter the one-fault message callers and
