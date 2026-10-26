@@ -160,8 +160,8 @@ def requirements_for_resolution(
                 kind=m.ResolutionKind.MISSING_EVIDENCE,
                 subject_or_claim=None,
                 description=(
-                    f"{target}{scope}; locators are relative to that "
-                    f"repository's root, not the workspace root; "
+                    f"{target}{scope}; locators resolve against that "
+                    f"repository's root; "
                     f"discover exact locators with locate "
                     f"(FILE_OUTLINE for a file, TARGET_MEMBERS for "
                     f"scope members)"

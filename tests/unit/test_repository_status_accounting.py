@@ -10,6 +10,8 @@ import unittest
 
 from span import service as ops
 from span.core import model as m
+from span.ports.structural import StaleContinuationError
+from span.shell import paging
 from span.shell.agent_exchange.continuations import ContinuationStore
 from tests.support.agent_exchange import (
     REPO,
@@ -19,10 +21,10 @@ from tests.support.agent_exchange import (
 )
 
 
-def _status(bounds, page_token=None):
+def _status(bounds, page_token=None, target=None):
     return ops.SemanticStatusRequest(
         repository_id=REPO,
-        target=None,
+        target=target,
         bounds=bounds,
         page_token=page_token,
     )
@@ -117,6 +119,120 @@ class RepositoryStatusAccountingTest(unittest.TestCase):
                     answer.bound_info.truncated
                     or answer.bound_info.continuation_token is not None
                 )
+        finally:
+            store.close()
+
+
+class ScopedStatusPaginationTest(unittest.TestCase):
+    """A scoped status cursor resumes the frontier it was issued against.
+
+    The cursor identifies the scope, so replaying it must reach page two.
+    Deriving the digest from the returned page made every resume stale,
+    because page two resolves a different page of the same frontier. A page
+    that has to cut its own items must also stop at one subject, so the
+    cursor can name the item position instead of skipping it.
+    """
+
+    def _scope(self, path="src"):
+        return m.EvidenceScope(paths=(path,), evidence_refs=())
+
+    def _call(self, structural, evidence, store, bounds, scope, token=None):
+        return ops.status(
+            _status(bounds, token, target=scope),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=ContinuationStore(),
+        )
+
+    def _page_through(self, structural, evidence, store, bounds, scope):
+        pages = []
+        token = None
+        for _ in range(30):
+            answer = self._call(structural, evidence, store, bounds, scope, token)
+            pages.append(answer)
+            if not answer.bound_info.truncated:
+                break
+            token = answer.bound_info.continuation_token
+            self.assertIsNotNone(token, "a truncated page carried no cursor")
+        return pages
+
+    def test_a_scope_cursor_resumes_the_next_frontier_page(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _establish(structural, evidence, store, agent)
+            bounds = _bounds(max_subjects=1, max_results=50)
+            seen: list[str] = []
+            for answer in self._page_through(
+                structural, evidence, store, bounds, self._scope()
+            ):
+                seen.extend(
+                    e.subject.canonical_locator
+                    for e in answer.content.coverage_report.page.entries
+                )
+            self.assertGreaterEqual(len(seen), 2)
+            self.assertEqual(len(seen), len(set(seen)), "an entry appeared twice")
+        finally:
+            store.close()
+
+    def test_a_changed_scope_still_restarts_the_listing(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _establish(structural, evidence, store, agent)
+            bounds = _bounds(max_subjects=1, max_results=50)
+            first = self._call(structural, evidence, store, bounds, self._scope("src"))
+            token = first.bound_info.continuation_token
+            self.assertIsNotNone(token)
+            with self.assertRaises(StaleContinuationError):
+                self._call(
+                    structural, evidence, store, bounds, self._scope("conf"), token
+                )
+        finally:
+            store.close()
+
+    def test_a_tight_page_never_skips_items_it_did_not_return(self):
+        # The regression this guards: the frontier advanced past claims the
+        # page had cut, so those claims were unreachable forever.
+        structural, evidence, store, agent = _harness()
+        try:
+            _establish(structural, evidence, store, agent)
+            scope = self._scope()
+            wide = self._call(
+                structural, evidence, store, _bounds(max_results=50), scope
+            )
+            want = {c.claim_id.value for c in wide.content.claims}
+            self.assertGreaterEqual(len(want), 4)
+
+            bounds = _bounds(max_subjects=8, max_results=3)
+            delivered: list[str] = []
+            for answer in self._page_through(
+                structural, evidence, store, bounds, scope
+            ):
+                delivered.extend(c.claim_id.value for c in answer.content.claims)
+                bound = answer.bound_info
+                self.assertEqual(
+                    bound.truncated,
+                    bound.continuation_token is not None,
+                    "a page reported truncation without a cursor, or the reverse",
+                )
+            self.assertEqual(len(delivered), len(set(delivered)), "a claim repeated")
+            self.assertEqual(set(delivered), want)
+        finally:
+            store.close()
+
+    def test_a_page_that_cuts_items_stays_on_its_subject(self):
+        structural, evidence, store, agent = _harness()
+        try:
+            _establish(structural, evidence, store, agent)
+            bounds = _bounds(max_subjects=8, max_results=3)
+            first = self._call(structural, evidence, store, bounds, self._scope())
+            entries = first.content.coverage_report.page.entries
+            token = first.bound_info.continuation_token
+            self.assertEqual(len(entries), 1, "a cutting page held several subjects")
+            self.assertIsNotNone(token)
+            frontier, claims, _, _ = paging.parse_scope_token(token)
+            self.assertEqual(frontier, 0, "the frontier advanced past cut items")
+            self.assertGreater(claims, 0, "the cursor did not name the item position")
         finally:
             store.close()
 
