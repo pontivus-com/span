@@ -5,9 +5,12 @@
 **The defects 0.8.0's own gate exposed.**
 
 The gate recorded five tasks, three arms, two hosts. Its result for 0.8.0 was
-**not solved**: T2, T3, T4, and T7 failed. This release fixes the defects that
-produced that result. It does not claim the economics; a probe and a re-run are
-still owed.
+**not solved**: T2 (cold start costs 1.81× no Span) and T4 (zero assertions
+stored) failed. T3 and T7 are **void**, not failed: the warm arm is defined
+over subjects the first session asserted, and the first session asserted
+nothing, so recall was never measured. This release fixes the defects that
+produced the two valid failures. It does not claim the economics; a probe and a
+re-run with the populated-store prerequisite are still owed.
 
 ### Wire contract
 
