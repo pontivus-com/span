@@ -23,9 +23,9 @@
   "provider_paging_helpers": 0,
   "service_shell_imports": 0,
   "test_doubles_in_src": 0,
-  "test_files": 73,
+  "test_files": 74,
   "test_helper_definitions": 13,
-  "test_lines": 39191,
+  "test_lines": 39581,
   "type_ignore": 44,
   "untyped_defs": 84
 }

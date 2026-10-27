@@ -597,6 +597,7 @@ class MultiUnitChainTest(unittest.TestCase):
             doomed_times = [
                 datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
                 datetime.datetime(2026, 1, 1, 1, tzinfo=datetime.timezone.utc),
+                datetime.datetime(2026, 1, 1, 2, tzinfo=datetime.timezone.utc),
             ]
             doomed = ContinuationStore(now=lambda: doomed_times.pop(0))
             first = ops.trace(
