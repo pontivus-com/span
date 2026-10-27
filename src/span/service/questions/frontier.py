@@ -25,6 +25,24 @@ from span.service.questions.slices import (
 )
 
 
+def _question_coverage_for_scope(
+    coverages: tuple[m.InterpretationCoverage, ...],
+    scope: m.SemanticQuestionScope,
+) -> m.InterpretationCoverage | None:
+    """Return the persisted coverage for one complete question identity.
+
+    Identity matches the store primary key (``_question_identity_key``), so a
+    host-supplied ``materiality_basis`` difference cannot make the read path
+    disagree with the row the store would overwrite.
+    """
+    key = _question_identity_key(scope)
+    for coverage in coverages:
+        question = coverage.question
+        if question is not None and _question_identity_key(question) == key:
+            return coverage
+    return None
+
+
 def _question_class_for_intent(
     intent: m.SemanticIntent, establish_baseline: bool = False
 ) -> m.SemanticQuestionClass:

@@ -332,7 +332,7 @@ def _compose_status_answer(
     pending_requirements = tuple(
         dict.fromkeys(
             (
-                *_pending_exchange_requirements(repository_id, views, continuations),
+                *_pending_exchange_requirements(views, continuations),
                 *_live_subject_requirements(repository_id, subjects, continuations),
             )
         )
