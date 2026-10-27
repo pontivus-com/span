@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.8.2 — 2026-10-27
+
+### Continuation recovery
+
+- Reissuing `explain`, `authority`, `impact`, or `trace` with a selected
+  question whose persisted coverage is `PENDING` now returns a fresh
+  `PendingInterpretation` when the original continuation is no longer live. A
+  live continuation is reported as the owning unit instead of a duplicate task.
+- Question recovery and live-unit matching use the persisted question identity
+  (the store key), so a host-supplied `materiality_basis` change cannot hide a
+  persisted row or duplicate a live unit.
+- `status` names the live unit for the same identity. A persisted `PENDING`
+  question with no live continuation and no recorded originating operation is
+  still reported as unrecorded; the operation is never inferred.
+
+### Store migration
+
+- Adds a version-specific 0.8.0 payload migration: schema-9 stores written by
+  0.8.0 drop the retired `declared_complete` field transactionally and
+  idempotently, and the report adds `rewritten_question_coverages`.
+- `migrate_store` now accepts a current schema-9 store so that same-schema
+  cleanup is reachable. It reports `migrated` only when it changed something,
+  and a repeated run is a no-op. The schema-7/8 path, including legacy
+  target-account normalization, is unchanged.
+
+### Verification
+
+- `946 passed, 1 skipped`; ruff, black, and the typing ratchet (84) clean.
+- New `tests/unit/test_selected_question_recovery.py` pins reissue recovery for
+  all four selected operations, the live-duplicate guard across a
+  `materiality_basis` change, the non-`PENDING` answer path, and the `refresh`
+  fallback.
+- `tests/unit/test_store_fact_kinds.py` pins the schema-9 payload cleanup and
+  its idempotence.
+
 ## 0.8.1 — 2026-10-26
 
 **The defects 0.8.0's own gate exposed.**

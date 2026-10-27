@@ -30,6 +30,10 @@ from span.service.resolution import (
 from span.service.operations.trace.answer import (
     _compose_trace_answer,
 )
+from span.service.questions.live import (
+    live_question_records,
+    with_live_question_requirements,
+)
 
 
 def _trace_endpoints(
@@ -377,12 +381,17 @@ def _trace_drive(
         question_selection=question_selection,
         root_subject=root_subject,
     )
+    # A live unit already owns its frontier subject's first examination.
+    # Skip that subject and report the live work instead of minting a second
+    # continuation for the same question identity.
+    live_records = live_question_records(question.scope, continuations)
+    live_subjects = tuple(record.subject.subject_id for record in live_records)
     walk = _trace_walk(
         repository_id,
         target,
         question,
         resolution,
-        suspended,
+        tuple(dict.fromkeys(suspended + live_subjects)),
         direction=direction,
         relationship_filter=relationship_filter,
         boundary_only=boundary_only,
@@ -398,7 +407,7 @@ def _trace_drive(
     )
     if isinstance(walk, PendingInterpretation):
         return walk
-    return _compose_trace_answer(
+    answer = _compose_trace_answer(
         repository_id,
         target,
         resolution,
@@ -413,3 +422,4 @@ def _trace_drive(
         truncated_walk=walk.truncated,
         structural_coverage=walk.coverage,
     )
+    return with_live_question_requirements(answer, live_records)

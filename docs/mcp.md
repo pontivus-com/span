@@ -49,9 +49,16 @@ projections of one canonical Span carrier and are not separate contracts.
 Errors keep readable JSON text and have no structured success payload.
 
 Continuation tokens remain opaque and are never exposed by `status`. Normal
-status can identify the exact pending question and its owning operation, and
-whether its live continuation still exists. A lost or expired continuation is
-recovered by re-running the original idempotent operation.
+status can identify the exact pending question and, while a continuation is
+live, its owning operation. When no continuation is live, the persisted
+question does not record its original operation; status reports that recovery
+gap rather than inferring one. A lost or expired continuation is
+recovered by re-running the original idempotent operation. For a narrowed
+`explain`, `authority`, `impact`, or `trace` request, re-running against
+persisted `PENDING` coverage returns a fresh `PendingInterpretation`; it does
+not treat the unfinished question as an answer. If the original continuation
+is still live, the repeated call reports the live work instead of creating a
+duplicate continuation.
 
 ## Repository discovery
 
@@ -88,7 +95,9 @@ notice and does not return the repository inventory.
   service derives root/subject/class, canonicalizes verbatim, appends
   TRACE/IMPACT discriminators, and rejects full-scope supply, baseline
   conflicts, and ClaimRef-with-selection. Anchors pass verbatim as
-  `question_terms`. Page tokens are opaque; pass the returned token
+  `question_terms`. A selected question with persisted `PENDING` coverage is
+  still unexamined: reissue the operation to receive a fresh task when no live
+  continuation exists. Page tokens are opaque; pass the returned token
   unchanged to the same operation with the same arguments.
 - Input schemas are generated from the canonical dataclasses with
   `$defs`, `$type` constants, and `additionalProperties: false`.
@@ -177,9 +186,12 @@ seeds persist with repository state in one atomic row and are rehydrated
 after a process or host restart. Omitting `authority_seeds` preserves
 the seeds already configured; an explicit empty tuple clears them; a
 non-empty tuple replaces them. Unknown seed locators fail closed. The
-semantic store supports schema 7 only: a fresh store is created at
-schema 7, an existing schema-7 store opens normally, and any other store
-version fails closed with no runtime migration. There is no separate structural MCP server:
+semantic store supports schema 9 only: a fresh store is created at
+schema 9, an existing schema-9 store opens normally, and any other store
+version fails closed with no runtime migration. The explicit upgrade,
+including the schema-9 payload cleanup for stores written by 0.8.0, is
+`span-install --migrate-store <repository-id>`. There is no separate
+structural MCP server:
 structural navigation (`locate` for find/ outline/member listing,
 `neighbors` for bounded adjacency) is served by Span itself, with two-tier
 freshness (entry verification plus scope coverage) and version-bound
@@ -314,7 +326,7 @@ exposure is deferred until a proven consumer exists.
   seed. Membership is never submitted by the agent.
 - Coverage shape is fixed per disposition: `OPEN` carries
   `resolution_requirements`, `ANSWERED` requires validated material and
-  Span derives `declared_complete`, `result_refs`, and `question_evidence`,
+  Span derives `result_refs` and `question_evidence`,
   and `NOT_APPLICABLE` carries a basis and no result refs.
 
 ---

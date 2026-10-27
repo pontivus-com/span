@@ -34,7 +34,11 @@ from span.service.interpretation import (
     prepare_interpretation_task,
 )
 from span.service.questions import (
+    _question_coverage_for_scope,
     _question_local_missing,
+    live_question_record,
+    needs_first_examination,
+    with_live_question_requirement,
 )
 from span.service.repository import (
     _is_initialized,
@@ -278,20 +282,9 @@ def _explain_selected(
         )
     except Exception:
         existing = ()
-    match = None
-    for coverage in existing:
-        if coverage.question is None:
-            continue
-        question = coverage.question
-        if (
-            question.scope_root == scope.scope_root
-            and question.subject == scope.subject
-            and question.question_class == scope.question_class
-            and question.question_slice == scope.question_slice
-        ):
-            match = coverage
-            break
-    if match is None:
+    match = _question_coverage_for_scope(existing, scope)
+    live = live_question_record(scope, continuations)
+    if needs_first_examination(match, live):
         task = prepare_interpretation_task(
             request.repository_id,
             subject,
@@ -343,6 +336,7 @@ def _explain_selected(
         scope_root=subject.subject_id,
         question_key=f"{scope.question_class.value}:{scope.question_slice}",
     )
+    answer = with_live_question_requirement(answer, match, live)
     filtered = _filter_views(answer.content.question_coverage, scope)
     return _dc.replace(
         answer, content=_dc.replace(answer.content, question_coverage=filtered)

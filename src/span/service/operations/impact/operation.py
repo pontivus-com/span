@@ -6,7 +6,6 @@ Change-condition derivation and impact answers. Verbatim from
 
 from __future__ import annotations
 
-
 from span.core import answers as _answers
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
@@ -27,8 +26,13 @@ from span.service.interpretation import (
     prepare_interpretation_task,
 )
 from span.service.questions import (
+    _question_coverage_for_scope,
     derive_service_question,
     effective_impact_slice,
+    live_owns_question,
+    live_question_record,
+    needs_first_examination,
+    with_live_question_requirement,
 )
 from span.service.repository import (
     _is_initialized,
@@ -122,15 +126,9 @@ def impact(
         )
     except Exception:
         _existing = ()
-    _found = any(
-        _c.question is not None
-        and _c.question.scope_root == _eff_scope.scope_root
-        and _c.question.subject == _eff_scope.subject
-        and _c.question.question_class == _eff_scope.question_class
-        and _c.question.question_slice == _eff_scope.question_slice
-        for _c in _existing
-    )
-    if not _found:
+    _match = _question_coverage_for_scope(_existing, _eff_scope)
+    _live = live_question_record(_eff_scope, continuations)
+    if needs_first_examination(_match, _live):
         return _suspend_first_impact_unit(
             request,
             resolution.candidates[0].subject,
@@ -145,7 +143,8 @@ def impact(
             authority_seeds=authority_seeds,
             continuations=continuations,
         )
-    return _compose_impact_answer(
+    _live_owns_question = live_owns_question(_match, _live)
+    answer = _compose_impact_answer(
         request.repository_id,
         resolution.candidates[0].subject,
         resolution,
@@ -159,11 +158,14 @@ def impact(
         change_description=request.change_description,
         affected_assertions=request.affected_assertions,
         seeds=authority_seeds,
-        suspended=(),
+        suspended=(_eff_scope.subject,) if _live_owns_question else (),
         page_token=request.page_token,
         question_selection=request.question_selection,
         root_question=None,
     )
+    if isinstance(answer, PendingInterpretation):
+        return answer
+    return with_live_question_requirement(answer, _match, _live)
 
 
 def _unresolved_impact_answer(

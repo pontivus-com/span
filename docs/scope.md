@@ -258,9 +258,11 @@ Nor does it raise operational bounds merely to create the appearance of exhausti
 
 Span stores its state outside every target repository.
 
-The semantic store supports schema 7 only. A fresh store is created at
-schema 7, an existing schema-7 store opens normally, and any other store
-version fails closed; Span performs no runtime schema migration. Repository
+The semantic store supports schema 9 only. A fresh store is created at
+schema 9, an existing schema-9 store opens normally, and any other store
+version fails closed; Span performs no runtime schema migration.
+`span-install --migrate-store <repository-id>` performs the explicit upgrade,
+including the schema-9 payload cleanup for stores written by 0.8.0. Repository
 state and the configured authority seeds persist together in one atomic
 row, and persisted seeds are rehydrated after a process or host restart.
 Omitting `authority_seeds` preserves configured seeds, an explicit empty

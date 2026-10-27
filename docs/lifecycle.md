@@ -214,10 +214,12 @@ authority seeds persist together in one atomic row. Omitted
 repository; an explicit empty tuple clears them; a non-empty tuple
 replaces them. Persisted seeds are rehydrated by the shared context
 opener after a process or host restart, so later operations do not need
-the setup call repeated. The semantic store supports schema 7 only:
-a fresh store is created at schema 7, an existing schema-7 store opens
+the setup call repeated. The semantic store supports schema 9 only:
+a fresh store is created at schema 9, an existing schema-9 store opens
 normally, and any other store version fails closed with no runtime
-migration. Uninitialized repositories answer
+migration. `span-install --migrate-store <repository-id>` performs the
+explicit upgrade, including the schema-9 payload cleanup for stores written
+by 0.8.0. Uninitialized repositories answer
 `UNINITIALIZED` plus a setup requirement on every path; hooks and
 queries never bootstrap implicitly. A failed provider build is an
 actionable setup failure, never a usable provider; a dirty tree after a
