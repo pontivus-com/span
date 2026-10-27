@@ -225,8 +225,8 @@ def _downgrade_to_seven(path):
         connection.close()
 
 
-def _downgrade_to_eight(path):
-    """Turn a current store into the schema-8 shape (mapping-era accounts)."""
+def _rewrite_target_accounts_to_legacy(path):
+    """Inject mapping-era target-account fields without changing the version."""
     connection = sqlite3.connect(str(path))
     try:
         with connection:
@@ -262,6 +262,16 @@ def _downgrade_to_eight(path):
                     "WHERE target_id=?",
                     (json.dumps(data), target_id),
                 )
+    finally:
+        connection.close()
+
+
+def _downgrade_to_eight(path):
+    """Turn a current store into the schema-8 shape (mapping-era accounts)."""
+    _rewrite_target_accounts_to_legacy(path)
+    connection = sqlite3.connect(str(path))
+    try:
+        with connection:
             connection.execute("UPDATE meta SET value='8' WHERE key='schema_version'")
     finally:
         connection.close()
@@ -362,6 +372,60 @@ class MigrationTest(unittest.TestCase):
             finally:
                 reopened.close()
 
+    def test_version_nine_normalizes_legacy_target_accounts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "store.db"
+            subject = _subject()
+            ref = m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-9"),
+                repository_id=REPO,
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/f9.py",
+                revision_or_fingerprint="fp",
+            )
+            store = SqliteSemanticStore(str(path))
+            try:
+                store.write_index_batch(
+                    m.CanonicalIndexBatch(
+                        subjects=(subject,),
+                        target_associations=(
+                            m.TargetAssociation(
+                                target_id=m.TargetId("target-9"),
+                                repository_id=REPO,
+                                target_scope=m.EvidenceScope(paths=("src",)),
+                                objective="migrate",
+                                area_subjects=(subject.subject_id,),
+                                inventory_accounting=(
+                                    m.TargetInventoryAccount(
+                                        evidence_ref=ref,
+                                        assigned_area_subjects=(subject.subject_id,),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    )
+                )
+            finally:
+                store.close()
+            _rewrite_target_accounts_to_legacy(path)
+            report = migrate_store(path)
+            self.assertTrue(report["migrated"])
+            self.assertEqual(
+                (report["from"], report["to"]),
+                (SCHEMA_VERSION, SCHEMA_VERSION),
+            )
+            self.assertEqual(report["rewritten_target_accounts"], 1)
+            self.assertEqual(report["dropped_target_accounts"], 0)
+            reopened = SqliteSemanticStore(str(path))
+            try:
+                association = reopened.load_target_association(
+                    REPO, m.TargetId("target-9")
+                )
+                assert association is not None
+                self.assertEqual(len(association.inventory_accounting), 1)
+            finally:
+                reopened.close()
+
     def test_second_migration_is_a_no_op(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "store.db"
@@ -401,6 +465,65 @@ class MigrationTest(unittest.TestCase):
             report = migrate_store(path)
             self.assertFalse(report["migrated"])
             self.assertEqual(report["to"], SCHEMA_VERSION)
+
+
+class SchemaNineMigrationTest(unittest.TestCase):
+    def test_rewrites_080_question_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "store.db"
+            subject = _subject()
+            question = m.SemanticQuestionScope(
+                scope_root=subject.subject_id,
+                subject=subject.subject_id,
+                question_class=m.SemanticQuestionClass.CQ_01,
+                question_slice="purpose",
+                materiality_basis="migration test",
+            )
+            coverage = m.InterpretationCoverage(
+                subjects=(subject.subject_id,),
+                question_slice="purpose",
+                question=question,
+                disposition=m.SemanticQuestionDisposition.PENDING,
+            )
+            store = SqliteSemanticStore(str(path))
+            try:
+                store.write_index_batch(
+                    m.CanonicalIndexBatch(
+                        subjects=(subject,),
+                        coverage=(coverage,),
+                    )
+                )
+                (payload,) = store._db.execute(
+                    "SELECT canonical_json FROM question_coverages"
+                ).fetchone()
+                data = json.loads(payload)
+                data["declared_complete"] = False
+                with store._db:
+                    store._db.execute(
+                        "UPDATE question_coverages SET canonical_json=?",
+                        (json.dumps(data, sort_keys=True),),
+                    )
+            finally:
+                store.close()
+
+            preview = migrate_store(path, dry_run=True)
+            self.assertFalse(preview["migrated"])
+            self.assertEqual(preview["rewritten_question_coverages"], 1)
+
+            report = migrate_store(path)
+            self.assertTrue(report["migrated"])
+            self.assertEqual(report["rewritten_question_coverages"], 1)
+
+            reopened = SqliteSemanticStore(str(path))
+            try:
+                loaded = reopened.load_all_question_coverages(REPO, None, ())
+                self.assertEqual(loaded, (coverage,))
+            finally:
+                reopened.close()
+
+            second = migrate_store(path)
+            self.assertFalse(second["migrated"])
+            self.assertEqual(second["rewritten_question_coverages"], 0)
 
 
 if __name__ == "__main__":
