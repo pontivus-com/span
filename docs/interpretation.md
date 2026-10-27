@@ -73,8 +73,8 @@ verifies prose truth. Empty basis summaries fail the unit.
 
 Claims alone never complete a question. A submission answers its
 bound question only with an explicit `ANSWERED` `question_decision`
-(the service derives `declared_complete`, result refs, and question
-evidence from validated candidates and admitted evidence). Without
+(the service derives result refs and question evidence from validated
+candidates and admitted evidence). Without
 explicit decision the unit persists `PENDING` and its claims stay
 unassigned output. Explicit `ANSWERED` with zero validated material
 rejects the whole unit.
@@ -88,7 +88,8 @@ evidence basis.
 ## Failure classes (Span-observable only)
 
 `InterpretationSuccess` · `InterpretationUnavailable` (unknown/expired
-continuation; re-issue the idempotent original op) ·
+continuation; re-issue the idempotent original op, including a selected
+operation whose persisted question is still `PENDING`) ·
 `SemanticValidationFailure` (whole unit rejected, no salvage; the live
 continuation remains usable for a corrected submission). There is no
 reissue operation and no ingress-failure exchange class. Provider transports,
