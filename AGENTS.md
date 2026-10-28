@@ -21,6 +21,41 @@ or depend on a parent workspace, a private service, or a proprietary schema.
 Required paths resolve from the Span repository root, an explicitly supplied
 target repository, or explicit user configuration.
 
+## Root cause only — no patches, no hacks
+
+Every defect is fixed where the bad state is produced, never where it is
+observed. A change that removes the symptom while the cause remains is not a
+fix and must not be proposed, implemented, or accepted.
+
+- No patches, shims, bridges, workarounds, retries-as-fix, downstream gates,
+  silent fallbacks, or special cases added to absorb a defect.
+- No weakening the evidence: never delete or loosen a test, assertion, check,
+  threshold, ceiling, or budget to make work pass. If a check is wrong,
+  correct the check and record why it was wrong; if it is right, the work is
+  wrong.
+- No gate editing: a conflict between the correct fix and a hard rule, budget,
+  or contract is the owner's decision. Surface it with evidence; never resolve
+  it by raising the limit.
+- No second shape: a fix that duplicates a carrier, vocabulary, or writer, or
+  that admits a state which cannot exist, is a new defect, not a fix.
+- A recommendation shown to be wrong is retracted explicitly with the
+  corrected reasoning; it is never carried forward.
+
+## No arbitrary numbers as rules
+
+A limit, ceiling, threshold, or budget must be either a measurement of the
+current tree (a ratchet: it may not grow without the growth being recorded in
+the same change) or derived from a stated principle. An invented constant is
+not authority; it is debt, and it never decides what work may proceed.
+
+- A number that exists only because it was once written down is an
+  anti-pattern. Replace it with the measurement or the principle it was
+  standing in for.
+- A measured ratchet records cost; it does not grant or deny permission.
+  Growth is visible in the diff and justified there.
+- Never introduce a new magic number to make a check pass, and never keep an
+  old one because removing it is inconvenient.
+
 ## Working rules
 
 - Code is the source of truth for what the software does. Documents describe

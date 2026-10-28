@@ -19,6 +19,80 @@ from span.service.interpretation import (
 from span.service.exchange.prepare import _PreparedSubmission
 
 
+def _stored_selection(
+    selection: m.SemanticQuestionSelection | None,
+) -> m.SemanticQuestionSelection | None:
+    """Persist the canonical form of a host selection.
+
+    ``SemanticQuestionSelection`` defines the empty basis as "use the
+    operation-derived default". A caller-supplied ``None`` means the same
+    thing but is outside the carrier's annotation, so it is normalized once
+    here rather than becoming undecodable stored state.
+    """
+    if selection is None or selection.materiality_basis:
+        return selection
+    return m.SemanticQuestionSelection(
+        question_slice=selection.question_slice,
+        materiality_basis="",
+        question_anchors=selection.question_anchors,
+    )
+
+
+def _exact_target(operation: SuspendedOperation) -> m.SubjectSelector:
+    """Name the admitted subject exactly, so re-issue binds the same identity."""
+    return m.SubjectSelector(exact_subject_id=operation.subject.subject_id)
+
+
+def _admitted_recovery(operation: SuspendedOperation) -> m.QuestionRecovery | None:
+    """The recovery inputs the admitting operation can vouch for.
+
+    Only operations that recreate the question from their own resolved inputs
+    carry a recipe. ``refresh`` re-binds the persisted identity and
+    ``initialize_target`` recovers from its durable target association, so
+    both return ``None``; an existing question keeps its stored recipe.
+    """
+    if operation.op == "explain":
+        return m.ExplainReplay(
+            target=_exact_target(operation),
+            bounds=operation.bounds,
+            establish_baseline=operation.establish_baseline,
+            question_selection=_stored_selection(operation.question_selection),
+        )
+    if operation.op == "impact":
+        if operation.change_kind is None:
+            raise AssertionError("impact suspension without change_kind")
+        return m.ImpactReplay(
+            target=_exact_target(operation),
+            proposed_change=m.ProposedChange(
+                change_kind=m.ChangeKind(operation.change_kind),
+                change_description=operation.change_description,
+                affected_assertions=operation.affected_assertions,
+            ),
+            bounds=operation.bounds,
+            question_selection=_stored_selection(operation.question_selection),
+        )
+    if operation.op == "trace":
+        if operation.trace_direction is None:
+            raise AssertionError("trace suspension without trace_direction")
+        return m.TraceReplay(
+            target=_exact_target(operation),
+            bounds=operation.bounds,
+            direction=m.StructuralDirection(operation.trace_direction),
+            relationship_filter=(
+                operation.trace_filter if operation.trace_filter_set else None
+            ),
+            boundary_only=operation.trace_boundary,
+            question_selection=_stored_selection(operation.question_selection),
+        )
+    if operation.op == "authority":
+        return m.AuthorityReplay(
+            target=_exact_target(operation),
+            bounds=operation.bounds,
+            question_selection=_stored_selection(operation.question_selection),
+        )
+    return None
+
+
 def _commit_prepared(
     continuation: str,
     prepared: _PreparedSubmission,
@@ -64,6 +138,7 @@ def _commit_prepared(
             current_inventory_ids=prepared.target.inventory_ids,
             current_inventory_snapshot=prepared.target.inventory_snapshot,
             correction_question=prepared.correction_question,
+            recovery=_admitted_recovery(acquired),
         )
     except BaseException:
         continuations.release(continuation)

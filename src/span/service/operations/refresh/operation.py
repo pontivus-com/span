@@ -14,6 +14,7 @@ from span.ports.interpretation import PendingInterpretation
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
 from span.ports.continuation import ContinuationPort
+from span.core.continuations import RefreshSnapshot
 
 from span.service.bounds import (
     resolve_bounds as _resolve_bounds,
@@ -179,4 +180,8 @@ def refresh(
         continuations=continuations,
         operation_intent="STATUS",
         question_slice=task.request.question_slice,
+        refresh=RefreshSnapshot(
+            eligible=tuple(first_stale),
+            attempted=(first_stale[0],) if first_stale else (),
+        ),
     )

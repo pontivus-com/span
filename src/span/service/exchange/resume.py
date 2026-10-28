@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from span.core import model as m
+from span.core import requirements as _requirements
 from span.ports.evidence import EvidenceSource
 from span.ports.interpretation import PendingInterpretation
 from span.ports.store import SemanticStore
 from span.ports.structural import StructuralSource
 from span.ports.continuation import ContinuationPort
-from span.core.continuations import SuspendedOperation
+from span.core.continuations import RefreshSnapshot, SuspendedOperation
 
 from span.service.establishment import (
     _Establishment,
@@ -111,27 +112,40 @@ def _resume_initialize_target(
     )
 
 
-def _resume_refresh_cycle(
+def _deferred_refresh_requirements(
+    deferred: tuple[m.SemanticQuestionScope, ...],
+) -> tuple[m.ResolutionRequirement, ...]:
+    """Name questions that became eligible after this chain's snapshot."""
+    return tuple(
+        _requirements.missing_semantic_coverage(
+            subject_or_claim=question.subject,
+            description=(
+                f"{question.question_class.value} '{question.question_slice}' "
+                f"for '{question.subject.canonical_locator}' appeared after "
+                "this refresh snapshot was taken and was deferred; run refresh "
+                "again to examine it"
+            ),
+            supporting_context=(),
+        )
+        for question in deferred
+    )
+
+
+def _suspend_refresh_scope(
     record: SuspendedOperation,
     prepared: _PreparedSubmission,
     *,
+    subject: m.Subject,
+    scope: m.SemanticQuestionScope | None,
+    remaining: tuple[m.Subject, ...],
+    snapshot: RefreshSnapshot,
     structural: StructuralSource,
     evidence: EvidenceSource,
     store: SemanticStore,
     continuations: ContinuationPort,
 ) -> PendingInterpretation:
-    """Suspend the next subject of a refresh run that still has work left."""
+    """Suspend one refresh unit under the persisted question identity."""
     bounds = record.bounds
-    subject, rest = record.remaining[0], record.remaining[1:]
-    stale = _stale_question_scopes(
-        record.repository_id,
-        subject,
-        store=store,
-        evidence=evidence,
-        bounds=bounds,
-        suspended=continuations.live_question_keys(),
-    )
-    scope = stale[0] if stale else None
     task = prepare_interpretation_task(
         record.repository_id,
         subject,
@@ -161,11 +175,110 @@ def _resume_refresh_cycle(
         state=prepared.state,
         resolution=None,
         scope=record.scope,
-        remaining=rest,
+        remaining=remaining,
         changed=record.changed,
         continuations=continuations,
         operation_intent="STATUS",
         question_slice=task.request.question_slice,
+        refresh=snapshot,
+    )
+
+
+def _resume_refresh_cycle(
+    record: SuspendedOperation,
+    prepared: _PreparedSubmission,
+    *,
+    structural: StructuralSource,
+    evidence: EvidenceSource,
+    store: SemanticStore,
+    continuations: ContinuationPort,
+) -> m.SemanticAnswer | PendingInterpretation:
+    """Drain one finite per-subject snapshot, then advance or answer.
+
+    The snapshot is fixed when the chain reaches a subject. Each submission
+    marks its bound question attempted, so a repeated ``PENDING`` cannot
+    re-attempt it. A question that appears after the snapshot is deferred and
+    named in the final answer, never attempted in this chain.
+    """
+    bounds = record.bounds
+    snapshot = record.refresh or RefreshSnapshot()
+    submitted = record.request.question
+    attempted = snapshot.attempted
+    if submitted is not None and submitted not in attempted:
+        attempted = attempted + (submitted,)
+    current = _stale_question_scopes(
+        record.repository_id,
+        record.subject,
+        store=store,
+        evidence=evidence,
+        bounds=bounds,
+        suspended=continuations.live_question_keys(),
+    )
+    eligible = set(snapshot.eligible)
+    deferred = tuple(question for question in current if question not in eligible)
+    deferred_all = tuple(dict.fromkeys(snapshot.deferred + deferred))
+    next_scope = next(
+        (
+            question
+            for question in current
+            if question in eligible and question not in attempted
+        ),
+        None,
+    )
+    if next_scope is not None:
+        return _suspend_refresh_scope(
+            record,
+            prepared,
+            subject=record.subject,
+            scope=next_scope,
+            remaining=record.remaining,
+            snapshot=RefreshSnapshot(
+                eligible=snapshot.eligible,
+                attempted=attempted + (next_scope,),
+                deferred=deferred_all,
+            ),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=continuations,
+        )
+    if record.remaining:
+        subject, rest = record.remaining[0], record.remaining[1:]
+        current = _stale_question_scopes(
+            record.repository_id,
+            subject,
+            store=store,
+            evidence=evidence,
+            bounds=bounds,
+            suspended=continuations.live_question_keys(),
+        )
+        next_scope = current[0] if current else None
+        return _suspend_refresh_scope(
+            record,
+            prepared,
+            subject=subject,
+            scope=next_scope,
+            remaining=rest,
+            snapshot=RefreshSnapshot(
+                eligible=tuple(current),
+                attempted=(next_scope,) if next_scope is not None else (),
+                deferred=deferred_all,
+            ),
+            structural=structural,
+            evidence=evidence,
+            store=store,
+            continuations=continuations,
+        )
+    return _compose_refresh_answer(
+        record.repository_id,
+        record.scope,
+        structural=structural,
+        evidence=evidence,
+        store=store,
+        bounds=bounds,
+        state=prepared.state,
+        changed=record.changed,
+        extra_unresolved=_deferred_refresh_requirements(deferred_all),
     )
 
 
@@ -290,7 +403,7 @@ def _resume_operation(
             store=store,
             continuations=continuations,
         )
-    if record.op == "refresh" and record.remaining:
+    if record.op == "refresh":
         return _resume_refresh_cycle(
             record,
             prepared,
@@ -335,13 +448,4 @@ def _resume_operation(
             store=store,
             continuations=continuations,
         )
-    return _compose_refresh_answer(
-        record.repository_id,
-        record.scope,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-        bounds=record.bounds,
-        state=prepared.state,
-        changed=record.changed,
-    )
+    raise AssertionError(f"unhandled suspended op: {record.op}")

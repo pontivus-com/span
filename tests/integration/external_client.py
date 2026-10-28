@@ -371,6 +371,52 @@ async def _submit_answered(
     return payload, result
 
 
+async def _defer_pending(wire, pending, repo_id):
+    """Defer a bound question without discarding the gaps it already names.
+
+    ``PENDING`` is a legal submitted disposition. The decision re-states the
+    requirements the pending brief already carries, so a deferral never
+    replaces an explicit gap with empty scaffolding.
+    """
+    result = submission_template_from_pending(pending)
+    decision = result.setdefault("question_decision", {})
+    decision["disposition"] = "PENDING"
+    decision["disposition_basis"] = (
+        "deferred: this refresh chain did not examine the bound question"
+    )
+    brief = (pending.get("request") or {}).get("brief") or {}
+    requirements = brief.get("open_requirements") or []
+    if requirements:
+        decision["resolution_requirements"] = requirements
+    payload, is_error = await wire.call(
+        "submit_interpretation",
+        {
+            "continuation": pending["continuation"],
+            "result": result,
+            "repository_id": repo_id,
+        },
+    )
+    assert not is_error, payload
+    return payload
+
+
+async def _drain_refresh(wire, pending, repo_id, summary=None, **updates):
+    """Answer the intended question, then defer every other bound question.
+
+    A refresh chain drains the subject's eligible questions. The client
+    examines the unit it intended to answer and explicitly defers the rest,
+    so the chain terminates without fabricating an answer for a question it
+    did not examine.
+    """
+    assert "continuation" in pending, pending
+    payload, _ = await _submit_answered(wire, pending, repo_id, summary, **updates)
+    for _ in range(50):
+        if "continuation" not in payload:
+            return payload
+        payload = await _defer_pending(wire, payload, repo_id)
+    raise AssertionError("refresh chain did not terminate")
+
+
 async def lane(exe, work, data_dir, transcript):
     from mcp.client.stdio import StdioServerParameters, stdio_client
     from mcp import ClientSession
@@ -603,7 +649,7 @@ async def lane(exe, work, data_dir, transcript):
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
-        answer, _ = await _submit_answered(
+        answer = await _drain_refresh(
             wire, payload, repo_id, "alpha computes the value"
         )
         assert "content" in answer, answer
@@ -693,7 +739,7 @@ async def lane(exe, work, data_dir, transcript):
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
-        answer, _ = await _submit_answered(
+        answer = await _drain_refresh(
             wire, payload, repo_id, "beta holds the other value"
         )
         assert "content" in answer, answer
@@ -712,7 +758,7 @@ async def lane(exe, work, data_dir, transcript):
         )
         assert not is_error, payload
         assert "continuation" in payload, payload
-        answer, _ = await _submit_answered(
+        answer = await _drain_refresh(
             wire, payload, repo_id, "beta holds the other value"
         )
         assert "content" in answer, answer
@@ -796,7 +842,7 @@ async def lane(exe, work, data_dir, transcript):
         assert "continuation" in payload, payload
         withdraw_subject = _pending_subject(payload)
         withdraw_ref = _pending_evidence_ref(payload)
-        answer, _ = await _submit_answered(
+        answer = await _drain_refresh(
             wire,
             payload,
             repo_id,
@@ -860,7 +906,7 @@ async def lane(exe, work, data_dir, transcript):
         assert is_error, payload
         assert payload.get("error") == "ingress", payload
         assert "result" in payload.get("message", ""), payload
-        answer, _ = await _submit_answered(
+        answer = await _drain_refresh(
             wire, malformed_pending, repo_id, "beta holds the other value"
         )
         assert "content" in answer, answer

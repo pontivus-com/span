@@ -12,7 +12,7 @@ persistent store is served by an empty in-memory store and no authority
 seeds, so an ordinary read returns the canonical `UNINITIALIZED` answer
 instead of creating `<data-dir>/<repository_id>.db` (or its schema) on a
 path that explicit `initialize_repository` owns. An existing store must
-be schema 7; its persisted authority seeds are rehydrated here for every
+be schema 9; its persisted authority seeds are rehydrated here for every
 later operation and process restart. Any other store version fails
 closed rather than being migrated or served.
 """

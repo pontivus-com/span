@@ -141,8 +141,9 @@ The semantic store is the shared durable medium; continuations are not shared.
   rather than corrupting state. One logical writer per repository is the
   supported pattern.
 - Each process owns a private continuation store. A continuation is single-use,
-  process-local, and expires; a second session cannot resume it and re-runs the
-  originating operation, which is idempotent by contract.
+  process-local, and expires; a second session cannot resume it. Recovery
+  re-runs the originating operation when the question records one (idempotent
+  by contract), or `refresh` on the subject otherwise.
 - Campaign handles (`TargetId`) are durable and repository-scoped, so a second
   session can read campaign progress through `status`.
 - Page cursors are stateless and restart-safe; they carry no process state.

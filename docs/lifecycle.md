@@ -134,9 +134,11 @@ Normal `status` names the next exact step in each non-current entry:
 - `UNASSESSED` (no adopted question coverage) → question-local `explain`
   on that subject when no owning operation is live. If the operation has
   already suspended, continue its returned continuation instead.
-- Pending or open question work → continue through the continuation
-  returned by the operation that suspended. Pass it unchanged; never
-  decode or synthesize it.
+- Pending or open question work → continue through the continuation returned
+  by the operation that suspended when it is live. When it is not, recover
+  from the stored recovery inputs when the question records them, or with
+  `refresh` on the subject otherwise. Pass a returned continuation unchanged;
+  never decode or synthesize one.
 
 Hooks report the same distinction in compact form and never allocate a
 continuation.
@@ -179,8 +181,9 @@ to partition that boundary into material areas, then drives the returned
 typed units through investigation and `submit_interpretation` serially,
 using the returned continuation; a malformed or validation-rejected unit
 reuses the same continuation after correction, while an unknown, expired,
-or lost continuation is recovered by re-running the idempotent original
-operation (there is no reissue operation). `explain(establish_baseline=True)` remains for an ordinary
+or lost continuation recovers from the question's stored recovery inputs when
+recorded, or with `refresh` on the subject otherwise (there is no reissue
+operation). `explain(establish_baseline=True)` remains for an ordinary
 selected root without an exact target directory; it is not the exact-target
 path. Every material area must end with persisted coverage or an explicit
 `NOT_APPLICABLE`, `OPEN`, or `PENDING` disposition with its requirement; a
@@ -190,15 +193,13 @@ fresh-session retrieval before reporting the target complete. A request
 without an exact target still requires an explicit bounded scope choice.
 
 Target accounting constraint: structural candidates make the exchange
-resumable; they are not semantic areas. Coherent grouping is host-owned and
-must be recorded through canonical subjects, relationships, semantic question
-coverage, and typed target-inventory accounting in the single
-`TargetAssociation` carrier. Target-inventory assignment, evidence-backed
-exclusion, or unresolved mapping is distinct from question-level
-`NOT_APPLICABLE`. No second progress store, ledger, or writer exists.
-`target_scope` alone does not prove grouping or completeness. The accounting
-carrier and atomic result/store contract are defined by the interpretation
-exchange.
+resumable; they are not semantic areas. Membership is computed at admission:
+every current inventory member is assigned to the target's area and recorded
+in the single `TargetAssociation` carrier. Membership is never submitted, and
+inventory membership is distinct from question-level `NOT_APPLICABLE`. No
+second progress store, ledger, or writer exists. `target_scope` alone does not
+prove grouping or completeness. The accounting carrier and atomic result/store
+contract are defined by the interpretation exchange.
 
 Exact onboarding path: `docs/onboarding-runbook.md`.
 
@@ -217,9 +218,9 @@ opener after a process or host restart, so later operations do not need
 the setup call repeated. The semantic store supports schema 9 only:
 a fresh store is created at schema 9, an existing schema-9 store opens
 normally, and any other store version fails closed with no runtime
-migration. `span-install --migrate-store <repository-id>` performs the
-explicit upgrade, including the schema-9 payload cleanup for stores written
-by 0.8.0. Uninitialized repositories answer
+migration. `span-install --migrate-store <repository-id>` is the explicit
+upgrade: it migrates a schema-7 or schema-8 store to schema 9 and cleans
+schema-9 payloads written by 0.8.0. Uninitialized repositories answer
 `UNINITIALIZED` plus a setup requirement on every path; hooks and
 queries never bootstrap implicitly. A failed provider build is an
 actionable setup failure, never a usable provider; a dirty tree after a
@@ -264,11 +265,11 @@ completeness; coverage and currency are reported separately.
 
 ## Target mapping
 
-`initialize_target` binds a bounded, deterministic batch of unaccounted
-inventory members per mapping unit; every bound member receives exactly one
-disposition (assignment, evidence-backed exclusion, or unresolved mapping),
-validated atomically. Newly admitted areas take a service-owned first
-`PENDING` CQ-01 seed when no reusable current question exists.
-Use `status(TargetId)` to distinguish a live mapping unit, which continues
+`initialize_target` admits the complete target deterministically: every
+current inventory member is assigned to the target's area and recorded as
+membership. Membership is computed at admission and is never submitted; there
+is no mapping unit or mapping payload. Newly admitted areas take a
+service-owned first `PENDING` CQ-01 seed when no reusable current question
+exists. Use `status(TargetId)` to distinguish live target work, which continues
 through its returned continuation, from unaccounted work with no live unit,
 which reruns `initialize_target` with the same target scope and objective.

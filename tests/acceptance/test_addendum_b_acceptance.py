@@ -954,13 +954,13 @@ class SharedClaimRetirementTest(unittest.TestCase):
 class QuestionIsolationTest(unittest.TestCase):
     """Gap-1 regression: two questions, one subject, independent currency.
 
-    A refresh under question A heals item marks for the scope but must
-    never make sibling question B current: B's own discovery snapshot
-    still predates the change, so `question_coverage_check` keeps
-    reporting B stale until B itself is re-examined.
+    A refresh drains every eligible question of the subject in one chain,
+    once each. A question becomes current only because the chain bound and
+    submitted its own unit; a question the chain did not bind is never
+    marked current.
     """
 
-    def test_sibling_question_stays_stale_after_refresh(self):
+    def test_sibling_question_is_examined_in_the_same_refresh_chain(self):
         structural, evidence, store = _harness()
         seeds = (_ref("README.md"),)
         try:
@@ -1009,18 +1009,11 @@ class QuestionIsolationTest(unittest.TestCase):
             grown["README.md"] = "# parcel-svc\n\nSorts parcels daily.\n"
             grown["src/new_source.py"] = "NEW = 1\n"
             evidence_v2 = FixtureEvidenceSource(REPO, grown)
-            # Refresh heals the CQ_01 question (resubmits same meaning).
-            refreshed, _ = _drain(
-                ops.SemanticRefreshRequest(
-                    repository_id=REPO,
-                    target=m.SubjectSelector(None, "src/parcel.py", (), None),
-                    bounds=_bounds(),
-                ),
-                ops.refresh,
-                structural,
-                evidence_v2,
-                store,
-                lambda req: m.SemanticInterpretationResult(
+            bound_slices: list[str] = []
+
+            def _answer_and_record(req):
+                bound_slices.append(req.question.question_slice)
+                return m.SemanticInterpretationResult(
                     claims=(
                         m.CandidateSemanticClaim(
                             candidate_key="purpose",
@@ -1040,40 +1033,52 @@ class QuestionIsolationTest(unittest.TestCase):
                     candidate_conflicts=(),
                     question_decision=_answer_current(req),
                     candidate_withdrawals=(),
+                )
+
+            # Refresh drains both eligible questions of the subject.
+            refreshed, rounds = _drain(
+                ops.SemanticRefreshRequest(
+                    repository_id=REPO,
+                    target=m.SubjectSelector(None, "src/parcel.py", (), None),
+                    bounds=_bounds(),
                 ),
+                ops.refresh,
+                structural,
+                evidence_v2,
+                store,
+                _answer_and_record,
                 seeds=seeds,
             )
-            # The refreshed CQ_01 question is answerable current, while
-            # the superseded-but-shared twin is retained and honestly
-            # stale (shared retention, no silent deletion).
-            by_fp = {}
-            for claim in refreshed.content.claims:
-                for ref in claim.evidence:
-                    by_fp.setdefault(ref.revision_or_fingerprint, []).append(claim)
-            current = [
-                c
-                for c in refreshed.content.claims
-                if c.freshness.state is m.FreshnessState.CURRENT
-            ]
-            stale = [
-                c
-                for c in refreshed.content.claims
-                if c.freshness.state is not m.FreshnessState.CURRENT
-            ]
-            self.assertTrue(current)
-            self.assertTrue(stale)
-            self.assertEqual(len({c.claim_id.value for c in current}), 1)
-            # The sibling CQ_06 question is still stale on its own
-            # snapshot despite the healed items.
-            covs = store.load_all_question_coverages(REPO, None, (root,))
-            stale = ops.question_coverage_check(
-                REPO, covs, evidence=evidence_v2, store=store
+            # The sibling was bound and examined in this chain, exactly once;
+            # it did not become current because another question refreshed.
+            self.assertEqual(rounds, 2)
+            self.assertEqual(len(bound_slices), 2)
+            self.assertEqual(len(set(bound_slices)), 2)
+            self.assertIn("iso-6", bound_slices)
+            views = refreshed.content.question_coverage
+            self.assertEqual(
+                {view.question.question_slice for view in views},
+                set(bound_slices),
             )
-            stale_classes = {
-                cov.question.question_class for cov in stale if cov.question is not None
-            }
-            self.assertIn(m.SemanticQuestionClass.CQ_06, stale_classes)
-            self.assertNotIn(m.SemanticQuestionClass.CQ_01, stale_classes)
+            self.assertTrue(
+                all(
+                    view.recorded_disposition is m.SemanticQuestionDisposition.ANSWERED
+                    and view.effective_disposition
+                    is m.SemanticQuestionDisposition.ANSWERED
+                    and view.freshness.state is m.FreshnessState.CURRENT
+                    for view in views
+                )
+            )
+            # Every current question was examined; the superseded shared
+            # result was replaced by the sibling's own unit, and nothing is
+            # silently marked current.
+            covs = store.load_all_question_coverages(REPO, None, (root,))
+            self.assertEqual(
+                ops.question_coverage_check(
+                    REPO, covs, evidence=evidence_v2, store=store
+                ),
+                (),
+            )
         finally:
             store.close()
 

@@ -12,11 +12,14 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
 
 from span.shell import install
+from scripts.sync_assets import sync_assets
 
 INSTALL_PACKAGE = pathlib.Path(install.__file__).parent
 
@@ -406,24 +409,28 @@ class PlanningTest(unittest.TestCase):
                 bundled / "agents-snippet.md",
             )
 
-    def test_bundled_assets_match_canonical_sources(self):
-        # The wheel carries copies of the canonical skills and lifecycle
-        # snippet because an installed package has no repository root.
-        # Copies drift silently, so equality is asserted here.
+    def test_packaged_assets_are_generated_from_canonical_sources(self):
+        # A wheel has no repository root, so the build copies the canonical
+        # skills and lifecycle snippet into the package. The destination is
+        # generated: there is no second committed copy to drift.
         repo_root = pathlib.Path(__file__).resolve().parents[2]
-        bundled = repo_root / "src" / "span" / "_assets"
-        canonical_skills = repo_root / "skills"
-        for skill in sorted(p.name for p in canonical_skills.iterdir() if p.is_dir()):
-            source = canonical_skills / skill / "SKILL.md"
-            if not source.is_file():
-                continue
-            copy = bundled / "skills" / skill / "SKILL.md"
-            self.assertTrue(copy.is_file(), f"missing bundled skill: {skill}")
-            self.assertEqual(source.read_bytes(), copy.read_bytes(), skill)
-        snippet = repo_root / "docs" / "agents-snippet.md"
-        self.assertEqual(
-            snippet.read_bytes(), (bundled / "agents-snippet.md").read_bytes()
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            generated = pathlib.Path(tmp) / "_assets"
+            sync_assets(generated)
+            canonical_skills = repo_root / "skills"
+            for skill in sorted(
+                p.name for p in canonical_skills.iterdir() if p.is_dir()
+            ):
+                source = canonical_skills / skill / "SKILL.md"
+                if not source.is_file():
+                    continue
+                copy = generated / "skills" / skill / "SKILL.md"
+                self.assertTrue(copy.is_file(), f"missing generated skill: {skill}")
+                self.assertEqual(source.read_bytes(), copy.read_bytes(), skill)
+            snippet = repo_root / "docs" / "agents-snippet.md"
+            self.assertEqual(
+                snippet.read_bytes(), (generated / "agents-snippet.md").read_bytes()
+            )
 
     def test_main_returns_success_for_console_entrypoint(self):
         import tempfile
@@ -1058,12 +1065,13 @@ class SkillDeployTest(unittest.TestCase):
             finally:
                 os.path.expanduser = real_expanduser
 
-    def test_skills_deploy_from_bundled_assets_in_distribution_mode(self):
+    def test_skills_deploy_from_generated_assets_in_distribution_mode(self):
         import os
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             home = pathlib.Path(tmp) / "home"
+            assets = pathlib.Path(tmp) / "_assets"
+            sync_assets(assets)
             not_a_checkout = pathlib.Path(tmp) / "cwd"
             not_a_checkout.mkdir()
             real_expanduser = os.path.expanduser
@@ -1072,9 +1080,13 @@ class SkillDeployTest(unittest.TestCase):
             )
             try:
                 (home / ".config" / "opencode" / "skills").mkdir(parents=True)
-                deployed = install.deploy_skills(not_a_checkout, dry_run=False)
+                install_paths = importlib.import_module("span.shell.install.paths")
+                with mock.patch.object(
+                    install_paths, "bundled_assets_root", return_value=assets
+                ):
+                    deployed = install.deploy_skills(not_a_checkout, dry_run=False)
                 self.assertTrue(deployed)
-                bundled = install.bundled_assets_root() / "skills" / "span" / "SKILL.md"
+                bundled = assets / "skills" / "span" / "SKILL.md"
                 installed = (
                     home / ".config" / "opencode" / "skills" / "span" / "SKILL.md"
                 )

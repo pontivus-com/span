@@ -32,7 +32,22 @@ from span.core.model.semantics import (
 )
 from span.core.model.targets import TargetId
 
-__all__ = ["SuspendedOperation"]
+__all__ = ["RefreshSnapshot", "SuspendedOperation"]
+
+
+@_dataclass(frozen=True)
+class RefreshSnapshot:
+    """Finite per-subject refresh frontier (0.8.3 D2).
+
+    ``eligible`` is the subject's question identities when the chain reached
+    it; ``attempted`` those already submitted in this chain; ``deferred``
+    identities that became eligible after the snapshot and are reported for a
+    later ``refresh``. Ephemeral exchange state, never persisted.
+    """
+
+    eligible: tuple[SemanticQuestionScope, ...] = ()
+    attempted: tuple[SemanticQuestionScope, ...] = ()
+    deferred: tuple[SemanticQuestionScope, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -71,6 +86,7 @@ class SuspendedOperation:
     target_id: TargetId | None = None
     root_question: SemanticQuestionScope | None = None
     question_selection: SemanticQuestionSelection | None = None
+    refresh: RefreshSnapshot | None = None
 
     def __post_init__(self) -> None:
         if self.op not in (

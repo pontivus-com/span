@@ -858,8 +858,17 @@ class CoverageEntryGuidanceTest(unittest.TestCase):
             self._write(store, coverage)
             requirements = self._requirements(structural, evidence, store)
             descriptions = " ".join(r.description for r in requirements)
-            self.assertIn("does not record its originating operation", descriptions)
-            self.assertIn("repeat the original idempotent request", descriptions)
+            # No recipe and no live continuation: recovery is refresh under
+            # the persisted identity, and the text never guesses an owner.
+            self.assertIn("no recorded originating operation", descriptions)
+            self.assertIn("recover it with refresh on this subject", descriptions)
+            for guessed in (
+                "re-run explain",
+                "re-run impact",
+                "re-run trace",
+                "re-run authority",
+            ):
+                self.assertNotIn(guessed, descriptions)
             self.assertNotIn(
                 "continuation returned by the suspending operation", descriptions
             )

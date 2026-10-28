@@ -5,7 +5,6 @@ capability with an empty result: ``unsupported=True`` (with empty items)
 is the typed ``UNSUPPORTED_CAPABILITY`` outcome (§4.11).
 """
 
-import enum as _enum
 import typing as _typing
 
 from span.core.model import (
@@ -15,6 +14,7 @@ from span.core.model import (
     QueryBounds,
     RepositoryState,
     ScopeCoverage,  # noqa: F401
+    StructuralDirection,
     StructuralEdge,
     StructuralEdgeKind,
     StructuralFreshnessReport,  # noqa: F401
@@ -34,14 +34,6 @@ class StaleContinuationError(ValueError):
     """A version-bound listing continuation no longer matches the listing
     version ([design note F](docs/design-references.md#f) §4.3). The caller restarts the listing from page
     one; the error names the observed new version."""
-
-
-class StructuralDirection(_enum.Enum):
-    """Edge/relationship traversal direction vocabulary (plan §5.2)."""
-
-    UPSTREAM = "UPSTREAM"
-    DOWNSTREAM = "DOWNSTREAM"
-    BOTH = "BOTH"
 
 
 @_typing.runtime_checkable

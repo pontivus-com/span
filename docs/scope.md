@@ -261,8 +261,9 @@ Span stores its state outside every target repository.
 The semantic store supports schema 9 only. A fresh store is created at
 schema 9, an existing schema-9 store opens normally, and any other store
 version fails closed; Span performs no runtime schema migration.
-`span-install --migrate-store <repository-id>` performs the explicit upgrade,
-including the schema-9 payload cleanup for stores written by 0.8.0. Repository
+`span-install --migrate-store <repository-id>` is the explicit upgrade: it
+migrates a schema-7 or schema-8 store to schema 9 and cleans schema-9 payloads
+written by 0.8.0, in one transaction. Repository
 state and the configured authority seeds persist together in one atomic
 row, and persisted seeds are rehydrated after a process or host restart.
 Omitting `authority_seeds` preserves configured seeds, an explicit empty

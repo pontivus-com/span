@@ -6,7 +6,7 @@ from __future__ import annotations
 from span.core import model as m
 from span.ports.interpretation import PendingInterpretation
 from span.ports.continuation import ContinuationPort
-from span.core.continuations import SuspendedOperation
+from span.core.continuations import RefreshSnapshot, SuspendedOperation
 
 from span.service.interpretation.task import InterpretationTask
 
@@ -41,6 +41,7 @@ def _suspend(
     target_id: m.TargetId | None = None,
     root_question: m.SemanticQuestionScope | None = None,
     question_selection: m.SemanticQuestionSelection | None = None,
+    refresh: RefreshSnapshot | None = None,
 ) -> PendingInterpretation:
     token = continuations.pend(
         SuspendedOperation(
@@ -73,6 +74,7 @@ def _suspend(
             target_id=target_id,
             root_question=root_question,
             question_selection=question_selection,
+            refresh=refresh,
         )
     )
     return PendingInterpretation(continuation=token, request=task.request)

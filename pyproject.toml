@@ -105,10 +105,6 @@ version = { attr = "span.__version__" }
 [tool.setuptools.package-data]
 span = [
     "BUILD_IDENTITY",
-    "_assets/agents-snippet.md",
-    "_assets/skills/span/SKILL.md",
-    "_assets/skills/span-change-context/SKILL.md",
-    "_assets/skills/span-document/SKILL.md",
 ]
 
 [tool.coverage.run]
