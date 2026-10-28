@@ -11,6 +11,10 @@ import pathlib as _pathlib
 import sqlite3 as _sqlite3
 
 from span.shell.sqlite_store.mapping import _encode
+from span.shell.sqlite_store.migrations.v0_8_0_to_v0_8_1 import (
+    _count_legacy_question_coverages,
+    _rewrite_question_coverages,
+)
 
 SCHEMA_VERSION = 9
 
@@ -251,7 +255,7 @@ def _rewrite_target_accounting(connection) -> tuple[int, int]:
 def migrate_store(
     path: str | _pathlib.Path, *, dry_run: bool = False
 ) -> dict[str, object]:
-    """Explicitly upgrade one schema-7 or schema-8 store to schema 9.
+    """Upgrade schema-7/8 stores and normalize 0.8.0 schema-9 stores.
 
     Never called at open. Refuses an unknown version rather than guessing,
     is idempotent at the current version, and performs every step in one
@@ -266,22 +270,13 @@ def migrate_store(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
         version = int(row[0]) if row is not None else 0
-        if version == SCHEMA_VERSION:
-            return {
-                "path": str(db_path),
-                "from": version,
-                "to": version,
-                "migrated": False,
-                "rewritten_verifications": 0,
-                "rewritten_target_accounts": 0,
-                "dropped_target_accounts": 0,
-            }
-        if version not in (7, 8):
+        if version not in (7, 8, SCHEMA_VERSION):
             raise ValueError(
                 "cannot migrate Span store schema version "
-                f"{version}; only schema 7 or 8 can be migrated to "
+                f"{version}; only schema 7, 8, or 9 can be migrated to "
                 f"{SCHEMA_VERSION}"
             )
+        question_coverages = _count_legacy_question_coverages(connection)
         if dry_run:
             return {
                 "path": str(db_path),
@@ -291,6 +286,7 @@ def migrate_store(
                 "rewritten_verifications": 0,
                 "rewritten_target_accounts": 0,
                 "dropped_target_accounts": 0,
+                "rewritten_question_coverages": question_coverages,
             }
         with connection:
             rewritten_verifications = 0
@@ -302,6 +298,7 @@ def migrate_store(
             rewritten_accounts, dropped_accounts = _rewrite_target_accounting(
                 connection
             )
+            rewritten_question_coverages = _rewrite_question_coverages(connection)
             connection.execute(
                 "UPDATE meta SET value=? WHERE key='schema_version'",
                 (str(SCHEMA_VERSION),),
@@ -310,10 +307,16 @@ def migrate_store(
             "path": str(db_path),
             "from": version,
             "to": SCHEMA_VERSION,
-            "migrated": True,
+            "migrated": bool(
+                version != SCHEMA_VERSION
+                or rewritten_verifications
+                or rewritten_accounts
+                or rewritten_question_coverages
+            ),
             "rewritten_verifications": rewritten_verifications,
             "rewritten_target_accounts": rewritten_accounts,
             "dropped_target_accounts": dropped_accounts,
+            "rewritten_question_coverages": rewritten_question_coverages,
         }
     finally:
         connection.close()

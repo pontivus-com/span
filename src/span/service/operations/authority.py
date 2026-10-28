@@ -36,7 +36,11 @@ from span.service.interpretation import (
 )
 from span.service.questions import (
     _paged_question_views,
+    _question_coverage_for_scope,
     _question_local_missing,
+    live_question_record,
+    needs_first_examination,
+    with_live_question_requirement,
 )
 from span.service.repository import (
     _is_initialized,
@@ -302,15 +306,9 @@ def _authority_selected(
         )
     except Exception:
         existing = ()
-    found = any(
-        coverage.question is not None
-        and coverage.question.scope_root == scope.scope_root
-        and coverage.question.subject == scope.subject
-        and coverage.question.question_class == scope.question_class
-        and coverage.question.question_slice == scope.question_slice
-        for coverage in existing
-    )
-    if not found:
+    match = _question_coverage_for_scope(existing, scope)
+    live = live_question_record(scope, continuations)
+    if needs_first_examination(match, live):
         task = prepare_interpretation_task(
             request.repository_id,
             subject,
@@ -360,6 +358,7 @@ def _authority_selected(
         page_token=request.page_token,
         question_key=f"{scope.question_class.value}:{scope.question_slice}",
     )
+    answer = with_live_question_requirement(answer, match, live)
     filtered = _filter_views(answer.content.question_coverage, scope)
     return _dc.replace(
         answer, content=_dc.replace(answer.content, question_coverage=filtered)

@@ -9,7 +9,6 @@ from __future__ import annotations
 from span.service.operations.status.requirements import (  # noqa: F401
     _pending_exchange_requirements,
     _live_question_records,
-    _live_requirement,
     _live_subject_requirements,
     _repository_live_requirements,
     _project_pending_requirements,
@@ -61,7 +60,6 @@ from span.service.operations.status.scoped import (  # noqa: F401
 __all__ = [
     "_pending_exchange_requirements",
     "_live_question_records",
-    "_live_requirement",
     "_live_subject_requirements",
     "_repository_live_requirements",
     "_project_pending_requirements",

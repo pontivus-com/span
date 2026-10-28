@@ -16,6 +16,8 @@ from span.core.continuations import SuspendedOperation
 
 from span.service.questions import (
     effective_question_view,
+    live_question_requirement,
+    match_live_question,
 )
 
 
@@ -64,29 +66,22 @@ def _recovery_detail(recovery: m.QuestionRecovery) -> tuple[str, str]:
 
 
 def _pending_exchange_requirements(
-    repository_id: str,
     views: tuple[m.SemanticQuestionCoverageView, ...],
     continuations: ContinuationPort,
     *,
     recovery_operation: str | None = None,
 ) -> tuple[m.ResolutionRequirement, ...]:
     """Project persisted pending questions against live exchange records."""
-    live = continuations.live_records()
+    records = continuations.live_records()
     requirements: list[m.ResolutionRequirement] = []
     for view in views:
         if view.effective_disposition is not m.SemanticQuestionDisposition.PENDING:
             continue
         question = view.question
-        matches = tuple(
-            record
-            for record in live
-            if record.repository_id == repository_id
-            and record.request.question is not None
-            and record.request.question.scope_root == question.scope_root
-            and record.request.question.subject == question.subject
-            and record.request.question.question_class == question.question_class
-            and record.request.question.question_slice == question.question_slice
-        )
+        live = match_live_question(records, question)
+        if live is not None:
+            requirements.append(live_question_requirement(live))
+            continue
         subject = question.subject.canonical_locator
         if matches:
             operation = matches[0].op
@@ -149,29 +144,6 @@ def _live_question_records(
     )
 
 
-def _live_requirement(record: SuspendedOperation) -> m.ResolutionRequirement:
-    """Project one live question without exposing its continuation token."""
-    question = record.request.question
-    assert question is not None
-    scope_root = (
-        f"{question.scope_root.subject_kind.value}:"
-        f"{question.scope_root.canonical_locator}"
-    )
-    return m.ResolutionRequirement(
-        kind=m.ResolutionKind.INCOMPLETE_SEMANTIC_SCOPE,
-        subject_or_claim=question.subject,
-        description=(
-            f"{question.question_class.value} '{question.question_slice}' "
-            f"under scope root '{scope_root}' for "
-            f"'{question.subject.canonical_locator}' has a live "
-            f"{record.op} interpretation unit; continue with the "
-            f"continuation returned by that {record.op} call and pass it "
-            "unchanged"
-        ),
-        supporting_context=(),
-    )
-
-
 def _live_subject_requirements(
     repository_id: str,
     subjects: tuple[m.Subject, ...],
@@ -179,7 +151,7 @@ def _live_subject_requirements(
 ) -> tuple[m.ResolutionRequirement, ...]:
     """Project live question work even before its first persisted row."""
     return tuple(
-        _live_requirement(record)
+        live_question_requirement(record)
         for record in _live_question_records(repository_id, subjects, continuations)
     )
 
@@ -190,7 +162,7 @@ def _repository_live_requirements(
 ) -> tuple[m.ResolutionRequirement, ...]:
     """Expose first-time live semantic work in repository status."""
     return tuple(
-        _live_requirement(record)
+        live_question_requirement(record)
         for record in _live_question_records(repository_id, None, continuations)
     )
 
@@ -289,13 +261,13 @@ def _project_live_requirements(
             if _is_generic_live_action(requirement, entry, operations):
                 if subject not in replaced:
                     replaced.add(subject)
-                    kept.extend(_live_requirement(record) for record in live)
+                    kept.extend(live_question_requirement(record) for record in live)
                 continue
         kept.append(requirement)
 
     for subject, live in by_subject.items():
         if subject not in replaced:
-            kept.extend(_live_requirement(record) for record in live)
+            kept.extend(live_question_requirement(record) for record in live)
     return tuple(dict.fromkeys(kept))
 
 
@@ -322,7 +294,7 @@ def _repository_pending_requirements(
         and coverage.question.subject in subjects
         and coverage.disposition is m.SemanticQuestionDisposition.PENDING
     )
-    return _pending_exchange_requirements(repository_id, views, continuations)
+    return _pending_exchange_requirements(views, continuations)
 
 
 def _target_live_requirements(
@@ -371,7 +343,6 @@ def _target_live_requirements(
         )
     requirements.extend(
         _pending_exchange_requirements(
-            repository_id,
             tuple(pending_views),
             continuations,
             recovery_operation="initialize_target",

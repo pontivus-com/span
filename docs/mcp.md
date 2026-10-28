@@ -91,7 +91,9 @@ notice and does not return the repository inventory.
   service derives root/subject/class, canonicalizes verbatim, appends
   TRACE/IMPACT discriminators, and rejects full-scope supply, baseline
   conflicts, and ClaimRef-with-selection. Anchors pass verbatim as
-  `question_terms`. Page tokens are opaque; pass the returned token
+  `question_terms`. A selected question with persisted `PENDING` coverage is
+  still unexamined: reissue the operation to receive a fresh task when no live
+  continuation exists. Page tokens are opaque; pass the returned token
   unchanged to the same operation with the same arguments.
 - Input schemas are generated from the canonical dataclasses with
   `$defs`, `$type` constants, and `additionalProperties: false`.
@@ -322,7 +324,7 @@ exposure is deferred until a proven consumer exists.
   seed. Membership is never submitted by the agent.
 - Coverage shape is fixed per disposition: `OPEN` carries
   `resolution_requirements`, `ANSWERED` requires validated material and
-  Span derives `declared_complete`, `result_refs`, and `question_evidence`,
+  Span derives `result_refs` and `question_evidence`,
   and `NOT_APPLICABLE` carries a basis and no result refs.
 
 ---
