@@ -94,38 +94,103 @@ otherwise.
   atomic single-subject page is by design. Measurement comes first.
 ## 0.8.2 — 2026-10-27
 
-### Continuation recovery
+**Durable work can be picked up again.**
 
-- Reissuing `explain`, `authority`, `impact`, or `trace` with a selected
-  question whose persisted coverage is `PENDING` now returns a fresh
-  `PendingInterpretation` when the original continuation is no longer live. A
-  live continuation is reported as the owning unit instead of a duplicate task.
-- Question recovery and live-unit matching use the persisted question identity
-  (the store key), so a host-supplied `materiality_basis` change cannot hide a
-  persisted row or duplicate a live unit.
-- `status` names the live unit for the same identity. A persisted `PENDING`
-  question with no live continuation and no recorded originating operation is
-  still reported as unrecorded; the operation is never inferred.
+0.8.1 fixed what the 0.8.0 gate measured. This release fixes a defect the gate
+could not see: a question Span had already decided to ask could outlive the
+information needed to examine it again.
 
-### Store migration
+A pending question is durable. The continuation that answers it is not: it is
+process-local, single-use, and expires after thirty minutes. Span's stated
+recovery for a lost continuation is to re-run the originating operation. For
+`explain`, `impact`, `trace`, and `authority` that instruction was not
+executable, because what produced the question was not stored with it.
 
-- Adds a version-specific 0.8.0 payload migration: schema-9 stores written by
-  0.8.0 drop the retired `declared_complete` field transactionally and
-  idempotently, and the report adds `rewritten_question_coverages`.
-- `migrate_store` now accepts a current schema-9 store so that same-schema
-  cleanup is reachable. It reports `migrated` only when it changed something,
-  and a repeated run is a no-op. The schema-7/8 path, including legacy
-  target-account normalization, is unchanged.
+Recovery now re-runs the originating operation with the inputs stored on the
+question. Questions that no operation can recreate — those an agent proposed,
+and the service-owned seed for a newly admitted area — are re-examined through
+`refresh` under their persisted identity instead.
 
-### Verification
+`status` now names which of the two applies.
 
-- `946 passed, 1 skipped`; ruff, black, and the typing ratchet (84) clean.
-- New `tests/unit/test_selected_question_recovery.py` pins reissue recovery for
-  all four selected operations, the live-duplicate guard across a
-  `materiality_basis` change, the non-`PENDING` answer path, and the `refresh`
-  fallback.
-- `tests/unit/test_store_fact_kinds.py` pins the schema-9 payload cleanup and
-  its idempotence.
+No `0.8.2` release exists; the numbering skips it rather than inventing a
+release that was never cut.
+
+### Pending questions
+
+- **A pending question survives the loss of its continuation.** A question
+  admitted by `explain`, `impact`, `trace`, or `authority` now stores the
+  operation and the resolved inputs that produced it, so recovery no longer
+  depends on the caller remembering inputs it was never given.
+- **`refresh` and `initialize_target` needed no new storage.** A refresh
+  question is re-examined by calling `refresh` on its subject, and a target
+  campaign is recovered from its durable target association. Both were already
+  recoverable; only the status message was missing.
+- **`status` names the recovery action.** A pending question with no live
+  continuation now produces a requirement that says how to pick it up: the
+  originating operation and its stored inputs when the question records them,
+  and `refresh` on the subject otherwise. A row written before this release
+  decodes with no stored recipe and takes the `refresh` path.
+
+### Refresh
+
+- **Refresh drains a subject before advancing.** The frontier is
+  question-level; the closeout unit was subject-level. A subject with two
+  pending questions used to answer one and report completion.
+- **Each question is attempted once per refresh chain.** The eligible questions
+  for a subject are snapshotted when the chain reaches it, and each is
+  attempted at most once. A question that becomes eligible during the chain —
+  for example, one reopened by a withdrawal — is deferred to the next `refresh`
+  call rather than extending this one, so the chain always terminates.
+- **An explicit `PENDING` is reported, not hidden.** `PENDING` is a legal
+  submission outcome. A refresh may return while a deliberately pending
+  question remains, or while a question that became eligible mid-chain is
+  deferred, and the answer says so rather than implying completion.
+- **A brand-new question cannot enter a chain by proposal.** A non-bound
+  question submitted during refresh is a correction nomination and is rejected
+  before persistence unless that exact scope is already stored. The rejection
+  is explicit, persists nothing, and leaves the continuation and snapshot
+  usable; the only mid-chain growth is a question reopened by a withdrawal,
+  which is deferred and reported.
+
+### Documentation
+
+- The store schema is documented as 9, and `span-install --migrate-store` is
+  documented as migrating schema 7 or 8 to 9. Five places previously said 7,
+  and one described a 7→8 migration that does not exist.
+- Status documentation describes what `status` actually reports for a pending
+  question.
+- The agent skills were rewritten for concision: the primary skill is about
+  half its previous length, and the two specialty skills now carry only their
+  task-specific steps and point at the primary. Every operation, contract, and
+  state vocabulary is unchanged. The hand-maintained Python submission example
+  was removed because the pending brief already returns the authoritative
+  template, and the old example had drifted into an invalid construction.
+- The packaged skills and lifecycle snippet are generated at build time from
+  `skills/` and `docs/agents-snippet.md`. The repository no longer carries a
+  second committed copy of any skill or the snippet; a wheel and a wheel built
+  from the sdist both contain byte-identical assets.
+- The obsolete mapping vocabulary is gone from the status requirement, the
+  lifecycle guide, and the onboarding runbook: target membership is computed at
+  admission and is never submitted, and there is no mapping unit, exclusion, or
+  unresolved-mapping decision. Recovery guidance in the MCP reference and the
+  architecture guide now names both paths: stored recovery inputs when
+  recorded, otherwise `refresh` on the subject.
+
+### Not in this release
+
+- No gate re-run. The five-task economics remain unmeasured since 0.8.1, and
+  this release does not claim them.
+- No change to the continuation contract. Continuations stay ephemeral,
+  process-scoped, and single-use; no token is persisted.
+- No new question disposition. Whether withdrawal needs a state distinct from
+  `NOT_APPLICABLE` with a basis is an open decision.
+- No evidence-nomination surface. An agent still cannot cite an exact source it
+  found outside the discovered set; that is a separate public-input capability.
+- No machine-readable action on `ResolutionRequirement` beyond the recovery
+  text status needs.
+- No change to status payload weight. The scoped path is already bounded; the
+  atomic single-subject page is by design. Measurement comes first.
 
 ## 0.8.1 — 2026-10-26
 
