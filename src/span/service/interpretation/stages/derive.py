@@ -19,6 +19,7 @@ from span.service.interpretation.coverage import (
     _material_evidence_refs,
     _material_result_refs,
     _ordered_result_refs,
+    _resolve_recovery,
     _retire_replaced_outputs,
 )
 from span.service.interpretation.task import (
@@ -114,6 +115,7 @@ def _reopen_shared_outputs(
                             )
                         ),
                         question_evidence=other.question_evidence,
+                        recovery=_resolve_recovery(other, None),
                     )
                 )
     # Bound check: if fanout exceeds bounds, fail without partial.
@@ -242,6 +244,7 @@ def _derive_coverages(
         retires_claims=inputs.retires_claims,
         retires_relationships=inputs.retires_relationships,
         has_material=has_material,
+        recovery=inputs.recovery,
     )
     nominated_qcov = _nominated_correction_coverage(
         task=task,
@@ -348,6 +351,7 @@ def _current_question_coverage(
     retires_claims: list[m.ClaimRef],
     retires_relationships: list[m.RelationshipRef],
     has_material: bool,
+    recovery: m.QuestionRecovery | None = None,
 ) -> m.InterpretationCoverage | None:
     """Derive the bound question's single persisted coverage.
 
@@ -372,13 +376,17 @@ def _current_question_coverage(
             bound_question,
             has_material=has_material,
         )
-        current_qcov = deriver.finalize(current_qcov, owns_material=True)
+        current_qcov = deriver.finalize(
+            _dataclasses.replace(current_qcov, recovery=recovery),
+            owns_material=True,
+        )
     else:
         current_qcov = _synthesized_pending_coverage(
             task=task,
             deriver=deriver,
             bound_question=bound_question,
             subjects=subjects,
+            recovery=recovery,
         )
     if current_qcov.disposition is m.SemanticQuestionDisposition.ANSWERED:
         # [design note C](docs/design-references.md#c) C-05: only a complete replacement retires prior unshared
@@ -402,6 +410,7 @@ def _synthesized_pending_coverage(
     deriver: _CoverageDeriver,
     bound_question: m.SemanticQuestionScope,
     subjects: tuple[m.Subject, ...],
+    recovery: m.QuestionRecovery | None = None,
 ) -> m.InterpretationCoverage:
     """Build the PENDING coverage a unit must not omit ([design note C](docs/design-references.md#c) C-05).
 
@@ -438,6 +447,7 @@ def _synthesized_pending_coverage(
             ),
         ),
         question_evidence=() if prior is None else prior.question_evidence,
+        recovery=_resolve_recovery(prior, recovery),
     )
 
 
@@ -541,3 +551,4 @@ class _CoverageInputs:
     submitted_coverages: list[m.InterpretationCoverage]
     question_coverages_to_persist: list[m.InterpretationCoverage]
     reopened_coverages: list[m.InterpretationCoverage]
+    recovery: m.QuestionRecovery | None = None

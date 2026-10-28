@@ -226,6 +226,7 @@ def effective_question_view(
         effective_disposition=effective,
         freshness=freshness,
         resolution_requirements=requirements,
+        recovery=coverage.recovery,
     )
 
 

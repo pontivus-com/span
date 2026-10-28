@@ -221,8 +221,10 @@ absence from a receipt is evidence of an unreceipted ID, not proof that its
 data is unused.
 
 `span-install --migrate-store <repository-id>` upgrades that ID's store from
-schema 7 to schema 8 in one transaction: it adds the verification-record table,
-removes the retired-claim archives, and rewrites stored verification payloads
-to the link-only shape. It is idempotent at the current version and refuses any
+schema 7 or schema 8 to schema 9 in one transaction. From schema 7 it adds
+the verification-record table, removes the retired-claim archives, and
+rewrites stored verification payloads to the link-only shape; from either
+version it drops mapping-era target-account outcomes that no longer have a
+producer or reader. It is idempotent at the current version and refuses any
 other version rather than guessing. The server never migrates at open; a
 version mismatch fails closed until this command is run.

@@ -19,6 +19,50 @@ from span.service.questions import (
 )
 
 
+def _selector_text(selector: m.SubjectSelector) -> str:
+    if selector.exact_subject_id is not None:
+        return selector.exact_subject_id.canonical_locator
+    if selector.name_or_locator is not None:
+        return selector.name_or_locator
+    return "the stored target"
+
+
+def _recovery_detail(recovery: m.QuestionRecovery) -> tuple[str, str]:
+    """Name the operation and the inputs that distinguish this recipe."""
+    if isinstance(recovery, m.ExplainReplay):
+        return (
+            "explain",
+            f"target '{_selector_text(recovery.target)}', "
+            f"establish_baseline={str(recovery.establish_baseline).lower()}",
+        )
+    if isinstance(recovery, m.ImpactReplay):
+        change = recovery.proposed_change
+        detail = (
+            f"target '{_selector_text(recovery.target)}', "
+            f"change_kind={change.change_kind.value}"
+        )
+        if change.change_description:
+            detail = f"{detail}, change_description={change.change_description!r}"
+        return "impact", detail
+    if isinstance(recovery, m.TraceReplay):
+        if recovery.relationship_filter is None:
+            filter_text = "ALL"
+        elif not recovery.relationship_filter:
+            filter_text = "NONE"
+        else:
+            filter_text = ",".join(kind.value for kind in recovery.relationship_filter)
+        return (
+            "trace",
+            f"target '{_selector_text(recovery.target)}', "
+            f"direction={recovery.direction.value}, "
+            f"relationship_filter={filter_text}, "
+            f"boundary_only={str(recovery.boundary_only).lower()}",
+        )
+    if isinstance(recovery, m.AuthorityReplay):
+        return "authority", f"target '{_selector_text(recovery.target)}'"
+    raise AssertionError(f"unknown recovery carrier: {type(recovery).__name__}")
+
+
 def _pending_exchange_requirements(
     repository_id: str,
     views: tuple[m.SemanticQuestionCoverageView, ...],
@@ -52,6 +96,14 @@ def _pending_exchange_requirements(
                 f"continue with the continuation returned by that {operation} "
                 "call and pass it unchanged"
             )
+        elif view.recovery is not None:
+            operation, detail = _recovery_detail(view.recovery)
+            description = (
+                f"{question.question_class.value} '{question.question_slice}' "
+                f"for '{subject}' has no live continuation in the current "
+                f"continuation store; re-run {operation} with the persisted "
+                f"recovery inputs ({detail}); do not synthesize a continuation"
+            )
         elif recovery_operation is not None:
             description = (
                 f"{question.question_class.value} '{question.question_slice}' "
@@ -64,10 +116,9 @@ def _pending_exchange_requirements(
             description = (
                 f"{question.question_class.value} '{question.question_slice}' "
                 f"for '{subject}' has no live continuation in the current "
-                "continuation store; the persisted question identity does not "
-                "record its originating operation; repeat the original "
-                "idempotent request with the same inputs and do not synthesize "
-                "a continuation"
+                "continuation store and no recorded originating operation; "
+                "recover it with refresh on this subject under the persisted "
+                "question identity; do not synthesize a continuation"
             )
         requirements.append(
             m.ResolutionRequirement(
@@ -296,8 +347,8 @@ def _target_live_requirements(
                 subject_or_claim=record.subject.subject_id,
                 description=(
                     f"target '{target_id.value}' has a live initialize_target "
-                    "mapping unit; continue with the continuation returned "
-                    "by that initialize_target call and pass it unchanged"
+                    "unit; continue with the continuation returned by that "
+                    "initialize_target call and pass it unchanged"
                 ),
                 supporting_context=(),
             )

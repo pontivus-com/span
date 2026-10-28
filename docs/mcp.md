@@ -49,9 +49,12 @@ projections of one canonical Span carrier and are not separate contracts.
 Errors keep readable JSON text and have no structured success payload.
 
 Continuation tokens remain opaque and are never exposed by `status`. Normal
-status can identify the exact pending question and its owning operation, and
-whether its live continuation still exists. A lost or expired continuation is
-recovered by re-running the original idempotent operation.
+status names the recovery action for a pending question. When a continuation
+is live it names the operation holding the question; when none is live it
+names the originating operation and the inputs stored with the question; a
+question with no recorded origin is recovered with `refresh` on its subject.
+A lost or expired continuation is never reconstructed, and `READY` is
+storage/runtime availability, never semantic completeness.
 
 ## Repository discovery
 
@@ -177,9 +180,11 @@ seeds persist with repository state in one atomic row and are rehydrated
 after a process or host restart. Omitting `authority_seeds` preserves
 the seeds already configured; an explicit empty tuple clears them; a
 non-empty tuple replaces them. Unknown seed locators fail closed. The
-semantic store supports schema 7 only: a fresh store is created at
-schema 7, an existing schema-7 store opens normally, and any other store
-version fails closed with no runtime migration. There is no separate structural MCP server:
+semantic store supports schema 9 only: a fresh store is created at
+schema 9, an existing schema-9 store opens normally, and any other store
+version fails closed with no runtime migration; `span-install
+--migrate-store <repository-id>` upgrades a schema-7 or schema-8 store to
+schema 9 explicitly. There is no separate structural MCP server:
 structural navigation (`locate` for find/ outline/member listing,
 `neighbors` for bounded adjacency) is served by Span itself, with two-tier
 freshness (entry verification plus scope coverage) and version-bound
@@ -215,8 +220,10 @@ agent intent; setup is separate from ordinary queries:
   Status entry requirements name the next exact step: stale or
   unverifiable → `refresh` with the exact `SubjectSelector`; `UNASSESSED`
   → question-local `explain` only when no owning operation is live; otherwise
-  continue the returned continuation. Pending question work → only the
-  continuation returned by the suspending operation.
+  continue the returned continuation. Pending question work → continue with
+  the continuation returned by the suspending operation when one is live;
+  otherwise follow the recovery action status names (the stored originating
+  inputs, or `refresh` on the subject).
 - Knowledge maintenance: `initialize_target` (exact `EvidenceScope`
   plus user-directed objective; admits a campaign), `refresh` (ordinary
   stale refresh accepts a scoped `SubjectSelector` or `EvidenceScope`;
@@ -225,8 +232,9 @@ agent intent; setup is separate from ordinary queries:
 - Interpretation exchange: `submit_interpretation`
   (`continuation` plus typed result; retained on malformed or validation
   failure, consumed only on successful commit). An unknown, expired, or
-  lost continuation recovers by re-entering the original idempotent
-  operation; there is no reissue operation.
+  lost continuation recovers from the question's stored recovery inputs when
+  recorded, or with `refresh` on the subject otherwise; there is no reissue
+  operation.
 
 Selection rules: need a file, symbol, or member list → `locate`; need
 structural adjacency → `neighbors`; need established semantics →
