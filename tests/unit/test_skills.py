@@ -1,15 +1,13 @@
-"""Agent Skill non-authority tests (plan Phase 4.7).
+"""Agent Skill non-authority and contract tests.
 
 Skills are optional lifecycle guidance only. They may orchestrate the
-eleven canonical operations but cannot establish or reinterpret
-semantic claims, ownership, authority, precedence, trust, or
-freshness. These tests pin that boundary mechanically:
+eleven canonical operations but cannot establish or reinterpret semantic
+claims, ownership, authority, precedence, trust, or freshness.
 
-- only canonical public operation names appear;
-- no rule-flavored vocabulary (second authorities, scores,
-  automatic lifecycle actions) appears;
-- the uncertainty-preservation rule is present;
-- no implementation file depends on skill content.
+These tests pin the contract, not the prose: operation coverage, the
+required lifecycle concepts, the boundary against internal persistence
+vocabulary, and the consistency of the closeout order. Exact sentences are
+not pinned, so the skills can stay concise without changing behaviour.
 """
 
 import pathlib
@@ -17,11 +15,10 @@ import re
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-SKILLS = (
-    REPO_ROOT / "skills" / "span" / "SKILL.md",
-    REPO_ROOT / "skills" / "span-change-context" / "SKILL.md",
-    REPO_ROOT / "skills" / "span-document" / "SKILL.md",
-)
+PRIMARY = REPO_ROOT / "skills" / "span" / "SKILL.md"
+CHANGE = REPO_ROOT / "skills" / "span-change-context" / "SKILL.md"
+DOCUMENT = REPO_ROOT / "skills" / "span-document" / "SKILL.md"
+SKILLS = (PRIMARY, CHANGE, DOCUMENT)
 
 CANONICAL_OPS = {
     "initialize_repository",
@@ -54,9 +51,33 @@ FORBIDDEN_PHRASES = (
     "relationship kind",
 )
 
+#: Persisted bookkeeping is Span-owned. Agent guidance names the public
+#: decision and the recovery rules, never internal storage carriers.
+INTERNAL_VOCABULARY = (
+    "InterpretationCoverage",
+    "question-result join",
+    "coverage dependency storage",
+    "SQLite",
+    "result-ID materialization",
+    "pgv:",
+    "pgn:",
+    "cont-",
+    "reissue_interpretation",
+)
+
 
 def _text(path):
     return path.read_text(encoding="utf-8")
+
+
+def _flat(path):
+    return " ".join(_text(path).split())
+
+
+def _section(text, heading, following):
+    start = text.index(heading)
+    end = text.index(following, start)
+    return text[start:end]
 
 
 class SkillNonAuthorityTest(unittest.TestCase):
@@ -66,49 +87,50 @@ class SkillNonAuthorityTest(unittest.TestCase):
 
     def test_only_canonical_operations(self):
         for path in SKILLS:
-            with self.subTest(skill=path.name):
+            with self.subTest(skill=path.parent.name):
                 text = _text(path)
                 mentioned = set(re.findall(r"`([a-z_]+)`", text)) & CANONICAL_OPS
                 self.assertTrue(mentioned)
-                stale = set(re.findall(r"span_[a-z_]+", text))
-                self.assertEqual(stale, set())
+                self.assertEqual(set(re.findall(r"span_[a-z_]+", text)), set())
 
     def test_no_rule_flavored_vocabulary(self):
         for path in SKILLS:
-            with self.subTest(skill=path.name):
+            with self.subTest(skill=path.parent.name):
                 lowered = _text(path).lower()
                 for phrase in FORBIDDEN_PHRASES:
                     self.assertNotIn(phrase, lowered, phrase)
 
     def test_uncertainty_preservation_present(self):
         for path in SKILLS:
-            with self.subTest(skill=path.name):
-                text = _text(path)
-                self.assertIn("never", text.lower())
-                self.assertIn("certainty", text.lower())
+            with self.subTest(skill=path.parent.name):
+                lowered = _text(path).lower()
+                self.assertIn("never", lowered)
+                self.assertIn("certainty", lowered)
                 for state in ("UNRESOLVED", "STALE"):
-                    self.assertIn(state, text)
+                    self.assertIn(state, _text(path))
 
-    def test_span_lifecycle_lists_all_operations(self):
-        text = _text(SKILLS[0])
-        for op in CANONICAL_OPS:
-            self.assertIn(op, text)
+    def test_implementation_ignores_skills(self):
+        for path in (REPO_ROOT / "src").rglob("*.py"):
+            content = path.read_text(encoding="utf-8")
+            self.assertNotIn("skills/", content, path)
+            self.assertNotIn("SKILL.md", content, path)
 
-    def test_primary_quick_reference_selects_each_operation(self):
-        text = _text(SKILLS[0])
-        table_start = text.index("### Operation selection")
-        table_end = text.index("`initialize_repository` is not routine", table_start)
-        table = text[table_start:table_end]
+
+class PrimarySkillTest(unittest.TestCase):
+    def test_every_operation_is_in_the_selection_table(self):
+        text = _text(PRIMARY)
+        table = _section(text, "## Operations", "## Exact target")
         for op in CANONICAL_OPS:
             with self.subTest(operation=op):
                 self.assertIn(f"`{op}`", table)
-        self.assertIn("There are no semantic aliases", text)
+        self.assertIn("There are exactly these eleven public operations", text)
+        self.assertIn("no aliases", text)
 
-    def test_repository_identity_and_initialization_are_conditional(self):
-        text = _text(SKILLS[0])
+    def test_identity_and_readiness_are_conditional(self):
+        text = _flat(PRIMARY)
         for required in (
             "Never pass a filesystem path as",
-            "canonical registered ID",
+            "canonical registered `repository_id`",
             "from MCP `tools/list`",
             "If `store_readiness` is `UNINITIALIZED`",
             "do not initialize it again",
@@ -116,122 +138,80 @@ class SkillNonAuthorityTest(unittest.TestCase):
         ):
             self.assertIn(required, text)
 
-    def test_continuation_recovery_matrix_preserves_ownership(self):
-        text = _text(SKILLS[0])
-        matrix_start = text.index("## Continuation recovery")
-        matrix_end = text.index("## Freshness, authority, and closeout", matrix_start)
-        matrix = text[matrix_start:matrix_end]
-        for required in (
-            "Malformed submit payload",
-            "Semantic validation rejection",
-            "Unreadable or unverifiable evidence rejection",
-            "In-process persistence failure",
-            "Successful commit",
-            "Unknown, expired, lost, or already consumed continuation",
-            "Post-commit response loss",
-            "Process crash with uncertain commit",
-            "Concurrent submission or in-flight token",
-            "There is no reissue operation",
-            "same continuation after correction",
-            "original",
-            "idempotent operation",
-        ):
-            self.assertIn(required, matrix)
-
-    def test_submission_example_uses_existing_typed_contract(self):
-        text = _text(SKILLS[0])
-        for required in (
-            "Worked typed submission excerpt",
-            "request.task_evidence.evidence_units[0].evidence_ref",
-            "CandidateSemanticClaim",
-            "SemanticQuestionDecision",
-            "SemanticInterpretationResult",
-            "question_decision",
-            "ops.submit_interpretation",
-            "same typed result is the MCP submit payload",
-        ):
-            self.assertIn(required, text)
-
-    def test_lifecycle_reference_matches_primary_heading(self):
-        lifecycle = _text(REPO_ROOT / "docs" / "lifecycle.md")
-        primary = _text(SKILLS[0])
-        self.assertIn("Freshness, authority, and closeout", lifecycle)
-        self.assertIn("## Freshness, authority, and closeout", primary)
-
-    def test_submission_and_target_accounting_guidance_is_canonical(self):
-        text = _text(SKILLS[0])
-        for required in (
-            "canonical `EvidenceRef`",
-            "evidence_units",
-            "provider-backed evidence",
-            "SemanticInterpretationResult",
-            "proposed_questions",
-            "proposed_target_questions",
-            "exact same persisted question scope",
-            "NOT_APPLICABLE",
-            "stale_only=False",
-            "exact `SubjectSelector`",
-        ):
-            self.assertIn(required, text)
-
-    def test_primary_preserves_agent_judgment_and_uncertainty(self):
-        text = _text(SKILLS[0])
-        for required in (
-            "does not make a wrong interpretation correct",
-            "Missing authority",
-            "contradictions",
-            "OPEN`/`PENDING",
-            "Span never",
-            "impact` is preparation, not",
-        ):
-            self.assertIn(required, text)
-
-    def test_presubmit_review_guidance_present(self):
-        # §14 paraphrase-only negative is owned by host pre-submit
-        # review: the directing procedure must exist in prose and be
-        # pinned here (oracles backstop wrong content, never the
-        # no-knowledge-gained judgment itself).
-        text = _text(SKILLS[0])
-        for required in (
-            "paraphrase-only",
-            "leg-open",
-            "before submitting",
-        ):
-            self.assertIn(required, text)
-
-    def test_explicit_target_is_complete_semantic_scope(self):
-        text = _text(SKILLS[0])
-        for required in (
-            "exact directory supplied by the user",
-            "complete target boundary",
-            "every current inventory member",
-            "fresh `status`/`explain` readback",
-        ):
-            self.assertIn(required, text)
-
-    def test_entry_decision_comes_first(self):
-        # One canonical three-branch entry decision follows the quick
-        # reference. Ordinary orientation starts with the needed operation;
-        # refresh is never routine first-contact.
-        text = _text(SKILLS[0])
-        quick_ref_at = text.index("## Agent quick reference")
-        entry_at = text.index("## Entry decision")
-        self.assertLess(quick_ref_at, entry_at)
+    def test_entry_branches_cover_the_three_starts(self):
+        text = _flat(PRIMARY)
         for required in (
             "Ordinary orientation",
             "`explain` on the chosen target",
-            "no status preflight",
+            "No status preflight is required",
             "Exact user-supplied directory plus objective",
-            "`initialize_target`",
             "Post-change closeout",
             "Never `refresh` on first contact",
         ):
             self.assertIn(required, text)
 
-    def test_freshness_planes_stated(self):
-        # Structural orientation evidence and semantic decision currency
-        # remain distinct.
-        text = _text(SKILLS[0])
+    def test_pending_unit_uses_the_returned_template_and_required_fields(self):
+        text = _flat(PRIMARY)
+        for required in (
+            "request.brief.submission_rules",
+            "request.task_evidence.evidence_units",
+            "assertion_nature",
+            "question_decision",
+            "SemanticInterpretationResult",
+            "canonical `EvidenceRef`",
+            "paraphrase-only",
+            "Before submitting",
+        ):
+            self.assertIn(required, text)
+        # The skill must not carry a hand-maintained executable example:
+        # the pending brief's template is the authority, and an example
+        # here previously drifted into an invalid construction.
+        self.assertNotIn("ops.submit_interpretation", text)
+        self.assertNotIn("```python", _text(PRIMARY))
+
+    def test_recovery_matrix_covers_each_outcome(self):
+        text = _flat(PRIMARY)
+        for required in (
+            "Malformed payload",
+            "Semantic validation rejection",
+            "Unreadable or unverifiable evidence",
+            "In-process persistence failure",
+            "Successful commit",
+            "Unknown, expired, lost, or consumed",
+            "Post-commit response loss",
+            "Crash with uncertain commit",
+            "Concurrent submission or in-flight token",
+            "stored recovery inputs",
+            "`refresh` on the subject",
+            "There is no reissue operation",
+            "same continuation after correction",
+        ):
+            self.assertIn(required, text)
+
+    def test_refresh_cannot_admit_a_new_question_by_proposal(self):
+        text = _flat(PRIMARY)
+        for required in (
+            "Inside a `refresh` unit, a non-bound question is a correction nomination",
+            "must already be persisted",
+            "not through refresh",
+        ):
+            self.assertIn(required, text)
+
+    def test_target_accounting_is_service_owned(self):
+        text = _flat(PRIMARY)
+        for required in (
+            "complete target boundary",
+            "every current inventory member",
+            "Membership is never submitted",
+            "first-admission",
+            "target_total_count",
+            "never a fabricated zero",
+            "proposed_target_questions",
+        ):
+            self.assertIn(required, text)
+
+    def test_freshness_planes_are_stated(self):
+        text = _flat(PRIMARY)
         for required in (
             "Structural and semantic freshness are separate",
             "cannot prove completeness or absence",
@@ -242,8 +222,7 @@ class SkillNonAuthorityTest(unittest.TestCase):
             self.assertIn(required, text)
 
     def test_hook_scope_is_event_local_not_inventory(self):
-        # HOOK_FAST is event-local, not the inventory path.
-        text = _text(SKILLS[0])
+        text = _flat(PRIMARY)
         for required in (
             "event-local scope only",
             "never means the repository is clean",
@@ -251,98 +230,90 @@ class SkillNonAuthorityTest(unittest.TestCase):
         ):
             self.assertIn(required, text)
 
-    def test_document_skill_preserves_target_scope_quality_bar(self):
-        text = _text(SKILLS[2])
-        for required in (
-            "exact directory",
-            "complete target boundary",
-            "every material area",
-            "primary skill's shared card",
-        ):
-            self.assertIn(required, text)
+    def test_closeout_order_is_explicit(self):
+        text = _flat(PRIMARY)
+        tests_at = text.index("external tests/review")
+        refresh_at = text.index("`refresh`", tests_at)
+        final_at = text.rindex("scoped `status` again")
+        self.assertIn("scoped `status`", text[:tests_at])
+        self.assertLess(tests_at, refresh_at)
+        self.assertLess(refresh_at, final_at)
+        self.assertIn("impact` is preparation, not", text)
 
-    def test_semantic_granularity_is_architectural_not_file_count_based(self):
-        text = _text(SKILLS[0])
+    def test_granularity_is_meaning_based_not_file_based(self):
+        text = _flat(PRIMARY)
         for required in (
-            "map the exact target structurally",
-            "establish a\ncoherent baseline area",
+            "exact target structurally",
+            "coherent baseline area",
             "descend to member questions",
             "semantic subject per file",
             "ownership, authority, lifecycle",
             "host-owned",
-            "boundary",
-            "do not fabricate a directory/document subject",
+            "fabricating a directory",
             "provider exposes only",
         ):
             self.assertIn(required, text)
 
     def test_primary_avoids_persistence_internal_vocabulary(self):
-        # Addendum M M-09/M-12: persisted coverage bookkeeping is
-        # Span-owned. Ordinary agent guidance names the public
-        # question_decision and the recovery rules, never internal
-        # storage carriers, token grammars, or a reissue operation.
-        text = _text(SKILLS[0])
+        text = _text(PRIMARY)
         self.assertIn("question_decision", text)
-        for forbidden in (
-            "InterpretationCoverage",
-            "question-result join",
-            "coverage dependency storage",
-            "SQLite",
-            "result-ID materialization",
-            "pgv:",
-            "pgn:",
-            "cont-",
-            "reissue_interpretation",
-        ):
+        for forbidden in INTERNAL_VOCABULARY:
             self.assertNotIn(forbidden, text, forbidden)
 
-    def test_implementation_ignores_skills(self):
-        for path in (REPO_ROOT / "src").rglob("*.py"):
-            content = path.read_text(encoding="utf-8")
-            self.assertNotIn("skills/", content, path)
-            self.assertNotIn("SKILL.md", content, path)
+
+class SpecializedSkillTest(unittest.TestCase):
+    def test_both_specialties_defer_to_the_primary(self):
+        for path in (CHANGE, DOCUMENT):
+            with self.subTest(skill=path.parent.name):
+                text = _flat(path)
+                self.assertIn("primary span skill", text.lower())
+                self.assertIn("authoritative", text.lower())
+                self.assertIn("primary skill's order", text)
+
+    def test_change_context_stays_pre_change(self):
+        text = _flat(CHANGE)
+        for required in (
+            "`impact`",
+            "never approval",
+            "possibility, not established impact",
+            "outside tests/review",
+            "do not invent a second change shape",
+        ):
+            self.assertIn(required, text)
+
+    def test_document_skill_preserves_target_scope_and_gap_ledger(self):
+        text = _flat(DOCUMENT)
+        for required in (
+            "complete target boundary",
+            "every material area",
+            "gap ledger",
+            "host-owned",
+            "do not manufacture it",
+            "status(TargetId)",
+            "`proposed_questions`",
+        ):
+            self.assertIn(required, text)
 
 
 class SkillLifecycleConsistencyTest(unittest.TestCase):
-    """One lifecycle protocol, stated the same way in every skill."""
-
-    def _normalized(self, path):
-        return " ".join(_text(path).split())
-
-    def test_target_admission_is_service_owned_in_all_skills(self):
-        # A new material area is admitted through target inventory
-        # accounting; Span creates the first-admission CQ-01 seed. No
-        # skill may send the agent back to manufacturing that question.
-        for path in SKILLS:
-            text = self._normalized(path)
-            with self.subTest(skill=path.name):
+    def test_target_admission_is_service_owned(self):
+        for path in (PRIMARY, DOCUMENT):
+            text = _flat(path)
+            with self.subTest(skill=path.parent.name):
                 self.assertNotIn("Admit each new material area with", text)
-                self.assertNotIn("proposed_questions` entry for a new area", text)
-        for path in (SKILLS[0], SKILLS[2]):
-            text = self._normalized(path)
-            with self.subTest(skill=path.name):
-                self.assertIn("Span creates the", text)
                 self.assertIn("first-admission", text)
-        self.assertIn("do not manufacture it", self._normalized(SKILLS[2]))
+        self.assertIn("do not manufacture it", _flat(DOCUMENT))
 
-    def test_closeout_order_is_consistent_in_all_skills(self):
-        # edit -> scoped status -> external tests/review -> scoped
-        # refresh and submit -> scoped status again.
-        for path in SKILLS:
-            text = self._normalized(path)
-            with self.subTest(skill=path.name):
-                tests_at = text.index("external tests/review")
-                refresh_at = text.index("`refresh`", tests_at)
-                final_at = text.rindex("scoped `status` again")
-                self.assertIn("scoped `status`", text[:tests_at])
-                self.assertLess(tests_at, refresh_at)
-                self.assertLess(refresh_at, final_at)
+    def test_specialties_do_not_restate_the_full_closeout(self):
+        # One closeout order lives in the primary. Specialties point to it
+        # rather than maintaining a second copy that can drift.
+        for path in (CHANGE, DOCUMENT):
+            with self.subTest(skill=path.parent.name):
+                self.assertIn("primary skill's order", _flat(path))
 
     def test_no_obsolete_coverage_inventory_gap_tolerance(self):
-        # Readiness-only output is event-local by design (HOOK_FAST),
-        # never a tolerated coverage-inventory gap on normal calls.
         for path in (
-            SKILLS[0],
+            PRIMARY,
             REPO_ROOT / "docs" / "skills.md",
             REPO_ROOT / "docs" / "agents-snippet.md",
         ):

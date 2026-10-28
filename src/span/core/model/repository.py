@@ -151,6 +151,14 @@ class StructuralEdgeKind(_enum.Enum):
     DEFINES = "DEFINES"
 
 
+class StructuralDirection(_enum.Enum):
+    """Edge/relationship traversal direction vocabulary (plan §5.2)."""
+
+    UPSTREAM = "UPSTREAM"
+    DOWNSTREAM = "DOWNSTREAM"
+    BOTH = "BOTH"
+
+
 @_dataclass(frozen=True)
 class StructuralObservation:
     source_subject: SubjectId

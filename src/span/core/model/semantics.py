@@ -12,17 +12,22 @@ import typing as _typing
 from dataclasses import dataclass as _dataclass
 from dataclasses import field as _field
 
+from span.core.model.claims import RelationshipKind
 from span.core.model.primitives import (
     ClaimRef,
     EvidenceRef,
     EvidenceScope,
     Freshness,
+    ProposedChange,
+    QueryBounds,
     RelationshipRef,
     SemanticBasis,
     SubjectId,
+    SubjectSelector,
     _require_non_empty,
     _require_non_negative_int,
 )
+from span.core.model.repository import StructuralDirection
 
 
 class ResolutionKind(_enum.Enum):
@@ -135,6 +140,7 @@ class SemanticQuestionCoverageView:
     effective_disposition: SemanticQuestionDisposition
     freshness: Freshness
     resolution_requirements: tuple[ResolutionRequirement, ...] = ()
+    recovery: QuestionRecovery | None = None
 
 
 class SemanticCoverageDisposition(_enum.Enum):
@@ -390,6 +396,50 @@ QUESTION_CLASS_DEFAULT_SLICE: _typing.Mapping[SemanticQuestionClass, str] = (
 
 
 @_dataclass(frozen=True)
+class ExplainReplay:
+    """Recovery inputs for a question admitted by ``explain``."""
+
+    target: SubjectSelector
+    bounds: QueryBounds
+    establish_baseline: bool = False
+    question_selection: SemanticQuestionSelection | None = None
+
+
+@_dataclass(frozen=True)
+class ImpactReplay:
+    """Recovery inputs for a question admitted by ``impact``."""
+
+    target: SubjectSelector
+    proposed_change: ProposedChange
+    bounds: QueryBounds
+    question_selection: SemanticQuestionSelection | None = None
+
+
+@_dataclass(frozen=True)
+class TraceReplay:
+    """Recovery inputs for a question admitted by ``trace``."""
+
+    target: SubjectSelector
+    bounds: QueryBounds
+    direction: StructuralDirection
+    relationship_filter: tuple[RelationshipKind, ...] | None = None
+    boundary_only: bool = False
+    question_selection: SemanticQuestionSelection | None = None
+
+
+@_dataclass(frozen=True)
+class AuthorityReplay:
+    """Recovery inputs for a question admitted by ``authority``."""
+
+    target: SubjectSelector
+    bounds: QueryBounds
+    question_selection: SemanticQuestionSelection | None = None
+
+
+QuestionRecovery = ExplainReplay | ImpactReplay | TraceReplay | AuthorityReplay
+
+
+@_dataclass(frozen=True)
 class InterpretationCoverage:
     """Single canonical persisted question record ([design note B](docs/design-references.md#b) B-01)."""
 
@@ -402,6 +452,7 @@ class InterpretationCoverage:
     resolution_requirements: tuple[ResolutionRequirement, ...] = ()
     disposition_basis: str = ""
     question_evidence: tuple[QuestionEvidenceObservation, ...] = ()
+    recovery: QuestionRecovery | None = None
 
     def __post_init__(self) -> None:
         if self.disposition is SemanticQuestionDisposition.OPEN:

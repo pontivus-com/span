@@ -80,15 +80,13 @@ declared-not-observed). Record each as ordinary questions,
 requirements, and claims — dimensions organize the work, the existing
 coverage contract records it.
 
-Recording convention: submit typed target-inventory accounting for every
-current inventory member: assign it to one or more admitted area
-subjects, provide an evidence-backed target exclusion (`SemanticBasis`), or record an explicit
-unresolved mapping requirement. Submit exactly one accounting decision for
-every inventory member bound in the mapping task. Span creates the
-first-admission `PENDING` CQ-01 itself for a newly admitted area; reuse
-persisted coverage via `proposed_target_questions` when an identical scope
-already exists. This is
-separate from admitting one question per coherent area with the area anchor as
+Recording convention: membership is admitted for you. `initialize_target`
+assigns every current inventory member to the target's area and records it;
+do not submit membership, an exclusion, or a mapping requirement. Span
+creates the first-admission `PENDING` CQ-01 itself for a newly admitted area;
+reuse persisted coverage via `proposed_target_questions` when an identical
+scope already exists. This is separate from admitting one question per
+coherent area with the area anchor as
 `scope_root` and the area's complete evidence in that question's
 `SemanticQuestionDecision.evidence_scope`. `NOT_APPLICABLE` answers a
 semantic question; it does not exclude that area's inventory from the target.
@@ -118,9 +116,9 @@ structure before grouping areas:
    `BOTH` at a bounded `max_depth` → caller/callee adjacency for
    partition grouping and pre-change blast radius. Multi-hop pages
    are a discovery tree; resume with the continuation token.
-4. Admit: group members into coherent areas and account every member
-   through `submit_interpretation` (assign to an area,
-   evidence-backed target exclusion, or explicit unresolved mapping).
+4. Admit: group members into coherent areas and examine each area's
+   returned question through `submit_interpretation`. Membership is already
+   admitted; do not submit it.
 
 All four return navigation evidence only — cite it as evidence refs,
 never as authority. Stale entries are excluded and counted
@@ -156,17 +154,17 @@ ordinary selected root. Do not substitute one for the other.
 ## 5. Persistence and advance
 
 Call `submit_interpretation` with the typed result under its continuation.
-For target-mode work, the result may include bounded target-inventory
-accounting proposals; ordinary question-local results leave that component
-empty. Span validates and writes accepted accounting, subjects, semantic
-results, and target-bound coverage atomically through the canonical batch.
-A malformed payload or returned `validation` error keeps the existing
-continuation: correct and resubmit it under that same continuation. An
-unknown, expired, or lost continuation is recovered by re-running the
-idempotent original operation; there is no reissue operation. Continue until no
+Target membership is already admitted, so a result carries semantic claims,
+relationships, questions, and dispositions — not accounting. Span validates
+and writes subjects, semantic results, and target-bound coverage atomically
+through the canonical batch. A malformed payload or returned `validation`
+error keeps the existing continuation: correct and resubmit it under that same
+continuation. An unknown, expired, or lost continuation recovers from the
+question's stored recovery inputs when recorded, or with `refresh` on the
+subject otherwise; there is no reissue operation. Continue until no
 unprocessed target work remains. One representative answer is never
-completion. Each submission persists canonical results plus the next task
-or a truthful terminal result.
+completion. Each submission persists canonical results plus the next task or a
+truthful terminal result.
 
 ## 6. Normal retrieval
 
@@ -182,8 +180,9 @@ After source changes, call scoped `refresh`, inspect stale/unverifiable
 coverage, and repeat the same quality card for affected areas. A stale
 answer is not presented as current; `refresh` alone manufactures nothing.
 An `UNASSESSED` subject uses question-local `explain` only when no owning
-operation is live; otherwise continue its returned continuation. Refresh
-never establishes its first semantic question. An explicit CURRENT challenge uses
+operation is live; otherwise continue its returned continuation, and when that
+continuation is lost recover it from the stored inputs or with `refresh` on the
+subject. Refresh never establishes its first semantic question. An explicit CURRENT challenge uses
 `stale_only=false` only against an already-persisted question.
 
 To challenge a `CURRENT` explanation without a source change, resolve
@@ -197,21 +196,20 @@ is rejected.
 ## 8. Fresh-session closeout
 
 Start a new agent session. Read `status(TargetId)` and representative
-`explain` answers for exact area ids. Expected: reusable claims/relationships/questions,
-explicit gaps, and a completion report listing every inventory accounting
-state and material area with its persisted semantic-question disposition.
-Completion requires whole-target accounting plus fresh retrieval evidence —
-not merely `READY`, a populated store, or a successful transport call.
+`explain` answers for exact area ids. Expected: reusable claims/relationships/questions, explicit gaps, and a
+completion report over every material area with its persisted
+semantic-question disposition. Completion requires whole-target semantic
+coverage plus fresh retrieval evidence — not merely `READY`, a populated
+store, or a successful transport call.
 
 ## Stopping rule (binding)
 
-Every current inventory member is assigned, evidence-backed excluded, or
-explicitly unresolved, and every admitted area has persisted semantic
-question coverage for this target. `PENDING` means the campaign is not complete. `OPEN` means
-an unresolved requirement is recorded, not hidden. `NOT_APPLICABLE` states
-why a bound semantic question does not apply; it does not establish target
-exclusion. Never collapse these facts into a single coverage score, count,
-percentage, or threshold.
+Every admitted area has persisted semantic question coverage for this target,
+and no question is left `PENDING` when the campaign is reported complete.
+`OPEN` means an unresolved requirement is recorded, not hidden.
+`NOT_APPLICABLE` states why a bound semantic question does not apply; it never
+removes that member from the target. Never collapse these facts into a single
+coverage score, count, percentage, or threshold.
 
 ## Boundaries
 

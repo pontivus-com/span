@@ -49,16 +49,19 @@ projections of one canonical Span carrier and are not separate contracts.
 Errors keep readable JSON text and have no structured success payload.
 
 Continuation tokens remain opaque and are never exposed by `status`. Normal
-status can identify the exact pending question and, while a continuation is
-live, its owning operation. When no continuation is live, the persisted
-question does not record its original operation; status reports that recovery
-gap rather than inferring one. A lost or expired continuation is
-recovered by re-running the original idempotent operation. For a narrowed
-`explain`, `authority`, `impact`, or `trace` request, re-running against
-persisted `PENDING` coverage returns a fresh `PendingInterpretation`; it does
-not treat the unfinished question as an answer. If the original continuation
-is still live, the repeated call reports the live work instead of creating a
-duplicate continuation.
+status names the exact pending question and its recovery action. While a
+continuation is live it names the operation holding the question. When none is
+live it names the originating operation and the inputs stored with the
+question; when no origin is recorded it reports that gap rather than inferring
+one, and recovery is `refresh` on the subject. A lost or expired continuation
+is never reconstructed, and `READY` is storage/runtime availability, never
+semantic completeness. A lost continuation is recovered by re-running the
+original idempotent operation with those inputs. For a narrowed `explain`,
+`authority`, `impact`, or `trace` request, re-running against persisted
+`PENDING` coverage returns a fresh `PendingInterpretation`; it does not treat
+the unfinished question as an answer. If the original continuation is still
+live, the repeated call reports the live work instead of creating a duplicate
+continuation.
 
 ## Repository discovery
 
@@ -188,10 +191,10 @@ the seeds already configured; an explicit empty tuple clears them; a
 non-empty tuple replaces them. Unknown seed locators fail closed. The
 semantic store supports schema 9 only: a fresh store is created at
 schema 9, an existing schema-9 store opens normally, and any other store
-version fails closed with no runtime migration. The explicit upgrade,
-including the schema-9 payload cleanup for stores written by 0.8.0, is
-`span-install --migrate-store <repository-id>`. There is no separate
-structural MCP server:
+version fails closed with no runtime migration. `span-install --migrate-store
+<repository-id>` is the explicit upgrade: it migrates a schema-7 or schema-8
+store to schema 9 and cleans schema-9 payloads written by 0.8.0. There is no
+separate structural MCP server:
 structural navigation (`locate` for find/ outline/member listing,
 `neighbors` for bounded adjacency) is served by Span itself, with two-tier
 freshness (entry verification plus scope coverage) and version-bound
@@ -227,8 +230,10 @@ agent intent; setup is separate from ordinary queries:
   Status entry requirements name the next exact step: stale or
   unverifiable → `refresh` with the exact `SubjectSelector`; `UNASSESSED`
   → question-local `explain` only when no owning operation is live; otherwise
-  continue the returned continuation. Pending question work → only the
-  continuation returned by the suspending operation.
+  continue the returned continuation. Pending question work → continue with
+  the continuation returned by the suspending operation when one is live;
+  otherwise follow the recovery action status names (the stored originating
+  inputs, or `refresh` on the subject).
 - Knowledge maintenance: `initialize_target` (exact `EvidenceScope`
   plus user-directed objective; admits a campaign), `refresh` (ordinary
   stale refresh accepts a scoped `SubjectSelector` or `EvidenceScope`;
@@ -237,8 +242,9 @@ agent intent; setup is separate from ordinary queries:
 - Interpretation exchange: `submit_interpretation`
   (`continuation` plus typed result; retained on malformed or validation
   failure, consumed only on successful commit). An unknown, expired, or
-  lost continuation recovers by re-entering the original idempotent
-  operation; there is no reissue operation.
+  lost continuation recovers from the question's stored recovery inputs when
+  recorded, or with `refresh` on the subject otherwise; there is no reissue
+  operation.
 
 Selection rules: need a file, symbol, or member list → `locate`; need
 structural adjacency → `neighbors`; need established semantics →
