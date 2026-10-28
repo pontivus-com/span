@@ -151,6 +151,23 @@ def _derive_question_evidence(
     return tuple(observations)
 
 
+def _resolve_recovery(
+    prior: m.InterpretationCoverage | None,
+    admitted: m.QuestionRecovery | None,
+) -> m.QuestionRecovery | None:
+    """Apply the per-origin attachment rule for one coverage write.
+
+    A question's first persistence attaches the recovery inputs of the
+    operation that admitted it. Once the question exists, the stored inputs
+    are preserved on every later write: the executing operation never
+    replaces them. Agent-proposed questions and service-owned seeds pass no
+    ``admitted`` inputs, so they carry none.
+    """
+    if prior is not None:
+        return prior.recovery
+    return admitted
+
+
 def _coverage(
     question: m.SemanticQuestionScope,
     *,
@@ -161,6 +178,7 @@ def _coverage(
     resolution_requirements: tuple[m.ResolutionRequirement, ...] = (),
     result_refs: tuple[m.ClaimRef | m.RelationshipRef, ...] = (),
     question_evidence: tuple[m.QuestionEvidenceObservation, ...] = (),
+    recovery: m.QuestionRecovery | None = None,
 ) -> m.InterpretationCoverage:
     """Construct one canonical coverage record.
 
@@ -178,6 +196,7 @@ def _coverage(
         resolution_requirements=resolution_requirements,
         disposition_basis=disposition_basis,
         question_evidence=question_evidence,
+        recovery=recovery,
     )
 
 

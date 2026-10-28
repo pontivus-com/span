@@ -1,5 +1,97 @@
 # Changelog
 
+## 0.8.3 — 2026-10-28
+
+**Durable work can be picked up again.**
+
+0.8.2 made reissuing `explain`, `authority`, `impact`, or `trace` re-suspend a
+persisted `PENDING` question after its continuation was lost. It matched the
+persisted identity but did not record the inputs that produced the question, so
+`status` could name a live unit but could not tell a caller how to reissue a
+question whose unit was gone; a question with no originating operation had no
+recovery action at all.
+
+0.8.3 stores the recovery inputs with the question, preserves them across
+rewrites, and projects them into `status`. Recovery now names the originating
+operation and its stored inputs when recorded, and `refresh` on the subject
+otherwise.
+
+### Pending questions
+
+- **A pending question survives the loss of its continuation.** A question
+  admitted by `explain`, `impact`, `trace`, or `authority` now stores the
+  operation and the resolved inputs that produced it, so recovery no longer
+  depends on the caller remembering inputs it was never given.
+- **`refresh` and `initialize_target` needed no new storage.** A refresh
+  question is re-examined by calling `refresh` on its subject, and a target
+  campaign is recovered from its durable target association. Both were already
+  recoverable; only the status message was missing.
+- **`status` names the recovery action.** A pending question with no live
+  continuation now produces a requirement that says how to pick it up: the
+  originating operation and its stored inputs when the question records them,
+  and `refresh` on the subject otherwise. This extends 0.8.2's live-unit
+  reporting; a row written before this release decodes with no stored recipe
+  and takes the `refresh` path.
+
+### Refresh
+
+- **Refresh drains a subject before advancing.** The frontier is
+  question-level; the closeout unit was subject-level. A subject with two
+  pending questions used to answer one and report completion.
+- **Each question is attempted once per refresh chain.** The eligible questions
+  for a subject are snapshotted when the chain reaches it, and each is
+  attempted at most once. A question that becomes eligible during the chain —
+  for example, one reopened by a withdrawal — is deferred to the next `refresh`
+  call rather than extending this one, so the chain always terminates.
+- **An explicit `PENDING` is reported, not hidden.** `PENDING` is a legal
+  submission outcome. A refresh may return while a deliberately pending
+  question remains, or while a question that became eligible mid-chain is
+  deferred, and the answer says so rather than implying completion.
+- **A brand-new question cannot enter a chain by proposal.** A non-bound
+  question submitted during refresh is a correction nomination and is rejected
+  before persistence unless that exact scope is already stored. The rejection
+  is explicit, persists nothing, and leaves the continuation and snapshot
+  usable; the only mid-chain growth is a question reopened by a withdrawal,
+  which is deferred and reported.
+
+### Documentation
+
+- The store schema is documented as 9, and `span-install --migrate-store` is
+  documented as migrating schema 7 or 8 to 9. Five places previously said 7,
+  and one described a 7→8 migration that does not exist.
+- Status documentation describes what `status` actually reports for a pending
+  question.
+- The agent skills were rewritten for concision: the primary skill is about
+  half its previous length, and the two specialty skills now carry only their
+  task-specific steps and point at the primary. Every operation, contract, and
+  state vocabulary is unchanged. The hand-maintained Python submission example
+  was removed because the pending brief already returns the authoritative
+  template, and the old example had drifted into an invalid construction.
+- The packaged skills and lifecycle snippet are generated at build time from
+  `skills/` and `docs/agents-snippet.md`. The repository no longer carries a
+  second committed copy of any skill or the snippet; a wheel and a wheel built
+  from the sdist both contain byte-identical assets.
+- The obsolete mapping vocabulary is gone from the status requirement, the
+  lifecycle guide, and the onboarding runbook: target membership is computed at
+  admission and is never submitted, and there is no mapping unit, exclusion, or
+  unresolved-mapping decision. Recovery guidance in the MCP reference and the
+  architecture guide now names both paths: stored recovery inputs when
+  recorded, otherwise `refresh` on the subject.
+
+### Not in this release
+
+- No gate re-run. The five-task economics remain unmeasured since 0.8.1, and
+  this release does not claim them.
+- No change to the continuation contract. Continuations stay ephemeral,
+  process-scoped, and single-use; no token is persisted.
+- No new question disposition. Whether withdrawal needs a state distinct from
+  `NOT_APPLICABLE` with a basis is an open decision.
+- No evidence-nomination surface. An agent still cannot cite an exact source it
+  found outside the discovered set; that is a separate public-input capability.
+- No machine-readable action on `ResolutionRequirement` beyond the recovery
+  text status needs.
+- No change to status payload weight. The scoped path is already bounded; the
+  atomic single-subject page is by design. Measurement comes first.
 ## 0.8.2 — 2026-10-27
 
 ### Continuation recovery

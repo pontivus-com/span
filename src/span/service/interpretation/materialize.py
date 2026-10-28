@@ -37,6 +37,7 @@ def _materialize_unit(
     current_inventory_ids: frozenset[str] = frozenset(),
     current_inventory_snapshot: dict[str, m.EvidenceRef] | None = None,
     correction_question: m.SemanticQuestionScope | None = None,
+    recovery: m.QuestionRecovery | None = None,
 ) -> None:
     """Validate and atomically materialize one submitted unit (§7.5, I-37).
 
@@ -115,6 +116,7 @@ def _materialize_unit(
             submitted_coverages=submitted_coverages,
             question_coverages_to_persist=question_coverages_to_persist,
             reopened_coverages=reopened_coverages,
+            recovery=recovery,
         )
     )
     dependencies = tuple(

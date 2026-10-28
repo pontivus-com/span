@@ -12,6 +12,7 @@ from span.service.interpretation.coverage import (
     _decision_coverage,
     _derive_question_evidence,
     _ordered_result_refs,
+    _resolve_recovery,
 )
 
 from span.service.interpretation.task import (
@@ -96,6 +97,7 @@ def _finalize_coverage(
         submitted,
         result_refs=result_refs,
         question_evidence=question_evidence,
+        recovery=_resolve_recovery(prior, submitted.recovery),
     )
 
 

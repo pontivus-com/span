@@ -221,11 +221,13 @@ absence from a receipt is evidence of an unreceipted ID, not proof that its
 data is unused.
 
 `span-install --migrate-store <repository-id>` upgrades that ID's store in one
-transaction. A schema-7 or schema-8 store gains the verification-record table
-when needed, drops the retired-claim archives, and has stored verification
-payloads rewritten to the link-only shape. A schema-9 store written by 0.8.0
-drops the obsolete `declared_complete` field from question-coverage payloads.
-Both paths are transactional and idempotent, and the report counts every
-rewritten record (`rewritten_verifications`, `rewritten_target_accounts`,
+transaction. A schema-7 or schema-8 store is migrated to schema 9: it gains
+the verification-record table when needed, drops the retired-claim archives,
+has stored verification payloads rewritten to the link-only shape, and drops
+mapping-era target-account outcomes that no longer have a producer or reader.
+A schema-9 store written by 0.8.0 drops the obsolete `declared_complete` field
+from question-coverage payloads. Both paths are transactional and idempotent,
+and the report counts every rewritten record (`rewritten_verifications`,
+`rewritten_target_accounts`, `dropped_target_accounts`,
 `rewritten_question_coverages`). The server never migrates at open; an
 unsupported version fails closed until this command is run.
