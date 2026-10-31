@@ -1,219 +1,69 @@
-# Span onboarding runbook — new-user semantic extraction
+# First investigation and fresh-session reuse
 
-Canonical path for an exact user-supplied target. Guides describe; they never
-define semantics. No new operation, store, writer, score, or background
-process is introduced here; target accounting uses the canonical
-target-association/result contract.
+This runbook establishes useful understanding for a chosen engineering task.
+Choose the repository, exact scope, and question before investigating. The
+scope may span implementation, tests, configuration, and governing documents.
+A source inventory is evidence to examine; it is not a campaign to document
+one semantic unit per file.
 
-## 0. Preflight (host, fail closed)
+## Prepare
 
-Confirm and record: installed Span source revision, registered host, data
-directory outside every target repo, and the exact repository root.
-Installation provisions the managed structural indexer, so no separate
-indexer download is needed — no separate structural server is
-registered; structural navigation is served by Span itself. Missing
-prerequisites stop the run. Record the
-preflight in the receipt and acceptance evidence with a target artifact
-snapshot proving the target tree is unchanged.
+Install and connect Span using the [installation guide](install.md). Keep its
+data directory outside the target repository. Check the installed version,
+root binding, store, and provider with `span-install --verify-only`.
 
-## 0.1 Authority seeds convention
+If no store exists, use `initialize_repository` once in a dedicated setup
+session. Supply only declared authority seeds and bindings; finding a document
+does not make it governing. Preserve the returned canonical repository ID.
+An older store requires the explicit offline transition, not ordinary setup.
+Operational readiness creates no understanding.
 
-Governing sources enter only as user-supplied seeds, never invented by
-Span or the installer. Repositories carry their seeds in a checked-in
-JSON file (a list of canonical `EvidenceRef` items); the operator passes
-it via `span-install --authority-seeds-file PATH`, and a setup-session
-`initialize_repository` call provisions them. Seed files live with the
-target repo they govern; unknown seed locators fail closed. Seeds
-persist with repository state and are rehydrated after restart.
-Omitting `authority_seeds` preserves the configured seeds, an explicit
-empty tuple clears them, and a non-empty tuple replaces them.
+## Investigate the chosen scope
 
-## 1. Operational setup
+Ask `understand_question` with a new caller request identity, the engineering
+question, and its exact scope. Examine any saved candidates before starting
+new work. An investigation gap is permission to investigate within the task,
+not proof that the whole repository lacks understanding.
 
-Discover the exact registered canonical `repository_id` through MCP
-`tools/list`. If the repository is `UNINITIALIZED`, call
-`initialize_repository` once for the repository root with
-one plain `repository_locator` and only user-supplied
-`authority_seeds` (unknown seeds fail closed); provider selection stays
-shell-owned. Provisioning runs the one
-bounded provider build when the cache is missing, stale, or the working
-tree is dirty; a failed
-build is an actionable setup failure. Reuse the returned canonical
-ID unchanged. If it is already initialized, do not initialize it again for a
-new target session. Expected: `READY` operational status and schema/store
-identity. This proves storage readiness only; it is not semantic completion.
+Follow returned cursors unchanged with the same request identity and
+arguments. Truncation leaves unexamined work explicit; a first page does not
+establish complete membership or absence. Retrieve referenced context detail
+when the byte budget omitted source bodies.
 
-## 2. Target admission
+Read material implementation, consumers, tests, and governing sources using
+the agent's normal tools. Admit exact sources or ranges through a bounded
+`evidence_start` batch or `evidence_extend`. CSS and configuration remain
+addressable as exact source even when a parser supplies no symbols.
 
-Pass the exact user target and objective to `initialize_target` with the
-exact `EvidenceScope` and a non-empty objective. Expected: the deterministic
-`TargetId` campaign handle plus the next typed task. Record the exact semantic
-boundary, canonicalized to the exact user boundary (not verbatim text).
-`initialize_target` creates or resumes the deterministic
-`TargetAssociation`. Span enumerates the current inventory, assigns every
-member to the target's area, and creates the first-admission `PENDING` CQ-01
-seed when no reusable question exists. The anchor is a candidate and evidence
-input, never a semantic area. Membership changes re-enter here; content changes
-use `refresh`.
+## Save a useful result
 
-## 3. Semantic mapping
+Record coherent conclusions with admitted support and a short account of how
+the evidence led to them. Keep unresolved questions and their basis as gaps.
+Choose the existing understanding when updating an explanation; do not create
+an unrelated replacement merely to avoid its history or challenges.
 
-Inspect the admitted target, group structural evidence into coherent
-material areas (subsystem, workflow/composition slice, service boundary,
-governed document area, or cross-boundary path), and account for every
-area. No area disappears because it is inconvenient, small, duplicated, or
-structurally difficult. `target_scope` alone does not prove grouping; see
-the E-13 constraint in `docs/lifecycle.md`.
+Use the live tool schemas and the [recording guide](interpretation.md). Preserve
+`repository_id`, `context_id`, `submission_id`, and the exact content before
+dispatch. Inspect the receipt and post-commit qualification, then retrieve
+the saved version. Acceptance proves storage and validation, not semantic truth.
 
-Coverage-dimension checklist (convention, not a second model): when
-substantiating completeness for a bounded area, walk identity
-(subjects via structural discovery), structure (adjacency via
-`neighbors`), dataflow (producer-to-consumer via `trace`),
-composition (area membership and boundary crossings), authority
-(governing sources plus seeds), verification (linked tests with
-currency, never test-existence-as-pass), registration (manifest-
-declared units as candidate subjects), execution routing (declared
-routes as evidence, never runtime claims), governance (ownership and
-constraint claims), state provenance (evidence fingerprints and
-freshness), and declared configuration (config evidence marked
-declared-not-observed). Record each as ordinary questions,
-requirements, and claims — dimensions organize the work, the existing
-coverage contract records it.
+## Check a fresh session
 
-Recording convention: membership is admitted for you. `initialize_target`
-assigns every current inventory member to the target's area and records it;
-do not submit membership, an exclusion, or a mapping requirement. Span
-creates the first-admission `PENDING` CQ-01 itself for a newly admitted area;
-reuse persisted coverage via `proposed_target_questions` when an identical
-scope already exists. This is separate from admitting one question per
-coherent area with the area anchor as
-`scope_root` and the area's complete evidence in that question's
-`SemanticQuestionDecision.evidence_scope`. `NOT_APPLICABLE` answers a
-semantic question; it does not exclude that area's inventory from the target.
-Admitted area subjects stay queryable by exact id. `status(TargetId)` (`NORMAL`
-only) then reports target accounting and semantic coverage separately; unresolved or
-unaccounted inventory prevents `CURRENT`. No second store, ledger, or
-progress model exists.
+Start another agent session and ask a differently worded question over the
+same material scope, without supplying the saved ID. Inspect discovery,
+retrieve the applicable snapshot, and distinguish supported reuse from new
+source investigation. If no candidate is found, report that bounded outcome
+and continue explicit discovery; do not invent semantic equivalence.
 
-### Worked structural orientation (`locate` → `neighbors` → admit)
+## Maintain it
 
-After `initialize_target` returns the campaign handle, orient with
-structure before grouping areas:
+After a relevant edit, `reassess` the recorded understanding, investigate the
+reported dependency changes, and record a confirm/correct/replace/withdraw
+update against the expected version. Preserve unresolved disputes through
+explicit challenge dispositions. Record verification independently after
+external execution, using the observations actually tested.
 
-1. `locate` with `TARGET_MEMBERS` and the exact `EvidenceScope` → the
-   full member list (the same enumeration the frontier reconciles
-   against). A member without an indexed subject carries a null
-   subject and stays a full member.
-2. `locate` with `FILE_OUTLINE` for one file, or `SYMBOL` for a
-   name/locator (`EXACT` resolves that exact locator to its
-   declaration/name with no partial matches; `CONTAINS` returns
-   substring matches in provider order) → symbols, spans, signatures.
-   `FILE_OUTLINE` takes one file locator and no target scope or match
-   mode; `SYMBOL` accepts an optional target scope. In-body content
-   (error strings, config keys) stays with grep; Span does not
-   duplicate it.
-3. `neighbors` with the exact subject and `UPSTREAM` / `DOWNSTREAM` /
-   `BOTH` at a bounded `max_depth` → caller/callee adjacency for
-   partition grouping and pre-change blast radius. Multi-hop pages
-   are a discovery tree; resume with the continuation token.
-4. Admit: group members into coherent areas and examine each area's
-   returned question through `submit_interpretation`. Membership is already
-   admitted; do not submit it.
-
-All four return navigation evidence only — cite it as evidence refs,
-never as authority. Stale entries are excluded and counted
-(`stale_omitted`); `UNVERIFIED` coverage, including an empty page,
-proves nothing about absence.
-
-## 4. Area interpretation (one coherent area at a time)
-
-For the current task, follow its `brief` through the uniform card:
-
-1. objective; 2. exact scope and exclusions; 3. evidence examined plus
-governing sources, separating observed behavior from governing intent;
-4. material input → producer → transformation/state → consumer/output →
-terminal/failure path; 5. typed claims/relationships in existing kinds
-only; 6. adversarial check (alternate owner, contradiction, omitted
-participant, unsupported route, stale premise, missing verification);
-7. explicit `ANSWERED`, `NOT_APPLICABLE`, `OPEN`, or `PENDING` disposition
-with requirements; 8. fresh readback stating what is reusable and what
-still needs interpretation.
-
-No fixed file count, claim count, score, representative-root shortcut, or
-populated-store check satisfies this.
-
-Evidence quality: prefer function or block spans over
-whole-file citation where `span_text` and `signature_text` exist; cite
-tests, contracts, and docs alongside code with existing
-`EvidenceSourceKind` values. Link `VERIFIED_BY` only on executed
-evidence with observed revision. Entry modes: `initialize_target` with
-an exact `EvidenceScope` plus user objective campaigns an exact
-user-supplied directory; `explain(establish_baseline=True)` audits an
-ordinary selected root. Do not substitute one for the other.
-
-## 5. Persistence and advance
-
-Call `submit_interpretation` with the typed result under its continuation.
-Target membership is already admitted, so a result carries semantic claims,
-relationships, questions, and dispositions — not accounting. Span validates
-and writes subjects, semantic results, and target-bound coverage atomically
-through the canonical batch. A malformed payload or returned `validation`
-error keeps the existing continuation: correct and resubmit it under that same
-continuation. An unknown, expired, or lost continuation recovers from the
-question's stored recovery inputs when recorded, or with `refresh` on the
-subject otherwise; there is no reissue operation. Continue until no
-unprocessed target work remains. One representative answer is never
-completion. Each submission persists canonical results plus the next task or a
-truthful terminal result.
-
-## 6. Normal retrieval
-
-Use `status(TargetId)` for campaign readback; then `explain`, `impact`,
-`trace`, and `authority` on exact area `SubjectId`s for bounded
-questions. Results distinguish persisted coverage from new pending
-interpretation. Retrieval never invents, widens, or substitutes an answer.
-`TargetId` is rejected under `HOOK_FAST`; hooks use `EvidenceScope` only.
-
-## 7. Change maintenance
-
-After source changes, call scoped `refresh`, inspect stale/unverifiable
-coverage, and repeat the same quality card for affected areas. A stale
-answer is not presented as current; `refresh` alone manufactures nothing.
-An `UNASSESSED` subject uses question-local `explain` only when no owning
-operation is live; otherwise continue its returned continuation, and when that
-continuation is lost recover it from the stored inputs or with `refresh` on the
-subject. Refresh never establishes its first semantic question. An explicit CURRENT challenge uses
-`stale_only=false` only against an already-persisted question.
-
-To challenge a `CURRENT` explanation without a source change, resolve
-the exact persisted question from `status`/`explain` question coverage,
-then call `refresh` with the exact `SubjectSelector` and explicit
-`stale_only=False`. Nominate exactly one already-persisted original
-question through `proposed_questions`, with evidence-grounded withdrawals and
-replacements; a second distinct correction question in the same unit
-is rejected.
-
-## 8. Fresh-session closeout
-
-Start a new agent session. Read `status(TargetId)` and representative
-`explain` answers for exact area ids. Expected: reusable claims/relationships/questions, explicit gaps, and a
-completion report over every material area with its persisted
-semantic-question disposition. Completion requires whole-target semantic
-coverage plus fresh retrieval evidence — not merely `READY`, a populated
-store, or a successful transport call.
-
-## Stopping rule (binding)
-
-Every admitted area has persisted semantic question coverage for this target,
-and no question is left `PENDING` when the campaign is reported complete.
-`OPEN` means an unresolved requirement is recorded, not hidden.
-`NOT_APPLICABLE` states why a bound semantic question does not apply; it never
-removes that member from the target. Never collapse these facts into a single
-coverage score, count, percentage, or threshold.
-
-## Boundaries
-
-Span never edits code, runs tests, selects models, or invokes providers.
-No whole-repo crawl. Hooks call only `status` with `HOOK_FAST` and never
-initialize, interpret, refresh, rebuild, or decide. Refresh is always
-scoped; repo-wide refresh is rejected fail-closed.
+Close the task with what was recorded and retrieved, what remains uncertain,
+what was tested externally, and any omitted scope. There is no repository
+coverage score or campaign-completion claim in this procedure. See
+[lifecycle](lifecycle.md) and [scope](scope.md).

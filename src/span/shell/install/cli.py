@@ -49,7 +49,6 @@ from span.shell.install.receipt import write_receipt
 from span.shell.install.skills import deploy_agents_rules, deploy_skills
 from span.shell.install.uninstall import list_orphans, purge_repository, uninstall
 from span.shell.install.venv import (
-    _run,
     distribution_venv_in_sync,
     ensure_venv,
     expose_binary,
@@ -113,24 +112,53 @@ def _run_one_shot(env: _Environment) -> bool:
         list_orphans(env.data_dir)
         return True
     if args.migrate_store is not None:
-        if env.dry:
-            print(
-                f"+ migrate store {args.migrate_store} (dry-run, skipped): "
-                f"{env.data_dir}"
-            )
-            return True
-        out = _run(
-            [
-                sys.executable,
-                "-m",
-                "span.shell.store_migration",
-                "--data-dir",
-                str(env.data_dir),
-                "--repository-id",
-                args.migrate_store,
-            ]
+        raise SystemExit(
+            "--migrate-store was removed in 0.9.0. Use "
+            "`span-install --transition-store <repository-id> "
+            "--transition-phase inspect` for a read-only assessment, then "
+            "`--transition-phase apply` with --transition-root for the "
+            "authorized offline transition. Nothing was changed."
         )
-        print(out.strip())
+    if args.transition_phase is not None or args.transition_root is not None:
+        if args.transition_store is None:
+            raise SystemExit(
+                "--transition-phase/--transition-root require "
+                "--transition-store <repository-id>. Nothing was changed."
+            )
+    if args.transition_store is not None:
+        if args.transition_phase is None:
+            raise SystemExit(
+                "--transition-store requires --transition-phase "
+                "inspect|apply|verify|rollback. Nothing was changed."
+            )
+        from span.shell.store_transition import (
+            TransitionConfig,
+            TransitionError,
+            TransitionPhase,
+            dispatch,
+            parse_phase,
+            report_payload,
+        )
+
+        config = TransitionConfig(
+            data_dir=env.data_dir,
+            repository_id=args.transition_store,
+            root=args.transition_root,
+        )
+        phase = parse_phase(args.transition_phase)
+        if env.dry and phase not in {TransitionPhase.INSPECT, TransitionPhase.VERIFY}:
+            print(
+                f"+ transition {phase.value} (dry-run, not executed): "
+                f"{env.data_dir}",
+                file=sys.stderr,
+            )
+            phase = TransitionPhase.INSPECT
+        try:
+            report = dispatch(config, phase)
+        except TransitionError as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(2) from None
+        print(json.dumps(report_payload(report), sort_keys=True))
         return True
     if args.uninstall:
         uninstall(

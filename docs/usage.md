@@ -1,329 +1,88 @@
 # Using Span
 
-Span is designed to fit into normal coding work: retrieve what is already
-known, investigate only what is missing or stale, implement with your normal
-tools, then re-check the semantic scope your change affected.
-
-## First use
-
-Once Span is connected:
-
-1. Call the operation you need: `explain` for explanation, `trace` for execution path, `impact` for change risk, `authority` for governance, or `status` when coverage/freshness is the objective.
-2. If current understanding already exists, Span can return it with its supporting state.
-3. If the required understanding has not yet been established, Span returns a bounded interpretation task.
-4. Your coding agent investigates that task with its normal tools and model.
-5. The result is submitted with `submit_interpretation`.
-6. Continue until the original question resolves or an explicit unresolved requirement remains.
-
-The interaction can therefore be immediate:
-
-```text
-explain
-   ↓
-established current understanding
-```
-
-or require investigation:
-
-```text
-explain
-   ↓
-PendingInterpretation
-   ↓
-coding agent investigates
-   ↓
-submit_interpretation
-   ↓
-answer or next bounded task
-```
-
-Span does not invoke the model during this process.
-
-The host coding agent performs the reasoning.
-
-Submitting accepted interpretation persists reusable knowledge.
-
-Reading alone does not manufacture new semantic state.
-
-
----
-
-
-## What can be established
-
-When an agent investigates a system area, Span can preserve conclusions about
-things such as:
-
-- what a subsystem or component is responsible for;
-- which component owns a decision;
-- how data moves from producer to consumer;
-- where important boundaries exist;
-- which contracts or decisions govern behavior;
-- what lifecycle or failure paths exist;
-- which downstream areas depend on something;
-- what a proposed change may affect.
-
-Those conclusions remain connected to the evidence and semantic premises that
-supported them. If that support changes, Span marks the affected understanding
-stale instead of continuing to serve it as current. The agent can then re-check
-only that affected scope.
-
-> **A change underneath established understanding cannot silently leave that
-> understanding looking current.**
-
-
----
-
-
-## Establish a subsystem once
-
-For an explicit directory or other bounded target that you want agents to understand and reuse, call:
-
-```text
-initialize_target
-```
-
-with:
-
-- the exact target scope; and
-- the objective for understanding it.
-
-Span then coordinates a bounded establishment campaign through the host agent.
-
-The target is partitioned into material areas.
-
-Each material area must end with an explicit disposition rather than disappearing because it was ambiguous, difficult, or unsupported.
-
-Established understanding becomes available to later agents.
-
-Unresolved work remains visible.
-
-See [the onboarding runbook](onboarding-runbook.md) for the complete procedure.
-
-
----
-
-
-## An example
-
-Suppose an agent establishes:
-
-```text
-AuthenticationService owns session issuance.
-```
-
-Span records that conclusion together with the evidence used to establish it.
-
-Later, a refactor changes one of those supporting sources.
-
-Span does **not** claim:
-
-```text
-AuthenticationService no longer owns session issuance.
-```
-
-It does not know that merely because evidence changed.
-
-Instead, the affected understanding may read back as:
-
-```text
-AuthenticationService owns session issuance
-
-STALE
-
-Supporting evidence changed:
-  auth/session.py
-
-Re-check this scope before relying on it.
-```
-
-That distinction is intentional.
-
-**Stale means "needs another look."**
-
-It does not mean "proven wrong."
-
-Span tracks whether established understanding is still supported by the repository state it depends on. It does not pretend that evidence drift automatically determines semantic truth.
-
-
----
-
-
-## Current and stale are explicit
-
-Span separates **whether an interpretation has been established** from **whether its support is still current**.
-
-Those are different questions.
-
-An interpretation can have been well established previously and still become stale because its evidence changed.
-
-### Freshness
-
-| State | Meaning |
-| --- | --- |
-| `CURRENT` | The recorded understanding is still supported by the evidence and premises it depends on. |
-| `STALE` | Relevant support changed after the understanding was established. Re-check it before treating it as current. |
-| `UNVERIFIABLE` | A conclusion exists, but the support needed to confirm it could not be obtained: a recorded source is absent from the inventory, an authority seed is missing, an inventory fingerprint is unavailable, or a bounded premise walk did not complete. It is neither current nor known-stale. A provider or store failure is not this state — the operation fails instead. |
-
-### Unresolved work
-
-Span also preserves unresolved investigation instead of forcing an answer.
-
-For example:
-
-| State | Meaning |
-| --- | --- |
-| `OPEN` | A material unresolved requirement is known and recorded. |
-| `PENDING` | Required investigation has not yet been completed. |
-
-The deeper establishment model also preserves ambiguity, conflict, partial support, and unresolved conclusions where appropriate.
-
-The important user-facing behavior is simple:
-
-> **Span does not flatten uncertainty into a confident answer.**
-
-See [the freshness model](freshness.md) and [authority and trust](authority-trust.md) for the complete contract.
-
-
----
-
-
-## How freshness works
-
-Before recorded understanding is presented as current, Span checks the evidence and semantic premises it depends on.
-
-At a high level:
-
-```text
-recorded understanding
-        ↓
-load supporting evidence
-        ↓
-compare against current repository state
-        ↓
-check dependent semantic premises
-        ↓
-CURRENT / STALE / UNVERIFIABLE
-```
-
-Span checks fingerprints and coverage dependencies rather than trusting an old timestamp or a previously stored status.
-
-Changed or retired premises can make dependent understanding stale.
-
-If required support cannot be verified, Span reports that limitation rather than presenting the old interpretation as current.
-
-Stored history is not the same thing as effective current state.
-
-
----
-
-
-## Scoped re-checking
-
-When understanding becomes stale, Span does not automatically rewrite it.
-
-Instead:
-
-```text
-identify affected stale scope
-        ↓
-select current evidence for that scope
-        ↓
-coding agent re-investigates
-        ↓
-submit interpretation
-        ↓
-Span validates and reconciles the result
-        ↓
-fresh state becomes reusable
-```
-
-Current unaffected understanding stays untouched.
-
-A failed or incomplete reassessment remains visibly stale, unverifiable, open, or pending as appropriate.
-
-A `refresh` call alone does not prove that understanding has been corrected.
-
-Reassessment does.
-
-
----
-
-
-## Why this matters
-
-Without Span, the safest coding agent often has to reconstruct the relevant system area from first principles.
-
-That can mean repeatedly:
-
-- searching for definitions;
-- following imports and callers;
-- opening tests;
-- reconstructing producer-to-consumer paths;
-- comparing implementation with contracts or ADRs;
-- determining responsibility and ownership;
-- resolving conflicting documentation;
-- checking whether old explanations still apply.
-
-With Span, previously established understanding can be reused while its supporting evidence remains current.
-
-When something changes, the agent does not have to distrust everything.
-
-It can focus its effort on the affected scope.
-
-The intended result is:
-
-- less repeated code archaeology;
-- less time and context spent reconstructing known architecture;
-- less accidental reliance on stale documentation;
-- narrower investigations after changes;
-- more continuity between coding agents and sessions.
-
-
----
-
-
-## Typical development workflow
-
-Span is designed to fit into normal coding work.
-
-```text
-ORIENT
-retrieve what is already known
-        ↓
-PREPARE
-check likely semantic impact
-        ↓
-INVESTIGATE
-resolve only what is missing, unclear, or stale
-        ↓
-IMPLEMENT
-edit with your normal coding tools
-        ↓
-VERIFY
-run normal tests and review
-check semantic currency
-        ↓
-CLOSE OUT
-re-check affected understanding
-        ↓
-REUSE
-the next agent starts from current established context
-```
-
-Tests and Span answer different questions.
-
-**Tests check executable behavior.**
-
-**Span checks whether the evidence supporting recorded understanding is still current.**
-
-Passing tests do not automatically prove a semantic interpretation.
-
-Likewise, semantic currency does not replace executable testing.
-
-They participate in the same development cycle while preserving their distinct responsibilities.
-
-See [the lifecycle documentation](lifecycle.md).
-
-
----
+Investigate a real engineering question, record the useful result, and let the
+next session find it with its support attached. The coding agent owns the
+reasoning, edits, and test execution. Span owns evidence admission, recording,
+version history, and checks on the dependencies the agent declared.
+
+## Ask an ordinary question
+
+After [setup](install.md), discover the canonical `repository_id` from
+`tools/list`. Call `understand_question` with that ID, a caller-chosen
+`request_id`, a natural-language question, and the paths you need to examine.
+For example: “How does this request reach persistence?” over the relevant
+service and storage directories.
+
+Span returns saved candidates with live support, an `InvestigationNeeded`
+result with inspectable evidence, or an explicit discovery or byte-budget
+limit. The agent decides whether a candidate answers the question. Scope
+association and term overlap help discovery; they do not prove applicability.
+A differently worded question can find associated understanding without its
+saved ID, but universal paraphrase matching is not promised.
+
+## Investigate and record
+
+1. Inspect the returned evidence and the material gaps. Use normal source
+   search, or `locate` and `neighbors` for structural navigation.
+2. Admit additional exact files or line ranges in a batch with
+   `evidence_extend`. Read every per-item outcome; missing, unreadable,
+   ambiguous, and omitted sources are not accepted support.
+3. Record a coherent result with `record_create`. Cite the admitted
+   observations, distinguish observed behavior from governing intent, and
+   include unresolved questions with their basis as gaps.
+4. Preserve the caller identity and full submission before sending. Retrying
+   identical content with the same identity returns the retained receipt.
+5. Read back the accepted understanding with `understand_retrieve`. Check
+   its conclusions, support, and challenges before reporting what was saved.
+
+A question-bound context supplies the create target. An evidence-only context
+requires an explicit question and scope when creating understanding. If the
+work began outside Span, use `evidence_start` to admit the sources and record
+that investigation directly. A preliminary question is optional.
+
+Payloads come from the installed `tools/list` schemas. The [MCP reference](mcp.md)
+owns the wire grammar; this guide describes the procedure.
+
+## Reuse in another session
+
+Ask the engineering question over its scope. No prior conversation, original
+wording, or saved understanding ID is required for candidate discovery.
+Retrieve any referenced detail and assess the result's relevance.
+
+`CURRENT` means the recorded dependencies still check out. It does not certify
+that the original interpretation was correct or complete. Open challenges and
+gaps remain relevant even when source bytes match.
+
+## After a change
+
+Use your normal tools to edit and test. Call `reassess` for the relevant
+understanding and version. Changed supporting bytes, authority, premises, or
+recorded discovery membership can require reconsideration. Unrelated changes
+leave conclusions current when they do not affect a declared dependency.
+
+Investigate the changed support, admit current evidence, then choose the
+matching update: add, confirm, correct, replace, or withdraw. Updates use an
+expected version and create a new immutable snapshot; omission is not deletion.
+A confirmation records a substantive reassessment, including its current
+support and basis. `reassess` alone changes no interpretation.
+
+Use `record_challenge` when an explanation is disputed even with unchanged
+sources. Settle or carry the dispute forward explicitly through
+`record_update`; a later version or passing test does not settle it.
+
+## Verification and recovery
+
+Record an actual external test or review with `record_verification`, including
+its tested observations, outcome, and limitations. `verification_support`
+checks those observations today; it does not rerun the test or turn a recorded
+failure into a pass.
+
+Recover saved context excerpts or a retained receipt through
+`understand_retrieve`. After a lost recording response, resend the exact
+identity and content. After receipt retention expires, inspect stored history
+before deciding what new work to record. Do not assume that a missing receipt
+means the original write never happened.
+
+Hooks are optional notices. Retrieval and recording check support even when
+hooks are disabled. See [lifecycle](lifecycle.md), [freshness](freshness.md), and
+[onboarding](onboarding-runbook.md) for the responsibilities and limits.

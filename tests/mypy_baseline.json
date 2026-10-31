@@ -1,24 +1,4 @@
 {
-  "modules": {
-    "src/span/core/model/canonical.py": 1,
-    "src/span/core/schema/projection.py": 2,
-    "src/span/core/schema/wire.py": 3,
-    "src/span/core/validation/context.py": 2,
-    "src/span/core/validation/rules.py": 9,
-    "src/span/service/interpretation/admission.py": 5,
-    "src/span/service/interpretation/coverage.py": 3,
-    "src/span/service/interpretation/excerpts.py": 1,
-    "src/span/service/interpretation/materialize.py": 3,
-    "src/span/service/interpretation/stages/checks.py": 10,
-    "src/span/service/interpretation/stages/derive.py": 5,
-    "src/span/service/interpretation/stages/persist.py": 3,
-    "src/span/service/operations/authority.py": 5,
-    "src/span/service/operations/impact/answer.py": 6,
-    "src/span/service/operations/initialize_target/admission.py": 1,
-    "src/span/service/operations/refresh/scan.py": 3,
-    "src/span/shell/mcp_server.py": 8,
-    "src/span/shell/structural/graft.py": 6,
-    "src/span/shell/structural/memory.py": 8
-  },
-  "total": 84
+  "modules": {},
+  "total": 0
 }

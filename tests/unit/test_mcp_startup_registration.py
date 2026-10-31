@@ -1,23 +1,25 @@
-"""MCP startup registration/provisioning separation (Addendum M friction).
+"""MCP startup registration and lazy context opening.
 
-`span-mcp --repo` registers repository identity before serving MCP. It
-must not provision, open a semantic store, or build structural state.
-Repository contexts open lazily on the first repository-scoped call,
-and explicit `initialize_repository` still provisions and replaces the
-lazy registration.
+``span-mcp --repo`` registers repository identity before serving MCP. It must
+not provision, open a store, or build structural state. Contexts open lazily
+on the first repository-scoped call, and explicit ``initialize_repository``
+still provisions through the injected provisioner.
 """
+
+from __future__ import annotations
 
 import json
 import pathlib
+import tempfile
 import unittest
 from unittest import mock
 
 from span.core import model as m
-from span import service as ops
-from span.shell.agent_exchange.continuations import ContinuationStore
-from tests.support.evidence import FixtureEvidenceSource
-from span.shell.mcp import McpAdapter, ServiceContext
-from span.shell.sqlite_store import SqliteSemanticStore
+from span.shell.context import compose_context
+from span.shell.filesystem_evidence import FilesystemEvidenceSource
+from span.shell.mcp import TOOL_NAMES, McpAdapter, ServiceContext
+from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_store.lifecycle import LifecycleStore
 from span.shell.structural.memory import (
     InMemoryFile,
     InMemoryStructuralSource,
@@ -31,48 +33,46 @@ FILES = {
 }
 
 
-def _context() -> ServiceContext:
+def _open(tmp: str) -> tuple[pathlib.Path, ServiceContext]:
+    root = pathlib.Path(tmp) / REPO
+    root.mkdir()
+    for path, body in FILES.items():
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+    data = pathlib.Path(tmp) / "data"
+    data.mkdir()
+    store = LifecycleStore(data / f"{REPO}.db", retention=DEFAULT_LIFECYCLE_RETENTION)
+    store.register_repository(REPO, str(root.resolve()))
     structural = InMemoryStructuralSource(
         REPO,
         tuple(InMemoryFile(path, body) for path, body in FILES.items()),
         (InMemorySubject("src/tools.py", m.SubjectKind.COMPONENT, "tools"),),
     )
-    evidence = FixtureEvidenceSource(REPO, dict(FILES))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="/fixture",
-            authority_seeds=(),
-        ),
+    context = compose_context(
         repository_id=REPO,
+        root=str(root.resolve()),
         structural=structural,
-        evidence=evidence,
+        evidence=FilesystemEvidenceSource(REPO, root),
         store=store,
     )
-    return ServiceContext(
-        structural=structural,
-        evidence=evidence,
-        store=store,
-        continuations=ContinuationStore(),
-        authority_seeds=(),
-    )
+    return data, context
 
 
-def _status(adapter: McpAdapter):
+def _start(adapter: McpAdapter):
     return adapter.dispatch(
-        "status",
+        "start_context",
         {
             "repository_id": REPO,
-            "target": None,
-            "mode": "HOOK_FAST",
+            "request_id": {"value": "req-startup"},
+            "scope": {"paths": [], "evidence_refs": []},
+            "question": "What does the service do?",
         },
     )
 
 
 class StartupRegistrationTest(unittest.TestCase):
     def test_cs01_startup_registration_does_not_provision(self):
-        import tempfile
-
         from span.shell import mcp_server
 
         captured = {}
@@ -98,7 +98,6 @@ class StartupRegistrationTest(unittest.TestCase):
             adapter = captured["adapter"]
             self.assertEqual(adapter.contexts, {})
             self.assertEqual(adapter.registered_repository_ids(), (REPO,))
-            # Registration touched no filesystem state.
             self.assertFalse(data_dir.exists())
 
     def test_cs02_startup_registration_does_not_open_context(self):
@@ -113,94 +112,80 @@ class StartupRegistrationTest(unittest.TestCase):
         loader.assert_not_called()
         self.assertEqual(adapter.contexts, {})
         descriptions = {spec["name"]: spec["description"] for spec in listed}
-        self.assertIn(REPO, descriptions["explain"])
+        self.assertIn(REPO, descriptions["understand_question"])
         self.assertIn(REPO, descriptions["neighbors"])
 
     def test_cs03_first_repository_request_opens_once(self):
-        context = _context()
-        self.addCleanup(context.store.close)
-        loader = mock.Mock(return_value=context)
-        adapter = McpAdapter(context_loader=loader)
-        adapter.register_repository_locator(REPO, "/tmp/startup-svc")
+        with tempfile.TemporaryDirectory() as tmp:
+            _, context = _open(tmp)
+            self.addCleanup(context.store.close)
+            loader = mock.Mock(return_value=context)
+            adapter = McpAdapter(context_loader=loader)
+            adapter.register_repository_locator(REPO, "/tmp/startup-svc")
 
-        first = _status(adapter)
-        self.assertFalse(first.is_error, first.content)
-        loader.assert_called_once_with("/tmp/startup-svc")
+            first = _start(adapter)
+            self.assertFalse(first.is_error, first.content)
+            loader.assert_called_once_with("/tmp/startup-svc")
 
-        second = _status(adapter)
-        self.assertFalse(second.is_error, second.content)
-        loader.assert_called_once_with("/tmp/startup-svc")
-        self.assertIs(adapter.contexts[REPO], context)
+            second = _start(adapter)
+            self.assertFalse(second.is_error, second.content)
+            loader.assert_called_once_with("/tmp/startup-svc")
+            self.assertIs(adapter.contexts[REPO], context)
 
     def test_cs04_explicit_initialization_still_provisions(self):
-        context = _context()
-        self.addCleanup(context.store.close)
-        result = ops.SemanticInitializeRepositoryResult(
-            repository_id=REPO,
-            store_readiness=m.StoreReadiness.READY,
-            structural_source_status="ready",
-            evidence_inventory_status="ready:0items",
-            semantic_store_status="ready:schema-6",
-            warnings=(),
-            bound_info=m.BoundInfo(
-                requested_max_results=50,
-                requested_max_depth=5,
-                returned_results=0,
-                truncated=False,
-                continuation_token=None,
-            ),
-        )
-        provisioner = mock.Mock(return_value=(context, result))
-        adapter = McpAdapter(provisioner=provisioner)
+        with tempfile.TemporaryDirectory() as tmp:
+            _, context = _open(tmp)
+            self.addCleanup(context.store.close)
+            result = m.InitializeRepositoryResult(
+                repository_id=REPO,
+                canonical_root=context.root,
+                schema_version=10,
+                store_ready=True,
+                structural_status="index:CURRENT",
+            )
+            provisioner = mock.Mock(return_value=(context, result))
+            adapter = McpAdapter(provisioner=provisioner)
 
-        dispatched = adapter.dispatch(
-            "initialize_repository",
-            {"repository_locator": "/tmp/startup-svc"},
-        )
+            dispatched = adapter.dispatch(
+                "initialize_repository",
+                {"repository_locator": "/tmp/startup-svc"},
+            )
 
-        self.assertFalse(dispatched.is_error, dispatched.content)
-        provisioner.assert_called_once()
-        self.assertIs(adapter.contexts[REPO], context)
-        payload = json.loads(dispatched.content)
-        self.assertEqual(payload["store_readiness"], "READY")
+            self.assertFalse(dispatched.is_error, dispatched.content)
+            provisioner.assert_called_once()
+            self.assertIs(adapter.contexts[REPO], context)
+            payload = json.loads(dispatched.content)
+            self.assertTrue(payload["store_ready"])
 
     def test_cs05_provisioning_replaces_lazy_state(self):
-        lazy = _context()
-        self.addCleanup(lazy.store.close)
-        provisioned = _context()
-        self.addCleanup(provisioned.store.close)
-        loader = mock.Mock(return_value=lazy)
-        result = ops.SemanticInitializeRepositoryResult(
-            repository_id=REPO,
-            store_readiness=m.StoreReadiness.READY,
-            structural_source_status="ready",
-            evidence_inventory_status="ready:0items",
-            semantic_store_status="ready:schema-6",
-            warnings=(),
-            bound_info=m.BoundInfo(
-                requested_max_results=50,
-                requested_max_depth=5,
-                returned_results=0,
-                truncated=False,
-                continuation_token=None,
-            ),
-        )
-        adapter = McpAdapter(
-            context_loader=loader,
-            provisioner=mock.Mock(return_value=(provisioned, result)),
-        )
-        adapter.register_repository_locator(REPO, "/tmp/startup-svc")
+        with tempfile.TemporaryDirectory() as tmp:
+            _, lazy = _open(tmp)
+            self.addCleanup(lazy.store.close)
+            provisioned = lazy
+            loader = mock.Mock(return_value=lazy)
+            result = m.InitializeRepositoryResult(
+                repository_id=REPO,
+                canonical_root=lazy.root,
+                schema_version=10,
+                store_ready=True,
+                structural_status="index:CURRENT",
+            )
+            adapter = McpAdapter(
+                context_loader=loader,
+                provisioner=mock.Mock(return_value=(provisioned, result)),
+            )
+            adapter.register_repository_locator(REPO, "/tmp/startup-svc")
 
-        initialized = adapter.dispatch(
-            "initialize_repository",
-            {"repository_locator": "/tmp/startup-svc"},
-        )
-        self.assertFalse(initialized.is_error, initialized.content)
+            initialized = adapter.dispatch(
+                "initialize_repository",
+                {"repository_locator": "/tmp/startup-svc"},
+            )
+            self.assertFalse(initialized.is_error, initialized.content)
 
-        dispatched = _status(adapter)
-        self.assertFalse(dispatched.is_error, dispatched.content)
-        loader.assert_not_called()
-        self.assertIs(adapter.contexts[REPO], provisioned)
+            dispatched = _start(adapter)
+            self.assertFalse(dispatched.is_error, dispatched.content)
+            loader.assert_not_called()
+            self.assertIs(adapter.contexts[REPO], provisioned)
 
     def test_cs06_tools_list_performs_no_repository_io(self):
         from span.shell import mcp_server
@@ -213,61 +198,31 @@ class StartupRegistrationTest(unittest.TestCase):
                 mcp_server, "provision_repository", side_effect=forbidden
             ) as provision,
             mock.patch.object(
-                mcp_server,
-                "structural_source_from_config",
-                side_effect=forbidden,
-            ) as structural,
-            mock.patch.object(
-                mcp_server, "FilesystemEvidenceSource", side_effect=forbidden
-            ) as evidence,
-            mock.patch.object(
-                mcp_server, "SqliteSemanticStore", side_effect=forbidden
-            ) as store,
+                mcp_server, "_open_context", side_effect=forbidden
+            ) as opener,
         ):
             listed = mcp_server.handle_list_tools(adapter)
 
-        self.assertEqual(len(listed), 11)
+        self.assertEqual(len(listed), len(TOOL_NAMES))
         provision.assert_not_called()
-        structural.assert_not_called()
-        evidence.assert_not_called()
-        store.assert_not_called()
+        opener.assert_not_called()
         self.assertEqual(adapter.contexts, {})
 
-    def test_cs07_uninitialized_read_creates_no_store(self):
-        # Opening the lazy context is not setup: a repository explicit
-        # initialization has not provisioned returns the canonical
-        # UNINITIALIZED notice without creating `<data-dir>/<id>.db`.
-        import tempfile
-
+    def test_cs07_uninitialized_context_creates_no_store(self):
         from span.shell import mcp_server
+        from span.shell.context import RepositoryNotInitialized
 
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / REPO
             root.mkdir()
-            (root / "a.py").write_text("x = 1\n", encoding="utf-8")
             data_dir = pathlib.Path(tmp) / "data"
             data_dir.mkdir()
-            repository_id, context = mcp_server.open_repository_context(
-                mcp_server.ServerConfig(data_dir=data_dir), str(root)
-            )
-            try:
-                notice = ops.status(
-                    ops.SemanticStatusRequest(
-                        repository_id=repository_id,
-                        target=None,
-                        bounds=(ops.DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds),
-                        mode=m.StatusMode.HOOK_FAST,
-                    ),
-                    structural=context.structural,
-                    evidence=context.evidence,
-                    store=context.store,
-                    continuations=context.continuations,
+            with self.assertRaises(RepositoryNotInitialized):
+                mcp_server.open_repository_context(
+                    mcp_server.ServerConfig(data_dir=data_dir), str(root)
                 )
-            finally:
-                context.store.close()
-            self.assertIs(notice.store_readiness, m.StoreReadiness.UNINITIALIZED)
             self.assertEqual(list(data_dir.iterdir()), [])
-            self.assertFalse((data_dir / f"{repository_id}.db").exists())
+            self.assertFalse((data_dir / f"{REPO}.db").exists())
 
 
 if __name__ == "__main__":

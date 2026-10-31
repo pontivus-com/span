@@ -365,7 +365,7 @@ class InMemoryStructuralSource:
             version=version,
         )
         return m.StructuralResult(
-            items=kept,  # type: ignore[arg-type]
+            items=kept,
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
@@ -394,7 +394,7 @@ class InMemoryStructuralSource:
                 if locator in self._files
                 else m.ScopeCoverage.VERIFIED
             )
-            kept, bound_info = versioned_page(
+            _, bound_info = versioned_page(
                 (), offset, 1, "outline", index_version=self._index_version()
             )
             return m.StructuralResult(
@@ -426,7 +426,7 @@ class InMemoryStructuralSource:
             index_version=self._index_version(),
         )
         return m.StructuralResult(
-            items=kept,  # type: ignore[arg-type]
+            items=kept,
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
@@ -460,7 +460,7 @@ class InMemoryStructuralSource:
             tuple(item.location.locator for item in kept)
         )
         return m.StructuralResult(
-            items=tuple(kept),  # type: ignore[arg-type]
+            items=tuple(kept),
             repository_state=state,
             bound_info=bound_info,
             unsupported=False,
@@ -496,7 +496,7 @@ class InMemoryStructuralSource:
             tuple(edge.evidence.locator for edge in kept)
         )
         return m.StructuralResult(
-            items=tuple(kept),  # type: ignore[arg-type]
+            items=tuple(kept),
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
@@ -518,20 +518,20 @@ class InMemoryStructuralSource:
         limit = min(max_depth, bounds.max_depth)
         kinds = set(edge_kinds) if edge_kinds else set(m.StructuralEdgeKind)
         adjacency: dict[str, list[m.StructuralEdge]] = {}
-        for edge in self._edges:
-            if edge.kind not in kinds:
+        for stored_edge in self._edges:
+            if stored_edge.kind not in kinds:
                 continue
-            struct = self._to_edge(edge)
+            struct = self._to_edge(stored_edge)
             if direction in (
                 StructuralDirection.DOWNSTREAM,
                 StructuralDirection.BOTH,
             ):
-                adjacency.setdefault(edge.source_locator, []).append(struct)
+                adjacency.setdefault(stored_edge.source_locator, []).append(struct)
             if direction in (
                 StructuralDirection.UPSTREAM,
                 StructuralDirection.BOTH,
             ):
-                adjacency.setdefault(edge.target_locator, []).append(struct)
+                adjacency.setdefault(stored_edge.target_locator, []).append(struct)
         for key in adjacency:
             adjacency[key].sort(
                 key=lambda e: (
@@ -584,7 +584,7 @@ class InMemoryStructuralSource:
             tuple(node.via.evidence.locator for node in kept if node.via is not None)
         )
         return m.StructuralResult(
-            items=tuple(kept),  # type: ignore[arg-type]
+            items=tuple(kept),
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,

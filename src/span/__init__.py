@@ -9,4 +9,4 @@ Package layout follows plan §14 (core/ports/shell):
 - ``span.service`` — coordinates ports/core; owns no semantic rules.
 """
 
-__version__ = "0.8.3"
+__version__ = "0.9.0"

@@ -21,6 +21,27 @@ from span.shell import install
 
 CANONICAL_OPS = {
     "initialize_repository",
+    "start_context",
+    "understand_question",
+    "understand_retrieve",
+    "reassess",
+    "verification_support",
+    "evidence_start",
+    "evidence_extend",
+    "record_create",
+    "record_add",
+    "record_confirm",
+    "record_correct",
+    "record_replace",
+    "record_withdraw",
+    "record_challenge",
+    "record_update",
+    "record_verification",
+    "locate",
+    "neighbors",
+}
+
+RETIRED_OPS = (
     "initialize_target",
     "explain",
     "impact",
@@ -29,9 +50,7 @@ CANONICAL_OPS = {
     "status",
     "refresh",
     "submit_interpretation",
-    "locate",
-    "neighbors",
-}
+)
 
 FORBIDDEN_PHRASES = (
     "source of truth",
@@ -60,7 +79,7 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertTrue(SNIPPET.is_file(), SNIPPET)
         self.assertIn("## Span lifecycle", _text(SNIPPET))
 
-    def test_lists_all_eleven_operations(self):
+    def test_lists_all_canonical_operations(self):
         text = _text(SNIPPET)
         for op in CANONICAL_OPS:
             self.assertIn(op, text, op)
@@ -71,6 +90,8 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertTrue(mentioned)
         self.assertEqual(set(re.findall(r"span_[a-z_]+", text)), set())
         self.assertNotIn("semantic_", text)
+        for retired in RETIRED_OPS:
+            self.assertNotRegex(text, rf"`{retired}`", retired)
 
     def test_no_rule_flavored_vocabulary(self):
         lowered = _text(SNIPPET).lower()
@@ -91,29 +112,6 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn("verbatim", text.lower())
         self.assertIn("Missing authority stays missing", text)
 
-    def test_target_stopping_rule_present(self):
-        text = _text(SNIPPET)
-        for required in (
-            "every material area",
-            "never completion",
-            "readback",
-        ):
-            self.assertIn(required, text, required)
-
-    def test_readiness_only_output_is_treated_as_unexpected(self):
-        # Readiness-only output is event-local by design (HOOK_FAST).
-        # A normal call returning readiness only where coverage is
-        # expected is unexpected, not a tolerated inventory gap.
-        text = _text(SNIPPET)
-        for required in (
-            "readiness only",
-            "unexpected",
-            "exact-target",
-            "event-local by design",
-        ):
-            self.assertIn(required, text, required)
-        self.assertNotIn("coverage-inventory gap", text)
-
     def test_docs_pointer_present(self):
         text = _text(SNIPPET)
         for required in (
@@ -125,37 +123,34 @@ class AgentsSnippetTest(unittest.TestCase):
     def test_entry_guidance_uses_direct_operation(self):
         text = _text(SNIPPET)
         self.assertIn("No status preflight is required", text)
-        self.assertIn("`explain` for explanation", text)
-        self.assertNotIn("status` with no target", text)
+        self.assertIn("`understand_question`", text)
+        self.assertIn("`record_create`", text)
 
-    def test_managed_block_carries_m_lifecycle(self):
+    def test_managed_block_carries_lifecycle_hard_rules(self):
         text = _text(SNIPPET)
         for required in (
             "No status preflight is required",
-            "every inventory member",
-            "first-admission CQ-01 seed",
-            "There is no separate reissue operation",
-            "pass a returned page token unchanged",
-            "Ordinary Span reads and hooks never rebuild structural state",
-            "explicit `refresh` may invoke",
+            "never settle implicitly",
+            "records what was actually tested",
+            "Hooks are optional event-local notices",
+            "Span never edits",
         ):
-            self.assertIn(required, text)
+            self.assertIn(required, text, required)
         for forbidden in (
             "reissue_interpretation",
             "pgv:",
             "pgn:",
             "cont-*",
-            "rebuilds the structural index",
-            "normal `status` with no target",
+            "CQ-01",
+            "initialize_target",
         ):
             self.assertNotIn(forbidden, text)
 
     def test_implementation_ignores_snippet(self):
         for path in (REPO_ROOT / "src").rglob("*.py"):
-            if path.name == "install.py" or "shell/install" in path.as_posix():
+            if "shell/install" in path.as_posix():
                 continue
-            content = path.read_text(encoding="utf-8")
-            self.assertNotIn("agents-snippet", content, path)
+            self.assertNotIn("agents-snippet", path.read_text(encoding="utf-8"), path)
 
 
 class AgentsRuleDeployTest(unittest.TestCase):

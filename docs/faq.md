@@ -1,116 +1,84 @@
 # Frequently asked questions
 
+## What does an agent actually do with Span?
 
-## Is Span deciding whether documentation is true?
+Ask a scoped engineering question, inspect saved candidates or source evidence,
+investigate material gaps, and record useful conclusions. A later session can
+ask its own question, find applicable understanding, and check its support.
+After changes, the agent reassesses and updates affected explanations.
+See [usage](usage.md).
 
-No.
+## Does installation explain the whole repository?
 
-Span distinguishes between an interpretation and whether the repository evidence supporting that interpretation is still current.
+Installation establishes operational readiness. Understanding comes from
+explicit investigations and recording. A ready store, populated database, or
+successful call does not prove repository completeness.
 
-Changed evidence means the conclusion needs reassessment.
+## Must every file be documented first?
 
-It does not automatically mean the conclusion is false.
+No. An understanding is a coherent explanation and can span several files.
+The agent chooses the scope for the real task. There is no mandatory campaign,
+internal question classification, or one-file-at-a-time semantic submission.
 
----
+## Can I record work that began without Span?
 
-## Is Span a documentation generator?
+Yes. Admit the exact evidence with `evidence_start`, then create understanding
+with an explicit question and scope, or record an independent verification
+run. A prior question/answer exchange is optional.
 
-No.
+## Does CURRENT mean the explanation is true?
 
-Its canonical state is structured semantic understanding, supporting evidence, authority relationships, coverage, and freshness.
+It means declared support still passes its checks. The original interpretation
+may still be incomplete or wrong. Gaps and challenges remain visible; the
+agent judges applicability and semantic correctness.
 
-Documentation can be produced from that state, but generated prose is not the primary source of truth.
+## What happens when code changes?
 
----
+Dependent support can become `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
+`reassess` identifies the current qualification. The agent investigates and
+records a confirm/correct/replace/withdraw update; history remains intact.
+Changes outside a declared dependency boundary leave other support alone.
 
-## Is Span an LLM service?
+## What if sources match but I disagree?
 
-No.
+Record an explicit challenge. Resolve it or carry it forward through named
+challenge dispositions in `record_update`. A new version or passing test does
+not silently settle it.
 
-Span never invokes a model.
+## Does Span run the agent, change code, or execute tests?
 
-Your coding agent performs semantic interpretation using the model and tools already available to it.
+The coding agent uses its own model and tools for reasoning, edits, and tests.
+Span stores and qualifies what is recorded. It has no model provider or
+provider credentials and does not autonomously reinterpret source.
 
-Span validates, persists, relates, retrieves, and tracks the resulting established understanding.
+## Do I need hooks?
 
----
+Hooks are optional notices. Retrieval and recording check support without
+them. A configured hook, a quiet event, and an observed delivery are different
+facts. See [hooks](hooks.md).
 
-## Does Span understand my whole repository after installation?
+## What happens after a lost response?
 
-No.
+Retry exactly the same recording identity and content. A retained receipt
+recovers acceptance, even if its context expired or the sources later changed.
+Inspect history when retention has expired; missing replay state does not
+prove the original commit failed.
 
-Installation establishes operational readiness.
+## Which clients are verified for this beta?
 
-Understanding must be established through normal queries or explicit bounded target campaigns.
+Codex is the live beta validation target. OpenCode integration exists and has
+earlier trial evidence, without final-package revalidation. Claude's live
+model grammar and identity behavior remain UNVERIFIED under the owner waiver.
+Registration health alone is not model-delivery evidence.
 
-Coverage stays visible separately from store readiness.
+## Does Span save time or tokens?
 
----
+It is designed to preserve useful investigations and focus reassessment. The
+amount saved depends on workload, reuse, recording overhead, and host delivery.
+The beta does not claim a universal saving or a completed comparative ACCEPT.
 
-## Does Span automatically fix stale knowledge?
+## Where is state stored, and how do upgrades work?
 
-No.
-
-It identifies that required support changed and keeps the affected understanding noncurrent.
-
-An agent must re-investigate and submit the reassessed result.
-
----
-
-## Can unrelated changes make everything stale?
-
-They should not.
-
-Freshness is dependency-based and scoped.
-
-Understanding that does not depend on changed evidence should remain current.
-
----
-
-## What builds the structural index?
-
-Installation provisions a managed structural indexer into Span's tools
-directory. Setup and explicit `refresh` build the wiring-only index
-into the data directory when needed, with no target writes.
-
-The indexer provides structural evidence.
-
-Span adds persistent semantic interpretation, semantic dependency, authority, freshness, and reassessment on top of structural evidence.
-
----
-
-## Does Span replace search?
-
-No.
-
-Search remains useful for evidence discovery.
-
-Span reduces the need to repeatedly reinterpret evidence that agents have already examined and established.
-
----
-
-## Does `READY` mean all knowledge is current?
-
-No.
-
-`store_readiness: READY` is operational readiness.
-
-Semantic coverage and freshness are separate.
-
----
-
-## Can Span be wrong?
-
-Yes.
-
-Interpretation is performed by coding agents and is not assumed infallible.
-
-Span preserves evidence, uncertainty, conflicts, unresolved questions, and freshness so that interpretations can be challenged and reassessed rather than being treated as unquestionable truth.
-
----
-
-## Where does Span store data?
-
-Outside the target repositories, in the configured Span data directory.
-
----
+In an external data directory. The active store is schema 10; older supported
+stores use the explicit offline archive/export/stage/activate transition.
+[Install](install.md) documents verification, rollback, removal, and retention.

@@ -28,6 +28,17 @@ def install_source() -> str:
     return "\n".join(path.read_text() for path in INSTALL_PACKAGE.glob("*.py"))
 
 
+def _module_level_imports(tree: ast.Module):
+    """Imports executed at module import time (not lazy function imports)."""
+    for node in tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            yield node
+        elif isinstance(node, ast.Try):
+            for child in node.body:
+                if isinstance(child, (ast.Import, ast.ImportFrom)):
+                    yield child
+
+
 class NoSpanImportTest(unittest.TestCase):
     def test_top_level_imports_are_stdlib_only(self):
         source = install_source()
@@ -47,7 +58,7 @@ class NoSpanImportTest(unittest.TestCase):
             "sys",
             "pathlib",
         }
-        for node in ast.walk(tree):
+        for node in _module_level_imports(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     root = alias.name.split(".")[0]

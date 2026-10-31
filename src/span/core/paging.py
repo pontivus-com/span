@@ -18,6 +18,7 @@ here: pure slicing plus ``BoundInfo``.
 from __future__ import annotations
 
 import hashlib as _hashlib
+from typing import TypeVar as _TypeVar
 
 from span.core import model as m
 
@@ -41,6 +42,7 @@ __all__ = [
 
 _PREFIX = "pg:"
 _VERSIONED_PREFIX = "pgv:"
+_Item = _TypeVar("_Item")
 
 #: The public diagnostic for any unusable cursor. Callers raising their own
 #: typed error reuse this text instead of restating it.
@@ -258,12 +260,12 @@ def parse_service_token_bound(
 
 
 def paginate(
-    items: tuple[object, ...],
+    items: tuple[_Item, ...],
     max_results: int,
     category: str,
     page_token: str | None,
     requested_max_depth: int = 0,
-) -> tuple[tuple[object, ...], m.BoundInfo]:
+) -> tuple[tuple[_Item, ...], m.BoundInfo]:
     """Slice one listing page and describe it deterministically."""
     offset = parse_page_token(page_token)
     kept = items[offset : offset + max_results]

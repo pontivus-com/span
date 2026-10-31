@@ -1,110 +1,71 @@
-# Agent interpretation exchange
+# Interpretation and recording
 
-Span never selects, configures, authenticates to, or invokes a model.
-When stored/current semantics are insufficient, the operation
-suspends with a `PendingInterpretation{continuation, request}`; the
-invoking LLM-connected agent interprets under the bounded contract
-and submits via `submit_interpretation`; Span validates,
-materializes, and resumes — returning the final `SemanticAnswer`, or
-the next `PendingInterpretation` while frontiers remain.
+The coding agent investigates and judges meaning. Span accepts explicit,
+supported recording commands and keeps their history. A question can return an
+investigation gap, but recording is also available after an investigation that
+started outside Span. No suspended model task or continuation is required.
 
-## Request (`SemanticInterpretationRequest`)
+## Evidence before conclusions
 
-Repository id, target subjects, bounded evidence units, bounded
-structural observations, allowed kinds, live identity bindings,
-operation intent, question slice, optional typed proposal, output
-cardinality limits. The exchange adds the immutable
-`question: SemanticQuestionScope`, bounded `prior_claims` /
-`prior_relationships` context, and service-owned
-`analysis_obligations` (SA-1–SA-7). It also adds the service-built
-`brief` (`TaskBrief`): the compact objective, exact scope, evidence/authority,
-material-path, typed-result, adversarial-check, disposition, and fresh-readback
-guidance, plus C-04 material aspects and recorded OPEN/PENDING requirements.
-The exact user-directed `target_scope` is carried separately from the
-current structural anchor, so a bounded candidate is never mistaken for the
-whole semantic target. Target-mode work carries the target association:
-membership is computed at admission from the provider inventory and is never
-submitted, so there is no inventory-accounting proposal in the result
-exchange. It is distinct from semantic-question `NOT_APPLICABLE` coverage.
-The brief is guidance, never validated content and never submitted back (the
-result carrier has no brief field). Nothing else crosses.
+Admit exact evidence through `evidence_start` or `evidence_extend`. The agent
+reads the material sources and cites returned observation IDs. Source support
+records a content observation; authority support cites declared governance;
+premise support names an exact conclusion revision; discovery support names
+an observed membership boundary. See [authority](authority-trust.md).
 
-## One analysis contract (SA-1–SA-7)
+One conclusion can explain behavior across several files. Give it a statement,
+assertion nature, exact scope, support, and basis. Record descriptive behavior
+separately from a normative claim about what ought to govern. Include gaps for
+unresolved questions. Shape acceptance does not prove the prose is correct.
 
-SA-1 scope the exact subject/question; SA-2 establish evidence
-(observed vs governing intent); SA-3 trace behavior and terminal
-paths; SA-4 establish meaning in existing kinds only; SA-5
-adversarial check; SA-6 submit one canonical result with explicit
-disposition; SA-7 close with fresh question-scoped readback. `ANSWERED`
-means recorded analysis, never reviewer truth. CQ-01–CQ-09 are question
-classes with CQ-10 cross-cutting, not claim kinds.
+## Create and update
 
-The same contract applies at target initialization and during ordinary
-question-local work. When a user supplies an exact directory, the active
-host partitions that directory for execution but analyzes every material
-partition. It does not substitute one representative root, silently exclude
-areas, or treat structural readiness as semantic completion.
+`record_create` creates an understanding and its first immutable version.
+A question-bound context supplies its question/scope; an evidence-only
+context requires an explicit target within the admitted scope.
 
-## Entry modes
+| Action | Effect |
+| --- | --- |
+| `record_add` | Add a conclusion lineage while retaining other membership. |
+| `record_confirm` | Record that the explanation still holds, with current support and a reassessment basis. |
+| `record_correct` | Revise the explanation in its existing lineage. |
+| `record_replace` | Replace an exact old conclusion revision with a new lineage. |
+| `record_withdraw` | Record an explicit withdrawal and its reason. |
+| `record_update` | Apply conclusion actions and named challenge dispositions atomically. |
 
-Question-local (default) answers the operation's applicable
-questions. Baseline (`explain(establish_baseline=True)`) audits
-CQ-01–CQ-09 for an explicitly selected root, admits bounded
-`PENDING`/`OPEN`/`NOT_APPLICABLE` follow-ups, and resumes them in
-deterministic order. `refresh` never silently expands scope.
-Exact user-supplied directory targets use `initialize_target` per
-`docs/onboarding-runbook.md`, not the baseline path.
+Updates compare the expected understanding version. Each accepted version
+records its full membership of exact conclusion revisions; earlier versions
+and revision history remain retrievable. Omitted conclusions are retained.
+Invalid references or version conflicts reject the command without a partial
+semantic write.
 
-## Result (`SemanticInterpretationResult`)
+## Explicit disputes
 
-Typed candidate claims/relationships (unique keys), candidate
-subjects, candidate conflicts, governing-source refs, target-inventory
-accounting proposals for target-mode tasks, and diagnostics.
-Question semantics travel in `question_decision` for the already-bound
-question and `proposed_questions` for questions the agent introduces or
-explicitly nominates; `InterpretationCoverage` is never the agent command.
-No new kinds. Authority arrives as `CandidateAuthority`: binding plus
-`AuthoritySupport` (verbatim quote + locating sections) — the core
-checks the account mechanically (resolves, belongs, quote substring,
-sections resolve, no structural/confidence promotion) and never
-verifies prose truth. Empty basis summaries fail the unit.
+`record_challenge` records a dispute against an understanding/version and its
+specified conclusions. Challenge revisions are independent of understanding
+versions. `record_update` names the expected challenge revision and either
+records an unresolved question/basis or an evidence-backed resolution tied to
+the resulting version and conclusion revisions. Unmentioned disputes survive.
+Neither matching bytes nor a passing verification run resolves one implicitly.
 
-## Explicit completion
+## Acceptance and replay
 
-Claims alone never complete a question. A submission answers its
-bound question only with an explicit `ANSWERED` `question_decision`
-(the service derives result refs and question evidence from validated
-candidates and admitted evidence). Without
-explicit decision the unit persists `PENDING` and its claims stay
-unassigned output. Explicit `ANSWERED` with zero validated material
-rejects the whole unit.
-Only complete replacement retires unshared prior outputs;
-`PENDING`/`OPEN`/`NOT_APPLICABLE` never retire by omission, and the
-store refuses `ANSWERED` rows with empty result refs. A semantic question's
-`NOT_APPLICABLE` disposition does not exclude an inventory member from an
-exact target; target exclusion is target-inventory accounting with its own
-evidence basis.
+The caller preserves `(repository_id, context_id, submission_id)` and content
+before sending. Matching replay returns its retained receipt before checking
+whether a new write could be accepted today. Different content under the same
+identity conflicts. A new update uses a new submission identity.
 
-## Failure classes (Span-observable only)
+A record result contains the receipt and present support qualification.
+`SupportUnavailable` after commit means acceptance succeeded but qualification
+failed; recover the receipt and investigate availability. It is not a rejected
+write and is not a support verdict.
 
-`InterpretationSuccess` · `InterpretationUnavailable` (unknown/expired
-continuation; re-issue the idempotent original op, including a selected
-operation whose persisted question is still `PENDING`) ·
-`SemanticValidationFailure` (whole unit rejected, no salvage; the live
-continuation remains usable for a corrected submission). There is no
-reissue operation and no ingress-failure exchange class. Provider transports,
-HTTP statuses, and model errors belong to the agent's environment and
-never enter Span's failure model. Continuations are single-use,
-TTL-bounded (30 min default), never persisted, never authoritative.
+## Independent verification
 
-## Interpretation profile
+Use `record_verification` after an actual external execution, independently of
+semantic recording. Record command or scenario, tested source observations,
+observer, time, `PASS`/`FAIL`/`INCONCLUSIVE`, and environment limitations.
+`verification_support` qualifies those observations without rerunning the work.
 
-- The static SA obligations live in the tool contract, not in every unit.
-- Target admission computes `TargetInventoryAccount` from the provider
-  snapshot and assigns every member to the target's area; membership is never
-  an agent submission.
-- A newly admitted area with no reusable current question receives exactly
-  one service-owned `PENDING` CQ-01 first-admission seed; the agent is never
-  required to manufacture it.
-- Mapping binds a bounded batch of inventory members per unit; every bound
-  member receives exactly one disposition, atomically.
+See [MCP reference](mcp.md) for the authoritative request/result grammar and
+[lifecycle](lifecycle.md) for context expiry and operational retention.

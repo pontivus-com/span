@@ -1,32 +1,16 @@
-"""Repository identity: provenance, conflict rejection, nested reporting.
+"""Repository identity: one root binding, conflict rejection, idempotence."""
 
-Identity is still the directory basename. What changes is that a store now
-records which canonical root it belongs to, so two roots with the same name can
-never silently share one store, and a moved root has a named way forward.
-"""
+from __future__ import annotations
 
 import tempfile
 import unittest
 from pathlib import Path
 
 from span.core import model as m
-from span.service import initialize_repository
-from span.service.requests import SemanticInitializeRepositoryRequest
-from tests.support.evidence import FixtureEvidenceSource
+from span.shell.context import provision_repository
 from span.shell.mcp import McpAdapter
-from span.shell.sqlite_store import SqliteSemanticStore
-from span.shell.structural.memory import (
-    InMemoryFile,
-    InMemoryStructuralSource,
-)
-
-FILES = {"README.md": "# fixture\n"}
-
-
-def _structural(repo: str):
-    return InMemoryStructuralSource(
-        repo, (InMemoryFile("README.md", FILES["README.md"]),), (), ()
-    )
+from span.shell.sqlite_store.lifecycle import LifecycleStore
+from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 
 
 class RegistrationConflictTest(unittest.TestCase):
@@ -41,7 +25,6 @@ class RegistrationConflictTest(unittest.TestCase):
             first.mkdir()
             second.mkdir()
             adapter.register_repository_locator("src", str(first))
-            # Same canonical root is idempotent.
             adapter.register_repository_locator("src", str(first))
             with self.assertRaises(m.RepositoryIdentityConflict) as caught:
                 adapter.register_repository_locator("src", str(second))
@@ -61,43 +44,62 @@ class RegistrationConflictTest(unittest.TestCase):
             self.assertIn("re-initialize", message)
 
 
-class ProvenanceTest(unittest.TestCase):
-    def test_initialize_records_and_rejects_a_foreign_root(self):
-        store = SqliteSemanticStore(":memory:")
-        try:
-            result = initialize_repository(
-                SemanticInitializeRepositoryRequest(
-                    repository_locator="fixture", authority_seeds=()
-                ),
-                repository_id="repo",
-                structural=_structural("repo"),
-                evidence=FixtureEvidenceSource("repo", dict(FILES)),
-                store=store,
-                canonical_root="/roots/a/fixture",
-            )
-            self.assertEqual(result.canonical_root, "/roots/a/fixture")
-            self.assertEqual(store.repository_root("repo"), "/roots/a/fixture")
+class BindingTest(unittest.TestCase):
+    def _store(self, tmp: str) -> LifecycleStore:
+        return LifecycleStore(
+            Path(tmp) / "repo.db", retention=DEFAULT_LIFECYCLE_RETENTION
+        )
 
-            with self.assertRaises(m.RepositoryIdentityConflict):
-                store.record_repository_root("repo", "/roots/b/fixture")
-        finally:
-            store.close()
+    def test_initialize_binds_and_rejects_a_foreign_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            try:
+                store.register_repository("repo", "/roots/a/fixture")
+                self.assertEqual(store.require_repository("repo"), "/roots/a/fixture")
+                with self.assertRaises(ValueError):
+                    store.register_repository("repo", "/roots/b/fixture")
+            finally:
+                store.close()
 
     def test_same_root_is_idempotent(self):
-        store = SqliteSemanticStore(":memory:")
-        try:
-            store.record_repository_root("repo", "/roots/a/fixture")
-            store.record_repository_root("repo", "/roots/a/fixture")
-            self.assertEqual(store.repository_root("repo"), "/roots/a/fixture")
-        finally:
-            store.close()
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            try:
+                store.register_repository("repo", "/roots/a/fixture")
+                store.register_repository("repo", "/roots/a/fixture")
+                self.assertEqual(store.require_repository("repo"), "/roots/a/fixture")
+            finally:
+                store.close()
 
-    def test_uninitialized_store_has_no_provenance(self):
-        store = SqliteSemanticStore(":memory:")
-        try:
-            self.assertIsNone(store.repository_root("repo"))
-        finally:
-            store.close()
+    def test_unregistered_store_has_no_binding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            try:
+                with self.assertRaises(ValueError):
+                    store.require_repository("repo")
+            finally:
+                store.close()
+
+    def test_provision_binds_the_canonical_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            root.mkdir()
+            (root / "README.md").write_text("# fixture\n", encoding="utf-8")
+            data = Path(tmp) / "data"
+            context, result = provision_repository(
+                data,
+                m.InitializeRepositoryRequest(
+                    repository_locator=str(root), authority_seeds=()
+                ),
+            )
+            try:
+                self.assertEqual(result.canonical_root, str(root.resolve()))
+                self.assertEqual(result.repository_id, "repo")
+                self.assertEqual(result.schema_version, 10)
+                self.assertTrue(result.store_ready)
+                self.assertEqual(list(data.glob("*.db")), [data / "repo.db"])
+            finally:
+                context.store.close()
 
 
 if __name__ == "__main__":

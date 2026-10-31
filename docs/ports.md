@@ -1,47 +1,51 @@
 # Port contracts
 
-## Structural source (§5.2)
+Ports carry canonical domain types directly. Services compose these contracts;
+shell implementations own effects. Public JSON grammar belongs to
+[MCP reference](mcp.md).
 
-`repository_state` · `resolve_subject` · `locations` · `edges` ·
-`reach` · `search_symbols` · `file_outline` · `verify_files` ·
-`describe_current` · `ensure_current`, over
-`REFERENCES/IMPORTS/DEPENDS_ON/CALLS/DEFINES` in
-`UPSTREAM/DOWNSTREAM/BOTH`. Every paginated read returns one
-`StructuralResult[T]` envelope carrying repository state, explicit
-truncation, redeemable version-bound cursors, and `coverage` plus
-`coverage_detail` for the structure behind the items. Coverage is a
-property of the return type, not a per-operation convention.
-Unsupported capabilities return typed `unsupported:true` with empty
-items — never a faked empty result. Production provider: Graft
-(`shell/structural/graft.py`, MIT, closed node-kind/relation mapping
-with explicit errors for unknown vocabulary). Deterministic
-in-memory source for tests.
+## Lifecycle store and authority
 
-## Evidence (§5.3)
+`LifecycleStorePort` in `src/span/ports/lifecycle.py` owns repository bindings,
+request-bound contexts, source/discovery observations, understanding/version
+reads, conclusion history, challenges, verification runs, and receipt lookup.
+Its recording operations accept canonical commands and commit the transition
+with its receipt atomically. SQLite implements schema 10; semantic decisions
+are made by core rules rather than by SQL or transport.
 
-`inventory_evidence` (fingerprints, paged) · `list_inventory_entries`
-(membership-only `(locator, evidence_id)` listing plus targeted
-fingerprints — one metadata walk, no per-page re-hash) ·
-`select_evidence`
-(relevance only: links, structural context, authority seeds,
-identity/term anchors, bounded) · `read_evidence` (bounded units).
-Selection never confers authority. Production: filesystem source
-(skips `.git/`, `graft/`, binaries; path-escape rejected); fixture
-source for tests.
+`LifecycleAuthorityResolver` resolves declared authority references. Source
+selection and filenames never manufacture a binding. Both ports are required
+at composition; there is no optional-manager or legacy-store fallback.
 
-## Store (§5.5)
+## Evidence source
 
-Canonical domain types directly, no DTO layer. Loads (subjects,
-by-refs, claims, relationships — all paged), evidence/coverage/
-conflict dependency loads, atomic `write_index_batch` (write +
-coverage + conflict record + exactly the listed retirements, or
-nothing), `mark_freshness`, repository-state record, schema version,
-and the verification-record upsert/read on its `(subject, scope)`
-natural key. SQLite implementation normalizes physically only.
+`EvidenceSource` in `src/span/ports/evidence.py` supplies bounded inventory,
+exact reads, selection, membership listing, and fingerprints. Exact requests
+carry a locator and optional ranges. Admission returns a typed outcome for
+each item, preserves successful observations, and distinguishes failures
+from omissions. Exact source can be admitted without structural symbols.
 
-Every table declares its fact kind in `STORE_FACT_DECLARATIONS`: an
-Observation (content-addressed, no natural key), a State (natural key,
-upsert), or a Handle (issued pointer). The declaration is checked
-against `sqlite_master` in both directions, and a State's declared key
-must be the table's primary key, so a new carrier cannot be added
-without stating what kind of fact it holds.
+A source observation retains its content identity and delivered excerpt
+boundary. Source support checks the observed content; a small excerpt does
+not imply that only those lines participate in the fingerprint. Selection
+finds relevant evidence and grants no authority.
+
+## Structural source
+
+`StructuralSource` supplies repository state, subject resolution, locations,
+edges, reach, symbol search, file outlines, file verification, and explicit
+provider currency. `StructuralResult[T]` preserves typed items, coverage,
+limits, and version-bound page cursors. Unsupported capability and unverified
+coverage are explicit; an empty page cannot prove absence by itself.
+
+The production provider is the pinned Graft adapter; the in-memory provider
+supports deterministic tests. Their shared paging helpers preserve the item
+type. Closed node/edge mappings reject unknown vocabulary. Structural
+adjacency is evidence for investigation, never inferred ownership or policy.
+
+## Effect boundaries
+
+Filesystem evidence, SQLite, provider processes, clocks, and MCP transport
+belong in the shell. Repository setup may run the provider's bounded currency
+operation. Ordinary queries, hooks, and recording do not select or invoke
+models, edit target source, run tests, or rebuild structure automatically.

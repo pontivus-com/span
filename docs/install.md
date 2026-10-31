@@ -14,13 +14,13 @@ Span currently requires:
 - Linux for the currently verified installation path.
 
 Span uses a managed structural wiring graph as structural evidence.
-Explicit `initialize_repository` and installer verification may build the
-provider-owned structural index when it is missing, stale, or the working
-tree is dirty (the build then reflects the current tree and freshness stays
-`UNVERIFIABLE`). MCP process startup
-registration is read-only: it registers repository identity for discovery
-and performs no structural build. Explicit `refresh` remains the other
-provider-owned rebuild path.
+Explicit `initialize_repository` may build the provider-owned structural
+index when it is missing, stale, or the working tree is dirty (the build then
+reflects the current tree and freshness stays `UNVERIFIABLE`). MCP process
+startup registration is read-only: it registers repository identity for
+discovery and performs no structural build. Installer `--verify-only` is
+observational and never initializes or rebuilds. No separate `refresh`
+operation exists in 0.9.0.
 
 The index lives at:
 
@@ -29,9 +29,9 @@ The index lives at:
 ```
 
 Builds are wiring-only (`--no-deep`, no credentials, no target
-writes: `--no-gitignore --no-ignore`). Explicit `refresh` performs at
-most one bounded rebuild. Ordinary reads (`status`, `explain`,
-`locate`, `neighbors`), hooks, and background paths never build.
+writes: `--no-gitignore --no-ignore`). Explicit setup performs at
+most one bounded rebuild. Ordinary reads (`understand_*`, `locate`,
+`neighbors`), hooks, and background paths never build.
 
 macOS and Windows paths are reserved but are not currently verified.
 
@@ -90,9 +90,12 @@ It does **not** mean Span already understands your repository.
 
 ## Supported hosts
 
-Span works with any MCP-capable agent. Managed setup — registration, skills,
-and lifecycle hooks — is implemented for Claude Code, Codex, and OpenCode
-today; other hosts connect manually. Span never invokes an LLM, chooses a
+Managed registration and skills are implemented for Claude Code, Codex, and
+OpenCode, with host-specific optional hooks. Codex is the live beta validation
+target. OpenCode has earlier trial evidence without final-package revalidation;
+Claude model-delivered grammar and caller identity remain UNVERIFIED under the
+owner waiver. Other MCP hosts connect manually without an assumed delivery
+guarantee. See [host status](../integrations/hosts/triggers.md). Span never invokes an LLM, chooses a
 model, stores provider credentials, edits source code, runs tests, or
 autonomously reinterprets your repository. Its state lives in a data
 directory outside the repositories it analyzes.
@@ -220,14 +223,58 @@ deletes nothing. A repository can be registered through `--repo` alone, so
 absence from a receipt is evidence of an unreceipted ID, not proof that its
 data is unused.
 
-`span-install --migrate-store <repository-id>` upgrades that ID's store in one
-transaction. A schema-7 or schema-8 store is migrated to schema 9: it gains
-the verification-record table when needed, drops the retired-claim archives,
-has stored verification payloads rewritten to the link-only shape, and drops
-mapping-era target-account outcomes that no longer have a producer or reader.
-A schema-9 store written by 0.8.0 drops the obsolete `declared_complete` field
-from question-coverage payloads. Both paths are transactional and idempotent,
-and the report counts every rewritten record (`rewritten_verifications`,
-`rewritten_target_accounts`, `dropped_target_accounts`,
-`rewritten_question_coverages`). The server never migrates at open; an
-unsupported version fails closed until this command is run.
+## Upgrade an existing store
+
+Span 0.9.0 uses schema 10. The runtime never migrates at open; an older store
+fails closed with a transition action. `--migrate-store` is removed.
+
+Stop every process using the store, then run one phase at a time for each
+repository ID:
+
+```bash
+span-install --data-dir <DATA_DIR> \
+  --transition-store <repository-id> --transition-phase inspect \
+  --transition-root <TARGET_REPO>
+
+span-install --data-dir <DATA_DIR> \
+  --transition-store <repository-id> --transition-phase apply \
+  --transition-root <TARGET_REPO>
+
+span-install --data-dir <DATA_DIR> \
+  --transition-store <repository-id> --transition-phase verify \
+  --transition-root <TARGET_REPO>
+```
+
+`inspect` and `verify` are observational. `apply` requires an explicit root
+whose basename matches the repository ID, holds exclusive store ownership
+through activation, archives a WAL-consistent copy, writes a lossless raw
+export and readable report, stages schema 10, verifies it, and atomically
+activates it. Supported source schemas are 7, 8, and 9. Refusals (live writer,
+unsupported schema, failed integrity, insufficient space, wrong root) change
+nothing.
+
+Only the repository root binding and declared authority seeds are carried
+forward. Legacy claims, campaigns, coverages, and targets remain historical
+export; they are not promoted as current understanding. Re-record current
+understanding through the lifecycle tools and re-declare explicit authority
+bindings in setup.
+
+Roll back before or after activation:
+
+```bash
+span-install --data-dir <DATA_DIR> \
+  --transition-store <repository-id> --transition-phase rollback
+```
+
+Before activation, rollback discards only owned staging. After activation, it
+preserves any schema-10 writes as `new-format-*.db` and restores the previous
+store. Restart the old binary afterward.
+
+The archive, export, report, and restart-safe manifest live under
+`<DATA_DIR>/transitions/<repository-id>/`. Do not delete them until the new
+store has been verified and retained according to your own policy.
+
+Known limitations: an idle old server that holds no SQLite lock is not
+detected, so the operator must stop all old processes; interrupted-transition
+runtime fencing is not yet proven in production. Rehearse on a disposable
+copy before a live upgrade.

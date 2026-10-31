@@ -6,7 +6,6 @@ Tests pin two-tier freshness, version-bound cursors, exhaustive
 traversal, the four neighbors outcomes, and strict transport mapping.
 """
 
-import json
 import unittest
 
 from span.core import model as m
@@ -14,9 +13,7 @@ from span import service as ops
 from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
 from span.core import paging as _paging
-from span.shell.agent_exchange.continuations import ContinuationStore
 from tests.support.evidence import FixtureEvidenceSource
-from span.shell.sqlite_store import SqliteSemanticStore
 from span.shell.structural.support import check_repository
 from span.shell.structural.memory import (
     InMemoryEdge,
@@ -30,6 +27,17 @@ from tests.support.factories import query_bounds
 
 from functools import partial as _partial
 from tests.support.factories import subject_id
+
+
+class _RegisteredStore:
+    """Minimal lifecycle binding used by navigation reads."""
+
+    def require_repository(self, repository_id: str) -> str:
+        return "/fixture"
+
+    def close(self) -> None:
+        return None
+
 
 REPO = "struct-nav-svc"
 
@@ -54,18 +62,7 @@ def _memory_harness(files=None, subjects=None, edges=()):
         tuple(edges),
     )
     evidence = FixtureEvidenceSource(REPO, dict(files))
-    store = SqliteSemanticStore(":memory:")
-    ops.initialize_repository(
-        ops.SemanticInitializeRepositoryRequest(
-            repository_locator="fixture",
-            authority_seeds=(),
-        ),
-        repository_id=REPO,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-    )
-    return structural, evidence, store
+    return structural, evidence, _RegisteredStore()
 
 
 _sid = _partial(subject_id, repository_id=REPO)
@@ -432,17 +429,18 @@ class LocateServiceTest(unittest.TestCase):
 
     def test_uninitialized_repo_rejected(self):
         structural, evidence, _ = _memory_harness()
-        store = SqliteSemanticStore(":memory:")
-        try:
-            with self.assertRaises(ValueError):
-                ops.locate(
-                    self._req(),
-                    structural=structural,
-                    evidence=evidence,
-                    store=store,
-                )
-        finally:
-            store.close()
+
+        class _Unbound:
+            def require_repository(self, repository_id: str) -> str:
+                raise ValueError("unknown repository")
+
+        with self.assertRaises(ValueError):
+            ops.locate(
+                self._req(),
+                structural=structural,
+                evidence=evidence,
+                store=_Unbound(),
+            )
 
     def test_target_members_subject_and_null(self):
         structural, evidence, store = _memory_harness()
@@ -606,18 +604,8 @@ class NeighborsServiceTest(unittest.TestCase):
             tuple(InMemoryFile(p, c) for p, c in files.items()),
             (InMemorySubject("hub.py", m.SubjectKind.COMPONENT, "hub"),),
         )
-        evidence = FixtureEvidenceSource(REPO, dict(files))
-        store = SqliteSemanticStore(":memory:")
-        ops.initialize_repository(
-            ops.SemanticInitializeRepositoryRequest(
-                repository_locator="fixture",
-                authority_seeds=(),
-            ),
-            repository_id=REPO,
-            structural=structural,
-            evidence=evidence,
-            store=store,
-        )
+        FixtureEvidenceSource(REPO, dict(files))
+        store = _RegisteredStore()
         try:
             ans = ops.neighbors(self._req(), structural=structural, store=store)
             self.assertTrue(ans.unsupported)
@@ -639,105 +627,33 @@ class StaleContinuationEnvelopeTest(unittest.TestCase):
         from span.shell.mcp import McpAdapter, ServiceContext
 
         structural, evidence, store = _memory_harness()
-        try:
-            adapter = McpAdapter(
-                contexts={
-                    REPO: ServiceContext(
-                        structural=structural,
-                        evidence=evidence,
-                        store=store,
-                        continuations=ContinuationStore(),
-                        authority_seeds=(),
-                    )
-                }
-            )
-            out = adapter.dispatch(
-                "locate",
-                {
-                    "repository_id": REPO,
-                    "mode": "SYMBOL",
-                    "query": "src/tools.py",
-                    "page_token": "pgv:deadbeef:0",
-                },
-            )
-            self.assertTrue(out.is_error)
-            body = json.loads(out.content)
-            self.assertEqual(body["error"], "stale_continuation")
-            self.assertIn("restart the listing from page one", body["message"])
-            self.assertIn("page_token null", body["message"])
-        finally:
-            store.close()
-
-
-class ProviderVocabularyTest(unittest.TestCase):
-    """Every provider node kind the indexer emits maps to one SubjectKind."""
-
-    def _source(self, nodes):
-        from span.shell.structural.graft import GraftStructuralSource
-
-        return GraftStructuralSource(
-            "vocab-repo", ".", wiring={"nodes": list(nodes), "edges": []}
+        adapter = McpAdapter(
+            contexts={
+                REPO: ServiceContext(
+                    repository_id=REPO,
+                    root="/fixture",
+                    structural=structural,
+                    evidence=evidence,
+                    store=store,
+                    lifecycle=None,  # type: ignore[arg-type]
+                    evidence_service=None,  # type: ignore[arg-type]
+                    understand=None,  # type: ignore[arg-type]
+                    support=None,  # type: ignore[arg-type]
+                )
+            }
         )
-
-    def test_module_and_constant_map_to_canonical_subjects(self):
-        source = self._source(
-            (
-                {"id": "lib.rs", "name": "lib.rs", "kind": "file", "path": "lib.rs"},
-                {
-                    "id": "lib.rs#MAX",
-                    "name": "MAX",
-                    "kind": "constant",
-                    "path": "lib.rs",
-                },
-                {
-                    "id": "lib.rs#inner",
-                    "name": "inner",
-                    "kind": "module",
-                    "path": "lib.rs",
-                },
-            )
+        out = adapter.dispatch(
+            "locate",
+            {
+                "repository_id": REPO,
+                "mode": "SYMBOL",
+                "query": "src/tools.py",
+                "page_token": "pgv:deadbeef:0",
+            },
         )
-        kinds = {
-            node_id: source._to_subject(node_id).subject_id.subject_kind
-            for node_id in source._nodes
-        }
-        self.assertIs(kinds["lib.rs"], m.SubjectKind.COMPONENT)
-        self.assertIs(kinds["lib.rs#MAX"], m.SubjectKind.CODE_SYMBOL)
-        self.assertIs(kinds["lib.rs#inner"], m.SubjectKind.COMPONENT)
-
-    def test_unknown_provider_kind_still_fails_closed(self):
-        from span.shell.structural.graft import GraftVocabularyError
-
-        with self.assertRaises(GraftVocabularyError):
-            self._source(({"id": "x", "name": "x", "kind": "variable", "path": "x"},))
-
-
-class LocateDescriptionTest(unittest.TestCase):
-    """SPMCP-06: the tool description is self-sufficient about modes."""
-
-    def test_description_names_modes_and_arguments(self):
-        from span.shell.mcp import TOOL_DESCRIPTIONS
-
-        text = TOOL_DESCRIPTIONS["locate"]
-        for token in (
-            "SYMBOL",
-            "FILE_OUTLINE",
-            "TARGET_MEMBERS",
-            "optional target scope",
-            "file locator",
-            "exact target scope",
-            "page token",
-        ):
-            with self.subTest(token=token):
-                self.assertIn(token, text)
-
-    def test_description_keeps_exact_and_contains_distinct(self):
-        from span.shell.mcp import TOOL_DESCRIPTIONS
-
-        text = TOOL_DESCRIPTIONS["locate"]
-        self.assertIn("never returns partial hits", text)
-        self.assertIn("provider order", text)
-        self.assertIn("never a semantic claim", text)
+        self.assertTrue(out.is_error)
+        self.assertIn("stale_continuation", out.content)
+        self.assertIn("page_token null", out.content)
 
 
 if __name__ == "__main__":

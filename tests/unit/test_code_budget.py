@@ -20,7 +20,6 @@ SRC = ROOT / "src" / "span"
 TESTS = ROOT / "tests"
 BASELINE = TESTS / "code_budget_baseline.json"
 
-MIGRATION_MODULE = "shell/sqlite_store/schema.py"
 
 #: The canonical test-factory names (one definition per concept) plus the two
 #: provider/adapter harness configurations that are not expressible as a
@@ -185,27 +184,10 @@ def measure() -> dict[str, int]:
 
     source_text = "\n".join(path.read_text(errors="ignore") for path in source_files)
     metrics["inline_addendum_refs"] = len(re.findall(r"Addendum", source_text))
-    # The schema migration is the one legitimate reader of the legacy field
-    # names; the gate measures the runtime surface it must not leave behind.
-    mapping_text = "\n".join(
-        text
-        for path, text in (
-            (path, path.read_text(errors="ignore")) for path in source_files
-        )
-        if _relative(path, SRC) != MIGRATION_MODULE
-    )
-    migration_text = (SRC / MIGRATION_MODULE).read_text(errors="ignore")
-    migration_tree = ast.parse(migration_text)
-    for node in ast.walk(migration_tree):
-        if (
-            isinstance(node, ast.FunctionDef)
-            and node.name == "_rewrite_target_accounting"
-        ):
-            lines = migration_text.splitlines(keepends=True)
-            lines[node.lineno - 1 : node.end_lineno] = []
-            mapping_text += "\n" + "".join(lines)
+    # The legacy semantic runtime is gone; the gate now measures the shipped
+    # surface directly, with no migration exemption.
     metrics["mapping_symbols"] = sum(
-        mapping_text.count(symbol) for symbol in MAPPING_SYMBOLS
+        source_text.count(symbol) for symbol in MAPPING_SYMBOLS
     )
 
     mutable_tables = 0

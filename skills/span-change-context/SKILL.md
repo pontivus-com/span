@@ -1,45 +1,35 @@
 ---
 name: span-change-context
-description: Assess a planned material code change with Span impact analysis before editing: blast radius, conditions, authority, verification, and blockers.
+description: Prepare a pre-change semantic brief with Span: understand the affected scope, reassess recorded conclusions, and identify open challenges before editing.
 ---
 
-# Span — pre-change context for material edits
+# Span — change context
 
-Use this when a change is material: it crosses a boundary, changes ownership or
-representation, affects configuration or lifecycle, changes a public contract,
-or touches an unfamiliar component. The primary span skill is authoritative for
-operation selection, repository identity, readiness, evidence, recovery, target
-accounting, freshness, and closeout.
+Use this skill before a material change. It prepares investigation; it never
+approves a change and never writes understanding.
 
-1. Confirm the registered `repository_id` and the exact target. If readiness is
-   `UNINITIALIZED`, use the primary skill's setup path first.
-2. Call `impact` with the target, `change_kind`, a concise
-   `change_description`, and `affected_assertions` naming established claim or
-   relationship references where known. The result is a bounded brief, never
-   approval.
-3. Follow only the required pending units. Use `trace` for established
-   producer/carrier/consumer and lifecycle relationships, `authority` for
-   governing sources, `explain` for behavior, and `locate`/`neighbors` for
-   structural discovery. Structural reach is possibility, not established
-   impact.
-4. Resolve blockers before relying on the brief: missing authority, `PARTIAL`,
-   `AMBIGUOUS`, `CONFLICTED`, `UNRESOLVED`, `STALE`, and `UNVERIFIABLE`
-   findings stay visible and require the bounded action Span names. Change
-   conditions are dimensions, not scores.
+1. Ask `understand_question` for the affected scope. Read saved candidates as
+   candidates: the agent judges applicability.
+2. For each relevant candidate, call `reassess` with its exact understanding and
+   version. Report `CURRENT`, `REASSESSMENT_REQUIRED`, or `UNVERIFIABLE`
+   verbatim.
+3. Admit the exact sources you will rely on with `evidence_start` or
+   `evidence_extend`. Failed or omitted items stay explicit; a source failure is
+   never an admitted observation.
+4. If a recorded conclusion is disputed, use `record_challenge`. Do not infer a
+   resolution from your reading, a test result, or a later version.
+5. Use `locate`/`neighbors` only for structural adjacency. They are navigation
+   evidence, not authority or causation.
+6. State the affected conclusions, the checked differences, the still-open
+   questions, and the limitations. Do not invent coverage.
 
-Keep semantically established effects separate from structural-only
-possibilities. Preserve ownership, governing sources, invariants,
-representation, verification currency, and unresolved requirements exactly as
-evidenced. Submit through `submit_interpretation` using the primary skill's
-pending procedure and recovery matrix; do not invent a second change shape or
-semantic policy. Never convert uncertainty into certainty.
+Record what you established only after the change, through the matching
+`record_*` tool. Settlement is explicit: `record_update` with named challenge
+dispositions, or the challenge remains open.
 
-If the proposal reveals an unknown participant, contract, dependency, or
-authority question, establish that precise question first and submit it through
-the same canonical path. Structural adjacency is evidence only; it never
-determines ownership or semantic impact.
+Keep `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`, `UNRESOLVED`, `STALE`, and
+`UNVERIFIABLE` verbatim. Missing authority stays missing.
 
-After editing, close out in the primary skill's order: scoped `status` on the
-exact mutated scope, outside tests/review, scoped `refresh` with a substantive
-re-submission where required, then scoped `status` again. A bare `refresh`
-proves nothing.
+Detail: [Span skill](https://github.com/pontivus-com/span/blob/master/skills/span/SKILL.md),
+[freshness](https://github.com/pontivus-com/span/blob/master/docs/freshness.md),
+[authority trust](https://github.com/pontivus-com/span/blob/master/docs/authority-trust.md).

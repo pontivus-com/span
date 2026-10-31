@@ -1,10 +1,10 @@
 // Span lifecycle notices (read-only).
 //
-// Report-only hooks for the Span semantic repository: surfaces only
-// scopes needing action (uninitialized stores, missing coverage,
-// moved dependents, stale/open/pending work) and stays silent when
-// everything is current. Never writes, interprets, refreshes, or
-// initializes. Silent no-op when Span is not installed.
+// Report-only hooks for the Span lifecycle: surfaces only event-local
+// action (an absent/old store, or recorded conclusions whose cited
+// source changed) and stays silent otherwise. Never writes, records,
+// reassesses, interprets, rebuilds, or initializes. Silent no-op when
+// Span is not installed.
 
 import fs from "node:fs";
 import path from "node:path";

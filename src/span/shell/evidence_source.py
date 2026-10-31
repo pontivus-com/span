@@ -184,6 +184,45 @@ class EvidenceSourceBase(ABC):
             ),
         )
 
+    def read_exact(
+        self,
+        repository_id: str,
+        request: m.EvidenceRequest,
+        bounds: m.QueryBounds,
+    ) -> m.EvidenceUnit | m.EvidenceSourceFailure:
+        """Read one exact locator without structural subjects.
+
+        Missing, non-text/unservable, and oversized sources are distinct
+        failures; a provider read error is raised, not disguised as a source
+        outcome.
+        """
+        self._check_repository(repository_id)
+        if not self._exists(request.locator):
+            return m.EvidenceSourceFailure(
+                request,
+                m.EvidenceSourceFailureKind.MISSING,
+                f"unknown evidence locator: {request.locator}",
+            )
+        if request.locator not in set(self._paths()):
+            return m.EvidenceSourceFailure(
+                request,
+                m.EvidenceSourceFailureKind.UNREADABLE,
+                "not servable text evidence",
+            )
+        data = self._read_bytes(request.locator)
+        if len(data) > bounds.max_evidence_bytes:
+            return m.EvidenceSourceFailure(
+                request,
+                m.EvidenceSourceFailureKind.UNREADABLE,
+                "evidence exceeds max_evidence_bytes",
+            )
+        fingerprint = _hashlib.sha256(data).hexdigest()
+        return m.EvidenceUnit(
+            evidence_ref=self._ref_for(request.locator, fingerprint),
+            content=data.decode("utf-8", errors="replace"),
+            content_fingerprint=fingerprint,
+        )
+
     def read_evidence(
         self,
         refs: tuple[m.EvidenceRef, ...],

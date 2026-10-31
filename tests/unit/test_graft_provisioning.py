@@ -206,9 +206,9 @@ class ProvisioningLifecycleTest(unittest.TestCase):
     def test_hooks_never_build(self):
         import inspect
 
-        from span.service.operations import status as status_op
+        from span.shell import hooks
 
-        source = inspect.getsource(status_op._hook_fast)
+        source = inspect.getsource(hooks)
         self.assertNotIn("ensure_current", source)
 
     def test_failed_binary_is_actionable_setup_failure(self):
@@ -221,7 +221,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 ServerConfig,
                 provision_repository,
             )
-            from span import service as ops
 
             # An explicit override outranks PATH lookup, so the
             # no-indexer path is only reachable with the override absent.
@@ -231,7 +230,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                     with self.assertRaises(ValueError) as ctx:
                         provision_repository(
                             ServerConfig(data_dir=data),
-                            ops.SemanticInitializeRepositoryRequest(
+                            m.InitializeRepositoryRequest(
                                 repository_locator=str(repo),
                                 authority_seeds=(),
                             ),
@@ -472,7 +471,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 ServerConfig,
                 provision_repository,
             )
-            from span import service as ops
 
             def fake_build(repo_path, artifact_dir=None):
                 _write_wiring(g.wiring_path_for(artifact_dir))
@@ -481,19 +479,20 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             with mock.patch.object(g, "_run_index_build", side_effect=fake_build):
                 context, result = provision_repository(
                     ServerConfig(data_dir=data),
-                    ops.SemanticInitializeRepositoryRequest(
+                    m.InitializeRepositoryRequest(
                         repository_locator=str(repo),
                         authority_seeds=(),
                     ),
                 )
-            self.assertEqual(result.store_readiness, m.StoreReadiness.READY)
+            self.assertTrue(result.store_ready)
+            self.assertEqual(result.schema_version, 10)
             self.assertTrue(context.structural.has_index())
             # A provider-prefixed locator is not part of the public
             # surface: provisioning rejects it instead of interpreting it.
             with self.assertRaises(ValueError):
                 provision_repository(
                     ServerConfig(data_dir=data),
-                    ops.SemanticInitializeRepositoryRequest(
+                    m.InitializeRepositoryRequest(
                         repository_locator=f"graft:{repo}",
                         authority_seeds=(),
                     ),
@@ -572,7 +571,6 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             ServerConfig as _ServerConfig,
             provision_repository as _provision,
         )
-        from span import service as _ops
 
         with _tempfile.TemporaryDirectory() as _tmp:
             _repo = _pl.Path(_tmp) / "repo"
@@ -582,7 +580,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 with self.assertRaises(ValueError) as _ctx:
                     _provision(
                         _ServerConfig(data_dir=_pl.Path(_tmp) / "data"),
-                        _ops.SemanticInitializeRepositoryRequest(
+                        m.InitializeRepositoryRequest(
                             repository_locator=str(_repo),
                             authority_seeds=(),
                         ),

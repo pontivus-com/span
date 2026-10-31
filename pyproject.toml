@@ -88,7 +88,7 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 # These tests put the repository root on ``sys.path`` before importing span.
 "tests/unit/test_agents_snippet.py" = ["E402"]
-"tests/unit/test_hooks_runner.py" = ["E402"]
+"tests/fixtures/host-contract/*.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -11,8 +11,10 @@ import typing as _typing
 from span.core.model import (
     EvidenceRef,
     EvidenceInventoryPage,
+    EvidenceRequest,
     EvidenceScope,
     EvidenceSelection,
+    EvidenceSourceFailure,
     EvidenceUnit,
     QueryBounds,
     StructuralObservation,
@@ -58,6 +60,15 @@ class EvidenceSource(_typing.Protocol):
         bounds: QueryBounds,
     ) -> tuple[EvidenceUnit, ...]:
         """Read bounded evidence units for the given references."""
+        ...
+
+    def read_exact(
+        self,
+        repository_id: str,
+        request: EvidenceRequest,
+        bounds: QueryBounds,
+    ) -> EvidenceUnit | EvidenceSourceFailure:
+        """Read one exact locator, distinguishing missing/unreadable/failed."""
         ...
 
     def list_inventory_entries(

@@ -23,11 +23,10 @@ from span.shell.install.venv import (
 
 
 def verify_installation(venv_python, data_dir, repos, dry_run=False):
-    """Provision + readiness via a helper module executed under the installed interpreter.
+    """Observational readiness via a helper module under the installed interpreter.
 
-    Operational readiness only (A1): sequential per-target provisioning
-    with the settled READY predicate. Never invokes ``explain`` and never
-    establishes semantic knowledge.
+    Never initializes, migrates, rebuilds or invokes a semantic operation.
+    An absent or old store reports the explicit setup/transition action.
     """
     cmd = [
         str(venv_python),

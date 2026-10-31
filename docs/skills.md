@@ -1,52 +1,36 @@
-# Agent Skills integration guide
+# Agent Skills integration
 
-Skills (`skills/span/SKILL.md`, `skills/span-change-context/SKILL.md`,
-`skills/span-document/SKILL.md`)
-are optional lifecycle/orchestration guidance over the eleven canonical
-operations. They sit outside the semantic core and the service
-contract: semantic correctness never depends on them.
+The packaged skills guide the agent through the public lifecycle. They do not
+run inside the semantic core, originate authority, or decide correctness.
+The installed tool schemas and [MCP reference](mcp.md) own request grammar;
+[lifecycle](lifecycle.md) owns the procedure.
 
-Allowed: when/how to invoke operations, multi-call workflow
-composition, preserving `PARTIAL`/`AMBIGUOUS`/`CONFLICTED`/
-`UNRESOLVED`/`STALE`/`UNVERIFIABLE` states verbatim, directing
-normal repository-level `status` orientation and exact-target
-`status`/`refresh` around verification. The repository status inventory is
-bounded persisted coverage, not structural enumeration. An automatic
-`HOOK_FAST` notice is event-local by design; if a normal `status` or
-semantic operation returns readiness only where coverage is expected, that
-is unexpected — the skill records it and does not infer empty semantic
-state or cleanliness.
+| Canonical source | Responsibility |
+| --- | --- |
+| `skills/span/SKILL.md` | Ask, investigate, admit, record, reuse, and reassess; preserve identities and limits. |
+| `skills/span-change-context/SKILL.md` | Prepare a material change using applicable saved understanding and current support. |
+| `skills/span-document/SKILL.md` | Explain one scope, record coherent supported conclusions and gaps, then read back. |
+| `docs/agents-snippet.md` | The managed lifecycle block copied into a target's `AGENTS.md`. |
 
-All three skills use the same compact pending-task card: objective; exact
-scope and exclusions; evidence and authority; material input-to-terminal
-path; typed result; adversarial check; explicit disposition with requirements;
-and fresh readback. This is orchestration guidance over the canonical
-`TaskBrief`, not a second semantic policy or quality model.
+Skills use the nineteen public tools. They do not require a campaign, a
+semantic-question taxonomy, or an interpretation continuation. A real
+investigation can span files and record directly from an evidence-only context.
+They must keep missing authority, failed admission, omissions, disputes, and
+noncurrent support explicit.
 
-When the user supplies an exact directory or repository target, the skills
-direct the host to treat that path as the complete semantic boundary. The
-host partitions all material areas within it and applies the same analysis
-card to each area, retaining `NOT_APPLICABLE`, `OPEN`, or `PENDING` work with
-requirements until it is resolved or explicitly reported. A representative
-root, structural `READY`, or a populated store cannot stand in for target
-coverage. Without an exact target, the skills require the user to choose a
-bounded scope before semantic establishment begins. Exact onboarding path:
-`docs/onboarding-runbook.md`.
+## Distribution and upgrades
 
-Forbidden: defining claim/relationship kinds, authority, ownership,
-precedence, trust, freshness, or change semantics; reinterpreting
-uncertainty into certainty; referencing non-canonical operations.
-`tests/unit/test_skills.py` enforces this mechanically (canonical-ops
-allowlist, rule-vocabulary scan, uncertainty-preservation presence,
-implementation-independence).
+Canonical skills and the snippet are copied into package assets by the build
+owner, `scripts/sync_assets.py` through `setup.py`. Generated copies are never
+edited manually. The installer deploys the managed assets and preserves
+foreign configuration. See [install](install.md).
 
-Per-skill ownership: `span` owns the full lifecycle plus
-operation selection rules, evidence and authority quality, and the
-OpenCode submit-until-answer loop; `span-change-context` owns
-change-scoped `impact` before editing plus refresh closeout;
-`span-document` owns documentation-area interpretation. All three share
-the pending-task card and the exact-target boundary rule above.
+Restart/reconnect hosts after upgrading and check that active skills and
+managed rules describe the same surface as the installed binary. A stale
+host-local skill can still teach the retired procedure even when tools were
+upgraded. This repository's source/package updates do not claim that every
+existing host-local copy has been replaced.
 
-Distribution is by filesystem. Serving skills through the MCP Skills
-extension is permitted but deferred until a proven consumer exists;
-correctness must never depend on it.
+`tests/unit/test_skills.py`, `test_agents_snippet.py`, and the asset cases in
+`test_install.py` exercise the source/asset boundaries. Skills remain
+optional; ordinary retrieval and recording check support without them or hooks.
