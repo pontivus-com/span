@@ -1,31 +1,18 @@
-"""Host hook runner for Span lifecycle notices (read-only, fast).
+"""Host hook runner for Span lifecycle notices (read-only, bounded).
 
-One canonical policy: every automatic hook maps to exactly one
-``status(..., mode=HOOK_FAST)`` call through the same shell opener the
-MCP runtime uses, and prints only what that notice reports. This module
-holds no semantic policy of its own — no SQL, no fingerprint
-classification, no readiness interpretation, no next-action wording
-beyond the notice's own ``recommended_action``.
+One canonical rule: an automatic hook maps a native event onto the same
+readiness probe and support checks the ordinary runtime uses. Hooks never
+initialize, migrate, record, reassess, interpret, rebuild, or run
+repository-scale work. A missed or disabled hook cannot make stale
+understanding look current, because correctness is evaluated by
+``reassess``/retrieval, not by hook delivery.
 
-Automatic hooks never initialize, explain, impact, trace,
-authority-check, refresh, interpret, rebuild, or run repository-size
-work. Any internal failure exits 0 silently (a hook must never break a
-host session); diagnostics go to stderr.
+Output is one bounded line per event. Routine current state prints nothing.
 
-Repository roots come from the install receipt
-(``<data-dir>/install.json``: ``repos``). The canonical repository ID is
-derived from the locator by the same rule explicit initialization uses;
-storage is ``<data-dir>/<repository_id>.db`` and is opened only when it
-already exists.
-
-Commands (exception-oriented per addendum D §9: routine current state
-prints nothing — silence is the all-current statement):
-  session-start      readiness notice for the active repo only when it
-                     needs action (unavailable or uninitialized)
-  source-changed     read absolute paths from argv or stdin JSON and
-                     report the canonical notice for that evidence scope
-  session-stop       same canonical notice for the session's changed
-                     paths when the host supplies them
+Commands:
+  session-start      report an unavailable/absent store for the active repo
+  source-changed     report dependent recorded conclusions for changed paths
+  session-stop       same bounded notice for the session's changed paths
 """
 
 from __future__ import annotations
@@ -35,10 +22,10 @@ import json
 import os
 import sys
 
-from span import service as ops
 from span.core import model as m
-from span.service import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.shell.context import open_repository_context
+from span.core import support_rules as _support_rules
+from span.shell.policy import HOOK_DIAGNOSTIC_LIMIT
+from span.shell.readiness import probe_store
 
 __all__ = [
     "cmd_session_start",
@@ -86,83 +73,83 @@ def repo_for_path(path, mapping):
 
 
 def scoped_repo_map(mapping, repo_root):
-    """Select the registered repository containing ``repo_root``.
-
-    Lifecycle hooks run in a host's active project directory. Selecting
-    the longest registered root keeps nested repositories deterministic and
-    prevents a session in one repository from reporting every installation
-    in the shared Span data directory.
-    """
+    """Select the longest registered root containing the active project."""
     active_root = repo_for_path(repo_root or os.getcwd(), mapping)
     if active_root is None:
         return {}
     return {active_root: mapping[active_root]}
 
 
-def _context_for(data_dir, root):
-    """Open the canonical working context for one registered repository.
-
-    The single seam every command uses; tests replace it with fixture
-    providers. Production always goes through the shell opener.
-    """
-    return open_repository_context(data_dir, root)
+def _repository_id(root: str) -> str:
+    return os.path.basename(os.path.abspath(root))
 
 
-def _notice(data_dir, root, scope_paths=None, close_prefix=False):
-    """Run the canonical HOOK_FAST status call and render its notice.
+def _readiness_notice(data_dir, root):
+    readiness = probe_store(data_dir, _repository_id(root))
+    if readiness.ready:
+        return None
+    action = readiness.action or "explicit setup is required"
+    return (
+        f"span: {readiness.repository_id} needs attention "
+        f"({_readiness_label(readiness)}; {action})."
+    )
 
-    ``scope_paths is None`` maps to the no-target readiness intent;
-    a tuple maps to the changed-evidence scope intent, with an empty
-    tuple left explicitly empty (the service treats it as no subjects).
-    """
-    repository_id, context = _context_for(data_dir, root)
+
+def _readiness_label(readiness) -> str:
+    if not readiness.exists:
+        return "no store"
+    if readiness.schema_version != readiness.expected_version:
+        return (
+            f"store schema {readiness.schema_version} "
+            f"(expected {readiness.expected_version})"
+        )
+    return "store unbound"
+
+
+def _affected_for_root(data_dir, root, rel_paths):
+    """Bounded dependent lookup for changed repository-relative locators."""
+    from span.shell.context import open_repository_context
+
+    repository_id, context = open_repository_context(data_dir, root)
+    affected: dict[str, m.SupportState] = {}
     try:
-        target = (
-            None
-            if scope_paths is None
-            else m.EvidenceScope(paths=tuple(scope_paths), evidence_refs=())
-        )
-        notice = ops.status(
-            ops.SemanticStatusRequest(
-                repository_id=repository_id,
-                target=target,
-                bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
-                mode=m.StatusMode.HOOK_FAST,
-            ),
-            structural=context.structural,
-            evidence=context.evidence,
-            store=context.store,
-            continuations=context.continuations,
-            authority_seeds=context.authority_seeds,
-        )
+        for locator in tuple(rel_paths)[:HOOK_DIAGNOSTIC_LIMIT]:
+            for observation_id in context.store.source_observation_ids_for_locator(
+                repository_id, locator
+            ):
+                for ref in context.store.support_dependents("SOURCE", observation_id):
+                    key = ref.understanding_id.value
+                    evaluation = context.support.evaluate_revision(ref)
+                    if key in affected:
+                        affected[key] = _support_rules.worse_state(
+                            affected[key], evaluation.state
+                        )
+                    else:
+                        affected[key] = evaluation.state
     finally:
         context.store.close()
-    return _render(repository_id, notice, close_prefix=close_prefix)
+    return repository_id, affected
 
 
-def _render(repository_id, notice, close_prefix=False):
-    if notice.store_readiness is m.StoreReadiness.UNAVAILABLE:
-        return f"span: {repository_id} needs attention " f"(repository unavailable)."
-    if notice.store_readiness is m.StoreReadiness.UNINITIALIZED:
-        action = (
-            notice.recommended_action
-            or "run initialize_repository in a dedicated setup session"
-        )
-        return f"span: {repository_id} UNINITIALIZED ({action})."
-    if not (notice.affected_count or notice.stale_count or notice.unverifiable_count):
+def _render_affected(repository_id, affected, *, close_prefix=False):
+    if not affected:
         return None
-    parts = []
-    if notice.stale_count:
-        parts.append(f"{notice.stale_count} stale")
-    if notice.unverifiable_count:
-        parts.append(f"{notice.unverifiable_count} unverifiable")
-    if not parts:
-        parts.append(f"{notice.affected_count} affected")
-    counts = ", ".join(parts)
-    action = f" {notice.recommended_action}" if notice.recommended_action else ""
-    if close_prefix:
-        return f"span: {repository_id} close: {counts}.{action}"
-    return f"span: {repository_id} needs attention ({counts}).{action}"
+    needing = {
+        key: state
+        for key, state in affected.items()
+        if state is not m.SupportState.CURRENT
+    }
+    if not needing:
+        return None
+    names = sorted(needing)[:HOOK_DIAGNOSTIC_LIMIT]
+    label = "close" if close_prefix else "needs attention"
+    detail = ", ".join(names)
+    more = "" if len(needing) <= HOOK_DIAGNOSTIC_LIMIT else "; more omitted"
+    return (
+        f"span: {repository_id} {label}: {len(needing)} recorded "
+        f"understanding(s) affected ({detail}{more}); call reassess or "
+        "understand_question."
+    )
 
 
 def cmd_session_start(data_dir, repo_root=None):
@@ -172,7 +159,7 @@ def cmd_session_start(data_dir, repo_root=None):
         return
     mapping = scoped_repo_map(mapping, repo_root)
     for root in sorted(mapping):
-        line = _notice(data_dir, root)
+        line = _readiness_notice(data_dir, root)
         if line:
             print(line)
 
@@ -214,6 +201,16 @@ def _stdin_paths():
     return found
 
 
+def _scoped_paths(mapping, paths):
+    scoped: dict[str, list[str]] = {}
+    for path in paths:
+        root = repo_for_path(path, mapping)
+        if root is None:
+            continue
+        scoped.setdefault(root, []).append(os.path.relpath(os.path.abspath(path), root))
+    return scoped
+
+
 def cmd_source_changed(data_dir, paths):
     if not paths:
         paths = _stdin_paths()
@@ -223,16 +220,15 @@ def cmd_source_changed(data_dir, paths):
     mapping = repo_map(data_dir)
     if not mapping:
         return
-    scoped = {}
-    for path in paths:
-        root = repo_for_path(path, mapping)
-        if root is None:
-            continue
-        scoped.setdefault(root, []).append(os.path.relpath(os.path.abspath(path), root))
-    for root in sorted(scoped):
-        line = _notice(data_dir, root, scope_paths=tuple(scoped[root]))
+    for root, rel_paths in sorted(_scoped_paths(mapping, paths).items()):
+        line = _readiness_notice(data_dir, root)
         if line:
             print(line)
+            continue
+        repository_id, affected = _affected_for_root(data_dir, root, rel_paths)
+        rendered = _render_affected(repository_id, affected)
+        if rendered:
+            print(rendered)
 
 
 def cmd_session_stop(data_dir, repo_root=None):
@@ -243,17 +239,13 @@ def cmd_session_stop(data_dir, repo_root=None):
     if not active:
         return
     root = next(iter(active))
-    # A host may supply the session's changed paths on stdin. Without
-    # them the close carries an empty event scope, which the canonical
-    # HOOK_FAST path reports as no affected subjects (silence).
-    rel_paths = []
-    for path in _stdin_paths():
-        if repo_for_path(path, {root: root}) is None:
-            continue
-        rel_paths.append(os.path.relpath(os.path.abspath(path), root))
-    line = _notice(data_dir, root, scope_paths=tuple(rel_paths), close_prefix=True)
-    if line:
-        print(line)
+    rel_paths = _scoped_paths({root: root}, _stdin_paths()).get(root, [])
+    if not rel_paths:
+        return
+    repository_id, affected = _affected_for_root(data_dir, root, rel_paths)
+    rendered = _render_affected(repository_id, affected, close_prefix=True)
+    if rendered:
+        print(rendered)
 
 
 def parse_args(argv=None):
@@ -273,11 +265,7 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "command",
-        choices=(
-            "session-start",
-            "source-changed",
-            "session-stop",
-        ),
+        choices=("session-start", "source-changed", "session-stop"),
     )
     parser.add_argument("paths", nargs="*")
     return parser.parse_args(argv)

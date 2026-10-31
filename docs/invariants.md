@@ -12,44 +12,44 @@ offending boundary would be recorded here.
 | ID | Invariant | Verdict | Evidence |
 |---|---|---|---|
 | I-01 | Functional-core purity | Test | `CorePurityTest` (stdlib + `span.core` only, AST scan) |
-| I-02 | Strict ingress | Test | `ConstructionValidationTest`; `SerializationRoundTripTest` (unknown tags/values/fields rejected); `IngressTest` over the wire |
-| I-03 | Closed semantic vocabulary | Test | `ClosedVocabularyTest` (member sets); `ProviderVocabularyTest` (provider-local vocabulary refused) |
-| I-04 | One semantic carrier | Test | `PortShapeTest` (`ChangeKind` single home); `SchemaSyncTest` (schema is the carrier's projection) |
-| I-05 | Evidence integrity | Test | `CandidateValidationTest` (missing/unresolving evidence rejected); `SemanticOutcomeTest` (valid delivery served) |
-| I-06 | Authority integrity | Test | `CandidateValidationTest` (UNKNOWN status, structural derivation, verbatim quote, resolvable sections) |
-| I-07 | Ownership integrity | Test | `RetiredOwnerTest`; `S02CustodyTest` (owner vs consumer population) |
-| I-08 | Conflict integrity | Test | `ConflictDetectionTest` (core + recorded conflicts); `SelectionAtomicityTest` (conflict pairs never split) |
-| I-09 | Ambiguity integrity | Test | `StoreResolutionTest` (ambiguity never overridden); `ContextualResolutionTest` (multiple roots stay ambiguous) |
-| I-10 | Freshness preflight | Test | `FreshnessClassificationTest` (stale/current/unverifiable); `HookBoundednessTest` (hook read-only proof) |
-| I-11 | Partial-refresh integrity | Test | `RefreshExchangeTest` (failed unit preserved as stale); `RetiredOwnerTest` (history preserved) |
-| I-12 | Verification integrity | Test | `DerivedCurrencyTest` (record projects pass/fail/stale/unknown); `ExecutionIngressTest` (identity derives from the link); `MigrationPayloadRewriteTest` (a stored asserted pass becomes an unknown link) |
-| I-13 | Structural separation | Review | Store holds canonical JSON + query columns only; no graph duplication |
-| I-14 | Provider neutrality | Test | `GraftMappingTest` (unknown vocabulary errors); `ProviderVocabularyTest` (generic port protocol) |
-| I-15 | No semantic reconstruction | Review | Composers project stored state; MCP/adapter/store add no judgments |
-| I-16 | Boundedness | Test | `BoundsPolicyTest` (rejection never clamped); `BoundednessTest` (truncation categories) |
+| I-02 | Strict ingress | Test | `ConstructionValidationTest`; `SerializationRoundTripTest`; `RecordWireMalformedTest` (unknown fields/tags/values rejected) |
+| I-03 | Closed semantic vocabulary | Test | `ClosedVocabularyTest` (member sets); `RecordWireSchemaTest` (closed branches) |
+| I-04 | One semantic carrier | Test | `CanonicalRoundTripTest`; `RecordWireCodecTest` (wire is the carrier's projection) |
+| I-05 | Evidence integrity | Test | `EvidenceServiceTest`; `test_missing_and_unreadable_are_distinct_and_success_survives` |
+| I-06 | Authority integrity | Test | `SupportServiceTest`; `test_authority_support_status_and_presence` |
+| I-07 | Ownership integrity | Test | `BindingTest`; `LifecycleStoreTest` (one root binding, no rebinding) |
+| I-08 | Conflict integrity | Test | `LifecycleStoreTest` (challenge settlement); `ChallengeTransitionTest` |
+| I-09 | Ambiguity integrity | Test | `UnderstandServiceTest`; `DiscoveryServiceTest` (candidates stay candidates) |
+| I-10 | Freshness preflight | Test | `SupportServiceTest`; `DiscoveryServiceTest` (current/changed/missing membership) |
+| I-11 | Version history integrity | Test | `LifecycleStoreTest`; `test_update_cas_and_history` |
+| I-12 | Verification integrity | Test | `SupportServiceTest`; `test_verification_runs_are_independent_and_source_aware` |
+| I-13 | Structural separation | Review | Store holds canonical JSON plus query columns only; no graph duplication |
+| I-14 | Provider neutrality | Test | `GraftMappingTest`; `StructuralCoverageConformanceTest` |
+| I-15 | No semantic reconstruction | Review | Composers project stored state; transport/store add no judgments |
+| I-16 | Boundedness | Test | `test_total_byte_bound_omits_remainder`; `test_unit_bound_omits_remainder`; `test_truncation_is_explicit` |
 | I-17 | Publication isolation | Test | `IsolationGateTest` (hermetic tree; no enclosing-workspace coupling) |
 | I-18 | No semantic `Any` | Test | `SemanticTypingTest` (annotation scan clean; canonical decode refuses untyped collections) |
-| I-19 | Success-path completeness | Test | `ExchangeTest` (first pass settles); `DriverServiceTest` (validation is a backstop, not the path) |
-| I-20 | Demand-driven indexing | Test | `InitializeTest` (init performs no interpretation); `InventorySnapshotTest` (bounded paged walk); `DemandDrivenIndexingTest` (service layer enumerates no filesystem) |
-| I-21 | Reconstructible rebuild only | Review | §10.4 rule; rebuild paths preserve required history (retired tables) |
-| I-22 | Missing authority remains missing | Test | `CandidateValidationTest` (UNRESOLVED + resolver requirement); `GhostSubjectTest` (absence stated, not invented) |
+| I-19 | Success-path completeness | Test | `LifecycleMcpTest` (first valid recording on the ordinary path) |
+| I-20 | Demand-driven indexing | Test | `ProvisioningLifecycleTest`; `DemandDrivenIndexingTest` |
+| I-21 | Reference-safe reaping | Review | Reaping removes operational state only; semantic history stays reference-safe |
+| I-22 | Missing authority remains missing | Test | `test_declared_authority_resolution`; `SupportServiceTest` (unverifiable stays unverifiable) |
 | I-23 | Skill non-authority | Test | `SkillNonAuthorityTest` (no second authorities, scores, or lifecycle actions) |
-| I-24 | Skill/API consistency | Test | `test_only_canonical_operations` (canonical ops only, across all skills) |
+| I-24 | Skill/API consistency | Test | `test_only_canonical_operations` (canonical operations only, across all skills) |
 | I-25 | Skill optionality | Test | `test_implementation_ignores_skills` (no implementation file depends on skill content) |
-| I-26 | Lifecycle placement | Test | `ImpactTest` (pre-change brief); `RefreshExchangeTest` (explicit refresh suspends and resumes) |
-| I-27 | Offline bootstrap isolation | Test | `InitializationContractTest` (no implicit bootstrap site); `AP09NoPersistentStoreTest` (read creates no store) |
-| I-28 | Interactive hook boundedness | Test | `HookBoundednessTest` (one page under hook bounds, no continuation) |
-| I-29 | No automatic semantic interpretation | Test | `HookBoundednessTest` (hook paths never suspend); `HookSafetyTest` (hook dispatches read-only status only) |
-| I-30 | No automatic refresh | Test | `HookSafetyTest` (hooks report only); `RefreshExchangeTest` (refresh explicit with suspension) |
-| I-31 | Readiness/trust separation | Test | `StatusTest` (ready qualifier separate from semantic coverage); `InitializeTest` (ready despite truncation) |
-| I-32 | Irrelevant-change silence | Test | `HookRunnerTest` (unchanged/outside-repository silence); `ClaudeMappingTest` (unknown hook silent) |
-| I-33 | Trust/freshness singularity | Test | `ClosedVocabularyTest` (enum-exactness, no STALE in trust); `SerializationRoundTripTest` (separate dimensions round-trip) |
-| I-34 | Tagged reference ingress | Test | `S3SchemaTest` (union positions use tagged definitions); `S4QuestionSelectionTest` (ref resolution) |
-| I-35 | Canonical operational bounds | Test | `BoundsPolicyTest` (policy defaults, maxima, hook bounds, rejection) |
-| I-36 | Answer self-containment | Test | `SelectionAtomicityTest` (pair-atomic selection); `DispatchTest` (refs resolve inside the answer over the wire) |
-| I-37 | Coverage-scoped atomic reconciliation | Test | `WithdrawalTest`; `SupersedingEvidenceTest`; `RetiredOwnerTest` (withdrawal, retire history, supersession, latest-wins) |
-| I-38 | Proposal-typed change classification | Test | `ImpactTest` (proposal rows need typed assertions; change-kind gating) |
-| I-39 | Continuation/pagination separation | Test | `PaginationContinuationTest`; `ContinuationIdentityTest`; `StaleContinuationEnvelopeTest` |
+| I-26 | Lifecycle placement | Test | `UnderstandServiceTest`; `test_cold_question_admits_inspectable_evidence` |
+| I-27 | Offline bootstrap isolation | Test | `InitializationContractTest`; `test_cs07_uninitialized_context_creates_no_store` |
+| I-28 | Interactive hook boundedness | Test | `LifecycleHooksTest` (one event-local notice; no inventory scan) |
+| I-29 | No automatic semantic interpretation | Test | `LifecycleHooksTest`; `test_hooks_never_build` (hook paths never build or record) |
+| I-30 | No automatic refresh | Test | `LifecycleHooksTest` (hooks report only) |
+| I-31 | Readiness/trust separation | Test | `StartupRegistrationTest`; `SupportServiceTest` (readiness is not currency) |
+| I-32 | Irrelevant-change silence | Test | `LifecycleHooksTest` (unrelated paths stay silent) |
+| I-33 | Trust/freshness singularity | Test | `ClosedVocabularyTest`; `SerializationRoundTripTest` |
+| I-34 | Tagged reference ingress | Test | `CanonicalRoundTripTest`; `RecordWireSchemaTest` (tagged union positions) |
+| I-35 | Canonical operational bounds | Test | `ConstructionValidationTest` (policy defaults and rejection are explicit) |
+| I-36 | Answer self-containment | Test | `test_full_lifecycle_and_restart`; `LifecycleMcpTest` (refs resolve inside the answer) |
+| I-37 | Explicit withdrawal and supersession | Test | `LifecycleStoreTest`; `test_withdraw_creates_explicit_withdrawal_revision` |
+| I-38 | Changed-support investigation stays pre-change | Test | `UnderstandServiceTest` (reconsideration prepares, recording accepts) |
+| I-39 | Continuation/pagination separation | Test | `test_stale_token_maps_to_envelope`; `PageTokenTest`; `ScopeTokenTest` |
 
 Downstream-compensation check (no silent repairs, no salvage, no
 fallback parsing): validation rejects whole units; strict decode has

@@ -58,10 +58,10 @@ class InitializationContractTest(unittest.TestCase):
             ):
                 stripped = line.strip()
                 if stripped.startswith("def "):
-                    in_provision = (
-                        relative == "src/span/shell/mcp_server.py"
-                        and stripped.startswith("def provision_repository(")
-                    )
+                    in_provision = relative in {
+                        "src/span/shell/mcp_server.py",
+                        "src/span/shell/context.py",
+                    } and stripped.startswith("def provision_repository(")
                     if stripped.startswith("def initialize_repository("):
                         continue
                 if in_provision:

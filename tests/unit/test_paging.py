@@ -10,7 +10,6 @@ required. Interpretation continuations are distinct and never appear here.
 
 import unittest
 
-from span.core import model as m
 from span.core import paging
 
 
@@ -77,18 +76,6 @@ class ServiceTokenTest(unittest.TestCase):
         for bad in ("bogus", "pg:", "pgv:", "pgv:bad", "pgv:d:1:2", "trunc:c:3"):
             with self.assertRaises(ValueError, msg=bad):
                 paging.parse_service_token(bad)
-
-    def test_model_carries_page_token(self):
-        request = m.SemanticInterpretationRequest(
-            repository_id="r",
-            subjects=(),
-            task_evidence=m.TaskEvidence(),
-            allowed_kinds=m.AllowedKinds(claim_kinds=(), relationship_kinds=()),
-            brief=m.TaskBrief(),
-            bounds=m.QueryBounds(50, 2, 8, 24, 96_000, 64, 64),
-        )
-        self.assertEqual(request.operation_intent, m.SemanticIntent.EXPLAIN)
-        self.assertIsNone(request.proposed_change)
 
 
 class ScopeTokenTest(unittest.TestCase):

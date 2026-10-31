@@ -10,15 +10,14 @@ structure, never as semantic claims.
 from __future__ import annotations
 
 from span.core import model as m
+from span.ports.lifecycle import LifecycleStorePort
 from span.ports.evidence import EvidenceSource
-from span.ports.store import SemanticStore
 from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralSource
 from span.service.bounds import resolve_bounds as _resolve_bounds
 from span.service.discovery import enumerate_target_inventory
 from span.service.operations.listing import listing_version
-from span.service.repository import _is_initialized
-from span.service.requests import SemanticStructuralLocateRequest
+from span.service.navigation import SemanticStructuralLocateRequest
 from span.core import paging as _paging
 
 __all__ = ["locate"]
@@ -29,11 +28,15 @@ def locate(
     *,
     structural: StructuralSource,
     evidence: EvidenceSource,
-    store: SemanticStore,
+    store: LifecycleStorePort,
 ) -> m.StructuralLocateResult:
     """Execute one structural locate (read-only, no persistence)."""
-    if not _is_initialized(request.repository_id, store=store):
-        raise ValueError(f"repository not initialized: {request.repository_id}")
+    try:
+        store.require_repository(request.repository_id)
+    except ValueError as exc:
+        raise ValueError(
+            f"repository not initialized: {request.repository_id}"
+        ) from exc
     bounds = _resolve_bounds(request.bounds, hook=False)
     mode = request.mode
     if mode is m.StructuralLocateMode.SYMBOL:

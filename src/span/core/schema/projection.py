@@ -231,7 +231,7 @@ def _prune_defs(schema: dict, defs: dict[str, dict]) -> dict[str, dict]:
 
 
 def schema_for_request(
-    root: type,
+    root: object,
     *,
     omit_type_tag: bool = True,
     description: str = "",
@@ -241,18 +241,32 @@ def schema_for_request(
     The top-level omits the carrier tag as today; nested carriers
     retain theirs. Only the reachable closure is emitted.
     """
+    origin = _typing.get_origin(root)
+    if origin is _typing.Union or origin is _types.UnionType:
+        union_defs: dict[str, dict] = {}
+        projected = _project_hint(root, union_defs, set())
+        union_schema: dict[str, object] = {
+            "type": "object",
+            "description": description,
+            **projected,
+        }
+        union_full_defs = _prune_defs(union_schema, union_defs)
+        if union_full_defs:
+            union_schema["$defs"] = union_full_defs
+        return union_schema
     defs: dict[str, dict] = {}
-    hints = _typing.get_type_hints(root)
+    hints = _typing.get_type_hints(_typing.cast(type, root))
     properties: dict[str, dict] = {}
     required: list[str] = []
-    for field in _dataclasses.fields(root):
-        field_schema, is_required = _project_field(root, field, hints, defs, set())
+    root_type = _typing.cast(type, root)
+    for field in _dataclasses.fields(root_type):
+        field_schema, is_required = _project_field(root_type, field, hints, defs, set())
         properties[field.name] = field_schema
         if is_required:
             required.append(field.name)
     # Collect reachable defs from all field types.
     full_defs: dict[str, dict] = {}
-    for field in _dataclasses.fields(root):
+    for field in _dataclasses.fields(root_type):
         hint = hints.get(field.name, str)
         _collect_hint_defs(hint, full_defs, set())
     # Also include the root's own nested closure for dataclass fields.
@@ -267,8 +281,9 @@ def schema_for_request(
     if full_defs:
         schema["$defs"] = full_defs
     if not omit_type_tag:
-        schema["properties"] = dict(properties)
-        schema["properties"]["$type"] = {"const": root.__name__}
+        tagged = dict(properties)
+        tagged["$type"] = {"const": root_type.__name__}
+        schema["properties"] = tagged
     return schema
 
 
@@ -279,7 +294,7 @@ def _project_result_hint(hint: object, defs: dict[str, dict]) -> dict:
     args = _typing.get_args(inner)
     if origin is _typing.Union or origin is _types.UnionType:
         branches = [_project_result_hint(arg, defs) for arg in args]
-        result: dict = {"anyOf": branches}
+        result: dict[str, object] = {"anyOf": branches}
     elif isinstance(inner, type) and hasattr(inner, "__dataclass_fields__"):
         _ensure_def(inner, defs, set())
         result = {"$ref": f"#/$defs/{inner.__name__}__tag"}
@@ -301,6 +316,7 @@ def schema_for_result(root: object) -> dict:
     projected = _project_result_hint(root, defs)
     # MCP 2.3.0 requires an object at the output-schema root. Keep the
     # canonical tagged root/union as the validation branch beneath it.
+    schema: dict[str, object]
     if "$ref" in projected:
         schema = {"type": "object", "allOf": [projected]}
     else:

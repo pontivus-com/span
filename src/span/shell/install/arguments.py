@@ -5,6 +5,41 @@ from __future__ import annotations
 import argparse
 
 
+def _add_transition_arguments(parser) -> None:
+    """The one offline transition command surface (§8.5)."""
+    parser.add_argument(
+        "--transition-store",
+        default=None,
+        metavar="REPOSITORY_ID",
+        help="Explicitly transition one repository's schema-7/8/9 store to "
+        "the schema-10 lifecycle store. Requires --transition-phase. This "
+        "is the only supported store upgrade path; the runtime never "
+        "migrates at open.",
+    )
+    parser.add_argument(
+        "--transition-phase",
+        default=None,
+        choices=("inspect", "apply", "verify", "rollback"),
+        help="Transition phase: inspect/verify are observational; apply "
+        "archives, stages and activates; rollback restores a verified old "
+        "store while preserving new-format writes. Refused without "
+        "--transition-store.",
+    )
+    parser.add_argument(
+        "--transition-root",
+        default=None,
+        metavar="TARGET_DIR",
+        help="Explicit repository root for the transition binding. "
+        "Required for apply; reported by inspect when supplied.",
+    )
+    parser.add_argument(
+        "--migrate-store",
+        default=None,
+        metavar="REPOSITORY_ID",
+        help=argparse.SUPPRESS,
+    )
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="span-install",
@@ -138,14 +173,7 @@ def parse_args(argv=None):
         help="Remove one repository ID's data (`<id>.db` and "
         "`<data-dir>/structural/<id>/`). Explicit ID only.",
     )
-    parser.add_argument(
-        "--migrate-store",
-        default=None,
-        metavar="REPOSITORY_ID",
-        help="Explicitly upgrade one repository's store to the current "
-        "schema. Refuses an unknown version; idempotent at the current "
-        "version.",
-    )
+    _add_transition_arguments(parser)
     parser.add_argument(
         "--list-orphans",
         action="store_true",

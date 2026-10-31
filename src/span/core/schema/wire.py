@@ -7,7 +7,7 @@ import types as _types
 import typing as _typing
 
 
-def from_wire(root: type, payload: dict) -> object:
+def from_wire(root: object, payload: dict) -> object:
     """Strict ingress for the compact agent-facing grammar (J-8/S6.2)."""
     from span.core import model as _m
 
@@ -16,7 +16,7 @@ def from_wire(root: type, payload: dict) -> object:
     if "$type" in payload:
         raise ValueError("top-level $type is never supplied on the wire")
     tagged = _inject(root, payload, "")
-    return _m.from_canonical(root, tagged)
+    return _m.from_canonical(_typing.cast(type, root), tagged)
 
 
 def _inject(hint: object, value: object, path: str) -> object:

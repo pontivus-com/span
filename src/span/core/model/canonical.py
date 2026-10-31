@@ -181,6 +181,9 @@ def _decode_dataclass(cls: type, data: dict) -> object:
         raise CanonicalDecodeError(f"invalid {cls.__name__}: {exc}") from exc
 
 
-def from_canonical(cls: type, data: object) -> object:
+_T = _typing.TypeVar("_T")
+
+
+def from_canonical(cls: type[_T], data: object) -> _T:
     """Decode canonical data into the target model type (strict, exact)."""
-    return _decode_value(cls, data)
+    return _typing.cast(_T, _decode_value(cls, data))
