@@ -44,54 +44,41 @@ support is still current.
 
 ## See it
 
-This is a real exchange from the current build, against a two-file fixture.
-The client is a scripted MCP client, not a model; it shows the wire and
-freshness behaviour, not model judgement. Raw records:
-[current MCP acceptance evidence](https://github.com/pontivus-com/span/blob/master/docs/acceptance-evidence/mcp-current-2026-10-23/README.md).
+A scripted MCP client, not a model, drives the wire contract: ask a scoped
+question, admit exact evidence, record an understanding, and retrieve it from
+a fresh process.
 
 ```text
-> explain src/alpha.py
-Pending cont-1  CQ-01
-  "VALUE = 1"
+> understand_question  repo=alpha  question="What does alpha do?"  scope=src/alpha.py
+InvestigationNeeded
+  context ctx-srv-...
+  admitted obs:...  src/alpha.py
+  gap: no saved understanding for this scope
 
-> submit_interpretation cont-1
-PURPOSE  alpha computes the value
-  CURRENT
+> record_create  context=ctx-srv-...  conclusion c-1="alpha computes the value"
+  support obs:...
+Receipt committed
+  understanding u:... version 1
+  support CURRENT
 
-> explain src/alpha.py
-PURPOSE  alpha computes the value
-  CURRENT
+> understand_question  repo=alpha  question="Which value does alpha compute?"  scope=src/alpha.py
+UnderstandingCandidateAnswer
+  candidate u:... version 1
+  support CURRENT
 
-# edit src/alpha.py
-
-> status src/alpha.py
-PURPOSE  alpha computes the value
-  STALE
-  evidence changed
-  scope: src/alpha.py
-
-> refresh src/alpha.py
-Pending cont-6  CQ-01
-  "VALUE = 1 # touched"
-
-> submit_interpretation cont-6
-PURPOSE  alpha computes the value
-  CURRENT
-predecessor  STALE
+> understand_retrieve  repo=alpha  understanding=u:...
+RetrievedUnderstanding
+  c-1  "alpha computes the value"
+  support CURRENT
 ```
 
-The first call suspends with a bounded task. The submission establishes the
-purpose, and the next explain reads it back as current. After the file changes,
-status reports the purpose as stale, with the changed file and the scope to
-re-check. Refresh re-examines that one scope; the new result becomes current
-while the predecessor stays recorded as stale.
+The first call returns an explicit investigation gap, not an invented answer.
+Recording is atomic and cites the admitted observation. Later retrieval returns
+the stored conclusion with live support. After the source changes, `reassess`
+reports `REASSESSMENT_REQUIRED`; the historical version remains intact.
 
-Stale means the supporting evidence changed. It does not mean Span has proved
-the old conclusion false.
-
-The edit did not invalidate the whole repository, and it did not leave the old
-conclusion looking current. Span does not remove the first investigation; it
-keeps that work from being discarded when the session ends.
+The edit does not invalidate the whole repository, and it does not leave the
+old conclusion looking current.
 
 ## How it works
 
@@ -191,10 +178,10 @@ See [scope and boundaries](https://github.com/pontivus-com/span/blob/master/docs
 
 Span is beta. Linux is the currently verified installation path; macOS and
 Windows paths are reserved but not verified. The public operation surface is
-eleven MCP operations; see the [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md). Recorded acceptance
-runs are in [acceptance evidence](https://github.com/pontivus-com/span/blob/master/docs/acceptance-evidence/).
+nineteen lifecycle MCP tools; see the [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md). Historical
+acceptance runs remain in [acceptance evidence](https://github.com/pontivus-com/span/blob/master/docs/acceptance-evidence/).
 
-Latest: **0.8.3** — durable pending questions and a bounded refresh chain.
+Latest: **0.9.0** — lifecycle rebuild, schema-10 store, offline transition, and live support qualification.
 See the [changelog](CHANGELOG.md).
 
 If Span is useful to you, a star helps other developers find it. Feedback and

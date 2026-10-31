@@ -1,37 +1,37 @@
-# Span — Offline Initialization / Readiness Contract (plan Phase 0.7)
+# Span — Offline Initialization and Readiness Contract
 
-Governing invariants: I-27 (initialization is explicit, never implicit),
-I-31 (readiness is operational state, not semantic trust), I-29/I-30
-(hooks never interpret or refresh).
+Governing invariants: initialization is explicit, never implicit; readiness
+is operational state, not semantic trust; hooks never interpret, record,
+reassess, or rebuild.
 
 ## Contract
 
-1. Repository initialization is an explicit administrative lifecycle
-   operation: `initialize_repository`. It runs in a dedicated
-   initialization session, never inside a normal coding session.
-2. A fresh Span checkout is **uninitialized by definition**: no semantic
-   store artifact exists, and readiness is `UNINITIALIZED` (§4.8).
-   Initialization performs structural-source verification/build where
-   required, evidence inventory/fingerprinting, authority-seed
-   registration, and semantic-store/schema initialization — and performs
-   **no agent semantic interpretation** (plan Phase 0 exit, Phase 2.8:
-   interpretation is executed by the invoking agent, never by Span).
-3. Normal queries (`explain`, `impact`, `trace`,
-   `authority`) and all automatic hooks (`SESSION_START`,
-   `SOURCE_CHANGED`, `SESSION_STOP` → `status(..., mode=HOOK_FAST)`
-   only) **must never start initialization implicitly**. An uninitialized
-   repository returns `UNINITIALIZED` plus a setup notice, not bootstrap.
-4. The full `RepositoryReadiness` enum and `HookStatusNotice` carrier are
-   defined canonically in Phase 1.1 (§4.8). This contract fixes the
-   behavior those types must exhibit; Phase 1 must adopt it verbatim.
+1. Repository initialization is the explicit administrative operation
+   `initialize_repository`. It runs in a dedicated setup session, never inside
+   ordinary question, record, or hook work.
+2. A repository with no schema-10 store is uninitialized. Initialization binds
+   the canonical root, registers declared authority seeds and bindings, and
+   creates the schema-10 store. It performs no semantic interpretation and
+   creates no understanding.
+3. Ordinary lifecycle calls (`understand_question`, `understand_retrieve`,
+   `evidence_start`, `evidence_extend`, `record_*`, `reassess`,
+   `verification_support`, `locate`, `neighbors`) never initialize a store.
+   They must never start initialization implicitly. An `UNINITIALIZED`
+   repository fails with the explicit setup action.
+4. An older schema fails closed with the offline transition action. The
+   runtime never migrates or rebuilds a store at open.
+5. `span-install --verify-only` is observational. It reports build, store
+   schema, root binding, provider availability, and registration state; it
+   never initializes, migrates, or invokes a semantic operation.
+6. Automatic hooks are optional, event-local notices. They never establish
+   freshness, and a missed hook cannot make stale understanding current.
+7. `READY` means the store and provider are operationally available. It is
+   not semantic coverage, correctness, or completeness.
 
-## Phase 0 tests
+## Tests
 
-- `tests/unit/test_initialization_contract.py` pins: fresh tree carries no
-  initialized-store artifact; no existing code path invokes initialization
-  from query/hook paths (structural scan — vacuously true in Phase 0,
-  guards Phases 1–4); the contract document exists and states
-  explicit-only bootstrap.
-- Full readiness-state behavior (`READY`/`DEGRADED`/`UNAVAILABLE`,
-  `HOOK_FAST` bounds) is implemented and tested in its owning phases
-  (Phase 1 freshness preflight, Phase 2.8 bootstrap, Phase 4.9–4.10 hooks).
+- `tests/unit/test_initialization_contract.py` pins explicit-only setup and
+  the absence of initialization from ordinary reads.
+- `tests/unit/test_administrative_readiness.py` pins observational installer
+  verification and uninitialized/old-schema outcomes.
+- `tests/unit/test_lifecycle_hooks.py` pins bounded, non-writing hooks.
