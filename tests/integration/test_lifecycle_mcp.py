@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 
@@ -14,7 +15,6 @@ from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
 SPAN = pathlib.Path(__file__).resolve().parents[2]
-VENV_PYTHON = SPAN / ".venv" / "bin" / "python"
 REPOSITORY_ID = "repo-lifecycle"
 BOUNDS = {
     "max_results": 10,
@@ -67,7 +67,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
     async def _session(self, callback):
         params = StdioServerParameters(
-            command=str(VENV_PYTHON),
+            command=sys.executable,
             args=[
                 "-m",
                 "span.shell.mcp_server",
