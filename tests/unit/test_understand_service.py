@@ -364,6 +364,32 @@ class UnderstandServiceTest(unittest.TestCase):
         self.assertTrue(result.bound_info is not None)
         self.assertTrue(result.bound_info.truncated)
 
+    def test_empty_discovery_continuation_respects_budget(self) -> None:
+        self._build()
+        bounds = m.QueryBounds(
+            max_results=10,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=10,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        result = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-empty-discovery"),
+                question="What happens in the app?",
+                scope=m.EvidenceScope(paths=("src/app.py",)),
+                bounds=bounds,
+                page_token="dsp:9999",
+            )
+        )
+        self.assertIsInstance(result, m.ResponseBudgetExceeded)
+        assert isinstance(result, m.ResponseBudgetExceeded)
+        self.assertEqual(result.requested_bytes, 10)
+        self.assertGreater(result.minimum_bytes, 10)
+
     def test_budget_below_minimum_is_an_explicit_refusal(self) -> None:
         self._build()
         bounds = m.QueryBounds(

@@ -139,7 +139,10 @@ class UnderstandService:
                 )
                 return self._fit_result(answer, request.bounds.max_evidence_bytes)
             if kind == "discovery":
-                return m.DiscoveryLimit(discovery=discovery)
+                return self._fit_result(
+                    m.DiscoveryLimit(discovery=discovery),
+                    request.bounds.max_evidence_bytes,
+                )
         if not (request.scope.paths or request.scope.evidence_refs):
             if discovery is None:
                 raise RecordingValidationError(
