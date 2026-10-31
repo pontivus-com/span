@@ -78,7 +78,7 @@ class UnderstandServiceTest(unittest.TestCase):
             new_context_id=lambda: f"ctx-u-{next(counter)}",
         )
 
-    def _seed(self) -> None:
+    def _seed(self, statement: str = "A validates input.") -> None:
         self.store.put_context(
             m.InvestigationContext(
                 context_id=CONTEXT_ID,
@@ -104,7 +104,7 @@ class UnderstandServiceTest(unittest.TestCase):
                 conclusions=(
                     m.ProposedConclusion(
                         conclusion_id=m.ConclusionId("c-1"),
-                        statement="A validates input.",
+                        statement=statement,
                         assertion_nature=m.AssertionNature.DESCRIPTIVE,
                         scope=scope,
                         support=(
@@ -170,6 +170,79 @@ class UnderstandServiceTest(unittest.TestCase):
         self.assertTrue(
             any(isinstance(item, m.AdmittedEvidence) for item in result.outcomes)
         )
+        self.assertIsNotNone(result.discovery_observation_id)
+        assert result.discovery_observation_id is not None
+        self.assertTrue(
+            self.store.has_admitted_discovery(
+                result.context.context_id.value,
+                result.discovery_observation_id.value,
+            )
+        )
+
+    def test_truncated_inventory_creates_no_complete_scope_observation(self) -> None:
+        self._build()
+        bounds = m.QueryBounds(
+            max_results=10,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=1,
+            max_evidence_bytes=90_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        result = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-truncated"),
+                question="What happens across the app and styles?",
+                scope=m.EvidenceScope(paths=("src", "styles")),
+                bounds=bounds,
+            )
+        )
+        self.assertIsInstance(result, m.InvestigationNeeded)
+        assert isinstance(result, m.InvestigationNeeded)
+        self.assertTrue(result.bound_info is not None)
+        self.assertTrue(result.bound_info.truncated)
+        self.assertIsNone(result.discovery_observation_id)
+        self.assertIn("truncated", result.reason)
+
+    def test_first_oversized_snapshot_is_a_reference(self) -> None:
+        self._build()
+        self._seed(statement="A" * 5_000)
+        bounds = m.QueryBounds(
+            max_results=10,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=10,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        result = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-budget"),
+                question="Explain the validation path",
+                scope=m.EvidenceScope(paths=("src/app.py",)),
+                bounds=bounds,
+            )
+        )
+        self.assertIsInstance(result, m.UnderstandingCandidateAnswer)
+        assert isinstance(result, m.UnderstandingCandidateAnswer)
+        self.assertTrue(result.bound_info is not None)
+        self.assertTrue(result.bound_info.truncated)
+        self.assertEqual(len(result.retrieved), 1)
+        self.assertIsInstance(result.retrieved[0], m.UnderstandingSnapshotReference)
+        reference = result.retrieved[0]
+        assert isinstance(reference, m.UnderstandingSnapshotReference)
+        self.assertEqual(reference.understanding_id.value, "u-a")
+        retrieved = self.understand.retrieve(
+            m.UnderstandingSnapshotSelector(
+                repository_id="repo-1", understanding_id="u-a"
+            )
+        )
+        assert isinstance(retrieved, m.RetrievedUnderstanding)
+        self.assertEqual(retrieved.conclusions[0].content.statement, "A" * 5_000)
 
     def test_cold_question_without_scope_returns_limit(self) -> None:
         self._build()

@@ -88,80 +88,78 @@ class DiscoveryService:
         self._store.require_repository(repository_id)
         question_tokens = _tokens(question or "")
         limit = bounds.max_results
+        # One request examines at most the caller's requested result count.
+        # That is the scan budget: no repository-sized sweep is ever needed
+        # to prove that a page has no match.
         page_size = max(limit, 1)
         offset = _decode_token(page_token)
         candidates: list[m.UnderstandingCandidate] = []
-        truncated = False
-        next_token: str | None = None
-        scanned = 0
-        while True:
-            page = self._store.list_understandings(
-                repository_id, limit=page_size, offset=offset
+        page = self._store.list_understandings(
+            repository_id, limit=page_size, offset=offset
+        )
+        stop_index: int | None = None
+        for index, understanding in enumerate(page):
+            version = self._store.get_version(
+                understanding.understanding_id.value,
+                understanding.current_version.value,
             )
-            if not page:
+            current = self._store.get_version_conclusions(
+                understanding.understanding_id.value,
+                understanding.current_version.value,
+            )
+            associated = _scope_associated(scope, understanding.scope)
+            text = " ".join(
+                [version.question] + [_statement(item.content) for item in current]
+            )
+            overlap = question_tokens & _tokens(text)
+            if not associated and not overlap:
+                continue
+            matched = tuple(
+                m.ConclusionRevisionRef(
+                    understanding_id=item.understanding_id,
+                    conclusion_id=item.conclusion_id,
+                    revision=item.revision,
+                )
+                for item in current
+                if question_tokens & _tokens(_statement(item.content))
+            )
+            if associated and not matched:
+                matched = version.conclusions
+            reasons: list[str] = []
+            if associated:
+                reasons.append("scope-associated")
+            if overlap:
+                reasons.append("terms: " + ", ".join(sorted(overlap)))
+            candidates.append(
+                m.UnderstandingCandidate(
+                    understanding_id=understanding.understanding_id,
+                    current_version=understanding.current_version,
+                    question=version.question,
+                    scope=understanding.scope,
+                    matched_conclusions=matched,
+                    match_reasons=tuple(reasons),
+                    lexical_overlap=len(overlap),
+                    scope_associated=associated,
+                )
+            )
+            if len(candidates) >= limit:
+                stop_index = index
                 break
-            stop = False
-            for index, understanding in enumerate(page):
-                scanned += 1
-                version = self._store.get_version(
-                    understanding.understanding_id.value,
-                    understanding.current_version.value,
-                )
-                current = self._store.get_version_conclusions(
-                    understanding.understanding_id.value,
-                    understanding.current_version.value,
-                )
-                associated = _scope_associated(scope, understanding.scope)
-                text = " ".join(
-                    [version.question] + [_statement(item.content) for item in current]
-                )
-                overlap = question_tokens & _tokens(text)
-                if not associated and not overlap:
-                    continue
-                matched = tuple(
-                    m.ConclusionRevisionRef(
-                        understanding_id=item.understanding_id,
-                        conclusion_id=item.conclusion_id,
-                        revision=item.revision,
-                    )
-                    for item in current
-                    if question_tokens & _tokens(_statement(item.content))
-                )
-                if associated and not matched:
-                    matched = version.conclusions
-                reasons: list[str] = []
-                if associated:
-                    reasons.append("scope-associated")
-                if overlap:
-                    reasons.append("terms: " + ", ".join(sorted(overlap)))
-                candidates.append(
-                    m.UnderstandingCandidate(
-                        understanding_id=understanding.understanding_id,
-                        current_version=understanding.current_version,
-                        question=version.question,
-                        scope=understanding.scope,
-                        matched_conclusions=matched,
-                        match_reasons=tuple(reasons),
-                        lexical_overlap=len(overlap),
-                        scope_associated=associated,
-                    )
-                )
-                if len(candidates) >= limit:
-                    stop = True
-                    next_offset = offset + index + 1
-                    break
-            if stop:
-                truncated = True
-                next_token = _encode_token(next_offset)
-                break
-            if len(page) < page_size:
-                break
-            offset += len(page)
-            if scanned and len(candidates) == 0 and offset == 0:
-                break
+        if stop_index is not None:
+            next_offset = offset + stop_index + 1
+            more_in_page = stop_index + 1 < len(page)
+            more_pages = len(page) == page_size
+            truncated = more_in_page or more_pages
+            next_token = _encode_token(next_offset) if truncated else None
+        else:
+            next_offset = offset + len(page)
+            truncated = len(page) == page_size
+            next_token = _encode_token(next_offset) if truncated else None
         kept = tuple(candidates[:limit])
         if not kept:
-            if not (scope.paths or scope.evidence_refs):
+            if truncated:
+                limit_reason = "scan budget reached; continue with the page token"
+            elif not (scope.paths or scope.evidence_refs):
                 limit_reason = (
                     "no saved understanding matched this wording; provide a "
                     "concrete scope to search associations; no "

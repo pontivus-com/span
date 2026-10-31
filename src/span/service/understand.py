@@ -157,26 +157,8 @@ class UnderstandService:
         inventory = self._evidence_source.inventory_evidence(
             request.repository_id, request.scope, request.bounds
         )
-        pairs = tuple(
-            (
-                item.evidence_ref.locator,
-                item.evidence_ref.evidence_id.value,
-            )
-            for item in inventory.items
-        )
-        fingerprint = _rules.discovery_membership_fingerprint(pairs)
-        observation = m.DiscoveryObservation(
-            observation_id=discovery_observation_identity(
-                request.repository_id, request.scope, fingerprint
-            ),
-            repository_id=request.repository_id,
-            scope=request.scope,
-            membership_fingerprint=fingerprint,
-            captured_at=self._clock(),
-        )
-        self._store.put_discovery_observation(observation)
-        self._store.add_context_discovery_evidence(
-            context.context_id.value, observation.observation_id.value
+        observation, inventory_limitation = self._observe_inventory(
+            context, request, inventory
         )
         requests = tuple(
             m.EvidenceRequest(item.evidence_ref.locator)
@@ -190,8 +172,11 @@ class UnderstandService:
                 reason=(
                     "no saved understanding matched and the scope contains "
                     "no servable text evidence"
+                    + (f"; {inventory_limitation}" if inventory_limitation else "")
                 ),
-                discovery_observation_id=observation.observation_id,
+                discovery_observation_id=(
+                    observation.observation_id if observation else None
+                ),
                 bound_info=inventory.bound_info,
             )
         admission = self._evidence.extend(
@@ -221,18 +206,62 @@ class UnderstandService:
             reason=(
                 "no saved understanding matched this question and scope; "
                 "the admitted evidence is the bounded material for investigation"
+                + (f"; {inventory_limitation}" if inventory_limitation else "")
             ),
-            discovery_observation_id=observation.observation_id,
+            discovery_observation_id=(
+                observation.observation_id if observation else None
+            ),
             bound_info=inventory.bound_info,
         )
+
+    def _observe_inventory(
+        self,
+        context: m.InvestigationContext,
+        request: m.UnderstandQuestionRequest,
+        inventory: m.EvidenceInventoryPage,
+    ) -> tuple[m.DiscoveryObservation | None, str]:
+        """Record complete scope membership only; a page is never complete."""
+        if inventory.bound_info.truncated:
+            return (
+                None,
+                "inventory was truncated; no complete-scope membership "
+                "observation was created",
+            )
+        pairs = tuple(
+            (
+                item.evidence_ref.locator,
+                item.evidence_ref.evidence_id.value,
+            )
+            for item in inventory.items
+        )
+        fingerprint = _rules.discovery_membership_fingerprint(pairs)
+        observation = m.DiscoveryObservation(
+            observation_id=discovery_observation_identity(
+                request.repository_id, request.scope, fingerprint
+            ),
+            repository_id=request.repository_id,
+            scope=request.scope,
+            membership_fingerprint=fingerprint,
+            captured_at=self._clock(),
+        )
+        self._store.put_discovery_observation(observation)
+        self._store.add_context_discovery_evidence(
+            context.context_id.value, observation.observation_id.value
+        )
+        return observation, ""
 
     def _bounded_snapshots(
         self,
         repository_id: str,
         candidates: tuple[m.UnderstandingCandidate, ...],
         max_bytes: int,
-    ) -> tuple[tuple[m.RetrievedUnderstanding, ...], bool]:
-        retrieved: list[m.RetrievedUnderstanding] = []
+    ) -> tuple[
+        tuple[m.RetrievedUnderstanding | m.UnderstandingSnapshotReference, ...],
+        bool,
+    ]:
+        retrieved: list[m.RetrievedUnderstanding | m.UnderstandingSnapshotReference] = (
+            []
+        )
         total = 0
         omitted = False
         for candidate in candidates:
@@ -242,7 +271,16 @@ class UnderstandService:
             size = len(
                 _json.dumps(m.to_canonical(snapshot), sort_keys=True).encode("utf-8")
             )
-            if retrieved and total + size > max_bytes:
+            if total + size > max_bytes:
+                if not retrieved:
+                    retrieved.append(
+                        m.UnderstandingSnapshotReference(
+                            understanding_id=snapshot.understanding.understanding_id,
+                            version=snapshot.version.version,
+                            question=snapshot.version.question,
+                            scope=snapshot.version.scope,
+                        )
+                    )
                 omitted = True
                 break
             retrieved.append(snapshot)

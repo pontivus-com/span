@@ -332,6 +332,29 @@ RetrieveRequest = _typing.Union[
 
 
 @_dataclass(frozen=True)
+class UnderstandingSnapshotReference:
+    """A bounded projection of one snapshot omitted by content budget.
+
+    The full body and support qualification remain retrievable through the
+    exact understanding/version selector; this carrier never pretends to be
+    the complete snapshot.
+    """
+
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+    question: str
+    scope: EvidenceScope
+    reason: str = (
+        "full snapshot omitted by the response byte budget; retrieve it "
+        "with understand_retrieve"
+    )
+
+    def __post_init__(self) -> None:
+        _require_non_empty("UnderstandingSnapshotReference.question", self.question)
+        _require_non_empty("UnderstandingSnapshotReference.reason", self.reason)
+
+
+@_dataclass(frozen=True)
 class RetrievedContext:
     """One context with its admitted source and discovery observations."""
 
@@ -378,7 +401,7 @@ class UnderstandingCandidateAnswer:
 
     context: InvestigationContext
     discovery: UnderstandingDiscovery
-    retrieved: tuple[RetrievedUnderstanding, ...] = ()
+    retrieved: tuple[RetrievedUnderstanding | UnderstandingSnapshotReference, ...] = ()
     bound_info: BoundInfo | None = None
 
 

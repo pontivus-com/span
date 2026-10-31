@@ -6,6 +6,7 @@ import datetime
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 from span.core import model as m
 from span.service.understanding_discovery import DiscoveryService
@@ -172,6 +173,65 @@ class DiscoveryServiceTest(unittest.TestCase):
         self.assertTrue(result.bound_info.truncated)
         self.assertEqual(result.bound_info.returned_results, 1)
         self.assertIsNotNone(result.limit_reason)
+
+    def test_scan_budget_stops_after_requested_result_count(self) -> None:
+        for index in range(30):
+            _seed(
+                self.store,
+                understanding_id=f"u-unmatched-{index:02d}",
+                submission=f"sub-unmatched-{index:02d}",
+                question="Unrelated question",
+                scope=m.EvidenceScope(paths=(f"src/unmatched_{index}.py",)),
+                statement="Unrelated statement.",
+            )
+        bounds = m.QueryBounds(
+            max_results=2,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=10_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        with mock.patch.object(
+            self.store, "get_version", wraps=self.store.get_version
+        ) as read:
+            result = self.service.discover(
+                "repo-1",
+                m.EvidenceScope(paths=("src/no-such-file.py",)),
+                "nothing matches this wording",
+                bounds,
+            )
+        self.assertLessEqual(read.call_count, 2)
+        self.assertEqual(result.candidates, ())
+        self.assertTrue(result.bound_info.truncated)
+        self.assertIsNotNone(result.bound_info.continuation_token)
+        self.assertIn("scan budget", result.limit_reason or "")
+
+    def test_continuation_resumes_after_scan_budget(self) -> None:
+        bounds = m.QueryBounds(
+            max_results=1,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=10_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        first = self.service.discover("repo-1", m.EvidenceScope(), "billing", bounds)
+        self.assertTrue(first.bound_info.truncated)
+        self.assertIsNotNone(first.bound_info.continuation_token)
+        second = self.service.discover(
+            "repo-1",
+            m.EvidenceScope(),
+            "billing",
+            bounds,
+            first.bound_info.continuation_token,
+        )
+        self.assertEqual(
+            [item.understanding_id.value for item in second.candidates],
+            ["u-b"],
+        )
 
     def test_no_candidate_with_scope_is_not_global_absence(self) -> None:
         result = self.service.discover(

@@ -2,7 +2,7 @@
   "any_count": 6,
   "bare_generics": 34,
   "broad_excepts": 13,
-  "concrete_carriers": 155,
+  "concrete_carriers": 156,
   "core_layer_violations": 0,
   "duplicate_helper_bodies": 0,
   "duplicate_source_groups": 0,
@@ -22,7 +22,7 @@
   "test_doubles_in_src": 0,
   "test_files": 43,
   "test_helper_definitions": 3,
-  "test_lines": 13875,
+  "test_lines": 14012,
   "type_ignore": 22,
   "untyped_defs": 84
 }
