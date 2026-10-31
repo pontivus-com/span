@@ -137,7 +137,7 @@ class UnderstandService:
                         request.repository_id, discovery.candidates
                     ),
                 )
-                return self._fit_answer(answer, request.bounds.max_evidence_bytes)
+                return self._fit_result(answer, request.bounds.max_evidence_bytes)
             if kind == "discovery":
                 return m.DiscoveryLimit(discovery=discovery)
         if not (request.scope.paths or request.scope.evidence_refs):
@@ -145,7 +145,10 @@ class UnderstandService:
                 raise RecordingValidationError(
                     "an inventory cursor requires a concrete evidence scope"
                 )
-            return m.DiscoveryLimit(discovery=discovery)
+            return self._fit_result(
+                m.DiscoveryLimit(discovery=discovery),
+                request.bounds.max_evidence_bytes,
+            )
         context = issue_context(
             self._store,
             payload=binding,
@@ -183,15 +186,18 @@ class UnderstandService:
             )
             if inventory_limitation:
                 reason += f"; {inventory_limitation}"
-            return m.InvestigationNeeded(
-                context=context,
-                outcomes=(),
-                evidence=(),
-                reason=reason,
-                discovery_observation_id=(
-                    observation.observation_id if observation else None
+            return self._fit_result(
+                m.InvestigationNeeded(
+                    context=context,
+                    outcomes=(),
+                    evidence=(),
+                    reason=reason,
+                    discovery_observation_id=(
+                        observation.observation_id if observation else None
+                    ),
+                    bound_info=inventory.bound_info,
                 ),
-                bound_info=inventory.bound_info,
+                request.bounds.max_evidence_bytes,
             )
         admission = self._evidence.extend(
             m.EvidenceExtendRequest(
@@ -219,15 +225,18 @@ class UnderstandService:
         )
         if inventory_limitation:
             reason += f"; {inventory_limitation}"
-        return m.InvestigationNeeded(
-            context=context,
-            outcomes=admission.outcomes,
-            evidence=evidence,
-            reason=reason,
-            discovery_observation_id=(
-                observation.observation_id if observation else None
+        return self._fit_result(
+            m.InvestigationNeeded(
+                context=context,
+                outcomes=admission.outcomes,
+                evidence=evidence,
+                reason=reason,
+                discovery_observation_id=(
+                    observation.observation_id if observation else None
+                ),
+                bound_info=inventory.bound_info,
             ),
-            bound_info=inventory.bound_info,
+            request.bounds.max_evidence_bytes,
         )
 
     def _observe_inventory(
@@ -285,11 +294,69 @@ class UnderstandService:
                 )
         return tuple(retrieved)
 
-    def _fit_answer(
+    def _fit_result(
+        self, result: m.UnderstandQuestionResult, max_bytes: int
+    ) -> m.UnderstandQuestionResult:
+        """Apply the one response budget to every answer variant."""
+        if _encoded_size(result) <= max_bytes:
+            return result
+        if isinstance(result, m.UnderstandingCandidateAnswer):
+            return self._fit_candidate(result, max_bytes)
+        if isinstance(result, m.InvestigationNeeded):
+            return self._fit_investigation(result, max_bytes)
+        if isinstance(result, m.DiscoveryLimit):
+            return _budget_exceeded(result, max_bytes)
+        return result
+
+    def _fit_investigation(
+        self,
+        answer: m.InvestigationNeeded,
+        max_bytes: int,
+    ) -> m.UnderstandQuestionResult:
+        """Reduce a cold answer, then refuse explicitly if it cannot fit."""
+        context: m.InvestigationContext | m.InvestigationContextReference = (
+            answer.context
+        )
+        limitation = "full context omitted by the response byte budget"
+        if isinstance(answer.context, m.InvestigationContext):
+            context = m.InvestigationContextReference(
+                context_id=answer.context.context_id,
+                repository_id=answer.context.repository_id,
+            )
+        bound = _budget_bound(answer.bound_info)
+        reduced = _dataclasses.replace(
+            answer,
+            context=context,
+            reason=answer.reason + f"; {limitation}",
+            bound_info=bound,
+        )
+        if _encoded_size(reduced) <= max_bytes:
+            return reduced
+        reduced = _dataclasses.replace(
+            reduced,
+            evidence=(),
+            reason=reduced.reason
+            + "; admitted evidence omitted; retrieve the context for its observations",
+        )
+        if _encoded_size(reduced) <= max_bytes:
+            return reduced
+        reduced = _dataclasses.replace(
+            reduced,
+            outcomes=(),
+            reason=reduced.reason + "; admission outcomes omitted by response budget",
+        )
+        if _encoded_size(reduced) <= max_bytes:
+            return reduced
+        reduced = _dataclasses.replace(reduced, discovery_observation_id=None)
+        if _encoded_size(reduced) <= max_bytes:
+            return reduced
+        return _budget_exceeded(reduced, max_bytes)
+
+    def _fit_candidate(
         self,
         answer: m.UnderstandingCandidateAnswer,
         max_bytes: int,
-    ) -> m.UnderstandingCandidateAnswer:
+    ) -> m.UnderstandQuestionResult:
         """Keep the whole answer inside the response budget.
 
         Full snapshots are replaced by minimal references first, then full
@@ -361,36 +428,34 @@ class UnderstandService:
             )
             if _encoded_size(rebuilt) <= max_bytes:
                 return rebuilt
-        if isinstance(answer.context, m.InvestigationContext):
-            context: m.InvestigationContext | m.InvestigationContextReference = (
-                m.InvestigationContextReference(
-                    context_id=answer.context.context_id,
-                    repository_id=answer.context.repository_id,
-                )
+        context: m.InvestigationContext | m.InvestigationContextReference = (
+            m.InvestigationContextReference(
+                context_id=answer.context.context_id,
+                repository_id=answer.context.repository_id,
             )
-            truncated = True
-            category = "response-budget"
-            discovery = _dataclasses.replace(
-                answer.discovery,
-                candidates=tuple(candidates),
-                bound_info=_dataclasses.replace(
-                    answer.discovery.bound_info,
-                    returned_results=len(candidates),
-                    truncated=True,
-                    truncated_category=category,
-                    continuation_token=token,
-                ),
-            )
-            rebuilt = _dataclasses.replace(
-                answer,
-                context=context,
-                retrieved=tuple(retrieved),
-                discovery=discovery,
-            )
-            return rebuilt
-        return _replace_answer(
-            answer, retrieved, candidates, truncated, token, category
         )
+        truncated = True
+        category = "response-budget"
+        discovery = _dataclasses.replace(
+            answer.discovery,
+            candidates=tuple(candidates),
+            bound_info=_dataclasses.replace(
+                answer.discovery.bound_info,
+                returned_results=len(candidates),
+                truncated=True,
+                truncated_category=category,
+                continuation_token=token,
+            ),
+        )
+        rebuilt = _dataclasses.replace(
+            answer,
+            context=context,
+            retrieved=tuple(retrieved),
+            discovery=discovery,
+        )
+        if _encoded_size(rebuilt) <= max_bytes:
+            return rebuilt
+        return _budget_exceeded(rebuilt, max_bytes)
 
     @staticmethod
     def _require_repository(actual: str, requested: str) -> None:
@@ -455,4 +520,21 @@ def _replace_answer(
         answer,
         retrieved=tuple(retrieved),
         discovery=discovery,
+    )
+
+
+def _budget_bound(bound: m.BoundInfo | None) -> m.BoundInfo | None:
+    if bound is None:
+        return None
+    return _dataclasses.replace(
+        bound,
+        truncated=True,
+        truncated_category="response-budget",
+    )
+
+
+def _budget_exceeded(minimal: object, requested_bytes: int) -> m.ResponseBudgetExceeded:
+    return m.ResponseBudgetExceeded(
+        requested_bytes=requested_bytes,
+        minimum_bytes=_encoded_size(minimal),
     )

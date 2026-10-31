@@ -332,6 +332,63 @@ class UnderstandServiceTest(unittest.TestCase):
         self.assertNotIn("A" * 100, encoded)
         self.assertTrue(result.discovery.bound_info.truncated)
 
+    def test_cold_answer_is_budgeted(self) -> None:
+        self._build()
+        bounds = m.QueryBounds(
+            max_results=10,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=1_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        result = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-cold-budget"),
+                question="Q" * 5_000,
+                scope=m.EvidenceScope(paths=("src/app.py",)),
+                bounds=bounds,
+            )
+        )
+        self.assertIsInstance(result, m.InvestigationNeeded)
+        assert isinstance(result, m.InvestigationNeeded)
+        self.assertIsInstance(result.context, m.InvestigationContextReference)
+        encoded = json.dumps(
+            m.to_canonical(result), sort_keys=True, separators=(",", ":")
+        )
+        self.assertLessEqual(len(encoded.encode("utf-8")), 1_000)
+        self.assertNotIn("Q" * 100, encoded)
+        self.assertFalse(result.evidence)
+        self.assertTrue(result.bound_info is not None)
+        self.assertTrue(result.bound_info.truncated)
+
+    def test_budget_below_minimum_is_an_explicit_refusal(self) -> None:
+        self._build()
+        bounds = m.QueryBounds(
+            max_results=10,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=10,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        result = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-impossible-budget"),
+                question="What happens in the app?",
+                scope=m.EvidenceScope(paths=("src/app.py",)),
+                bounds=bounds,
+            )
+        )
+        self.assertIsInstance(result, m.ResponseBudgetExceeded)
+        assert isinstance(result, m.ResponseBudgetExceeded)
+        self.assertEqual(result.requested_bytes, 10)
+        self.assertGreater(result.minimum_bytes, 10)
+
     def test_truncated_inventory_creates_no_complete_scope_observation(self) -> None:
         self._build()
         bounds = m.QueryBounds(

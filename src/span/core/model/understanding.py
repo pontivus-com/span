@@ -431,7 +431,7 @@ class UnderstandingCandidateAnswer:
 class InvestigationNeeded:
     """No saved candidate; the context and inspectable evidence to investigate."""
 
-    context: InvestigationContext
+    context: InvestigationContext | InvestigationContextReference
     outcomes: tuple[EvidenceAdmissionOutcome, ...]
     evidence: tuple[EvidenceUnit, ...]
     reason: str
@@ -449,8 +449,29 @@ class DiscoveryLimit:
     discovery: UnderstandingDiscovery
 
 
+@_dataclass(frozen=True)
+class ResponseBudgetExceeded:
+    """The requested byte budget cannot hold the minimum response.
+
+    This is an explicit refusal, not a silently oversized answer. Retrying
+    with at least ``minimum_bytes`` or a narrower scope is the next action.
+    """
+
+    requested_bytes: int
+    minimum_bytes: int
+    action: str = "retry with a larger max_evidence_bytes or a narrower scope"
+
+    def __post_init__(self) -> None:
+        if self.requested_bytes < 0:
+            raise ValueError("requested_bytes cannot be negative")
+        if self.minimum_bytes < 0:
+            raise ValueError("minimum_bytes cannot be negative")
+        _require_non_empty("ResponseBudgetExceeded.action", self.action)
+
+
 UnderstandQuestionResult = _typing.Union[
     UnderstandingCandidateAnswer,
     InvestigationNeeded,
     DiscoveryLimit,
+    ResponseBudgetExceeded,
 ]
