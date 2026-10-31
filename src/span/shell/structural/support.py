@@ -17,6 +17,7 @@ from span.core import paging as _paging
 from span.ports.structural import StaleContinuationError, StructuralDirection
 
 _Token = TypeVar("_Token")
+_Item = TypeVar("_Item")
 
 __all__ = [
     "check_repository",
@@ -51,14 +52,14 @@ def versioned_offset(
 
 
 def versioned_page(
-    items: tuple[object, ...],
+    items: tuple[_Item, ...],
     offset: int,
     max_results: int,
     category: str,
     *,
     index_version: str,
     version: str | None = None,
-) -> tuple[tuple[object, ...], m.BoundInfo]:
+) -> tuple[tuple[_Item, ...], m.BoundInfo]:
     """Slice one version-bound listing page and describe it deterministically."""
     kept = items[offset : offset + max_results]
     remaining = len(items) - (offset + len(kept))

@@ -11,6 +11,7 @@ import enum as _enum
 import types as _types
 import typing as _typing
 from dataclasses import fields as _fields
+from dataclasses import is_dataclass as _is_dataclass
 from dataclasses import MISSING as _MISSING
 
 from span.core.model.primitives import (
@@ -28,7 +29,7 @@ def to_canonical(value: object) -> object:
         return value.isoformat()
     if isinstance(value, (tuple, list)):
         return [to_canonical(item) for item in value]
-    if hasattr(value, "__dataclass_fields__"):
+    if _is_dataclass(value):
         payload: dict[str, object] = {"$type": type(value).__name__}
         for f in _fields(value):
             payload[f.name] = to_canonical(getattr(value, f.name))
@@ -181,6 +182,9 @@ def _decode_dataclass(cls: type, data: dict) -> object:
         raise CanonicalDecodeError(f"invalid {cls.__name__}: {exc}") from exc
 
 
-def from_canonical(cls: type, data: object) -> object:
+_T = _typing.TypeVar("_T")
+
+
+def from_canonical(cls: type[_T], data: object) -> _T:
     """Decode canonical data into the target model type (strict, exact)."""
-    return _decode_value(cls, data)
+    return _typing.cast(_T, _decode_value(cls, data))

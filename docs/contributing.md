@@ -42,6 +42,13 @@ version is a constant, not a lockfile entry, so
 workflow runs the same check weekly. Bump the pin only after verifying the
 upstream release against the structural fixtures.
 
+
+For the 0.9.0 beta, also run `python scripts/typecheck.py`: the configured
+mypy run and recorded baseline must both have zero errors. The pinned
+structural indexer is required for its integration lane; an indexer-version
+skip is deferred verification, not a full pass. Installed-process checks do
+not replace real Codex delivery or comparative product-acceptance evidence.
+
 ## What to test
 
 - **Unit** — core rules, carriers, serialization, ports, shells, paging,

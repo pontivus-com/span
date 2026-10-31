@@ -64,37 +64,6 @@ class RepositoryIdentityConflict(ValueError):
         )
 
 
-class StoreReadiness(_enum.Enum):
-    UNINITIALIZED = "UNINITIALIZED"
-    INITIALIZING = "INITIALIZING"
-    READY = "READY"
-    DEGRADED = "DEGRADED"
-    UNAVAILABLE = "UNAVAILABLE"
-
-
-@_dataclass(frozen=True)
-class HookNoticeScope(_enum.Enum):
-    """Scope discriminator for hook notices ([design note G](docs/design-references.md#g) Stage 2).
-
-    Hooks observe the triggering event's local scope only — never
-    repository inventory. Single value today; the type (not prose) is
-    what prevents misreading a silent notice as clean.
-    """
-
-    EVENT_LOCAL = "EVENT_LOCAL"
-
-
-@_dataclass(frozen=True)
-class HookStatusNotice:
-    store_readiness: StoreReadiness
-    affected_count: int = 0
-    stale_count: int = 0
-    unverifiable_count: int = 0
-    affected_subject_ids: tuple[SubjectId, ...] = ()
-    recommended_action: str | None = None
-    scope: HookNoticeScope = HookNoticeScope.EVENT_LOCAL
-
-
 @_dataclass(frozen=True)
 class RepositoryState:
     repository_id: str
@@ -190,11 +159,6 @@ class StructuralReachNode:
 
     def __post_init__(self) -> None:
         _require_non_negative_int("depth", self.depth)
-
-
-class StatusMode(_enum.Enum):
-    NORMAL = "NORMAL"
-    HOOK_FAST = "HOOK_FAST"
 
 
 class StructuralLocateMode(_enum.Enum):

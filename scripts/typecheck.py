@@ -25,6 +25,18 @@ LINE = re.compile(r"^(?P<path>[^:]+):(?P<line>\d+): error: (?P<message>.*)$")
 
 
 def run_mypy() -> tuple[collections.Counter[str], int]:
+    version = subprocess.run(
+        [sys.executable, "-m", "mypy", "--version"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if version.returncode != 0:
+        raise SystemExit(
+            "mypy is not available for the configured interpreter: "
+            f"{version.stderr.strip() or version.stdout.strip()}"
+        )
     result = subprocess.run(
         [
             sys.executable,
@@ -52,6 +64,12 @@ def run_mypy() -> tuple[collections.Counter[str], int]:
         total += 1
     if result.returncode not in (0, 1):
         raise SystemExit(result.stderr or result.stdout)
+    if result.returncode == 1 and total == 0:
+        raise SystemExit(
+            "mypy failed without parseable diagnostics; refusing to treat "
+            "an unusable run as a clean ratchet:\n"
+            f"{result.stdout.strip()}\n{result.stderr.strip()}"
+        )
     return counts, total
 
 

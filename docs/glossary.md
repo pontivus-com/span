@@ -1,96 +1,78 @@
 # Glossary
 
-Terms used across Span's documentation. Each entry is a pointer to the page that
-owns the definition; the code and tests remain the authority.
+**Understanding** — A saved explanation of a question over a scope, with a
+stable identity and immutable versions. See [lifecycle](lifecycle.md).
 
-**AFFECTS** — A derived query-time relation describing what a change can reach.
-It is computed from persisted relationships and premises, never stored as a claim
-or relationship. See [queries](queries.md#change-impact).
+**Version** — A full membership snapshot of exact conclusion revisions, gaps,
+and provenance. It is not a conclusion revision counter.
 
-**Authority (`AuthorityBinding`)** — A governing source with a kind, a status
-(accepted, declared, draft, superseded, unknown), applicability, and optional
-declared precedence. Evidence is not authority: finding a document does not make
-it governing. See [authority and trust](authority-trust.md).
+**Conclusion revision** — One immutable explanation or withdrawal in a lineage.
+The agent owns its meaning and the evidence-to-statement reasoning.
 
-**Bounds** — Operational limits on an answer: maximum results, depth, evidence
-units, and subjects. Bounds never change semantic meaning, only how much of an
-answer is returned. See [queries](queries.md#bounds).
+**Gap** — An unanswered question with a stated basis in a saved version.
+A gap is not a supported conclusion.
 
-**Claim** — One typed statement about a subject, with exactly one value for its
-kind (purpose, ownership, invariant, and so on). Every material claim carries
-evidence, optional authority, trust, freshness, and a basis. See
-[taxonomy](taxonomy.md#claims-one-typed-value-per-kind).
+**Candidate** — Potentially relevant saved understanding found by bounded scope
+association or term overlap. Matching does not establish applicability.
 
-**Continuation** — An opaque, single-use, TTL-bounded handle to a suspended
-interpretation task. It is never persisted and never authoritative. See
-[agent interpretation exchange](interpretation.md).
+**Scope** — The declared paths/evidence references bounding the investigation
+or conclusion. Unexamined and truncated scope stays explicit.
 
-**Coverage disposition** — The state of a semantic question: `PENDING`, `OPEN`,
-`ANSWERED`, or `NOT_APPLICABLE`. Coverage is not the same as freshness, and
-`ANSWERED` means the analysis was recorded, not that a reviewer approved it.
-See [interpretation](interpretation.md#explicit-completion).
+**Observation** — Immutable admitted source content identity and excerpts, or
+a recorded discovery-membership fingerprint. See [authority](authority-trust.md).
 
-**Current / stale / unverifiable** — The three freshness states. `CURRENT` means
-the required support still holds; `STALE` means supporting evidence changed and
-must be re-checked; `UNVERIFIABLE` means a conclusion exists but the support
-needed to confirm it could not be obtained — a recorded source is absent from the
-inventory, an authority seed is missing, an inventory fingerprint is unavailable,
-or a bounded premise walk did not complete. It is never how Span reports its own
-failure: a provider or store failure fails the operation. See
-[freshness](freshness.md).
+**Support** — A declared dependency on a source observation, authority binding,
+exact premise revision, or discovery observation.
 
-**Evidence (`EvidenceRef`)** — A located, revisioned source span with a source
-kind. Evidence supports reasoning; it confers no authority and no truth. See
-[authority and trust](authority-trust.md#evidence).
+**CURRENT** — Declared support passed its present checks. This is neither
+semantic truth nor proof of complete investigation.
 
-**Interpretation profile** — The named contract a pending task carries
-(`SA_1_7_V1`): scope, evidence, behavior, typed submission, adversarial check,
-and fresh readback. See [interpretation](interpretation.md#interpretation-profile).
+**REASSESSMENT_REQUIRED** — Support changed or a premise was superseded or
+withdrawn; investigate before treating the explanation as current.
 
-**PendingInterpretation** — The typed suspension returned when current
-understanding is insufficient. It carries a continuation and a bounded
-`SemanticInterpretationRequest`. See
-[interpretation](interpretation.md#request-semanticinterpretationrequest).
+**UNVERIFIABLE** — Required support cannot be established. Operational failure
+is reported separately. See [freshness](freshness.md).
 
-**Question (`SemanticQuestionScope`)** — The bounded question a pending task
-answers, identified by a question class (`CQ-01`–`CQ-09`, with `CQ-10`
-cross-cutting) plus a subject, scope root, slice, and materiality basis.
+**Authority binding** — Declared governance with evidence, kind, status,
+applicability, and any explicitly stated precedence. Relevance does not confer it.
 
-**Relationship** — A typed edge between subjects (membership, implementation,
-dependency, governance, supersession, and so on) with the same evidence,
-authority, trust, and freshness obligations as a claim. See
-[taxonomy](taxonomy.md#relationships).
+**Basis** — The account of how evidence or premises led to a conclusion or action.
+An accepted basis does not certify the prose as true.
 
-**Repository state** — The revision or state fingerprint Span observed, plus a
-dirty-tree flag. Freshness compares understanding against this state, never
-against wall-clock age. See [freshness](freshness.md#preflight-before-anything-is-presented-as-current).
+**Challenge** — An explicit dispute with an independent revision counter and
+history. Settlement requires a named disposition tied to resulting state.
 
-**ResolutionRequirement** — A typed, non-silent description of what is missing
-for a claim or answer (missing authority, missing evidence, ambiguity, and so
-on). It is reported, not hidden. See [authority and trust](authority-trust.md).
+**Context** — Recoverable, expiring operational investigation state. It binds a
+caller request to a repository and scope, and retains admitted evidence.
 
-**Scope / target** — The exact set of paths or subjects a question or an
-establishment campaign is allowed to cover. Scope never silently expands; a
-scoped refresh covers one recorded scope. See [lifecycle](lifecycle.md).
+**Receipt** — Immutable acceptance record for a recording identity and content.
+Matching replay can succeed after context expiry while the receipt is retained.
 
-**SemanticBasis** — A short typed account of how a claim or relationship was
-derived: explicit evidence, semantic interpretation, structural observation, or a
-derived join. Empty bases fail validation.
+**Recording identity** — `(repository_id, context_id, submission_id)`, preserved
+by the caller before dispatch. Same identity with different content conflicts.
 
-**Structural source** — The wiring-graph provider (a pinned local indexer) that
-supplies partitions, locations, and edges. Its output is evidence only; it never
-supplies semantic truth or authority. See [indexing](indexing.md).
+**Compare-and-set** — Accept an update only at the expected understanding or
+challenge revision, preventing conflicting concurrent changes.
 
-**Subject** — A typed entity (repository, subsystem, component, capability, code
-symbol, contract, boundary, representation, configuration, document, test or
-gate, surface, field, external dependency, or other). Identity is
-`repository_id + subject_kind + canonical_locator`, never a name alone. See
-[taxonomy](taxonomy.md#subjects).
+**Verification run** — Independent record of actual external execution and
+its tested observations, outcome, time, observer, and limitations.
+Qualification checks currency and does not rerun it or change its outcome.
 
-**Trust (`TrustState`)** — How well a claim is established:
-`ESTABLISHED`, `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`, or `UNRESOLVED`. Trust and
-freshness are separate and are never mixed. See
-[authority and trust](authority-trust.md#trust-vs-freshness-never-mixed).
+**Cursor** — Opaque listing position. Resume the same operation with the same
+request arguments and identity. It is not an interpretation continuation.
 
-**UNASSESSED** — Coverage for a subject or area nobody has examined yet. It is
-reported explicitly rather than treated as complete. See [lifecycle](lifecycle.md).
+**Bounds** — Operational work/result limits with explicit omissions and
+continuations. Question byte budgets do not measure total host context size.
+
+**Readiness** — Store/provider availability and root binding, separate from
+understanding, correctness, or completeness.
+
+**Hook** — Optional event-local notice. Silence and configured wiring do not
+prove delivery or semantic completeness. See [hooks](hooks.md).
+
+**Structural evidence** — Provider-observed symbols, locations, and adjacency.
+It supports investigation and grants no semantic or normative authority.
+
+**Legacy terminology** — Claim taxonomies, coverage campaigns, and suspended
+interpretation continuations in historical exports or older evidence. They are
+not the 0.9.0 public lifecycle. See [design references](design-references.md).

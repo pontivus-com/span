@@ -89,12 +89,17 @@ installed `span-mcp` over stdio.
 
 The public MCP operations are exactly:
 
-`initialize_repository`, `initialize_target`, `explain`, `impact`, `trace`,
-`authority`, `status`, `refresh`, `submit_interpretation`, `locate`, and
-`neighbors`.
+`initialize_repository`; `start_context`, `understand_question`,
+`understand_retrieve`, `evidence_start`, `evidence_extend`; `reassess`,
+`verification_support`; `record_create`, `record_add`, `record_confirm`,
+`record_correct`, `record_replace`, `record_withdraw`, `record_challenge`,
+`record_update`, `record_verification`; `locate`; `neighbors`.
 
-There are no `semantic_*` aliases. Span never selects a model, calls a
-provider, edits a target repository, or runs tests on the user's behalf.
+The retired operations `explain`, `trace`, `impact`, `authority`, `status`,
+`refresh`, `initialize_target`, and `submit_interpretation` are not
+registered. There are no `semantic_*` aliases. Span never selects a model,
+calls a provider, edits a target repository, or runs tests on the user's
+behalf.
 
 ## Contributions
 

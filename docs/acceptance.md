@@ -1,95 +1,72 @@
-# Fixtures and acceptance
+# Acceptance and evidence
 
-Span's acceptance model is behavioural. Every case is judged on correctness,
-sufficiency, evidence integrity, uncertainty integrity, freshness integrity,
-boundedness, and reuse integrity. Fixtures are generic and synthetic; no
-proprietary material is required.
+The 0.9.0 lifecycle is evaluated at three distinct boundaries: deterministic
+contracts, delivered host behavior, and useful real-task reuse. Passing a
+local suite proves neither host conversion nor comparative product value.
 
-## Case classes
+## Behavioral scenarios
 
-- **A — identity and purpose.** A subject's purpose is explainable from
-  evidence, not from a name.
-- **B — ownership and custody.** Owners are distinguished from consumers;
-  structural use is not ownership; a retired owner owns nothing live.
-- **C — boundary and representation.** One canonical representation; no
-  duplicate carriers, fallback writes, or shadow contracts.
-- **D — authority conflict.** Observed behaviour and declared authority are
-  separate; declared precedence is used, never invented.
-- **E — verification.** Candidate evidence and current pass/fail are
-  distinguished; nothing is presented as passed unless an execution record
-  for the verified scope still matches the current revision. A submission can
-  attest `CANDIDATE` or `UNKNOWN`; a pass is derived, never asserted.
-- **F — lifecycle.** State is created, used, terminal, failed, abandoned,
-  replayed, and reaped; persistence points are explicit.
-- **G — non-local impact.** Structural possibility is separated from
-  established impact; change kind and affected assertions are typed.
-- **H — ambiguity.** Multiple candidates stay visible; no arbitrary pick.
-- **I — missing authority.** Missing authority yields an explicit unresolved
-  state and a resolver requirement.
-- **J — staleness and partial refresh.** Only affected claims go stale;
-  coverage dependencies are invalidated by new evidence; withdrawal keeps
-  history.
-- **K — portability.** A held-out repository works with the real structural
-  provider; no repository-specific code.
-- **L — isolation.** Build, test, and serve without private access.
-- **M — publication boundary.** No proprietary artifacts; the licence gate
-  passes.
+The functional scenario set covers:
 
-The suite also exercises terminology authority (concept, surfaces, conflict,
-and no invented resolution) and publication custody (terminal lifecycle,
-copy-only downstream, candidate versus current verification).
+| ID | Behavior | Representative current tests |
+| --- | --- | --- |
+| F-01 | Cold scoped question returns useful evidence and honest gaps. | `test_cold_question_admits_inspectable_evidence` |
+| F-02 | Record a real supported investigation and inspect its receipt. | `test_create_records_and_replays`, installed MCP lane |
+| F-03 | Fresh-session discovery without a supplied saved ID. | installed MCP fresh-process lane, host capture |
+| F-04 | Relevant support change requires reassessment. | `test_source_support_current_changed_missing` |
+| F-05 | Unrelated change preserves independent support. | `test_unrelated_source_change_keeps_current` |
+| F-06 | Confirm/correct preserves revisions and version history. | `test_full_update_chain_preserves_history` |
+| F-07 | Explicit challenges retain unresolved state and settlement history. | challenge transition and lifecycle-store tests |
+| F-08 | Exact CSS/config evidence works without symbols. | `test_cross_file_batch_admits_each_source` |
+| F-09 | Retry, restart, lost-response, and concurrent identities recover safely. | lifecycle service/store replay and concurrency tests |
+| F-10 | Independent verification remains tied to tested observations. | `test_verification_runs_are_independent_and_source_aware` |
+| F-11 | Correctness holds without hooks. | lifecycle tests, hooks-disabled Codex capture |
+| F-12 | Batch outcomes, reference reuse, and membership changes remain explicit. | evidence/discovery/support service tests |
+| F-13 | Missing, ambiguous, failed, expired, and truncated outcomes differ. | evidence, understand, and lifecycle tests |
+| F-14 | Operational retention preserves accepted semantic history. | lifecycle-store reaping and replay-retention tests |
 
-## Contract paths
+This maps representative coverage; a named test does not certify every clause
+of a scenario or claim a host executed it. Read test assertions and execution
+receipts for the exact demonstrated boundary.
 
-- Multi-unit interpretation chaining.
-- Second-page retrieval with an opaque page token.
-- Superseding evidence.
-- Claim withdrawal with visible history.
-- Documentation-only subjects.
-- Empty and negative results that reopen rather than silently complete.
+## Contract and artifact verification
 
-## Lifecycle paths
+The suite exercises strict codecs and schemas, pure rules, atomic persistence,
+compare-and-set transitions, recovery, support checks, bounds, readiness,
+hooks, isolation, skills, and managed assets. The installed-MCP lane builds a
+non-editable install and drives `span-mcp` over stdio outside the source tree.
+The transition lane uses disposable stores, including archive/export/verify,
+interruption recovery, active-writer refusal, and rollback preservation.
 
-Normal:
+Use [contributing](contributing.md) for commands. The zero-error typing baseline
+is the beta gate; a passing ratchet with pre-existing errors is insufficient.
+Clean builds, packaged assets, docs, version, and changelog extraction are
+separate release checks.
 
-```text
-orient → impact → trace/authority → modify → status (stale)
-       → refresh → status (current)
-```
+## Host evidence
 
-Hook and bootstrap:
+Capture installed build/command, advertised schemas, model-delivered
+declarations, requests/results, representation duplication, and recovery and
+concurrency behavior. Codex is the live beta validation target. OpenCode's
+earlier captures do not prove final-package delivery; Claude live grammar
+and caller identity remain UNVERIFIED under the owner waiver. Hook wiring
+is separate from observed arrival.
 
-```text
-UNINITIALIZED setup notice → dedicated init → READY → HOOK_FAST session
-→ explicit impact → edit → hook classifies only → explicit refresh → closure
-```
+## Product value
 
-Negative paths: irrelevant edits stay silent; no implicit initialization,
-interpretation, rebuild, or refresh; no whole-repository crawl.
+Compare equivalent real tasks with and without Span. Separate mandatory
+conformance from natural use, cold recording from fresh-session reuse, and
+calibration from a precommitted scored evaluation. Preserve task quality,
+prerequisites, calls, tokens (cached separately), wall time, failures, omissions,
+recording overhead, and useful focused reassessment. A populated store is not
+useful reuse. An ACCEPT requires the frozen decision rule to pass.
 
-## Where the tests live
+Current beta calibration demonstrates recorded reuse but does not establish
+a final comparative ACCEPT or universal time/token saving.
 
-| Area | Tests |
-|---|---|
-| Core rules and carriers | `tests/unit/` |
-| Service operations and exchange | `tests/unit/`, `tests/integration/` |
-| MCP transport and installed process | `tests/integration/test_mcp_transport.py`, `tests/integration/test_installed_mcp.py` |
-| End-to-end semantics | `tests/acceptance/` |
-| Pinned submission outcomes | `tests/characterization/` |
-| Fixtures | `tests/fixtures/`, `docs/acceptance-evidence/` |
+## Historical evidence
 
-Run the suite from the repository root:
-
-```bash
-pytest
-```
-
-The installed-MCP lane builds a non-editable install in a temporary virtual
-environment and drives the installed `span-mcp` over stdio. It needs `uv`,
-Node, and npm.
-
-## Recorded evidence
-
-[`docs/acceptance-evidence/`](acceptance-evidence/) contains recorded runs
-and the fixtures behind them. Evidence is presented as a transcript, not as a
-performance claim.
+[acceptance-evidence/](acceptance-evidence/) contains older transcripts and
+fixtures. They retain their original protocol/results and do not prove the
+new API, delivered grammar, or product-fitness acceptance. Current execution
+receipts identify their candidate revision and tested boundary explicitly.

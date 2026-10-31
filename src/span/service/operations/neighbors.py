@@ -15,15 +15,13 @@ import json as _json
 from collections import deque as _deque
 
 from span.core import model as m
-from span.ports.store import SemanticStore
+from span.ports.lifecycle import LifecycleStorePort
 from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
 from span.ports.structural import StructuralSource
 from span.service.bounds import resolve_bounds as _resolve_bounds
 from span.service.operations.listing import listing_version
-from span.service.repository import _is_initialized
-from span.service.requests import SemanticStructuralNeighborsRequest
-from span.service.resolution import _resolve_query_subject
+from span.service.navigation import SemanticStructuralNeighborsRequest
 
 __all__ = ["neighbors", "encode_traversal_token", "decode_traversal_token"]
 
@@ -229,11 +227,15 @@ def neighbors(
     request: SemanticStructuralNeighborsRequest,
     *,
     structural: StructuralSource,
-    store: SemanticStore,
+    store: LifecycleStorePort,
 ) -> m.StructuralNeighborsResult:
     """Execute one structural neighbors traversal (read-only)."""
-    if not _is_initialized(request.repository_id, store=store):
-        raise ValueError(f"repository not initialized: {request.repository_id}")
+    try:
+        store.require_repository(request.repository_id)
+    except ValueError as exc:
+        raise ValueError(
+            f"repository not initialized: {request.repository_id}"
+        ) from exc
     if (
         isinstance(request.max_depth, bool)
         or not isinstance(request.max_depth, int)
@@ -250,12 +252,8 @@ def neighbors(
         raise
     except ValueError as exc:
         raise ValueError(f"neighbors failed: {exc}") from None
-    resolution = _resolve_query_subject(
-        request.repository_id,
-        request.target,
-        structural=structural,
-        store=store,
-        bounds=bounds,
+    resolution = structural.resolve_subject(
+        request.repository_id, request.target, bounds
     )
     if resolution.ambiguity is not m.ResolutionAmbiguity.RESOLVED:
         return _empty_neighbors_result(

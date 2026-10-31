@@ -287,6 +287,135 @@ class EvidenceIdRef:
     id: EvidenceId = _field(default_factory=lambda: EvidenceId("unset"))
 
 
+@_dataclass(frozen=True)
+class UnderstandingId:
+    """Stable identity of one coherent understanding, not a version."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("UnderstandingId", self.value)
+
+
+@_dataclass(frozen=True)
+class ConclusionId:
+    """Stable conclusion lineage identity owned by one understanding."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ConclusionId", self.value)
+
+
+@_dataclass(frozen=True)
+class ChallengeId:
+    """Stable identity of one explicit dispute."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ChallengeId", self.value)
+
+
+@_dataclass(frozen=True)
+class InvestigationContextId:
+    """Server-issued identity of one recoverable investigation context."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("InvestigationContextId", self.value)
+
+
+@_dataclass(frozen=True)
+class VerificationRunId:
+    """Stable identity of one independently recorded execution."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("VerificationRunId", self.value)
+
+
+@_dataclass(frozen=True)
+class RequestId:
+    """Caller-owned identity for one initial investigation request."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("RequestId", self.value)
+
+
+@_dataclass(frozen=True)
+class SubmissionId:
+    """Caller-owned identity for one recording submission."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("SubmissionId", self.value)
+
+
+@_dataclass(frozen=True)
+class SourceObservationId:
+    """Identity of one immutable source-content observation."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("SourceObservationId", self.value)
+
+
+@_dataclass(frozen=True)
+class DiscoveryObservationId:
+    """Identity of one immutable directory/completeness observation."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("DiscoveryObservationId", self.value)
+
+
+@_dataclass(frozen=True)
+class UnderstandingVersionNumber:
+    """Compare-and-set understanding version counter (starts at 1)."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        _require_positive_int("UnderstandingVersionNumber", self.value)
+
+
+@_dataclass(frozen=True)
+class ConclusionRevisionNumber:
+    """Immutable per-conclusion revision counter (starts at 1)."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        _require_positive_int("ConclusionRevisionNumber", self.value)
+
+
+@_dataclass(frozen=True)
+class ChallengeRevision:
+    """The sole canonical challenge-state revision counter (starts at 1)."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        _require_positive_int("ChallengeRevision", self.value)
+
+
+@_dataclass(frozen=True)
+class ConclusionRevisionRef:
+    """Exact immutable conclusion revision selected by a version snapshot."""
+
+    understanding_id: UnderstandingId
+    conclusion_id: ConclusionId
+    revision: ConclusionRevisionNumber
+
+
 class DerivationKind(_enum.Enum):
     EXPLICIT_EVIDENCE = "EXPLICIT_EVIDENCE"
     SEMANTIC_INTERPRETATION = "SEMANTIC_INTERPRETATION"

@@ -1,5 +1,99 @@
 # Changelog
 
+## 0.9.0 — 2026-10-31
+
+**A breaking lifecycle release: understanding is recorded against admitted
+evidence, returned with live support, and migrated offline.**
+
+0.9.0 replaces the campaign/question protocol with a bounded ordinary
+lifecycle. Span still never selects a model, edits a target repository, runs
+tests, or makes stale understanding current by itself.
+
+### Understand, record, reconsider
+
+- `understand_question` returns saved candidates with live support, an
+  evidence-only investigation gap, or an explicit discovery limit. Lexical
+  rank is a retrieval aid, never applicability.
+- `understand_retrieve` is a closed selector: exact understanding/version,
+  investigation context, or retained receipt. It returns live qualifications
+  and remains restart-safe after context expiry within receipt retention.
+- `start_context`, `evidence_start`, and `evidence_extend` issue a
+  server-owned context and admit exact sources with per-item outcomes.
+- `record_create`, `record_add`, `record_confirm`, `record_correct`,
+  `record_replace`, `record_withdraw`, `record_challenge`, `record_update`,
+  and `record_verification` are separate atomic tools. Each returns a receipt
+  and a post-commit support qualification.
+- `reassess` and `verification_support` qualify recorded understanding and
+  independent verification runs against present evidence.
+- `locate` and `neighbors` remain read-only structural navigation.
+
+The retired tools `explain`, `trace`, `impact`, `authority`, `status`,
+`refresh`, `initialize_target`, and `submit_interpretation` are removed and
+reject with an explicit replacement. `initialize_repository` remains explicit
+setup.
+
+### Store and transition
+
+The active store is schema 10. The runtime never migrates at open; an older
+store fails closed with a transition action.
+
+The supported offline upgrade is:
+
+```bash
+span-install --transition-store <repository-id> --transition-phase inspect
+span-install --transition-store <repository-id> --transition-phase apply --transition-root <repository-root>
+span-install --transition-store <repository-id> --transition-phase verify
+span-install --transition-store <repository-id> --transition-phase rollback
+```
+
+`inspect` and `verify` are observational. `apply` archives a WAL-consistent
+copy, writes a lossless raw export and readable report, stages schema 10,
+verifies it, and atomically activates it while holding exclusive store
+ownership. `rollback` restores the previous store and preserves any new-format
+writes. Supported source schemas are 7, 8, and 9. `--migrate-store` is
+removed.
+
+Only the repository root binding and declared authority seeds are carried
+forward. Legacy claims, campaigns, coverages, and targets are preserved as
+historical export, not promoted as current understanding. Re-record current
+understanding through the lifecycle tools.
+
+### Retention and correctness
+
+- Contexts expire; retained receipts remain replayable for their configured
+  window.
+- Matching replay is resolved before new-write dependency checks.
+- Context abandonment reaps operational membership only; accepted semantic
+  history and receipts survive.
+- Challenges retain every accepted disposition and resolution; settlement is
+  explicit and referenced against the resulting version.
+- Retrieval and recording evaluate source, authority, premise, and discovery
+  support. A changed authority content identity requires reassessment.
+- Bounded answers apply one response byte budget across snapshots, candidate
+  detail, cold evidence, and context. A budget below the minimum returns an
+  explicit `ResponseBudgetExceeded`.
+- Discovery, response, and inventory cursors are distinct and resumable.
+
+### Hosts and operations
+
+- Public guides and managed instructions describe investigate → record →
+  reuse → reassess, including direct recording from evidence-only contexts.
+  The retired campaign/continuation procedure is no longer active guidance.
+- The beta typing gate requires zero configured mypy errors; the remaining
+  26-error baseline has been eliminated and lowered to zero.
+- Reconnect or restart supported hosts after upgrade so `tools/list` reflects
+  the new surface and managed instructions are replaced.
+- Hooks are optional event-local notices. They never record, reassess,
+  interpret, or rebuild, and a missed hook cannot establish currentness.
+- Installer `--verify-only` is observational.
+
+### Not in this release
+
+- Claude model-delivered declarations and caller-identity behavior remain
+  UNVERIFIED under the owner waiver; stdio registration/health is verified.
+- No live production store transition is claimed by this changelog.
+- No comparative product-fitness claim is made beyond the recorded G-9
+  evidence.
 ## 0.8.3 — 2026-10-28
 
 **Durable work can be picked up again.**
