@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
 import datetime as _datetime
 import json as _json
 import typing as _typing
@@ -16,7 +17,10 @@ from span.service.contexts import issue_context
 from span.service.evidence import EvidenceService
 from span.service.ids import server_context_id
 from span.service.support import SupportService
-from span.service.understanding_discovery import DiscoveryService
+from span.service.understanding_discovery import (
+    DiscoveryService,
+    encode_discovery_cursor,
+)
 
 __all__ = ["UnderstandService"]
 
@@ -102,51 +106,49 @@ class UnderstandService:
     ) -> m.UnderstandQuestionResult:
         """Return candidates, inspectable evidence, or an explicit limit."""
         self._store.require_repository(request.repository_id)
-        discovery = self._discovery.discover(
-            request.repository_id,
-            request.scope,
-            request.question,
-            request.bounds,
-            request.page_token,
-        )
-        if discovery.candidates:
-            context = issue_context(
-                self._store,
-                payload=request,
-                repository_id=request.repository_id,
-                request_id=request.request_id,
-                scope=request.scope,
-                question=request.question,
-                clock=self._clock,
-                new_context_id=self._new_context_id,
-            )
-            retrieved, omitted = self._bounded_snapshots(
+        kind = _token_kind(request.page_token)
+        # Pagination position is not part of the investigation binding: the
+        # same request identity must recover the same context across pages.
+        binding = _dataclasses.replace(request, page_token=None)
+        discovery: m.UnderstandingDiscovery | None = None
+        if kind != "inventory":
+            discovery = self._discovery.discover(
                 request.repository_id,
-                discovery.candidates,
-                request.bounds.max_evidence_bytes,
+                request.scope,
+                request.question,
+                request.bounds,
+                request.page_token if kind == "discovery" else None,
             )
-            return m.UnderstandingCandidateAnswer(
-                context=context,
-                discovery=discovery,
-                retrieved=retrieved,
-                bound_info=m.BoundInfo(
-                    requested_max_results=request.bounds.max_results,
-                    requested_max_depth=0,
-                    returned_results=len(retrieved),
-                    truncated=omitted or discovery.bound_info.truncated,
-                    truncated_category=(
-                        "candidate-content"
-                        if omitted
-                        else discovery.bound_info.truncated_category
+            if discovery.candidates:
+                context = issue_context(
+                    self._store,
+                    payload=binding,
+                    repository_id=request.repository_id,
+                    request_id=request.request_id,
+                    scope=request.scope,
+                    question=request.question,
+                    clock=self._clock,
+                    new_context_id=self._new_context_id,
+                )
+                answer = m.UnderstandingCandidateAnswer(
+                    context=context,
+                    discovery=discovery,
+                    retrieved=self._snapshots(
+                        request.repository_id, discovery.candidates
                     ),
-                    continuation_token=discovery.bound_info.continuation_token,
-                ),
-            )
+                )
+                return self._fit_answer(answer, request.bounds.max_evidence_bytes)
+            if kind == "discovery":
+                return m.DiscoveryLimit(discovery=discovery)
         if not (request.scope.paths or request.scope.evidence_refs):
+            if discovery is None:
+                raise RecordingValidationError(
+                    "an inventory cursor requires a concrete evidence scope"
+                )
             return m.DiscoveryLimit(discovery=discovery)
         context = issue_context(
             self._store,
-            payload=request,
+            payload=binding,
             repository_id=request.repository_id,
             request_id=request.request_id,
             scope=request.scope,
@@ -155,25 +157,37 @@ class UnderstandService:
             new_context_id=self._new_context_id,
         )
         inventory = self._evidence_source.inventory_evidence(
-            request.repository_id, request.scope, request.bounds
+            request.repository_id,
+            request.scope,
+            request.bounds,
+            request.page_token if kind == "inventory" else None,
         )
-        observation, inventory_limitation = self._observe_inventory(
-            context, request, inventory
-        )
+        observation: m.DiscoveryObservation | None = None
+        inventory_limitation = ""
+        if kind == "inventory":
+            inventory_limitation = (
+                "continuing an inventory cursor; membership remains partial"
+            )
+        else:
+            observation, inventory_limitation = self._observe_inventory(
+                context, request, inventory
+            )
         requests = tuple(
             m.EvidenceRequest(item.evidence_ref.locator)
             for item in inventory.items[: request.bounds.max_evidence_units]
         )
         if not requests:
+            reason = (
+                "no saved understanding matched and the scope contains "
+                "no servable text evidence"
+            )
+            if inventory_limitation:
+                reason += f"; {inventory_limitation}"
             return m.InvestigationNeeded(
                 context=context,
                 outcomes=(),
                 evidence=(),
-                reason=(
-                    "no saved understanding matched and the scope contains "
-                    "no servable text evidence"
-                    + (f"; {inventory_limitation}" if inventory_limitation else "")
-                ),
+                reason=reason,
                 discovery_observation_id=(
                     observation.observation_id if observation else None
                 ),
@@ -199,15 +213,17 @@ class UnderstandService:
             if observation_ids
             else ()
         )
+        reason = (
+            "no saved understanding matched this question and scope; "
+            "the admitted evidence is the bounded material for investigation"
+        )
+        if inventory_limitation:
+            reason += f"; {inventory_limitation}"
         return m.InvestigationNeeded(
             context=context,
             outcomes=admission.outcomes,
             evidence=evidence,
-            reason=(
-                "no saved understanding matched this question and scope; "
-                "the admitted evidence is the bounded material for investigation"
-                + (f"; {inventory_limitation}" if inventory_limitation else "")
-            ),
+            reason=reason,
             discovery_observation_id=(
                 observation.observation_id if observation else None
             ),
@@ -250,42 +266,131 @@ class UnderstandService:
         )
         return observation, ""
 
-    def _bounded_snapshots(
+    def _snapshots(
         self,
         repository_id: str,
-        candidates: tuple[m.UnderstandingCandidate, ...],
-        max_bytes: int,
-    ) -> tuple[
-        tuple[m.RetrievedUnderstanding | m.UnderstandingSnapshotReference, ...],
-        bool,
-    ]:
+        candidates: tuple[
+            m.UnderstandingCandidate | m.UnderstandingCandidateReference, ...
+        ],
+    ) -> tuple[m.RetrievedUnderstanding | m.UnderstandingSnapshotReference, ...]:
         retrieved: list[m.RetrievedUnderstanding | m.UnderstandingSnapshotReference] = (
             []
         )
-        total = 0
-        omitted = False
         for candidate in candidates:
-            snapshot = self._snapshot(
-                repository_id, candidate.understanding_id.value, None
-            )
-            size = len(
-                _json.dumps(m.to_canonical(snapshot), sort_keys=True).encode("utf-8")
-            )
-            if total + size > max_bytes:
-                if not retrieved:
-                    retrieved.append(
-                        m.UnderstandingSnapshotReference(
-                            understanding_id=snapshot.understanding.understanding_id,
-                            version=snapshot.version.version,
-                            question=snapshot.version.question,
-                            scope=snapshot.version.scope,
-                        )
+            if isinstance(candidate, m.UnderstandingCandidate):
+                retrieved.append(
+                    self._snapshot(
+                        repository_id, candidate.understanding_id.value, None
                     )
-                omitted = True
-                break
-            retrieved.append(snapshot)
-            total += size
-        return tuple(retrieved), omitted
+                )
+        return tuple(retrieved)
+
+    def _fit_answer(
+        self,
+        answer: m.UnderstandingCandidateAnswer,
+        max_bytes: int,
+    ) -> m.UnderstandingCandidateAnswer:
+        """Keep the whole answer inside the response budget.
+
+        Full snapshots are replaced by minimal references first, then full
+        candidates, then candidate references are dropped with an explicit
+        cursor. The context binding itself is never rewritten.
+        """
+        if _encoded_size(answer) <= max_bytes:
+            return answer
+        retrieved = list(answer.retrieved)
+        candidates = list(answer.discovery.candidates)
+        positions = {
+            candidate.understanding_id.value: candidate.scan_position
+            for candidate in candidates
+        }
+        truncated = answer.discovery.bound_info.truncated
+        token = answer.discovery.bound_info.continuation_token
+        category = answer.discovery.bound_info.truncated_category
+        for index in reversed(range(len(retrieved))):
+            item = retrieved[index]
+            if isinstance(item, m.RetrievedUnderstanding):
+                retrieved[index] = m.UnderstandingSnapshotReference(
+                    understanding_id=item.understanding.understanding_id,
+                    version=item.version.version,
+                    scan_position=positions.get(
+                        item.understanding.understanding_id.value, 0
+                    ),
+                )
+                truncated = True
+                category = "response-budget"
+                rebuilt = _replace_answer(
+                    answer, retrieved, candidates, truncated, token, category
+                )
+                if _encoded_size(rebuilt) <= max_bytes:
+                    return rebuilt
+        for index in reversed(range(len(candidates))):
+            candidate_item = candidates[index]
+            if isinstance(candidate_item, m.UnderstandingCandidate):
+                candidates[index] = _candidate_reference(candidate_item)
+                truncated = True
+                category = "response-budget"
+                rebuilt = _replace_answer(
+                    answer, retrieved, candidates, truncated, token, category
+                )
+                if _encoded_size(rebuilt) <= max_bytes:
+                    return rebuilt
+        while candidates:
+            dropped = candidates.pop()
+            token = encode_discovery_cursor(dropped.scan_position)
+            truncated = True
+            category = "response-budget"
+            rebuilt = _replace_answer(
+                answer, retrieved, candidates, truncated, token, category
+            )
+            if _encoded_size(rebuilt) <= max_bytes:
+                return rebuilt
+        while retrieved:
+            dropped_snapshot = retrieved.pop()
+            if isinstance(dropped_snapshot, m.UnderstandingSnapshotReference):
+                position = dropped_snapshot.scan_position
+            else:
+                position = positions.get(
+                    dropped_snapshot.understanding.understanding_id.value, 0
+                )
+            token = encode_discovery_cursor(position)
+            truncated = True
+            category = "response-budget"
+            rebuilt = _replace_answer(
+                answer, retrieved, candidates, truncated, token, category
+            )
+            if _encoded_size(rebuilt) <= max_bytes:
+                return rebuilt
+        if isinstance(answer.context, m.InvestigationContext):
+            context: m.InvestigationContext | m.InvestigationContextReference = (
+                m.InvestigationContextReference(
+                    context_id=answer.context.context_id,
+                    repository_id=answer.context.repository_id,
+                )
+            )
+            truncated = True
+            category = "response-budget"
+            discovery = _dataclasses.replace(
+                answer.discovery,
+                candidates=tuple(candidates),
+                bound_info=_dataclasses.replace(
+                    answer.discovery.bound_info,
+                    returned_results=len(candidates),
+                    truncated=True,
+                    truncated_category=category,
+                    continuation_token=token,
+                ),
+            )
+            rebuilt = _dataclasses.replace(
+                answer,
+                context=context,
+                retrieved=tuple(retrieved),
+                discovery=discovery,
+            )
+            return rebuilt
+        return _replace_answer(
+            answer, retrieved, candidates, truncated, token, category
+        )
 
     @staticmethod
     def _require_repository(actual: str, requested: str) -> None:
@@ -294,3 +399,60 @@ class UnderstandService:
                 f"referenced content belongs to repository {actual!r}, not "
                 f"{requested!r}"
             )
+
+
+def _token_kind(token: str | None) -> str | None:
+    """Classify one canonical question cursor by its owning listing."""
+    if token is None:
+        return None
+    if token.startswith("dsp:"):
+        return "discovery"
+    if token.startswith("pg:"):
+        return "inventory"
+    raise RecordingValidationError(
+        "unsupported page token; expected a discovery or inventory cursor"
+    )
+
+
+def _encoded_size(value: object) -> int:
+    return len(
+        _json.dumps(
+            m.to_canonical(value), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    )
+
+
+def _candidate_reference(
+    candidate: m.UnderstandingCandidate,
+) -> m.UnderstandingCandidateReference:
+    return m.UnderstandingCandidateReference(
+        understanding_id=candidate.understanding_id,
+        current_version=candidate.current_version,
+        scan_position=candidate.scan_position,
+    )
+
+
+def _replace_answer(
+    answer: m.UnderstandingCandidateAnswer,
+    retrieved: list[m.RetrievedUnderstanding | m.UnderstandingSnapshotReference],
+    candidates: list[m.UnderstandingCandidate | m.UnderstandingCandidateReference],
+    truncated: bool,
+    token: str | None,
+    category: str | None,
+) -> m.UnderstandingCandidateAnswer:
+    discovery = _dataclasses.replace(
+        answer.discovery,
+        candidates=tuple(candidates),
+        bound_info=_dataclasses.replace(
+            answer.discovery.bound_info,
+            returned_results=len(candidates),
+            truncated=truncated,
+            truncated_category=category,
+            continuation_token=token,
+        ),
+    )
+    return _dataclasses.replace(
+        answer,
+        retrieved=tuple(retrieved),
+        discovery=discovery,
+    )

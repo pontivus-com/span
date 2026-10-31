@@ -15,7 +15,7 @@ import re as _re
 from span.core import model as m
 from span.ports.lifecycle import LifecycleStorePort
 
-__all__ = ["DiscoveryService"]
+__all__ = ["DiscoveryService", "encode_discovery_cursor"]
 
 _TOKEN = _re.compile(r"[a-z0-9_]{2,}")
 
@@ -69,6 +69,13 @@ def _decode_token(token: str | None) -> int:
 
 def _encode_token(offset: int) -> str:
     return f"dsp:{offset}"
+
+
+def encode_discovery_cursor(offset: int) -> str:
+    """Format one discovery continuation cursor (single owning grammar)."""
+    if offset < 0:
+        raise ValueError("discovery cursor offset cannot be negative")
+    return _encode_token(offset)
 
 
 class DiscoveryService:
@@ -140,6 +147,7 @@ class DiscoveryService:
                     match_reasons=tuple(reasons),
                     lexical_overlap=len(overlap),
                     scope_associated=associated,
+                    scan_position=offset + index,
                 )
             )
             if len(candidates) >= limit:

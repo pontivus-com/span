@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import itertools
+import json
 import pathlib
 import tempfile
 import unittest
@@ -179,6 +180,158 @@ class UnderstandServiceTest(unittest.TestCase):
             )
         )
 
+    def test_following_discovery_cursor_keeps_request_binding(self) -> None:
+        self._build()
+        self._seed(statement="A validates input.")
+        self.store.put_context(
+            m.InvestigationContext(
+                context_id=m.InvestigationContextId("ctx-second"),
+                repository_id="repo-1",
+                request_id=m.RequestId("req-second"),
+                request_digest=m.ContentDigest("sha256:second"),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(),
+                created_at=NOW,
+                expires_at=NOW + RETENTION.context_lifetime,
+            )
+        )
+        scope = m.EvidenceScope(paths=("src/app.py",))
+        self.store.record_understanding(
+            m.CreateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    context_id=m.InvestigationContextId("ctx-second"),
+                    submission_id=m.SubmissionId("sub-second"),
+                ),
+                target=m.ExplicitTarget(question="What does A do?", scope=scope),
+                conclusions=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-1"),
+                        statement="A validates input again.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=scope,
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-1")
+                            ),
+                        ),
+                        basis=m.SemanticBasis(
+                            derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
+                            summary="read source",
+                            input_refs=(),
+                        ),
+                    ),
+                ),
+            ),
+            understanding_id=m.UnderstandingId("u-b"),
+        )
+        bounds = m.QueryBounds(
+            max_results=1,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=100_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        request = m.UnderstandQuestionRequest(
+            repository_id="repo-1",
+            request_id=m.RequestId("req-page"),
+            question="Explain the validation path",
+            scope=scope,
+            bounds=bounds,
+        )
+        first = self.understand.question(request)
+        self.assertIsInstance(first, m.UnderstandingCandidateAnswer)
+        assert isinstance(first, m.UnderstandingCandidateAnswer)
+        self.assertTrue(first.discovery.bound_info is not None)
+        token = first.discovery.bound_info.continuation_token
+        self.assertIsNotNone(token)
+        second_page = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-page"),
+                question="Explain the validation path",
+                scope=scope,
+                bounds=bounds,
+                page_token=token,
+            )
+        )
+        self.assertIsInstance(second_page, m.UnderstandingCandidateAnswer)
+        assert isinstance(second_page, m.UnderstandingCandidateAnswer)
+        self.assertEqual(second_page.context.request_id.value, "req-page")
+
+    def test_inventory_cursor_resumes_evidence_page(self) -> None:
+        self._build()
+        bounds = m.QueryBounds(
+            max_results=10,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=1,
+            max_evidence_bytes=90_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        request = m.UnderstandQuestionRequest(
+            repository_id="repo-1",
+            request_id=m.RequestId("req-inventory-page"),
+            question="What happens across the app and styles?",
+            scope=m.EvidenceScope(paths=("src", "styles")),
+            bounds=bounds,
+        )
+        first = self.understand.question(request)
+        self.assertIsInstance(first, m.InvestigationNeeded)
+        assert isinstance(first, m.InvestigationNeeded)
+        token = first.bound_info.continuation_token
+        self.assertIsNotNone(token)
+        assert token is not None
+        self.assertTrue(token.startswith("pg:"))
+        second = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-inventory-page"),
+                question="What happens across the app and styles?",
+                scope=m.EvidenceScope(paths=("src", "styles")),
+                bounds=bounds,
+                page_token=token,
+            )
+        )
+        self.assertIsInstance(second, m.InvestigationNeeded)
+        assert isinstance(second, m.InvestigationNeeded)
+        self.assertTrue(second.evidence)
+        self.assertEqual(second.context.request_id.value, "req-inventory-page")
+
+    def test_budget_bounds_complete_answer_without_full_question(self) -> None:
+        self._build()
+        self._seed(statement="A" * 5_000)
+        bounds = m.QueryBounds(
+            max_results=10,
+            max_depth=2,
+            max_subjects=8,
+            max_evidence_units=10,
+            max_evidence_bytes=1_000,
+            max_candidate_claims=64,
+            max_candidate_relationships=64,
+        )
+        result = self.understand.question(
+            m.UnderstandQuestionRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-tight-budget"),
+                question="Explain the validation path",
+                scope=m.EvidenceScope(paths=("src/app.py",)),
+                bounds=bounds,
+            )
+        )
+        self.assertIsInstance(result, m.UnderstandingCandidateAnswer)
+        assert isinstance(result, m.UnderstandingCandidateAnswer)
+        encoded = json.dumps(
+            m.to_canonical(result), sort_keys=True, separators=(",", ":")
+        )
+        self.assertLessEqual(len(encoded.encode("utf-8")), 1_000)
+        self.assertNotIn("A" * 100, encoded)
+        self.assertTrue(result.discovery.bound_info.truncated)
+
     def test_truncated_inventory_creates_no_complete_scope_observation(self) -> None:
         self._build()
         bounds = m.QueryBounds(
@@ -214,7 +367,7 @@ class UnderstandServiceTest(unittest.TestCase):
             max_depth=2,
             max_subjects=8,
             max_evidence_units=10,
-            max_evidence_bytes=10,
+            max_evidence_bytes=1_500,
             max_candidate_claims=64,
             max_candidate_relationships=64,
         )
@@ -229,8 +382,17 @@ class UnderstandServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(result, m.UnderstandingCandidateAnswer)
         assert isinstance(result, m.UnderstandingCandidateAnswer)
-        self.assertTrue(result.bound_info is not None)
-        self.assertTrue(result.bound_info.truncated)
+        self.assertTrue(result.discovery.bound_info.truncated)
+        self.assertLessEqual(
+            len(
+                json.dumps(
+                    m.to_canonical(result),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ),
+            1_500,
+        )
         self.assertEqual(len(result.retrieved), 1)
         self.assertIsInstance(result.retrieved[0], m.UnderstandingSnapshotReference)
         reference = result.retrieved[0]

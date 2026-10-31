@@ -101,6 +101,28 @@ class SourceObservation:
 
 
 @_dataclass(frozen=True)
+class InvestigationContextReference:
+    """A bounded context handle used when the full context exceeds budget.
+
+    The exact context remains retrievable by ``context_id`` through the
+    context retrieval selector.
+    """
+
+    context_id: InvestigationContextId
+    repository_id: str
+    reason: str = (
+        "full context omitted by the response byte budget; retrieve it "
+        "with understand_retrieve"
+    )
+
+    def __post_init__(self) -> None:
+        _require_non_empty(
+            "InvestigationContextReference.repository_id", self.repository_id
+        )
+        _require_non_empty("InvestigationContextReference.reason", self.reason)
+
+
+@_dataclass(frozen=True)
 class LifecycleRetention:
     """Finite operational lifetime policy for contexts and replay state.
 

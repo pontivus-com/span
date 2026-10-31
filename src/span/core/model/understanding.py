@@ -16,6 +16,7 @@ from span.core.model.investigation import (
     DiscoveryObservation,
     EvidenceAdmissionOutcome,
     InvestigationContext,
+    InvestigationContextReference,
     SourceObservation,
 )
 from span.core.model.primitives import (
@@ -165,18 +166,39 @@ class UnderstandingCandidate:
     match_reasons: tuple[str, ...]
     lexical_overlap: int
     scope_associated: bool
+    scan_position: int = 0
 
     def __post_init__(self) -> None:
         _require_non_empty("UnderstandingCandidate.question", self.question)
         if self.lexical_overlap < 0:
             raise ValueError("lexical_overlap cannot be negative")
+        if self.scan_position < 0:
+            raise ValueError("scan_position cannot be negative")
+
+
+@_dataclass(frozen=True)
+class UnderstandingCandidateReference:
+    """A minimal candidate identity retained when its detail exceeds budget."""
+
+    understanding_id: UnderstandingId
+    current_version: UnderstandingVersionNumber
+    scan_position: int
+    reason: str = (
+        "candidate detail omitted by the response byte budget; retrieve it "
+        "with understand_retrieve"
+    )
+
+    def __post_init__(self) -> None:
+        _require_non_empty("UnderstandingCandidateReference.reason", self.reason)
+        if self.scan_position < 0:
+            raise ValueError("scan_position cannot be negative")
 
 
 @_dataclass(frozen=True)
 class UnderstandingDiscovery:
     """Bounded candidate discovery with explicit ambiguity and truncation."""
 
-    candidates: tuple[UnderstandingCandidate, ...]
+    candidates: tuple[UnderstandingCandidate | UnderstandingCandidateReference, ...]
     bound_info: BoundInfo
     limit_reason: str | None = None
 
@@ -342,16 +364,16 @@ class UnderstandingSnapshotReference:
 
     understanding_id: UnderstandingId
     version: UnderstandingVersionNumber
-    question: str
-    scope: EvidenceScope
+    scan_position: int
     reason: str = (
         "full snapshot omitted by the response byte budget; retrieve it "
         "with understand_retrieve"
     )
 
     def __post_init__(self) -> None:
-        _require_non_empty("UnderstandingSnapshotReference.question", self.question)
         _require_non_empty("UnderstandingSnapshotReference.reason", self.reason)
+        if self.scan_position < 0:
+            raise ValueError("scan_position cannot be negative")
 
 
 @_dataclass(frozen=True)
@@ -399,7 +421,7 @@ class UnderstandingCandidateAnswer:
     applicable to the caller's question.
     """
 
-    context: InvestigationContext
+    context: InvestigationContext | InvestigationContextReference
     discovery: UnderstandingDiscovery
     retrieved: tuple[RetrievedUnderstanding | UnderstandingSnapshotReference, ...] = ()
     bound_info: BoundInfo | None = None
