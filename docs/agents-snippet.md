@@ -13,6 +13,7 @@ When work touches unfamiliar code, cross-boundary effects, or saved meaning: use
 - Use outside tools to edit and test. Span never edits, runs tests, selects models, or writes the target.
 - Hooks are optional event-local notices. They never record, reassess, interpret, or rebuild; a missed hook never makes stale understanding current.
 - Keep `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`, `UNRESOLVED`, `STALE`, and `UNVERIFIABLE` verbatim. Missing authority stays missing.
+- Preserve `REASSESSMENT_REQUIRED` when returned. Current support does not certify semantic truth, completeness, or dispute settlement. Follow explicit truncation and byte-budget outcomes; retrieve referenced detail through the public tools.
 
 Detail: [lifecycle](https://github.com/pontivus-com/span/blob/master/docs/lifecycle.md),
 [onboarding runbook](https://github.com/pontivus-com/span/blob/master/docs/onboarding-runbook.md),

@@ -1053,7 +1053,7 @@ class GraftStructuralSource:
             else:
                 detail = self._coverage_detail(stale, unverifiable)
         return m.StructuralResult(
-            items=live_items,  # type: ignore[arg-type]
+            items=live_items,
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
@@ -1147,7 +1147,7 @@ class GraftStructuralSource:
             coverage = (
                 m.ScopeCoverage.UNVERIFIED if on_disk else m.ScopeCoverage.VERIFIED
             )
-            kept, bound_info = versioned_page(
+            _, bound_info = versioned_page(
                 (), offset, 1, "outline", index_version=self._index_version
             )
             if coverage is m.ScopeCoverage.VERIFIED:
@@ -1187,20 +1187,20 @@ class GraftStructuralSource:
         )
         report = self.verify_files(repository_id, (locator,))
         stale_set = set(report.stale_files)
-        live_items = () if locator in stale_set else kept  # type: ignore[assignment]
+        live_items = () if locator in stale_set else kept
         stale_omitted = 0 if live_items else len(kept)
         # S2.2: a file outline is VERIFIED when the requested file matches
         # the loaded index; unrelated dirty files are irrelevant (J-7).
         if report.stale_files or report.unverifiable_files:
             coverage = m.ScopeCoverage.UNVERIFIED
-            detail: str | None = self._file_detail(
+            detail = self._file_detail(
                 list(report.stale_files), list(report.unverifiable_files)
             )
         else:
             coverage = m.ScopeCoverage.VERIFIED
             detail = "clean-verified"
         return m.StructuralResult(
-            items=tuple(live_items),  # type: ignore[arg-type]
+            items=tuple(live_items),
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
@@ -1661,7 +1661,7 @@ class GraftStructuralSource:
             tuple(item.location.locator for item in kept),
         )
         return m.StructuralResult(
-            items=tuple(kept),  # type: ignore[arg-type]
+            items=tuple(kept),
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
@@ -1702,7 +1702,7 @@ class GraftStructuralSource:
             tuple(edge.evidence.locator for edge in kept),
         )
         return m.StructuralResult(
-            items=tuple(kept),  # type: ignore[arg-type]
+            items=tuple(kept),
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,
@@ -1765,7 +1765,7 @@ class GraftStructuralSource:
             # for unresolvable identity: skipped, never guessed) instead
             # of leaking KeyError; callers such as impact treat empty
             # reach as claims-only coverage with explicit limits.
-            kept, bound_info = _paging.paginate(
+            _, bound_info = _paging.paginate(
                 (),
                 bounds.max_results,
                 "reach",
@@ -1774,7 +1774,7 @@ class GraftStructuralSource:
             )
             coverage, detail = self._closed_world_coverage(repository_id, ())
             return m.StructuralResult(
-                items=tuple(kept),  # type: ignore[arg-type]
+                items=(),
                 repository_state=self.repository_state(repository_id),
                 bound_info=bound_info,
                 unsupported=False,
@@ -1851,7 +1851,7 @@ class GraftStructuralSource:
             tuple(node.via.evidence.locator for node in kept if node.via is not None),
         )
         return m.StructuralResult(
-            items=tuple(kept),  # type: ignore[arg-type]
+            items=tuple(kept),
             repository_state=self.repository_state(repository_id),
             bound_info=bound_info,
             unsupported=False,

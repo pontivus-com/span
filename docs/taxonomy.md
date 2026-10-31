@@ -1,90 +1,51 @@
-# Canonical taxonomy
+# Lifecycle vocabulary
 
-Closed vocabularies — workers never invent kinds without a contract
-amendment.
+Canonical carriers are exported from `span.core.model`; reference-only record
+wire contracts live in `span.core.schema.record_wire`. The installed schemas
+and [MCP reference](mcp.md) define the executable public grammar.
 
-## Subjects
+## Understandings and conclusions
 
-`SubjectKind`: REPOSITORY, SUBSYSTEM, COMPONENT, CAPABILITY,
-CODE_SYMBOL, CONTRACT, BOUNDARY, REPRESENTATION, CONFIGURATION,
-DOCUMENT, TEST_OR_GATE, SURFACE, FIELD, EXTERNAL_DEPENDENCY, OTHER
-(`OTHER` only with non-empty `declared_kind`; no built-in semantics).
-
-Identity: `repository_id + subject_kind + canonical_locator`. Names
-alone are never identity. Ambiguity returns candidates. Provider IDs
-are opaque evidence, never canonical identity. Semantic-only subjects
-(capabilities, boundaries, surfaces…) enter through evidence-backed
-agent proposal plus core validation — never from the structural
-provider.
-
-### Structural node kinds
-
-The structural provider vocabulary is closed and mapped, never
-free-form. Every node kind maps to exactly one `SubjectKind`:
-
-| Provider node kind | `SubjectKind` |
+| Carrier | Meaning |
 | --- | --- |
-| `file`, `module` | COMPONENT |
-| `function`, `class`, `method`, `interface`, `type`, `enum` | CODE_SYMBOL |
-| `struct`, `constant` | CODE_SYMBOL |
+| `Understanding` | Stable repository-bound identity, question, scope, and current version pointer. |
+| `UnderstandingVersion` | Immutable full membership of exact conclusion revisions, with gaps and predecessor. |
+| `ConclusionRevision` | Immutable revision in a conclusion lineage, with content and basis. |
+| `SupportedConclusion` | Statement, descriptive/normative assertion nature, scope, and declared support. |
+| `WithdrawnConclusion` | Explicit reason for withdrawal, preserving earlier content in history. |
+| `Gap` | Unanswered question and its basis within a version. |
+| `Challenge` | Explicit dispute with its own revision and disposition history. |
 
-`enum` is a named type declaration in the same sense as `class`,
-`interface`, and `type`. `struct` is a nominal data carrier — Go
-structs, Java records, Swift structs — reported by the provider as its
-own node kind rather than as `class`, and classified here as
-CODE_SYMBOL. `module` is a code container, the role a file plays (Rust
-`mod`), and never a subsystem: it carries no semantic boundary.
-`constant` is a named value declaration (Rust `const`/`static`); like a
-type declaration it is a named declaration in code, not a callable and
-not a member of a type. A kind outside this table is rejected, never
-guessed.
+Conclusion revisions and understanding versions are different counters.
+An update preserves unmentioned membership and challenges. Replacement and
+withdrawal are explicit operations, not omission-based deletion.
 
-Edges are mapped the same way: `contains` → DEFINES; `imports`,
-`calls`, `references`, and `depends_on` → their namesake kinds; and
-`extends` / `implements` → DEPENDS_ON, because a compile-time
-dependency is structural possibility, never a semantic IMPLEMENTS
-claim.
+## Support
 
-### Coverage status
+Source, authority, premise, and discovery dependencies use a closed tagged
+union. `SupportState` is `CURRENT`, `REASSESSMENT_REQUIRED`, or `UNVERIFIABLE`.
+`SupportUnavailable` is an operational qualification failure, not another
+support state. Challenge states are `OPEN`, `UNRESOLVED`, and `RESOLVED`;
+verification outcomes are `PASS`, `FAIL`, and `INCONCLUSIVE`.
 
-Every persisted semantic subject carries exactly one coverage status.
-They are evaluated in this order, and the first match wins:
+## Operational carriers
 
-| Status | Meaning |
-| --- | --- |
-| `UNVERIFIABLE` | A conclusion exists, but the support needed to confirm it could not be obtained: a recorded source is absent from the inventory, an authority seed is missing, an inventory fingerprint is unavailable, or a bounded premise walk did not complete. It is neither current nor known-stale. A provider or store failure is not this state — the operation fails instead. |
-| `STALE` | Supporting evidence, or an effective question, changed; the affected conclusion needs reassessment. |
-| `INCOMPLETE` | Adopted understanding with work outstanding — a pending or open question, an unexamined question scope, or a truncated page. |
-| `UNASSESSED` | No adopted question coverage is persisted for the subject; this is the `explain` entry point. |
-| `CURRENT` | Adopted understanding whose questions are decided and whose evidence, verification, and dependencies are current. |
+Contexts bind caller request identity to repository, question/scope, origin,
+and expiry. Sources are admitted as immutable observations with per-item
+outcomes. Recording identities and receipts support retry/restart recovery.
+Discovery candidates and compact references indicate potentially reusable
+understanding, never an asserted semantic answer. See [glossary](glossary.md).
 
-A persisted question carries exactly one decision: `PENDING`
-(unresolved and handed out), `ANSWERED`, `OPEN` (examined and still
-unresolved), or `NOT_APPLICABLE`. A stale effective question is
-reported as `STALE` coverage; the stored decision is never rewritten to
-express freshness.
+## Structural identities
 
-Readiness is a separate, operational state. It is not coverage, and it
-is never semantic truth.
+`SubjectId` remains a typed repository/kind/locator identity for structural
+navigation. Provider nodes map through a closed vocabulary: files/modules to
+components; functions, classes, methods, interfaces, types, enums, structs,
+and constants to code symbols. Structural edges describe defines, imports,
+calls, references, and dependencies. Unknown provider kinds fail explicitly.
+A module node does not establish a semantic subsystem or owner.
 
-## Claims (one typed value per kind)
-
-PURPOSE · CAPABILITY_MEMBERSHIP · RESPONSIBILITY ·
-OWNERSHIP_CUSTODY (owner/custodian/writer/producer/judge ×
-exclusive/non-exclusive/unknown) · REPRESENTATION_CONTRACT ·
-TRANSFORMATION_OWNERSHIP · INVARIANT_CONSTRAINT ·
-CONFIGURATION_ENVIRONMENT · LIFECYCLE_STATE (create/use/change/
-persist/terminal/fail/recover/abandon/replay/retain/remove/other) ·
-VERIFICATION (test/gate/review × candidate/current-pass/current-fail/
-stale/unknown — candidates are never reported as passes).
-
-## Relationships
-
-MEMBER_OF · IMPLEMENTS · PRODUCES · CARRIES · CONSUMES · DEPENDS_ON ·
-CROSSES_BOUNDARY · REPRESENTS_AS · TRANSFORMS_TO · GOVERNED_BY ·
-CONFIGURED_BY · PERSISTS_AT · TRANSITIONS_TO · VERIFIED_BY ·
-SUPERSEDES. (`AFFECTS` is derived at query time, never persisted.)
-
-Every material claim/relationship carries evidence, an optional
-authority binding, trust, freshness, and a bounded `SemanticBasis`
-whose summary restates the evidence/derivation relationship.
+The old mandatory claim kinds, semantic-question classes, subject coverage
+statuses, campaigns, and interpretation continuations are retired from the
+active lifecycle. Retained model definitions and archived data do not add
+public operations or a second semantic writer.

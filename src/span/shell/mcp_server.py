@@ -128,6 +128,7 @@ def handle_call_tool(
 def build_server(adapter: McpAdapter):
     """Construct the SDK server with Span's two handlers."""
     from mcp.server import Server
+    from mcp.server.context import ServerRequestContext
     import mcp.types as _types
 
     try:
@@ -139,27 +140,33 @@ def build_server(adapter: McpAdapter):
     except TypeError:  # older SDK without version kwarg
         server = Server("span")
 
-    async def _list_tools(_request: object, _params: object) -> object:
+    async def _list_tools(
+        _request: ServerRequestContext[object, object],
+        _params: _types.PaginatedRequestParams,
+    ) -> _types.ListToolsResult:
         return _types.ListToolsResult(
             tools=[
                 _types.Tool(
                     name=spec["name"],
                     description=spec["description"],
-                    inputSchema=spec["inputSchema"],
-                    outputSchema=spec["outputSchema"],
+                    input_schema=spec["inputSchema"],
+                    output_schema=spec["outputSchema"],
                 )
                 for spec in handle_list_tools(adapter)
             ]
         )
 
-    async def _call_tool(_request: object, params: object) -> object:
-        name = params.name  # type: ignore[union-attr]
-        arguments = params.arguments or {}  # type: ignore[union-attr]
+    async def _call_tool(
+        _request: ServerRequestContext[object, object],
+        params: _types.CallToolRequestParams,
+    ) -> _types.CallToolResult:
+        name = params.name
+        arguments = params.arguments or {}
         tool_result = adapter.dispatch(name, arguments)
         return _types.CallToolResult(
             content=[_types.TextContent(type="text", text=tool_result.content)],
-            structuredContent=tool_result.structured_content,
-            isError=tool_result.is_error,
+            structured_content=tool_result.structured_content,
+            is_error=tool_result.is_error,
         )
 
     server.add_request_handler("tools/list", _types.PaginatedRequestParams, _list_tools)

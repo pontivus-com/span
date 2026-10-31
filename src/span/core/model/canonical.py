@@ -11,6 +11,7 @@ import enum as _enum
 import types as _types
 import typing as _typing
 from dataclasses import fields as _fields
+from dataclasses import is_dataclass as _is_dataclass
 from dataclasses import MISSING as _MISSING
 
 from span.core.model.primitives import (
@@ -28,7 +29,7 @@ def to_canonical(value: object) -> object:
         return value.isoformat()
     if isinstance(value, (tuple, list)):
         return [to_canonical(item) for item in value]
-    if hasattr(value, "__dataclass_fields__"):
+    if _is_dataclass(value):
         payload: dict[str, object] = {"$type": type(value).__name__}
         for f in _fields(value):
             payload[f.name] = to_canonical(getattr(value, f.name))

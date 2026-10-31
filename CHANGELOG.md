@@ -76,6 +76,11 @@ understanding through the lifecycle tools.
 
 ### Hosts and operations
 
+- Public guides and managed instructions describe investigate → record →
+  reuse → reassess, including direct recording from evidence-only contexts.
+  The retired campaign/continuation procedure is no longer active guidance.
+- The beta typing gate requires zero configured mypy errors; the remaining
+  26-error baseline has been eliminated and lowered to zero.
 - Reconnect or restart supported hosts after upgrade so `tools/list` reflects
   the new surface and managed instructions are replaced.
 - Hooks are optional event-local notices. They never record, reassess,

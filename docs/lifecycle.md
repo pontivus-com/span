@@ -1,5 +1,10 @@
 # Agent lifecycle
 
+The agent investigates, records useful explanations, reuses applicable saved
+understanding, and reassesses affected support. Span does not require a
+documentation campaign before ordinary work. See [usage](usage.md) for the
+procedure and [MCP reference](mcp.md) for the nineteen-tool grammar.
+
 ```
 SETUP (dedicated session)
   initialize_repository
@@ -24,8 +29,9 @@ ORDINARY SESSION
 `request_id`. `understand_question` also issues a context when it returns an
 investigation gap or candidate answer. A context binds repository, question,
 scope, origin, and expiry. Following a pagination cursor keeps the same
-binding; changing the question or scope under the same `request_id` is a
-conflict.
+binding; changing the question, scope, or other bound request fields under
+the same `request_id` is a conflict. A result may carry a compact context
+reference when full context detail exceeds the question's byte allowance.
 
 Contexts expire. Expiry removes operational membership only. Accepted
 understanding, challenges, verification runs, and retained receipts survive.
@@ -35,8 +41,9 @@ understanding, challenges, verification runs, and retained receipts survive.
 Every record tool is atomic. It cites admitted observation or authority
 references; it does not resend source bodies. The result is the committed
 receipt plus a post-commit support qualification. A validation, identity,
-conflict, or source-drift failure changes nothing and names the offending
-identity.
+conflict, or source-drift rejection commits no semantic transition and names
+the offending identity. A post-commit `SupportUnavailable` preserves the
+receipt and reports qualification failure separately from acceptance.
 
 - `record_create` creates version 1.
 - `record_add`, `record_confirm`, `record_correct`, `record_replace`, and
@@ -58,6 +65,8 @@ authority or observation stays explicit; it is never promoted to current.
 
 Challenges settle only through an explicit disposition. A new version, a
 passing test, or a matching fingerprint does not settle a dispute.
+Current support does not certify meaning or complete investigation. Saved
+gaps and open disputes remain relevant to the agent's judgment.
 
 ## Hooks
 

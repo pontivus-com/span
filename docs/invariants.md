@@ -6,8 +6,8 @@ storage, service composition, and MCP output to its tests. Verdict
 enforced (no meaningful runtime probe exists). Every `Test` row names
 at least one live boundary test; `tests/unit/test_invariant_matrix.py`
 fails when a named test disappears, when a row claims no test, or when
-a `Review` row claims test enforcement. No violations found; first
-offending boundary would be recorded here.
+a `Review` row claims test enforcement. Named tests identify enforcement boundaries; they do not certify every
+semantic interpretation or every host. Execution receipts are separate.
 
 | ID | Invariant | Verdict | Evidence |
 |---|---|---|---|
@@ -46,13 +46,22 @@ offending boundary would be recorded here.
 | I-33 | Trust/freshness singularity | Test | `ClosedVocabularyTest`; `SerializationRoundTripTest` |
 | I-34 | Tagged reference ingress | Test | `CanonicalRoundTripTest`; `RecordWireSchemaTest` (tagged union positions) |
 | I-35 | Canonical operational bounds | Test | `ConstructionValidationTest` (policy defaults and rejection are explicit) |
-| I-36 | Answer self-containment | Test | `test_full_lifecycle_and_restart`; `LifecycleMcpTest` (refs resolve inside the answer) |
+| I-36 | Qualified result with publicly retrievable detail | Test | `test_full_lifecycle_and_restart`; `test_budget_bounds_complete_answer_without_full_question`; `test_first_oversized_snapshot_is_a_reference` (qualifications/next actions inline; omitted bodies resolve through public retrieval) |
 | I-37 | Explicit withdrawal and supersession | Test | `LifecycleStoreTest`; `test_withdraw_creates_explicit_withdrawal_revision` |
 | I-38 | Changed-support investigation stays pre-change | Test | `UnderstandServiceTest` (reconsideration prepares, recording accepts) |
-| I-39 | Continuation/pagination separation | Test | `test_stale_token_maps_to_envelope`; `PageTokenTest`; `ScopeTokenTest` |
+| I-39 | Cursor routing and stable request binding | Test | `test_following_discovery_cursor_keeps_request_binding`; `test_inventory_cursor_resumes_evidence_page`; `PageTokenTest` |
 
 Downstream-compensation check (no silent repairs, no salvage, no
 fallback parsing): validation rejects whole units; strict decode has
 no fallback branch; service never synthesizes summaries, quotes, or
-identifiers (auto-keys are deterministic intra-result labels, not
-semantic content).
+semantic statements. Server-owned context/receipt identities are operational
+identities, not semantic content.
+
+## Lifecycle transfer
+
+I-36 deliberately replaces the earlier all-detail-in-one-answer requirement:
+qualifications, omissions, and next actions stay explicit while large bodies
+may be retrieved through public references. I-39 now concerns listing cursors
+and request binding; process-local interpretation continuations are retired.
+Operational context/admission writes are distinct from semantic recording.
+Support currency does not establish truth or complete repository coverage.

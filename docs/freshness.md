@@ -1,62 +1,58 @@
-# Freshness and refresh
+# Support currency and reassessment
 
-## Preflight (before anything is presented as CURRENT)
+Span checks whether the dependencies recorded for an explanation remain
+current. It does not determine semantic truth from a fingerprint. The agent
+judges the meaning and completeness of the explanation.
 
-0. Coverage: recorded inventory-membership/seed fingerprints vs
-   current; mismatch → covered items stale/unverifiable.
-   Zero-result questions keep freshness through their discovery
-   snapshot, never through empty claim counts.
-1–4. Direct dependencies: load, fingerprint current evidence,
-   compare, classify each item CURRENT/STALE/UNVERIFIABLE and persist
-   non-current marks. Last-index timestamps are never trusted alone.
-   Work-start synchronization establishes current repository state.
-5. Semantic premises: bounded transitive walk of
-   `SemanticBasis.input_refs` with cycle detection before a CURRENT
-   answer. Changed/retired premises stale dependents; truncation
-   yields UNVERIFIABLE with outstanding scope.
+## States
 
-Stored disposition is history; effective disposition is computed on
-every read from evidence, discovery, and premise state.
+| Support state | Meaning |
+| --- | --- |
+| `CURRENT` | The declared dependencies passed their current checks. |
+| `REASSESSMENT_REQUIRED` | Recorded support changed or a premise was superseded/withdrawn; investigate before reuse. |
+| `UNVERIFIABLE` | Required support cannot be established, such as missing evidence, unresolved authority, or a bounded/cyclic premise walk. |
 
-`UNVERIFIABLE` is produced only when the support needed to confirm an
-existing conclusion cannot be obtained, and each cause is a fact about
-the repository: a recorded source is absent from the current inventory,
-a recorded authority seed no longer resolves, the provider cannot
-produce the inventory fingerprint, or a bounded premise walk did not
-complete. A provider or store that fails is not classified as
-`UNVERIFIABLE`; the operation fails instead, so an impaired runtime can
-never be mistaken for uncertain knowledge.
+These are support states, separate from gaps, challenge state, operational
+availability, and test outcome. An all-current aggregate does not prove that
+any substantive conclusion exists or that the investigation was complete.
 
-## Explicit refresh (`refresh`, always scoped)
+## What is checked
 
-Identify stale/unverifiable (direct + coverage) → reselect bounded
-evidence (including newly added authorities and competing
-declarations in scope) → reinterpret affected units → validate and
-materialize atomically per unit → preserve failures as
-stale/unverifiable → leave current items untouched.
+- **Source:** current content against the immutable observation's digest.
+  Missing content is unverifiable; changed bytes require reassessment.
+- **Authority:** declared identity, accepted status, kind, applicability, and
+  recorded content identity. Missing/undeclared authority is not promoted by
+  finding relevant prose. Superseded or changed authority requires review.
+- **Premise:** existence and current membership of an exact conclusion
+  revision, then its support through a bounded dependency walk. A replacement
+  or withdrawal can affect dependents without changing their own source files.
+- **Discovery:** current membership against the recorded scope fingerprint.
+  Additions/removals matter for conclusions that declare this dependency.
+  Truncated inventory never supplies a complete membership observation.
 
-## Reconciliation
+Checks follow declared dependencies. A conclusion citing a whole-file content
+observation can require reassessment after any change to that file, even if
+the meaning still holds. Unrelated files do not invalidate it merely because
+repository HEAD or a timestamp changed. Omitted support cannot be detected
+as a semantic omission by deterministic comparison alone.
 
-One successful unit applies atomically: writes, coverage records,
-question coverages, conflict record, premise index, and exactly the
-listed retirements — or nothing. Exact-question retirement removes
-only unshared outputs of the bound question; shared outputs keep
-their association. Explicit withdrawals retire even shared items but
-reopen all referencing questions. Legacy-unassigned items are never
-silently adopted or retired. Unknown retire ids fail the unit.
-Retired history is preserved, never discarded. Latest coverage per
-question scope wins so old rows never re-invalidate refreshed
-conclusions.
+## Reading and recording
 
-## Scoped discovery freshness
+Snapshot retrieval, `reassess`, new recording, and verification qualification
+use the owning support service and pure core rules. A provider/store failure
+is operational failure, not an invented support state. After an accepted
+record, a qualification failure is `SupportUnavailable` beside the durable
+receipt; it must not be reported as a rejected write.
 
-- `CoverageDependency.discovery_scope` records the exact bounded scope used
-  for discovery. Membership of that scope (plus authority-seed fingerprints)
-  joins the direct per-evidence fingerprints as the question's freshness
-  inputs. A change outside the scope does not invalidate the question; a
-  change inside it does.
-- Persisted task coverage always carries a non-empty discovery scope. An
-  empty scope enumerates the repository inventory for initialization and
-  inventory operations only; it is never persisted as question coverage, and
-  a task-coverage write with an empty scope fails closed with
-  `INCOMPLETE_SEMANTIC_SCOPE`.
+After a relevant edit, investigate the affected explanation, admit current
+evidence, and record the appropriate update with its basis. A new immutable
+version preserves history. `reassess` checks currency; it does not reinterpret,
+execute tests, or settle a challenge. Gaps and disputes remain explicit.
+
+## Independent runs
+
+`verification_support` checks the source observations tied to a saved run,
+including dirty-tree changes without a new commit. The run's
+`PASS`/`FAIL`/`INCONCLUSIVE` outcome remains historical fact. Current support
+for a failed run means the failure evidence still applies; it does not mean
+that the test now passes. See [recording](interpretation.md).

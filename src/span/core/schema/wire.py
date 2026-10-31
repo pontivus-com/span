@@ -45,13 +45,15 @@ def _inject(hint: object, value: object, path: str) -> object:
     if isinstance(hint, type) and _dataclasses.is_dataclass(hint):
         return _inject_dataclass(hint, value, path, keep_tag=False)
     if origin in (tuple, list):
+        if not isinstance(value, list):
+            raise ValueError(f"expected list at {path or 'root'}, got {value!r}")
         item = args[0] if args else None
         # Aggregate sibling faults so one call reports every bad member
         # instead of the caller discovering them one round trip at a
         # time; a single fault keeps its exact previous text.
         injected: list[object] = []
         faults: list[str] = []
-        for i, v in enumerate(value):  # type: ignore[union-attr]
+        for i, v in enumerate(value):
             try:
                 injected.append(_inject(item, v, f"{path}[{i}]"))
             except ValueError as exc:
@@ -127,8 +129,10 @@ def to_wire(value: object, hint: object) -> object:
     if isinstance(hint, type) and _dataclasses.is_dataclass(hint):
         return _compact_dataclass(hint, value, keep_tag=False)
     if origin in (tuple, list):
+        if not isinstance(value, list):
+            raise TypeError(f"expected canonical list, got {value!r}")
         item = args[0] if args else None
-        return [to_wire(v, item) for v in value]  # type: ignore[union-attr]
+        return [to_wire(v, item) for v in value]
     return value
 
 

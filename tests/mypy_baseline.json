@@ -1,10 +1,4 @@
 {
-  "modules": {
-    "src/span/core/model/canonical.py": 1,
-    "src/span/core/schema/wire.py": 3,
-    "src/span/shell/mcp_server.py": 8,
-    "src/span/shell/structural/graft.py": 6,
-    "src/span/shell/structural/memory.py": 8
-  },
-  "total": 26
+  "modules": {},
+  "total": 0
 }

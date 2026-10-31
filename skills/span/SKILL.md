@@ -19,7 +19,10 @@ and an exact scope. The result is one of:
 - saved candidates with live support qualifications;
 - `InvestigationNeeded` with admitted, inspectable evidence and the material gap;
 - `DiscoveryLimit` when there is no usable scope or overlap. That is a request
-  for a concrete scope, not a claim that no understanding exists.
+  for a concrete scope or the next bounded scan page, not a claim that no
+  understanding exists;
+- `ResponseBudgetExceeded` when the requested allowance cannot hold the
+  minimum response; narrow scope or increase the requested byte budget.
 
 Discover the exact registered `repository_id` from `tools/list` or an
 `initialize_repository` result. Never pass a filesystem path as the ID. When no
@@ -31,7 +34,7 @@ dedicated setup session and creates no understanding.
 | Intent | Tool | Use it when | Result |
 | --- | --- | --- | --- |
 | Ask a scoped question | `understand_question` | You need saved understanding or inspectable evidence | Candidates, investigation gap, or an explicit discovery limit |
-| Retrieve an exact snapshot | `understand_retrieve` | You have an understanding ID | Exact version, conclusion bodies, challenges; takes `repository_id` |
+| Retrieve saved detail | `understand_retrieve` | You have an understanding, context, or receipt identity | Exact snapshot with live support, admitted context excerpts, or a retained receipt |
 | Start a context | `start_context` | You will record after investigating | A recoverable server-issued context |
 | Admit exact sources | `evidence_start` / `evidence_extend` | You need canonical observations, with or without a question | Per-item admitted/reused/failed/omitted outcomes |
 | Record | `record_create`, `record_add`, `record_confirm`, `record_correct`, `record_replace`, `record_withdraw` | You established supported conclusions | Atomic receipt and accepted version |
@@ -45,7 +48,7 @@ dedicated setup session and creates no understanding.
 - Admit evidence first. Record cites canonical observation IDs; it does not
   resend source bodies or invent fingerprints.
 - Every recording call is atomic. A validation, identity, conflict, or source
-  drift failure changes nothing and names the exact offending identity.
+  drift rejection commits no semantic transition and names the exact identity.
 - Reuse the same `context_id` and `submission_id` when retrying a lost
   response. A matching committed receipt replays even after the context expired.
 - An update states whether it confirms, corrects, replaces, or withdraws an
@@ -68,6 +71,8 @@ makes stale understanding current.
 
 Keep `PARTIAL`, `AMBIGUOUS`, `CONFLICTED`, `UNRESOLVED`, `STALE`, and
 `UNVERIFIABLE` verbatim. Missing authority stays missing.
+Report `REASSESSMENT_REQUIRED` exactly when returned. Current support does
+not establish semantic truth, complete scope, or implicit challenge settlement.
 
 Detail: [lifecycle](https://github.com/pontivus-com/span/blob/master/docs/lifecycle.md),
 [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md),

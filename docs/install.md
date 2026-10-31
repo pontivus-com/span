@@ -90,9 +90,12 @@ It does **not** mean Span already understands your repository.
 
 ## Supported hosts
 
-Span works with any MCP-capable agent. Managed setup — registration, skills,
-and lifecycle hooks — is implemented for Claude Code, Codex, and OpenCode
-today; other hosts connect manually. Span never invokes an LLM, chooses a
+Managed registration and skills are implemented for Claude Code, Codex, and
+OpenCode, with host-specific optional hooks. Codex is the live beta validation
+target. OpenCode has earlier trial evidence without final-package revalidation;
+Claude model-delivered grammar and caller identity remain UNVERIFIED under the
+owner waiver. Other MCP hosts connect manually without an assumed delivery
+guarantee. See [host status](../integrations/hosts/triggers.md). Span never invokes an LLM, chooses a
 model, stores provider credentials, edits source code, runs tests, or
 autonomously reinterprets your repository. Its state lives in a data
 directory outside the repositories it analyzes.
