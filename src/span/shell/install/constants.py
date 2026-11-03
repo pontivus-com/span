@@ -35,6 +35,11 @@ PLATFORM_PATHS = {
 }
 
 
+#: Skills replaced by the three-moment surface. The installer removes these
+#: on upgrade; it never merges or keeps a second lifecycle grammar.
+RETIRED_SKILLS = ("span", "span-change-context", "span-document")
+
+
 AGENTS_START = "<!-- span:start -->"
 
 
@@ -42,3 +47,12 @@ AGENTS_END = "<!-- span:end -->"
 
 
 _VERSION_PROBE = "import importlib.metadata as m; print(m.version('span-mcp'))"
+
+#: O-3 measured response budgets in delivered wire bytes. OpenCode delivered
+#: 51,133 bytes inline and saved a 62,589-byte result to a file; Codex
+#: delivered 62,589 bytes inline. The values are recorded observations, not
+#: invented thresholds.
+HOST_RESPONSE_BUDGETS = {
+    "codex": 62_589,
+    "opencode": 51_133,
+}

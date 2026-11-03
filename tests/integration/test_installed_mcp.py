@@ -28,27 +28,7 @@ _REPO_FILES = {
 
 _SOURCE_SET = ("src", "pyproject.toml", "README.md")
 
-_EXPECTED_TOOLS = {
-    "initialize_repository",
-    "start_context",
-    "understand_question",
-    "understand_retrieve",
-    "reassess",
-    "verification_support",
-    "evidence_start",
-    "evidence_extend",
-    "record_create",
-    "record_add",
-    "record_confirm",
-    "record_correct",
-    "record_replace",
-    "record_withdraw",
-    "record_challenge",
-    "record_update",
-    "record_verification",
-    "locate",
-    "neighbors",
-}
+_EXPECTED_TOOLS = {"ask", "record", "reconsider"}
 
 _RETIRED_TOOLS = {
     "explain",
@@ -226,21 +206,17 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertFalse(_RETIRED_TOOLS & set(observed["tools"]))
         self.assertTrue(observed["removed_error"])
         self.assertEqual(observed["removed"]["kind"], "removed")
-        self.assertIn("understand_question", observed["removed"]["replacement"])
+        self.assertIn("ask", observed["removed"]["replacement"])
         for key in (
-            "admitted_error",
+            "cold_error",
             "created_error",
-            "found_error",
+            "warm_error",
             "retrieved_error",
         ):
             self.assertFalse(observed[key], key)
-        self.assertTrue(observed["observation"])
-        self.assertTrue(observed["context_id"])
         self.assertTrue(observed["understanding_id"])
-        self.assertIn(
-            observed["found_kind"],
-            {"InvestigationNeeded", "UnderstandingCandidateAnswer"},
-        )
+        self.assertEqual(observed["cold_kind"], "Gap")
+        self.assertEqual(observed["found_kind"], "Answer")
         self.assertEqual(observed["statement"], "Alpha declares VALUE = 1.")
         self.assertEqual(observed["version"], 1)
 

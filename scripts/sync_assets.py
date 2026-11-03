@@ -32,6 +32,11 @@ def sync_assets(destination: pathlib.Path) -> tuple[pathlib.Path, ...]:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(snippet, target)
     written.append(target)
+    plugin = ROOT / "integrations" / "hosts" / "opencode" / "span-hooks.js"
+    target = dest / "opencode-plugin" / "index.js"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(plugin, target)
+    written.append(target)
     stale = dest / "skills"
     if stale.is_dir():
         for child in stale.iterdir():

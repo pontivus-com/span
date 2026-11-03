@@ -8,125 +8,232 @@ span-mcp --data-dir DIR [--repo /path ...]
 
 `--repo` registers repository identity for discovery. It opens no store and
 performs no structural build; context opens lazily on the first
-repository-scoped call. Setup remains explicit.
+repository-scoped call. Setup belongs to the installer.
 
 ## Tools
 
-Exactly nineteen tools ship in 0.9.0.
+Exactly three core tools ship, one per lifecycle moment:
 
-| Family | Tools |
-| --- | --- |
-| Setup | `initialize_repository` |
-| Understand | `start_context`, `understand_question`, `understand_retrieve`, `evidence_start`, `evidence_extend` |
-| Qualify | `reassess`, `verification_support` |
-| Record | `record_create`, `record_add`, `record_confirm`, `record_correct`, `record_replace`, `record_withdraw`, `record_challenge`, `record_update`, `record_verification` |
-| Navigate | `locate`, `neighbors` |
+| Tool | Lifecycle verb | Job |
+| --- | --- | --- |
+| `ask` | obtain | Current understanding or gap |
+| `record` | retain | Create, update, verify, or declare a surface |
+| `reconsider` | re-align | Changed scope or challenge |
 
-The retired names `explain`, `trace`, `impact`, `authority`, `status`,
-`refresh`, `initialize_target`, and `submit_interpretation` are not
-registered. Calling one returns a typed `removed` error with its replacement;
-it performs no work.
+`structure` and `setup` are not registered in this build. The host's own file
+navigation covers structural lookup, and the installer covers setup. An optional
+`structure` tool may be delivered later for hosts without navigation; it is not
+part of the default surface.
 
-Every repository-scoped request carries its canonical `repository_id`.
-`initialize_repository` instead carries a plain `repository_locator` and
-returns the canonical ID. Paths are never accepted as IDs.
+`record` carries `kind` (`understanding`, `verification`, or `surface`). An
+understanding create is flat — one `conclusion` plus `locator` or
+`observation_id`; `actions` is for updates and `action` for a surface
+declaration. Those are semantic fields, not separate tools. The retired names
+are not registered; calling one returns a typed `removed` error with its
+replacement and performs no work.
 
-## Ingress
+Every repository-scoped request carries its canonical `repository_id`. Paths are
+never accepted as IDs.
 
-Each tool takes its canonical request as compact wire JSON. Generated schemas
-carry `additionalProperties: false`, required fields, enum values, and tagged
-union branches. Unknown tools, unknown fields or enums, missing required
-fields, and unknown `$type` values fail closed with an `ingress` error that
-reports every shape fault found in one response.
+## `ask`
 
-`bounds` may be omitted for service defaults. A supplied bound is validated,
-never widened.
+Forms (exactly one):
 
-`understand_retrieve` is a closed selector and requires a top-level `$type`:
+```json
+{"repository_id": "repo-1", "request_id": "ask-1", "surface": {"kind": "FILE", "locator": "src/a.py"}, "question": "What does it do?"}
+{"repository_id": "repo-1", "request_id": "ask-2", "reference": "src/a.py", "question": "What does it do?"}
+{"repository_id": "repo-1", "request_id": "ask-3", "reference": "src/a.py"}
+{"repository_id": "repo-1", "selector": {"$type": "UnderstandingSnapshotSelector", "repository_id": "repo-1", "understanding_id": "u:...", "version": 1}}
+{"repository_id": "repo-1", "selector": {"$type": "ReceiptRetrievalSelector", "repository_id": "repo-1", "request_id": "write-1"}}
+{"repository_id": "repo-1", "continuation": "span1_..."}
+```
 
-- `UnderstandingSnapshotSelector` — `repository_id`, `understanding_id`,
-  optional `version`; omitted version means current.
-- `ContextRetrievalSelector` — `repository_id`, `context_id`.
-- `ReceiptRetrievalSelector` — `repository_id`, `context_id`,
-  `submission_id`.
+- `surface` is an exact `{kind, locator}` identity. It resolves by identity,
+  never containment. `kind` is `FILE`, `SYMBOL`, `SERVICE`, or `DOMAIN`.
+- `reference` is the convenience form. It must resolve to exactly one surface;
+  otherwise the result is `AmbiguousSurface` with exact candidate identities.
+- `surface`/`reference` without a question returns the surface document view.
+  This is the normal reuse path: a fresh agent that does not know the exact
+  recorded question reads the view and selects the conclusion it needs. An exact
+  `question` is a targeted query and matches by exact identity; a paraphrase is a
+  different question.
+- `selector` returns a historical `RetrievedUnderstanding` or
+  `RetrievedReceipt`. These are never merged into `Answer` and never counted
+  current.
+- `continuation` returns an `EvidencePage` for evidence omitted from a gap.
 
-Record tools use the reference-only wire in
-`span.core.schema.record_wire`. They cite admitted observation or authority
-references; they do not resend source bodies or invent fingerprints.
+`context_id` is never an `ask` input. A context is returned in the answer and
+may be supplied to `record` or `reconsider`.
 
-## Egress
+Results: `Answer`, `Gap`, `AmbiguousSurface`, `RetrievedUnderstanding`,
+`RetrievedReceipt`, `EvidencePage`, or `Unavailable`.
 
-Every result is canonical JSON in both MCP text and structured content.
-Failures are typed `ToolError` envelopes: `unknown_tool`, `removed`,
-`ingress`, `unavailable`, `conflict`, `validation`, `source_drift`,
-`stale_continuation`, `rejected`, and `transport`.
+- `Answer` carries `ConclusionView`s (ref, statement, nature, scope, support,
+  evidence), surface status, gaps, applicable `VerificationView`s (run plus
+  qualification), context, and explicit truncation state.
+- `Gap` carries one reason (`invalidated`, `unverifiable`, `unassessed`,
+  `no_match`), historical conclusions, admitted evidence, observations,
+  context, a recovery, and a `continuation` when evidence was omitted. A
+  `no_match` gap tells the agent to ask the same surface without a question.
+- `AmbiguousSurface` carries exact `SurfaceKey` candidates. Copy one into
+  `surface`; do not re-resolve the path.
+- `EvidencePage` carries evidence units and an optional further continuation.
+  It is evidence, not current conclusion content.
 
-`understand_question` returns one of:
+### Continuation
 
-- `UnderstandingCandidateAnswer` — bounded candidate identities and exact
-  snapshots, each with live support; omitted detail is represented by a
-  `UnderstandingCandidateReference` or `UnderstandingSnapshotReference`.
-- `InvestigationNeeded` — a recovered context, admitted evidence, per-item
-  outcomes, and the material gap. Truncated inventory remains explicit.
-- `DiscoveryLimit` — no usable candidate or scope; no repository-wide absence
-  is claimed.
-- `ResponseBudgetExceeded` — the requested `max_evidence_bytes` cannot hold
-  the minimum response; retry with a larger budget or narrower scope.
+A continuation is opaque and stateless. It binds the repository, investigation
+context, original request identity and digest, and the next evidence position.
+It is valid while the context is `LIVE`; expired, abandoned, reaped, unknown, or
+wrong-repository tokens return `Unavailable` with a recovery. The same token
+against the same live context returns the same page. A page always advances by
+at least one evidence unit or exact line range; an oversized unit is split at
+line boundaries, and a unit that cannot fit even one line is refused rather than
+returned as an empty page.
 
-`understand_retrieve` returns `RetrievedUnderstanding` (snapshot, conclusion
-bodies, live support, challenges), `RetrievedContext` (context with admitted
-source and discovery observations), or `RetrievedReceipt` (retained receipt
-plus the context when it still exists).
+## `record`
 
-Record tools return `UnderstandingRecorded`, `VerificationRecorded`, or
-`ChallengeRecorded`: the atomic receipt plus a post-commit qualification.
+```json
+{
+  "repository_id": "repo-1",
+  "request_id": "write-1",
+  "kind": "understanding",
+  "question": "What does it do?",
+  "scope_paths": ["src/a.py"],
+  "conclusion": "It does a thing.",
+  "locator": "src/a.py"
+}
+```
+
+A create carries one conclusion. `locator` is the file the conclusion is
+about; `observation_id` from an `ask` gap may replace it. `surface` is optional
+and derived from the carried scope. `assertion_nature` defaults to
+`DESCRIPTIVE`; `conclusion_id` defaults to `c-1`. An understanding create
+takes no `action` and no `actions`: `action` belongs to `kind="surface"` and
+`actions` to updates. Sending either is an ingress error.
+
+Updates use `actions` with `add`, `confirm`, `correct`, `replace`, or `withdraw`,
+plus `understanding_id` and `expected_version`. Multiple keys apply atomically.
+`challenge_dispositions` settles a challenge raised by `reconsider`.
+
+A create may supply the `context_id` returned by `ask` (including a cold gap).
+The context's bound question and scope are used; do not also send `question` or
+`scope_paths` — that conflict is rejected. Without a context, a create requires
+`question` and issues its own evidence-only context.
+
+Surface declaration:
+
+```json
+{
+  "repository_id": "repo-1",
+  "request_id": "surface-1",
+  "kind": "surface",
+  "action": "create",
+  "surface": {
+    "kind": "SERVICE",
+    "locator": "billing",
+    "boundary": {"paths": ["src/billing/"], "symbols": []},
+    "parent": null
+  }
+}
+```
+
+`SERVICE` and `DOMAIN` require a boundary; `FILE` and `SYMBOL` reject one.
+`action="update"` requires `expected_boundary_version` and advances exactly one
+version. A declared surface must exist before understanding is recorded against
+it. A parent must be an existing declared surface in the same repository; self-
+parent and cycles are rejected. A stale boundary version or a kind conflict is
+`Rejected` with the current boundary version, not `Unavailable`.
+
+Verification uses `kind="verification"` with a `run` carrying the command,
+scope, outcome, observed time, observer, and the evidence it actually tested. A
+run applies to the surfaces in its declared scope and is not widened by a
+broader question. `run.observations` takes the `obs:` ids that `ask` returned
+for the request context; to cite a source instead, put it in `run.evidence` with
+the same `context_id` and Span admits it. An id that was never admitted is
+`Rejected` with `cause_kind=observation_not_admitted`, not a transport error.
+
+Support wires preserve source, admitted-source, authority, premise,
+discovery-boundary, and admitted-discovery support. A discovery boundary is the
+common path: the agent declares the scope it inspected and Span observes
+membership internally.
+
+Results: `UnderstandingRecorded`, `VerificationRecorded`, `SurfaceDeclared`,
+`Rejected`, or `Unavailable`. A rejection names the offending identity, the
+exact server cause, the required action, and the structured current version or
+current boundary version when one exists; it is a result, not a transport error.
 An accepted write is never reported as a rejection because present support
 could not be evaluated; that outcome is `SupportUnavailable`.
 
+## `reconsider`
+
+```json
+{"repository_id": "repo-1", "changed_paths": ["src/a.py"]}
+```
+
+```json
+{
+  "repository_id": "repo-1",
+  "challenge": {
+    "request_id": "ch-1",
+    "understanding_id": "u:...",
+    "target_version": 1,
+    "target_conclusions": [
+      {"understanding_id": "u:...", "conclusion_id": "c-1", "revision": 1}
+    ],
+    "reason": "The cited source does not support this statement.",
+    "evidence": []
+  }
+}
+```
+
+This is an after-edit operation. The service derives the challenge context from
+the target version and cited evidence; the caller does not supply a context id.
+Results: `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
+
+`Changed` names every surface to re-examine, the reasons it was considered
+(`containment`, `direct`, `indirect`), per-conclusion support state, and a
+context for re-establishment. Inclusion is not a verdict: a considered
+conclusion may remain `CURRENT`. Discovery dependents are part of the direct
+set. `Challenged` carries the challenge and its derived context; settle it
+through `record`.
+
+## Egress and errors
+
+Every result is canonical JSON in both MCP text and structured content.
+Failures are typed `ToolError` envelopes: `unknown_tool`, `removed`, `ingress`,
+`unavailable`, `conflict`, `validation`, `source_drift`, `rejected`, and
+`transport`.
+
+No operation accepts a response-size budget or a caller-supplied traversal
+bound. Layer 4 owns the default per host and applies it inside the composition
+boundary.
+
 ## Replay, identity, and retention
 
-A recording submission is identified by
-`(repository_id, context_id, submission_id)`. The caller owns and preserves
-that identity before dispatch. Retrying the same identity and content returns
-the committed receipt. Retrying the same identity with different content is a
-`conflict`. Matching replay is resolved before new-write dependency checks, so
-a retained receipt recovers even after its context was reaped.
+A recording decision is identified by `(repository_id, request_id)`. The caller
+owns and preserves that identity before dispatch. A context is not part of the
+replay key; it may be omitted when the recording cites locators and ranges, in
+which case the operation issues one internally. Retrying the same identity and
+content returns the committed receipt. Retrying the same identity with different
+content is a `conflict`. Replay is resolved before new-write dependency checks,
+so a retained receipt recovers even after its context was reaped.
 
-Contexts expire on the configured lifetime. Receipts remain replayable for
-their configured retention. Operational reaping removes expired contexts and
-expired receipts only; accepted understanding, challenges, verification runs,
-and retained receipts survive.
-
-## Cursors
-
-Pagination cursors are opaque. Pass the returned value to the same operation
-with the same arguments and `request_id`.
-
-- `dsp:<n>` — discovery cursor. Follow it with `understand_question`.
-- `pg:<n>` — inventory cursor. Follow it with `understand_question`; it
-  resumes the evidence inventory for the same investigation.
-- Structural `locate`/`neighbors` cursors are versioned and belong to those
-  tools.
-
-Pagination position is not part of the investigation binding. Changing the
-question or scope under an existing `request_id` is a binding conflict;
-advancing a cursor is not.
+Contexts expire on the configured lifetime. Receipts remain replayable for their
+configured retention. Operational reaping removes expired contexts and receipts
+only; accepted understanding, challenges, verification runs, and retained
+receipts survive.
 
 ## Repository discovery
 
-`tools/list` appends the sorted registered canonical repository IDs to
-repository-scoped descriptions. `initialize_repository` also returns the ID.
-Unknown IDs fail closed with the registered list.
+The repository ID is the registered name of a repository root — the basename
+recorded by the installer — never a filesystem path. `span-install --verify-only`
+prints it with store readiness. `tools/list` does not enumerate IDs; an unknown
+ID fails closed with the registered names.
 
-## Administrative readiness
+## Readiness
 
-There is no `status` tool. Readiness is reported by:
-
-- `initialize_repository` for explicit setup;
-- `span-install --verify-only` for observational installation checks;
-- transition `inspect`/`verify` for stores;
-- per-response availability and typed errors;
-- optional bounded hook notices.
-
-`READY` means the store and provider are operationally available. It never
-means the repository is semantically understood or complete.
+There is no status tool. Readiness is reported by the installer verification,
+per-response availability, typed errors, and optional bounded hook notices.
+`READY` means the store and provider are operationally available. It never means
+the repository is semantically understood or complete.

@@ -19,7 +19,9 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from span.shell import install
 
-CANONICAL_OPS = {
+CANONICAL_OPS = {"ask", "record", "reconsider"}
+
+RETIRED_OPS = (
     "initialize_repository",
     "start_context",
     "understand_question",
@@ -39,17 +41,6 @@ CANONICAL_OPS = {
     "record_verification",
     "locate",
     "neighbors",
-}
-
-RETIRED_OPS = (
-    "initialize_target",
-    "explain",
-    "impact",
-    "trace",
-    "authority",
-    "status",
-    "refresh",
-    "submit_interpretation",
 )
 
 FORBIDDEN_PHRASES = (
@@ -98,42 +89,37 @@ class AgentsSnippetTest(unittest.TestCase):
         for phrase in FORBIDDEN_PHRASES:
             self.assertNotIn(phrase, lowered, phrase)
 
-    def test_uncertainty_preservation_present(self):
+    def test_recovery_guidance_present(self):
         text = _text(SNIPPET)
-        for state in (
-            "PARTIAL",
-            "AMBIGUOUS",
-            "CONFLICTED",
-            "UNRESOLVED",
-            "STALE",
-            "UNVERIFIABLE",
-        ):
-            self.assertIn(state, text, state)
-        self.assertIn("verbatim", text.lower())
-        self.assertIn("Missing authority stays missing", text)
+        self.assertIn("continuation", text)
+        self.assertIn("never fetch a context id", text)
+
+    def test_no_match_recovery_present(self):
+        text = _text(SNIPPET)
+        self.assertIn("no_match", text)
+        self.assertIn("without a question", text)
 
     def test_docs_pointer_present(self):
         text = _text(SNIPPET)
         for required in (
-            "docs/lifecycle.md",
-            "docs/onboarding-runbook.md",
+            "docs/mcp.md",
+            "skills/span-router/SKILL.md",
         ):
             self.assertIn(required, text, required)
 
     def test_entry_guidance_uses_direct_operation(self):
         text = _text(SNIPPET)
-        self.assertIn("No status preflight is required", text)
-        self.assertIn("`understand_question`", text)
-        self.assertIn("`record_create`", text)
+        self.assertIn("Before `Read`/`Grep`", text)
+        self.assertIn("`ask`", text)
+        self.assertIn("`record`", text)
 
     def test_managed_block_carries_lifecycle_hard_rules(self):
         text = _text(SNIPPET)
         for required in (
-            "No status preflight is required",
-            "never settle implicitly",
-            "records what was actually tested",
-            "Hooks are optional event-local notices",
-            "Span never edits",
+            "Before `Read`/`Grep`",
+            "After editing",
+            "After establishing a conclusion",
+            "continuation",
         ):
             self.assertIn(required, text, required)
         for forbidden in (
@@ -175,7 +161,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
                 .strip("\n")
             )
             self.assertEqual(inner, _text(SNIPPET).rstrip("\n"))
-            self.assertIn("No status preflight is required", inner)
+            self.assertIn("Before `Read`/`Grep`", inner)
             self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
             second = self._run(REPO_ROOT, target)
             self.assertEqual(second["status"], "converged")

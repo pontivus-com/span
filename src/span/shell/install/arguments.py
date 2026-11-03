@@ -11,8 +11,8 @@ def _add_transition_arguments(parser) -> None:
         "--transition-store",
         default=None,
         metavar="REPOSITORY_ID",
-        help="Explicitly transition one repository's schema-7/8/9 store to "
-        "the schema-10 lifecycle store. Requires --transition-phase. This "
+        help="Explicitly transition one repository's schema-7/8/9/10 store to "
+        "the schema-11 lifecycle store. Requires --transition-phase. This "
         "is the only supported store upgrade path; the runtime never "
         "migrates at open.",
     )
@@ -98,18 +98,6 @@ def parse_args(argv=None):
         "--no-codex",
         action="store_true",
         help="Skip all Codex integration even when detected.",
-    )
-    parser.add_argument(
-        "--with-claude",
-        action="store_true",
-        default=None,
-        help="Register via `claude mcp add` (default: automatic when "
-        "the claude CLI is present; --no-claude to skip).",
-    )
-    parser.add_argument(
-        "--no-claude",
-        action="store_true",
-        help="Skip all Claude Code integration even when detected.",
     )
     parser.add_argument(
         "--with-hooks",

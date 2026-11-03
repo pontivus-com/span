@@ -71,7 +71,7 @@ def structural_source_from_config(
     uses only the provider-owned cache
     ``<data-dir>/structural/<repository-id>/``. Construction never
     builds: a missing index yields an unavailable source that explicit
-    `initialize_repository` / `refresh` may build via `ensure_current`;
+    installer provisioning may build via `ensure_current`;
     ordinary reads fail closed.
     """
     if config.startswith("memory:"):

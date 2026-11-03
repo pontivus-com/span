@@ -285,6 +285,78 @@ class OpencodeMergeTest(unittest.TestCase):
             self.assertEqual(json.loads(config_path.read_text()), {"mcp": {}})
 
 
+class OpencodePluginTest(unittest.TestCase):
+    def test_deploy_copies_plugin_and_wrapper_and_preserves_config(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            source = root / "span-hooks.js"
+            source.write_text("// plugin\n")
+            plugin_dir = root / "opencode-plugin"
+            config = root / "opencode.json"
+            config.write_text(
+                json.dumps({"theme": "dark", "plugins": ["/other/plugin"]})
+            )
+            result = install.deploy_opencode_plugin(
+                str(source),
+                str(plugin_dir),
+                str(config),
+                "/bin/span-hooks",
+                "/data",
+                dry_run=False,
+            )
+            self.assertEqual(result["status"], "wired")
+            self.assertEqual(
+                (plugin_dir / "index.js").read_text(encoding="utf-8"), "// plugin\n"
+            )
+            wrapper = (plugin_dir / "span-hooks").read_text(encoding="utf-8")
+            self.assertIn("/bin/span-hooks", wrapper)
+            self.assertIn("/data", wrapper)
+            merged = json.loads(config.read_text())
+            self.assertEqual(merged["theme"], "dark")
+            self.assertEqual(merged["plugins"], ["/other/plugin", str(plugin_dir)])
+            install.deploy_opencode_plugin(
+                str(source),
+                str(plugin_dir),
+                str(config),
+                "/bin/span-hooks",
+                "/data",
+                dry_run=False,
+            )
+            self.assertEqual(
+                json.loads(config.read_text())["plugins"],
+                ["/other/plugin", str(plugin_dir)],
+            )
+
+    def test_remove_opencode_plugin_preserves_foreign_entries(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            plugin_dir = root / "opencode-plugin"
+            plugin_dir.mkdir()
+            (plugin_dir / "index.js").write_text("// plugin\n")
+            config = root / "opencode.json"
+            config.write_text(
+                json.dumps({"plugins": ["/other/plugin", str(plugin_dir)]})
+            )
+            result = install.remove_opencode_plugin(
+                str(config), str(plugin_dir), dry_run=False
+            )
+            self.assertEqual(result["status"], "removed")
+            self.assertFalse(plugin_dir.exists())
+            self.assertEqual(
+                json.loads(config.read_text())["plugins"], ["/other/plugin"]
+            )
+            self.assertEqual(
+                install.remove_opencode_plugin(
+                    str(config), str(plugin_dir), dry_run=False
+                )["status"],
+                "absent",
+            )
+
+
 class AgentsRuleIsolationTest(unittest.TestCase):
     def test_deploy_changes_only_the_managed_agents_block(self):
         import tempfile
@@ -1024,6 +1096,34 @@ class SkillDeployTest(unittest.TestCase):
             finally:
                 os.path.expanduser = real_expanduser
 
+    def test_skills_deploy_removes_retired_skill_directories(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp) / "home"
+            span_repo = pathlib.Path(tmp) / "span"
+            (span_repo / "src" / "span").mkdir(parents=True)
+            (span_repo / "skills" / "span-router").mkdir(parents=True)
+            (span_repo / "skills" / "span-router" / "SKILL.md").write_text("# Router\n")
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                retired = ("span", "span-change-context", "span-document")
+                for host in (".config/opencode", ".codex"):
+                    root = home / host / "skills"
+                    for name in retired:
+                        (root / name).mkdir(parents=True)
+                install.deploy_skills(span_repo, dry_run=False)
+                for host in (".config/opencode", ".codex"):
+                    root = home / host / "skills"
+                    for name in retired:
+                        self.assertFalse((root / name).exists(), (host, name))
+                    self.assertTrue((root / "span-router" / "SKILL.md").is_file(), host)
+            finally:
+                os.path.expanduser = real_expanduser
+
     def test_skills_dry_run_writes_nothing(self):
         import os
         import tempfile
@@ -1044,35 +1144,6 @@ class SkillDeployTest(unittest.TestCase):
                 self.assertFalse(
                     (home / ".config" / "opencode" / "skills" / "span").exists()
                 )
-            finally:
-                os.path.expanduser = real_expanduser
-
-    def test_skills_deploy_into_fresh_claude_host(self):
-        # A freshly installed Claude Code has ~/.claude but no skills
-        # directory. Deployment must create it, otherwise the host is
-        # detected and then silently gets no skills.
-        import os
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            home = pathlib.Path(tmp) / "home"
-            span_repo = pathlib.Path(tmp) / "span"
-            (span_repo / "src" / "span").mkdir(parents=True)
-            (span_repo / "skills" / "span").mkdir(parents=True)
-            (span_repo / "skills" / "span" / "SKILL.md").write_text("# Span\n")
-            (home / ".claude").mkdir(parents=True)
-            real_expanduser = os.path.expanduser
-            os.path.expanduser = lambda p: (
-                str(home) + p[1:] if p.startswith("~") else p
-            )
-            try:
-                deployed = install.deploy_skills(span_repo, dry_run=False)
-                self.assertEqual(len(deployed), 1)
-                installed = home / ".claude" / "skills" / "span" / "SKILL.md"
-                self.assertEqual(installed.read_text(), "# Span\n")
-                # Hosts with no directory are never fabricated.
-                self.assertFalse((home / ".codex").exists())
-                self.assertFalse((home / ".config" / "opencode").exists())
             finally:
                 os.path.expanduser = real_expanduser
 
@@ -1097,9 +1168,14 @@ class SkillDeployTest(unittest.TestCase):
                 ):
                     deployed = install.deploy_skills(not_a_checkout, dry_run=False)
                 self.assertTrue(deployed)
-                bundled = assets / "skills" / "span" / "SKILL.md"
+                bundled = assets / "skills" / "span-router" / "SKILL.md"
                 installed = (
-                    home / ".config" / "opencode" / "skills" / "span" / "SKILL.md"
+                    home
+                    / ".config"
+                    / "opencode"
+                    / "skills"
+                    / "span-router"
+                    / "SKILL.md"
                 )
                 self.assertEqual(bundled.read_bytes(), installed.read_bytes())
                 origin = json.loads(
@@ -1108,7 +1184,7 @@ class SkillDeployTest(unittest.TestCase):
                         / ".config"
                         / "opencode"
                         / "skills"
-                        / "span"
+                        / "span-router"
                         / ".span-origin.json"
                     ).read_text()
                 )
@@ -1124,254 +1200,7 @@ class SkillDeployTest(unittest.TestCase):
         hosts = install.detect_hosts()
         self.assertTrue(hosts["opencode"])
         self.assertIn("codex", hosts)
-        self.assertIn("claude", hosts)
-
-
-class ClaudeHostTest(unittest.TestCase):
-    """Claude Code is a managed host: register, wire, inspect."""
-
-    def _home(self, tmp):
-        import os
-
-        real_expanduser = os.path.expanduser
-        os.path.expanduser = lambda p: (
-            str(pathlib.Path(tmp)) + p[1:] if p.startswith("~") else p
-        )
-        return real_expanduser
-
-    def test_claude_hooks_added_and_deduped(self):
-        import json
-        import os
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            settings = pathlib.Path(tmp) / ".claude" / "settings.json"
-            settings.parent.mkdir(parents=True)
-            settings.write_text(json.dumps({"permissions": {"allow": ["Bash"]}}))
-            real_expanduser = self._home(tmp)
-            try:
-                install.wire_claude_hooks("/bin/span-hooks", "/data", dry_run=False)
-                first = json.loads(settings.read_text())
-                for event in ("SessionStart", "PostToolUse", "Stop"):
-                    self.assertIn(event, first["hooks"])
-                # Every command names the installed data directory; the
-                # runner must never fall back to the platform default.
-                commands = [
-                    hook["command"]
-                    for groups in first["hooks"].values()
-                    for group in groups
-                    for hook in group["hooks"]
-                ]
-                self.assertEqual(
-                    sorted(commands),
-                    [
-                        "/bin/span-hooks session-start --data-dir /data",
-                        "/bin/span-hooks session-stop --data-dir /data",
-                        "/bin/span-hooks source-changed --data-dir /data",
-                    ],
-                )
-                # Foreign settings survive untouched.
-                self.assertEqual(first["permissions"], {"allow": ["Bash"]})
-                install.wire_claude_hooks("/bin/span-hooks", "/data", dry_run=False)
-                self.assertEqual(first, json.loads(settings.read_text()))
-            finally:
-                os.path.expanduser = real_expanduser
-
-    def test_claude_hooks_replace_older_span_entries(self):
-        # Upgrading must converge: a prior Span command with different
-        # arguments is replaced, while a foreign command in the same
-        # event group survives.
-        import json
-        import os
-        import tempfile
-
-        seeded = {
-            "hooks": {
-                "SessionStart": [
-                    {
-                        "matcher": "startup|resume|compact",
-                        "hooks": [
-                            {
-                                "type": "command",
-                                "command": "/bin/span-hooks session-start",
-                            },
-                            {"type": "command", "command": "/opt/other setup"},
-                        ],
-                    }
-                ]
-            }
-        }
-        with tempfile.TemporaryDirectory() as tmp:
-            settings = pathlib.Path(tmp) / ".claude" / "settings.json"
-            settings.parent.mkdir(parents=True)
-            settings.write_text(json.dumps(seeded))
-            real_expanduser = self._home(tmp)
-            try:
-                install.wire_claude_hooks("/bin/span-hooks", "/data", dry_run=False)
-                after = json.loads(settings.read_text())
-                commands = [
-                    hook["command"]
-                    for group in after["hooks"]["SessionStart"]
-                    for hook in group["hooks"]
-                ]
-                self.assertEqual(
-                    sorted(commands),
-                    [
-                        "/bin/span-hooks session-start --data-dir /data",
-                        "/opt/other setup",
-                    ],
-                )
-            finally:
-                os.path.expanduser = real_expanduser
-
-    def test_claude_hooks_preserve_foreign_hooks_and_back_up(self):
-        import json
-        import os
-        import tempfile
-
-        foreign = {
-            "hooks": {
-                "SessionStart": [
-                    {"matcher": "", "hooks": [{"type": "command", "command": "x"}]}
-                ]
-            }
-        }
-        with tempfile.TemporaryDirectory() as tmp:
-            settings = pathlib.Path(tmp) / ".claude" / "settings.json"
-            settings.parent.mkdir(parents=True)
-            settings.write_text(json.dumps(foreign))
-            real_expanduser = self._home(tmp)
-            try:
-                install.wire_claude_hooks("/bin/span-hooks", "/data", dry_run=False)
-                after = json.loads(settings.read_text())
-                self.assertEqual(
-                    after["hooks"]["SessionStart"][0],
-                    foreign["hooks"]["SessionStart"][0],
-                )
-                backup = settings.with_suffix(".json.bak-span")
-                self.assertEqual(json.loads(backup.read_text()), foreign)
-            finally:
-                os.path.expanduser = real_expanduser
-
-    def test_claude_hooks_missing_settings_skips(self):
-        import os
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            real_expanduser = self._home(tmp)
-            try:
-                result = install.wire_claude_hooks(
-                    "/bin/span-hooks", "/data", dry_run=False
-                )
-            finally:
-                os.path.expanduser = real_expanduser
-            self.assertEqual(result["status"], "skipped")
-            self.assertFalse((pathlib.Path(tmp) / ".claude").exists())
-
-    def test_register_claude_uses_user_scope_stdio(self):
-        from unittest.mock import patch
-
-        with (
-            patch.object(shutil, "which", return_value="/claude"),
-            patch.object(subprocess, "run") as remove,
-            patch("span.shell.install.hosts._run") as run,
-        ):
-            install.register_claude(["/bin/span-mcp", "--data-dir", "/d"])
-        self.assertEqual(
-            remove.call_args_list[0].args[0],
-            ["claude", "mcp", "remove", "span", "--scope", "user"],
-        )
-        run.assert_called_once_with(
-            [
-                "claude",
-                "mcp",
-                "add",
-                "--scope",
-                "user",
-                "--transport",
-                "stdio",
-                "span",
-                "--",
-                "/bin/span-mcp",
-                "--data-dir",
-                "/d",
-            ],
-            dry_run=False,
-        )
-
-    def test_register_claude_absent_skips(self):
-        from unittest.mock import patch
-
-        with patch.object(shutil, "which", return_value=None):
-            result = install.register_claude(["/bin/span-mcp"])
-        self.assertEqual(result["status"], "skipped")
-
-    def test_register_claude_dry_run_writes_nothing(self):
-        from unittest.mock import patch
-
-        with (
-            patch.object(shutil, "which", return_value="/claude"),
-            patch.object(subprocess, "run") as remove,
-            patch("span.shell.install.hosts._run") as run,
-        ):
-            result = install.register_claude(["/bin/span-mcp"], dry_run=True)
-        remove.assert_not_called()
-        run.assert_not_called()
-        self.assertEqual(result["status"], "skipped")
-
-    def test_inspect_claude_registration_states(self):
-        import json
-        import os
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            real_expanduser = self._home(tmp)
-            try:
-                expected = ["/bin/span-mcp", "--data-dir", "/d"]
-                self.assertEqual(
-                    install.inspect_claude_registration(expected)["status"],
-                    "missing",
-                )
-                config_path = pathlib.Path(tmp) / ".claude.json"
-                config_path.write_text(
-                    json.dumps(
-                        {
-                            "mcpServers": {
-                                "span": {
-                                    "command": "/bin/span-mcp",
-                                    "args": ["--data-dir", "/d"],
-                                }
-                            }
-                        }
-                    )
-                )
-                self.assertEqual(
-                    install.inspect_claude_registration(expected)["status"],
-                    "matched",
-                )
-                config_path.write_text(
-                    json.dumps(
-                        {
-                            "mcpServers": {
-                                "span": {
-                                    "command": "/bin/span-mcp",
-                                    "args": ["--data-dir", "/other"],
-                                }
-                            }
-                        }
-                    )
-                )
-                self.assertEqual(
-                    install.inspect_claude_registration(expected)["status"],
-                    "mismatched",
-                )
-                config_path.write_text("{not json")
-                self.assertEqual(
-                    install.inspect_claude_registration(expected)["status"],
-                    "unreadable",
-                )
-            finally:
-                os.path.expanduser = real_expanduser
+        self.assertNotIn("claude", hosts)
 
 
 class HostRegistrationInspectionTest(unittest.TestCase):
@@ -1545,11 +1374,24 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             result = install.inspect_opencode_registration(str(path), ["/bin/span-mcp"])
         self.assertEqual(result["status"], "unreadable")
 
+    def test_host_command_carries_the_measured_response_budget(self):
+        opencode = install.expected_span_command(
+            "/bin/span-mcp", "/d", ["/r"], host="opencode"
+        )
+        codex = install.expected_span_command(
+            "/bin/span-mcp", "/d", ["/r"], host="codex"
+        )
+        self.assertIn("--response-budget-bytes", opencode)
+        self.assertEqual(opencode[-1], "51133")
+        self.assertEqual(codex[-1], "62589")
+
     def test_doctor_inspection_leaves_config_bytes_unchanged(self):
         import tempfile
         from unittest.mock import patch
 
-        expected = ["/bin/span-mcp", "--data-dir", "/d"]
+        expected = install.expected_span_command(
+            "/bin/span-mcp", "/d", [], host="opencode"
+        )
         with tempfile.TemporaryDirectory() as tmp:
             path = self._config(tmp, expected)
             before = path.read_bytes()

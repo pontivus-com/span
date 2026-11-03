@@ -12,21 +12,19 @@ import datetime as _datetime
 from span.core import model as m
 from span.core import support_rules as _rules
 from span.core.recording import RecordingValidationError
+from span.core.rejection import RejectionCauseKind
 from span.ports.evidence import EvidenceSource
 from span.ports.lifecycle import (
     LifecycleAuthorityResolver,
     LifecycleStorePort,
 )
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 
 __all__ = ["SupportService"]
 
 
-def _key(ref: m.ConclusionRevisionRef) -> tuple[str, str, int]:
-    return (
-        ref.understanding_id.value,
-        ref.conclusion_id.value,
-        ref.revision.value,
-    )
+def _same_fingerprint(left: str, right: str) -> bool:
+    return left.split(":", 1)[-1] == right.split(":", 1)[-1]
 
 
 class SupportService:
@@ -39,11 +37,13 @@ class SupportService:
         evidence: EvidenceSource,
         authority: LifecycleAuthorityResolver,
         clock=None,
+        policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
     ) -> None:
         self._store = store
         self._evidence = evidence
         self._authority = authority
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
+        self._policy = policy
 
     def evaluate_version(
         self,
@@ -102,7 +102,8 @@ class SupportService:
         if evaluation.state is not m.SupportState.CURRENT:
             raise RecordingValidationError(
                 "support is not current: "
-                f"{evaluation.state.value}: {evaluation.reason}"
+                f"{evaluation.state.value}: {evaluation.reason}",
+                cause_kind=RejectionCauseKind.SOURCE_DRIFT,
             )
 
     def assert_observations(
@@ -114,7 +115,8 @@ class SupportService:
             if evaluation.state is not m.SupportState.CURRENT:
                 raise RecordingValidationError(
                     "verification observation is not current: "
-                    f"{observation_id.value}: {evaluation.state.value}"
+                    f"{observation_id.value}: {evaluation.state.value}",
+                    cause_kind=RejectionCauseKind.SOURCE_DRIFT,
                 )
 
     def evaluate_verification(self, run_id: str) -> m.VerificationSupport:
@@ -150,7 +152,7 @@ class SupportService:
         ref: m.ConclusionRevisionRef,
         visited: frozenset[tuple[str, str, int]],
     ) -> m.SupportEvaluation:
-        key = _key(ref)
+        key = ref.sort_key
         if key in visited:
             return _rules.evaluation(
                 m.SupportState.UNVERIFIABLE, self._clock(), "premise cycle"
@@ -173,21 +175,37 @@ class SupportService:
             )
         if isinstance(revision.content, m.WithdrawnConclusion):
             return _rules.evaluation(
-                m.SupportState.CURRENT, self._clock(), "explicitly withdrawn"
+                m.SupportState.UNVERIFIABLE,
+                self._clock(),
+                "conclusion revision was withdrawn",
             )
         dependencies = tuple(revision.content.support)
         evaluations = tuple(
-            self._dependency_eval(dependency, visited | {key})
+            (dependency, self._dependency_eval(dependency, visited | {key}))
             for dependency in dependencies
         )
-        state = _rules.combine_states(tuple(item.state for item in evaluations))
+        state = _rules.combine_states(
+            tuple(evaluation.state for _, evaluation in evaluations)
+        )
+        findings = tuple(
+            m.DependencyFinding(
+                dependency=dependency,
+                state=evaluation.state,
+                reason=evaluation.reason,
+            )
+            for dependency, evaluation in evaluations
+        )
         reasons = tuple(
-            item.reason
-            for item in evaluations
-            if item.state is not m.SupportState.CURRENT and item.reason
+            evaluation.reason
+            for _, evaluation in evaluations
+            if evaluation.state is not m.SupportState.CURRENT and evaluation.reason
         )
         return _rules.evaluation(
-            state, self._clock(), "; ".join(reasons), dependencies=dependencies
+            state,
+            self._clock(),
+            "; ".join(reasons),
+            dependencies=dependencies,
+            findings=findings,
         )
 
     def _dependency_eval(
@@ -208,16 +226,52 @@ class SupportService:
     def _source_eval(self, observation_id: str) -> m.SupportEvaluation:
         record = self._store.find_source_observation(observation_id)
         observed: str | None = None
+        expected: str | None = None
         if record is not None:
-            _, fingerprints = self._evidence.list_inventory_entries(
-                record.repository_id,
-                m.EvidenceScope(),
-                (record.evidence.locator,),
-            )
-            observed = fingerprints.get(record.evidence.locator)
+            locator = record.evidence.locator
+            if record.whole_file or not record.delivered_ranges:
+                _, fingerprints = self._evidence.list_inventory_entries(
+                    record.repository_id,
+                    m.EvidenceScope(),
+                    (locator,),
+                )
+                observed = fingerprints.get(locator)
+                expected = record.content_digest.value
+            else:
+                unit = self._evidence.read_exact(
+                    record.repository_id,
+                    m.EvidenceRequest(locator),
+                    self._policy.default_query_bounds,
+                )
+                if isinstance(unit, m.EvidenceSourceFailure):
+                    observed = None
+                    expected = record.content_digest.value
+                else:
+                    ranged = _rules.ranged_fingerprint(
+                        unit.content, record.delivered_ranges
+                    )
+                    if ranged is None:
+                        # FD-18: an unbound range falls back to the whole file.
+                        observed = unit.content_fingerprint
+                        expected = record.evidence.revision_or_fingerprint
+                    elif (
+                        record.evidence.revision_or_fingerprint is not None
+                        and _same_fingerprint(
+                            record.content_digest.value,
+                            record.evidence.revision_or_fingerprint,
+                        )
+                    ):
+                        # A legacy row recorded whole-file identity for a
+                        # ranged read; evaluate it as a whole-file observation.
+                        observed = unit.content_fingerprint
+                        expected = record.content_digest.value
+                    else:
+                        observed = ranged
+                        expected = record.content_digest.value
         return _rules.source_state(
             record=record,
             observed_fingerprint=observed,
+            expected_fingerprint=expected,
             observed_at=self._clock(),
         )
 
@@ -263,7 +317,7 @@ class SupportService:
         premise: m.ConclusionRevisionRef,
         visited: frozenset[tuple[str, str, int]],
     ) -> m.SupportEvaluation:
-        if _key(premise) in visited:
+        if premise.sort_key in visited:
             return _rules.evaluation(
                 m.SupportState.UNVERIFIABLE, self._clock(), "premise cycle"
             )
@@ -273,6 +327,7 @@ class SupportService:
             premise.revision.value,
         )
         in_membership = False
+        withdrawn = False
         if exists:
             understanding = self._store.get_understanding(
                 premise.understanding_id.value
@@ -286,9 +341,31 @@ class SupportService:
                 and ref.revision == premise.revision
                 for ref in current.conclusions
             )
+            revisions = self._store.get_conclusions(premise.understanding_id.value)
+            by_key = {
+                (item.conclusion_id, item.revision.value): item for item in revisions
+            }
+            lineage_ref = next(
+                (
+                    ref
+                    for ref in current.conclusions
+                    if ref.conclusion_id == premise.conclusion_id
+                ),
+                None,
+            )
+            lineage_revision = (
+                by_key.get((lineage_ref.conclusion_id, lineage_ref.revision.value))
+                if lineage_ref is not None
+                else None
+            )
+            withdrawn = isinstance(
+                lineage_revision.content if lineage_revision else None,
+                m.WithdrawnConclusion,
+            )
         membership = _rules.premise_membership_state(
             exists=exists,
             in_current_membership=in_membership,
+            withdrawn=withdrawn,
             observed_at=self._clock(),
         )
         if membership.state is not m.SupportState.CURRENT:

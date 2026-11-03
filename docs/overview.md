@@ -26,12 +26,16 @@ MCP request → strict ingress → lifecycle service → typed ports and pure ru
             → atomic store operation when requested → canonical result → MCP
 ```
 
-`understand_question` discovers qualified candidates or returns an investigation
-gap with evidence. `evidence_start` and `evidence_extend` admit exact sources.
-`record_*` operations accept supported understanding, explicit disputes, or
-independent verification. `understand_retrieve`, `reassess`, and
-`verification_support` read saved state with its current qualifications.
-`locate` and `neighbors` provide structural navigation.
+`ask` returns current content with evidence, a gap with inspectable evidence and
+an optional continuation, or the surface document view. With no question, `ask`
+returns the document view; that is the normal reuse path. An exact question is a
+targeted query; a paraphrase returns `no_match` with a recovery to the view.
+`record` accepts supported understanding, a declared service/domain boundary, or
+an independent verification run. `reconsider` maps a changed scope to every
+surface that must be re-examined, with per-conclusion support state. Exact
+snapshots and receipts are retrieved through `ask`'s selector form; they are
+historical and never current-answer content. Host navigation or an optional
+`structure` tool covers structural lookup.
 
 A question is not a suspended task. An agent can record an investigation that
 began outside Span. The store holds recoverable contexts and immutable

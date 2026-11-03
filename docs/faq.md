@@ -2,10 +2,10 @@
 
 ## What does an agent actually do with Span?
 
-Ask a scoped engineering question, inspect saved candidates or source evidence,
+Ask a scoped engineering question, inspect current answers or source evidence,
 investigate material gaps, and record useful conclusions. A later session can
 ask its own question, find applicable understanding, and check its support.
-After changes, the agent reassesses and updates affected explanations.
+After changes, the agent reconsiders affected explanations and updates actual loss.
 See [usage](usage.md).
 
 ## Does installation explain the whole repository?
@@ -22,9 +22,10 @@ internal question classification, or one-file-at-a-time semantic submission.
 
 ## Can I record work that began without Span?
 
-Yes. Admit the exact evidence with `evidence_start`, then create understanding
-with an explicit question and scope, or record an independent verification
-run. A prior question/answer exchange is optional.
+Yes. `record` issues its own context from the supplied scope and cited
+evidence, then creates understanding with an explicit question and scope, or
+records an independent verification run. A prior question/answer exchange is
+optional.
 
 ## Does CURRENT mean the explanation is true?
 
@@ -35,14 +36,15 @@ agent judges applicability and semantic correctness.
 ## What happens when code changes?
 
 Dependent support can become `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
-`reassess` identifies the current qualification. The agent investigates and
-records a confirm/correct/replace/withdraw update; history remains intact.
+`reconsider` names the affected surfaces and each conclusion's current
+qualification. The agent investigates and records a
+confirm/correct/replace/withdraw update; history remains intact.
 Changes outside a declared dependency boundary leave other support alone.
 
 ## What if sources match but I disagree?
 
 Record an explicit challenge. Resolve it or carry it forward through named
-challenge dispositions in `record_update`. A new version or passing test does
+challenge dispositions in `record`. A new version or passing test does
 not silently settle it.
 
 ## Does Span run the agent, change code, or execute tests?
@@ -66,10 +68,11 @@ prove the original commit failed.
 
 ## Which clients are verified for this beta?
 
-Codex is the live beta validation target. OpenCode integration exists and has
-earlier trial evidence, without final-package revalidation. Claude's live
-model grammar and identity behavior remain UNVERIFIED under the owner waiver.
-Registration health alone is not model-delivery evidence.
+Codex and OpenCode are the supported live targets. Both have three-tool
+captures of the declared grammar, request identity, and recovery behavior.
+OpenCode also has the flat-create re-capture and the adoption measurement;
+Codex's flat-create capture is pending. Registration health alone is not
+model-delivery evidence.
 
 ## Does Span save time or tokens?
 
@@ -79,6 +82,6 @@ The beta does not claim a universal saving or a completed comparative ACCEPT.
 
 ## Where is state stored, and how do upgrades work?
 
-In an external data directory. The active store is schema 10; older supported
+In an external data directory. The active store is schema 11; older supported
 stores use the explicit offline archive/export/stage/activate transition.
 [Install](install.md) documents verification, rollback, removal, and retention.

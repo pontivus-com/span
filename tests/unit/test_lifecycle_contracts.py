@@ -114,7 +114,7 @@ def _identity(submission: str = "sub-1") -> m.RecordingIdentity:
     return m.RecordingIdentity(
         repository_id="repo-1",
         context_id=m.InvestigationContextId("ctx-1"),
-        submission_id=m.SubmissionId(submission),
+        request_id=m.RequestId(submission),
     )
 
 
@@ -147,6 +147,11 @@ def _create_command(
 ) -> m.CreateUnderstandingCommand:
     return m.CreateUnderstandingCommand(
         identity=_identity(),
+        surface=m.SurfaceKey(
+            repository_id="repo-1",
+            kind=m.SurfaceKind.FILE,
+            locator=paths[0] if paths else "src/a.py",
+        ),
         target=target or m.ContextBoundTarget(),
         conclusions=(_proposed(conclusion_id, statement, *paths),),
     )
@@ -240,10 +245,11 @@ class CanonicalRoundTripTest(unittest.TestCase):
 
 
 class IdentityDigestTest(unittest.TestCase):
-    def test_content_digest_ignores_submission_identity(self):
+    def test_content_digest_ignores_request_identity(self):
         first = _create_command()
         second = m.CreateUnderstandingCommand(
             identity=_identity("sub-2"),
+            surface=first.surface,
             target=first.target,
             conclusions=first.conclusions,
         )
@@ -262,8 +268,7 @@ class IdentityDigestTest(unittest.TestCase):
     def test_recording_key_projects_the_identity(self):
         key = recording_key(_identity())
         self.assertEqual(key.repository_id, "repo-1")
-        self.assertEqual(key.context_id.value, "ctx-1")
-        self.assertEqual(key.submission_id.value, "sub-1")
+        self.assertEqual(key.request_id.value, "sub-1")
 
 
 class ReceiptDecisionTest(unittest.TestCase):

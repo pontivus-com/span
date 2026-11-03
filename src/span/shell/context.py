@@ -26,11 +26,13 @@ from span.shell.structural import (
     structural_source_from_config,
 )
 from span.service.administration import initialize_repository
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.evidence import EvidenceService
 from span.service.lifecycle import LifecycleService
 from span.service.support import SupportService
+from span.service.answer import AnswerService
+from span.service.reconsider import ReconsiderService
 from span.service.understand import UnderstandService
-from span.service.understanding_discovery import DiscoveryService
 
 __all__ = [
     "RepositoryNotInitialized",
@@ -41,7 +43,7 @@ __all__ = [
 
 
 class RepositoryNotInitialized(LifecycleStoreError):
-    """No schema-10 store exists for this repository; explicit setup is due."""
+    """No compatible store exists for this repository; explicit setup is due."""
 
 
 def compose_context(
@@ -51,20 +53,30 @@ def compose_context(
     structural,
     evidence: FilesystemEvidenceSource,
     store: LifecycleStore,
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> ServiceContext:
     """Wire the canonical lifecycle services over one open store."""
     seeds = store.load_authority_seeds(repository_id)
-    support = SupportService(store=store, evidence=evidence, authority=store)
-    lifecycle = LifecycleService(store=store, authority=store, support=support)
-    evidence_service = EvidenceService(store=store, evidence=evidence)
-    discovery = DiscoveryService(store=store)
-    understand = UnderstandService(
-        store=store,
-        discovery=discovery,
-        evidence=evidence_service,
-        evidence_source=evidence,
-        support=support,
+    support = SupportService(
+        store=store, evidence=evidence, authority=store, policy=policy
     )
+    evidence_service = EvidenceService(store=store, evidence=evidence, policy=policy)
+    lifecycle = LifecycleService(
+        store=store,
+        authority=store,
+        support=support,
+        evidence=evidence_service,
+    )
+    reconsider = ReconsiderService(
+        store=store,
+        support=support,
+        evidence=evidence_service,
+        policy=policy,
+    )
+    answer = AnswerService(
+        store=store, support=support, evidence=evidence_service, policy=policy
+    )
+    understand = UnderstandService(store=store, support=support)
     return ServiceContext(
         repository_id=repository_id,
         root=root,
@@ -75,6 +87,8 @@ def compose_context(
         evidence_service=evidence_service,
         understand=understand,
         support=support,
+        reconsider=reconsider,
+        answer=answer,
         authority_seeds=seeds,
     )
 
@@ -82,6 +96,8 @@ def compose_context(
 def open_repository_context(
     data_dir: str | _pathlib.Path,
     repository_locator: str,
+    *,
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> tuple[str, ServiceContext]:
     """Open an already-provisioned repository context without setup."""
     data_root = _pathlib.Path(data_dir)
@@ -92,8 +108,8 @@ def open_repository_context(
     store_path = data_root / f"{repository_id}.db"
     if not store_path.is_file():
         raise RepositoryNotInitialized(
-            f"repository {repository_id} is not initialized; call "
-            "initialize_repository in a dedicated setup session"
+            f"repository {repository_id} is not initialized; run the installer "
+            "to bind it"
         )
     store = LifecycleStore(store_path, retention=DEFAULT_LIFECYCLE_RETENTION)
     try:
@@ -102,7 +118,7 @@ def open_repository_context(
         except LifecycleStoreError:
             raise RepositoryNotInitialized(
                 f"store {store_path} has no binding for {repository_id}; "
-                "call initialize_repository in a dedicated setup session"
+                "run the installer to bind this repository"
             ) from None
         if bound_root != root:
             raise LifecycleStoreError(
@@ -120,12 +136,15 @@ def open_repository_context(
         structural=structural,
         evidence=evidence,
         store=store,
+        policy=policy,
     )
 
 
 def provision_repository(
     data_dir: str | _pathlib.Path,
     request: m.InitializeRepositoryRequest,
+    *,
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> tuple[ServiceContext, m.InitializeRepositoryResult]:
     """Explicit setup: bind identity and declared seeds (no interpretation)."""
     data_root = _pathlib.Path(data_dir)
@@ -167,6 +186,7 @@ def provision_repository(
             structural=structural,
             evidence=evidence,
             store=store,
+            policy=policy,
         )
     except BaseException:
         store.close()

@@ -1,4 +1,4 @@
-"""Offline schema-9 → schema-10 store transition (N-06, §8.3/§8.5).
+"""Offline legacy → schema-11 store transition (N-06, §8.3/§8.5).
 
 This is the one canonical transition tool. It is deliberately raw: legacy
 stores are inspected and exported by reading their observed SQLite catalog and
@@ -6,6 +6,10 @@ cell values directly. It never imports a legacy store constructor, reaper,
 semantic decoder, or mutating upgrade helper, so the historical bytes keep
 their original meaning instead of being reinterpreted by the runtime that is
 being replaced.
+
+Schemas 7–9 are preserved as a raw export and staged as an empty target.
+Schema 10 carries the same semantic tables as the target, so its documented
+per-table mapping lives in ``store_transition_schema10`` (technical design §14).
 
 The new runtime never migrates at open. This command performs the explicit,
 separately authorized offline protocol:
@@ -60,8 +64,8 @@ __all__ = [
 ]
 
 
-TARGET_SCHEMA = 10
-SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9})
+TARGET_SCHEMA = 11
+SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10})
 
 #: Every table the schema-7/8/9 runtime could own. A table outside this set is
 #: preserved and reported, never silently omitted.
@@ -92,6 +96,7 @@ _REPORT = "report.md"
 _STAGING = "staging.db"
 _PREVIOUS = "previous.db"
 _SMOKE = "smoke.db"
+_MAPPING = "mapping.json"
 
 _BLOB = "$span.blob"
 _REAL = "$span.real"
@@ -198,6 +203,10 @@ class TransitionPaths:
     @property
     def smoke(self) -> _pathlib.Path:
         return self.transition_dir / _SMOKE
+
+    @property
+    def mapping(self) -> _pathlib.Path:
+        return self.transition_dir / _MAPPING
 
 
 @_dataclasses.dataclass(frozen=True)
@@ -456,8 +465,8 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
             required_free_bytes=0,
             unknown_tables=(),
             limitations=(
-                f"no store at {source}; explicit initialize_repository creates "
-                "a new schema-10 store instead of a transition",
+                f"no store at {source}; explicit installer provisioning creates "
+                "a new schema-11 store instead of a transition",
             ),
         )
     connection = _connect_read_only(source)
@@ -980,6 +989,7 @@ def _stage(
     paths: TransitionPaths,
     config: TransitionConfig,
     root: str,
+    source_schema: int,
 ) -> tuple[
     tuple[TableInventory, ...],
     tuple[str, ...],
@@ -1001,6 +1011,11 @@ def _stage(
         store.register_repository(config.repository_id, root, authority_seeds=seeds)
     finally:
         store.close()
+    if source_schema == 10:
+        from span.shell.store_transition_schema10 import stage_schema10
+
+        limits, _ = stage_schema10(paths, config, root)
+        limitations = limitations + limits
     _fsync_file(paths.staging)
     _fsync_dir(paths.transition_dir)
     return (), limitations
@@ -1035,6 +1050,7 @@ def _verify_staged(
     config: TransitionConfig,
     root: str,
     expected: tuple[TableInventory, ...],
+    source_schema: int,
 ) -> tuple[str, ...]:
     """Verify one candidate active/staging store without mutating it."""
     if not paths.staging.is_file():
@@ -1065,6 +1081,15 @@ def _verify_staged(
             )
     finally:
         connection.close()
+    if source_schema == 10:
+        from span.shell.store_transition_schema10 import verify_schema10_staging
+
+        verify_schema10_staging(paths, config)
+        _smoke(paths, config)
+        return (
+            "staged store carries the schema-10 mapping with reconciled references",
+            "fresh lifecycle smoke test passed on an isolated copy",
+        )
     counts = _semantic_counts(paths.staging)
     if any(counts.values()):
         raise TransitionError(
@@ -1073,7 +1098,8 @@ def _verify_staged(
         )
     _smoke(paths, config)
     return (
-        "staged store is schema 10 with the bound root and no semantic rows",
+        f"staged store is schema {TARGET_SCHEMA} with the bound root and no "
+        "semantic rows",
         "fresh lifecycle smoke test passed on an isolated copy",
     )
 
@@ -1082,13 +1108,16 @@ def _smoke(paths: TransitionPaths, config: TransitionConfig) -> None:
     """Exercise a fresh lifecycle on an isolated copy, never the store."""
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
+    from span.service.evidence import EvidenceService
     from span.service.lifecycle import LifecycleService
     from span.service.support import SupportService
 
     with _tempfile.TemporaryDirectory(prefix="span-transition-smoke-") as tmp:
         copy = _pathlib.Path(tmp) / "smoke.db"
         _shutil.copy2(paths.staging, copy)
-        store = LifecycleStore(copy, retention=DEFAULT_LIFECYCLE_RETENTION)
+        store = LifecycleStore(
+            copy, retention=DEFAULT_LIFECYCLE_RETENTION, clock=config.clock
+        )
         try:
 
             class _NoEvidence:
@@ -1106,10 +1135,16 @@ def _smoke(paths: TransitionPaths, config: TransitionConfig) -> None:
                 authority=store,
                 clock=config.clock,
             )
+            evidence_service = EvidenceService(
+                store=store,
+                evidence=_typing.cast(EvidenceSource, _NoEvidence()),
+                clock=config.clock,
+            )
             service = LifecycleService(
                 store=store,
                 authority=store,
                 support=support,
+                evidence=evidence_service,
                 clock=config.clock,
             )
             context = service.start_context(
@@ -1185,11 +1220,13 @@ def _require_transitionable(
     if not inspection.exists:
         raise TransitionError(f"no store at {inspection.path}; nothing to transition")
     if inspection.schema_version == TARGET_SCHEMA:
-        raise TransitionError("store is already schema 10; use inspect or verify")
+        raise TransitionError(
+            f"store is already schema {TARGET_SCHEMA}; use inspect or verify"
+        )
     if inspection.schema_version not in SUPPORTED_SOURCE_SCHEMAS:
         raise TransitionError(
             f"unsupported source schema {inspection.schema_version}; "
-            "preserve the file and supply a supported schema 7/8/9 store "
+            "preserve the file and supply a supported schema 7/8/9/10 store "
             "or re-record with explicit interpretation"
         )
     if inspection.integrity != "ok":
@@ -1361,9 +1398,17 @@ def _stage_step(
 ) -> tuple[TransitionManifest, tuple[str, ...], tuple[str, ...]]:
     if manifest.state is not TransitionState.STAGED:
         return manifest, (), ()
-    _, binding_limitations = _stage(paths, config, root)
+    _, binding_limitations = _stage(paths, config, root, manifest.source_schema_version)
     effects = [f"staged schema-{TARGET_SCHEMA} store at {paths.staging}"]
-    effects.extend(_verify_staged(paths, config, root, manifest.tables))
+    effects.extend(
+        _verify_staged(
+            paths,
+            config,
+            root,
+            manifest.tables,
+            manifest.source_schema_version,
+        )
+    )
     manifest = _advance(
         manifest,
         TransitionState.ACTIVATED,
@@ -1523,8 +1568,8 @@ def rollback(config: TransitionConfig) -> TransitionReport:
         with _exclusive_source(paths.active) as source:
             if _read_schema_version(source) != TARGET_SCHEMA:
                 raise TransitionError(
-                    "active store is not the schema-10 store this manifest "
-                    "owns; refusing to move it"
+                    f"active store is not the schema-{TARGET_SCHEMA} store "
+                    "this manifest owns; refusing to move it"
                 )
             preserved = paths.transition_dir / (
                 "new-format-"

@@ -95,7 +95,7 @@ class BindingTest(unittest.TestCase):
             try:
                 self.assertEqual(result.canonical_root, str(root.resolve()))
                 self.assertEqual(result.repository_id, "repo")
-                self.assertEqual(result.schema_version, 10)
+                self.assertEqual(result.schema_version, 11)
                 self.assertTrue(result.store_ready)
                 self.assertEqual(list(data.glob("*.db")), [data / "repo.db"])
             finally:

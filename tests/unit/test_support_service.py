@@ -104,7 +104,12 @@ class SupportServiceTest(unittest.TestCase):
                 identity=m.RecordingIdentity(
                     repository_id="repo-1",
                     context_id=CONTEXT_ID,
-                    submission_id=m.SubmissionId(submission),
+                    request_id=m.RequestId(submission),
+                ),
+                surface=m.SurfaceKey(
+                    repository_id="repo-1",
+                    kind=m.SurfaceKind.FILE,
+                    locator=f"src/{understanding_id}.py",
                 ),
                 target=m.ExplicitTarget(
                     question="What does A do?", scope=m.EvidenceScope()
@@ -165,7 +170,12 @@ class SupportServiceTest(unittest.TestCase):
                 identity=m.RecordingIdentity(
                     repository_id="repo-1",
                     context_id=CONTEXT_ID,
-                    submission_id=m.SubmissionId("sub-multi"),
+                    request_id=m.RequestId("sub-multi"),
+                ),
+                surface=m.SurfaceKey(
+                    repository_id="repo-1",
+                    kind=m.SurfaceKind.FILE,
+                    locator="src/multi.py",
                 ),
                 target=m.ExplicitTarget(
                     question="What does A do?", scope=m.EvidenceScope()
@@ -207,6 +217,33 @@ class SupportServiceTest(unittest.TestCase):
         }
         self.assertEqual(states["c-1"], m.SupportState.REASSESSMENT_REQUIRED)
         self.assertEqual(states["c-2"], m.SupportState.CURRENT)
+
+    def test_dependency_findings_address_each_dependency(self) -> None:
+        first = self._put_observation("obs-1", "src/app.py")
+        _write(self.root, "src/util.py", "helper\n")
+        second = self._put_observation("obs-2", "src/util.py")
+        self._create(
+            "u-a",
+            "sub-a",
+            (
+                m.SourceSupport(observation_id=m.SourceObservationId(first)),
+                m.SourceSupport(observation_id=m.SourceObservationId(second)),
+            ),
+        )
+        _write(self.root, "src/util.py", "changed helper\n")
+        evaluation = self.service.evaluate_version("u-a").conclusions[0].evaluation
+        self.assertEqual(evaluation.state, m.SupportState.REASSESSMENT_REQUIRED)
+        self.assertEqual(len(evaluation.findings), 2)
+        by_observation = {
+            finding.dependency.observation_id.value: finding
+            for finding in evaluation.findings
+        }
+        self.assertEqual(by_observation[first].state, m.SupportState.CURRENT)
+        self.assertEqual(
+            by_observation[second].state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertIn("observed source bytes changed", by_observation[second].reason)
 
     def test_authority_support_status_and_presence(self) -> None:
         digest = hashlib.sha256((self.root / "docs/rule.md").read_bytes()).hexdigest()
@@ -250,7 +287,7 @@ class SupportServiceTest(unittest.TestCase):
             m.SupportState.UNVERIFIABLE,
         )
 
-    def test_premise_supersession_requires_reassessment(self) -> None:
+    def test_premise_withdrawal_is_unverifiable(self) -> None:
         observation = self._put_observation("obs-1", "src/app.py")
         self._create(
             "u-a",
@@ -271,7 +308,7 @@ class SupportServiceTest(unittest.TestCase):
                 identity=m.RecordingIdentity(
                     repository_id="repo-1",
                     context_id=CONTEXT_ID,
-                    submission_id=m.SubmissionId("sub-withdraw"),
+                    request_id=m.RequestId("sub-withdraw"),
                 ),
                 understanding_id=m.UnderstandingId("u-a"),
                 expected_version=m.UnderstandingVersionNumber(1),
@@ -279,6 +316,47 @@ class SupportServiceTest(unittest.TestCase):
                     m.WithdrawConclusion(
                         conclusion_id=m.ConclusionId("c-1"),
                         basis=self._basis(),
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(
+            self.service.evaluate_version("u-b").state,
+            m.SupportState.UNVERIFIABLE,
+        )
+
+    def test_premise_supersession_requires_reassessment(self) -> None:
+        observation = self._put_observation("obs-1", "src/app.py")
+        source = m.SourceSupport(observation_id=m.SourceObservationId(observation))
+        self._create("u-a", "sub-a", (source,))
+        premise = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-a"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        self._create("u-b", "sub-b", (m.PremiseSupport(premise=premise),))
+        self.assertEqual(
+            self.service.evaluate_version("u-b").state, m.SupportState.CURRENT
+        )
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    context_id=CONTEXT_ID,
+                    request_id=m.RequestId("sub-replace"),
+                ),
+                understanding_id=m.UnderstandingId("u-a"),
+                expected_version=m.UnderstandingVersionNumber(1),
+                replace=(
+                    m.ReplaceConclusion(
+                        old=premise,
+                        new_conclusion_id=m.ConclusionId("c-2"),
+                        statement="A is replaced.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(),
+                        support=(source,),
+                        basis=self._basis(),
+                        replacement_basis=self._basis(),
                     ),
                 ),
             )
@@ -332,7 +410,7 @@ class SupportServiceTest(unittest.TestCase):
                     identity=m.RecordingIdentity(
                         repository_id="repo-1",
                         context_id=CONTEXT_ID,
-                        submission_id=m.SubmissionId(submission),
+                        request_id=m.RequestId(submission),
                     ),
                     run=m.ProposedVerificationRun(
                         repository_id="repo-1",

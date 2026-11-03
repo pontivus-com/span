@@ -11,6 +11,8 @@ from span.ports.structural import StructuralSource
 from span.service.evidence import EvidenceService
 from span.service.lifecycle import LifecycleService
 from span.service.support import SupportService
+from span.service.answer import AnswerService
+from span.service.reconsider import ReconsiderService
 from span.service.understand import UnderstandService
 
 __all__ = ["ServiceContext", "ToolError", "ToolResult"]
@@ -29,6 +31,8 @@ class ServiceContext:
     evidence_service: EvidenceService
     understand: UnderstandService
     support: SupportService
+    reconsider: ReconsiderService
+    answer: AnswerService
     authority_seeds: tuple[m.EvidenceRef, ...] = ()
 
 

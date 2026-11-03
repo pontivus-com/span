@@ -2,10 +2,10 @@
 
 One canonical rule: an automatic hook maps a native event onto the same
 readiness probe and support checks the ordinary runtime uses. Hooks never
-initialize, migrate, record, reassess, interpret, rebuild, or run
+initialize, migrate, record, re-check, interpret, rebuild, or run
 repository-scale work. A missed or disabled hook cannot make stale
 understanding look current, because correctness is evaluated by
-``reassess``/retrieval, not by hook delivery.
+`ask`/retrieval, not by hook delivery.
 
 Output is one bounded line per event. Routine current state prints nothing.
 
@@ -28,12 +28,24 @@ from span.shell.policy import HOOK_DIAGNOSTIC_LIMIT
 from span.shell.readiness import probe_store
 
 __all__ = [
+    "ADOPTION_PRIMER",
+    "cmd_adoption_primer",
     "cmd_session_start",
     "cmd_source_changed",
     "cmd_session_stop",
     "default_data_dir",
     "main",
 ]
+
+#: FD-58 adoption notice. It states existence, not currency; it names the
+#: operation and the direct tool; it names no surface and asks no question.
+ADOPTION_PRIMER = (
+    "Span: this repository has recorded understanding. In your normal tool "
+    "list, the Span tools end in `_ask`, `_record`, and `_reconsider`; they are "
+    "not in the MCP resource list. Before your first Read/Grep/Glob/shell "
+    "inspection, call the `_ask` tool with surface "
+    '{"kind":"FILE","locator":"<the file you are about to inspect>"}.'
+)
 
 
 def _fail_silent(message):
@@ -147,9 +159,34 @@ def _render_affected(repository_id, affected, *, close_prefix=False):
     more = "" if len(needing) <= HOOK_DIAGNOSTIC_LIMIT else "; more omitted"
     return (
         f"span: {repository_id} {label}: {len(needing)} recorded "
-        f"understanding(s) affected ({detail}{more}); call reassess or "
-        "understand_question."
+        f"understanding(s) affected ({detail}{more}); call ask or "
+        "reconsider after editing."
     )
+
+
+def cmd_adoption_primer(data_dir, repo_root=None):
+    """Print the FD-58 notice only when the active repository has understanding."""
+    mapping = repo_map(data_dir)
+    if not mapping:
+        return
+    active = scoped_repo_map(mapping, repo_root)
+    if not active:
+        return
+    root = next(iter(active))
+    from span.shell.context import open_repository_context
+
+    try:
+        repository_id, context = open_repository_context(data_dir, root)
+    except Exception:  # noqa: BLE001 - a hook never breaks the session
+        return
+    try:
+        recorded = context.store.list_understandings(repository_id)
+    except Exception:  # noqa: BLE001
+        return
+    finally:
+        context.store.close()
+    if recorded:
+        print(ADOPTION_PRIMER)
 
 
 def cmd_session_start(data_dir, repo_root=None):
@@ -265,7 +302,7 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "command",
-        choices=("session-start", "source-changed", "session-stop"),
+        choices=("session-start", "adoption-primer", "source-changed", "session-stop"),
     )
     parser.add_argument("paths", nargs="*")
     return parser.parse_args(argv)
@@ -289,6 +326,8 @@ def main(argv=None):
     try:
         if args.command == "session-start":
             cmd_session_start(data_dir, repo_root)
+        elif args.command == "adoption-primer":
+            cmd_adoption_primer(data_dir, repo_root)
         elif args.command == "source-changed":
             cmd_source_changed(data_dir, args.paths)
         elif args.command == "session-stop":

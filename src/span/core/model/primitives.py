@@ -348,16 +348,6 @@ class RequestId:
 
 
 @_dataclass(frozen=True)
-class SubmissionId:
-    """Caller-owned identity for one recording submission."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        _require_non_empty("SubmissionId", self.value)
-
-
-@_dataclass(frozen=True)
 class SourceObservationId:
     """Identity of one immutable source-content observation."""
 
@@ -414,6 +404,23 @@ class ConclusionRevisionRef:
     understanding_id: UnderstandingId
     conclusion_id: ConclusionId
     revision: ConclusionRevisionNumber
+
+    @property
+    def sort_key(self) -> tuple[str, str, int]:
+        """Deterministic identity key for ordering and deduplication."""
+        return (
+            self.understanding_id.value,
+            self.conclusion_id.value,
+            self.revision.value,
+        )
+
+    @property
+    def label(self) -> str:
+        """The canonical human-readable identity of this exact revision."""
+        return (
+            f"{self.understanding_id.value}/{self.conclusion_id.value}"
+            f"@{self.revision.value}"
+        )
 
 
 class DerivationKind(_enum.Enum):
@@ -650,7 +657,7 @@ class ServiceBoundsPolicy:
     default_query_bounds: QueryBounds
     maximum_query_bounds: QueryBounds
     hook_fast_bounds: QueryBounds
-    max_delivered_evidence_bytes: int = 16_000
+    max_response_bytes: int = 51_133
 
 
 class CanonicalDecodeError(ValueError):

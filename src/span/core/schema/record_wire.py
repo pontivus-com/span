@@ -23,22 +23,58 @@ from span.core.model.canonical import to_canonical
 from span.core.model import commands as _c
 from span.core.model import primitives as _p
 from span.core.model import support as _s
+from span.core.model import surfaces as _surfaces
 from span.core.model import verification as _v
+from span.core.model.investigation import SourceRange as _SourceRange
 from span.core.model.recording import ContentDigest
 from span.core.model.claims import AssertionNature
 
 
 @_dataclass(frozen=True)
 class RecordWireResolver:
-    """Required reference resolution supplied by the service boundary."""
+    """Required resolution supplied by the service boundary."""
 
     reference: _typing.Callable[[str], _p.EvidenceRef]
     authority: _typing.Callable[[str], _p.AuthorityBinding]
+    source: _typing.Callable[[str, tuple[_SourceRange, ...]], _p.SourceObservationId]
+    discovery: _typing.Callable[[_p.EvidenceScope], _p.DiscoveryObservationId]
+
+
+@_dataclass(frozen=True)
+class RangeWire:
+    """One inclusive line range in a source-support citation."""
+
+    start_line: int
+    end_line: int
+
+    def __post_init__(self) -> None:
+        if self.start_line < 1 or self.end_line < self.start_line:
+            raise ValueError("RangeWire requires 1 <= start_line <= end_line")
 
 
 @_dataclass(frozen=True)
 class SourceSupportWire:
+    """Cite exact source bytes by locator and optional ranges (F7, FD-18)."""
+
+    locator: str
+    ranges: tuple[RangeWire, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.locator:
+            raise ValueError("SourceSupportWire.locator must be non-empty")
+
+
+@_dataclass(frozen=True)
+class AdmittedSourceSupportWire:
+    """Cite an observation already admitted for the context (L2 §4.2)."""
+
     observation_id: str
+
+    def __post_init__(self) -> None:
+        if not self.observation_id:
+            raise ValueError(
+                "AdmittedSourceSupportWire.observation_id must be non-empty"
+            )
 
 
 @_dataclass(frozen=True)
@@ -54,15 +90,47 @@ class PremiseSupportWire:
 
 
 @_dataclass(frozen=True)
-class DiscoverySupportWire:
+class DiscoveryScopeWire:
+    """The exact scope an agent inspected for a discovery claim."""
+
+    paths: tuple[str, ...] = ()
+    evidence_refs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for path in self.paths:
+            if not path:
+                raise ValueError("DiscoveryScopeWire.paths must be non-empty")
+            if path.startswith("/"):
+                raise ValueError("DiscoveryScopeWire.paths must be relative")
+
+
+@_dataclass(frozen=True)
+class DiscoveryBoundarySupportWire:
+    """Declare the boundary the agent inspected; Span observes membership."""
+
+    scope: DiscoveryScopeWire
+
+
+@_dataclass(frozen=True)
+class AdmittedDiscoverySupportWire:
+    """Cite a discovery observation already admitted in the context."""
+
     observation_id: str
+
+    def __post_init__(self) -> None:
+        if not self.observation_id:
+            raise ValueError(
+                "AdmittedDiscoverySupportWire.observation_id must be non-empty"
+            )
 
 
 SupportWire = _typing.Union[
     SourceSupportWire,
+    AdmittedSourceSupportWire,
     AuthoritySupportWire,
     PremiseSupportWire,
-    DiscoverySupportWire,
+    DiscoveryBoundarySupportWire,
+    AdmittedDiscoverySupportWire,
 ]
 
 
@@ -141,8 +209,10 @@ DispositionWire = _typing.Union[
 @_dataclass(frozen=True)
 class IdentityWire:
     repository_id: str
-    context_id: str
-    submission_id: str
+    request_id: str
+    #: Optional: a recording that cites locators/ranges is admitted into a
+    #: server-issued context inside the operation (L2 §4.2, TD §12).
+    context_id: str | None = None
 
 
 @_dataclass(frozen=True)
@@ -161,8 +231,55 @@ TargetWire = _typing.Union[ContextBoundTargetWire, ExplicitTargetWire]
 
 
 @_dataclass(frozen=True)
+class SurfaceKeyWire:
+    """Exact surface identity used as a declaration parent."""
+
+    kind: str
+    locator: str
+
+    def __post_init__(self) -> None:
+        try:
+            _surfaces.SurfaceKind(self.kind)
+        except ValueError:
+            raise ValueError(f"unknown surface kind: {self.kind!r}") from None
+        if not self.locator:
+            raise ValueError("SurfaceKeyWire.locator must be a non-empty string")
+
+
+@_dataclass(frozen=True)
+class SurfaceBoundaryWire:
+    """Declared containment for a service or domain surface."""
+
+    paths: tuple[str, ...] = ()
+    symbols: tuple[str, ...] = ()
+
+
+@_dataclass(frozen=True)
+class SurfaceWire:
+    """The surface a record request addresses.
+
+    Understanding creates use only ``kind`` and ``locator``. Surface
+    declarations may also carry a boundary and parent.
+    """
+
+    kind: str
+    locator: str
+    boundary: SurfaceBoundaryWire | None = None
+    parent: SurfaceKeyWire | None = None
+
+    def __post_init__(self) -> None:
+        try:
+            _surfaces.SurfaceKind(self.kind)
+        except ValueError:
+            raise ValueError(f"unknown surface kind: {self.kind!r}") from None
+        if not self.locator:
+            raise ValueError("SurfaceWire.locator must be a non-empty string")
+
+
+@_dataclass(frozen=True)
 class RecordCreateWire:
     identity: IdentityWire
+    surface: SurfaceWire
     target: TargetWire
     conclusions: tuple[ConclusionWire, ...]
     gaps: tuple[GapWire, ...] = ()
@@ -253,6 +370,7 @@ class VerificationRunWire:
     outcome: _v.VerificationOutcome
     observed_at: _datetime.datetime
     observer: str
+    evidence: tuple[SourceSupportWire, ...] = ()
     environment_limitations: tuple[str, ...] = ()
     provenance: str = ""
 
@@ -261,6 +379,206 @@ class VerificationRunWire:
 class RecordVerificationWire:
     identity: IdentityWire
     run: VerificationRunWire
+
+
+@_dataclass(frozen=True)
+class RecordActionsWire:
+    """The explicit semantic actions one record request states.
+
+    Keys are actions, not tool variants. Multiple keys are applied atomically.
+    """
+
+    add: tuple[ConclusionWire, ...] = ()
+    confirm: tuple[ConclusionWire, ...] = ()
+    correct: tuple[ConclusionWire, ...] = ()
+    replace: tuple[ReplaceWire, ...] = ()
+    withdraw: tuple[WithdrawWire, ...] = ()
+
+
+@_dataclass(frozen=True)
+class RecordRequestWire:
+    """One public record request, selected by ``kind``.
+
+    ``kind`` selects understanding, verification, or surface declaration. The
+    fields that do not belong to the selected kind fail closed in
+    ``__post_init__``. Repository and request identity are flat on the wire,
+    matching ``ask``; the internal recording identity is derived.
+    """
+
+    repository_id: str
+    request_id: str
+    kind: _c.RecordKind
+    context_id: str | None = None
+    surface: SurfaceWire | None = None
+    question: str | None = None
+    scope_paths: tuple[str, ...] = ()
+    scope_evidence_refs: tuple[str, ...] = ()
+    #: Flat create form. One conclusion per create request; updates use
+    #: ``actions``. ``locator`` is the file the conclusion is about;
+    #: ``observation_id`` may replace it with an observation from ``ask``.
+    conclusion: str | None = None
+    conclusion_id: str = "c-1"
+    locator: str | None = None
+    observation_id: str | None = None
+    assertion_nature: AssertionNature = AssertionNature.DESCRIPTIVE
+    support: tuple[SupportWire, ...] = ()
+    understanding_id: str | None = None
+    expected_version: int | None = None
+    actions: RecordActionsWire | None = None
+    run: VerificationRunWire | None = None
+    action: _c.SurfaceAction | None = None
+    expected_boundary_version: int | None = None
+    gaps: tuple[GapWire, ...] | None = None
+    challenge_dispositions: tuple[DispositionWire, ...] = ()
+    provenance: str = ""
+
+    @property
+    def identity(self) -> IdentityWire:
+        """The internal recording identity derived from the flat wire."""
+        return IdentityWire(
+            repository_id=self.repository_id,
+            request_id=self.request_id,
+            context_id=self.context_id,
+        )
+
+    def __post_init__(self) -> None:
+        if not self.repository_id:
+            raise ValueError("RecordRequestWire.repository_id must be non-empty")
+        if not self.request_id:
+            raise ValueError("RecordRequestWire.request_id must be non-empty")
+        if self.kind is _c.RecordKind.UNDERSTANDING:
+            self._validate_understanding()
+        elif self.kind is _c.RecordKind.VERIFICATION:
+            self._validate_verification()
+        elif self.kind is _c.RecordKind.SURFACE:
+            self._validate_surface()
+
+    def _validate_understanding(self) -> None:
+        if self.run is not None or self.action is not None:
+            raise ValueError(
+                "an understanding record takes no run or action; a create is "
+                "flat (conclusion plus locator or observation_id), an update "
+                "uses actions, and action belongs to kind=surface"
+            )
+        if self.expected_boundary_version is not None:
+            raise ValueError("an understanding record does not take a boundary version")
+        if self.conclusion is not None:
+            self._validate_create()
+            return
+        if self.actions is None:
+            raise ValueError("an understanding record requires actions")
+        self._validate_update()
+
+    def _validate_create(self) -> None:
+        if not self.conclusion:
+            raise ValueError("an understanding create requires a conclusion")
+        if not self.support and self.locator is None and self.observation_id is None:
+            raise ValueError(
+                "an understanding create requires support, locator, or observation_id"
+            )
+        if self.locator is not None and self.observation_id is not None:
+            raise ValueError(
+                "an understanding create takes locator or observation_id, not both"
+            )
+        if self.question is None and self.context_id is None:
+            raise ValueError(
+                "an understanding create requires a question, or a context "
+                "that already binds it"
+            )
+        if self.surface is not None and (
+            self.surface.boundary is not None or self.surface.parent is not None
+        ):
+            raise ValueError(
+                "an understanding record does not declare a boundary or parent"
+            )
+        if self.actions is not None and (
+            self.actions.add
+            or self.actions.confirm
+            or self.actions.correct
+            or self.actions.replace
+            or self.actions.withdraw
+        ):
+            raise ValueError("create cannot be combined with update actions")
+        if self.understanding_id is not None or self.expected_version is not None:
+            raise ValueError("create does not take understanding_id or version")
+
+    def _validate_update(self) -> None:
+        actions = self.actions
+        assert actions is not None
+        if (
+            self.conclusion is not None
+            or self.locator is not None
+            or self.observation_id is not None
+        ):
+            raise ValueError("an understanding update does not take a flat conclusion")
+        if self.question is not None:
+            raise ValueError("an understanding update does not take a question")
+        if self.surface is not None:
+            raise ValueError("an understanding update does not take a surface")
+        if self.understanding_id is None or self.expected_version is None:
+            raise ValueError(
+                "an understanding update requires understanding_id and "
+                "expected_version"
+            )
+        if not (
+            actions.add
+            or actions.confirm
+            or actions.correct
+            or actions.replace
+            or actions.withdraw
+            or self.challenge_dispositions
+            or self.gaps is not None
+        ):
+            raise ValueError("an understanding update must have an effect")
+
+    def _validate_verification(self) -> None:
+        if self.run is None:
+            raise ValueError("a verification record requires run")
+        if (
+            self.surface is not None
+            or self.actions is not None
+            or self.action is not None
+            or self.question is not None
+            or self.understanding_id is not None
+            or self.expected_version is not None
+            or self.expected_boundary_version is not None
+            or self.gaps is not None
+            or self.challenge_dispositions
+            or self.conclusion is not None
+            or self.locator is not None
+            or self.observation_id is not None
+        ):
+            raise ValueError("a verification record takes only run and provenance")
+
+    def _validate_surface(self) -> None:
+        if self.surface is None or self.action is None:
+            raise ValueError("a surface record requires surface and action")
+        declared = _surfaces.SurfaceKind(self.surface.kind).is_declared
+        if self.surface.boundary is None:
+            if declared:
+                raise ValueError("a service or domain surface requires a boundary")
+        elif not declared:
+            raise ValueError("a file or symbol surface rejects a boundary")
+        if (
+            self.actions is not None
+            or self.run is not None
+            or self.question is not None
+            or self.understanding_id is not None
+            or self.expected_version is not None
+            or self.gaps is not None
+            or self.challenge_dispositions
+            or self.conclusion is not None
+            or self.locator is not None
+            or self.observation_id is not None
+        ):
+            raise ValueError(
+                "a surface record takes only surface, action, and provenance"
+            )
+        if self.action is _c.SurfaceAction.UPDATE:
+            if self.expected_boundary_version is None:
+                raise ValueError("a surface update requires expected_boundary_version")
+        elif self.expected_boundary_version is not None:
+            raise ValueError("a surface create does not take a boundary version")
 
 
 def wire_content_digest(value: object) -> ContentDigest:
@@ -275,6 +593,9 @@ def wire_content_digest(value: object) -> ContentDigest:
         raise TypeError("a record wire payload must encode as an object")
     content = dict(canonical)
     content.pop("identity", None)
+    if isinstance(value, RecordRequestWire):
+        for key in ("repository_id", "request_id", "context_id"):
+            content.pop(key, None)
     return payload_digest(content)
 
 
@@ -306,9 +627,22 @@ def _support(
     value: SupportWire,
     resolver: RecordWireResolver,
 ) -> _s.SupportDependency:
-    if isinstance(value, SourceSupportWire):
+    if isinstance(value, AdmittedSourceSupportWire):
         return _s.SourceSupport(
             observation_id=_p.SourceObservationId(value.observation_id)
+        )
+    if isinstance(value, SourceSupportWire):
+        return _s.SourceSupport(
+            observation_id=resolver.source(
+                value.locator,
+                tuple(
+                    _SourceRange(
+                        start_line=item.start_line,
+                        end_line=item.end_line,
+                    )
+                    for item in value.ranges
+                ),
+            )
         )
     if isinstance(value, AuthoritySupportWire):
         return _s.AuthoritySupportDependency(
@@ -322,7 +656,15 @@ def _support(
                 revision=_p.ConclusionRevisionNumber(value.revision),
             )
         )
-    if isinstance(value, DiscoverySupportWire):
+    if isinstance(value, DiscoveryBoundarySupportWire):
+        scope = _p.EvidenceScope(
+            paths=value.scope.paths,
+            evidence_refs=tuple(
+                resolver.reference(item) for item in value.scope.evidence_refs
+            ),
+        )
+        return _s.DiscoverySupport(observation_id=resolver.discovery(scope))
+    if isinstance(value, AdmittedDiscoverySupportWire):
         return _s.DiscoverySupport(
             observation_id=_p.DiscoveryObservationId(value.observation_id)
         )
@@ -441,10 +783,15 @@ def _withdraw(
 
 
 def _identity(value: IdentityWire) -> _c.RecordingIdentity:
+    if value.context_id is None:
+        raise ValueError(
+            "recording identity context_id must be resolved before command "
+            "construction"
+        )
     return _c.RecordingIdentity(
         repository_id=value.repository_id,
+        request_id=_p.RequestId(value.request_id),
         context_id=_p.InvestigationContextId(value.context_id),
-        submission_id=_p.SubmissionId(value.submission_id),
     )
 
 
@@ -584,6 +931,7 @@ def create_command(
     value: RecordCreateWire,
     resolver: RecordWireResolver,
 ) -> _c.CreateUnderstandingCommand:
+    identity = _identity(value.identity)
     target: _c.UnderstandingTarget
     if isinstance(value.target, ContextBoundTargetWire):
         target = _c.ContextBoundTarget()
@@ -596,8 +944,14 @@ def create_command(
                 resolver,
             ),
         )
+    surface = _surfaces.SurfaceKey(
+        repository_id=identity.repository_id,
+        kind=_surfaces.SurfaceKind(value.surface.kind),
+        locator=value.surface.locator,
+    )
     return _c.CreateUnderstandingCommand(
-        identity=_identity(value.identity),
+        identity=identity,
+        surface=surface,
         target=target,
         conclusions=tuple(_proposed(item, resolver) for item in value.conclusions),
         gaps=tuple(_gap(item) for item in value.gaps),
@@ -651,9 +1005,15 @@ def challenge_command(
 def verification_command(
     value: RecordVerificationWire,
 ) -> _c.RecordVerificationCommand:
-    run = value.run
+    return _verification_command(value.identity, value.run)
+
+
+def _verification_command(
+    identity: IdentityWire,
+    run: VerificationRunWire,
+) -> _c.RecordVerificationCommand:
     return _c.RecordVerificationCommand(
-        identity=_identity(value.identity),
+        identity=_identity(identity),
         run=_v.ProposedVerificationRun(
             repository_id=run.repository_id,
             scope=_v.VerificationScope(
@@ -672,3 +1032,148 @@ def verification_command(
             provenance=run.provenance,
         ),
     )
+
+
+def _surface_key(value: SurfaceWire, identity: IdentityWire) -> _surfaces.SurfaceKey:
+    return _surfaces.SurfaceKey(
+        repository_id=identity.repository_id,
+        kind=_surfaces.SurfaceKind(value.kind),
+        locator=value.locator,
+    )
+
+
+def surface_declaration(value: RecordRequestWire) -> _surfaces.Surface:
+    """Project one surface declaration request into the canonical carrier."""
+    if value.surface is None or value.action is None:
+        raise ValueError("a surface record requires surface and action")
+    key = _surface_key(value.surface, value.identity)
+    boundary = _surfaces.SurfaceBoundary(
+        paths=() if value.surface.boundary is None else value.surface.boundary.paths,
+        symbols=(
+            () if value.surface.boundary is None else value.surface.boundary.symbols
+        ),
+    )
+    parent = (
+        None
+        if value.surface.parent is None
+        else _surfaces.SurfaceKey(
+            repository_id=value.identity.repository_id,
+            kind=_surfaces.SurfaceKind(value.surface.parent.kind),
+            locator=value.surface.parent.locator,
+        )
+    )
+    version = (
+        1
+        if value.action is _c.SurfaceAction.CREATE
+        else _typing.cast(int, value.expected_boundary_version) + 1
+    )
+    return _surfaces.Surface(
+        key=key,
+        boundary=boundary,
+        parent=parent,
+        boundary_version=version,
+    )
+
+
+def flat_conclusion(
+    value: RecordRequestWire,
+    resolver: RecordWireResolver,
+    *,
+    locator: str,
+    default_support: _s.SupportDependency | None,
+) -> _c.ProposedConclusion:
+    """Build one conclusion from the flat create fields."""
+    if value.support:
+        support = tuple(_support(item, resolver) for item in value.support)
+    elif default_support is not None:
+        support = (default_support,)
+    else:
+        raise ValueError("a flat create requires support, locator, or observation_id")
+    return _c.ProposedConclusion(
+        conclusion_id=_p.ConclusionId(value.conclusion_id),
+        statement=_typing.cast(str, value.conclusion),
+        assertion_nature=value.assertion_nature,
+        scope=_p.EvidenceScope(paths=value.scope_paths or (locator,)),
+        support=support,
+        basis=_p.SemanticBasis(
+            derivation=_p.DerivationKind.EXPLICIT_EVIDENCE,
+            summary=(
+                f"read {locator}" if locator else "recorded from admitted support"
+            ),
+            input_refs=(),
+        ),
+    )
+
+
+def record_command(
+    value: RecordRequestWire,
+    resolver: RecordWireResolver,
+    *,
+    context_bound: bool = False,
+    derived_surface: _surfaces.SurfaceKey | None = None,
+    derived_conclusions: tuple[_c.ProposedConclusion, ...] | None = None,
+) -> _c.RecordCommand:
+    """Decode one public record request into its canonical command."""
+    if value.kind is _c.RecordKind.UNDERSTANDING:
+        identity = _identity(value.identity)
+        if value.conclusion is not None:
+            if derived_conclusions is None:
+                raise ValueError(
+                    "a flat create requires the service to resolve its support"
+                )
+            surface = (
+                _surface_key(value.surface, value.identity)
+                if value.surface is not None
+                else derived_surface
+            )
+            if surface is None:
+                raise ValueError(
+                    "an understanding create requires a surface or a carried scope"
+                )
+            target: _c.UnderstandingTarget
+            if context_bound:
+                target = _c.ContextBoundTarget()
+            else:
+                target = _c.ExplicitTarget(
+                    question=_typing.cast(str, value.question),
+                    scope=_scope(
+                        value.scope_paths,
+                        value.scope_evidence_refs,
+                        resolver,
+                    ),
+                )
+            return _c.CreateUnderstandingCommand(
+                identity=identity,
+                surface=surface,
+                target=target,
+                conclusions=derived_conclusions,
+                gaps=tuple(_gap(item) for item in (value.gaps or ())),
+                provenance=value.provenance,
+            )
+        actions = value.actions
+        if actions is None:
+            raise ValueError("an understanding record requires actions")
+        if value.understanding_id is None or value.expected_version is None:
+            raise ValueError("an understanding update requires identity and version")
+        return _c.UpdateUnderstandingCommand(
+            identity=identity,
+            understanding_id=_p.UnderstandingId(value.understanding_id),
+            expected_version=_p.UnderstandingVersionNumber(value.expected_version),
+            add=tuple(_proposed(item, resolver) for item in actions.add),
+            confirm=tuple(_confirm(item, resolver) for item in actions.confirm),
+            correct=tuple(_correct(item, resolver) for item in actions.correct),
+            replace=tuple(_replace(item, resolver) for item in actions.replace),
+            withdraw=tuple(_withdraw(item, resolver) for item in actions.withdraw),
+            gaps=(
+                None if value.gaps is None else tuple(_gap(item) for item in value.gaps)
+            ),
+            challenge_dispositions=tuple(
+                _disposition(item, resolver) for item in value.challenge_dispositions
+            ),
+            provenance=value.provenance,
+        )
+    if value.kind is _c.RecordKind.VERIFICATION:
+        if value.run is None:
+            raise ValueError("a verification record requires run")
+        return _verification_command(value.identity, value.run)
+    raise ValueError("a surface declaration is not a record command")

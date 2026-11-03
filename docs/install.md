@@ -14,13 +14,13 @@ Span currently requires:
 - Linux for the currently verified installation path.
 
 Span uses a managed structural wiring graph as structural evidence.
-Explicit `initialize_repository` may build the provider-owned structural
-index when it is missing, stale, or the working tree is dirty (the build then
-reflects the current tree and freshness stays `UNVERIFIABLE`). MCP process
-startup registration is read-only: it registers repository identity for
-discovery and performs no structural build. Installer `--verify-only` is
-observational and never initializes or rebuilds. No separate `refresh`
-operation exists in 0.9.0.
+Installer provisioning may build the provider-owned structural index when it is
+missing, stale, or the working tree is dirty (the build then reflects the
+current tree and freshness stays `UNVERIFIABLE`). MCP process startup
+registration is read-only: it registers repository identity for discovery and
+performs no structural build. Installer `--verify-only` is observational and
+never initializes or rebuilds. There is no separate refresh operation in the
+public surface.
 
 The index lives at:
 
@@ -30,8 +30,8 @@ The index lives at:
 
 Builds are wiring-only (`--no-deep`, no credentials, no target
 writes: `--no-gitignore --no-ignore`). Explicit setup performs at
-most one bounded rebuild. Ordinary reads (`understand_*`, `locate`,
-`neighbors`), hooks, and background paths never build.
+most one bounded rebuild. Ordinary reads (`ask`, `reconsider`), hooks, and
+background paths never build.
 
 macOS and Windows paths are reserved but are not currently verified.
 
@@ -90,41 +90,21 @@ It does **not** mean Span already understands your repository.
 
 ## Supported hosts
 
-Managed registration and skills are implemented for Claude Code, Codex, and
-OpenCode, with host-specific optional hooks. Codex is the live beta validation
-target. OpenCode has earlier trial evidence without final-package revalidation;
-Claude model-delivered grammar and caller identity remain UNVERIFIED under the
-owner waiver. Other MCP hosts connect manually without an assumed delivery
-guarantee. See [host status](../integrations/hosts/triggers.md). Span never invokes an LLM, chooses a
+Managed registration and skills are implemented for Codex and OpenCode, with
+host-specific optional hooks. These are the supported registration targets.
+Delivery of the declared grammar and preservation of caller request identity
+are established by recorded captures on both hosts: exact declared schemas,
+cold→record→warm delivery, closed-union rejection, context-free recording,
+same-identity replay after a fresh process, and a forced retry that reused the
+same request identity. Replay safety is claimed only where the host preserves
+request identity (FD-50). Other MCP hosts connect manually without an assumed
+delivery guarantee. See
+[host status](../integrations/hosts/triggers.md). Span never invokes an LLM, chooses a
 model, stores provider credentials, edits source code, runs tests, or
 autonomously reinterprets your repository. Its state lives in a data
 directory outside the repositories it analyzes.
 
 ## Connect your coding agent
-
-### Claude Code
-
-The installer configures Claude Code automatically when the `claude` CLI is
-present: a user-scope stdio registration, skills in `~/.claude/skills`, and
-report-only lifecycle hooks in `~/.claude/settings.json`. Pass `--no-claude`
-to skip all of it. Hooks are added to an existing settings file and never
-created from nothing; if `~/.claude/settings.json` does not exist yet, start
-Claude Code once and re-run the installer to wire them.
-
-Register manually at user scope:
-
-```bash
-claude mcp add --scope user --transport stdio span -- \
-  span-mcp \
-  --data-dir <DATA_DIR> \
-  --repo <TARGET_REPO>
-```
-
-Then verify:
-
-```bash
-claude mcp list
-```
 
 ### Codex
 
@@ -174,6 +154,20 @@ The supported manual `opencode.json` entry is:
 `disabled` may be omitted or set to `false`. Do not use the legacy
 flat `mcp.span` registration.
 
+The installer also deploys the Span lifecycle plugin under
+`<DATA_DIR>/../../opencode-plugin` and registers that directory once in the
+host's global `~/.config/opencode/opencode.json` (`plugins`). It does not write
+the plugin into a target repository. The plugin waits a bounded three seconds at
+prompt admission for the local MCP connection, so the first model request
+already sees the Span tools, and injects one advisory notice at session start
+when the repository has recorded understanding. The notice is advisory: if it
+does not fire, the session still runs, just without the first-move reminder.
+
+OpenCode exposes the server's tools to the agent directly (`ask`, `record`,
+`reconsider`, prefixed by the server name). Its code-mode sandbox does not
+include MCP tools, so an agent that routes Span through `execute` sees
+`Unknown tool`; tell it to call the MCP tools directly, not through code mode.
+
 Reload OpenCode after changing its MCP configuration.
 
 ---
@@ -204,7 +198,7 @@ span-install --purge <repository-id>
 span-install --list-orphans
 ```
 
-`--uninstall` reverses only the host-side writes: the OpenCode/Codex/Claude MCP
+`--uninstall` reverses only the host-side writes: the OpenCode/Codex MCP
 entry, Span's hook entries, the managed `AGENTS.md` block in each registered
 target, deployed skills carrying Span's origin marker, and the receipt. It never
 touches repository data (stores, structural indexes), and running it twice is a
@@ -225,7 +219,7 @@ data is unused.
 
 ## Upgrade an existing store
 
-Span 0.9.0 uses schema 10. The runtime never migrates at open; an older store
+Span 0.9.0 uses schema 11. The runtime never migrates at open; an older store
 fails closed with a transition action. `--migrate-store` is removed.
 
 Stop every process using the store, then run one phase at a time for each
@@ -248,16 +242,21 @@ span-install --data-dir <DATA_DIR> \
 `inspect` and `verify` are observational. `apply` requires an explicit root
 whose basename matches the repository ID, holds exclusive store ownership
 through activation, archives a WAL-consistent copy, writes a lossless raw
-export and readable report, stages schema 10, verifies it, and atomically
-activates it. Supported source schemas are 7, 8, and 9. Refusals (live writer,
-unsupported schema, failed integrity, insufficient space, wrong root) change
-nothing.
+export and readable report, stages schema 11, verifies it, and atomically
+activates it. Supported source schemas are 7, 8, 9, and 10. Refusals (live
+writer, unsupported schema, failed integrity, insufficient space, wrong root)
+change nothing.
 
-Only the repository root binding and declared authority seeds are carried
-forward. Legacy claims, campaigns, coverages, and targets remain historical
-export; they are not promoted as current understanding. Re-record current
-understanding through the lifecycle tools and re-declare explicit authority
-bindings in setup.
+A schema-10 store carries the same semantic tables as the target, so it is
+mapped, not discarded. Each understanding maps to the path surface named by its
+recorded scope when that scope names exactly one file; wider, empty, or
+directory scopes stay unresolved with a named reason and remain in the archive.
+`mapping.json` records every source and target identity, count, hash, and the
+provenance of each mapping. Premise, source, and discovery references are
+reconciled before activation. Only the repository root binding and declared
+authority seeds are carried from schemas 7–9; their claims, campaigns,
+coverages, and targets remain historical export and are not promoted as current
+understanding.
 
 Roll back before or after activation:
 
@@ -267,10 +266,10 @@ span-install --data-dir <DATA_DIR> \
 ```
 
 Before activation, rollback discards only owned staging. After activation, it
-preserves any schema-10 writes as `new-format-*.db` and restores the previous
+preserves any schema-11 writes as `new-format-*.db` and restores the previous
 store. Restart the old binary afterward.
 
-The archive, export, report, and restart-safe manifest live under
+The archive, export, mapping, report, and restart-safe manifest live under
 `<DATA_DIR>/transitions/<repository-id>/`. Do not delete them until the new
 store has been verified and retained according to your own policy.
 

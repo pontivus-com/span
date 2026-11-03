@@ -62,11 +62,10 @@ def record_content_digest(command: RecordCommand) -> ContentDigest:
 
 
 def recording_key(identity: RecordingIdentity) -> RecordingKey:
-    """Project one recording identity into its unique store key."""
+    """Project one recording identity into its unique request key (FD-3)."""
     return RecordingKey(
         repository_id=identity.repository_id,
-        context_id=identity.context_id,
-        submission_id=identity.submission_id,
+        request_id=identity.request_id,
     )
 
 
@@ -77,14 +76,12 @@ def understanding_identity(identity: RecordingIdentity) -> UnderstandingId:
     response addresses the same understanding even when the receipt is being
     re-read by a new process. Updates carry their own understanding identity.
     """
-    return UnderstandingId(
-        f"u:{identity.context_id.value}:{identity.submission_id.value}"
-    )
+    return UnderstandingId(f"u:{identity.request_id.value}")
 
 
 def challenge_identity(identity: RecordingIdentity) -> ChallengeId:
     """Derive the stable challenge identity of one create submission."""
-    return ChallengeId(f"ch:{identity.context_id.value}:{identity.submission_id.value}")
+    return ChallengeId(f"ch:{identity.request_id.value}")
 
 
 def source_observation_identity(

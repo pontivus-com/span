@@ -90,6 +90,13 @@ def agents_snippet_path(span_repo):
     return bundled_assets_root() / "agents-snippet.md"
 
 
+def opencode_plugin_path(span_repo):
+    """Canonical OpenCode server-plugin source for this installation mode."""
+    if install_mode(span_repo) == "checkout":
+        return Path(span_repo) / "integrations" / "hosts" / "opencode" / "span-hooks.js"
+    return bundled_assets_root() / "opencode-plugin" / "index.js"
+
+
 def git_rev(span_repo):
     proc = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -102,9 +109,13 @@ def git_rev(span_repo):
     return proc.stdout.strip()
 
 
-def expected_span_command(span_mcp, data_dir, repos):
+def expected_span_command(span_mcp, data_dir, repos, host=None):
     """Installed invocation shape used for host-registration inspection."""
     command = [str(span_mcp), "--data-dir", str(data_dir)]
     for repo in repos:
         command += ["--repo", str(repo)]
+    if host is not None:
+        from span.shell.install.constants import HOST_RESPONSE_BUDGETS
+
+        command += ["--response-budget-bytes", str(HOST_RESPONSE_BUDGETS[host])]
     return command

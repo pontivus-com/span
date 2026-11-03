@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import dataclasses as _dataclasses
 import json as _json
+import re as _re
 import types as _types
 import typing as _typing
 from typing import cast as _cast
 
 from span.core import model as m
 from span.core import schema as _schema
-from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.shell.mcp.models import ToolError, ToolResult
 from span.shell.mcp.schemas import TOOL_REQUEST_TYPES
 
@@ -65,20 +65,22 @@ def decode_request(tool_name: str, arguments: dict[str, object]) -> object:
         if member is None:
             raise ValueError(f"unknown $type {tag!r} at root")
         root = member
-    if isinstance(root, type) and _dataclasses.is_dataclass(root):
-        fields = {field.name for field in _dataclasses.fields(root)}
-        if "bounds" in fields and "bounds" not in payload:
-            canonical = _typing.cast(
-                dict[str, object],
-                m.to_canonical(DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds),
-            )
-            payload["bounds"] = {
-                key: value for key, value in canonical.items() if key != "$type"
-            }
     try:
         return _schema.from_wire(root, payload)
     except (m.CanonicalDecodeError, ValueError) as exc:
-        raise ValueError(f"invalid {tool_name} arguments: {exc}") from None
+        raise ValueError(
+            f"invalid {tool_name} arguments: {_agent_reason(exc)}"
+        ) from None
+
+
+_CLASS_PREFIX = _re.compile(r"\binvalid [A-Za-z_][A-Za-z0-9_]*: ")
+_UNKNOWN_FIELDS = _re.compile(r"\bunknown fields for [A-Za-z_][A-Za-z0-9_]*: ")
+
+
+def _agent_reason(exc: Exception) -> str:
+    """Strip internal carrier names from an ingress reason a host will read."""
+    reason = _UNKNOWN_FIELDS.sub("unknown fields: ", str(exc))
+    return _CLASS_PREFIX.sub("", reason)
 
 
 def _union_members(root: object) -> tuple[type, ...]:

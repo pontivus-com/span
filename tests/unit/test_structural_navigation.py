@@ -25,8 +25,17 @@ from span.shell.structural.memory import (
 
 from tests.support.factories import query_bounds
 
+
 from functools import partial as _partial
 from tests.support.factories import subject_id
+
+
+def _policy(bounds: m.QueryBounds) -> m.ServiceBoundsPolicy:
+    return m.ServiceBoundsPolicy(
+        default_query_bounds=bounds,
+        maximum_query_bounds=bounds,
+        hook_fast_bounds=bounds,
+    )
 
 
 class _RegisteredStore:
@@ -370,7 +379,6 @@ class LocateServiceTest(unittest.TestCase):
         base = dict(
             repository_id=REPO,
             mode=m.StructuralLocateMode.SYMBOL,
-            bounds=_bounds(),
             query="src/tools.py",
         )
         base.update(overrides)
@@ -503,7 +511,6 @@ class NeighborsServiceTest(unittest.TestCase):
                 retrieval_scope_hint=None,
             ),
             direction=StructuralDirection.DOWNSTREAM,
-            bounds=_bounds(),
         )
         base.update(overrides)
         return ops.SemanticStructuralNeighborsRequest(**base)
@@ -523,11 +530,10 @@ class NeighborsServiceTest(unittest.TestCase):
         segments = 0
         while True:
             ans = ops.neighbors(
-                self._req(
-                    bounds=_bounds(max_subjects=2), max_depth=2, page_token=token
-                ),
+                self._req(max_depth=2, page_token=token),
                 structural=structural,
                 store=store,
+                policy=_policy(_bounds(max_subjects=2)),
             )
             segments += 1
             self.assertGreater(segments, 0)
@@ -563,7 +569,6 @@ class NeighborsServiceTest(unittest.TestCase):
                     retrieval_scope_hint=None,
                 ),
                 direction=StructuralDirection.DOWNSTREAM,
-                bounds=_bounds(),
             ),
             structural=structural,
             store=store,
@@ -622,26 +627,11 @@ class NeighborsServiceTest(unittest.TestCase):
                 )
 
 
-class StaleContinuationEnvelopeTest(unittest.TestCase):
-    def test_stale_token_maps_to_envelope(self):
-        from span.shell.mcp import McpAdapter, ServiceContext
+class RemovedNavigationToolTest(unittest.TestCase):
+    def test_locate_is_not_public(self):
+        from span.shell.mcp import McpAdapter
 
-        structural, evidence, store = _memory_harness()
-        adapter = McpAdapter(
-            contexts={
-                REPO: ServiceContext(
-                    repository_id=REPO,
-                    root="/fixture",
-                    structural=structural,
-                    evidence=evidence,
-                    store=store,
-                    lifecycle=None,  # type: ignore[arg-type]
-                    evidence_service=None,  # type: ignore[arg-type]
-                    understand=None,  # type: ignore[arg-type]
-                    support=None,  # type: ignore[arg-type]
-                )
-            }
-        )
+        adapter = McpAdapter()
         out = adapter.dispatch(
             "locate",
             {
@@ -652,8 +642,9 @@ class StaleContinuationEnvelopeTest(unittest.TestCase):
             },
         )
         self.assertTrue(out.is_error)
-        self.assertIn("stale_continuation", out.content)
-        self.assertIn("page_token null", out.content)
+        self.assertIn("removed", out.content)
+        self.assertIn("host", out.content)
+        self.assertNotIn("use structure", out.content)
 
 
 if __name__ == "__main__":

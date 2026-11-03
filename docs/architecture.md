@@ -11,7 +11,7 @@ flowchart LR
   S --> C[Pure core rules]
   S --> P[Typed ports]
   P --> E[Filesystem and structural evidence]
-  P --> D[Schema-10 SQLite store]
+  P --> D[Schema-11 SQLite store]
   S --> M
   M --> A
 ```
@@ -50,8 +50,8 @@ structural state; explicit setup owns provider currency work.
 
 ## Shared state and recovery
 
-The schema-10 store holds contexts and receipts across process/session
-restarts. The reasoning caller preserves request/submission identity before
+The schema-11 store holds contexts and receipts across process/session
+restarts. The reasoning caller preserves its request identity before
 dispatch. Matching receipt replay precedes new-write checks, including checks
 that could fail after context expiry or source changes. Compare-and-set
 versions and challenge revisions reject conflicting concurrent updates.
