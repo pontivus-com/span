@@ -6,7 +6,7 @@ guaranteed response time, and no commercial support offering.
 
 ## Supported versions
 
-Security and correctness fixes land on the current `0.6.x` line. Older lines are
+Security and correctness fixes land on the current `0.9.x` line. Older lines are
 not maintained. Upgrade to the latest release before reporting a problem.
 
 ## Where to ask

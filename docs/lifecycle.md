@@ -1,82 +1,91 @@
 # Agent lifecycle
 
 The agent investigates, records useful explanations, reuses applicable saved
-understanding, and reassesses affected support. Span does not require a
+understanding, and re-aligns affected support. Span does not require a
 documentation campaign before ordinary work. See [usage](usage.md) for the
-procedure and [MCP reference](mcp.md) for the nineteen-tool grammar.
+procedure and [MCP reference](mcp.md) for the three-tool grammar.
 
 ```
-SETUP (dedicated session)
-  initialize_repository
-    → binds root, declared authority seeds/bindings, creates schema 10
+SETUP (installer)
+  bind repository, declared authority seeds/bindings, schema 11
+  → no understanding is created
 
 ORDINARY SESSION
-  understand_question
-    → saved candidates with live support, or an investigation gap
-  evidence_start / evidence_extend
-    → admit exact sources into a server-issued context
-  record_*
-    → atomic understanding update plus a receipt and support qualification
-  reassess / verification_support
-    → qualify exactly what was recorded against present evidence
-  locate / neighbors
-    → structural navigation only
+  ask
+    → current answers with content and evidence,
+      a gap with inspectable evidence, or the surface document view
+  record
+    → atomic create/update/verify, or a declared service/domain surface
+  reconsider
+    → every surface a change affects, with per-conclusion support state
 ```
 
 ## Contexts
 
-`start_context` issues or recovers one server-owned context for a caller
-`request_id`. `understand_question` also issues a context when it returns an
-investigation gap or candidate answer. A context binds repository, question,
-scope, origin, and expiry. Following a pagination cursor keeps the same
-binding; changing the question, scope, or other bound request fields under
-the same `request_id` is a conflict. A result may carry a compact context
-reference when full context detail exceeds the question's byte allowance.
+`ask` issues or recovers one server-owned context bound to its request identity.
+The context is returned in the answer; it may be supplied to `record` or
+`reconsider`, but it is never an input to `ask`. A cold gap already carries the
+context needed to investigate and record in the same binding. Changing the
+question, surface, or other bound request fields under the same `request_id` is
+a conflict.
 
 Contexts expire. Expiry removes operational membership only. Accepted
 understanding, challenges, verification runs, and retained receipts survive.
+A gap's continuation lives exactly as long as its context; after expiry,
+abandonment, or reaping it returns a typed `Unavailable`.
 
 ## Recording
 
-Every record tool is atomic. It cites admitted observation or authority
-references; it does not resend source bodies. The result is the committed
-receipt plus a post-commit support qualification. A validation, identity,
-conflict, or source-drift rejection commits no semantic transition and names
-the offending identity. A post-commit `SupportUnavailable` preserves the
-receipt and reports qualification failure separately from acceptance.
+`record` is atomic. It cites admitted observation or authority references; it
+does not resend source bodies. The result is the committed receipt plus a
+post-commit support qualification — or `SurfaceDeclared` for a boundary
+declaration.
 
-- `record_create` creates version 1.
-- `record_add`, `record_confirm`, `record_correct`, `record_replace`, and
-  `record_withdraw` update an exact expected version.
-- `record_challenge` creates an explicit dispute.
-- `record_update` applies conclusion actions and named challenge dispositions
-  together.
-- `record_verification` records an independent run against the observations
-  actually tested.
+- `kind="understanding"` with `conclusion` and `locator` (or `observation_id`) creates version 1.
+- `actions.add`, `confirm`, `correct`, `replace`, and `withdraw` update an exact
+  expected version; multiple actions apply atomically.
+- `challenge_dispositions` settles a challenge raised by `reconsider`.
+- `kind="verification"` records an independent run against the observations or
+  evidence actually tested.
+- `kind="surface"` creates a service/domain boundary or updates it with
+  compare-and-set.
+
+A validation, identity, conflict, or source-drift rejection commits no semantic
+transition and names the offending identity. A post-commit `SupportUnavailable`
+preserves the receipt and reports qualification failure separately from
+acceptance.
 
 A matching replay returns the retained receipt before new-write dependency
 checks. The same identity with different content is a conflict.
 
 ## Currentness
 
-Support is evaluated on retrieval, recording, reassessment, and verification.
-States are `CURRENT`, `REASSESSMENT_REQUIRED`, and `UNVERIFIABLE`. A missing
-authority or observation stays explicit; it is never promoted to current.
+Support is evaluated on retrieval and recording. States are `CURRENT`,
+`REASSESSMENT_REQUIRED`, and `UNVERIFIABLE`. A missing authority or observation
+stays explicit; it is never promoted to current.
 
-Challenges settle only through an explicit disposition. A new version, a
-passing test, or a matching fingerprint does not settle a dispute.
-Current support does not certify meaning or complete investigation. Saved
-gaps and open disputes remain relevant to the agent's judgment.
+`reconsider` returns every affected surface and every conclusion it considered,
+with that conclusion's own support state. Inclusion is not a verdict: a
+considered conclusion can remain `CURRENT`. Only non-current states require
+re-establishment.
+
+Challenges settle only through an explicit disposition in `record`. A new
+version, a passing test, or a matching fingerprint does not settle a dispute.
+Current support does not certify meaning or complete investigation. Saved gaps
+and open disputes remain relevant to the agent's judgment.
 
 ## Hooks
 
-Hooks are optional event-local notices. They never record, reassess,
-interpret, or rebuild. A missed or disabled hook cannot make stale
-understanding current; correctness is evaluated by the lifecycle operations.
+Hooks are optional event-local notices. They never record, re-check, interpret,
+or rebuild. A missed or disabled hook cannot make stale understanding current;
+correctness is evaluated by the lifecycle operations.
 
 ## Store transition
 
-The runtime never migrates at open. Schema 7/8/9 stores use the offline
-inspect/apply/verify/rollback commands in [install](install.md). Only the
-repository binding and declared seeds are carried forward; legacy semantic
-content remains historical export and must be re-recorded.
+The runtime never migrates at open. Older stores use the offline
+inspect/apply/verify/rollback commands in [install](install.md). Schema 10
+carries the same semantic tables as the target, so each understanding maps to
+the path surface named by its recorded single-file scope, with unresolved rows
+preserved and reported. Older schemas carry a different meaning: only the
+repository binding and declared seeds are carried forward, and their legacy
+semantic content remains historical export.

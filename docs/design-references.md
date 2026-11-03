@@ -3,7 +3,7 @@
 Code comments referring to notes **A–M** originated in the 0.7/0.8 design
 series. Those identifiers explain provenance; they do not activate the old
 campaign, semantic-question taxonomy, or suspended interpretation protocol.
-The current subject owners below describe the 0.9.0 lifecycle.
+The current subject owners below describe the current lifecycle.
 
 | Historical note | Subject now owned by |
 | --- | --- |

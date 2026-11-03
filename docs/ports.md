@@ -10,7 +10,7 @@ shell implementations own effects. Public JSON grammar belongs to
 request-bound contexts, source/discovery observations, understanding/version
 reads, conclusion history, challenges, verification runs, and receipt lookup.
 Its recording operations accept canonical commands and commit the transition
-with its receipt atomically. SQLite implements schema 10; semantic decisions
+with its receipt atomically. SQLite implements schema 11; semantic decisions
 are made by core rules rather than by SQL or transport.
 
 `LifecycleAuthorityResolver` resolves declared authority references. Source

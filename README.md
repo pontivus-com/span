@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/pontivus-com/span/v0.6.0/assets/span-logo-plate-dark.png" alt="Span" width="360">
+  <img src="https://raw.githubusercontent.com/pontivus-com/span/master/assets/span-logo-plate-dark.png" alt="Span" width="360">
 </h1>
 
 <p align="center">
@@ -41,15 +41,20 @@ engineering question, then inspect what is current, disputed, or changed.
 The coding agent does the thinking. Span keeps the record and checks its
 support.
 
+Three tools — `ask`, `record`, `reconsider` — carry one lifecycle: find
+current understanding, retain a supported conclusion, and re-align after change.
+
 ## How it works
 
-1. **Investigate a real question.** Ask over the relevant scope. Span returns
-   qualified saved candidates or inspectable source evidence and an honest gap.
-2. **Record the useful result.** Save conclusions across the files you actually
-   examined, with their support and unanswered questions. Work that started
-   outside Span can be recorded directly after evidence admission.
-3. **Reuse in a fresh session.** Ask the next engineering question, discover
-   applicable understanding, and retrieve it with live support and challenges.
+1. **Investigate a real question.** Ask about the surface you are looking at.
+   Span returns current answers with surface status, or a gap with inspectable
+   source evidence.
+2. **Record the useful result.** Save one conclusion at a time with the file
+   it rests on, or declare a service/domain surface for a cross-file
+   explanation. Work that started outside Span can be recorded directly; the
+   flat create derives support from the locator you already read.
+3. **Reuse in a fresh session.** Ask the same question about the same surface,
+   and retrieve the result with live support and challenges.
 4. **Reassess after change.** Check affected dependencies, investigate what
    changed, then confirm, correct, replace, or withdraw the explanation.
    Earlier versions remain inspectable.
@@ -64,30 +69,31 @@ Illustrative tool sequence, not literal request JSON. The installed schemas
 and [MCP reference](docs/mcp.md) own the wire grammar.
 
 ```text
-understand_question: "How does checkout decide whether to charge?"
-  → InvestigationNeeded: exact evidence and an explicit gap
+ask: "How does checkout decide whether to charge?"
+  → Gap: exact evidence, a context, and an explicit question
 
-agent investigates; evidence_extend admits the additional sources
+agent investigates; record admits the source it just read
 
-record_create: explanation + admitted support + remaining questions
+record(kind="understanding", conclusion, locator)
   → committed receipt, understanding version 1, support qualification
 
-fresh session asks: "Where is purchase eligibility decided?"
-  → associated saved candidates; agent checks applicability
-understand_retrieve
+fresh session asks the same question about the same surface
+  → Answer with current conclusions, evidence, and surface status
+ask(selector=UnderstandingSnapshotSelector)
   → recorded explanation, live support, gaps, and challenges
 
 supporting source changes
-reassess
-  → REASSESSMENT_REQUIRED with the affected dependencies
+reconsider(changed_paths)
+  → every affected surface, with containment, direct, and indirect reasons,
+    and per-conclusion support state
 
 agent investigates and records a correction against the expected version
   → version 2; version 1 remains history
 ```
 
-Source association and term overlap help discovery. A different wording can
-find saved understanding without its original ID, but semantic equivalence is
-not guaranteed. A candidate is a starting point for judgment.
+A query names the surface; saved understanding is matched by that surface and
+the recorded question. Wording is not treated as semantic equivalence, and a
+returned conclusion is a starting point for judgment.
 
 ## Know what can be reused
 
@@ -110,7 +116,7 @@ present support qualification answer different questions.
 ## Quick start
 
 The verified installation path is Linux with Python 3.12+, Node.js, and npm.
-From a checkout containing the 0.9.0 candidate:
+From a checkout containing the current candidate:
 
 ```bash
 python3 scripts/install-span.py --repo /path/to/your/repo
@@ -136,9 +142,8 @@ see [using Span](docs/usage.md).
 
 | Host | Current scope |
 | --- | --- |
-| Codex | Live beta validation target; packaged lifecycle calls work with hooks explicitly disabled. |
-| OpenCode | Managed integration remains implemented; earlier trials are not final-package revalidation. |
-| Claude Code | Managed integration remains implemented; live model grammar and caller identity are UNVERIFIED under the owner waiver. |
+| Codex | Supported; three-tool delivery captured with hooks disabled. The flat-create re-capture is pending (account quota). |
+| OpenCode | Supported; three-tool and flat-create delivery captured. The installer plugin puts the first `ask` before the first source read in 5/5 measured runs. |
 | Other MCP hosts | Manual stdio connection is available; model-delivery behavior needs host-specific verification. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
@@ -153,14 +158,20 @@ model or store provider credentials. Structural search helps investigation;
 recorded conclusions retain the agent's interpretation and declared support.
 
 The intended benefit is continuity between sessions and a focused review of
-changed support. Recording and host delivery have costs. This beta makes no
-universal time/token-saving claim or completed comparative product-fitness
-ACCEPT claim. See [acceptance](docs/acceptance.md).
+changed support. Recording and host delivery have costs. Measured cost is
+class-specific: repeated reuse of a covered surface breaks even at two uses on
+the tested tasks, while single-use implementation is currently more expensive
+than reading. This beta makes no universal time/token-saving claim or completed
+comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.9.0 beta**: nineteen lifecycle tools, schema-10
-storage, explicit offline transition, and live support qualification.
+This checkout describes **0.9.0**: three lifecycle tools (`ask`, `record`,
+`reconsider`), schema-11 storage, surface-scoped answers, explicit store
+transition, and live support qualification. Host delivery is captured for the
+three-tool surface on Codex and OpenCode; the flat-create re-capture passes on
+OpenCode and is pending on Codex (account quota). Comparative fitness remains
+class-scoped (FD-53, FG-7).
 macOS and Windows installation paths remain unverified. Publication and
 product acceptance are separate from the implementation version.
 

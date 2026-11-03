@@ -33,6 +33,8 @@ def _resolver() -> w.RecordWireResolver:
     return w.RecordWireResolver(
         reference=_evidence,
         authority=_authority,
+        source=lambda locator, ranges: m.SourceObservationId("obs-1"),
+        discovery=lambda scope: m.DiscoveryObservationId("disc-1"),
     )
 
 
@@ -43,7 +45,7 @@ def _conclusion(conclusion_id: str = "c-1") -> w.ConclusionWire:
         assertion_nature=m.AssertionNature.DESCRIPTIVE,
         scope_paths=("src/a.py",),
         scope_evidence_refs=("ev-1",),
-        support=(w.SourceSupportWire(observation_id="obs-1"),),
+        support=(w.SourceSupportWire(locator="src/a.py"),),
         basis_derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
         basis_summary="read source",
         basis_input_refs=("ev-1",),
@@ -54,7 +56,7 @@ def _identity() -> w.IdentityWire:
     return w.IdentityWire(
         repository_id="repo-1",
         context_id="ctx-1",
-        submission_id="sub-1",
+        request_id="sub-1",
     )
 
 
@@ -79,6 +81,7 @@ class RecordWireSchemaTest(unittest.TestCase):
     def test_create_wire_round_trips_canonically(self):
         value = w.RecordCreateWire(
             identity=_identity(),
+            surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
             target=w.ExplicitTargetWire(
                 question="What does A do?",
                 scope_paths=("src/a.py",),
@@ -198,7 +201,7 @@ class RecordWireMalformedTest(unittest.TestCase):
                     "identity": {
                         "repository_id": "repo-1",
                         "context_id": "ctx-1",
-                        "submission_id": "sub-1",
+                        "request_id": "sub-1",
                     },
                     "run": {},
                     "unexpected": True,
@@ -210,6 +213,7 @@ class RecordWireCodecTest(unittest.TestCase):
     def test_create_maps_to_domain_command(self):
         wire = w.RecordCreateWire(
             identity=_identity(),
+            surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
             target=w.ContextBoundTargetWire(),
             conclusions=(_conclusion(),),
         )

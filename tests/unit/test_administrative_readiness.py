@@ -35,7 +35,7 @@ class StoreProbeTest(unittest.TestCase):
             readiness = probe_store(data, "repo")
             self.assertFalse(readiness.ready)
             self.assertFalse(readiness.exists)
-            self.assertIn("initialize_repository", readiness.action)
+            self.assertIn("installer", readiness.action)
             self.assertEqual(list(data.iterdir()), [])
 
     def test_old_schema_reports_transition(self):
@@ -64,7 +64,7 @@ class StoreProbeTest(unittest.TestCase):
             _ready(data, "repo", root)
             readiness = probe_store(data, "repo")
             self.assertTrue(readiness.ready)
-            self.assertEqual(readiness.expected_version, 10)
+            self.assertEqual(readiness.expected_version, 11)
             self.assertEqual(readiness.bound_root, str(root.resolve()))
 
     def test_provider_probe_reports_presence(self):
@@ -90,7 +90,7 @@ class InstallVerifyTest(unittest.TestCase):
             self.assertTrue(payload["restart_required"])
             store = payload["repos"][0]["store"]
             self.assertFalse(store["ready"])
-            self.assertIn("initialize_repository", store["action"])
+            self.assertIn("installer", store["action"])
             self.assertEqual(list(data.iterdir()), [])
             self.assertFalse(any(repo.rglob("*")))
 
@@ -105,7 +105,7 @@ class InstallVerifyTest(unittest.TestCase):
                 install_verify.main(["--data-dir", str(data), "--repo", str(root)])
             payload = json.loads(stream.getvalue())
             self.assertTrue(payload["repos"][0]["store"]["ready"])
-            self.assertEqual(payload["repos"][0]["store"]["schema_version"], 10)
+            self.assertEqual(payload["repos"][0]["store"]["schema_version"], 11)
 
 
 if __name__ == "__main__":

@@ -1,61 +1,70 @@
 # Questions, retrieval, and bounds
 
-Ask an engineering question with `understand_question`; the agent interprets
-the result. Saved understanding is discovered through scope association and
-term overlap. Candidates retain their match reasons and ambiguity. Neither a
-match nor a `CURRENT` qualification proves applicability or correctness.
+Ask a scoped engineering question with `ask`, naming either an exact
+`surface={kind, locator}` or a reference the agent is looking at. The answer
+comes from retained understanding, never from first principles. A first-contact
+question on an unassessed surface returns a gap with inspectable evidence; the
+agent investigates and then records the result.
 
 ## Result paths
 
-- `UnderstandingCandidateAnswer`: saved candidate identities and qualified
-  snapshots, or public references when details exceed the budget.
-- `InvestigationNeeded`: a recoverable context, inspected source evidence,
-  per-item admission outcomes, and an explicit gap.
-- `DiscoveryLimit`: the bounded scan found no usable candidate/scope; inspect
-  the reason and any continuation. Repository-wide absence is not asserted.
-- `ResponseBudgetExceeded`: the requested byte allowance cannot hold the
-  minimum reduced response; retry with a larger allowance or narrower scope.
+- `Answer`: every matched conclusion is current. It carries `ConclusionView`s
+  with statement, nature, scope, support, and evidence; the surface status
+  distribution; recorded gaps; applicable `VerificationView`s; and an explicit
+  truncation state when the server budget omitted content.
+- `Gap`: exactly one reason — `invalidated`, `unverifiable`, `unassessed`, or
+  `no_match` — with historical conclusions, admitted evidence, the context, the
+  missing items, and a recovery. It carries a continuation when evidence was
+  omitted. A `no_match` gap points back to the surface document view.
+- `AmbiguousSurface`: more than one granularity matches the reference; the
+  candidates are exact identities. Copy one into `surface`; Span never guesses.
+- `RetrievedUnderstanding` / `RetrievedReceipt`: exact-reference history. They
+  are never merged into `Answer` and never satisfy the current-answer guarantee.
+- `EvidencePage`: omitted gap evidence with an optional further continuation.
+- `Unavailable`: an operational failure, an invalid continuation, or a response
+  budget too small to carry the minimum result, always with a recovery action.
 
-Request/result schemas are owned by [MCP reference](mcp.md) and the installed
-`tools/list`. The substantive result includes its qualifications, limits, and
-next action; large supporting detail may require public retrieval. The old
-requirement that every detail body travel in the same answer is retired.
+With no question, `ask` returns the surface document view: current conclusions
+grouped by the question they answer, plus status, gaps, and verification. The
+view is assembled on read and cannot drift.
+
+That view is the normal reuse path. Read it and select the current conclusion
+that answers the task; an exact question is a targeted query. A paraphrase is a
+different question and returns `no_match`; its recovery tells the agent to read
+the document view. Span does not rank, embed, or semantically match questions.
 
 ## Retrieve exact detail
 
-`understand_retrieve` has three selectors: an understanding snapshot (current
-or exact version), a context with admitted excerpts/discovery observations, or
-a retained receipt. A receipt can survive its context; missing context detail
-does not revoke committed acceptance. Snapshot retrieval evaluates support
-and returns challenges alongside the recorded content.
+Use `ask` with an `UnderstandingSnapshotSelector` for a current or exact
+snapshot, or a `ReceiptRetrievalSelector` for a retained receipt. A receipt can
+survive its context; missing context detail does not revoke committed
+acceptance. Snapshot retrieval evaluates support and returns challenges
+alongside the recorded content.
 
-Use `reassess` to qualify a selected understanding/version and
-`verification_support` to qualify an independent recorded run. Neither
-operation performs semantic reinterpretation or external test execution.
+`ask` also returns applicable verification runs and their live qualification.
+There is no separate qualification call. Neither retrieval nor qualification
+performs semantic reinterpretation or external test execution.
 
-## Bounded discovery and delivery
+## Bounds and truncation
 
-A discovery request scans at most one stored page, bounded by `max_results`.
-No match on that page does not establish absence on later pages. Question
-answers apply `max_evidence_bytes` to the complete canonical response,
-including candidates, snapshots, context, and cold evidence. They can replace
-bodies with references, omit details explicitly, and provide a continuation.
-There is no oversized-first-item exception for an ordinary answer.
+The agent does not manage response size. Layer 4 owns the per-host budget and
+applies it at the composition boundary. A truncated result names what was
+omitted; truncation never promotes historical content into the answer. If the
+budget cannot carry the result kind, the surface identity, and the fact of
+truncation, the operation returns `Unavailable` rather than a misleading
+fragment.
 
-The explicit `ResponseBudgetExceeded` refusal is control output; it can
-itself exceed an impossibly small allowance. This budget is not a guarantee
-on host context size: MCP delivers both text and structured content, and host
-declarations and rendering add their own overhead. Other tools have their
-own declared bounds; exact retrieval is not the question's byte-budget page.
+## Continuations
 
-## Cursors and identities
+A continuation is an opaque, stateless token bound to a repository, live
+context, original request identity and digest, and the next evidence position.
+Pass it to `ask` with the same repository. The same token against the same live
+context returns the same page. Expired, abandoned, reaped, unknown, or
+mismatched tokens return `Unavailable`.
 
-Pass each returned cursor unchanged to the same operation with the same
-request identity, question, scope, and bounds. A cursor changes position,
-not the context binding. Discovery and inventory cursors resume different
-listings; they cannot be interchanged with structural navigation cursors.
-There is no interpretation continuation in the 0.9.0 lifecycle.
+Every page advances by at least one evidence unit or exact line range. An
+oversized unit is split at line boundaries; a unit that cannot fit even one line
+is refused rather than returned as an empty page. Continuations are not
+structural listing cursors and cannot be interchanged with them.
 
-Truncated inventory cannot stand in for a complete discovery observation.
-Absence/completeness conclusions require the recorded membership boundary
-they actually depend on. See [freshness](freshness.md).
+See [freshness](freshness.md) for what current support means.

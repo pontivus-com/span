@@ -2,10 +2,9 @@
 """Black-box lifecycle probe for the installed ``span-mcp`` executable.
 
 Runs under the isolated installed interpreter with ``PYTHONPATH`` removed and
-imports no ``span`` module. It drives the shipped separate-tool surface over
-MCP stdio: list tools, admit evidence, record an understanding, discover it
-from different wording, retrieve the exact snapshot, and confirm retired tool
-names reject with replacement guidance.
+imports no ``span`` module. It drives the shipped three-tool surface over MCP
+stdio: list tools, ask cold, record, ask warm, retrieve an exact snapshot, and
+confirm a retired tool name rejects with replacement guidance.
 """
 
 from __future__ import annotations
@@ -51,74 +50,54 @@ async def _run(exe, repo, data_dir, repository_id):
             removed, removed_error = await _call(
                 session, "explain", {"repository_id": repository_id}
             )
-            admitted, admitted_error = await _call(
+            cold, cold_error = await _call(
                 session,
-                "evidence_start",
+                "ask",
                 {
                     "repository_id": repository_id,
-                    "request_id": {"value": "probe-evidence"},
-                    "scope": {"paths": ["src/alpha.py"], "evidence_refs": []},
-                    "requests": [{"locator": "src/alpha.py", "ranges": []}],
+                    "request_id": "probe-ask-cold",
+                    "reference": "src/alpha.py",
+                    "question": "What does alpha declare?",
                 },
             )
-            observation = admitted["outcomes"][0]["observation_id"]["value"]
-            context_id = admitted["context"]["context_id"]["value"]
             created, created_error = await _call(
                 session,
-                "record_create",
+                "record",
                 {
-                    "identity": {
-                        "repository_id": repository_id,
-                        "context_id": context_id,
-                        "submission_id": "probe-create",
-                    },
-                    "target": {
-                        "$type": "ExplicitTargetWire",
-                        "question": "What does alpha declare?",
-                        "scope_paths": ["src/alpha.py"],
-                        "scope_evidence_refs": [],
-                    },
-                    "conclusions": [
-                        {
-                            "conclusion_id": "c-1",
-                            "statement": "Alpha declares VALUE = 1.",
-                            "assertion_nature": "DESCRIPTIVE",
-                            "scope_paths": ["src/alpha.py"],
-                            "scope_evidence_refs": [],
-                            "support": [
-                                {
-                                    "$type": "SourceSupportWire",
-                                    "observation_id": observation,
-                                }
-                            ],
-                            "basis_derivation": "EXPLICIT_EVIDENCE",
-                            "basis_summary": "read src/alpha.py",
-                            "basis_input_refs": [],
-                        }
-                    ],
-                    "gaps": [],
+                    "repository_id": repository_id,
+                    "request_id": "probe-create",
+                    "kind": "understanding",
+                    "surface": {"kind": "FILE", "locator": "src/alpha.py"},
+                    "question": "What does alpha declare?",
+                    "scope_paths": ["src/alpha.py"],
+                    "conclusion": "Alpha declares VALUE = 1.",
+                    "locator": "src/alpha.py",
                     "provenance": "installed probe",
                 },
             )
-            receipt = created["receipt"]
-            understanding_id = receipt["accepted_understanding_ids"][0]["value"]
-            found, found_error = await _call(
+            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
+                "value"
+            ]
+            warm, warm_error = await _call(
                 session,
-                "understand_question",
+                "ask",
                 {
                     "repository_id": repository_id,
-                    "request_id": {"value": "probe-question"},
-                    "question": "Which value does the alpha module set?",
-                    "scope": {"paths": ["src/alpha.py"], "evidence_refs": []},
+                    "request_id": "probe-ask-warm",
+                    "reference": "src/alpha.py",
+                    "question": "What does alpha declare?",
                 },
             )
             retrieved, retrieved_error = await _call(
                 session,
-                "understand_retrieve",
+                "ask",
                 {
-                    "$type": "UnderstandingSnapshotSelector",
                     "repository_id": repository_id,
-                    "understanding_id": understanding_id,
+                    "selector": {
+                        "$type": "UnderstandingSnapshotSelector",
+                        "repository_id": repository_id,
+                        "understanding_id": understanding_id,
+                    },
                 },
             )
             return {
@@ -126,17 +105,14 @@ async def _run(exe, repo, data_dir, repository_id):
                 "tools": names,
                 "removed": removed,
                 "removed_error": removed_error,
-                "admitted_error": admitted_error,
+                "cold_error": cold_error,
+                "cold_kind": cold.get("$type"),
                 "created_error": created_error,
-                "created": created,
-                "admitted": admitted,
-                "found_error": found_error,
+                "warm_error": warm_error,
                 "retrieved_error": retrieved_error,
-                "observation": observation,
-                "context_id": context_id,
                 "understanding_id": understanding_id,
-                "found_kind": found.get("$type"),
-                "statement": retrieved["conclusions"][0]["content"]["statement"],
+                "found_kind": warm.get("$type"),
+                "statement": warm["conclusions"][0]["statement"],
                 "version": retrieved["version"]["version"]["value"],
             }
 
@@ -144,7 +120,7 @@ async def _run(exe, repo, data_dir, repository_id):
 def main(argv):
     if len(argv) != 5:
         print(
-            "usage: lifecycle_probe.py <span-mcp> <repo> <data-dir> " "<repository-id>",
+            "usage: lifecycle_probe.py <span-mcp> <repo> <data-dir> <repository-id>",
             file=sys.stderr,
         )
         return 2

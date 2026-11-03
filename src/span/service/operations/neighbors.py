@@ -19,7 +19,7 @@ from span.ports.lifecycle import LifecycleStorePort
 from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralDirection
 from span.ports.structural import StructuralSource
-from span.service.bounds import resolve_bounds as _resolve_bounds
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.operations.listing import listing_version
 from span.service.navigation import SemanticStructuralNeighborsRequest
 
@@ -228,6 +228,7 @@ def neighbors(
     *,
     structural: StructuralSource,
     store: LifecycleStorePort,
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> m.StructuralNeighborsResult:
     """Execute one structural neighbors traversal (read-only)."""
     try:
@@ -242,7 +243,7 @@ def neighbors(
         or request.max_depth < 1
     ):
         raise ValueError("neighbors max_depth must be a positive integer")
-    bounds = _resolve_bounds(request.bounds, hook=False)
+    bounds = policy.default_query_bounds
     version = listing_version(structural, request.repository_id)
     try:
         visited_token, frontier_token = decode_traversal_token(

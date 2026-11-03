@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse as _argparse
 import asyncio as _asyncio
+import dataclasses as _dataclasses
 import pathlib as _pathlib
 from dataclasses import dataclass as _dataclass
 
@@ -30,6 +31,7 @@ from span.shell.mcp import (
     McpAdapter,
     ServiceContext,
 )
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY as _DEFAULT_BOUNDS
 from span.shell.structural import repository_id_from_config
 
 __all__ = [
@@ -48,6 +50,17 @@ class ServerConfig:
     """Server runtime configuration (transport-owned, never semantic)."""
 
     data_dir: _pathlib.Path
+    response_budget_bytes: int | None = None
+
+
+def _policy(config: ServerConfig) -> m.ServiceBoundsPolicy:
+    """The installed per-host response budget, or the measured default."""
+    if config.response_budget_bytes is None:
+        return _DEFAULT_BOUNDS
+    return _dataclasses.replace(
+        _DEFAULT_BOUNDS,
+        max_response_bytes=config.response_budget_bytes,
+    )
 
 
 def provision_repository(
@@ -55,7 +68,7 @@ def provision_repository(
     request: m.InitializeRepositoryRequest,
 ) -> tuple[ServiceContext, m.InitializeRepositoryResult]:
     """Explicit provisioning bound to this server's data directory."""
-    return _provision(config.data_dir, request)
+    return _provision(config.data_dir, request, policy=_policy(config))
 
 
 def open_repository_context(
@@ -63,33 +76,12 @@ def open_repository_context(
     repository_locator: str,
 ) -> tuple[str, ServiceContext]:
     """Open an already-provisioned repository without setup."""
-    return _open_context(config.data_dir, repository_locator)
+    return _open_context(config.data_dir, repository_locator, policy=_policy(config))
 
 
 #: Repository-scoped tools: their descriptions carry registered canonical IDs
 #: at list time so agents discover identity before the first scoped call.
-_REPO_SCOPED_TOOLS = frozenset(
-    {
-        "start_context",
-        "understand_question",
-        "understand_retrieve",
-        "reassess",
-        "verification_support",
-        "evidence_start",
-        "evidence_extend",
-        "record_create",
-        "record_add",
-        "record_confirm",
-        "record_correct",
-        "record_replace",
-        "record_withdraw",
-        "record_challenge",
-        "record_update",
-        "record_verification",
-        "locate",
-        "neighbors",
-    }
-)
+_REPO_SCOPED_TOOLS = frozenset({"ask", "record", "reconsider"})
 
 
 def handle_list_tools(adapter: McpAdapter) -> list[dict]:
@@ -98,9 +90,7 @@ def handle_list_tools(adapter: McpAdapter) -> list[dict]:
     if registered:
         scope_note = " Registered repositories: " + ", ".join(registered) + "."
     else:
-        scope_note = (
-            " No repositories registered yet; call " "initialize_repository first."
-        )
+        scope_note = " No repositories registered yet; run the installer to bind one."
     specs = []
     for name in TOOL_NAMES:
         description = TOOL_DESCRIPTIONS[name]
@@ -186,7 +176,16 @@ def _parse_args(argv: list[str] | None = None) -> _argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         required=True,
-        help="Directory for schema-10 lifecycle stores.",
+        help="Directory for schema-11 lifecycle stores.",
+    )
+    parser.add_argument(
+        "--response-budget-bytes",
+        type=int,
+        default=None,
+        help=(
+            "Per-host response budget in delivered wire bytes (the installer "
+            "sets the measured value for the host being registered)."
+        ),
     )
     parser.add_argument(
         "--repo",
@@ -205,7 +204,10 @@ def _parse_args(argv: list[str] | None = None) -> _argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     """Server entry point (`span-mcp` console script, stdio)."""
     args = _parse_args(argv)
-    config = ServerConfig(data_dir=_pathlib.Path(args.data_dir))
+    config = ServerConfig(
+        data_dir=_pathlib.Path(args.data_dir),
+        response_budget_bytes=args.response_budget_bytes,
+    )
     adapter = McpAdapter(
         provisioner=lambda request: provision_repository(config, request),
         context_loader=lambda locator: open_repository_context(config, locator)[1],

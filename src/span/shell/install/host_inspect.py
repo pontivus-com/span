@@ -13,11 +13,6 @@ def detect_hosts():
     hosts = {"opencode": True}  # MCP config merge is file-local.
     home = Path(os.path.expanduser("~"))
     hosts["codex"] = shutil.which("codex") is not None or (home / ".codex").exists()
-    hosts["claude"] = (
-        shutil.which("claude") is not None
-        or (home / ".claude").exists()
-        or (home / ".claude.json").exists()
-    )
     return hosts
 
 
@@ -118,39 +113,3 @@ def inspect_codex_registration():
             ),
         }
     return {"status": "skipped", "reason": "codex CLI not detected"}
-
-
-def inspect_claude_registration(span_cmd):
-    """Read-only inspection of Claude Code's user-scope MCP entry.
-
-    ``~/.claude.json`` is the documented user-scope store, so this check
-    reads it directly and never runs the CLI. Missing file, missing
-    entry, unreadable JSON, and a differing command are reported
-    distinctly; nothing is written.
-    """
-    config_path = Path(os.path.expanduser("~")) / ".claude.json"
-    expected = [str(part) for part in span_cmd]
-    result = {
-        "status": "missing",
-        "config": str(config_path),
-        "expected_command": expected,
-    }
-    try:
-        raw = config_path.read_text()
-    except OSError:
-        return result
-    try:
-        config = json.loads(raw)
-    except ValueError:
-        result["status"] = "unreadable"
-        return result
-    servers = config.get("mcpServers")
-    entry = servers.get("span") if isinstance(servers, dict) else None
-    if not isinstance(entry, dict):
-        return result
-    actual = [str(entry.get("command", ""))] + [
-        str(arg) for arg in entry.get("args", [])
-    ]
-    result["actual_command"] = actual
-    result["status"] = "matched" if actual == expected else "mismatched"
-    return result

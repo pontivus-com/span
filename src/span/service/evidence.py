@@ -12,10 +12,12 @@ import datetime as _datetime
 import typing as _typing
 
 from span.core import model as m
+from span.core import support_rules
 from span.core.identity import source_observation_identity
 from span.core.recording import RecordingValidationError
 from span.ports.evidence import EvidenceSource
 from span.ports.lifecycle import LifecycleStorePort
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import issue_context
 from span.service.ids import server_context_id
 
@@ -32,13 +34,55 @@ class EvidenceService:
         evidence: EvidenceSource,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
+        policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
     ) -> None:
         self._store = store
         self._evidence = evidence
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
+        self._policy = policy
 
     # -- context start / extension ----------------------------------------
+
+    def inventory_paths(
+        self, repository_id: str, scope: m.EvidenceScope
+    ) -> tuple[str, ...]:
+        """Servable repository paths inside one scope, for boundary status."""
+        pairs, _ = self._evidence.list_inventory_entries(repository_id, scope)
+        return tuple(path for path, _ in pairs)
+
+    def inventory_entries(
+        self, repository_id: str, scope: m.EvidenceScope
+    ) -> tuple[tuple[str, str], ...]:
+        """Membership pairs for a discovery observation."""
+        pairs, _ = self._evidence.list_inventory_entries(repository_id, scope)
+        return pairs
+
+    def context_observations(self, context_id: str) -> tuple[m.SourceObservation, ...]:
+        """Return one context's admitted source observations in stable order."""
+        return tuple(
+            sorted(
+                self._store.list_context_evidence(context_id),
+                key=lambda item: item.observation_id.value,
+            )
+        )
+
+    def context_unit(self, record: m.SourceObservation) -> m.EvidenceUnit:
+        """Project one admitted observation into an evidence unit without bounds."""
+        content_range = None
+        if len(record.delivered_ranges) == 1:
+            only = record.delivered_ranges[0]
+            content_range = m.EvidenceLineRange(
+                start_line=only.start_line,
+                end_line=only.end_line,
+                total_lines=record.total_lines,
+            )
+        return m.EvidenceUnit(
+            evidence_ref=record.evidence,
+            content=record.excerpt,
+            content_fingerprint=record.content_digest.value.split(":", 1)[1],
+            content_range=content_range,
+        )
 
     def start(self, request: m.EvidenceStartRequest) -> m.EvidenceAdmissionResult:
         """Create or recover the evidence-only context and admit the batch."""
@@ -53,7 +97,7 @@ class EvidenceService:
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
-        return self._admit(context, request.requests, request.bounds)
+        return self._admit(context, request.requests, self._policy.default_query_bounds)
 
     def extend(self, request: m.EvidenceExtendRequest) -> m.EvidenceAdmissionResult:
         """Admit further exact sources into one existing live context."""
@@ -65,9 +109,19 @@ class EvidenceService:
                 f"{request.repository_id!r}"
             )
         self._require_live(context)
-        return self._admit(context, request.requests, request.bounds)
+        return self._admit(context, request.requests, self._policy.default_query_bounds)
 
     # -- retrieval ---------------------------------------------------------
+
+    def admit(
+        self,
+        context: m.InvestigationContext,
+        requests: tuple[m.EvidenceRequest, ...],
+        bounds: m.QueryBounds,
+    ) -> m.EvidenceAdmissionResult:
+        """Admit exact sources into one live context (internal record step)."""
+        self._require_live(context)
+        return self._admit(context, requests, bounds)
 
     def admitted(self, context_id: str) -> tuple[m.AdmittedEvidence, ...]:
         """Return the context's admitted observations as canonical carriers."""
@@ -206,7 +260,19 @@ class EvidenceService:
                 delivered = ()
                 excerpt = unit.content
                 whole_file = True
-            digest = m.ContentDigest(f"sha256:{unit.content_fingerprint}")
+            if request.ranges:
+                ranged = support_rules.ranged_fingerprint(unit.content, delivered)
+                if ranged is None:
+                    outcomes.append(
+                        m.OmittedEvidence(
+                            request,
+                            "requested range cannot bind to the observed text",
+                        )
+                    )
+                    continue
+                digest = m.ContentDigest(f"sha256:{ranged}")
+            else:
+                digest = m.ContentDigest(f"sha256:{unit.content_fingerprint}")
             observation_id = source_observation_identity(
                 context.repository_id,
                 request.locator,

@@ -25,6 +25,9 @@ __all__ = [
 ]
 
 
+#: O-2 (technical design §13, owner direction 2026-11-02): a recording retry
+#: is supported for seven days; a context is live for one day. Span state is
+#: on disk, so a host-process restart is not a suspension of that state.
 _CONTEXT_LIFETIME = _datetime.timedelta(days=1)
 _REPLAY_RETENTION = _datetime.timedelta(days=7)
 

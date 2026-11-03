@@ -178,6 +178,12 @@ class LifecycleStorePort(_typing.Protocol):
         """Return observations captured from one repository locator."""
         ...
 
+    def support_dependents(
+        self, dependency_kind: str, dependency_ref: str
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        """Return exact revisions whose support references one identity."""
+        ...
+
     def find_source_observation(
         self, observation_id: str
     ) -> m.SourceObservation | None:
@@ -200,8 +206,20 @@ class LifecycleStorePort(_typing.Protocol):
         """Return one stored discovery observation."""
         ...
 
+    def list_discovery_observations(
+        self, repository_id: str
+    ) -> tuple[m.DiscoveryObservation, ...]:
+        """Return every discovery observation for one repository."""
+        ...
+
     def get_verification_run(self, run_id: str) -> m.VerificationRun:
         """Return one stored independent verification run."""
+        ...
+
+    def list_verification_runs(
+        self, repository_id: str
+    ) -> tuple[m.VerificationRun, ...]:
+        """Return every stored independent verification run for one repository."""
         ...
 
     def resolve_authority(
@@ -210,8 +228,49 @@ class LifecycleStorePort(_typing.Protocol):
         """Resolve one declared authority binding."""
         ...
 
-    def get_receipt(self, identity: m.RecordingIdentity) -> m.RecordReceipt | None:
-        """Return the retained receipt for one recording key."""
+    def put_surface(self, surface: m.Surface) -> m.Surface:
+        """Persist a surface, idempotent for identical content."""
+        ...
+
+    def update_surface(
+        self, surface: m.Surface, *, expected_boundary_version: int
+    ) -> m.Surface:
+        """Apply a compare-and-set boundary update and keep its history."""
+        ...
+
+    def find_surface(self, key: m.SurfaceKey) -> m.Surface | None:
+        """Return one surface, or None when it has never been declared."""
+        ...
+
+    def get_surface(self, key: m.SurfaceKey) -> m.Surface:
+        """Return one surface or reject an unknown identity."""
+        ...
+
+    def list_surfaces(self, repository_id: str) -> tuple[m.Surface, ...]:
+        """Return every declared surface of one repository."""
+        ...
+
+    def surface_boundaries(self, key: m.SurfaceKey) -> tuple[m.Surface, ...]:
+        """Return every immutable boundary version of one surface."""
+        ...
+
+    def get_receipt(self, key: m.RecordingKey) -> m.RecordReceipt | None:
+        """Return the retained receipt for one request key."""
+        ...
+
+    def record_noop(
+        self,
+        identity: m.RecordingIdentity,
+        content_digest: m.ContentDigest,
+        understanding_id: m.UnderstandingId,
+    ) -> m.RecordReceipt:
+        """Persist acceptance for an unchanged, already-current version."""
+        ...
+
+    def find_context_by_request(
+        self, repository_id: str, request_id: m.RequestId
+    ) -> m.InvestigationContext | None:
+        """Return the context bound to a request identity, or None."""
         ...
 
     def record_understanding(

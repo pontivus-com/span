@@ -19,7 +19,6 @@ class SemanticStructuralLocateRequest:
 
     repository_id: str
     mode: m.StructuralLocateMode
-    bounds: m.QueryBounds | None = None
     query: str | None = None
     match: m.StructuralLocateMatch = m.StructuralLocateMatch.EXACT
     target: m.EvidenceScope | None = None
@@ -33,7 +32,6 @@ class SemanticStructuralNeighborsRequest:
     repository_id: str
     target: m.SubjectSelector
     direction: StructuralDirection
-    bounds: m.QueryBounds | None = None
     edge_kinds: tuple[m.StructuralEdgeKind, ...] = ()
     max_depth: int = 1
     page_token: str | None = None

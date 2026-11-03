@@ -61,7 +61,7 @@ def probe_store(
             schema_version=None,
             bound_root=None,
             ready=False,
-            action=("call initialize_repository in a dedicated setup session"),
+            action=("run the installer to bind this repository"),
         )
     connection = _sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     try:
@@ -114,7 +114,7 @@ def probe_store(
             schema_version=version,
             bound_root=None,
             ready=False,
-            action=("call initialize_repository in a dedicated setup session"),
+            action=("run the installer to bind this repository"),
         )
     return StoreReadiness(
         repository_id=repository_id,

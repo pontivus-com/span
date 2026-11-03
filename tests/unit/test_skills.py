@@ -12,12 +12,15 @@ import re
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-PRIMARY = REPO_ROOT / "skills" / "span" / "SKILL.md"
-CHANGE = REPO_ROOT / "skills" / "span-change-context" / "SKILL.md"
-DOCUMENT = REPO_ROOT / "skills" / "span-document" / "SKILL.md"
-SKILLS = (PRIMARY, CHANGE, DOCUMENT)
+ROUTER = REPO_ROOT / "skills" / "span-router" / "SKILL.md"
+BEFORE = REPO_ROOT / "skills" / "span-before-you-read" / "SKILL.md"
+AFTER = REPO_ROOT / "skills" / "span-after-change" / "SKILL.md"
+RECORD = REPO_ROOT / "skills" / "span-record" / "SKILL.md"
+SKILLS = (ROUTER, BEFORE, AFTER, RECORD)
 
-CANONICAL_OPS = {
+CANONICAL_OPS = {"ask", "record", "reconsider"}
+
+RETIRED_OPS = {
     "initialize_repository",
     "start_context",
     "understand_question",
@@ -37,17 +40,6 @@ CANONICAL_OPS = {
     "record_verification",
     "locate",
     "neighbors",
-}
-
-RETIRED_OPS = {
-    "explain",
-    "impact",
-    "trace",
-    "authority",
-    "status",
-    "refresh",
-    "initialize_target",
-    "submit_interpretation",
 }
 
 FORBIDDEN_PHRASES = (
@@ -75,7 +67,6 @@ INTERNAL_VOCABULARY = (
     "result-ID materialization",
     "pgv:",
     "pgn:",
-    "cont-",
     "reissue_interpretation",
 )
 
@@ -111,20 +102,18 @@ class SkillNonAuthorityTest(unittest.TestCase):
             for token in INTERNAL_VOCABULARY:
                 self.assertNotIn(token, text, f"{path}: {token}")
 
-    def test_uncertainty_preservation_present(self):
-        for path in SKILLS:
-            text = _text(path)
-            for state in (
-                "PARTIAL",
-                "AMBIGUOUS",
-                "CONFLICTED",
-                "UNRESOLVED",
-                "STALE",
-                "UNVERIFIABLE",
-            ):
-                self.assertIn(state, text, f"{path}: {state}")
-            self.assertIn("verbatim", text.lower(), path)
-            self.assertIn("Missing authority stays missing", text, path)
+    def test_uncertainty_preservation_present_in_router(self):
+        text = _text(ROUTER)
+        for state in (
+            "CURRENT",
+            "REASSESSMENT_REQUIRED",
+            "UNVERIFIABLE",
+            "OPEN",
+            "UNRESOLVED",
+            "RESOLVED",
+        ):
+            self.assertIn(state, text, state)
+        self.assertIn("verbatim", text.lower())
 
     def test_implementation_ignores_skills(self):
         for path in (REPO_ROOT / "src").rglob("*.py"):
@@ -133,71 +122,84 @@ class SkillNonAuthorityTest(unittest.TestCase):
             self.assertNotIn("skills/", path.read_text(encoding="utf-8"), path)
 
 
-class PrimarySkillTest(unittest.TestCase):
-    def test_primary_covers_understand_record_reassess(self):
-        text = _text(PRIMARY)
+class RouterSkillTest(unittest.TestCase):
+    def test_router_covers_the_three_moments(self):
+        text = _text(ROUTER)
         for required in (
-            "`understand_question`",
-            "`evidence_start`",
-            "`record_create`",
-            "`record_update`",
-            "`reassess`",
-            "`verification_support`",
+            "`ask`",
+            "`record`",
+            "`reconsider`",
+            "exact `surface`",
+            '`record(kind="surface")`',
         ):
             self.assertIn(required, text, required)
 
-    def test_primary_states_no_status_preflight(self):
-        self.assertIn("No status preflight is required", _text(PRIMARY))
-
-    def test_primary_states_hooks_are_optional(self):
-        text = _text(PRIMARY).lower()
+    def test_router_states_hooks_are_optional(self):
+        text = _text(ROUTER).lower()
         self.assertIn("hooks are optional", text)
-        self.assertIn("never", text)
+        self.assertIn("never record", text)
 
-    def test_primary_rejects_retired_campaign_language(self):
-        text = _text(PRIMARY).lower()
-        for phrase in ("campaign", "continuation", "question class", "phase 4"):
-            self.assertNotIn(phrase, text, phrase)
+    def test_router_marks_reconsider_as_after_edit(self):
+        text = _text(ROUTER).lower()
+        self.assertIn("after editing", text)
+        self.assertIn("before editing", text)
 
 
 class SpecializedSkillTest(unittest.TestCase):
-    def test_change_context_defers_to_primary(self):
-        text = _text(CHANGE)
-        self.assertIn("Span skill", text)
-        self.assertIn("reassess", text)
-        self.assertIn("record_update", text)
+    def test_after_change_skill_covers_reconsider(self):
+        text = _text(AFTER)
+        self.assertIn("`reconsider`", text)
+        self.assertIn("REASSESSMENT_REQUIRED", text)
+        self.assertIn("CURRENT", text)
 
-    def test_document_skill_keeps_gap_ledger(self):
-        text = _text(DOCUMENT)
-        self.assertIn("gap ledger", text.lower())
-        self.assertIn("understand_retrieve", text)
-        self.assertIn("evidence_start", text)
+    def test_before_read_skill_covers_surface_and_continuation(self):
+        text = _text(BEFORE)
+        self.assertIn("AmbiguousSurface", text)
+        self.assertIn("continuation", text)
+        self.assertIn("`ask`", text)
 
-    def test_specialties_do_not_restate_the_full_closeout(self):
-        for path in (CHANGE, DOCUMENT):
-            text = _text(path)
-            self.assertLess(len(text), len(_text(PRIMARY)))
+    def test_record_skill_covers_all_three_kinds(self):
+        text = _text(RECORD)
+        self.assertIn('kind="understanding"', text)
+        self.assertIn('kind="verification"', text)
+        self.assertIn('kind="surface"', text)
 
 
 class SkillLifecycleConsistencyTest(unittest.TestCase):
     def test_every_operation_is_known(self):
+        allowed = (
+            CANONICAL_OPS
+            | RETIRED_OPS
+            | {
+                "repository_id",
+                "context_id",
+                "request_id",
+                "version",
+                "understanding_id",
+                "observation_id",
+                "invalidated",
+                "unverifiable",
+                "unassessed",
+                "no_match",
+                "kind",
+                "surface",
+                "actions",
+                "create",
+                "add",
+                "confirm",
+                "correct",
+                "replace",
+                "withdraw",
+                "challenge_dispositions",
+                "expected_boundary_version",
+                "expected_version",
+            }
+        )
         for path in SKILLS:
             text = _text(path)
             for name in set(re.findall(r"`([a-z_]+)`", text)):
                 if "_" not in name:
                     continue
-                allowed = (
-                    CANONICAL_OPS
-                    | RETIRED_OPS
-                    | {
-                        "repository_id",
-                        "context_id",
-                        "submission_id",
-                        "version",
-                        "understanding_id",
-                        "observation_id",
-                    }
-                )
                 self.assertIn(name, allowed, f"{path}: {name}")
 
     def test_skills_are_self_contained(self):
@@ -205,6 +207,31 @@ class SkillLifecycleConsistencyTest(unittest.TestCase):
             text = _text(path)
             self.assertIn("docs/", text, path)
             self.assertIn("span", text.lower(), path)
+
+    def test_json_examples_decode_through_the_mcp_wire(self):
+        """A skill example that the server would reject is a guidance defect."""
+        import json as _json
+
+        from span.shell.mcp.wire import decode_request
+
+        for path in SKILLS:
+            text = _text(path)
+            for block in re.findall(r"```json\n(.*?)```", text, re.S):
+                try:
+                    payload = _json.loads(block)
+                except ValueError as exc:
+                    self.fail(f"{path} has invalid JSON: {exc}")
+                keys = set(payload)
+                if {"changed_paths", "challenge"} & keys:
+                    tool = "reconsider"
+                elif "kind" in keys:
+                    tool = "record"
+                else:
+                    tool = "ask"
+                try:
+                    decode_request(tool, payload)
+                except ValueError as exc:
+                    self.fail(f"{path}: example does not decode as {tool}: {exc}")
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ as a semantic omission by deterministic comparison alone.
 
 ## Reading and recording
 
-Snapshot retrieval, `reassess`, new recording, and verification qualification
+Snapshot retrieval, `ask`, new recording, and verification qualification
 use the owning support service and pure core rules. A provider/store failure
 is operational failure, not an invented support state. After an accepted
 record, a qualification failure is `SupportUnavailable` beside the durable
@@ -46,12 +46,12 @@ receipt; it must not be reported as a rejected write.
 
 After a relevant edit, investigate the affected explanation, admit current
 evidence, and record the appropriate update with its basis. A new immutable
-version preserves history. `reassess` checks currency; it does not reinterpret,
+version preserves history. `ask` checks currency; it does not reinterpret,
 execute tests, or settle a challenge. Gaps and disputes remain explicit.
 
 ## Independent runs
 
-`verification_support` checks the source observations tied to a saved run,
+`ask` returns each saved run with its live qualification,
 including dirty-tree changes without a new commit. The run's
 `PASS`/`FAIL`/`INCONCLUSIVE` outcome remains historical fact. Current support
 for a failed run means the failure evidence still applies; it does not mean

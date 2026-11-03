@@ -2,8 +2,8 @@
 
 ``span-mcp --repo`` registers repository identity before serving MCP. It must
 not provision, open a store, or build structural state. Contexts open lazily
-on the first repository-scoped call, and explicit ``initialize_repository``
-still provisions through the injected provisioner.
+on the first repository-scoped call. Setup is owned by the installer, not a
+public lifecycle tool.
 """
 
 from __future__ import annotations
@@ -59,13 +59,13 @@ def _open(tmp: str) -> tuple[pathlib.Path, ServiceContext]:
     return data, context
 
 
-def _start(adapter: McpAdapter):
+def _ask(adapter: McpAdapter):
     return adapter.dispatch(
-        "start_context",
+        "ask",
         {
             "repository_id": REPO,
-            "request_id": {"value": "req-startup"},
-            "scope": {"paths": [], "evidence_refs": []},
+            "request_id": "req-startup",
+            "reference": "README.md",
             "question": "What does the service do?",
         },
     )
@@ -112,8 +112,8 @@ class StartupRegistrationTest(unittest.TestCase):
         loader.assert_not_called()
         self.assertEqual(adapter.contexts, {})
         descriptions = {spec["name"]: spec["description"] for spec in listed}
-        self.assertIn(REPO, descriptions["understand_question"])
-        self.assertIn(REPO, descriptions["neighbors"])
+        for name in TOOL_NAMES:
+            self.assertIn(REPO, descriptions[name])
 
     def test_cs03_first_repository_request_opens_once(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -123,27 +123,20 @@ class StartupRegistrationTest(unittest.TestCase):
             adapter = McpAdapter(context_loader=loader)
             adapter.register_repository_locator(REPO, "/tmp/startup-svc")
 
-            first = _start(adapter)
+            first = _ask(adapter)
             self.assertFalse(first.is_error, first.content)
             loader.assert_called_once_with("/tmp/startup-svc")
 
-            second = _start(adapter)
+            second = _ask(adapter)
             self.assertFalse(second.is_error, second.content)
             loader.assert_called_once_with("/tmp/startup-svc")
             self.assertIs(adapter.contexts[REPO], context)
 
-    def test_cs04_explicit_initialization_still_provisions(self):
+    def test_cs04_initialize_repository_is_not_public(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, context = _open(tmp)
             self.addCleanup(context.store.close)
-            result = m.InitializeRepositoryResult(
-                repository_id=REPO,
-                canonical_root=context.root,
-                schema_version=10,
-                store_ready=True,
-                structural_status="index:CURRENT",
-            )
-            provisioner = mock.Mock(return_value=(context, result))
+            provisioner = mock.Mock()
             adapter = McpAdapter(provisioner=provisioner)
 
             dispatched = adapter.dispatch(
@@ -151,41 +144,29 @@ class StartupRegistrationTest(unittest.TestCase):
                 {"repository_locator": "/tmp/startup-svc"},
             )
 
-            self.assertFalse(dispatched.is_error, dispatched.content)
-            provisioner.assert_called_once()
-            self.assertIs(adapter.contexts[REPO], context)
+            self.assertTrue(dispatched.is_error)
             payload = json.loads(dispatched.content)
-            self.assertTrue(payload["store_ready"])
+            self.assertEqual(payload["kind"], "removed")
+            provisioner.assert_not_called()
 
-    def test_cs05_provisioning_replaces_lazy_state(self):
+    def test_cs05_provisioning_is_installer_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, lazy = _open(tmp)
             self.addCleanup(lazy.store.close)
-            provisioned = lazy
             loader = mock.Mock(return_value=lazy)
-            result = m.InitializeRepositoryResult(
-                repository_id=REPO,
-                canonical_root=lazy.root,
-                schema_version=10,
-                store_ready=True,
-                structural_status="index:CURRENT",
-            )
-            adapter = McpAdapter(
-                context_loader=loader,
-                provisioner=mock.Mock(return_value=(provisioned, result)),
-            )
+            adapter = McpAdapter(context_loader=loader)
             adapter.register_repository_locator(REPO, "/tmp/startup-svc")
 
             initialized = adapter.dispatch(
                 "initialize_repository",
                 {"repository_locator": "/tmp/startup-svc"},
             )
-            self.assertFalse(initialized.is_error, initialized.content)
+            self.assertTrue(initialized.is_error)
 
-            dispatched = _start(adapter)
+            dispatched = _ask(adapter)
             self.assertFalse(dispatched.is_error, dispatched.content)
-            loader.assert_not_called()
-            self.assertIs(adapter.contexts[REPO], provisioned)
+            loader.assert_called_once_with("/tmp/startup-svc")
+            self.assertIs(adapter.contexts[REPO], lazy)
 
     def test_cs06_tools_list_performs_no_repository_io(self):
         from span.shell import mcp_server

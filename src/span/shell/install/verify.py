@@ -7,7 +7,6 @@ import shutil
 from pathlib import Path
 
 from span.shell.install.host_inspect import (
-    inspect_claude_registration,
     inspect_codex_registration,
     inspect_opencode_registration,
 )
@@ -64,22 +63,22 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     selected_config = opencode_config
     if selected_config is None and Path("opencode.json").exists():
         selected_config = "opencode.json"
-    span_cmd = expected_span_command(
-        resolved if resolved is not None else "span-mcp", data_dir, repos
+    opencode_state = inspect_opencode_registration(
+        selected_config,
+        expected_span_command(
+            resolved if resolved is not None else "span-mcp",
+            data_dir,
+            repos,
+            host="opencode",
+        ),
     )
-    opencode_state = inspect_opencode_registration(selected_config, span_cmd)
     codex_state = inspect_codex_registration()
-    claude_state = inspect_claude_registration(span_cmd)
     print(f"opencode registration: {opencode_state['status']}")
     if opencode_state.get("reason"):
         print(f"  {opencode_state['reason']}")
     print(
         f"codex registration: {codex_state['status']} "
         f"({codex_state.get('reason', '')})"
-    )
-    print(
-        f"claude registration: {claude_state['status']} "
-        f"({claude_state.get('config', '')})"
     )
     report = verify_installation(venv_python, data_dir, repos, dry_run)
     print(f"runtime verification: span-mcp={resolved}")
@@ -93,5 +92,4 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         "store_readiness": report,
         "opencode_registration": opencode_state,
         "codex_registration": codex_state,
-        "claude_registration": claude_state,
     }

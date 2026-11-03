@@ -12,6 +12,7 @@ import hashlib
 import json
 import pathlib
 import sqlite3
+
 import subprocess
 import sys
 import tempfile
@@ -207,6 +208,253 @@ def _legacy_store(
     return path
 
 
+def _schema10_store(
+    path: pathlib.Path, root: pathlib.Path, *, unresolved: bool = False
+) -> pathlib.Path:
+    """Build one real schema-11 store, then present its schema-10 shape."""
+    from span.core.recording import create_challenge
+    from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+    from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "src").mkdir(exist_ok=True)
+    (root / "src/a.py").write_text("a\n", encoding="utf-8")
+    store = LifecycleStore(
+        path, retention=DEFAULT_LIFECYCLE_RETENTION, clock=lambda: NOW
+    )
+    store.register_repository("demo", str(root))
+    store.put_source_observation(
+        m.SourceObservation(
+            observation_id=m.SourceObservationId("obs-a"),
+            repository_id="demo",
+            evidence=m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-a"),
+                repository_id="demo",
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/a.py",
+                revision_or_fingerprint="sha256:a",
+            ),
+            content_digest=m.ContentDigest("sha256:a"),
+            captured_at=NOW,
+            total_lines=1,
+            whole_file=True,
+            excerpt="a",
+        )
+    )
+    for context_id, request_id in (("ctx-1", "req-1"), ("ctx-2", "req-2")):
+        store.put_context(
+            m.InvestigationContext(
+                context_id=m.InvestigationContextId(context_id),
+                repository_id="demo",
+                request_id=m.RequestId(request_id),
+                request_digest=m.ContentDigest(f"sha256:{request_id}"),
+                origin=m.ContextOrigin.QUESTION,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+                created_at=NOW,
+                expires_at=NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime,
+                question="What does A do?",
+            )
+        )
+    basis = m.SemanticBasis(
+        derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
+        summary="read",
+        input_refs=(),
+    )
+    store.record_understanding(
+        m.CreateUnderstandingCommand(
+            identity=m.RecordingIdentity(
+                repository_id="demo",
+                request_id=m.RequestId("req-1"),
+                context_id=m.InvestigationContextId("ctx-1"),
+            ),
+            surface=m.SurfaceKey(
+                repository_id="demo",
+                kind=m.SurfaceKind.FILE,
+                locator="src/a.py",
+            ),
+            target=m.ContextBoundTarget(),
+            conclusions=(
+                m.ProposedConclusion(
+                    conclusion_id=m.ConclusionId("c-1"),
+                    statement="A is present.",
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                    support=(
+                        m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+                    ),
+                    basis=basis,
+                ),
+            ),
+            gaps=(m.GapDraft(question="Is A complete?", basis="not checked"),),
+        ),
+        understanding_id=m.UnderstandingId("u-1"),
+    )
+    store.create_challenge(
+        create_challenge(
+            challenge_id=m.ChallengeId("ch-1"),
+            understanding_id=m.UnderstandingId("u-1"),
+            target_version=m.UnderstandingVersionNumber(1),
+            target_conclusions=(
+                m.ConclusionRevisionRef(
+                    understanding_id=m.UnderstandingId("u-1"),
+                    conclusion_id=m.ConclusionId("c-1"),
+                    revision=m.ConclusionRevisionNumber(1),
+                ),
+            ),
+            reason="disputed",
+            evidence=(),
+            provenance="fixture",
+            now=NOW,
+        )
+    )
+    store.record_verification(
+        m.RecordVerificationCommand(
+            identity=m.RecordingIdentity(
+                repository_id="demo",
+                request_id=m.RequestId("req-2"),
+                context_id=m.InvestigationContextId("ctx-2"),
+            ),
+            run=m.ProposedVerificationRun(
+                repository_id="demo",
+                scope=m.VerificationScope(
+                    description="app",
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                ),
+                observations=(m.SourceObservationId("obs-a"),),
+                command="python3 -m unittest",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="fixture",
+            ),
+        )
+    )
+    if unresolved:
+        store.put_context(
+            m.InvestigationContext(
+                context_id=m.InvestigationContextId("ctx-3"),
+                repository_id="demo",
+                request_id=m.RequestId("req-3"),
+                request_digest=m.ContentDigest("sha256:req-3"),
+                origin=m.ContextOrigin.QUESTION,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(paths=("src/a.py", "src/b.py")),
+                created_at=NOW,
+                expires_at=NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime,
+                question="Which file owns this?",
+            )
+        )
+        store.record_understanding(
+            m.CreateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="demo",
+                    request_id=m.RequestId("req-3"),
+                    context_id=m.InvestigationContextId("ctx-3"),
+                ),
+                surface=m.SurfaceKey(
+                    repository_id="demo",
+                    kind=m.SurfaceKind.FILE,
+                    locator="src/a.py",
+                ),
+                target=m.ContextBoundTarget(),
+                conclusions=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-wide"),
+                        statement="Two files participate.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py", "src/b.py")),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-a")
+                            ),
+                        ),
+                        basis=basis,
+                    ),
+                ),
+            ),
+            understanding_id=m.UnderstandingId("u-wide"),
+        )
+    store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute("UPDATE meta SET value='10' WHERE key='schema_version'")
+        connection.execute("DROP TABLE surfaces")
+        connection.execute("DROP TABLE surface_boundary_versions")
+        connection.execute(
+            "CREATE TABLE understandings_old("
+            "understanding_id TEXT PRIMARY KEY, repository_id TEXT NOT NULL,"
+            " question TEXT NOT NULL, scope_json TEXT NOT NULL,"
+            " current_version INTEGER NOT NULL, canonical_json TEXT NOT NULL)"
+        )
+        for row in connection.execute(
+            "SELECT understanding_id, repository_id, question, scope_json,"
+            " current_version, canonical_json FROM understandings"
+        ).fetchall():
+            payload = json.loads(row[5])
+            payload.pop("surface", None)
+            connection.execute(
+                "INSERT INTO understandings_old VALUES(?,?,?,?,?,?)",
+                (*row[:5], json.dumps(payload, sort_keys=True)),
+            )
+        connection.execute("DROP TABLE understandings")
+        connection.execute("ALTER TABLE understandings_old RENAME TO understandings")
+        rows = connection.execute(
+            "SELECT understanding_id, version, canonical_json"
+            " FROM understanding_versions"
+        ).fetchall()
+        for understanding_id, version, canonical in rows:
+            payload = json.loads(canonical)
+            payload.pop("surface_boundary_version", None)
+            for gap in payload.get("gaps", []):
+                gap["$type"] = "Gap"
+            connection.execute(
+                "UPDATE understanding_versions SET canonical_json=?"
+                " WHERE understanding_id=? AND version=?",
+                (json.dumps(payload, sort_keys=True), understanding_id, version),
+            )
+        receipts = connection.execute(
+            "SELECT repository_id, canonical_json, replay_expires_at"
+            " FROM record_receipts"
+        ).fetchall()
+        connection.execute("DROP TABLE record_receipts")
+        connection.execute(
+            "CREATE TABLE record_receipts("
+            "repository_id TEXT NOT NULL, context_id TEXT NOT NULL,"
+            " submission_id TEXT NOT NULL, content_digest TEXT NOT NULL,"
+            " canonical_json TEXT NOT NULL, replay_expires_at TEXT,"
+            " PRIMARY KEY(repository_id, context_id, submission_id))"
+        )
+        for repository_id, canonical, expires in receipts:
+            payload = json.loads(canonical)
+            context_id = payload["identity"]["context_id"]["value"]
+            submission = payload["identity"]["request_id"]["value"]
+            payload["identity"] = {
+                "$type": "RecordingIdentity",
+                "repository_id": repository_id,
+                "context_id": {"$type": "InvestigationContextId", "value": context_id},
+                "submission_id": {"$type": "SubmissionId", "value": submission},
+            }
+            connection.execute(
+                "INSERT INTO record_receipts VALUES(?,?,?,?,?,?)",
+                (
+                    repository_id,
+                    context_id,
+                    submission,
+                    payload["content_digest"]["value"],
+                    json.dumps(payload, sort_keys=True),
+                    expires,
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+    return path
+
+
 def _config(
     root: pathlib.Path,
     data: pathlib.Path,
@@ -269,7 +517,7 @@ class InspectTest(unittest.TestCase):
             inspection = st.inspect_store(_config(root, data))
             self.assertFalse(inspection.exists)
             self.assertEqual(inspection.required_free_bytes, 0)
-            self.assertIn("explicit initialize_repository", inspection.limitations[0])
+            self.assertIn("explicit installer provisioning", inspection.limitations[0])
 
 
 class ApplyTest(unittest.TestCase):
@@ -295,7 +543,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "10")
+                self.assertEqual(version, "11")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -498,7 +746,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 10"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 11"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -512,6 +760,40 @@ class RecoveryTest(unittest.TestCase):
         data.mkdir()
         _legacy_store(data / "demo.db", seeds=(_seed(),))
         return root, data
+
+    def test_schema10_unresolved_scope_is_preserved_not_imported(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / "demo"
+            data = base / "data"
+            _schema10_store(data / "demo.db", root, unresolved=True)
+            report = st.apply(_config(root, data))
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            mapping_path = data / "transitions" / "demo" / "mapping.json"
+            mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+            self.assertGreaterEqual(mapping["counts"]["unresolved"], 1)
+            self.assertTrue(
+                any(item["source_id"] == "u-wide" for item in mapping["unresolved"]),
+            )
+            from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+            from span.shell.sqlite_store.lifecycle import (
+                LifecycleStore,
+                LifecycleStoreError,
+            )
+
+            store = LifecycleStore(
+                data / "demo.db", retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            try:
+                with self.assertRaises(LifecycleStoreError):
+                    store.get_understanding("u-wide")
+                self.assertEqual(
+                    store.get_understanding("u-1").surface.locator, "src/a.py"
+                )
+            finally:
+                store.close()
 
     def test_interruption_after_archive_resumes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -737,6 +1019,52 @@ class InstallerCommandTest(unittest.TestCase):
                 before, hashlib.sha256((data / "demo.db").read_bytes()).hexdigest()
             )
             self.assertFalse((data / "transitions").exists())
+
+    def test_schema10_maps_surfaces_history_and_receipts(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / "demo"
+            data = base / "data"
+            source = _schema10_store(data / "demo.db", root)
+            inspection = st.inspect_store(_config(root, data))
+            self.assertEqual(inspection.schema_version, 10)
+            report = st.apply(_config(root, data))
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            mapping_path = data / "transitions" / "demo" / "mapping.json"
+            self.assertTrue(mapping_path.is_file())
+            mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+            self.assertEqual(mapping["counts"]["unresolved"], 0)
+            self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
+            self.assertEqual(st._read_schema_version_ro(source), 11)
+            from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+            from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+            store = LifecycleStore(
+                data / "demo.db", retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            try:
+                understanding = store.get_understanding("u-1")
+                self.assertEqual(understanding.surface.locator, "src/a.py")
+                self.assertEqual(understanding.surface.kind, m.SurfaceKind.FILE)
+                self.assertEqual(len(store.get_version("u-1", 1).conclusions), 1)
+                self.assertEqual(len(store.get_version("u-1", 1).gaps), 1)
+                self.assertEqual(len(store.get_challenges("u-1")), 1)
+                self.assertEqual(
+                    store.get_verification_run("run:ctx-2:req-2").run_id.value,
+                    "run:ctx-2:req-2",
+                )
+                receipt = store.get_receipt(
+                    m.RecordingKey(
+                        repository_id="demo", request_id=m.RequestId("req-1")
+                    )
+                )
+                self.assertIsNotNone(receipt)
+                assert receipt is not None
+                self.assertEqual(receipt.identity.context_id.value, "ctx-1")
+            finally:
+                store.close()
 
 
 if __name__ == "__main__":

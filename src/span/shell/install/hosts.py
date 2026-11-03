@@ -54,6 +54,90 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
     }
 
 
+def deploy_opencode_plugin(
+    plugin_source,
+    plugin_dir,
+    config_path,
+    hook_bin,
+    data_dir,
+    dry_run=False,
+):
+    """Deploy the FD-58 notice plugin outside any target and register it.
+
+    The plugin lives under Span's own data root; the host configuration gains
+    one ``plugins`` entry. No target repository is written. The wrapper beside
+    the plugin pins the hook binary and data directory, so the plugin does not
+    depend on PATH.
+    """
+    print(f"+ deploy opencode plugin: {plugin_dir}")
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    source = Path(plugin_source)
+    if not source.is_file():
+        raise SystemExit(f"opencode plugin source missing: {source}")
+    target_dir = Path(plugin_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target_dir / "index.js")
+    wrapper = target_dir / "span-hooks"
+    wrapper.write_text(
+        f'#!/bin/sh\nexec "{hook_bin}" --data-dir "{data_dir}" "$@"\n',
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    path = Path(config_path)
+    config: dict[str, object] = {}
+    if path.is_file():
+        try:
+            config = json.loads(path.read_text())
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"cannot read opencode config {config_path}: {exc}")
+    plugins = config.get("plugins")
+    if not isinstance(plugins, list):
+        plugins = []
+    entry = str(target_dir)
+    if entry not in plugins:
+        plugins.append(entry)
+    config["plugins"] = plugins
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2) + "\n")
+    print(f"opencode plugin registered: {path}")
+    return {"status": "wired", "plugin": str(target_dir), "config": str(path)}
+
+
+def remove_opencode_plugin(config_path, plugin_dir, dry_run=False):
+    """Remove the FD-58 plugin directory and its one ``plugins`` entry.
+
+    Foreign plugins and every other configuration key are preserved. A missing
+    entry or directory is already uninstalled.
+    """
+    print(f"+ remove opencode plugin: {plugin_dir}")
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    path = Path(config_path)
+    entry = str(Path(plugin_dir))
+    removed_entry = False
+    if path.is_file():
+        try:
+            config = json.loads(path.read_text())
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"cannot read opencode config {config_path}: {exc}")
+        plugins = config.get("plugins")
+        if isinstance(plugins, list) and entry in plugins:
+            config["plugins"] = [item for item in plugins if item != entry]
+            path.write_text(json.dumps(config, indent=2) + "\n")
+            removed_entry = True
+    directory = Path(plugin_dir)
+    removed_dir = False
+    if directory.is_dir():
+        shutil.rmtree(directory)
+        removed_dir = True
+    return {
+        "status": "removed" if (removed_entry or removed_dir) else "absent",
+        "config": str(path),
+        "plugin": str(directory),
+    }
+
+
 def remove_opencode_registration(config_path, dry_run=False):
     """Remove only Span's own ``mcp.servers.span`` registration.
 
@@ -97,55 +181,6 @@ def register_codex(span_cmd, dry_run=False):
         print(f"codex registration failed, continuing: {exc}")
         return {"status": "failed", "error": str(exc)}
     return {"status": "registered"}
-
-
-def register_claude(span_cmd, dry_run=False):
-    """Register Span with Claude Code at user scope.
-
-    Claude Code owns its registration format, so the supported surface is
-    its CLI rather than a config file Span writes itself. User scope makes
-    the server available in every project instead of binding it to the
-    directory the installer happened to run in.
-
-    Span owns the ``span`` entry, so an existing one is removed before it
-    is re-added: that is convergence on the exact command, and it never
-    touches another server.
-    """
-    if shutil.which("claude") is None:
-        print("claude CLI absent; skipping claude registration.")
-        return {"status": "skipped", "reason": "claude CLI absent"}
-    if dry_run:
-        print("+ register claude (dry-run, skipped)")
-        return {"status": "skipped", "reason": "dry-run"}
-    # Absent entry is the normal first-install case; a non-zero exit
-    # here is expected and carries no signal.
-    subprocess.run(
-        ["claude", "mcp", "remove", "span", "--scope", "user"],
-        capture_output=True,
-        text=True,
-    )
-    try:
-        _run(
-            [
-                "claude",
-                "mcp",
-                "add",
-                "--scope",
-                "user",
-                "--transport",
-                "stdio",
-                "span",
-                "--",
-            ]
-            + span_cmd,
-            dry_run=dry_run,
-        )
-    except SystemExit as exc:
-        # A broken Claude configuration is outside Span: warn and
-        # continue instead of aborting the whole install.
-        print(f"claude registration failed, continuing: {exc}")
-        return {"status": "failed", "error": str(exc)}
-    return {"status": "registered", "scope": "user"}
 
 
 def _hook_bin(venv_dir, bin_dir):
@@ -213,92 +248,6 @@ def wire_codex_hooks(hook_bin, dry_run=False):
     return {"status": "wired", "added": added}
 
 
-def wire_claude_hooks(hook_bin, data_dir, dry_run=False):
-    """Append report-only span entries to Claude Code's user settings.
-
-    Uses the same three lifecycle events the Claude-style adapter maps:
-    ``SessionStart``, post-edit ``PostToolUse``, and ``Stop``. Only the
-    ``hooks`` key is touched; every other setting and every foreign hook
-    entry is preserved, and the file is backed up before the first write.
-
-    ``--data-dir`` is part of every command: without it the runner falls
-    back to the platform default and would inspect a different store than
-    the one this install registered.
-    """
-    settings_path = Path(os.path.expanduser("~")) / ".claude" / "settings.json"
-    print(f"+ wire claude hooks: {settings_path}")
-    if dry_run:
-        return {"status": "skipped", "reason": "dry-run"}
-    if not settings_path.exists():
-        print("no claude settings.json; skipping claude hook wiring.")
-        return {"status": "skipped", "reason": "no claude settings.json"}
-    try:
-        config = json.loads(settings_path.read_text())
-    except ValueError as exc:
-        raise SystemExit(f"cannot parse claude settings.json: {exc}")
-    backup = settings_path.with_suffix(".json.bak-span")
-    if not backup.exists():
-        shutil.copy2(settings_path, backup)
-        print(f"claude settings backed up: {backup}")
-    entries = [
-        (
-            "SessionStart",
-            "startup|resume|compact",
-            [hook_bin, "session-start", "--data-dir", str(data_dir)],
-        ),
-        (
-            "PostToolUse",
-            "Write|Edit|MultiEdit",
-            [hook_bin, "source-changed", "--data-dir", str(data_dir)],
-        ),
-        ("Stop", "", [hook_bin, "session-stop", "--data-dir", str(data_dir)]),
-    ]
-    added = 0
-    hooks = config.setdefault("hooks", {})
-    for event, matcher, cmd in entries:
-        command = " ".join(cmd)
-        group = hooks.setdefault(event, [])
-        # Span owns every command that invokes this hook binary, so an
-        # older Span entry is replaced instead of accumulating beside the
-        # new one. Foreign commands and foreign matchers are untouched.
-        kept_blocks = []
-        for block in group:
-            block_hooks = block.get("hooks", [])
-            kept = [
-                hook
-                for hook in block_hooks
-                if str(hook.get("command", "")).split()[:1] != [hook_bin]
-            ]
-            if kept:
-                block = {**block, "hooks": kept}
-                kept_blocks.append(block)
-        group[:] = kept_blocks
-        duplicate = any(
-            block.get("matcher", "") == matcher
-            and any(h.get("command", "") == command for h in block.get("hooks", []))
-            for block in group
-        )
-        if duplicate:
-            continue
-        group.append(
-            {
-                "matcher": matcher,
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": command,
-                        "timeout": 10,
-                        "statusMessage": "Span lifecycle notice",
-                    }
-                ],
-            }
-        )
-        added += 1
-    settings_path.write_text(json.dumps(config, indent=2) + "\n")
-    print(f"claude hooks updated ({added} entries).")
-    return {"status": "wired", "added": added}
-
-
 def remove_codex_registration(dry_run=False):
     """Remove the Span entry through the Codex CLI when it is present."""
     if shutil.which("codex") is None:
@@ -310,22 +259,6 @@ def remove_codex_registration(dry_run=False):
     )
     if proc.returncode != 0:
         # An absent entry is the normal already-uninstalled case.
-        return {"status": "absent"}
-    return {"status": "removed"}
-
-
-def remove_claude_registration(dry_run=False):
-    """Remove the Span entry through the Claude Code CLI when present."""
-    if shutil.which("claude") is None:
-        return {"status": "absent", "reason": "claude CLI absent"}
-    if dry_run:
-        return {"status": "skipped", "reason": "dry-run"}
-    proc = subprocess.run(
-        ["claude", "mcp", "remove", "span", "--scope", "user"],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
         return {"status": "absent"}
     return {"status": "removed"}
 
@@ -397,11 +330,4 @@ def _remove_span_hooks(path, dry_run=False):
 def remove_codex_hooks(dry_run=False):
     return _remove_span_hooks(
         Path(os.path.expanduser("~")) / ".codex" / "hooks.json", dry_run=dry_run
-    )
-
-
-def remove_claude_hooks(dry_run=False):
-    return _remove_span_hooks(
-        Path(os.path.expanduser("~")) / ".claude" / "settings.json",
-        dry_run=dry_run,
     )

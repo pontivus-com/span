@@ -17,14 +17,9 @@ from typing import cast as _cast
 
 from span.core import model as m
 from span.core.recording import RecordingConflict, RecordingValidationError
+from span.core.rejection import Rejection
 from span.core.schema import record_wire as _rw
 from span.ports.structural import StaleContinuationError
-from span.service.navigation import (
-    SemanticStructuralLocateRequest,
-    SemanticStructuralNeighborsRequest,
-)
-from span.service import locate as locate_operation
-from span.service import neighbors as neighbors_operation
 from span.shell.mcp.models import ServiceContext, ToolResult
 from span.shell.mcp.schemas import REMOVED_TOOLS, TOOL_REQUEST_TYPES
 from span.shell.mcp.wire import (
@@ -38,6 +33,7 @@ from span.shell.mcp.wire import (
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStoreError,
     SchemaVersionError,
+    UnknownRepository,
 )
 
 try:  # Shell-owned provider-error mapping; the port gains no new result.
@@ -46,6 +42,8 @@ except Exception:  # pragma: no cover - import-time fallback
     GraftUnavailableError = None  # type: ignore[assignment,misc]
 
 __all__ = ["McpAdapter"]
+
+_RESULT_UNION_TOOLS = frozenset({"record", "reconsider"})
 
 
 @_dataclass
@@ -114,8 +112,6 @@ class McpAdapter:
                 f"{tool_name} was removed in 0.9.0",
                 REMOVED_TOOLS[tool_name],
             )
-        if tool_name == "initialize_repository":
-            return self._dispatch_init(arguments)
         if tool_name not in TOOL_REQUEST_TYPES:
             return encode_error("unknown_tool", f"unknown tool: {tool_name}")
         try:
@@ -130,7 +126,7 @@ class McpAdapter:
             return encode_error(
                 "unavailable",
                 str(exc),
-                "call initialize_repository in a setup session",
+                "run the installer to bind this repository",
             )
         try:
             outcome = _call_operation(tool_name, request, context)
@@ -140,10 +136,16 @@ class McpAdapter:
                 f"{exc}; restart the listing from page one with " "page_token null",
             )
         except RecordingConflict as exc:
-            return encode_error("conflict", str(exc))
+            if tool_name in _RESULT_UNION_TOOLS:
+                return _encoded_result(_rejected(request, exc))
+            return encode_error(exc.cause_kind.value, str(exc))
         except RecordingValidationError as exc:
-            return encode_error(_validation_kind(str(exc)), str(exc))
+            if tool_name in _RESULT_UNION_TOOLS:
+                return _encoded_result(_rejected(request, exc))
+            return encode_error(exc.cause_kind.value, str(exc))
         except SchemaVersionError as exc:
+            if tool_name in _RESULT_UNION_TOOLS:
+                return _encoded_result(_unavailable(tool_name, exc))
             return encode_error(
                 "unavailable",
                 str(exc),
@@ -151,8 +153,12 @@ class McpAdapter:
                 "--transition-phase inspect` for the offline transition",
             )
         except LifecycleStoreError as exc:
+            if tool_name in _RESULT_UNION_TOOLS:
+                return _encoded_result(_unavailable(tool_name, exc))
             return encode_error("rejected", str(exc))
         except ValueError as exc:
+            if tool_name in _RESULT_UNION_TOOLS:
+                return _encoded_result(_rejected(request, exc))
             return encode_error("rejected", str(exc))
         except Exception as exc:  # noqa: BLE001 - typed provider boundary
             if GraftUnavailableError is not None and isinstance(
@@ -162,115 +168,69 @@ class McpAdapter:
             raise
         return _encoded_result(outcome)
 
-    def _dispatch_init(self, arguments: dict[str, object]) -> ToolResult:
-        try:
-            request = decode_request("initialize_repository", arguments)
-        except ValueError as exc:
-            return encode_error(
-                "ingress", f"invalid initialize_repository arguments: {exc}"
-            )
-        if self.provisioner is None:
-            return encode_error(
-                "unavailable",
-                "initialize_repository needs a provisioned server data " "directory",
-            )
-        try:
-            context, result = self.provisioner(
-                _cast(m.InitializeRepositoryRequest, request)
-            )
-        except SchemaVersionError as exc:
-            return encode_error(
-                "unavailable",
-                str(exc),
-                "run `span-install --transition-store <repository-id> "
-                "--transition-phase inspect`",
-            )
-        except ValueError as exc:
-            return encode_error("rejected", str(exc))
-        self.register(result.repository_id, context)
-        return _encoded_result(result)
+
+_TRANSITION_RECOVERY = (
+    "run `span-install --transition-store <repository-id> "
+    "--transition-phase inspect` for the offline transition"
+)
 
 
-def _validation_kind(message: str) -> str:
-    lowered = message.lower()
-    if "not current" in lowered or "drift" in lowered:
-        return "source_drift"
-    return "validation"
+def _request_identity(request: object) -> str:
+    """The exact caller identity a rejection names."""
+    if isinstance(request, m.ReconsiderRequest):
+        challenge = request.challenge
+        if challenge is None:
+            return request.repository_id
+        return (
+            f"{request.repository_id}/{challenge.request_id}/"
+            f"{challenge.understanding_id}"
+        )
+    if isinstance(request, m.AskRequest):
+        return f"{request.repository_id}/{request.request_id or 'continuation'}"
+    if isinstance(request, _rw.RecordRequestWire):
+        identity = request.identity
+        base = f"{identity.repository_id}/{identity.request_id}"
+        if request.understanding_id is not None:
+            return f"{base}/{request.understanding_id}"
+        return base
+    return "unknown"
+
+
+def _rejected(request: object, exc: Exception) -> m.Rejected:
+    """Copy the typed rejection; never classify a message or extract a version."""
+    rejection = exc if isinstance(exc, Rejection) else Rejection(str(exc))
+    return m.Rejected(
+        identity=_request_identity(request),
+        required_action=rejection.required_action,
+        cause_kind=rejection.cause_kind,
+        cause=rejection.cause,
+        current_version=rejection.current_version,
+        current_boundary_version=rejection.current_boundary_version,
+    )
+
+
+def _unavailable(operation: str, exc: Exception) -> m.Unavailable:
+    if isinstance(exc, SchemaVersionError):
+        recovery = _TRANSITION_RECOVERY
+    elif isinstance(exc, UnknownRepository):
+        recovery = "run the installer to bind this repository"
+    else:
+        recovery = "read the named operational state, then retry"
+    return m.Unavailable(
+        operation=operation,
+        failure=str(exc),
+        recovery=recovery,
+    )
 
 
 def _call_operation(tool_name: str, request: object, context: ServiceContext) -> object:
     """Project one tool name onto exactly one canonical service operation."""
-    if tool_name == "start_context":
-        return context.lifecycle.start_context(_cast(m.StartContextRequest, request))
-    if tool_name == "understand_question":
-        return context.understand.question(_cast(m.UnderstandQuestionRequest, request))
-    if tool_name == "understand_retrieve":
-        return context.understand.retrieve(_cast(m.RetrieveRequest, request))
-    if tool_name == "reassess":
-        reassess = _cast(m.ReassessRequest, request)
-        _require_same_repository(context, reassess.repository_id, "understanding")
-        return context.support.evaluate_version(
-            reassess.understanding_id, reassess.version
-        )
-    if tool_name == "verification_support":
-        verification = _cast(m.VerificationSupportRequest, request)
-        _require_same_repository(
-            context, verification.repository_id, "verification run"
-        )
-        return context.support.evaluate_verification(verification.run_id)
-    if tool_name == "evidence_start":
-        return context.evidence_service.start(_cast(m.EvidenceStartRequest, request))
-    if tool_name == "evidence_extend":
-        return context.evidence_service.extend(_cast(m.EvidenceExtendRequest, request))
-    if tool_name == "record_create":
-        return context.lifecycle.qualify_understanding(
-            context.lifecycle.create(_cast(_rw.RecordCreateWire, request))
-        )
-    if tool_name == "record_add":
-        return context.lifecycle.qualify_understanding(
-            context.lifecycle.add(_cast(_rw.RecordAddWire, request))
-        )
-    if tool_name == "record_confirm":
-        return context.lifecycle.qualify_understanding(
-            context.lifecycle.confirm(_cast(_rw.RecordConfirmWire, request))
-        )
-    if tool_name == "record_correct":
-        return context.lifecycle.qualify_understanding(
-            context.lifecycle.correct(_cast(_rw.RecordCorrectWire, request))
-        )
-    if tool_name == "record_replace":
-        return context.lifecycle.qualify_understanding(
-            context.lifecycle.replace(_cast(_rw.RecordReplaceWire, request))
-        )
-    if tool_name == "record_withdraw":
-        return context.lifecycle.qualify_understanding(
-            context.lifecycle.withdraw(_cast(_rw.RecordWithdrawWire, request))
-        )
-    if tool_name == "record_challenge":
-        return context.lifecycle.qualify_challenge(
-            context.lifecycle.challenge(_cast(_rw.RecordChallengeWire, request))
-        )
-    if tool_name == "record_update":
-        return context.lifecycle.qualify_understanding(
-            context.lifecycle.update(_cast(_rw.RecordUpdateWire, request))
-        )
-    if tool_name == "record_verification":
-        return context.lifecycle.qualify_verification(
-            context.lifecycle.verification(_cast(_rw.RecordVerificationWire, request))
-        )
-    if tool_name == "locate":
-        return locate_operation(
-            _cast(SemanticStructuralLocateRequest, request),
-            structural=context.structural,
-            evidence=context.evidence,
-            store=context.store,
-        )
-    if tool_name == "neighbors":
-        return neighbors_operation(
-            _cast(SemanticStructuralNeighborsRequest, request),
-            structural=context.structural,
-            store=context.store,
-        )
+    if tool_name == "ask":
+        return context.answer.ask(_cast(m.AskRequest, request))
+    if tool_name == "record":
+        return context.lifecycle.record(_cast(_rw.RecordRequestWire, request))
+    if tool_name == "reconsider":
+        return context.reconsider.reconsider(_cast(m.ReconsiderRequest, request))
     raise RoutingError(f"unknown tool: {tool_name}")
 
 

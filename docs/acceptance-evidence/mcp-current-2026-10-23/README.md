@@ -1,4 +1,9 @@
-# Current MCP session — 2026-10-23
+# Historical MCP session — 2026-10-23
+
+> **Historical/void for the current surface.** This capture predates the
+> three-tool `ask`/`record`/`reconsider` surface. It is retained as protocol
+> and product evidence for the candidate it actually exercised, not as proof of
+> the current API.
 
 Source: an external-client acceptance run against the installed `span-mcp`
 (eleven tools, compact wire), recorded 2026-10-23.

@@ -161,7 +161,7 @@ class StructuralSource(_typing.Protocol):
         a memory provider no-ops). Bounded: one attempt, then report.
         Failures return UNVERIFIABLE with a reason; never raise for
         build failure. Allowed only from explicit repository
-        provisioning (`initialize_repository`) and explicit semantic
+        provisioning (installer) and explicit semantic
         `refresh`. Forbidden from `status`, `explain`, `locate`,
         `neighbors`, hooks, background workers, and ordinary reads.
         """

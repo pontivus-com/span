@@ -43,7 +43,7 @@ workflow runs the same check weekly. Bump the pin only after verifying the
 upstream release against the structural fixtures.
 
 
-For the 0.9.0 beta, also run `python scripts/typecheck.py`: the configured
+For the current candidate, also run `python scripts/typecheck.py`: the configured
 mypy run and recorded baseline must both have zero errors. The pinned
 structural indexer is required for its integration lane; an indexer-version
 skip is deferred verification, not a full pass. Installed-process checks do

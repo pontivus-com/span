@@ -14,7 +14,7 @@ from span.ports.lifecycle import LifecycleStorePort
 from span.ports.evidence import EvidenceSource
 from span.ports.structural import StaleContinuationError
 from span.ports.structural import StructuralSource
-from span.service.bounds import resolve_bounds as _resolve_bounds
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.discovery import enumerate_target_inventory
 from span.service.operations.listing import listing_version
 from span.service.navigation import SemanticStructuralLocateRequest
@@ -29,6 +29,7 @@ def locate(
     structural: StructuralSource,
     evidence: EvidenceSource,
     store: LifecycleStorePort,
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> m.StructuralLocateResult:
     """Execute one structural locate (read-only, no persistence)."""
     try:
@@ -37,7 +38,7 @@ def locate(
         raise ValueError(
             f"repository not initialized: {request.repository_id}"
         ) from exc
-    bounds = _resolve_bounds(request.bounds, hook=False)
+    bounds = policy.default_query_bounds
     mode = request.mode
     if mode is m.StructuralLocateMode.SYMBOL:
         if not request.query or not request.query.strip():

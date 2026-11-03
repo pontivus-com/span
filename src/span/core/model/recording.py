@@ -1,4 +1,4 @@
-"""Recording identity, submission keys, and immutable acceptance receipts.
+"""Recording identity, request keys, and immutable acceptance receipts.
 
 Part of the canonical domain carrier package. Import through
 ``span.core.model`` rather than this module.
@@ -12,9 +12,9 @@ from dataclasses import dataclass as _dataclass
 
 from span.core.model.primitives import (
     ChallengeId,
+    ConclusionRevisionRef,
     InvestigationContextId,
     RequestId,
-    SubmissionId,
     UnderstandingId,
     UnderstandingVersionNumber,
     VerificationRunId,
@@ -34,11 +34,16 @@ class ContentDigest:
 
 @_dataclass(frozen=True)
 class RecordingIdentity:
-    """The caller-owned recording key components."""
+    """The caller-owned recording decision identity (FD-3).
+
+    ``request_id`` is the key. ``context_id`` is the evidence context the
+    request was made in; it is not part of the receipt key, so a replay is
+    decided by request identity and content digest alone.
+    """
 
     repository_id: str
+    request_id: RequestId
     context_id: InvestigationContextId
-    submission_id: SubmissionId
 
     def __post_init__(self) -> None:
         _require_non_empty("RecordingIdentity.repository_id", self.repository_id)
@@ -46,11 +51,10 @@ class RecordingIdentity:
 
 @_dataclass(frozen=True)
 class RecordingKey:
-    """The unique key of one recording submission."""
+    """The unique key of one recording decision: repository and request."""
 
     repository_id: str
-    context_id: InvestigationContextId
-    submission_id: SubmissionId
+    request_id: RequestId
 
     def __post_init__(self) -> None:
         _require_non_empty("RecordingKey.repository_id", self.repository_id)
@@ -79,6 +83,7 @@ class RecordReceipt:
     accepted_understanding_versions: tuple[UnderstandingVersionNumber, ...] = ()
     accepted_verification_run_ids: tuple[VerificationRunId, ...] = ()
     accepted_challenge_ids: tuple[ChallengeId, ...] = ()
+    dependent_effects: tuple[ConclusionRevisionRef, ...] = ()
     replay_expires_at: _datetime.datetime | None = None
 
     def __post_init__(self) -> None:

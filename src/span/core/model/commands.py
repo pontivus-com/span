@@ -6,6 +6,7 @@ Part of the canonical domain carrier package. Import through
 
 from __future__ import annotations
 
+import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
@@ -25,7 +26,27 @@ from span.core.model.primitives import (
 )
 from span.core.model.recording import RecordingIdentity
 from span.core.model.support import SupportDependency
+from span.core.model.surfaces import SurfaceKey, SurfaceReference
+from span.core.model.understanding import (
+    ReceiptRetrievalSelector,
+    UnderstandingSnapshotSelector,
+)
 from span.core.model.verification import ProposedVerificationRun
+
+
+class RecordKind(_enum.Enum):
+    """The three public record kinds: understanding, verification, surface."""
+
+    UNDERSTANDING = "understanding"
+    VERIFICATION = "verification"
+    SURFACE = "surface"
+
+
+class SurfaceAction(_enum.Enum):
+    """A surface declaration is either created or boundary-updated."""
+
+    CREATE = "create"
+    UPDATE = "update"
 
 
 @_dataclass(frozen=True)
@@ -61,7 +82,9 @@ class ConclusionContentDraft:
         _require_non_empty("ConclusionContentDraft.statement", self.statement)
         if not self.support:
             raise ValueError(
-                "a conclusion content draft requires at least one dependency"
+                "a conclusion requires at least one support dependency; pass an "
+                "AdmittedSourceSupportWire whose observation_id is the "
+                "observations[0].value from the preceding ask"
             )
 
 
@@ -182,8 +205,138 @@ class StartContextRequest:
 
 
 @_dataclass(frozen=True)
+class AskRequest:
+    """One scoped question, document view, exact reference, or continuation.
+
+    Exactly one of ``surface``, ``reference``, ``selector``, or
+    ``continuation`` is supplied. ``question`` is optional for surface and
+    reference forms; every other form rejects it.
+    """
+
+    repository_id: str
+    request_id: str | None = None
+    surface: SurfaceReference | None = None
+    reference: str | None = None
+    continuation: str | None = None
+    selector: UnderstandingSnapshotSelector | ReceiptRetrievalSelector | None = None
+    question: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("AskRequest.repository_id", self.repository_id)
+        forms = (
+            self.surface is not None,
+            self.reference is not None,
+            self.continuation is not None,
+            self.selector is not None,
+        )
+        if sum(forms) != 1:
+            raise ValueError(
+                "ask takes exactly one of surface, reference, selector, or "
+                "continuation"
+            )
+        if (self.surface is not None or self.reference is not None) and (
+            self.request_id is None
+        ):
+            raise ValueError("a surface or reference ask requires request_id")
+        if self.request_id is not None:
+            _require_non_empty("AskRequest.request_id", self.request_id)
+        if self.surface is not None:
+            if (
+                self.surface.repository_id is not None
+                and self.surface.repository_id != self.repository_id
+            ):
+                raise ValueError("AskRequest.surface must share the repository")
+        if self.reference is not None:
+            _require_non_empty("AskRequest.reference", self.reference)
+        if self.continuation is not None:
+            _require_non_empty("AskRequest.continuation", self.continuation)
+            if self.question is not None:
+                raise ValueError("a continuation form does not take a question")
+        if self.selector is not None:
+            if self.selector.repository_id != self.repository_id:
+                raise ValueError("AskRequest.selector must share the repository")
+            if self.question is not None:
+                raise ValueError("an exact-reference form does not take a question")
+        if self.question is not None:
+            _require_non_empty("AskRequest.question", self.question)
+
+
+@_dataclass(frozen=True)
+class ChallengeConclusionRef:
+    """One exact conclusion revision named by a public challenge."""
+
+    understanding_id: str
+    conclusion_id: str
+    revision: int
+
+    def __post_init__(self) -> None:
+        _require_non_empty(
+            "ChallengeConclusionRef.understanding_id", self.understanding_id
+        )
+        _require_non_empty("ChallengeConclusionRef.conclusion_id", self.conclusion_id)
+        if self.revision < 1:
+            raise ValueError("ChallengeConclusionRef.revision must be positive")
+
+
+@_dataclass(frozen=True)
+class ChallengeRaise:
+    """One explicit dispute raised through reconsider (L2 §4.3).
+
+    ``context_id`` is optional: the service derives it from the target version
+    and cited evidence when the caller does not supply a preceding context.
+    """
+
+    request_id: str
+    understanding_id: str
+    target_version: int
+    target_conclusions: tuple[ChallengeConclusionRef, ...]
+    reason: str
+    evidence: tuple[EvidenceRef, ...] = ()
+    context_id: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ChallengeRaise.request_id", self.request_id)
+        _require_non_empty("ChallengeRaise.understanding_id", self.understanding_id)
+        _require_non_empty("ChallengeRaise.reason", self.reason)
+        if self.target_version < 1:
+            raise ValueError("ChallengeRaise.target_version must be positive")
+        if not self.target_conclusions:
+            raise ValueError("a challenge requires at least one target conclusion")
+
+
+@_dataclass(frozen=True)
+class ReconsiderRequest:
+    """A changed scope to re-align, or one explicit challenge (FD-17, L2 §4.3).
+
+    Exactly one branch is supplied: a changed scope (``changed_paths`` and/or
+    ``changed_surfaces``) or a ``challenge`` raise. The two are never combined.
+    """
+
+    repository_id: str
+    changed_paths: tuple[str, ...] = ()
+    changed_surfaces: tuple[SurfaceKey, ...] = ()
+    challenge: ChallengeRaise | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ReconsiderRequest.repository_id", self.repository_id)
+        has_scope = bool(self.changed_paths or self.changed_surfaces)
+        if self.challenge is not None and has_scope:
+            raise ValueError(
+                "reconsideration takes a changed scope or a challenge, not both"
+            )
+        if not has_scope and self.challenge is None:
+            raise ValueError("reconsideration requires a changed scope or a challenge")
+        for path in self.changed_paths:
+            _require_non_empty("ReconsiderRequest.changed_paths", path)
+        for surface in self.changed_surfaces:
+            if surface.repository_id != self.repository_id:
+                raise ValueError("changed surfaces must share the repository")
+
+
+@_dataclass(frozen=True)
 class CreateUnderstandingCommand:
     identity: RecordingIdentity
+    surface: SurfaceKey
     target: UnderstandingTarget
     conclusions: tuple[ProposedConclusion, ...]
     gaps: tuple[GapDraft, ...] = ()
@@ -192,6 +345,8 @@ class CreateUnderstandingCommand:
     def __post_init__(self) -> None:
         if not self.conclusions:
             raise ValueError("a create command requires at least one conclusion")
+        if self.surface.repository_id != self.identity.repository_id:
+            raise ValueError("the surface must share the recording repository")
         ids = {item.conclusion_id for item in self.conclusions}
         if len(ids) != len(self.conclusions):
             raise ValueError("duplicate conclusion IDs in one create command")

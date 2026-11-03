@@ -7,6 +7,7 @@ and call them; the shell only enforces storage and clock effects.
 from __future__ import annotations
 
 import datetime as _datetime
+import hashlib as _hashlib
 
 from span.core.identity import payload_digest
 from span.core import model as _m
@@ -35,12 +36,14 @@ def evaluation(
     reason: str = "",
     *,
     dependencies: tuple[_s.SupportDependency, ...] = (),
+    findings: tuple[_s.DependencyFinding, ...] = (),
     limitations: tuple[str, ...] = (),
 ) -> _s.SupportEvaluation:
     return _s.SupportEvaluation(
         state=state,
         dependencies=dependencies,
         reason=reason,
+        findings=findings,
         observed_at=observed_at,
         limitations=limitations,
     )
@@ -52,10 +55,28 @@ def _fingerprint(value: str | None) -> str | None:
     return value.split(":", 1)[-1]
 
 
+def ranged_fingerprint(content: str, ranges: tuple[_m.SourceRange, ...]) -> str | None:
+    """Fingerprint the exact declared ranges, or None when they cannot bind.
+
+    A range that names lines beyond the present text cannot be evaluated as
+    that range; FD-18 requires the caller to fall back to the whole file
+    rather than a narrower claim.
+    """
+    lines = content.splitlines(keepends=True)
+    if any(item.end_line > len(lines) for item in ranges):
+        return None
+    ordered = sorted(ranges, key=lambda item: (item.start_line, item.end_line))
+    excerpt = "".join(
+        "".join(lines[item.start_line - 1 : item.end_line]) for item in ordered
+    )
+    return _hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+
+
 def source_state(
     *,
     record: _m.SourceObservation | None,
     observed_fingerprint: str | None,
+    expected_fingerprint: str | None,
     observed_at: _datetime.datetime,
 ) -> _s.SupportEvaluation:
     """Compare one admitted source observation with present bytes."""
@@ -71,7 +92,7 @@ def source_state(
             observed_at,
             "observed source is no longer present",
         )
-    expected = _fingerprint(record.content_digest.value)
+    expected = _fingerprint(expected_fingerprint)
     if expected is None:
         return evaluation(
             _m.SupportState.UNVERIFIABLE,
@@ -183,20 +204,27 @@ def premise_membership_state(
     *,
     exists: bool,
     in_current_membership: bool,
+    withdrawn: bool,
     observed_at: _datetime.datetime,
 ) -> _s.SupportEvaluation:
-    """Check the premise's existence and current membership before recursion."""
+    """Check the premise's existence, withdrawal, and current membership."""
     if not exists:
         return evaluation(
             _m.SupportState.UNVERIFIABLE,
             observed_at,
             "premise revision no longer exists",
         )
+    if withdrawn:
+        return evaluation(
+            _m.SupportState.UNVERIFIABLE,
+            observed_at,
+            "premise revision was withdrawn",
+        )
     if not in_current_membership:
         return evaluation(
             _m.SupportState.REASSESSMENT_REQUIRED,
             observed_at,
-            "premise revision was superseded or withdrawn",
+            "premise revision was superseded",
         )
     return evaluation(_m.SupportState.CURRENT, observed_at)
 

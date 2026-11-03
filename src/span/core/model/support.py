@@ -68,6 +68,15 @@ SupportDependency = _typing.Union[
 
 
 @_dataclass(frozen=True)
+class DependencyFinding:
+    """One dependency's own evaluation, addressed by its identity (FD-16)."""
+
+    dependency: SupportDependency
+    state: SupportState
+    reason: str = ""
+
+
+@_dataclass(frozen=True)
 class SupportEvaluation:
     """The result of checking declared support against present evidence.
 
@@ -78,6 +87,7 @@ class SupportEvaluation:
     state: SupportState
     dependencies: tuple[SupportDependency, ...]
     reason: str = ""
+    findings: tuple[DependencyFinding, ...] = ()
     observed_at: _datetime.datetime | None = None
     limitations: tuple[str, ...] = ()
 
