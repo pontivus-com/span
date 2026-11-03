@@ -2,3 +2,4 @@ include setup.py
 recursive-include scripts *.py
 recursive-include skills *.md
 include docs/agents-snippet.md
+include integrations/hosts/opencode/span-hooks.js
