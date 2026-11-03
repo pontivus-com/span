@@ -39,6 +39,26 @@ and the rejection vocabulary are corrected; no tool is added or renamed.**
   than currency, names no surface, never blocks, and is silent on failure
   (FD-58). Measured: 5/5 first `ask` before the first source read.
 
+### Storage and upgrade
+
+- 0.9.0 uses **schema 11**. The runtime never migrates at open; an older store
+  fails closed with a transition action.
+- A store at schema 7, 8, 9, or 10 moves offline, one phase at a time:
+  `span-install --transition-store <repository-id> --transition-phase
+  inspect|apply|verify --transition-root <target-repo>`. `apply` archives a
+  WAL-consistent copy, writes a lossless export, stages schema 11, maps a
+  schema-10 understanding to the path surface named by its scope when that
+  scope names exactly one file, records wider or empty scopes as unresolved,
+  verifies, and activates atomically. `rollback` is available before and after
+  activation.
+- A store created by a withdrawn artifact is schema 10 and needs this
+  transition. The version number is unchanged across the replacement, so
+  reinstall from this release (`pip install --force-reinstall
+  span-mcp==0.9.0`, or run `span-install` from the checkout) instead of relying
+  on `pip install -U`.
+- Complete commands and the mapping rules are in
+  [install and connect](docs/install.md#upgrade-an-existing-store).
+
 ### Results
 
 - `Rejected` carries `cause_kind` (typed), `cause` (the server's exact
