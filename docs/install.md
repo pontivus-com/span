@@ -219,7 +219,7 @@ data is unused.
 
 ## Upgrade an existing store
 
-Span 0.9.0 uses schema 11. The runtime never migrates at open; an older store
+Span 0.9.1 uses schema 11. The runtime never migrates at open; an older store
 fails closed with a transition action. `--migrate-store` is removed.
 
 Stop every process using the store, then run one phase at a time for each
