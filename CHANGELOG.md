@@ -1,9 +1,9 @@
 # Changelog
 
-## 0.9.0 — 2026-11-03
+## 0.9.1 — 2026-11-03
 
-**This 0.9.0 replaces the withdrawn internal pre-release artifacts. They were
-never public; their changelog sections are removed.**
+**This 0.9.1 carries the replacement for the withdrawn internal pre-release
+artifacts. They were never public; their changelog sections are removed.**
 
 **Breaking request shape: an understanding create is flat. Guidance, recovery,
 and the rejection vocabulary are corrected; no tool is added or renamed.**
@@ -41,7 +41,7 @@ and the rejection vocabulary are corrected; no tool is added or renamed.**
 
 ### Storage and upgrade
 
-- 0.9.0 uses **schema 11**. The runtime never migrates at open; an older store
+- 0.9.1 uses **schema 11**. The runtime never migrates at open; an older store
   fails closed with a transition action.
 - A store at schema 7, 8, 9, or 10 moves offline, one phase at a time:
   `span-install --transition-store <repository-id> --transition-phase
@@ -54,7 +54,7 @@ and the rejection vocabulary are corrected; no tool is added or renamed.**
 - A store created by a withdrawn artifact is schema 10 and needs this
   transition. The version number is unchanged across the replacement, so
   reinstall from this release (`pip install --force-reinstall
-  span-mcp==0.9.0`, or run `span-install` from the checkout) instead of relying
+  span-mcp==0.9.1`, or run `span-install` from the checkout) instead of relying
   on `pip install -U`.
 - Complete commands and the mapping rules are in
   [install and connect](docs/install.md#upgrade-an-existing-store).

@@ -166,7 +166,7 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.9.0**: three lifecycle tools (`ask`, `record`,
+This checkout describes **0.9.1**: three lifecycle tools (`ask`, `record`,
 `reconsider`), schema-11 storage, surface-scoped answers, explicit store
 transition, and live support qualification. Host delivery is captured for the
 three-tool surface on Codex and OpenCode; the flat-create re-capture passes on

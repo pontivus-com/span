@@ -9,7 +9,7 @@ adds no product requirement. Where it conflicts with a higher layer, the higher
 layer governs.
 
 **Release identity (2026-11-03).** The only public release described here is
-**0.9.0** (2026-11-03). The prior internal pre-release artifacts were withdrawn
+**0.9.1** (2026-11-03). The prior internal pre-release artifacts were withdrawn
 and were never public. References below to the withdrawn internal baseline
 describe that artifact, not the public release.
 
@@ -320,10 +320,10 @@ mapping of existing schema-10 records.
 
 ### O-9 — Package release version
 
-Status: **RESOLVED — owner direction 2026-11-03: `0.9.0`.** This restores D-17:
-the replacement ships as 0.9.0, and the prior internal pre-release artifacts
+Status: **RESOLVED — owner direction 2026-11-03: `0.9.1`.** This restores D-17:
+the replacement ships as 0.9.1, and the prior internal pre-release artifacts
 are withdrawn and were never public. The public release is
-0.9.0 (2026-11-03). FP-6 freezes release metadata against this value.
+0.9.1 (2026-11-03). FP-6 freezes release metadata against this value.
 
 ### O-10 — Supported host set and recovery scope (resolved 2026-11-01)
 
