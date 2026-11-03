@@ -7,47 +7,58 @@ version history, and checks on the dependencies the agent declared.
 
 ## Ask an ordinary question
 
-After [setup](install.md), discover the canonical `repository_id` from
-`tools/list`. Call `understand_question` with that ID, a caller-chosen
-`request_id`, a natural-language question, and the paths you need to examine.
-For example: “How does this request reach persistence?” over the relevant
-service and storage directories.
+After [setup](install.md), use the registered `repository_id` — the basename
+of the repository root recorded by the installer. `span-install --verify-only`
+prints it; it is never a filesystem path. Call `ask` with that ID, a caller-chosen `request_id`, a
+natural-language question, and either a surface reference (a declared name or a
+path you are looking at) or an exact `surface={kind, locator}`. For example:
+“How does this request reach persistence?” with the relevant service surface.
 
-Span returns saved candidates with live support, an `InvestigationNeeded`
-result with inspectable evidence, or an explicit discovery or byte-budget
-limit. The agent decides whether a candidate answers the question. Scope
-association and term overlap help discovery; they do not prove applicability.
-A differently worded question can find associated understanding without its
-saved ID, but universal paraphrase matching is not promised.
+Span returns an `Answer` with current conclusions, their support and evidence,
+and surface status; a `Gap` with inspectable evidence and a context; an
+`AmbiguousSurface` when more than one granularity matches; or `Unavailable` with
+its recovery. Omitting the question returns the surface document view. That view
+is the normal reuse path: a fresh agent that does not know the exact recorded
+question reads it and selects the conclusion it needs. An exact question is a
+targeted query; a paraphrase returns `no_match` with a recovery that points back
+to the document view. Span never semantic-matches questions. If the gap omitted
+evidence to fit the response, follow its continuation. Currentness is checked
+against present support; a saved conclusion is never served as current on the
+strength of its wording.
 
 ## Investigate and record
 
-1. Inspect the returned evidence and the material gaps. Use normal source
-   search, or `locate` and `neighbors` for structural navigation.
-2. Admit additional exact files or line ranges in a batch with
-   `evidence_extend`. Read every per-item outcome; missing, unreadable,
-   ambiguous, and omitted sources are not accepted support.
-3. Record a coherent result with `record_create`. Cite the admitted
-   observations, distinguish observed behavior from governing intent, and
-   include unresolved questions with their basis as gaps.
-4. Preserve the caller identity and full submission before sending. Retrying
+1. Inspect the returned evidence and the material gaps. Use normal source search
+   or host navigation. After code changes, call `reconsider` with the changed
+   paths to see every affected surface, why it was considered, and which
+   conclusions actually lost support.
+2. Record a coherent result with `record(kind="understanding")`. A create is
+   one conclusion: `conclusion` plus `locator` (or the `observation_id` from the
+   ask gap), with an optional `surface`. Cite what you already hold.
+   Distinguish observed behavior from governing intent, and include unresolved
+   questions with their basis as gaps. Use `actions.add`, `confirm`, `correct`,
+   `replace`, or `withdraw` for an update.
+3. Preserve the caller identity and full submission before sending. Retrying
    identical content with the same identity returns the retained receipt.
-5. Read back the accepted understanding with `understand_retrieve`. Check
-   its conclusions, support, and challenges before reporting what was saved.
+4. Read back an exact snapshot or receipt with `ask(selector=...)` if needed.
+   Check its conclusions, support, and challenges before reporting what was
+   saved.
 
-A question-bound context supplies the create target. An evidence-only context
-requires an explicit question and scope when creating understanding. If the
-work began outside Span, use `evidence_start` to admit the sources and record
-that investigation directly. A preliminary question is optional.
+A question-bound context supplies the create target. Do not also send the
+question or scope with that context; the conflict is rejected. If the work began
+outside Span, `record` can issue its own context from the supplied scope and
+cited locators. A preliminary question is optional.
 
 Payloads come from the installed `tools/list` schemas. The [MCP reference](mcp.md)
 owns the wire grammar; this guide describes the procedure.
 
 ## Reuse in another session
 
-Ask the engineering question over its scope. No prior conversation, original
-wording, or saved understanding ID is required for candidate discovery.
-Retrieve any referenced detail and assess the result's relevance.
+Read the surface document view first: call `ask` with the surface and no question.
+Select the current conclusion that answers the task; no prior conversation or
+saved understanding ID is required. If you already know the exact recorded
+question, ask it as a targeted query. A paraphrase is a different question and
+returns `no_match`; use its recovery to read the document view.
 
 `CURRENT` means the recorded dependencies still check out. It does not certify
 that the original interpretation was correct or complete. Open challenges and
@@ -55,33 +66,36 @@ gaps remain relevant even when source bytes match.
 
 ## After a change
 
-Use your normal tools to edit and test. Call `reassess` for the relevant
-understanding and version. Changed supporting bytes, authority, premises, or
-recorded discovery membership can require reconsideration. Unrelated changes
+Use your normal tools to edit and test. Call `reconsider` with the paths you
+just edited. It returns every affected surface, the reasons each was considered,
+and each conclusion's present support. Changed source bytes, authority,
+premises, or discovery membership can produce actual loss; unrelated changes
 leave conclusions current when they do not affect a declared dependency.
 
-Investigate the changed support, admit current evidence, then choose the
-matching update: add, confirm, correct, replace, or withdraw. Updates use an
+Investigate the changed support, then record the matching update. Updates use an
 expected version and create a new immutable snapshot; omission is not deletion.
 A confirmation records a substantive reassessment, including its current
-support and basis. `reassess` alone changes no interpretation.
+support and basis.
 
-Use `record_challenge` when an explanation is disputed even with unchanged
-sources. Settle or carry the dispute forward explicitly through
-`record_update`; a later version or passing test does not settle it.
+Raise a challenge through `reconsider` when an explanation is disputed even with
+unchanged sources. Settle or carry the dispute forward explicitly through
+`record` with named dispositions; a later version or passing test does not
+settle it.
 
 ## Verification and recovery
 
-Record an actual external test or review with `record_verification`, including
-its tested observations, outcome, and limitations. `verification_support`
-checks those observations today; it does not rerun the test or turn a recorded
-failure into a pass.
+Record an actual external test or review with `record(kind="verification")`,
+including its tested evidence, outcome, and limitations. A run applies to the
+surfaces in its declared scope; record it against the surface it verifies. `ask`
+returns the applicable verification runs and their present qualification; it
+does not rerun the test or turn a recorded failure into a pass.
 
-Recover saved context excerpts or a retained receipt through
-`understand_retrieve`. After a lost recording response, resend the exact
-identity and content. After receipt retention expires, inspect stored history
-before deciding what new work to record. Do not assume that a missing receipt
-means the original write never happened.
+A gap whose evidence was omitted carries a continuation. Call `ask` with only
+the repository and that continuation until the evidence is complete. Never
+fetch or construct a context id. After a lost recording response, resend the
+exact identity and content. After receipt retention expires, inspect stored
+history before deciding what new work to record. Do not assume that a missing
+receipt means the original write never happened.
 
 Hooks are optional notices. Retrieval and recording check support even when
 hooks are disabled. See [lifecycle](lifecycle.md), [freshness](freshness.md), and

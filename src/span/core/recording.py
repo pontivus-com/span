@@ -49,6 +49,7 @@ from span.core.model.recording import (
     ReceiptDecisionKind,
     RecordReceipt,
     RecordingIdentity,
+    RecordingKey,
 )
 from span.core.model.understanding import (
     Challenge,
@@ -58,20 +59,42 @@ from span.core.model.understanding import (
     ResolvedChallengeRecord,
     UnresolvedChallengeRecord,
     ConclusionRevision,
-    Gap,
+    RecordedQuestionGap,
     SupportedConclusion,
     Understanding,
     UnderstandingVersion,
     WithdrawnConclusion,
 )
+from span.core.rejection import Rejection, RejectionCauseKind
 
 
-class RecordingConflict(ValueError):
+class RecordingConflict(Rejection):
     """A compare-and-set, receipt, or challenge revision conflict."""
 
+    def __init__(
+        self,
+        cause: str,
+        *,
+        cause_kind: RejectionCauseKind = RejectionCauseKind.VERSION_CONFLICT,
+        current_version: int | None = None,
+    ) -> None:
+        super().__init__(
+            cause,
+            cause_kind=cause_kind,
+            current_version=current_version,
+        )
 
-class RecordingValidationError(ValueError):
+
+class RecordingValidationError(Rejection):
     """The command/context content cannot be accepted as submitted."""
+
+    def __init__(
+        self,
+        cause: str,
+        *,
+        cause_kind: RejectionCauseKind = RejectionCauseKind.VALIDATION,
+    ) -> None:
+        super().__init__(cause, cause_kind=cause_kind)
 
 
 @_dataclass(frozen=True)
@@ -94,14 +117,20 @@ class UnderstandingTransition:
 
 def receipt_decision(
     existing: RecordReceipt | None,
-    identity: RecordingIdentity,
+    key: RecordingKey,
     digest: ContentDigest,
 ) -> ReceiptDecision:
-    """Receipt-first decision for one recording key/content pair."""
+    """Receipt-first decision for one request key/content pair (FD-3)."""
     if existing is None:
         return ReceiptDecision(ReceiptDecisionKind.NEW)
-    if existing.identity != identity:
-        raise RecordingConflict("receipt identity does not match the recording key")
+    if (
+        existing.identity.repository_id != key.repository_id
+        or existing.identity.request_id != key.request_id
+    ):
+        raise RecordingConflict(
+            "receipt identity does not match the recording key",
+            cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+        )
     if existing.content_digest == digest:
         return ReceiptDecision(ReceiptDecisionKind.REPLAY, receipt=existing)
     return ReceiptDecision(
@@ -119,6 +148,7 @@ def build_receipt(
     understanding: tuple[UnderstandingId, UnderstandingVersionNumber] | None = None,
     verification_run_id: VerificationRunId | None = None,
     challenge_id: ChallengeId | None = None,
+    dependent_effects: tuple[ConclusionRevisionRef, ...] = (),
     replay_expires_at: _datetime.datetime | None = None,
 ) -> RecordReceipt:
     """Build the immutable receipt for one accepted effect."""
@@ -141,6 +171,7 @@ def build_receipt(
         accepted_understanding_versions=understanding_versions,
         accepted_verification_run_ids=verification_ids,
         accepted_challenge_ids=challenge_ids,
+        dependent_effects=dependent_effects,
         replay_expires_at=replay_expires_at,
     )
 
@@ -205,8 +236,12 @@ def resolve_create_target(
     return ExplicitTarget(question=context.question, scope=context.scope)
 
 
-def _gap_values(drafts: tuple[GapDraft, ...]) -> tuple[Gap, ...]:
-    return tuple(Gap(question=item.question, basis=item.basis) for item in drafts)
+def _gap_values(
+    drafts: tuple[GapDraft, ...],
+) -> tuple[RecordedQuestionGap, ...]:
+    return tuple(
+        RecordedQuestionGap(question=item.question, basis=item.basis) for item in drafts
+    )
 
 
 def _supported_content(draft: ConclusionContentDraft) -> SupportedConclusion:
@@ -223,6 +258,8 @@ def create_understanding(
     command: CreateUnderstandingCommand,
     context: InvestigationContext,
     now: _datetime.datetime,
+    *,
+    surface_boundary_version: int = 1,
 ) -> UnderstandingTransition:
     """Create version 1 from a closed create command."""
     repository_id = command.identity.repository_id
@@ -265,10 +302,12 @@ def create_understanding(
         gaps=_gap_values(command.gaps),
         provenance=command.provenance,
         previous_version=None,
+        surface_boundary_version=surface_boundary_version,
     )
     understanding = Understanding(
         understanding_id=understanding_id,
         repository_id=repository_id,
+        surface=command.surface,
         question=target.question,
         scope=target.scope,
         current_version=version_number,
@@ -529,7 +568,8 @@ def apply_update(
         raise RecordingConflict(
             "expected understanding version "
             f"{command.expected_version.value} does not match current "
-            f"{current_version.version.value}"
+            f"{current_version.version.value}",
+            current_version=current_version.version.value,
         )
     if not _scopes_compatible(context.scope, current_version.scope):
         raise RecordingValidationError(
@@ -578,10 +618,12 @@ def apply_update(
         gaps=gaps,
         provenance=command.provenance,
         previous_version=current_version.version,
+        surface_boundary_version=current_version.surface_boundary_version,
     )
     updated_understanding = Understanding(
         understanding_id=current_understanding.understanding_id,
         repository_id=current_understanding.repository_id,
+        surface=current_understanding.surface,
         question=current_understanding.question,
         scope=current_understanding.scope,
         current_version=new_version_number,
@@ -641,7 +683,8 @@ def apply_challenge_dispositions(
             raise RecordingConflict(
                 "challenge revision "
                 f"{disposition.expected_challenge_revision.value} does not match "
-                f"current {challenge.challenge_revision.value}"
+                f"current {challenge.challenge_revision.value}",
+                current_version=challenge.challenge_revision.value,
             )
         new_revision = ChallengeRevision(challenge.challenge_revision.value + 1)
         record: ChallengeDispositionRecord

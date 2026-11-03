@@ -83,9 +83,9 @@ def _simple_identity() -> dict:
         {
             "repository_id": _string(),
             "context_id": _string(),
-            "submission_id": _string(),
+            "request_id": _string(),
         },
-        ("repository_id", "context_id", "submission_id"),
+        ("repository_id", "context_id", "request_id"),
     )
 
 
@@ -187,6 +187,9 @@ def _simple_create() -> dict:
     return _object(
         {
             "identity": _simple_identity(),
+            "surface": _object(
+                {"kind": _string(), "locator": _string()}, ("kind", "locator")
+            ),
             "target": {
                 "anyOf": [
                     _object({"$type": {"const": "ContextBoundTarget"}}, ("$type",)),
@@ -204,7 +207,7 @@ def _simple_create() -> dict:
             "gaps": _array(_simple_gap()),
             "provenance": _string(),
         },
-        ("identity", "target", "conclusions"),
+        ("identity", "surface", "target", "conclusions"),
     )
 
 

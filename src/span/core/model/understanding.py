@@ -14,17 +14,13 @@ from dataclasses import dataclass as _dataclass
 from span.core.model.claims import AssertionNature
 from span.core.model.investigation import (
     DiscoveryObservation,
-    EvidenceAdmissionOutcome,
     InvestigationContext,
-    InvestigationContextReference,
     SourceObservation,
 )
 from span.core.model.primitives import (
-    BoundInfo,
     ChallengeId,
     ChallengeRevision,
     ConclusionId,
-    DiscoveryObservationId,
     ConclusionRevisionNumber,
     ConclusionRevisionRef,
     EvidenceRef,
@@ -34,8 +30,8 @@ from span.core.model.primitives import (
     UnderstandingVersionNumber,
     _require_non_empty,
 )
-from span.core.model.repository import EvidenceUnit
 from span.core.model.recording import RecordReceipt
+from span.core.model.surfaces import SurfaceKey
 from span.core.model.support import (
     SupportDependency,
     SupportUnavailable,
@@ -49,15 +45,15 @@ def _require_aware(name: str, value: _datetime.datetime) -> None:
 
 
 @_dataclass(frozen=True)
-class Gap:
+class RecordedQuestionGap:
     """One explicit unresolved question in a version snapshot."""
 
     question: str
     basis: str
 
     def __post_init__(self) -> None:
-        _require_non_empty("Gap.question", self.question)
-        _require_non_empty("Gap.basis", self.basis)
+        _require_non_empty("RecordedQuestionGap.question", self.question)
+        _require_non_empty("RecordedQuestionGap.basis", self.basis)
 
 
 @_dataclass(frozen=True)
@@ -111,6 +107,7 @@ class Understanding:
 
     understanding_id: UnderstandingId
     repository_id: str
+    surface: SurfaceKey
     question: str
     scope: EvidenceScope
     current_version: UnderstandingVersionNumber
@@ -121,6 +118,8 @@ class Understanding:
         _require_non_empty("Understanding.repository_id", self.repository_id)
         _require_non_empty("Understanding.question", self.question)
         _require_aware("Understanding.created_at", self.created_at)
+        if self.surface.repository_id != self.repository_id:
+            raise ValueError("Understanding.surface must share the repository")
 
 
 @_dataclass(frozen=True)
@@ -133,13 +132,16 @@ class UnderstandingVersion:
     scope: EvidenceScope
     conclusions: tuple[ConclusionRevisionRef, ...]
     created_at: _datetime.datetime
-    gaps: tuple[Gap, ...] = ()
+    gaps: tuple[RecordedQuestionGap, ...] = ()
     provenance: str = ""
     previous_version: UnderstandingVersionNumber | None = None
+    surface_boundary_version: int = 1
 
     def __post_init__(self) -> None:
         _require_non_empty("UnderstandingVersion.question", self.question)
         _require_aware("UnderstandingVersion.created_at", self.created_at)
+        if self.surface_boundary_version < 1:
+            raise ValueError("surface_boundary_version must be positive")
         if self.previous_version is not None:
             if self.previous_version.value >= self.version.value:
                 raise ValueError("previous_version must precede version")
@@ -152,55 +154,6 @@ class UnderstandingVersion:
                     f"duplicate conclusion lineage in version: {ref.conclusion_id}"
                 )
             lineages.add(ref.conclusion_id)
-
-
-@_dataclass(frozen=True)
-class UnderstandingCandidate:
-    """One discovered saved understanding, never an asserted answer."""
-
-    understanding_id: UnderstandingId
-    current_version: UnderstandingVersionNumber
-    question: str
-    scope: EvidenceScope
-    matched_conclusions: tuple[ConclusionRevisionRef, ...]
-    match_reasons: tuple[str, ...]
-    lexical_overlap: int
-    scope_associated: bool
-    scan_position: int = 0
-
-    def __post_init__(self) -> None:
-        _require_non_empty("UnderstandingCandidate.question", self.question)
-        if self.lexical_overlap < 0:
-            raise ValueError("lexical_overlap cannot be negative")
-        if self.scan_position < 0:
-            raise ValueError("scan_position cannot be negative")
-
-
-@_dataclass(frozen=True)
-class UnderstandingCandidateReference:
-    """A minimal candidate identity retained when its detail exceeds budget."""
-
-    understanding_id: UnderstandingId
-    current_version: UnderstandingVersionNumber
-    scan_position: int
-    reason: str = (
-        "candidate detail omitted by the response byte budget; retrieve it "
-        "with understand_retrieve"
-    )
-
-    def __post_init__(self) -> None:
-        _require_non_empty("UnderstandingCandidateReference.reason", self.reason)
-        if self.scan_position < 0:
-            raise ValueError("scan_position cannot be negative")
-
-
-@_dataclass(frozen=True)
-class UnderstandingDiscovery:
-    """Bounded candidate discovery with explicit ambiguity and truncation."""
-
-    candidates: tuple[UnderstandingCandidate | UnderstandingCandidateReference, ...]
-    bound_info: BoundInfo
-    limit_reason: str | None = None
 
 
 class ChallengeState(_enum.Enum):
@@ -334,16 +287,14 @@ class ContextRetrievalSelector:
 
 @_dataclass(frozen=True)
 class ReceiptRetrievalSelector:
-    """Select one retained recording receipt by its caller-known identity."""
+    """Select one retained recording receipt by its request identity."""
 
     repository_id: str
-    context_id: str
-    submission_id: str
+    request_id: str
 
     def __post_init__(self) -> None:
         _require_non_empty("ReceiptRetrievalSelector.repository_id", self.repository_id)
-        _require_non_empty("ReceiptRetrievalSelector.context_id", self.context_id)
-        _require_non_empty("ReceiptRetrievalSelector.submission_id", self.submission_id)
+        _require_non_empty("ReceiptRetrievalSelector.request_id", self.request_id)
 
 
 RetrieveRequest = _typing.Union[
@@ -351,29 +302,6 @@ RetrieveRequest = _typing.Union[
     ContextRetrievalSelector,
     ReceiptRetrievalSelector,
 ]
-
-
-@_dataclass(frozen=True)
-class UnderstandingSnapshotReference:
-    """A bounded projection of one snapshot omitted by content budget.
-
-    The full body and support qualification remain retrievable through the
-    exact understanding/version selector; this carrier never pretends to be
-    the complete snapshot.
-    """
-
-    understanding_id: UnderstandingId
-    version: UnderstandingVersionNumber
-    scan_position: int
-    reason: str = (
-        "full snapshot omitted by the response byte budget; retrieve it "
-        "with understand_retrieve"
-    )
-
-    def __post_init__(self) -> None:
-        _require_non_empty("UnderstandingSnapshotReference.reason", self.reason)
-        if self.scan_position < 0:
-            raise ValueError("scan_position cannot be negative")
 
 
 @_dataclass(frozen=True)
@@ -411,67 +339,3 @@ class ReassessRequest:
     def __post_init__(self) -> None:
         _require_non_empty("ReassessRequest.repository_id", self.repository_id)
         _require_non_empty("ReassessRequest.understanding_id", self.understanding_id)
-
-
-@_dataclass(frozen=True)
-class UnderstandingCandidateAnswer:
-    """Candidate identities plus their exact stored snapshots.
-
-    The snapshots are qualified candidates, not an assertion that any one is
-    applicable to the caller's question.
-    """
-
-    context: InvestigationContext | InvestigationContextReference
-    discovery: UnderstandingDiscovery
-    retrieved: tuple[RetrievedUnderstanding | UnderstandingSnapshotReference, ...] = ()
-    bound_info: BoundInfo | None = None
-
-
-@_dataclass(frozen=True)
-class InvestigationNeeded:
-    """No saved candidate; the context and inspectable evidence to investigate."""
-
-    context: InvestigationContext | InvestigationContextReference
-    outcomes: tuple[EvidenceAdmissionOutcome, ...]
-    evidence: tuple[EvidenceUnit, ...]
-    reason: str
-    discovery_observation_id: DiscoveryObservationId | None = None
-    bound_info: BoundInfo | None = None
-
-    def __post_init__(self) -> None:
-        _require_non_empty("InvestigationNeeded.reason", self.reason)
-
-
-@_dataclass(frozen=True)
-class DiscoveryLimit:
-    """No usable candidate or scope; no repository-wide absence is claimed."""
-
-    discovery: UnderstandingDiscovery
-
-
-@_dataclass(frozen=True)
-class ResponseBudgetExceeded:
-    """The requested byte budget cannot hold the minimum response.
-
-    This is an explicit refusal, not a silently oversized answer. Retrying
-    with at least ``minimum_bytes`` or a narrower scope is the next action.
-    """
-
-    requested_bytes: int
-    minimum_bytes: int
-    action: str = "retry with a larger max_evidence_bytes or a narrower scope"
-
-    def __post_init__(self) -> None:
-        if self.requested_bytes < 0:
-            raise ValueError("requested_bytes cannot be negative")
-        if self.minimum_bytes < 0:
-            raise ValueError("minimum_bytes cannot be negative")
-        _require_non_empty("ResponseBudgetExceeded.action", self.action)
-
-
-UnderstandQuestionResult = _typing.Union[
-    UnderstandingCandidateAnswer,
-    InvestigationNeeded,
-    DiscoveryLimit,
-    ResponseBudgetExceeded,
-]

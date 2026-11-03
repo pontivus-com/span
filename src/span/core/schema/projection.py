@@ -9,6 +9,28 @@ import types as _types
 import typing as _typing
 
 
+def _json_default(value: object) -> object:
+    """Project one dataclass default into JSON-compatible data.
+
+    Defaults are ordinary carrier values; the schema must never expose a
+    Python dataclass or enum instance to a host serializer.
+    """
+    if isinstance(value, _enum.Enum):
+        return value.value
+    if isinstance(value, _datetime.datetime):
+        return value.isoformat()
+    if _dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _json_default(getattr(value, field.name))
+            for field in _dataclasses.fields(value)
+        }
+    if isinstance(value, (tuple, list)):
+        return [_json_default(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"cannot project {type(value).__name__} as a schema default")
+
+
 def _is_optional(hint: object) -> tuple[bool, object]:
     origin = _typing.get_origin(hint)
     args = _typing.get_args(hint)
@@ -152,13 +174,11 @@ def _project_field(
     )
     if has_default and field.default is not _dataclasses.MISSING:
         try:
-            default = field.default
-            if isinstance(default, _enum.Enum):
-                default = default.value
-            elif isinstance(default, tuple):
-                default = list(default)
-            field_schema = {**field_schema, "default": default}
-        except Exception:
+            field_schema = {
+                **field_schema,
+                "default": _json_default(field.default),
+            }
+        except (TypeError, ValueError):
             pass
     return field_schema, not has_default
 

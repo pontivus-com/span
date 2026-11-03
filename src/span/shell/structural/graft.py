@@ -18,7 +18,7 @@ Suitability record (plan Phase 2.1, license MIT verified Phase 0.4):
   provider-owned build into Span's data directory
   (``<data-dir>/structural/<repository-id>/`` via ``graft --dir``,
   no ``--deep``, no credentials, no target writes), then reload.
-  Allowed only from explicit `initialize_repository` provisioning and
+  Allowed only from installer provisioning and
   explicit `refresh`. Forbidden from `status`, `explain`, `locate`,
   `neighbors`, hooks, background workers, and ordinary reads.
   Queries never build; missing indexes fail closed on reads.
@@ -643,7 +643,7 @@ class GraftStructuralSource:
             raise GraftUnavailableError(
                 f"no usable structural index for repository "
                 f"{self._repository_id!r}{detail}; run "
-                f"initialize_repository setup (or refresh) to build it"
+                f"installer setup to build it"
             )
 
     def _load_from_disk(self) -> bool:
@@ -1464,7 +1464,7 @@ class GraftStructuralSource:
         Missing means nothing usable is loaded or there is no provable
         build time. Stale means the index predates HEAD. A dirty working
         tree also warrants one bounded build when the caller explicitly
-        asked for currency (`initialize_repository`, `refresh`): the
+        asked for currency (installer provisioning): the
         build indexes the current working tree instead of leaving a
         graph that still represents pre-edit topology. The resulting
         freshness stays UNVERIFIABLE because a dirty tree cannot prove
@@ -1500,7 +1500,7 @@ class GraftStructuralSource:
         cache location; concurrent callers serialize on the lock.
         Reloads and validates after a successful build. Build failures
         and malformed/missing output return UNVERIFIABLE with a reason;
-        never raise. Invoked only from `initialize_repository`
+        never raise. Invoked only from installer provisioning
         provisioning and explicit `refresh`, never from ordinary reads.
         """
         check_repository(repository_id, self._repository_id)

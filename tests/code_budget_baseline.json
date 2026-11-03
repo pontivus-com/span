@@ -1,8 +1,8 @@
 {
   "any_count": 6,
   "bare_generics": 34,
-  "broad_excepts": 13,
-  "concrete_carriers": 159,
+  "broad_excepts": 14,
+  "concrete_carriers": 174,
   "core_layer_violations": 0,
   "duplicate_helper_bodies": 0,
   "duplicate_source_groups": 0,
@@ -10,7 +10,7 @@
   "getattr": 9,
   "inline_addendum_refs": 0,
   "longest_function": 141,
-  "longest_module": 1860,
+  "longest_module": 1876,
   "mapping_symbols": 0,
   "max_carrier_fields": 13,
   "most_branches": 36,
@@ -20,9 +20,9 @@
   "provider_paging_helpers": 0,
   "service_shell_imports": 0,
   "test_doubles_in_src": 0,
-  "test_files": 43,
+  "test_files": 48,
   "test_helper_definitions": 3,
-  "test_lines": 14251,
+  "test_lines": 17010,
   "type_ignore": 22,
   "untyped_defs": 84
 }

@@ -6,8 +6,7 @@ investigates meaning and explicitly records useful conclusions.
 
 ## Structural setup
 
-The installer provisions the pinned indexer. Explicit `initialize_repository`
-may invoke the provider's bounded currency operation when its cache is missing,
+The installer provisions the pinned indexer. Installer provisioning may invoke the provider's bounded currency operation when its cache is missing,
 stale, or the target is dirty. Provider artifacts stay in Span's external data
 directory. Setup creates no semantic understanding.
 
@@ -15,13 +14,13 @@ MCP startup registers identity without opening a store or building an index.
 Ordinary question/retrieval, evidence admission, recording, navigation, and
 hook paths do not rebuild structural state. `span-install --verify-only`
 observes readiness without provisioning. There is no refresh operation in
-the 0.9.0 public API.
+the current public API.
 
 ## Investigations follow real work
 
 A scoped question first examines a bounded page of saved understanding. It
-returns qualified candidates or inspectable evidence and an explicit gap.
-The agent can search more source, follow structural neighbors, and admit a
+returns current answers or inspectable evidence and an explicit gap.
+The agent can search more source, use its own navigation, and admit a
 cross-file evidence batch. No mandatory subject taxonomy or whole-repository
 semantic crawl is required.
 

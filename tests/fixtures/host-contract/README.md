@@ -1,18 +1,22 @@
 # Host-contract capture fixture
 
-Status: **UNVERIFIED for live host delivery.** This directory is the
-planned test-only owner for the 0.9.0 host-contract probe. It is not a
-record of a successful Codex, OpenCode, or Claude conversion.
+Status: **HISTORICAL/VOID for the current `ask`/`record`/`reconsider` surface.**
 
-The automated lane is:
+This directory holds test-only diagnostics for the retired twenty-tool
+host-contract probe. `probe_server.py` is not imported or run by the test
+suite; it is kept only as a record of the grammar it exercised.
+`schema_lab_server.py` remains a generic schema-construct diagnostic. Neither
+file certifies live host delivery for the current surface.
+
+The delivered three-tool journey, exact surface selection, declared surfaces,
+continuation, replay/restart, and challenge settlement are covered by:
 
 ```sh
-PYTHONPATH=src python3 -m pytest tests/integration/test_host_contract.py -v
+PYTHONPATH=src python3 -m pytest tests/integration/test_lifecycle_mcp.py -v
 ```
 
-That lane checks the local candidate grammar, generated schema, wire codec,
-and closed branch obligations. It does **not** prove that a host converter
-accepts or delivers the grammar.
+That lane drives the installed `span-mcp` over stdio. It does **not** prove that
+a host converter accepts or delivers the grammar.
 
 To record a live capture for one host/version, use an isolated host profile
 and a project-authored fixture repository. Do not modify a user's live Span
@@ -29,7 +33,7 @@ configuration. Capture, at minimum:
 Template command placeholders (fill with the exact tested values):
 
 ```sh
-# Codex / OpenCode / Claude: replace <host-cli>, <profile>, and <repo>.
+# Codex / OpenCode: replace <host-cli>, <profile>, and <repo>.
 <host-cli> --profile <isolated-profile> --mcp-server span-mcp --repo <repo>
 ```
 

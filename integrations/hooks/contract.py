@@ -3,7 +3,7 @@
 Host adapters map native lifecycle events onto ``HookIntent`` values. The
 contract only names the event and its changed-path scope; the shell hook
 runner performs one bounded readiness/dependent check. Hooks never
-initialize, record, reassess, interpret, rebuild, or run repository-scale
+initialize, record, re-check, interpret, rebuild, or run repository-scale
 work, and missing delivery can never establish freshness.
 """
 

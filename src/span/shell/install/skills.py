@@ -12,6 +12,7 @@ from pathlib import Path
 from span.shell.install.constants import (
     AGENTS_END,
     AGENTS_START,
+    RETIRED_SKILLS,
 )
 from span.shell.install.paths import (
     agents_snippet_path,
@@ -148,7 +149,6 @@ def deploy_skills(span_repo, dry_run=False):
     destinations = [
         home / ".config" / "opencode",
         home / ".codex",
-        home / ".claude",
     ]
     mode = install_mode(span_repo)
     version = distribution_version() if mode == "distribution" else None
@@ -170,6 +170,11 @@ def deploy_skills(span_repo, dry_run=False):
         dest_root = host_root / "skills"
         if not dry_run:
             dest_root.mkdir(exist_ok=True)
+            for retired in RETIRED_SKILLS:
+                stale = dest_root / retired
+                if stale.is_dir():
+                    print(f"- remove retired skill {stale}")
+                    shutil.rmtree(stale)
         for name in names:
             src = skills_dir / name
             dst_dir = dest_root / name
@@ -204,7 +209,6 @@ def check_skills(dry_run=False):
     for dest_root in (
         home / ".config" / "opencode" / "skills",
         home / ".codex" / "skills",
-        home / ".claude" / "skills",
     ):
         if not dest_root.is_dir():
             continue
@@ -231,7 +235,7 @@ def remove_deployed_skills(dry_run=False):
     """
     home = Path(os.path.expanduser("~"))
     removed = []
-    for host_root in (home / ".config" / "opencode", home / ".codex", home / ".claude"):
+    for host_root in (home / ".config" / "opencode", home / ".codex"):
         dest_root = host_root / "skills"
         if not dest_root.is_dir():
             continue

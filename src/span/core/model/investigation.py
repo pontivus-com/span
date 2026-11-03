@@ -16,7 +16,6 @@ from span.core.model.primitives import (
     EvidenceRef,
     EvidenceScope,
     InvestigationContextId,
-    QueryBounds,
     RequestId,
     SourceObservationId,
     _require_non_empty,
@@ -98,28 +97,6 @@ class SourceObservation:
             raise ValueError("SourceObservation.captured_at must be aware")
         if self.total_lines < 0:
             raise ValueError("SourceObservation.total_lines cannot be negative")
-
-
-@_dataclass(frozen=True)
-class InvestigationContextReference:
-    """A bounded context handle used when the full context exceeds budget.
-
-    The exact context remains retrievable by ``context_id`` through the
-    context retrieval selector.
-    """
-
-    context_id: InvestigationContextId
-    repository_id: str
-    reason: str = (
-        "full context omitted by the response byte budget; retrieve it "
-        "with understand_retrieve"
-    )
-
-    def __post_init__(self) -> None:
-        _require_non_empty(
-            "InvestigationContextReference.repository_id", self.repository_id
-        )
-        _require_non_empty("InvestigationContextReference.reason", self.reason)
 
 
 @_dataclass(frozen=True)
@@ -237,30 +214,11 @@ class EvidenceStartRequest:
     request_id: RequestId
     scope: EvidenceScope
     requests: tuple[EvidenceRequest, ...]
-    bounds: QueryBounds
 
     def __post_init__(self) -> None:
         _require_non_empty("EvidenceStartRequest.repository_id", self.repository_id)
         if not self.requests:
             raise ValueError("an evidence start request requires sources")
-
-
-@_dataclass(frozen=True)
-class UnderstandQuestionRequest:
-    """One ordinary scoped question against saved understanding and evidence."""
-
-    repository_id: str
-    request_id: RequestId
-    question: str
-    scope: EvidenceScope
-    bounds: QueryBounds
-    page_token: str | None = None
-
-    def __post_init__(self) -> None:
-        _require_non_empty(
-            "UnderstandQuestionRequest.repository_id", self.repository_id
-        )
-        _require_non_empty("UnderstandQuestionRequest.question", self.question)
 
 
 @_dataclass(frozen=True)
@@ -270,7 +228,6 @@ class EvidenceExtendRequest:
     repository_id: str
     context_id: InvestigationContextId
     requests: tuple[EvidenceRequest, ...]
-    bounds: QueryBounds
 
     def __post_init__(self) -> None:
         _require_non_empty("EvidenceExtendRequest.repository_id", self.repository_id)

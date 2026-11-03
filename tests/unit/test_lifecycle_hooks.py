@@ -45,31 +45,27 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
     evidence = FilesystemEvidenceSource(REPO, root)
     evidence_service = EvidenceService(store=store, evidence=evidence)
     support = SupportService(store=store, evidence=evidence, authority=store)
-    lifecycle = LifecycleService(store=store, authority=store, support=support)
+    lifecycle = LifecycleService(
+        store=store,
+        authority=store,
+        support=support,
+        evidence=evidence_service,
+    )
     admitted = evidence_service.start(
         m.EvidenceStartRequest(
             repository_id=REPO,
             request_id=m.RequestId("hook-evidence"),
             scope=m.EvidenceScope(paths=("src/app.py",)),
             requests=(m.EvidenceRequest("src/app.py"),),
-            bounds=m.QueryBounds(
-                max_results=50,
-                max_depth=5,
-                max_subjects=8,
-                max_evidence_units=24,
-                max_evidence_bytes=96_000,
-                max_candidate_claims=64,
-                max_candidate_relationships=64,
-            ),
         )
     )
-    observation = admitted.outcomes[0].observation_id.value
     wire = rw.RecordCreateWire(
         identity=rw.IdentityWire(
             repository_id=REPO,
             context_id=admitted.context.context_id.value,
-            submission_id="hook-create",
+            request_id="hook-create",
         ),
+        surface=rw.SurfaceWire(kind="FILE", locator="src/app.py"),
         target=rw.ExplicitTargetWire(
             question="What does the app do?",
             scope_paths=("src/app.py",),
@@ -82,7 +78,7 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
                 assertion_nature=m.AssertionNature.DESCRIPTIVE,
                 scope_paths=("src/app.py",),
                 scope_evidence_refs=(),
-                support=(rw.SourceSupportWire(observation_id=observation),),
+                support=(rw.SourceSupportWire(locator="src/app.py"),),
                 basis_derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
                 basis_summary="read the source",
                 basis_input_refs=(),
@@ -107,6 +103,39 @@ class LifecycleHooksTest(unittest.TestCase):
             root, data = _recorded(tmp)
             self.assertEqual(_capture(hooks.cmd_session_start, data, str(root)), "")
 
+    def test_adoption_primer_when_understanding_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = _recorded(tmp)
+            output = _capture(hooks.cmd_adoption_primer, data, str(root))
+            self.assertEqual(output, hooks.ADOPTION_PRIMER)
+            self.assertIn("recorded understanding", output)
+            self.assertIn("_ask", output)
+            self.assertIn("normal tool list", output)
+            self.assertNotIn("current", output)
+            self.assertNotIn("stale", output)
+
+    def test_adoption_primer_is_silent_without_a_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / REPO
+            root.mkdir()
+            data = base / "data"
+            data.mkdir()
+            _write_receipt(data, root)
+            self.assertEqual(_capture(hooks.cmd_adoption_primer, data, str(root)), "")
+
+    def test_adoption_primer_is_silent_for_unregistered_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            (base / "elsewhere").mkdir()
+            data = base / "data"
+            data.mkdir()
+            (data / "install.json").write_text('{"repos": []}', encoding="utf-8")
+            self.assertEqual(
+                _capture(hooks.cmd_adoption_primer, data, str(base / "elsewhere")),
+                "",
+            )
+
     def test_session_start_reports_absent_store_and_creates_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = pathlib.Path(tmp)
@@ -117,7 +146,7 @@ class LifecycleHooksTest(unittest.TestCase):
             _write_receipt(data, root)
             output = _capture(hooks.cmd_session_start, data, str(root))
             self.assertIn("no store", output)
-            self.assertIn("initialize_repository", output)
+            self.assertIn("installer", output)
             self.assertEqual(sorted(p.name for p in data.iterdir()), ["install.json"])
 
     def test_source_change_reports_bounded_dependents(self):
@@ -131,7 +160,7 @@ class LifecycleHooksTest(unittest.TestCase):
             )
             self.assertIn("needs attention", output)
             self.assertIn("1 recorded understanding", output)
-            self.assertIn("reassess", output)
+            self.assertIn("reconsider", output)
 
     def test_unrelated_source_change_is_silent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -155,7 +184,7 @@ class LifecycleHooksTest(unittest.TestCase):
                     m.RecordingIdentity(
                         repository_id=REPO,
                         context_id=m.InvestigationContextId("unused"),
-                        submission_id=m.SubmissionId("unused"),
+                        request_id=m.RequestId("unused"),
                     )
                 )
             finally:

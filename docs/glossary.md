@@ -3,17 +3,59 @@
 **Understanding** — A saved explanation of a question over a scope, with a
 stable identity and immutable versions. See [lifecycle](lifecycle.md).
 
-**Version** — A full membership snapshot of exact conclusion revisions, gaps,
-and provenance. It is not a conclusion revision counter.
+**Version** — A full membership snapshot of exact conclusion revisions,
+recorded question gaps, and provenance. It is not a conclusion revision
+counter.
 
 **Conclusion revision** — One immutable explanation or withdrawal in a lineage.
 The agent owns its meaning and the evidence-to-statement reasoning.
 
-**Gap** — An unanswered question with a stated basis in a saved version.
-A gap is not a supported conclusion.
+**Recorded question gap** — An unanswered question with a stated basis in a
+saved version. It is not a supported conclusion.
 
-**Candidate** — Potentially relevant saved understanding found by bounded scope
-association or term overlap. Matching does not establish applicability.
+**Gap** — The `ask` result when no matched conclusion is current. It carries
+exactly one reason: `invalidated`, `unverifiable`, `unassessed`, or `no_match`,
+plus a recovery that names the next action.
+
+**Surface document view** — The `ask` result when the question is omitted:
+current conclusions grouped by the question they answer, plus status, gaps, and
+verification. It is assembled on read and cannot drift.
+
+**Surface-first reuse** — Reading the surface document view and selecting the
+current conclusion that answers the task. An exact question is a targeted query;
+a paraphrase is a different question and returns `no_match`. Span does not
+semantically match questions.
+
+**Rejection cause** — The exact server message and typed cause kind carried by a
+`Rejected` result, with the required action and the structured current version
+or boundary version when one exists. It is not derived from keyword matching.
+
+**Surface** — The unit an answer is scoped to: a file, symbol, service, or
+domain. A path or declared name resolves to a surface; more than one match is
+`AmbiguousSurface`.
+
+**Exact surface** — The public `{kind, locator}` identity supplied to `ask`.
+It resolves by identity, never containment. An `AmbiguousSurface` candidate is
+copied back verbatim.
+
+**Declared surface** — A service or domain created or updated through
+`record(kind="surface")` with a boundary and optional parent. Its boundary has
+its own compare-and-set version.
+
+**Historical snapshot** — A `RetrievedUnderstanding` selected by exact
+understanding/version. It is never merged into a current `Answer`.
+
+**Continuation** — An opaque, stateless token that resumes evidence omitted from
+a gap. It is valid while its context is `LIVE` and always advances.
+
+**Possible impact** — A conclusion was included in a `reconsider` result because
+its surface or dependency was considered. It may still be `CURRENT`.
+
+**Actual loss** — A conclusion whose support is `REASSESSMENT_REQUIRED` or
+`UNVERIFIABLE`; it requires re-establishment.
+
+**Answer** — Current conclusions for one surface with per-conclusion support,
+surface status, recorded gaps, and applicable verification.
 
 **Scope** — The declared paths/evidence references bounding the investigation
 or conclusion. Unexamined and truncated scope stays explicit.
@@ -48,7 +90,7 @@ caller request to a repository and scope, and retains admitted evidence.
 **Receipt** — Immutable acceptance record for a recording identity and content.
 Matching replay can succeed after context expiry while the receipt is retained.
 
-**Recording identity** — `(repository_id, context_id, submission_id)`, preserved
+**Recording identity** — `(repository_id, request_id)`, preserved
 by the caller before dispatch. Same identity with different content conflicts.
 
 **Compare-and-set** — Accept an update only at the expected understanding or
@@ -75,4 +117,4 @@ It supports investigation and grants no semantic or normative authority.
 
 **Legacy terminology** — Claim taxonomies, coverage campaigns, and suspended
 interpretation continuations in historical exports or older evidence. They are
-not the 0.9.0 public lifecycle. See [design references](design-references.md).
+not the current public lifecycle. See [design references](design-references.md).

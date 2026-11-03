@@ -1,99 +1,73 @@
 # Changelog
 
-## 0.9.0 — 2026-10-31
+## 0.9.0 — 2026-11-03
 
-**A breaking lifecycle release: understanding is recorded against admitted
-evidence, returned with live support, and migrated offline.**
+**This 0.9.0 replaces the withdrawn internal pre-release artifacts. They were
+never public; their changelog sections are removed.**
 
-0.9.0 replaces the campaign/question protocol with a bounded ordinary
-lifecycle. Span still never selects a model, edits a target repository, runs
-tests, or makes stale understanding current by itself.
+**Breaking request shape: an understanding create is flat. Guidance, recovery,
+and the rejection vocabulary are corrected; no tool is added or renamed.**
 
-### Understand, record, reconsider
+### Request shape (breaking)
 
-- `understand_question` returns saved candidates with live support, an
-  evidence-only investigation gap, or an explicit discovery limit. Lexical
-  rank is a retrieval aid, never applicability.
-- `understand_retrieve` is a closed selector: exact understanding/version,
-  investigation context, or retained receipt. It returns live qualifications
-  and remains restart-safe after context expiry within receipt retention.
-- `start_context`, `evidence_start`, and `evidence_extend` issue a
-  server-owned context and admit exact sources with per-item outcomes.
-- `record_create`, `record_add`, `record_confirm`, `record_correct`,
-  `record_replace`, `record_withdraw`, `record_challenge`, `record_update`,
-  and `record_verification` are separate atomic tools. Each returns a receipt
-  and a post-commit support qualification.
-- `reassess` and `verification_support` qualify recorded understanding and
-  independent verification runs against present evidence.
-- `locate` and `neighbors` remain read-only structural navigation.
+- `record(kind="understanding")` creates with one `conclusion` plus `locator` or
+  `observation_id`. `actions` is update-only and `action` is surface-only;
+  `create` is no longer an action. A create that sends `action` or a non-empty
+  `actions` is an ingress error.
+- The `record` description carries create, update, surface, and verification
+  templates, so a host can copy one and succeed on the first call.
+- `ask` without a question returns the document view in `groups`. The top-level
+  `conclusions` is empty by design, and a targeted answer needs the exact
+  recorded question.
+- A verification run takes the `obs:` ids `ask` returned for the request
+  context, or `run.evidence` with a locator. An id that was never admitted is
+  `Rejected` with `cause_kind=observation_not_admitted`, and the required action
+  names both remedies.
+- A refusal never names an operation this build does not register: the retired
+  navigation and setup names point to the host's navigation and the installer.
 
-The retired tools `explain`, `trace`, `impact`, `authority`, `status`,
-`refresh`, `initialize_target`, and `submit_interpretation` are removed and
-reject with an explicit replacement. `initialize_repository` remains explicit
-setup.
+### Adoption (OpenCode)
 
-### Store and transition
+- The installer deploys the lifecycle plugin under Span's own data root and
+  registers it once in the host's global `opencode.json`; it writes nothing into
+  a target repository.
+- The plugin waits a bounded three seconds at prompt admission for the local MCP
+  connection. OpenCode otherwise dispatches the first request without the Span
+  tools, so the agent cannot ask before reading even when it intends to.
+- The plugin injects one advisory session notice when the repository has
+  recorded understanding. It names the direct tools, asserts existence rather
+  than currency, names no surface, never blocks, and is silent on failure
+  (FD-58). Measured: 5/5 first `ask` before the first source read.
 
-The active store is schema 10. The runtime never migrates at open; an older
-store fails closed with a transition action.
+### Results
 
-The supported offline upgrade is:
+- `Rejected` carries `cause_kind` (typed), `cause` (the server's exact
+  message), `required_action` (derived from the kind), and the structured
+  `current_version` or `current_boundary_version` when one exists. The adapter
+  no longer derives a cause or an action from message text.
+- `Gap` always carries `recovery`. A `no_match` gap points to the surface
+  document view; `invalidated` and `unverifiable` point to re-reading the cited
+  evidence; `unassessed` points to reading the evidence and recording.
+- A stale surface boundary version, a surface kind conflict, and a duplicate
+  boundary are `Rejected`, not `Unavailable`. A schema-version failure remains
+  `Unavailable`.
 
-```bash
-span-install --transition-store <repository-id> --transition-phase inspect
-span-install --transition-store <repository-id> --transition-phase apply --transition-root <repository-root>
-span-install --transition-store <repository-id> --transition-phase verify
-span-install --transition-store <repository-id> --transition-phase rollback
-```
+### Recording
 
-`inspect` and `verify` are observational. `apply` archives a WAL-consistent
-copy, writes a lossless raw export and readable report, stages schema 10,
-verifies it, and atomically activates it while holding exclusive store
-ownership. `rollback` restores the previous store and preserves any new-format
-writes. Supported source schemas are 7, 8, and 9. `--migrate-store` is
-removed.
+- A create against a question context rejects an explicit `question` or
+  `scope_paths` as a conflict instead of ignoring them.
+- A declared surface parent must be an existing declared service or domain in
+  the same repository; self-parent and cycles are rejected.
+- A verification run applies only to the surfaces in its declared scope.
 
-Only the repository root binding and declared authority seeds are carried
-forward. Legacy claims, campaigns, coverages, and targets are preserved as
-historical export, not promoted as current understanding. Re-record current
-understanding through the lifecycle tools.
+### Guidance
 
-### Retention and correctness
+- The `ask` description leads with surface-first reuse: omit the question to
+  read the surface document view; supply an exact question only when the
+  recorded key is known. A paraphrase returns `no_match`.
+- The `record` description states the context-bound create form, the
+  verification scope rule, and the surface declaration.
 
-- Contexts expire; retained receipts remain replayable for their configured
-  window.
-- Matching replay is resolved before new-write dependency checks.
-- Context abandonment reaps operational membership only; accepted semantic
-  history and receipts survive.
-- Challenges retain every accepted disposition and resolution; settlement is
-  explicit and referenced against the resulting version.
-- Retrieval and recording evaluate source, authority, premise, and discovery
-  support. A changed authority content identity requires reassessment.
-- Bounded answers apply one response byte budget across snapshots, candidate
-  detail, cold evidence, and context. A budget below the minimum returns an
-  explicit `ResponseBudgetExceeded`.
-- Discovery, response, and inventory cursors are distinct and resumable.
-
-### Hosts and operations
-
-- Public guides and managed instructions describe investigate → record →
-  reuse → reassess, including direct recording from evidence-only contexts.
-  The retired campaign/continuation procedure is no longer active guidance.
-- The beta typing gate requires zero configured mypy errors; the remaining
-  26-error baseline has been eliminated and lowered to zero.
-- Reconnect or restart supported hosts after upgrade so `tools/list` reflects
-  the new surface and managed instructions are replaced.
-- Hooks are optional event-local notices. They never record, reassess,
-  interpret, or rebuild, and a missed hook cannot establish currentness.
-- Installer `--verify-only` is observational.
-
-### Not in this release
-
-- Claude model-delivered declarations and caller-identity behavior remain
-  UNVERIFIED under the owner waiver; stdio registration/health is verified.
-- No live production store transition is claimed by this changelog.
-- No comparative product-fitness claim is made beyond the recorded G-9
-  evidence.
 ## 0.8.3 — 2026-10-28
 
 **Durable work can be picked up again.**

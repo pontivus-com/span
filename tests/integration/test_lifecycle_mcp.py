@@ -1,4 +1,4 @@
-"""Installed-stdio lifecycle fixture: question, record, restart, replay."""
+"""Installed-stdio three-tool journey: ask, record, reconsider."""
 
 from __future__ import annotations
 
@@ -11,26 +11,44 @@ import unittest
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
+from span.core import model as m
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
 SPAN = pathlib.Path(__file__).resolve().parents[2]
 REPOSITORY_ID = "repo-lifecycle"
-BOUNDS = {
-    "max_results": 10,
-    "max_depth": 2,
-    "max_subjects": 8,
-    "max_evidence_units": 10,
-    "max_evidence_bytes": 10_000,
-    "max_candidate_claims": 64,
-    "max_candidate_relationships": 64,
-}
 
 
 def _write(root: pathlib.Path, relative: str, content: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _conclusion(
+    *,
+    conclusion_id: str = "c-1",
+    statement: str = "The app emits line1.",
+    support: list[dict] | None = None,
+) -> dict:
+    return {
+        "conclusion_id": conclusion_id,
+        "statement": statement,
+        "assertion_nature": "DESCRIPTIVE",
+        "scope_paths": ["src/app.py"],
+        "scope_evidence_refs": [],
+        "support": support
+        or [
+            {
+                "$type": "SourceSupportWire",
+                "locator": "src/app.py",
+                "ranges": [],
+            }
+        ],
+        "basis_derivation": "EXPLICIT_EVIDENCE",
+        "basis_summary": "read the source",
+        "basis_input_refs": [],
+    }
 
 
 class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
@@ -60,22 +78,22 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         if result.is_error:
             self.fail(f"{name} failed: {result.content}")
         self.assertIsNotNone(result.structured_content)
-        payload = result.structured_content or {}
-        if name.startswith("record_") and isinstance(payload.get("receipt"), dict):
-            return payload["receipt"]
-        return payload
+        return result.structured_content or {}
 
-    async def _session(self, callback):
+    async def _session(self, callback, *, budget: int | None = None):
+        args = [
+            "-m",
+            "span.shell.mcp_server",
+            "--data-dir",
+            str(self.data),
+            "--repo",
+            str(self.repo),
+        ]
+        if budget is not None:
+            args.extend(["--response-budget-bytes", str(budget)])
         params = StdioServerParameters(
             command=sys.executable,
-            args=[
-                "-m",
-                "span.shell.mcp_server",
-                "--data-dir",
-                str(self.data),
-                "--repo",
-                str(self.repo),
-            ],
+            args=args,
             env=self.env,
         )
         async with stdio_client(params) as (read, write):
@@ -83,380 +101,437 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 await session.initialize()
                 return await callback(session)
 
-    def _create_wire(
-        self, context_id: str, observation_id: str, submission: str
-    ) -> dict:
-        return {
-            "identity": {
-                "repository_id": "repo-lifecycle",
-                "context_id": context_id,
-                "submission_id": submission,
+    async def _record_create(self, session: ClientSession, request: str) -> dict:
+        return await self._call(
+            session,
+            "record",
+            {
+                "repository_id": REPOSITORY_ID,
+                "request_id": request,
+                "kind": "understanding",
+                "surface": {"kind": "FILE", "locator": "src/app.py"},
+                "question": "What happens in the app?",
+                "scope_paths": ["src/app.py"],
+                "conclusion": "The app emits line1.",
+                "locator": "src/app.py",
             },
-            "target": {"$type": "ContextBoundTargetWire"},
-            "conclusions": [
-                {
-                    "conclusion_id": "c-1",
-                    "statement": "The app emits line1.",
-                    "assertion_nature": "DESCRIPTIVE",
-                    "scope_paths": ["src/app.py"],
-                    "scope_evidence_refs": [],
-                    "support": [
-                        {
-                            "$type": "SourceSupportWire",
-                            "observation_id": observation_id,
-                        }
-                    ],
-                    "basis_derivation": "EXPLICIT_EVIDENCE",
-                    "basis_summary": "read the source",
-                    "basis_input_refs": [],
-                }
-            ],
-        }
+        )
 
-    async def test_full_lifecycle_and_restart(self) -> None:
+    async def test_three_tool_journey_and_restart(self) -> None:
         async def first(session: ClientSession) -> dict:
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
-            self.assertIn("understand_question", names)
-            self.assertIn("record_create", names)
-            self.assertIn("evidence_start", names)
+            self.assertEqual(names, {"ask", "record", "reconsider"})
 
             cold = await self._call(
                 session,
-                "understand_question",
+                "ask",
                 {
-                    "repository_id": "repo-lifecycle",
-                    "request_id": {"value": "req-1"},
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-1",
+                    "reference": "src/app.py",
                     "question": "What happens in the app?",
-                    "scope": {"paths": ["src"], "evidence_refs": []},
-                    "bounds": BOUNDS,
                 },
             )
-            self.assertIn("context", cold)
-            self.assertIn("evidence", cold)
+            self.assertEqual(cold["$type"], "Gap")
+            self.assertEqual(cold["reason"], "unassessed")
             self.assertIn("line1", cold["evidence"][0]["content"])
-            context_id = cold["context"]["context_id"]["value"]
-            observation_id = cold["outcomes"][0]["observation_id"]["value"]
 
+            created = await self._record_create(session, "sub-create-1")
+            self.assertEqual(created["$type"], "UnderstandingRecorded")
+
+            warm = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-2",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                },
+            )
+            self.assertEqual(warm["$type"], "Answer")
+            self.assertEqual(
+                warm["conclusions"][0]["statement"], "The app emits line1."
+            )
+            self.assertTrue(warm["conclusions"][0]["evidence"])
+            return warm
+
+        async def second(session: ClientSession) -> dict:
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-3",
+                    "reference": "src/app.py",
+                    "question": "What happens in the app?",
+                },
+            )
+
+        await self._session(first)
+        again = await self._session(second)
+        self.assertEqual(again["$type"], "Answer")
+        self.assertEqual(
+            again["conclusions"][0]["ref"]["understanding_id"]["value"],
+            "u:sub-create-1",
+        )
+
+    async def test_cold_gap_context_is_accepted_by_record(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            gap = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-context-bound",
+                    "reference": "src/app.py",
+                    "question": "What happens in the app?",
+                },
+            )
+            self.assertEqual(gap["$type"], "Gap")
+            context_id = gap["context"]["value"]
+            observation_id = gap["observations"][0]["value"]
+            recorded = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-context-bound",
+                    "kind": "understanding",
+                    "context_id": context_id,
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "conclusion": "The app emits line1.",
+                    "observation_id": observation_id,
+                },
+            )
+            self.assertEqual(recorded["$type"], "UnderstandingRecorded")
+            return recorded
+
+        recorded = await self._session(journey)
+        self.assertEqual(
+            recorded["receipt"]["accepted_understanding_ids"][0]["value"],
+            "u:sub-context-bound",
+        )
+
+    async def test_question_context_rejects_an_explicit_target(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            gap = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-context-conflict",
+                    "reference": "src/app.py",
+                    "question": "What happens in the app?",
+                },
+            )
+            context_id = gap["context"]["value"]
+            rejected = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-context-conflict",
+                    "kind": "understanding",
+                    "context_id": context_id,
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                    "conclusion": "The app emits line1.",
+                    "locator": "src/app.py",
+                },
+            )
+            self.assertEqual(rejected["$type"], "Rejected")
+            return rejected
+
+        rejected = await self._session(journey)
+        self.assertEqual(rejected["cause_kind"], "context_target_conflict")
+        self.assertFalse(rejected["required_action"] == "")
+
+    async def test_exact_surface_resolves_ambiguity(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            await self._record_create(session, "sub-create-1")
+            declared = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "surface-1",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {
+                        "kind": "SERVICE",
+                        "locator": "app",
+                        "boundary": {"paths": ["src"], "symbols": []},
+                        "parent": None,
+                    },
+                },
+            )
+            self.assertEqual(declared["$type"], "SurfaceDeclared")
+
+            ambiguous = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-ambiguous",
+                    "reference": "src/app.py",
+                    "question": "What happens in the app?",
+                },
+            )
+            self.assertEqual(ambiguous["$type"], "AmbiguousSurface")
+            candidate = next(
+                item for item in ambiguous["candidates"] if item["kind"] == "FILE"
+            )
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-exact",
+                    "surface": {
+                        "kind": candidate["kind"],
+                        "locator": candidate["locator"],
+                    },
+                    "question": "What happens in the app?",
+                },
+            )
+
+        result = await self._session(journey)
+        self.assertEqual(result["$type"], "Answer")
+
+    async def test_surface_boundary_update(self) -> None:
+        async def journey(session: ClientSession) -> dict:
             created = await self._call(
                 session,
-                "record_create",
-                self._create_wire(context_id, observation_id, "sub-create-1"),
-            )
-            self.assertEqual(created["accepted_understanding_versions"][0]["value"], 1)
-            understanding_id = created["accepted_understanding_ids"][0]["value"]
-            committed_at = created["committed_at"]
-
-            verification = await self._call(
-                session,
-                "record_verification",
+                "record",
                 {
-                    "identity": {
-                        "repository_id": "repo-lifecycle",
-                        "context_id": context_id,
-                        "submission_id": "sub-v-1",
-                    },
-                    "run": {
-                        "repository_id": "repo-lifecycle",
-                        "scope_description": "app entry",
-                        "scope_paths": ["src/app.py"],
-                        "observations": [observation_id],
-                        "command": "python3 -m unittest",
-                        "scenario": None,
-                        "outcome": "PASS",
-                        "observed_at": "2026-10-31T08:00:00+00:00",
-                        "observer": "host-trial",
-                        "environment_limitations": [],
-                        "provenance": "",
-                    },
-                },
-            )
-            run_id = verification["accepted_verification_run_ids"][0]["value"]
-            verification_current = await self._call(
-                session,
-                "verification_support",
-                {"repository_id": REPOSITORY_ID, "run_id": run_id},
-            )
-            self.assertEqual(verification_current["state"], "CURRENT")
-
-            found = await self._call(
-                session,
-                "understand_question",
-                {
-                    "repository_id": "repo-lifecycle",
-                    "request_id": {"value": "req-2"},
-                    "question": "Explain the application behavior",
-                    "scope": {"paths": ["src/app.py"], "evidence_refs": []},
-                    "bounds": BOUNDS,
-                },
-            )
-            self.assertIn("retrieved", found)
-            self.assertEqual(
-                found["retrieved"][0]["conclusions"][0]["content"]["statement"],
-                "The app emits line1.",
-            )
-
-            retrieved = await self._call(
-                session,
-                "understand_retrieve",
-                {
-                    "$type": "UnderstandingSnapshotSelector",
                     "repository_id": REPOSITORY_ID,
-                    "understanding_id": understanding_id,
+                    "request_id": "surface-1",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {
+                        "kind": "SERVICE",
+                        "locator": "app",
+                        "boundary": {"paths": ["src"], "symbols": []},
+                        "parent": None,
+                    },
                 },
             )
-            self.assertEqual(
-                retrieved["conclusions"][0]["content"]["statement"],
-                "The app emits line1.",
-            )
-
-            replay = await self._call(
+            self.assertEqual(created["surface"]["boundary_version"], 1)
+            return await self._call(
                 session,
-                "record_create",
-                self._create_wire(context_id, observation_id, "sub-create-1"),
-            )
-            self.assertEqual(replay["committed_at"], committed_at)
-
-            added = await self._call(
-                session,
-                "record_add",
+                "record",
                 {
-                    "identity": {
-                        "repository_id": "repo-lifecycle",
-                        "context_id": context_id,
-                        "submission_id": "sub-add-1",
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "surface-2",
+                    "kind": "surface",
+                    "action": "update",
+                    "expected_boundary_version": 1,
+                    "surface": {
+                        "kind": "SERVICE",
+                        "locator": "app",
+                        "boundary": {"paths": ["src", "styles"], "symbols": []},
+                        "parent": None,
                     },
-                    "understanding_id": understanding_id,
-                    "expected_version": 1,
-                    "conclusion": {
-                        "conclusion_id": "c-2",
-                        "statement": "The app has three fixture lines.",
-                        "assertion_nature": "DESCRIPTIVE",
+                },
+            )
+
+        updated = await self._session(journey)
+        self.assertEqual(updated["$type"], "SurfaceDeclared")
+        self.assertEqual(updated["surface"]["boundary_version"], 2)
+
+    async def test_verification_run_is_returned_with_qualification(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            await self._record_create(session, "sub-create-1")
+            recorded = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "verify-1",
+                    "kind": "verification",
+                    "run": {
+                        "repository_id": REPOSITORY_ID,
+                        "scope_description": "app tests",
                         "scope_paths": ["src/app.py"],
-                        "scope_evidence_refs": [],
-                        "support": [
+                        "observations": [],
+                        "evidence": [
                             {
                                 "$type": "SourceSupportWire",
-                                "observation_id": observation_id,
+                                "locator": "src/app.py",
+                                "ranges": [],
                             }
                         ],
-                        "basis_derivation": "EXPLICIT_EVIDENCE",
-                        "basis_summary": "read the source",
-                        "basis_input_refs": [],
+                        "command": "pytest -q",
+                        "scenario": None,
+                        "outcome": "PASS",
+                        "observed_at": "2026-11-02T12:00:00Z",
+                        "observer": "tester",
                     },
                 },
             )
-            self.assertEqual(added["accepted_understanding_versions"][0]["value"], 2)
-
-            challenge_args = {
-                "identity": {
-                    "repository_id": "repo-lifecycle",
-                    "context_id": context_id,
-                    "submission_id": "sub-ch-1",
-                },
-                "understanding_id": understanding_id,
-                "target_version": 1,
-                "target_conclusions": [
-                    {
-                        "understanding_id": understanding_id,
-                        "conclusion_id": "c-1",
-                        "revision": 1,
-                    }
-                ],
-                "reason": "The entry point claim is disputed.",
-                "evidence_refs": [],
-                "provenance": "host trial",
-            }
-            challenge = await self._call(session, "record_challenge", challenge_args)
-            challenge_id = challenge["accepted_challenge_ids"][0]["value"]
-            disputed = await self._call(
+            self.assertEqual(recorded["$type"], "VerificationRecorded")
+            return await self._call(
                 session,
-                "understand_retrieve",
+                "ask",
                 {
-                    "$type": "UnderstandingSnapshotSelector",
                     "repository_id": REPOSITORY_ID,
-                    "understanding_id": understanding_id,
+                    "request_id": "req-verify",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
                 },
             )
-            self.assertEqual(disputed["challenges"][0]["state"], "OPEN")
-            updated = await self._call(
+
+        answer = await self._session(journey)
+        self.assertEqual(answer["$type"], "Answer")
+        self.assertEqual(len(answer["verification"]), 1)
+        self.assertEqual(answer["verification"][0]["run"]["outcome"], "PASS")
+        self.assertEqual(answer["verification"][0]["qualification"]["state"], "CURRENT")
+
+    async def test_continuation_recovers_omitted_evidence(self) -> None:
+        _write(self.repo, "src/big.py", "line\n" * 500)
+
+        async def journey(session: ClientSession) -> dict:
+            first = await self._call(
                 session,
-                "record_update",
+                "ask",
                 {
-                    "identity": {
-                        "repository_id": "repo-lifecycle",
-                        "context_id": context_id,
-                        "submission_id": "sub-ch-update",
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-big",
+                    "surface": {"kind": "FILE", "locator": "src/big.py"},
+                    "question": "What is here?",
+                },
+            )
+            self.assertEqual(first["$type"], "Gap")
+            self.assertTrue(first.get("continuation"))
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "continuation": first["continuation"],
+                },
+            )
+
+        page = await self._session(journey, budget=1500)
+        self.assertEqual(page["$type"], "EvidencePage")
+        self.assertTrue(page["evidence"])
+
+    async def test_continuation_survives_a_fresh_process(self) -> None:
+        _write(self.repo, "src/big.py", "line\n" * 500)
+
+        async def first(session: ClientSession) -> str:
+            gap = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-big",
+                    "surface": {"kind": "FILE", "locator": "src/big.py"},
+                    "question": "What is here?",
+                },
+            )
+            self.assertEqual(gap["$type"], "Gap")
+            self.assertTrue(gap.get("continuation"))
+            return gap["continuation"]
+
+        token = await self._session(first, budget=1500)
+
+        async def second(session: ClientSession) -> dict:
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "continuation": token,
+                },
+            )
+
+        page = await self._session(second, budget=1500)
+        self.assertEqual(page["$type"], "EvidencePage")
+        self.assertTrue(page["evidence"])
+
+    async def test_challenge_raised_by_reconsider_is_settled_by_record(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            created = await self._record_create(session, "sub-challenge")
+            self.assertEqual(created["$type"], "UnderstandingRecorded")
+            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
+                "value"
+            ]
+            challenged = await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "challenge": {
+                        "request_id": "ch-1",
+                        "understanding_id": understanding_id,
+                        "target_version": 1,
+                        "target_conclusions": [
+                            {
+                                "understanding_id": understanding_id,
+                                "conclusion_id": "c-1",
+                                "revision": 1,
+                            }
+                        ],
+                        "reason": ("The cited source does not support the statement."),
+                        "evidence": [],
                     },
+                },
+            )
+            self.assertEqual(challenged["$type"], "Challenged")
+            challenge = challenged["challenge"]
+            challenge_id = challenge["challenge_id"]["value"]
+            challenge_revision = challenge["challenge_revision"]["value"]
+            settled = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-challenge-settle",
+                    "kind": "understanding",
                     "understanding_id": understanding_id,
-                    "expected_version": 2,
-                    "confirm": [
-                        {
-                            "conclusion_id": "c-1",
-                            "statement": "The app emits line1, confirmed.",
-                            "assertion_nature": "DESCRIPTIVE",
-                            "scope_paths": ["src/app.py"],
-                            "scope_evidence_refs": [],
-                            "support": [
-                                {
-                                    "$type": "SourceSupportWire",
-                                    "observation_id": observation_id,
-                                }
-                            ],
-                            "basis_derivation": "EXPLICIT_EVIDENCE",
-                            "basis_summary": "rechecked the source",
-                            "basis_input_refs": [],
-                        }
-                    ],
+                    "expected_version": 1,
+                    "actions": {
+                        "confirm": [
+                            _conclusion(statement="The app emits line1, reassessed.")
+                        ]
+                    },
                     "challenge_dispositions": [
                         {
                             "$type": "UnresolvedDispositionWire",
                             "challenge_id": challenge_id,
-                            "expected_challenge_revision": 1,
-                            "remaining_question": "Is the entry point complete?",
-                            "basis": "more evidence is needed",
+                            "expected_challenge_revision": challenge_revision,
+                            "remaining_question": ("What evidence settles this?"),
+                            "basis": "The dispute remains open.",
                         }
                     ],
                 },
             )
-            self.assertEqual(updated["accepted_understanding_versions"][0]["value"], 3)
-            settled = await self._call(
-                session,
-                "understand_retrieve",
-                {
-                    "$type": "UnderstandingSnapshotSelector",
-                    "repository_id": REPOSITORY_ID,
-                    "understanding_id": understanding_id,
-                },
-            )
-            self.assertEqual(settled["challenges"][0]["state"], "UNRESOLVED")
-            self.assertEqual(settled["challenges"][0]["challenge_revision"]["value"], 2)
-
-            reassessed = await self._call(
-                session,
-                "reassess",
-                {
-                    "repository_id": REPOSITORY_ID,
-                    "understanding_id": understanding_id,
-                },
-            )
-            self.assertEqual(reassessed["state"], "CURRENT")
-            _write(self.repo, "src/app.py", "changed\n")
-            changed = await self._call(
-                session,
-                "reassess",
-                {
-                    "repository_id": REPOSITORY_ID,
-                    "understanding_id": understanding_id,
-                },
-            )
-            self.assertEqual(changed["state"], "REASSESSMENT_REQUIRED")
-            verification_changed = await self._call(
-                session,
-                "verification_support",
-                {"repository_id": REPOSITORY_ID, "run_id": run_id},
-            )
-            self.assertEqual(verification_changed["state"], "REASSESSMENT_REQUIRED")
-            failed_add = await session.call_tool(
-                "record_add",
-                {
-                    "identity": {
-                        "repository_id": "repo-lifecycle",
-                        "context_id": context_id,
-                        "submission_id": "sub-drift-1",
-                    },
-                    "understanding_id": understanding_id,
-                    "expected_version": 3,
-                    "conclusion": {
-                        "conclusion_id": "c-3",
-                        "statement": "This must be rejected after drift.",
-                        "assertion_nature": "DESCRIPTIVE",
-                        "scope_paths": ["src/app.py"],
-                        "scope_evidence_refs": [],
-                        "support": [
-                            {
-                                "$type": "SourceSupportWire",
-                                "observation_id": observation_id,
-                            }
-                        ],
-                        "basis_derivation": "EXPLICIT_EVIDENCE",
-                        "basis_summary": "stale source",
-                        "basis_input_refs": [],
-                    },
-                },
-            )
-            self.assertTrue(failed_add.is_error)
-
-            evidence = await self._call(
-                session,
-                "evidence_start",
-                {
-                    "repository_id": "repo-lifecycle",
-                    "request_id": {"value": "req-ev-1"},
-                    "scope": {
-                        "paths": ["styles"],
-                        "evidence_refs": [],
-                    },
-                    "requests": [{"locator": "styles/site.css", "ranges": []}],
-                    "bounds": BOUNDS,
-                },
-            )
-            self.assertEqual(
-                evidence["outcomes"][0]["observation_id"]["value"][:4],
-                "obs:",
-            )
             return {
-                "understanding_id": understanding_id,
-                "context_id": context_id,
-                "observation_id": observation_id,
-                "committed_at": committed_at,
-                "challenge_args": challenge_args,
-                "challenge_committed_at": challenge["committed_at"],
+                "challenge_id": challenge_id,
+                "challenge_revision": challenge_revision,
+                "settled": settled,
             }
 
-        state = await self._session(first)
-
-        async def after_restart(session: ClientSession) -> None:
-            retrieved = await self._call(
-                session,
-                "understand_retrieve",
-                {
-                    "$type": "UnderstandingSnapshotSelector",
-                    "repository_id": REPOSITORY_ID,
-                    "understanding_id": state["understanding_id"],
-                },
-            )
-            self.assertEqual(retrieved["understanding"]["current_version"]["value"], 3)
-            replay = await self._call(
-                session,
-                "record_create",
-                self._create_wire(
-                    state["context_id"],
-                    state["observation_id"],
-                    "sub-create-1",
-                ),
-            )
-            self.assertEqual(replay["committed_at"], state["committed_at"])
-            reassessed = await self._call(
-                session,
-                "reassess",
-                {
-                    "repository_id": REPOSITORY_ID,
-                    "understanding_id": state["understanding_id"],
-                },
-            )
-            self.assertEqual(reassessed["state"], "REASSESSMENT_REQUIRED")
-            challenge_replay = await self._call(
-                session,
-                "record_challenge",
-                state["challenge_args"],
-            )
-            self.assertEqual(
-                challenge_replay["committed_at"],
-                state["challenge_committed_at"],
-            )
-
-        await self._session(after_restart)
+        outcome = await self._session(journey)
+        settled = outcome["settled"]
+        self.assertEqual(settled["$type"], "UnderstandingRecorded")
+        self.assertEqual(
+            settled["receipt"]["accepted_understanding_versions"][0]["value"], 2
+        )
+        store = LifecycleStore(
+            self.data / f"{REPOSITORY_ID}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        self.addCleanup(store.close)
+        challenge = store.get_challenge(outcome["challenge_id"])
+        self.assertEqual(
+            challenge.challenge_revision.value,
+            outcome["challenge_revision"] + 1,
+        )
+        self.assertEqual(challenge.state, m.ChallengeState.UNRESOLVED)
 
 
 if __name__ == "__main__":

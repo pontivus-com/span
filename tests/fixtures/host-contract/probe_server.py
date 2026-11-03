@@ -1,10 +1,9 @@
-"""Test-only MCP server exposing the 0.9.0 candidate record grammar.
+"""HISTORICAL/VOID: the retired 0.9.0 host-contract probe server.
 
-This is the G-0 probe's local server. It is not a shipped Span operation and
-must not be installed as one. It uses the canonical N-01 carriers and the
-normal generated schema/wire codec; a host that cannot deliver this grammar
-is evidence against the candidate contract, not a reason to add a second
-host-specific model.
+This fixture is retained only as a record of the twenty-tool grammar it
+exercised. It is not imported or run by the test suite and must not be used to
+certify the current ``ask``/``record``/``reconsider`` surface. The delivered
+three-tool journey is covered by ``tests/integration/test_lifecycle_mcp.py``.
 """
 
 from __future__ import annotations
@@ -43,6 +42,7 @@ from span.core.schema import (
     to_wire_root,
 )
 from span.core.schema import record_wire as rw
+from span.shell.mcp.wire import canonical_result_payload
 
 __all__ = ["build_server", "main"]
 
@@ -59,7 +59,7 @@ CRASH_CREATE_SUBMISSION = os.environ.get(
     "SPAN_HOST_CONTRACT_CRASH_CREATE_SUBMISSION", ""
 )
 SCOPE_PATH = os.environ.get("SPAN_HOST_CONTRACT_SCOPE", "src/probe.py")
-SERVER_VERSION = "0.9.0-probe"
+SERVER_VERSION = "0.10.0-probe"
 
 _CONTEXTS: dict[str, m.InvestigationContext] = {}
 _REQUESTS: dict[tuple[str, str], str] = {}
@@ -84,11 +84,10 @@ def _log(event: dict[str, object]) -> None:
         handle.write(json.dumps(event, sort_keys=True) + "\n")
 
 
-def _receipt_key(identity: m.RecordingIdentity) -> tuple[str, str, str]:
+def _receipt_key(identity: m.RecordingIdentity) -> tuple[str, str]:
     return (
         identity.repository_id,
-        identity.context_id.value,
-        identity.submission_id.value,
+        identity.request_id.value,
     )
 
 
@@ -125,7 +124,14 @@ def _replay_or_none(
     digest: m.ContentDigest,
 ) -> m.RecordReceipt | None:
     existing = _RECEIPTS.get(_receipt_key(identity))
-    decision = receipt_decision(existing, identity, digest)
+    decision = receipt_decision(
+        existing,
+        m.RecordingKey(
+            repository_id=identity.repository_id,
+            request_id=identity.request_id,
+        ),
+        digest,
+    )
     if decision.kind is m.ReceiptDecisionKind.REPLAY:
         return decision.receipt
     if decision.kind is m.ReceiptDecisionKind.CONFLICT:
@@ -274,9 +280,7 @@ def _create_domain(command: m.CreateUnderstandingCommand) -> dict[str, object]:
     if replay is not None:
         return to_wire_root(m.RecordReceipt, m.to_canonical(replay))
     context = _context_for(command.identity)
-    understanding_id = m.UnderstandingId(
-        f"u:{command.identity.context_id.value}:{command.identity.submission_id.value}"
-    )
+    understanding_id = m.UnderstandingId(f"u:{command.identity.request_id.value}")
     transition = create_understanding(understanding_id, command, context, _now())
     _STATE[understanding_id.value] = (
         transition.understanding,
@@ -290,12 +294,12 @@ def _create_domain(command: m.CreateUnderstandingCommand) -> dict[str, object]:
         understanding=(understanding_id, transition.new_version.version),
     )
     _RECEIPTS[_receipt_key(command.identity)] = receipt
-    if CRASH_CREATE_SUBMISSION == command.identity.submission_id.value:
+    if CRASH_CREATE_SUBMISSION == command.identity.request_id.value:
         _save_state()
         os._exit(17)
-    drop_key = f"create:{command.identity.submission_id.value}"
+    drop_key = f"create:{command.identity.request_id.value}"
     if (
-        DROP_CREATE_SUBMISSION == command.identity.submission_id.value
+        DROP_CREATE_SUBMISSION == command.identity.request_id.value
         and drop_key not in _DROPS
     ):
         _DROPS.add(drop_key)
@@ -348,9 +352,7 @@ def _verification_domain(command: m.RecordVerificationCommand) -> dict[str, obje
     replay = _replay_or_none(command.identity, digest)
     if replay is not None:
         return to_wire_root(m.RecordReceipt, m.to_canonical(replay))
-    run_id = m.VerificationRunId(
-        f"run:{command.identity.context_id.value}:{command.identity.submission_id.value}"
-    )
+    run_id = m.VerificationRunId(f"run:{command.identity.request_id.value}")
     receipt = build_receipt(
         command.identity,
         digest,
@@ -389,7 +391,14 @@ def _wire_resolver(repository_id: str) -> rw.RecordWireResolver:
             status=m.AuthorityStatus.ACCEPTED,
         )
 
-    return rw.RecordWireResolver(reference=reference, authority=authority)
+    def source(
+        locator: str, _ranges: tuple[m.SourceRange, ...]
+    ) -> m.SourceObservationId:
+        return m.SourceObservationId(f"obs-probe:{locator}")
+
+    return rw.RecordWireResolver(
+        reference=reference, authority=authority, source=source
+    )
 
 
 def _wire_create(arguments: dict[str, object]) -> dict[str, object]:
@@ -469,12 +478,72 @@ def _verification(arguments: dict[str, object]) -> dict[str, object]:
         return _verification_unlocked(arguments)
 
 
+def _probe_surface(repository_id: str, locator: str) -> m.SurfaceKey:
+    return m.SurfaceKey(
+        repository_id=repository_id,
+        kind=m.SurfaceKind.FILE,
+        locator=locator,
+    )
+
+
+def _ask(arguments: dict[str, object]) -> dict[str, object]:
+    request = from_wire(m.AskRequest, arguments)
+    _log({"event": "ask", "reference": request.reference})
+    surface = _probe_surface(request.repository_id, request.reference)
+    if not _STATE:
+        result: object = m.Gap(
+            surface=surface,
+            reason=m.GapReason.UNASSESSED,
+            recovery="read the cited evidence, then record the conclusion",
+            question=request.question or "",
+            missing=(request.question or "no current conclusion",),
+        )
+    else:
+        understanding, version, _ = next(iter(_STATE.values()))
+        result = m.Answer(
+            surface=surface,
+            status=m.SurfaceStatus(surface=surface, current=1),
+            question=request.question or "",
+            conclusions=version.conclusions,
+            context=m.InvestigationContextId("ctx-probe-ask"),
+        )
+    return canonical_result_payload(result)  # type: ignore[return-value]
+
+
+def _reconsider(arguments: dict[str, object]) -> dict[str, object]:
+    request = from_wire(m.ReconsiderRequest, arguments)
+    _log({"event": "reconsider", "paths": list(request.changed_paths)})
+    surface = _probe_surface(request.repository_id, "src/probe.py")
+    result = m.Changed(
+        surfaces=(
+            m.ChangedSurface(
+                surface=surface,
+                reasons=(m.ChangeReason.CONTAINMENT,),
+            ),
+        ),
+    )
+    return canonical_result_payload(result)  # type: ignore[return-value]
+
+
 _TOOLS = (
     (
         "probe_start_context",
         "Start one server-issued investigation context.",
         m.StartContextRequest,
         _start_context,
+    ),
+    (
+        "probe_understand_question",
+        "Ask one scoped question about a surface, or omit the question for "
+        "the surface document view.",
+        m.AskRequest,
+        _ask,
+    ),
+    (
+        "probe_reconsider",
+        "Map a changed scope to every surface that must be re-examined.",
+        m.ReconsiderRequest,
+        _reconsider,
     ),
     (
         "probe_record_create",
@@ -553,17 +622,20 @@ def _result_schema(root: object) -> dict:
     return _inline_refs(schema, schema.get("$defs", {}), set())
 
 
+_PROBE_RESULTS: dict[str, object] = {
+    "probe_start_context": m.InvestigationContext,
+    "probe_understand_question": m.AskResult,
+    "probe_reconsider": m.Changed,
+}
+
+
 def _tool_specs() -> list[types.Tool]:
     return [
         types.Tool(
             name=name,
             description=description,
             inputSchema=_request_schema(root),
-            outputSchema=_result_schema(
-                m.InvestigationContext
-                if name == "probe_start_context"
-                else m.RecordReceipt
-            ),
+            outputSchema=_result_schema(_PROBE_RESULTS.get(name, m.RecordReceipt)),
         )
         for name, description, root, _handler in _TOOLS
     ]

@@ -60,21 +60,36 @@ class EvidenceServiceTest(unittest.TestCase):
             new_context_id=lambda: "ctx-ev-1",
         )
 
+    def _service(self, bounds: m.QueryBounds) -> EvidenceService:
+        return EvidenceService(
+            store=self.store,
+            evidence=self.evidence,
+            clock=lambda: NOW,
+            new_context_id=lambda: "ctx-ev-1",
+            policy=m.ServiceBoundsPolicy(
+                default_query_bounds=bounds,
+                maximum_query_bounds=bounds,
+                hook_fast_bounds=bounds,
+            ),
+        )
+
     def _start(
         self,
         requests: tuple[m.EvidenceRequest, ...],
         *,
         scope_paths: tuple[str, ...] = (),
         request_id: str = "req-ev-1",
-        bounds: m.QueryBounds = BOUNDS,
+        policy_bounds: m.QueryBounds | None = None,
     ) -> m.EvidenceAdmissionResult:
-        return self.service.start(
+        service = (
+            self.service if policy_bounds is None else self._service(policy_bounds)
+        )
+        return service.start(
             m.EvidenceStartRequest(
                 repository_id="repo-1",
                 request_id=m.RequestId(request_id),
                 scope=m.EvidenceScope(paths=scope_paths),
                 requests=requests,
-                bounds=bounds,
             )
         )
 
@@ -186,7 +201,7 @@ class EvidenceServiceTest(unittest.TestCase):
                 m.EvidenceRequest("src/app.py"),
                 m.EvidenceRequest("styles/site.css"),
             ),
-            bounds=bounds,
+            policy_bounds=bounds,
         )
         self.assertIsInstance(result.outcomes[0], m.AdmittedEvidence)
         self.assertIsInstance(result.outcomes[1], m.OmittedEvidence)
@@ -206,7 +221,7 @@ class EvidenceServiceTest(unittest.TestCase):
                 m.EvidenceRequest("src/app.py"),
                 m.EvidenceRequest("styles/site.css"),
             ),
-            bounds=bounds,
+            policy_bounds=bounds,
         )
         self.assertIsInstance(result.outcomes[0], m.AdmittedEvidence)
         self.assertIsInstance(result.outcomes[1], m.OmittedEvidence)
@@ -218,7 +233,6 @@ class EvidenceServiceTest(unittest.TestCase):
                 repository_id="repo-1",
                 context_id=first.context.context_id,
                 requests=(m.EvidenceRequest("styles/site.css"),),
-                bounds=BOUNDS,
             )
         )
         self.assertEqual(extended.context.context_id, first.context.context_id)
@@ -262,7 +276,6 @@ class EvidenceServiceTest(unittest.TestCase):
                 request_id=m.RequestId("req-ambiguous"),
                 scope=m.EvidenceScope(),
                 requests=(m.EvidenceRequest("src/app.py"),),
-                bounds=BOUNDS,
             )
         )
         self.assertIsInstance(result.outcomes[0], m.EvidenceSourceFailure)
@@ -287,7 +300,6 @@ class EvidenceServiceTest(unittest.TestCase):
                     request_id=m.RequestId("req-failing"),
                     scope=m.EvidenceScope(),
                     requests=(m.EvidenceRequest("src/app.py"),),
-                    bounds=BOUNDS,
                 )
             )
 

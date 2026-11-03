@@ -19,14 +19,14 @@ semantic interpretation or every host. Execution receipts are separate.
 | I-06 | Authority integrity | Test | `SupportServiceTest`; `test_authority_support_status_and_presence` |
 | I-07 | Ownership integrity | Test | `BindingTest`; `LifecycleStoreTest` (one root binding, no rebinding) |
 | I-08 | Conflict integrity | Test | `LifecycleStoreTest` (challenge settlement); `ChallengeTransitionTest` |
-| I-09 | Ambiguity integrity | Test | `UnderstandServiceTest`; `DiscoveryServiceTest` (candidates stay candidates) |
-| I-10 | Freshness preflight | Test | `SupportServiceTest`; `DiscoveryServiceTest` (current/changed/missing membership) |
+| I-09 | Ambiguity integrity | Test | `AnswerServiceTest`; `test_multiple_granularities_are_ambiguous` (ambiguity is a separate result) |
+| I-10 | Freshness preflight | Test | `SupportServiceTest` (current/changed/missing membership) |
 | I-11 | Version history integrity | Test | `LifecycleStoreTest`; `test_update_cas_and_history` |
 | I-12 | Verification integrity | Test | `SupportServiceTest`; `test_verification_runs_are_independent_and_source_aware` |
 | I-13 | Structural separation | Review | Store holds canonical JSON plus query columns only; no graph duplication |
 | I-14 | Provider neutrality | Test | `GraftMappingTest`; `StructuralCoverageConformanceTest` |
 | I-15 | No semantic reconstruction | Review | Composers project stored state; transport/store add no judgments |
-| I-16 | Boundedness | Test | `test_total_byte_bound_omits_remainder`; `test_unit_bound_omits_remainder`; `test_truncation_is_explicit` |
+| I-16 | Boundedness | Test | `test_total_byte_bound_omits_remainder`; `test_unit_bound_omits_remainder`; `test_bound_reports_truncation_not_unaffected` |
 | I-17 | Publication isolation | Test | `IsolationGateTest` (hermetic tree; no enclosing-workspace coupling) |
 | I-18 | No semantic `Any` | Test | `SemanticTypingTest` (annotation scan clean; canonical decode refuses untyped collections) |
 | I-19 | Success-path completeness | Test | `LifecycleMcpTest` (first valid recording on the ordinary path) |
@@ -34,9 +34,9 @@ semantic interpretation or every host. Execution receipts are separate.
 | I-21 | Reference-safe reaping | Review | Reaping removes operational state only; semantic history stays reference-safe |
 | I-22 | Missing authority remains missing | Test | `test_declared_authority_resolution`; `SupportServiceTest` (unverifiable stays unverifiable) |
 | I-23 | Skill non-authority | Test | `SkillNonAuthorityTest` (no second authorities, scores, or lifecycle actions) |
-| I-24 | Skill/API consistency | Test | `test_only_canonical_operations` (canonical operations only, across all skills) |
+| I-24 | Skill/API consistency | Test | `test_only_canonical_operations` (canonical operations only, across all skills); `test_json_examples_decode_through_the_mcp_wire` (each skill example decodes as its tool); `test_record_description_carries_every_call_template`; `test_contract_action_vocabulary_matches_the_wire`; `test_refusals_name_only_registered_operations` |
 | I-25 | Skill optionality | Test | `test_implementation_ignores_skills` (no implementation file depends on skill content) |
-| I-26 | Lifecycle placement | Test | `UnderstandServiceTest`; `test_cold_question_admits_inspectable_evidence` |
+| I-26 | Lifecycle placement | Test | `AnswerServiceTest`; `test_unknown_surface_is_unassessed` |
 | I-27 | Offline bootstrap isolation | Test | `InitializationContractTest`; `test_cs07_uninitialized_context_creates_no_store` |
 | I-28 | Interactive hook boundedness | Test | `LifecycleHooksTest` (one event-local notice; no inventory scan) |
 | I-29 | No automatic semantic interpretation | Test | `LifecycleHooksTest`; `test_hooks_never_build` (hook paths never build or record) |
@@ -46,10 +46,10 @@ semantic interpretation or every host. Execution receipts are separate.
 | I-33 | Trust/freshness singularity | Test | `ClosedVocabularyTest`; `SerializationRoundTripTest` |
 | I-34 | Tagged reference ingress | Test | `CanonicalRoundTripTest`; `RecordWireSchemaTest` (tagged union positions) |
 | I-35 | Canonical operational bounds | Test | `ConstructionValidationTest` (policy defaults and rejection are explicit) |
-| I-36 | Qualified result with publicly retrievable detail | Test | `test_full_lifecycle_and_restart`; `test_budget_bounds_complete_answer_without_full_question`; `test_first_oversized_snapshot_is_a_reference` (qualifications/next actions inline; omitted bodies resolve through public retrieval) |
+| I-36 | Qualified result with publicly retrievable detail | Test | `test_three_tool_journey_and_restart`; `test_current_content_is_an_answer`; `test_changed_source_is_an_invalidated_gap` (omitted content resolves through public retrieval) |
 | I-37 | Explicit withdrawal and supersession | Test | `LifecycleStoreTest`; `test_withdraw_creates_explicit_withdrawal_revision` |
 | I-38 | Changed-support investigation stays pre-change | Test | `UnderstandServiceTest` (reconsideration prepares, recording accepts) |
-| I-39 | Cursor routing and stable request binding | Test | `test_following_discovery_cursor_keeps_request_binding`; `test_inventory_cursor_resumes_evidence_page`; `PageTokenTest` |
+| I-39 | Cursor routing and stable request binding | Test | `PageTokenTest` |
 
 Downstream-compensation check (no silent repairs, no salvage, no
 fallback parsing): validation rejects whole units; strict decode has

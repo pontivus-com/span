@@ -27,7 +27,7 @@ def load_seeds(path, dry_run=False):
     # canonical decoder is always obtainable in supported paths. Shape
     # only; no locator resolution against the store and no structural
     # provider contact. Unknown locators stay rejected at
-    # initialize_repository provisioning, the authoritative boundary.
+    # installer provisioning, the authoritative boundary.
     # A missing decoder is a broken checkout or install and fails
     # closed here; validation is never skipped.
     try:

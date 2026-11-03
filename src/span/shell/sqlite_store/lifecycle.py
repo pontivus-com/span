@@ -1,12 +1,11 @@
-"""Candidate schema-10 lifecycle store.
+"""Candidate schema-11 lifecycle store.
 
-This is the replacement store boundary for the 0.9.0 lifecycle: canonical
+This is the replacement store boundary for the 0.10 lifecycle: canonical
 contexts, understanding versions, conclusion revisions, challenges,
 verification runs, and recording receipts in one SQLite transaction.
 
-It is a candidate module for WP-02 and is not wired into the current MCP
-server. The old schema-9 store remains the running release until the
-coordinated cutover.
+It is the active runtime store. Older stores are transitioned only through the
+explicit offline protocol; the runtime never migrates at open.
 """
 
 from __future__ import annotations
@@ -20,7 +19,12 @@ import sqlite3 as _sqlite3
 import typing as _typing
 
 from span.core import model as m
-from span.core.identity import challenge_identity, record_content_digest
+from span.core.identity import (
+    challenge_identity,
+    payload_digest,
+    record_content_digest,
+    recording_key,
+)
 from span.core.recording import (
     ChallengeEffect,
     RecordingConflict,
@@ -32,15 +36,18 @@ from span.core.recording import (
     create_understanding,
     receipt_decision,
 )
+from span.core.rejection import RejectionCauseKind, SurfaceConflict
+from span.shell.sqlite_store import dependents as _dependents
 
 __all__ = [
     "LifecycleStore",
     "LifecycleStoreError",
     "SchemaVersionError",
     "SourceObservationRecord",
+    "UnknownRepository",
 ]
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 class LifecycleStoreError(ValueError):
@@ -49,6 +56,10 @@ class LifecycleStoreError(ValueError):
 
 class SchemaVersionError(LifecycleStoreError):
     """The store is not the supported schema version."""
+
+
+class UnknownRepository(LifecycleStoreError):
+    """The repository has not been bound by the installer."""
 
 
 _DDL = (
@@ -64,6 +75,33 @@ _DDL = (
         root TEXT NOT NULL,
         authority_seeds_json TEXT NOT NULL DEFAULT '[]',
         authority_bindings_json TEXT NOT NULL DEFAULT '[]'
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS surfaces(
+        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
+        kind TEXT NOT NULL,
+        locator TEXT NOT NULL,
+        parent_kind TEXT,
+        parent_locator TEXT,
+        boundary_version INTEGER NOT NULL,
+        canonical_json TEXT NOT NULL,
+        PRIMARY KEY(repository_id, kind, locator),
+        UNIQUE(repository_id, locator)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS surface_boundary_versions(
+        repository_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        locator TEXT NOT NULL,
+        boundary_version INTEGER NOT NULL,
+        boundary_digest TEXT NOT NULL,
+        canonical_json TEXT NOT NULL,
+        PRIMARY KEY(repository_id, kind, locator, boundary_version),
+        FOREIGN KEY(repository_id, kind, locator)
+            REFERENCES surfaces(repository_id, kind, locator)
+            ON DELETE CASCADE
     )
     """,
     """
@@ -140,10 +178,13 @@ _DDL = (
     CREATE TABLE IF NOT EXISTS understandings(
         understanding_id TEXT PRIMARY KEY,
         repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
+        surface_kind TEXT NOT NULL,
+        surface_locator TEXT NOT NULL,
         question TEXT NOT NULL,
         scope_json TEXT NOT NULL,
         current_version INTEGER NOT NULL,
-        canonical_json TEXT NOT NULL
+        canonical_json TEXT NOT NULL,
+        UNIQUE(repository_id, surface_kind, surface_locator, question)
     )
     """,
     """
@@ -229,12 +270,11 @@ _DDL = (
     """
     CREATE TABLE IF NOT EXISTS record_receipts(
         repository_id TEXT NOT NULL,
-        context_id TEXT NOT NULL,
-        submission_id TEXT NOT NULL,
+        request_id TEXT NOT NULL,
         content_digest TEXT NOT NULL,
         canonical_json TEXT NOT NULL,
         replay_expires_at TEXT,
-        PRIMARY KEY(repository_id, context_id, submission_id)
+        PRIMARY KEY(repository_id, request_id)
     )
     """,
 )
@@ -470,6 +510,193 @@ class LifecycleStore:
         """Return the active lifecycle schema version."""
         return SCHEMA_VERSION
 
+    # -- surfaces ----------------------------------------------------------
+
+    def put_surface(self, surface: m.Surface) -> m.Surface:
+        """Persist one surface at its current boundary version.
+
+        Identical content is idempotent; a kind conflict or a changed boundary
+        under the same version is rejected. Boundary changes use
+        ``update_surface`` so history stays immutable.
+        """
+        key = surface.key
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT kind, canonical_json FROM surfaces"
+                " WHERE repository_id=? AND locator=?",
+                (key.repository_id, key.locator),
+            ).fetchone()
+            if row is None:
+                self._insert_surface(connection, surface)
+                return surface
+            existing = m.from_canonical(m.Surface, _json.loads(row["canonical_json"]))
+            if row["kind"] != key.kind.value:
+                raise SurfaceConflict(
+                    f"surface {key.locator!r} is already declared as {row['kind']}",
+                    current_boundary_version=existing.boundary_version,
+                )
+            if existing == surface:
+                return existing
+            raise SurfaceConflict(
+                f"surface {key.locator!r} already has boundary version "
+                f"{existing.boundary_version}",
+                current_boundary_version=existing.boundary_version,
+            )
+
+    def update_surface(
+        self, surface: m.Surface, *, expected_boundary_version: int
+    ) -> m.Surface:
+        """Apply one compare-and-set boundary update, preserving history."""
+        key = surface.key
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT kind, boundary_version FROM surfaces"
+                " WHERE repository_id=? AND locator=?",
+                (key.repository_id, key.locator),
+            ).fetchone()
+            if row is None:
+                raise LifecycleStoreError(f"unknown surface: {key.locator}")
+            current = int(row["boundary_version"])
+            if surface.boundary_version != expected_boundary_version + 1:
+                raise SurfaceConflict(
+                    "a boundary update must advance the version by exactly one",
+                    current_boundary_version=current,
+                )
+            if row["kind"] != key.kind.value:
+                raise SurfaceConflict(
+                    f"surface {key.locator!r} is already declared as {row['kind']}",
+                    current_boundary_version=current,
+                )
+            if current != expected_boundary_version:
+                raise SurfaceConflict(
+                    f"surface {key.locator!r} is at boundary version {current}, "
+                    f"not {expected_boundary_version}",
+                    current_boundary_version=current,
+                )
+            canonical = _json.dumps(m.to_canonical(surface), sort_keys=True)
+            connection.execute(
+                "UPDATE surfaces SET parent_kind=?, parent_locator=?,"
+                " boundary_version=?, canonical_json=?"
+                " WHERE repository_id=? AND kind=? AND locator=?",
+                (
+                    None if surface.parent is None else surface.parent.kind.value,
+                    None if surface.parent is None else surface.parent.locator,
+                    surface.boundary_version,
+                    canonical,
+                    key.repository_id,
+                    key.kind.value,
+                    key.locator,
+                ),
+            )
+            self._insert_boundary(connection, surface, canonical)
+            return surface
+
+    def find_surface(self, key: m.SurfaceKey) -> m.Surface | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM surfaces"
+            " WHERE repository_id=? AND kind=? AND locator=?",
+            (key.repository_id, key.kind.value, key.locator),
+        ).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(m.Surface, _json.loads(row["canonical_json"]))
+
+    def get_surface(self, key: m.SurfaceKey) -> m.Surface:
+        surface = self.find_surface(key)
+        if surface is None:
+            raise LifecycleStoreError(
+                f"unknown surface: {key.repository_id}/{key.kind.value}/"
+                f"{key.locator}"
+            )
+        return surface
+
+    def list_surfaces(self, repository_id: str) -> tuple[m.Surface, ...]:
+        rows = self._connection.execute(
+            "SELECT canonical_json FROM surfaces WHERE repository_id=?"
+            " ORDER BY locator, kind",
+            (repository_id,),
+        ).fetchall()
+        return tuple(
+            m.from_canonical(m.Surface, _json.loads(row["canonical_json"]))
+            for row in rows
+        )
+
+    def surface_boundaries(self, key: m.SurfaceKey) -> tuple[m.Surface, ...]:
+        rows = self._connection.execute(
+            "SELECT canonical_json FROM surface_boundary_versions"
+            " WHERE repository_id=? AND kind=? AND locator=?"
+            " ORDER BY boundary_version",
+            (key.repository_id, key.kind.value, key.locator),
+        ).fetchall()
+        return tuple(
+            m.from_canonical(m.Surface, _json.loads(row["canonical_json"]))
+            for row in rows
+        )
+
+    def _resolve_create_surface(
+        self, connection: _sqlite3.Connection, key: m.SurfaceKey
+    ) -> int:
+        """Return the boundary version a new understanding is recorded against.
+
+        A path or symbol surface is created on first reference (L2 §4.2); a
+        declared surface must already exist and is never inferred.
+        """
+        row = connection.execute(
+            "SELECT boundary_version FROM surfaces"
+            " WHERE repository_id=? AND kind=? AND locator=?",
+            (key.repository_id, key.kind.value, key.locator),
+        ).fetchone()
+        if row is not None:
+            return int(row["boundary_version"])
+        if key.kind.is_declared:
+            raise RecordingValidationError(
+                f"declared surface has not been created: {key.locator}"
+            )
+        surface = m.Surface(key=key)
+        self._insert_surface(connection, surface)
+        return surface.boundary_version
+
+    def _insert_surface(
+        self, connection: _sqlite3.Connection, surface: m.Surface
+    ) -> None:
+        canonical = _json.dumps(m.to_canonical(surface), sort_keys=True)
+        connection.execute(
+            "INSERT INTO surfaces(repository_id, kind, locator, parent_kind,"
+            " parent_locator, boundary_version, canonical_json)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (
+                surface.key.repository_id,
+                surface.key.kind.value,
+                surface.key.locator,
+                None if surface.parent is None else surface.parent.kind.value,
+                None if surface.parent is None else surface.parent.locator,
+                surface.boundary_version,
+                canonical,
+            ),
+        )
+        self._insert_boundary(connection, surface, canonical)
+
+    def _insert_boundary(
+        self,
+        connection: _sqlite3.Connection,
+        surface: m.Surface,
+        canonical: str,
+    ) -> None:
+        digest = payload_digest(m.to_canonical(surface.boundary))
+        connection.execute(
+            "INSERT INTO surface_boundary_versions(repository_id, kind, locator,"
+            " boundary_version, boundary_digest, canonical_json)"
+            " VALUES(?,?,?,?,?,?)",
+            (
+                surface.key.repository_id,
+                surface.key.kind.value,
+                surface.key.locator,
+                surface.boundary_version,
+                digest.value,
+                canonical,
+            ),
+        )
+
     def require_repository(self, repository_id: str) -> str:
         """Return the registered root or reject an unknown repository."""
         row = self._connection.execute(
@@ -477,7 +704,7 @@ class LifecycleStore:
             (repository_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(
+            raise UnknownRepository(
                 f"unknown repository: {repository_id}; "
                 "initialize it before recording"
             )
@@ -649,6 +876,19 @@ class LifecycleStore:
                 f"unknown discovery observation: {observation_id}"
             )
         return observation
+
+    def list_discovery_observations(
+        self, repository_id: str
+    ) -> tuple[m.DiscoveryObservation, ...]:
+        rows = self._connection.execute(
+            "SELECT canonical_json FROM discovery_observations"
+            " WHERE repository_id=? ORDER BY observation_id",
+            (repository_id,),
+        ).fetchall()
+        return tuple(
+            m.from_canonical(m.DiscoveryObservation, _json.loads(row["canonical_json"]))
+            for row in rows
+        )
 
     def find_admitted_evidence(
         self, context_id: str, reference: str
@@ -845,22 +1085,69 @@ class LifecycleStore:
 
     # -- receipts ----------------------------------------------------------
 
-    def get_receipt(self, identity: m.RecordingIdentity) -> m.RecordReceipt | None:
-        return self._get_receipt_in(self._connection, identity, self._clock())
+    def get_receipt(self, key: m.RecordingKey) -> m.RecordReceipt | None:
+        return self._get_receipt_in(self._connection, key, self._clock())
+
+    def record_noop(
+        self,
+        identity: m.RecordingIdentity,
+        content_digest: m.ContentDigest,
+        understanding_id: m.UnderstandingId,
+    ) -> m.RecordReceipt:
+        """Persist acceptance for an unchanged, already-current version (FD-31)."""
+        with self._transaction() as connection:
+            now = self._clock()
+            key = recording_key(identity)
+            existing = self._get_receipt_in(connection, key, now)
+            decision = receipt_decision(existing, key, content_digest)
+            if decision.kind is m.ReceiptDecisionKind.REPLAY:
+                if decision.receipt is None:
+                    raise LifecycleStoreError("a replay decision carried no receipt")
+                return decision.receipt
+            if decision.kind is m.ReceiptDecisionKind.CONFLICT:
+                raise RecordingConflict(
+                    decision.reason
+                    or "this request identity already committed different content",
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+                )
+            understanding = self._get_understanding_in(
+                connection, understanding_id.value
+            )
+            receipt = build_receipt(
+                identity,
+                content_digest,
+                now,
+                understanding=(
+                    understanding.understanding_id,
+                    understanding.current_version,
+                ),
+                replay_expires_at=now + self.retention.replay_retention,
+            )
+            self._write_receipt(connection, receipt)
+            return receipt
+
+    def find_context_by_request(
+        self, repository_id: str, request_id: m.RequestId
+    ) -> m.InvestigationContext | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM investigation_contexts"
+            " WHERE repository_id=? AND request_id=?",
+            (repository_id, request_id.value),
+        ).fetchone()
+        return None if row is None else _context_from_json(row["canonical_json"])
 
     def _get_receipt_in(
         self,
         connection: _sqlite3.Connection,
-        identity: m.RecordingIdentity,
+        key: m.RecordingKey,
         now: _datetime.datetime,
     ) -> m.RecordReceipt | None:
         row = connection.execute(
             "SELECT canonical_json, replay_expires_at FROM record_receipts"
-            " WHERE repository_id=? AND context_id=? AND submission_id=?",
+            " WHERE repository_id=? AND request_id=?",
             (
-                identity.repository_id,
-                identity.context_id.value,
-                identity.submission_id.value,
+                key.repository_id,
+                key.request_id.value,
             ),
         ).fetchone()
         if row is None:
@@ -897,8 +1184,9 @@ class LifecycleStore:
             selected = command.understanding_id
         with self._transaction() as connection:
             now = self._clock()
-            existing = self._get_receipt_in(connection, command.identity, now)
-            decision = receipt_decision(existing, command.identity, digest)
+            key = recording_key(command.identity)
+            existing = self._get_receipt_in(connection, key, now)
+            decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
                     raise LifecycleStoreError("a replay decision carried no receipt")
@@ -906,14 +1194,43 @@ class LifecycleStore:
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
                     decision.reason
-                    or "this submission identity already committed different content"
+                    or "this submission identity already committed different content",
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
                 )
             context = self._get_context_in(
                 connection, command.identity.context_id.value
             )
             self._require_live_context(context, now, command.identity.repository_id)
             if isinstance(command, m.CreateUnderstandingCommand):
-                transition = create_understanding(selected, command, context, now)
+                boundary_version = self._resolve_create_surface(
+                    connection, command.surface
+                )
+                transition = create_understanding(
+                    selected,
+                    command,
+                    context,
+                    now,
+                    surface_boundary_version=boundary_version,
+                )
+                duplicate = connection.execute(
+                    "SELECT understanding_id FROM understandings"
+                    " WHERE repository_id=? AND surface_kind=?"
+                    " AND surface_locator=? AND question=?"
+                    " AND understanding_id<>?",
+                    (
+                        transition.understanding.repository_id,
+                        transition.understanding.surface.kind.value,
+                        transition.understanding.surface.locator,
+                        transition.understanding.question,
+                        selected.value,
+                    ),
+                ).fetchone()
+                if duplicate is not None:
+                    raise RecordingConflict(
+                        "an understanding already exists for this surface "
+                        "and question",
+                        cause_kind=RejectionCauseKind.ALREADY_EXISTS,
+                    )
             else:
                 understanding = self._get_understanding_in(connection, selected.value)
                 version = self._get_version_in(
@@ -935,11 +1252,23 @@ class LifecycleStore:
                 )
             self._write_transition(connection, transition)
             self._write_challenge_effects(connection, transition.challenge_effects)
+            dependents: tuple[m.ConclusionRevisionRef, ...] = ()
+            if not isinstance(command, m.CreateUnderstandingCommand):
+                before = {
+                    (selected.value, ref.conclusion_id.value, ref.revision.value)
+                    for ref in version.conclusions
+                }
+                after = {
+                    (selected.value, ref.conclusion_id.value, ref.revision.value)
+                    for ref in transition.new_version.conclusions
+                }
+                dependents = _dependents.premise_dependents(connection, before - after)
             receipt = build_receipt(
                 command.identity,
                 digest,
                 now,
                 understanding=(selected, transition.new_version.version),
+                dependent_effects=dependents,
                 replay_expires_at=now + self.retention.replay_retention,
             )
             self._write_receipt(connection, receipt)
@@ -954,8 +1283,9 @@ class LifecycleStore:
         digest = content_digest or record_content_digest(command)
         with self._transaction() as connection:
             now = self._clock()
-            existing = self._get_receipt_in(connection, command.identity, now)
-            decision = receipt_decision(existing, command.identity, digest)
+            key = recording_key(command.identity)
+            existing = self._get_receipt_in(connection, key, now)
+            decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
                     raise LifecycleStoreError("a replay decision carried no receipt")
@@ -963,7 +1293,8 @@ class LifecycleStore:
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
                     decision.reason
-                    or "this submission identity already committed different content"
+                    or "this submission identity already committed different content",
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
                 )
             context = self._get_context_in(
                 connection, command.identity.context_id.value
@@ -976,7 +1307,7 @@ class LifecycleStore:
             run = m.VerificationRun(
                 run_id=m.VerificationRunId(
                     f"run:{command.identity.context_id.value}:"
-                    f"{command.identity.submission_id.value}"
+                    f"{command.identity.request_id.value}"
                 ),
                 repository_id=command.run.repository_id,
                 scope=command.run.scope,
@@ -1253,8 +1584,9 @@ class LifecycleStore:
         digest = content_digest or record_content_digest(command)
         with self._transaction() as connection:
             now = self._clock()
-            existing = self._get_receipt_in(connection, command.identity, now)
-            decision = receipt_decision(existing, command.identity, digest)
+            key = recording_key(command.identity)
+            existing = self._get_receipt_in(connection, key, now)
+            decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
                     raise LifecycleStoreError("a replay decision carried no receipt")
@@ -1262,7 +1594,8 @@ class LifecycleStore:
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
                     decision.reason
-                    or "this submission identity already committed different content"
+                    or "this submission identity already committed different content",
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
                 )
             context = self._get_context_in(
                 connection, command.identity.context_id.value
@@ -1330,6 +1663,19 @@ class LifecycleStore:
             raise LifecycleStoreError(f"unknown verification run: {run_id}")
         return m.from_canonical(m.VerificationRun, _json.loads(row["canonical_json"]))
 
+    def list_verification_runs(
+        self, repository_id: str
+    ) -> tuple[m.VerificationRun, ...]:
+        rows = self._connection.execute(
+            "SELECT canonical_json FROM verification_runs"
+            " WHERE repository_id=? ORDER BY run_id",
+            (repository_id,),
+        ).fetchall()
+        return tuple(
+            m.from_canonical(m.VerificationRun, _json.loads(row["canonical_json"]))
+            for row in rows
+        )
+
     # -- retention ---------------------------------------------------------
 
     def reap_expired(self, now: _datetime.datetime | None = None) -> int:
@@ -1359,10 +1705,13 @@ class LifecycleStore:
         version = transition.new_version
         connection.execute(
             "INSERT INTO understandings"
-            "(understanding_id, repository_id, question, scope_json,"
-            " current_version, canonical_json) VALUES(?,?,?,?,?,?)"
+            "(understanding_id, repository_id, surface_kind, surface_locator,"
+            " question, scope_json, current_version, canonical_json)"
+            " VALUES(?,?,?,?,?,?,?,?)"
             " ON CONFLICT(understanding_id) DO UPDATE SET"
             " repository_id=excluded.repository_id,"
+            " surface_kind=excluded.surface_kind,"
+            " surface_locator=excluded.surface_locator,"
             " question=excluded.question,"
             " scope_json=excluded.scope_json,"
             " current_version=excluded.current_version,"
@@ -1370,6 +1719,8 @@ class LifecycleStore:
             (
                 understanding.understanding_id.value,
                 understanding.repository_id,
+                understanding.surface.kind.value,
+                understanding.surface.locator,
                 understanding.question,
                 _json.dumps(m.to_canonical(understanding.scope), sort_keys=True),
                 understanding.current_version.value,
@@ -1450,12 +1801,11 @@ class LifecycleStore:
     ) -> None:
         connection.execute(
             "INSERT INTO record_receipts"
-            "(repository_id, context_id, submission_id, content_digest,"
-            " canonical_json, replay_expires_at) VALUES(?,?,?,?,?,?)",
+            "(repository_id, request_id, content_digest,"
+            " canonical_json, replay_expires_at) VALUES(?,?,?,?,?)",
             (
                 receipt.identity.repository_id,
-                receipt.identity.context_id.value,
-                receipt.identity.submission_id.value,
+                receipt.identity.request_id.value,
                 receipt.content_digest.value,
                 _json.dumps(m.to_canonical(receipt), sort_keys=True),
                 (

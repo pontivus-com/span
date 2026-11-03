@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Span is pre-1.0. Security fixes land on the current `0.6.x` line.
+Span is pre-1.0. Security fixes land on the current `0.9.x` line.
 
 ## Reporting a vulnerability
 

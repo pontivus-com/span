@@ -9,9 +9,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const SIBLING = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "span-hooks",
+);
 
 const CANDIDATES = [
   process.env.SPAN_HOOKS_BIN,
+  SIBLING,
   path.join(
     process.env.HOME || "~",
     ".local/share/span/venv/bin/span-hooks"
@@ -169,6 +176,63 @@ export default {
       });
     }
 
-    return () => controller.abort();
+    // OpenCode dispatches the first request before a local MCP server has
+    // finished connecting. Wait (bounded) at prompt admission so the first
+    // tool list already contains the Span tools; otherwise the agent cannot
+    // ask before reading even when it intends to. FD-58: advisory and silent
+    // on failure — the session proceeds without Span rather than blocking.
+    let mcpReady = false;
+    if (ctx && ctx.session && typeof ctx.session.hook === "function") {
+      await ctx.session.hook("prompt", async () => {
+        if (mcpReady) return;
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline) {
+          try {
+            const tools = await ctx.tool.list();
+            if (tools.some((tool) => String(tool.id).endsWith("_ask"))) {
+              mcpReady = true;
+              return;
+            }
+          } catch {
+            // keep waiting
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      });
+    }
+
+    // FD-58 adoption notice: one system notice per session, only when the
+    // repository has recorded understanding. Advisory and silent on failure.
+    let contextRegistration = null;
+    if (ctx && ctx.session && typeof ctx.session.hook === "function") {
+      const checked = new Set();
+      contextRegistration = await ctx.session.hook("context", (event) => {
+        try {
+          const sessionID = event && event.sessionID;
+          if (!sessionID || checked.has(sessionID)) return;
+          checked.add(sessionID);
+          const notice = run(resolveBin(), [
+            "--repo-root",
+            locationRoot,
+            "adoption-primer",
+          ]);
+          if (!notice) return;
+          if (!event || !Array.isArray(event.system)) return;
+          event.system.push({ type: "text", text: notice });
+        } catch {
+          // A notice never breaks a model call.
+        }
+      });
+    }
+
+    return () => {
+      controller.abort();
+      if (
+        contextRegistration &&
+        typeof contextRegistration.dispose === "function"
+      ) {
+        void contextRegistration.dispose();
+      }
+    };
   },
 };

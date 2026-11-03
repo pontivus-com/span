@@ -26,7 +26,8 @@ class InitializationContractTest(unittest.TestCase):
     def test_contract_document_exists_and_states_explicit_only(self):
         self.assertTrue(CONTRACT.is_file(), "INITIALIZATION_CONTRACT.md missing")
         text = CONTRACT.read_text(encoding="utf-8")
-        self.assertIn("initialize_repository", text)
+        self.assertIn("installer", text)
+        self.assertIn("optional `setup` tool", text)
         self.assertIn("UNINITIALIZED", text)
         self.assertIn("must never start initialization implicitly", text)
 

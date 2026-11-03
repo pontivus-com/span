@@ -45,7 +45,7 @@ interpretations and their disposition history independently of current source
 bytes. A later version or passing run does not silently resolve disagreement.
 
 Legacy trust/claim-kind vocabulary may remain in retained core types and
-historical exports. It is not a required taxonomy for authoring a 0.9.0
+historical exports. It is not a required taxonomy for authoring a current
 understanding. See [taxonomy](taxonomy.md) and [recording](interpretation.md).
 
 ## Verification is its own record
@@ -53,5 +53,5 @@ understanding. See [taxonomy](taxonomy.md) and [recording](interpretation.md).
 An external execution is recorded independently with its observed outcome and
 source observations. Test existence is not a pass. A current failed run still
 records failure; changed tested bytes require a new execution before a fresh
-pass can be claimed. `verification_support` checks currency without running
-anything. Span never originates repository or professional authority.
+pass can be claimed. `ask` returns the run with its live qualification without
+running anything. Span never originates repository or professional authority.

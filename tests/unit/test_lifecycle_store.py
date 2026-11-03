@@ -1,4 +1,4 @@
-"""Candidate schema-10 lifecycle store tests."""
+"""Candidate schema-11 lifecycle store tests."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def _identity(submission: str = "sub-1") -> m.RecordingIdentity:
     return m.RecordingIdentity(
         repository_id="repo-1",
         context_id=m.InvestigationContextId("ctx-1"),
-        submission_id=m.SubmissionId(submission),
+        request_id=m.RequestId(submission),
     )
 
 
@@ -129,6 +129,11 @@ def _create_command(
 ) -> m.CreateUnderstandingCommand:
     return m.CreateUnderstandingCommand(
         identity=_identity(submission),
+        surface=m.SurfaceKey(
+            repository_id="repo-1",
+            kind=m.SurfaceKind.FILE,
+            locator="src/a.py",
+        ),
         target=m.ExplicitTarget(
             question="What does A do?",
             scope=m.EvidenceScope(paths=("src/a.py",)),
@@ -277,11 +282,11 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.register_repository("repo-1", "/repo/one")
         self.store.put_source_observation(_observation())
 
-    def test_schema_version_is_ten(self) -> None:
+    def test_schema_version_is_eleven(self) -> None:
         row = self.store._connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        self.assertEqual(row["value"], "10")
+        self.assertEqual(row["value"], "11")
 
     def test_create_replay_and_conflict(self) -> None:
         self.store.put_context(_context())
@@ -453,7 +458,7 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_challenge(command)
         self.assertEqual(
             receipt.accepted_challenge_ids[0].value,
-            "ch:ctx-1:sub-ch-create",
+            "ch:sub-ch-create",
         )
         replay = self.store.record_challenge(command)
         self.assertEqual(replay.committed_at, receipt.committed_at)
@@ -590,6 +595,43 @@ class LifecycleStoreTest(unittest.TestCase):
         with self.assertRaises(LifecycleStoreError):
             self.store.get_context("ctx-1")
         self.assertEqual(self.store.get_receipt(_identity()), receipt)
+
+    def test_reaping_preserves_accepted_history(self) -> None:
+        self.store.put_context(_context(expires_at=NOW + RETENTION.context_lifetime))
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        self.store.create_challenge(_challenge())
+        verification = self.store.record_verification(_verification_command())
+        run_id = verification.accepted_verification_run_ids[0]
+        self.store.reap_expired(
+            NOW + RETENTION.context_lifetime + datetime.timedelta(minutes=1)
+        )
+        with self.assertRaises(LifecycleStoreError):
+            self.store.get_context("ctx-1")
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 1)
+        self.assertEqual(len(self.store.get_challenges("u-1")), 1)
+        self.assertEqual(self.store.get_verification_run(run_id.value).run_id, run_id)
+
+    def test_restart_recovers_context_and_receipt_by_identity(self) -> None:
+        path = pathlib.Path(self._tmp.name) / "restart.db"
+        first = LifecycleStore(path, retention=RETENTION, clock=lambda: NOW)
+        first.register_repository("repo-1", "/repo/one")
+        first.put_source_observation(_observation())
+        first.put_context(_context())
+        receipt = first.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        first.close()
+        second = LifecycleStore(path, retention=RETENTION, clock=lambda: NOW)
+        self.addCleanup(second.close)
+        self.assertEqual(second.get_context("ctx-1").context_id.value, "ctx-1")
+        self.assertEqual(
+            second.get_receipt(
+                m.RecordingKey(repository_id="repo-1", request_id=m.RequestId("sub-1"))
+            ),
+            receipt,
+        )
 
     def test_failure_before_commit_rolls_back_every_effect(self) -> None:
         self.store.put_context(_context())

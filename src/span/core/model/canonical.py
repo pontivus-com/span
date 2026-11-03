@@ -90,8 +90,9 @@ def _decode_value(hint: object, data: object) -> object:
         try:
             return hint(data)
         except ValueError:
+            accepted = ", ".join(str(member.value) for member in hint)
             raise CanonicalDecodeError(
-                f"unknown {hint.__name__} value: {data!r}"
+                f"unknown {hint.__name__} value: {data!r}; " f"accepted: {accepted}"
             ) from None
 
     if hint is _datetime.datetime:

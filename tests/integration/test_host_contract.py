@@ -49,13 +49,18 @@ def _probe_identity() -> m.RecordingIdentity:
     return m.RecordingIdentity(
         repository_id="repo-probe",
         context_id=m.InvestigationContextId("ctx-probe"),
-        submission_id=m.SubmissionId("sub-probe"),
+        request_id=m.RequestId("sub-probe"),
     )
 
 
 def _probe_create() -> m.CreateUnderstandingCommand:
     return m.CreateUnderstandingCommand(
         identity=_probe_identity(),
+        surface=m.SurfaceKey(
+            repository_id="repo-probe",
+            kind=m.SurfaceKind.FILE,
+            locator="src/probe.py",
+        ),
         target=m.ExplicitTarget(
             question="What does the probe component do?",
             scope=m.EvidenceScope(paths=("src/probe.py",)),
@@ -115,7 +120,7 @@ class CandidateSchemaTest(unittest.TestCase):
         schema = schema_for_request(m.CreateUnderstandingCommand)
         self.assertEqual(
             set(schema["required"]),
-            {"identity", "target", "conclusions"},
+            {"identity", "surface", "target", "conclusions"},
         )
         self.assertIn("ContextBoundTarget__tag", schema["$defs"])
         self.assertIn("ExplicitTarget__tag", schema["$defs"])

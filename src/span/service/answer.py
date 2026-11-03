@@ -1,0 +1,905 @@
+"""Answer composition: current conclusions, gaps, ambiguity, and the document view.
+
+Covers FD-23–FD-29 and the bounded response of FD-54–FD-57. Resolution uses
+the shared containment resolver; support comes from the shared evaluator;
+nothing is stored or rendered. A question ask returns ``Answer`` when at least
+one matched conclusion is current and ``Gap`` otherwise. A no-question ask
+returns the same current content grouped by recorded question (FD-28).
+
+A cold result admits inspectable evidence into a server-issued context inside
+the operation, so the caller never performs a separate admission step.
+"""
+
+from __future__ import annotations
+
+import datetime as _datetime
+import typing as _typing
+
+from span.core import containment
+from span.core import model as m
+from span.core import support_rules
+from span.core.recording import RecordingValidationError
+from span.ports.lifecycle import LifecycleStorePort
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.contexts import issue_context
+from span.service.continuation import (
+    ContinuationCursor,
+    decode_continuation,
+    encode_continuation,
+)
+from span.service.evidence import EvidenceService
+from span.service.ids import server_context_id
+from span.service.support import SupportService
+
+__all__ = ["AnswerService", "gap_recovery"]
+
+
+def gap_recovery(reason: m.GapReason) -> str:
+    """The one fixed remedy for a gap reason (FD-25, A8, TD §9.2).
+
+    The text is server-owned. It names the next action and never ranks or
+    describes other questions.
+    """
+    if reason is m.GapReason.NO_MATCH:
+        return (
+            "ask the same surface without a question to read its current "
+            "document view"
+        )
+    if reason is m.GapReason.UNASSESSED:
+        return "read the cited evidence, then record the conclusion"
+    return "re-read the cited evidence, then record against the current revision"
+
+
+def _encoded_size(value: object) -> int:
+    """The exact MCP wire size: the budget is measured on delivered bytes."""
+    import json
+
+    from span.core.schema import to_wire_root
+
+    payload = to_wire_root(type(value), m.to_canonical(value))
+    return len(json.dumps(payload, sort_keys=True).encode("utf-8"))
+
+
+class AnswerService:
+    """Compose one answer, gap, ambiguity, or document view over stored meaning."""
+
+    def __init__(
+        self,
+        *,
+        store: LifecycleStorePort,
+        support: SupportService,
+        evidence: EvidenceService,
+        policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
+        clock: _typing.Callable[[], _datetime.datetime] | None = None,
+        new_context_id: _typing.Callable[[], str] | None = None,
+    ) -> None:
+        self._store = store
+        self._support = support
+        self._evidence = evidence
+        self._policy = policy
+        self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
+        self._new_context_id = new_context_id or server_context_id
+
+    def ask(self, request: m.AskRequest) -> m.AskResult:
+        self._store.require_repository(request.repository_id)
+        if request.continuation is not None:
+            return self._evidence_page(request)
+        if request.selector is not None:
+            return self._exact_reference(request.selector)
+        if request.surface is not None:
+            surface = m.SurfaceKey(
+                repository_id=request.repository_id,
+                kind=request.surface.kind,
+                locator=request.surface.locator,
+            )
+        else:
+            if request.reference is None:
+                raise RecordingValidationError("ask requires a surface or reference")
+            resolved = self._resolve(request.repository_id, request.reference)
+            if isinstance(resolved, m.AmbiguousSurface):
+                return self._fit(request, resolved)
+            surface = resolved
+        all_understandings = tuple(
+            self._store.list_understandings(request.repository_id)
+        )
+        understandings = tuple(
+            item for item in all_understandings if item.surface == surface
+        )
+        status = self._status(surface, understandings, all_understandings)
+        if request.question is None:
+            return self._fit(
+                request, self._document(request, surface, understandings, status)
+            )
+        matched = tuple(
+            item for item in understandings if item.question == request.question
+        )
+        if not matched:
+            return self._fit(
+                request,
+                self._cold_gap(
+                    request,
+                    surface,
+                    (
+                        m.GapReason.NO_MATCH
+                        if understandings
+                        else m.GapReason.UNASSESSED
+                    ),
+                ),
+            )
+        current: list[m.ConclusionView] = []
+        historical: list[m.ConclusionRevisionRef] = []
+        gaps: list[m.RecordedQuestionGap] = []
+        states: list[m.SupportState] = []
+        for understanding in matched:
+            support = self._support.evaluate_version(
+                understanding.understanding_id.value
+            )
+            states.append(support.state)
+            version = self._store.get_version(
+                understanding.understanding_id.value,
+                understanding.current_version.value,
+            )
+            gaps.extend(version.gaps)
+            revisions = {
+                (item.conclusion_id.value, item.revision.value): item
+                for item in self._store.get_conclusions(
+                    understanding.understanding_id.value
+                )
+            }
+            for item in support.conclusions:
+                if item.evaluation.state is m.SupportState.CURRENT:
+                    current.append(self._view(item, revisions))
+                else:
+                    historical.append(item.ref)
+        if current:
+            return self._fit(
+                request,
+                m.Answer(
+                    surface=surface,
+                    status=status,
+                    question=request.question,
+                    conclusions=tuple(current),
+                    gaps=tuple(gaps),
+                    verification=self._verification(surface),
+                    context=self._context(request, surface),
+                ),
+            )
+        combined = support_rules.combine_states(tuple(states))
+        reason = (
+            m.GapReason.INVALIDATED
+            if combined is m.SupportState.REASSESSMENT_REQUIRED
+            else m.GapReason.UNVERIFIABLE
+        )
+        context_id, evidence, observations = self._investigate(request, surface)
+        return self._fit(
+            request,
+            m.Gap(
+                surface=surface,
+                reason=reason,
+                recovery=gap_recovery(reason),
+                question=request.question,
+                changed_evidence=tuple(unit.evidence_ref for unit in evidence),
+                historical=tuple(historical),
+                missing=(request.question,),
+                evidence=evidence,
+                observations=observations,
+                context=context_id,
+            ),
+        )
+
+    def _resolve(
+        self, repository_id: str, reference: str
+    ) -> m.SurfaceKey | m.AmbiguousSurface:
+        surfaces = self._store.list_surfaces(repository_id)
+        for surface in surfaces:
+            if surface.key.kind.is_declared and surface.key.locator == reference:
+                return surface.key
+        member = containment.path_surface(repository_id, reference)
+        candidates = containment.containing_surfaces(surfaces, member)
+        if len(candidates) > 1:
+            return m.AmbiguousSurface(
+                reference=reference,
+                candidates=candidates,
+                missing_decision=(
+                    "choose the file, symbol, service, or domain surface"
+                ),
+            )
+        return candidates[0]
+
+    def _view(
+        self,
+        support: m.ConclusionSupport,
+        revisions: dict[tuple[str, int], m.ConclusionRevision],
+    ) -> m.ConclusionView:
+        revision = revisions.get(
+            (support.ref.conclusion_id.value, support.ref.revision.value)
+        )
+        if revision is None or not isinstance(revision.content, m.SupportedConclusion):
+            raise RecordingValidationError(
+                "a current conclusion has no supported revision content"
+            )
+        content = revision.content
+        return m.ConclusionView(
+            ref=support.ref,
+            statement=content.statement,
+            assertion_nature=content.assertion_nature,
+            scope=content.scope,
+            support=support,
+            evidence=self._evidence_refs(content.support),
+        )
+
+    def _evidence_refs(
+        self, dependencies: tuple[m.SupportDependency, ...]
+    ) -> tuple[m.EvidenceRef, ...]:
+        refs: list[m.EvidenceRef] = []
+        for dependency in dependencies:
+            if isinstance(dependency, m.SourceSupport):
+                record = self._store.find_source_observation(
+                    dependency.observation_id.value
+                )
+                if record is not None:
+                    refs.append(record.evidence)
+            elif isinstance(dependency, m.AuthoritySupportDependency):
+                refs.append(dependency.authority.evidence_ref)
+        return tuple({ref.evidence_id.value: ref for ref in refs}.values())
+
+    def _cold_gap(
+        self,
+        request: m.AskRequest,
+        surface: m.SurfaceKey,
+        reason: m.GapReason,
+    ) -> m.Gap:
+        """Return a gap with the surface's inspectable evidence admitted."""
+        context, evidence, observations = self._investigate(request, surface)
+        return m.Gap(
+            surface=surface,
+            reason=reason,
+            recovery=gap_recovery(reason),
+            question=request.question or "",
+            evidence=evidence,
+            observations=observations,
+            context=context,
+            missing=(
+                (
+                    request.question
+                    if request.question
+                    else "no current conclusion on this surface"
+                ),
+            ),
+        )
+
+    def _investigate(self, request: m.AskRequest, surface: m.SurfaceKey) -> tuple[
+        m.InvestigationContextId | None,
+        tuple[m.EvidenceUnit, ...],
+        tuple[m.SourceObservationId, ...],
+    ]:
+        paths = self._surface_paths(surface)
+        if not paths:
+            return None, (), ()
+        scope = m.EvidenceScope(paths=paths)
+        try:
+            context = issue_context(
+                self._store,
+                payload=request,
+                repository_id=request.repository_id,
+                request_id=m.RequestId(str(request.request_id)),
+                scope=scope,
+                question=request.question,
+                clock=self._clock,
+                new_context_id=self._new_context_id,
+            )
+            bounds = self._policy.default_query_bounds
+            self._evidence.admit(
+                context,
+                tuple(m.EvidenceRequest(path) for path in paths),
+                bounds,
+            )
+            records = self._evidence.context_observations(context.context_id.value)
+            evidence = tuple(self._evidence.context_unit(record) for record in records)
+            observation_ids = tuple(record.observation_id.value for record in records)
+        except ValueError:
+            return None, (), ()
+        return (
+            context.context_id,
+            evidence,
+            tuple(m.SourceObservationId(value) for value in observation_ids),
+        )
+
+    def _surface_paths(self, surface: m.SurfaceKey) -> tuple[str, ...]:
+        if surface.kind is m.SurfaceKind.FILE:
+            return (surface.locator,)
+        declared = self._store.find_surface(surface)
+        return () if declared is None else declared.boundary.paths
+
+    def _context(
+        self, request: m.AskRequest, surface: m.SurfaceKey
+    ) -> m.InvestigationContextId:
+        context = issue_context(
+            self._store,
+            payload=request,
+            repository_id=request.repository_id,
+            request_id=m.RequestId(str(request.request_id)),
+            scope=m.EvidenceScope(paths=self._surface_paths(surface)),
+            question=request.question,
+            clock=self._clock,
+            new_context_id=self._new_context_id,
+        )
+        return context.context_id
+
+    def _verification(self, surface: m.SurfaceKey) -> tuple[m.VerificationView, ...]:
+        paths = self._surface_paths(surface)
+        selected: list[m.VerificationView] = []
+        for run in self._store.list_verification_runs(surface.repository_id):
+            scope = run.scope.scope
+            if not scope.paths and not scope.evidence_refs:
+                continue
+            if all(
+                any(
+                    path == prefix.rstrip("/")
+                    or path.startswith(prefix.rstrip("/") + "/")
+                    for prefix in paths
+                )
+                for path in scope.paths
+            ) and all(
+                ref.repository_id == surface.repository_id
+                for ref in scope.evidence_refs
+            ):
+                try:
+                    qualification: m.VerificationSupport | m.SupportUnavailable = (
+                        self._support.evaluate_verification(run.run_id.value)
+                    )
+                except (OSError, ValueError) as exc:
+                    qualification = m.SupportUnavailable(str(exc))
+                selected.append(
+                    m.VerificationView(run=run, qualification=qualification)
+                )
+        return tuple(selected)
+
+    def _exact_reference(
+        self,
+        selector: m.UnderstandingSnapshotSelector | m.ReceiptRetrievalSelector,
+    ) -> m.AskResult:
+        self._store.require_repository(selector.repository_id)
+        if isinstance(selector, m.UnderstandingSnapshotSelector):
+            understanding = self._store.get_understanding(selector.understanding_id)
+            version_number = (
+                understanding.current_version.value
+                if selector.version is None
+                else selector.version
+            )
+            version = self._store.get_version(selector.understanding_id, version_number)
+            try:
+                support: m.UnderstandingSupport | m.SupportUnavailable = (
+                    self._support.evaluate_version(
+                        selector.understanding_id, version_number
+                    )
+                )
+            except (OSError, ValueError) as exc:
+                support = m.SupportUnavailable(str(exc))
+            return m.RetrievedUnderstanding(
+                understanding=understanding,
+                version=version,
+                conclusions=self._store.get_version_conclusions(
+                    selector.understanding_id, version_number
+                ),
+                support=support,
+                challenges=self._store.get_challenges(selector.understanding_id),
+            )
+        key = m.RecordingKey(
+            repository_id=selector.repository_id,
+            request_id=m.RequestId(selector.request_id),
+        )
+        receipt = self._store.get_receipt(key)
+        if receipt is None:
+            raise RecordingValidationError(
+                f"no receipt for request {selector.request_id!r}"
+            )
+        context = self._store.find_context_by_request(
+            selector.repository_id, m.RequestId(selector.request_id)
+        )
+        return m.RetrievedReceipt(receipt=receipt, context=context)
+
+    def _evidence_page(self, request: m.AskRequest) -> m.AskResult:
+        try:
+            cursor = decode_continuation(request.continuation or "")
+        except ValueError as exc:
+            return m.Unavailable(
+                operation="ask",
+                failure=str(exc),
+                recovery="ask again for the surface; the continuation is invalid",
+            )
+        if cursor.repository_id != request.repository_id:
+            return m.Unavailable(
+                operation="ask",
+                failure="the continuation belongs to another repository",
+                recovery="ask again for this repository",
+            )
+        context = self._store.find_context_by_id(cursor.context_id)
+        if context is None:
+            return m.Unavailable(
+                operation="ask",
+                failure="the continuation context no longer exists",
+                recovery="ask again for the surface; the context was reaped",
+            )
+        if (
+            context.repository_id != cursor.repository_id
+            or context.request_id != cursor.request_id
+            or context.request_digest != cursor.request_digest
+        ):
+            return m.Unavailable(
+                operation="ask",
+                failure="the continuation does not match its context",
+                recovery="ask again for the surface",
+            )
+        if context.state is not m.ContextState.LIVE:
+            return m.Unavailable(
+                operation="ask",
+                failure=f"the continuation context is {context.state.value.lower()}",
+                recovery="ask again for the surface; the context is no longer live",
+            )
+        if context.expires_at is not None and context.expires_at < self._clock():
+            return m.Unavailable(
+                operation="ask",
+                failure="the continuation context has expired",
+                recovery="ask again for the surface; the context expired",
+            )
+        records = self._evidence.context_observations(context.context_id.value)
+        if cursor.unit_index > len(records):
+            return m.Unavailable(
+                operation="ask",
+                failure="the continuation position is outside its context",
+                recovery="ask again for the surface",
+            )
+        pages: list[m.EvidenceUnit] = []
+        next_index = cursor.unit_index
+        next_line = cursor.line_offset
+        omitted: list[str] = []
+        limit = self._policy.max_response_bytes
+        while next_index < len(records):
+            record = records[next_index]
+            lines = record.excerpt.splitlines(keepends=True)
+            if next_line >= len(lines):
+                next_index += 1
+                next_line = 0
+                continue
+            remaining = lines[next_line:]
+            candidate_unit = _slice_unit(record, next_line, len(remaining))
+            candidate_page = m.EvidencePage(
+                evidence=tuple([*pages, candidate_unit]),
+                continuation="span1_" + "x" * 256,
+                truncated=True,
+            )
+            if _encoded_size(candidate_page) <= limit:
+                pages.append(candidate_unit)
+                next_index += 1
+                next_line = 0
+                continue
+            # The whole unit does not fit. Return the largest exact line prefix.
+            fit = 0
+            for count in range(1, len(remaining) + 1):
+                trial = m.EvidencePage(
+                    evidence=tuple([*pages, _slice_unit(record, next_line, count)]),
+                    continuation="span1_" + "x" * 256,
+                    truncated=True,
+                )
+                if _encoded_size(trial) <= limit:
+                    fit = count
+                else:
+                    break
+            if fit == 0:
+                if pages:
+                    omitted.append(f"observation:{record.observation_id.value}")
+                    break
+                return m.Unavailable(
+                    operation="ask",
+                    failure=(
+                        "one evidence line plus the response envelope exceeds "
+                        f"the {limit}-byte budget"
+                    ),
+                    recovery="ask again with a narrower surface",
+                )
+            pages.append(_slice_unit(record, next_line, fit))
+            next_line += fit
+            if next_line >= len(lines):
+                next_index += 1
+                next_line = 0
+            else:
+                omitted.append(f"observation:{record.observation_id.value}")
+            break
+        if not pages:
+            return m.Unavailable(
+                operation="ask",
+                failure="the continuation has no remaining evidence",
+                recovery="ask again for the surface",
+            )
+        continuation = None
+        if next_index < len(records):
+            continuation = encode_continuation(
+                ContinuationCursor(
+                    repository_id=cursor.repository_id,
+                    context_id=cursor.context_id,
+                    request_id=cursor.request_id,
+                    request_digest=cursor.request_digest,
+                    unit_index=next_index,
+                    line_offset=next_line,
+                )
+            )
+        return m.EvidencePage(
+            evidence=tuple(pages),
+            continuation=continuation,
+            omitted=tuple(omitted),
+            truncated=continuation is not None,
+        )
+
+    def _status(
+        self,
+        surface: m.SurfaceKey,
+        understandings: tuple[m.Understanding, ...],
+        all_understandings: tuple[m.Understanding, ...],
+        seen: set[m.SurfaceKey] | None = None,
+        examined: tuple[set[str], bool] | None = None,
+        children: dict[m.SurfaceKey, list[m.SurfaceKey]] | None = None,
+    ) -> m.SurfaceStatus:
+        visited = set() if seen is None else seen
+        visited.add(surface)
+        if examined is None:
+            examined = self._examined_paths(all_understandings)
+        examined_paths, covers_all = examined
+        if children is None:
+            children = {}
+            for item in self._store.list_surfaces(surface.repository_id):
+                if item.parent is not None:
+                    children.setdefault(item.parent, []).append(item.key)
+        current = 0
+        stale = 0
+        unassessed = 0
+        for understanding in understandings:
+            support = self._support.evaluate_version(
+                understanding.understanding_id.value
+            )
+            if not support.conclusions:
+                unassessed += 1
+            for conclusion in support.conclusions:
+                if conclusion.evaluation.state is m.SupportState.CURRENT:
+                    current += 1
+                else:
+                    stale += 1
+        unexamined, limited = self._unexamined(
+            surface, understandings, examined_paths, covers_all
+        )
+        descendants = tuple(
+            self._status(
+                child,
+                tuple(item for item in all_understandings if item.surface == child),
+                all_understandings,
+                visited,
+                examined,
+                children,
+            )
+            for child in children.get(surface, ())
+            if child not in visited
+        )
+        return m.SurfaceStatus(
+            surface=surface,
+            current=current,
+            stale=stale,
+            unassessed=unassessed,
+            unexamined=unexamined,
+            unexamined_limited=limited,
+            descendants=descendants,
+        )
+
+    def _examined_paths(
+        self, understandings: tuple[m.Understanding, ...]
+    ) -> tuple[set[str], bool]:
+        """Conclusion scopes that cover boundary members, and whether one is global.
+
+        An empty scope paths tuple means the whole repository (FD-8, TD §9).
+        """
+        covered: set[str] = set()
+        covers_all = False
+        for understanding in understandings:
+            version = self._store.get_version(
+                understanding.understanding_id.value,
+                understanding.current_version.value,
+            )
+            revisions = {
+                (item.conclusion_id.value, item.revision.value): item
+                for item in self._store.get_conclusions(
+                    understanding.understanding_id.value
+                )
+            }
+            for ref in version.conclusions:
+                revision = revisions.get((ref.conclusion_id.value, ref.revision.value))
+                content = None if revision is None else revision.content
+                if isinstance(content, m.SupportedConclusion):
+                    scope = content.scope
+                    if not scope.paths:
+                        covers_all = True
+                    covered.update(scope.paths)
+        return covered, covers_all
+
+    def _unexamined(
+        self,
+        surface: m.SurfaceKey,
+        understandings: tuple[m.Understanding, ...],
+        examined_paths: set[str],
+        covers_all: bool,
+    ) -> tuple[int, bool]:
+        """Boundary members with no understanding, and whether the count is bounded.
+
+        A path or symbol surface is exactly one enumerable member. A declared
+        surface can only enumerate the path and symbol surfaces the store has
+        seen, so it reports the limit rather than claiming completeness
+        (FD-8, scope.md "never as completeness").
+        """
+        if surface.kind in (m.SurfaceKind.FILE, m.SurfaceKind.SYMBOL):
+            if covers_all or self._covers(surface.locator, examined_paths):
+                return 0, False
+            return (0 if understandings else 1), False
+        declared = self._store.find_surface(surface)
+        if declared is None:
+            return 0, True
+        if not (declared.boundary.paths or declared.boundary.symbols):
+            return 0, True
+        unexamined = 0
+        if declared.boundary.paths:
+            for path in self._evidence.inventory_paths(
+                surface.repository_id,
+                m.EvidenceScope(paths=declared.boundary.paths),
+            ):
+                if not (covers_all or self._covers(path, examined_paths)):
+                    unexamined += 1
+        for symbol in declared.boundary.symbols:
+            if not any(
+                item.surface.kind is m.SurfaceKind.SYMBOL
+                and item.surface.locator == symbol
+                for item in self._store.list_understandings(surface.repository_id)
+            ):
+                unexamined += 1
+        return unexamined, True
+
+    def _covers(self, locator: str, examined_paths: set[str]) -> bool:
+        for path in examined_paths:
+            stem = path.rstrip("/")
+            if locator == stem or locator.startswith(stem + "/"):
+                return True
+        return False
+
+    def _document(
+        self,
+        request: m.AskRequest,
+        surface: m.SurfaceKey,
+        understandings: tuple[m.Understanding, ...],
+        status: m.SurfaceStatus,
+    ) -> m.AskResult:
+        grouped: dict[str, list[m.ConclusionView]] = {}
+        gaps: list[m.RecordedQuestionGap] = []
+        for understanding in understandings:
+            support = self._support.evaluate_version(
+                understanding.understanding_id.value
+            )
+            version = self._store.get_version(
+                understanding.understanding_id.value,
+                understanding.current_version.value,
+            )
+            gaps.extend(version.gaps)
+            revisions = {
+                (item.conclusion_id.value, item.revision.value): item
+                for item in self._store.get_conclusions(
+                    understanding.understanding_id.value
+                )
+            }
+            current = [
+                self._view(item, revisions)
+                for item in support.conclusions
+                if item.evaluation.state is m.SupportState.CURRENT
+            ]
+            if current:
+                grouped.setdefault(understanding.question, []).extend(current)
+        if not grouped:
+            reason = (
+                m.GapReason.UNASSESSED
+                if not understandings
+                else (
+                    m.GapReason.INVALIDATED
+                    if status.stale
+                    else m.GapReason.UNVERIFIABLE
+                )
+            )
+            return m.Gap(
+                surface=surface,
+                reason=reason,
+                recovery=gap_recovery(reason),
+                missing=("no current conclusion on this surface",),
+            )
+        return m.Answer(
+            surface=surface,
+            status=status,
+            groups=tuple(
+                m.AnswerGroup(question=question, conclusions=tuple(views))
+                for question, views in sorted(grouped.items())
+            ),
+            gaps=tuple(gaps),
+            verification=self._verification(surface),
+            context=self._context(request, surface),
+        )
+
+    # -- bounded response (FD-54–FD-57) -----------------------------------
+
+    def _fit(self, request: m.AskRequest, result: m.AskResult) -> m.AskResult:
+        """Fit one canonical result, stating every omission and refusal."""
+        limit = self._policy.max_response_bytes
+        if _encoded_size(result) <= limit:
+            return result
+        if isinstance(result, m.Answer):
+            return self._fit_answer(result, limit)
+        if isinstance(result, m.Gap):
+            return self._fit_gap(result, limit)
+        return self._refuse(result, limit)
+
+    def _fit_answer(self, answer: m.Answer, limit: int) -> m.AskResult:
+        conclusions = list(answer.conclusions)
+        groups = list(answer.groups)
+        omitted: list[str] = []
+        references = list(answer.references)
+        while True:
+            if not conclusions and not groups:
+                return self._refuse(answer, limit)
+            candidate = _replace_answer(
+                answer,
+                conclusions=tuple(conclusions),
+                groups=tuple(groups),
+                omitted=tuple(omitted),
+                references=tuple(sorted(set(references))),
+                truncated=True,
+            )
+            if _encoded_size(candidate) <= limit:
+                return candidate
+            if groups:
+                group = groups.pop()
+                omitted.extend(_group_label(view) for view in group.conclusions)
+                references.extend(
+                    view.ref.understanding_id.value for view in group.conclusions
+                )
+                continue
+            dropped = conclusions.pop()
+            omitted.append(dropped.ref.label)
+            references.append(dropped.ref.understanding_id.value)
+
+    def _fit_gap(self, gap: m.Gap, limit: int) -> m.AskResult:
+        evidence = list(gap.evidence)
+        observations = list(gap.observations)
+        historical = list(gap.historical)
+        omitted: list[str] = []
+        while True:
+            continuation = None
+            if len(evidence) < len(gap.evidence):
+                if gap.context is None:
+                    return self._refuse(gap, limit)
+                context = self._store.find_context_by_id(gap.context.value)
+                if context is None:
+                    return self._refuse(gap, limit)
+                continuation = encode_continuation(
+                    ContinuationCursor(
+                        repository_id=gap.surface.repository_id,
+                        context_id=gap.context.value,
+                        request_id=context.request_id,
+                        request_digest=context.request_digest,
+                        unit_index=len(evidence),
+                    )
+                )
+            candidate = _replace_gap(
+                gap,
+                evidence=tuple(evidence),
+                observations=tuple(observations),
+                historical=tuple(historical),
+                omitted=tuple(omitted),
+                continuation=continuation,
+                truncated=True,
+            )
+            if _encoded_size(candidate) <= limit:
+                return candidate
+            if evidence:
+                evidence.pop()
+                omitted.append(
+                    f"observation:{observations.pop().value}"
+                    if observations
+                    else "admitted evidence"
+                )
+                continue
+            if historical:
+                omitted.append(historical.pop().label)
+                continue
+            return self._refuse(gap, limit)
+
+    def _refuse(self, result: m.AskResult, limit: int) -> m.AskResult:
+        """FD-57: refuse rather than return a misleading fragment."""
+        return m.Unavailable(
+            operation="ask",
+            failure=(
+                "the server response budget cannot carry the minimum result "
+                f"for this surface within {limit} bytes"
+            ),
+            recovery=("ask for a narrower surface or follow a gap continuation"),
+        )
+
+
+def _replace_answer(
+    answer: m.Answer,
+    *,
+    conclusions: tuple[m.ConclusionView, ...],
+    groups: tuple[m.AnswerGroup, ...],
+    omitted: tuple[str, ...],
+    references: tuple[str, ...],
+    truncated: bool,
+) -> m.Answer:
+    return m.Answer(
+        surface=answer.surface,
+        status=answer.status,
+        question=answer.question,
+        conclusions=conclusions,
+        groups=groups,
+        gaps=answer.gaps,
+        verification=answer.verification,
+        references=references,
+        context=answer.context,
+        omitted=omitted,
+        truncated=truncated,
+    )
+
+
+def _replace_gap(
+    gap: m.Gap,
+    *,
+    evidence: tuple[m.EvidenceUnit, ...],
+    observations: tuple[m.SourceObservationId, ...],
+    historical: tuple[m.ConclusionRevisionRef, ...],
+    omitted: tuple[str, ...],
+    continuation: str | None,
+    truncated: bool,
+) -> m.Gap:
+    return m.Gap(
+        surface=gap.surface,
+        reason=gap.reason,
+        recovery=gap.recovery,
+        question=gap.question,
+        changed_evidence=gap.changed_evidence,
+        historical=historical,
+        missing=gap.missing,
+        evidence=evidence,
+        observations=observations,
+        context=gap.context,
+        continuation=continuation,
+        omitted=omitted,
+        truncated=truncated,
+    )
+
+
+def _group_label(view: m.ConclusionView) -> str:
+    return view.ref.label
+
+
+def _slice_unit(
+    record: m.SourceObservation,
+    line_offset: int,
+    line_count: int,
+) -> m.EvidenceUnit:
+    lines = record.excerpt.splitlines(keepends=True)
+    selected = "".join(lines[line_offset : line_offset + line_count])
+    start_line = (
+        record.delivered_ranges[0].start_line
+        if len(record.delivered_ranges) == 1
+        else 1
+    )
+    end_line = start_line + line_offset + line_count - 1
+    return m.EvidenceUnit(
+        evidence_ref=record.evidence,
+        content=selected,
+        content_fingerprint=record.content_digest.value.split(":", 1)[1],
+        content_range=m.EvidenceLineRange(
+            start_line=start_line + line_offset,
+            end_line=end_line,
+            total_lines=record.total_lines,
+        ),
+    )

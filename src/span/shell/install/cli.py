@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import shutil
 import sys
 from dataclasses import dataclass as _dataclass
@@ -23,14 +24,13 @@ from span.shell.install.backup import (
     target_artifact_snapshot,
     _clean_build_staging,
 )
-from span.shell.install.constants import INSTALL_VERSION
+from span.shell.install.constants import HOST_RESPONSE_BUDGETS, INSTALL_VERSION
 from span.shell.install.host_inspect import detect_hosts
 from span.shell.install.hosts import (
     _hook_bin,
+    deploy_opencode_plugin,
     merge_opencode_config,
-    register_claude,
     register_codex,
-    wire_claude_hooks,
     wire_codex_hooks,
 )
 from span.shell.install.indexer import (
@@ -42,6 +42,7 @@ from span.shell.install.paths import (
     distribution_version,
     git_rev,
     install_mode,
+    opencode_plugin_path,
     platform_paths,
 )
 from span.shell.install.preflight import load_seeds, preflight_facts
@@ -259,12 +260,11 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
     }
     expose_binary(env.venv_dir, env.bin_dir, dry_run=env.dry)
     if seeds:
-        # Verification provisions without seeds; seeds enter through a
-        # setup-session initialize_repository call with authority_seeds.
+        # Verification provisions without seeds; the installer writes the
+        # declared authority seeds into the repository binding.
         print(
             f"loaded {len(seeds)} authority seeds "
-            "(provision them via a setup-session "
-            "initialize_repository call; verification "
+            "(installer provisioning binds them; verification "
             "provisions without seeds)"
         )
     return _RuntimeState(
@@ -291,10 +291,18 @@ def _span_command(env: _Environment) -> list[str]:
     return command
 
 
+def _host_command(command: list[str], host: str) -> list[str]:
+    """Add the measured per-host response budget to one registration."""
+    budget = HOST_RESPONSE_BUDGETS[host]
+    return [*command, "--response-budget-bytes", str(budget)]
+
+
 def _register_hosts(env: _Environment) -> dict[str, object]:
     """Register hosts and deploy skills; each host's refusal stays typed."""
     args = env.args
     span_cmd = _span_command(env)
+    opencode_cmd = _host_command(span_cmd, "opencode")
+    codex_cmd = _host_command(span_cmd, "codex")
     host_registration: dict[str, object] = {}
     opencode_config = args.opencode_config
     if opencode_config is None and Path("opencode.json").exists():
@@ -302,7 +310,7 @@ def _register_hosts(env: _Environment) -> dict[str, object]:
     if opencode_config is not None:
         try:
             host_registration["opencode"] = merge_opencode_config(
-                opencode_config, span_cmd, dry_run=env.dry
+                opencode_config, opencode_cmd, dry_run=env.dry
             )
         except SystemExit as exc:
             host_registration["opencode"] = {
@@ -326,7 +334,7 @@ def _register_hosts(env: _Environment) -> dict[str, object]:
     if args.with_hooks is None:
         args.with_hooks = not args.no_hooks
     if args.with_codex:
-        host_registration["codex"] = register_codex(span_cmd, dry_run=env.dry)
+        host_registration["codex"] = register_codex(codex_cmd, dry_run=env.dry)
     else:
         _codex_reason = (
             "codex disabled (--no-codex)" if args.no_codex else "codex CLI not detected"
@@ -335,23 +343,6 @@ def _register_hosts(env: _Environment) -> dict[str, object]:
         host_registration["codex"] = {
             "status": "skipped",
             "reason": _codex_reason,
-        }
-    if args.with_claude is None:
-        args.with_claude = detect_hosts()["claude"] and not args.no_claude
-    elif args.no_claude:
-        args.with_claude = False
-    if args.with_claude:
-        host_registration["claude"] = register_claude(span_cmd, dry_run=env.dry)
-    else:
-        _claude_reason = (
-            "claude disabled (--no-claude)"
-            if args.no_claude
-            else "claude CLI not detected"
-        )
-        print(f"skipping claude registration ({_claude_reason}).")
-        host_registration["claude"] = {
-            "status": "skipped",
-            "reason": _claude_reason,
         }
     host_registration["hooks"] = _wire_hooks(env)
     if not args.no_skills:
@@ -371,7 +362,6 @@ def _wire_hooks(env: _Environment) -> dict[str, object]:
         print("skipping hook wiring (--no-hooks).")
         return {
             "codex": {"status": "skipped", "reason": "hooks disabled (--no-hooks)"},
-            "claude": {"status": "skipped", "reason": "hooks disabled (--no-hooks)"},
             "opencode_plugin": {},
         }
     hook_bin = _hook_bin(env.venv_dir, env.bin_dir)
@@ -379,33 +369,20 @@ def _wire_hooks(env: _Environment) -> dict[str, object]:
         codex_hooks = wire_codex_hooks(hook_bin, dry_run=env.dry)
     except SystemExit:
         raise
-    if args.with_claude:
-        try:
-            claude_hooks = wire_claude_hooks(hook_bin, env.data_dir, dry_run=env.dry)
-        except SystemExit:
-            raise
-    else:
-        claude_hooks = {
-            "status": "skipped",
-            "reason": "claude integration not enabled",
-        }
-    # Per-target opencode plugin deployment would write into target
-    # repositories and is therefore removed. Host hooks outside targets
-    # remain allowed.
-    plugin = {
-        str(target): {
-            "status": "skipped",
-            "reason": "target writes prohibited (Span never writes into targets)",
-        }
-        for target in env.targets
-    }
-    print(
-        "per-target opencode plugin deployment removed "
-        "(Span never writes into targets)."
+    # The adoption notice is deployed under Span's own data root and
+    # registered once in the host's global config. Nothing is written into a
+    # target repository.
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    plugin = deploy_opencode_plugin(
+        opencode_plugin_path(env.span_repo),
+        env.data_dir.parent / "opencode-plugin",
+        config_home / "opencode" / "opencode.json",
+        hook_bin,
+        env.data_dir,
+        dry_run=env.dry,
     )
     return {
         "codex": codex_hooks,
-        "claude": claude_hooks,
         "opencode_plugin": plugin,
     }
 

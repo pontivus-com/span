@@ -422,7 +422,7 @@ class SerializationRoundTripTest(unittest.TestCase):
 
     def test_decode_rejects_unknown_tags_and_values(self):
         with self.assertRaises(m.CanonicalDecodeError):
-            m.from_canonical(m.UnderstandQuestionResult, {"$type": "Nope"})
+            m.from_canonical(m.AskResult, {"$type": "Nope"})
         with self.assertRaises(m.CanonicalDecodeError):
             m.from_canonical(m.TrustState, "BOGUS")
         with self.assertRaises(m.CanonicalDecodeError):

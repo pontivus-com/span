@@ -4,6 +4,26 @@ Span is a standalone MCP server that gives coding agents maintained
 understanding of a codebase: what a subsystem is for, who owns it, what
 depends on it, and whether that understanding is still current.
 
+## Foundations — binding
+
+[`docs/goals.md`](docs/goals.md) (layer 0) states why Span exists and the
+outcomes it is judged on. [`docs/foundations.md`](docs/foundations.md) (layer 1)
+defines the axioms about the agent and the principles of the system.
+[`docs/lifecycle-contract.md`](docs/lifecycle-contract.md) (layer 2) turns them
+into operations, payloads, contract laws, and the boundary between the agent's
+work and Span's internals. [`docs/functional-design.md`](docs/functional-design.md)
+(layer 3) states the behaviour that makes the contract deterministic.
+[`docs/technical-design.md`](docs/technical-design.md) (layer 4) records the
+implementation baseline, what is retained, and the minimal refactoring set.
+[`docs/requirements-pyramid.md`](docs/requirements-pyramid.md)
+governs how those layers are structured: what each owns, where a new requirement
+belongs, and why a restatement is a defect. All of these are binding on design,
+contracts, code, tests, prompts, documentation, and releases, and a lower layer
+may not contradict a higher one. Where any plan, ADR, changelog, guide, skill, or
+instruction conflicts with them, they govern; amend them explicitly before
+working around them. Cite the IDs (G1–G6, A1–A9, F1–F10, L1–L11, FD-1–FD-58) in
+changes and reviews.
+
 ## Layout
 
 - `src/span/core/` — deterministic semantic core.
@@ -87,19 +107,23 @@ installed `span-mcp` over stdio.
 
 ## Public surface
 
-The public MCP operations are exactly:
+The public MCP operations are exactly three, one per lifecycle moment:
 
-`initialize_repository`; `start_context`, `understand_question`,
-`understand_retrieve`, `evidence_start`, `evidence_extend`; `reassess`,
-`verification_support`; `record_create`, `record_add`, `record_confirm`,
-`record_correct`, `record_replace`, `record_withdraw`, `record_challenge`,
-`record_update`, `record_verification`; `locate`; `neighbors`.
+`ask`, `record`, `reconsider`.
 
-The retired operations `explain`, `trace`, `impact`, `authority`, `status`,
-`refresh`, `initialize_target`, and `submit_interpretation` are not
-registered. There are no `semantic_*` aliases. Span never selects a model,
-calls a provider, edits a target repository, or runs tests on the user's
-behalf.
+`record` carries `kind` (`understanding`, `verification`, or `surface`). An
+understanding create is flat — one `conclusion` plus `locator` or
+`observation_id`; `actions` is for updates and `action` for a surface
+declaration. Those are semantic fields, not separate tools. Setup belongs
+to the installer; structural navigation belongs to the host. The retired operations
+`understand_question`, `understand_retrieve`, `start_context`,
+`evidence_start`, `evidence_extend`, `reassess`, `verification_support`,
+`record_create`, `record_add`, `record_confirm`, `record_correct`,
+`record_replace`, `record_withdraw`, `record_challenge`, `record_update`,
+`record_verification`, `initialize_repository`, `locate`, and `neighbors` are
+not registered and reject with their replacement. There are no aliases,
+`semantic_*` names, or dual grammar. Span never selects a model, calls a
+provider, edits a target repository, or runs tests on the user's behalf.
 
 ## Contributions
 

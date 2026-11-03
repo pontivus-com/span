@@ -1,17 +1,13 @@
-"""Span service bounds policy (plan §5.1, v0.6 §14 Amendment A-01).
+"""Server-owned operational bounds (FD-54, technical design §13).
 
-Service-level operational configuration and strict typed ingress
-helpers for operation bounds. Verbatim from the former
-``span.service`` module; only the module path changed.
+These are finite service limits, not semantic thresholds and not caller
+choices. The composition boundary applies them; no public request carries a
+response budget or a traversal bound.
 """
 
 from span.core.model import QueryBounds, ServiceBoundsPolicy
 
-__all__ = [
-    "DEFAULT_SERVICE_BOUNDS_POLICY",
-    "BoundsRejectedError",
-    "resolve_bounds",
-]
+__all__ = ["DEFAULT_SERVICE_BOUNDS_POLICY"]
 
 
 def _bounds(
@@ -38,6 +34,10 @@ def _bounds(
 #: thresholds: changeable only as a configuration/versioned product
 #: decision, never per-call model judgment.
 DEFAULT_SERVICE_BOUNDS_POLICY = ServiceBoundsPolicy(
+    # O-3: largest wire result observed delivered inline on the smaller of the
+    # two supported hosts (OpenCode); Codex inlined 62,589 bytes. A per-host
+    # install may raise it up to that host's measured value.
+    max_response_bytes=51_133,
     default_query_bounds=_bounds(
         max_results=50,
         max_depth=2,
@@ -66,48 +66,3 @@ DEFAULT_SERVICE_BOUNDS_POLICY = ServiceBoundsPolicy(
         max_candidate_relationships=1,
     ),
 )
-
-
-class BoundsRejectedError(ValueError):
-    """User-supplied bounds above the maximum (plan §5.1: reject, never
-    silently widen or clamp)."""
-
-
-_BOUND_FIELDS: tuple[str, ...] = (
-    "max_results",
-    "max_depth",
-    "max_subjects",
-    "max_evidence_units",
-    "max_evidence_bytes",
-    "max_candidate_claims",
-    "max_candidate_relationships",
-)
-
-
-def resolve_bounds(
-    requested: QueryBounds | None,
-    *,
-    hook: bool,
-    policy: ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
-) -> QueryBounds:
-    """Apply the §5.1 ingress rules for operation bounds.
-
-    - omitted bounds use ``default_query_bounds``;
-    - lifecycle hooks always use ``hook_fast_bounds``;
-    - user-supplied bounds above ``maximum_query_bounds`` are rejected
-      (never silently widened/clamped).
-    """
-    if hook:
-        return policy.hook_fast_bounds
-    if requested is None:
-        return policy.default_query_bounds
-    maximum = policy.maximum_query_bounds
-    for field_name in _BOUND_FIELDS:
-        if getattr(requested, field_name) > getattr(maximum, field_name):
-            raise BoundsRejectedError(
-                f"{field_name}={getattr(requested, field_name)} exceeds "
-                f"maximum {getattr(maximum, field_name)}; "
-                f"default when omitted is "
-                f"{getattr(policy.default_query_bounds, field_name)}"
-            )
-    return requested
