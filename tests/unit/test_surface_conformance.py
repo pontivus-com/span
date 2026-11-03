@@ -221,6 +221,7 @@ class SurfaceConformanceTest(unittest.TestCase):
         server = json.loads((REPO_ROOT / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(server["version"], __version__)
         self.assertEqual(server["packages"][0]["version"], __version__)
+        self.assertLessEqual(len(server["description"]), 100)
         for name in (
             "README.md",
             "docs/overview.md",
