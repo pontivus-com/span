@@ -49,6 +49,14 @@ evidence, and record the appropriate update with its basis. A new immutable
 version preserves history. `ask` checks currency; it does not reinterpret,
 execute tests, or settle a challenge. Gaps and disputes remain explicit.
 
+A surface status names its stale conclusions through `stale_refs` (exact
+revision, understanding version, present state). The reference is not content.
+Read the prior statement with
+`ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`, then
+withdraw, correct, or replace it through `record` with the expected version.
+Nothing is auto-withdrawn, and the count and references always describe the same
+set.
+
 ## Independent runs
 
 `ask` returns each saved run with its live qualification,

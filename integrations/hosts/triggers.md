@@ -30,13 +30,36 @@ The canonical installer implementation is
 | `PostToolUse` for configured edit tools | `span-hooks source-changed` |
 | `Stop` | `span-hooks session-stop` |
 
-The OpenCode plugin is deployed under Span's own data root and registered in
-the host's global `opencode.json`; it writes nothing into a target. The notice
-is advisory and fires only when the repository has recorded understanding.
-Session notices select the registered root containing the working directory.
-Changed paths route to their longest matching registered root. Missing hook
-settings files or absent CLIs lead to an explicit skipped-wiring result.
-Foreign entries are preserved; reinstallation avoids duplicate Span entries.
+The OpenCode plugin scope is explicit: `--opencode-plugin-scope
+global|local|none`. Under `global` the plugin is deployed under Span's own data
+root and registered in the host's global `opencode.json`; it writes nothing into
+a target. A legacy per-target `.opencode/plugins/span-hooks.js` copy is moved to
+`<target>/.opencode/span-retired/`, never deleted, so only the installed plugin
+declares the `span-hooks` id. Only targets passed with `--repo` are migrated;
+receipt targets not selected are inspected read-only and yield `conflict` if a
+Span-owned copy remains. Under `local` and `none`, the target plugin is
+user-managed: Span removes its own global registration and reports the local
+copy.
+
+| Scope | Selected target (`--repo`) | Receipt-only target | Global registration |
+| --- | --- | --- | --- |
+| `global` | retire Span-owned copies | read-only; `conflict` if present | update |
+| `local` | report only | read-only; report only | remove Span-owned |
+| `none` | report only | read-only; report only | remove Span-owned |
+
+A fresh install defaults to `global`; an upgrade uses the receipt scope and
+stops if it is absent or ambiguous. The authoritative full matrix is in
+[install](../../docs/install.md#opencode).
+
+The notices are advisory and the edit-time notice fires only when a
+changed path affects recorded understanding. Session notices select the
+registered root containing the working directory. Changed paths route to their
+longest matching registered root. Missing hook settings files or absent CLIs
+lead to an explicit skipped-wiring result. Foreign entries are preserved;
+reinstall replaces Span entries whose binary path or matcher changed instead of
+accumulating them. Claude Code is not a supported target; Span-owned hook
+entries left in `~/.claude/settings.json` by an earlier version are removed on
+install and uninstall.
 
 Wiring tests establish merge/registration behavior, not live arrival. Capture
 configured, invoked, scoped, and delivered observations separately. A quiet

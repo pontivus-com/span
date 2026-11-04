@@ -7,6 +7,12 @@ import os
 import shutil
 from pathlib import Path
 
+from span.shell.install.hosts import (
+    _is_span_managed_entry,
+    _span_plugin_file,
+    inspect_target_opencode_plugins,
+)
+
 
 def detect_hosts():
     """Detect supported agent hosts without changing anything."""
@@ -93,6 +99,60 @@ def inspect_opencode_registration(config_path, span_cmd):
         "mcp.servers.span command does not match the installed invocation"
     )
     return result
+
+
+def inspect_opencode_plugin_state(
+    config_path, span_root, canonical_dir, targets
+) -> dict[str, object]:
+    """Read-only discovery of Span-owned plugin artifacts for one scope.
+
+    Only the global configuration's ``plugins`` entries and the explicitly
+    named targets' ``.opencode/plugins`` directories are inspected. Retired
+    files under ``.opencode/span-retired`` are inert and never listed.
+    """
+    entries: list[dict[str, str]] = []
+    unreadable: list[dict[str, str]] = []
+    if config_path is not None:
+        path = Path(config_path)
+        if path.is_file():
+            try:
+                config = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                unreadable.append(
+                    {
+                        "artifact": "global-config",
+                        "path": str(path),
+                        "reason": f"cannot read OpenCode config: {exc}",
+                    }
+                )
+                config = {}
+            plugins = config.get("plugins") if isinstance(config, dict) else None
+            if isinstance(plugins, list):
+                for item in plugins:
+                    if not isinstance(item, str):
+                        continue
+                    if _is_span_managed_entry(item, canonical_dir, span_root):
+                        entries.append({"artifact": "global-managed", "path": item})
+                    elif _span_plugin_file(item) is not None:
+                        entries.append({"artifact": "global-user", "path": item})
+    targets_state, target_unreadable = inspect_target_opencode_plugins(targets)
+    for target, found in targets_state.items():
+        entries.extend(
+            {
+                "artifact": "target",
+                "target": target,
+                "path": item["path"],
+                "sha256": item["sha256"],
+            }
+            for item in found
+        )
+    unreadable.extend(target_unreadable)
+    return {
+        "entries": entries,
+        "unreadable": unreadable,
+        "canonical": str(canonical_dir),
+        "canonical_exists": Path(canonical_dir).is_dir(),
+    }
 
 
 def inspect_codex_registration():

@@ -22,7 +22,7 @@ semantic interpretation or every host. Execution receipts are separate.
 | I-09 | Ambiguity integrity | Test | `AnswerServiceTest`; `test_multiple_granularities_are_ambiguous` (ambiguity is a separate result) |
 | I-10 | Freshness preflight | Test | `SupportServiceTest` (current/changed/missing membership) |
 | I-11 | Version history integrity | Test | `LifecycleStoreTest`; `test_update_cas_and_history` |
-| I-12 | Verification integrity | Test | `SupportServiceTest`; `test_verification_runs_are_independent_and_source_aware` |
+| I-12 | Verification integrity | Test | `SupportServiceTest`; `test_verification_runs_are_independent_and_source_aware`, `test_verification_accepts_evidence_only` |
 | I-13 | Structural separation | Review | Store holds canonical JSON plus query columns only; no graph duplication |
 | I-14 | Provider neutrality | Test | `GraftMappingTest`; `StructuralCoverageConformanceTest` |
 | I-15 | No semantic reconstruction | Review | Composers project stored state; transport/store add no judgments |

@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
 from span.shell.install.host_inspect import (
     inspect_codex_registration,
+    inspect_opencode_plugin_state,
     inspect_opencode_registration,
+)
+from span.shell.install.hosts import (
+    _same_path,
+    receipt_opencode_scope,
 )
 from span.shell.install.paths import (
     expected_span_command,
+)
+from span.shell.install.receipt import (
+    read_receipt,
 )
 from span.shell.install.skills import (
     check_skills,
@@ -45,6 +54,78 @@ def verify_installation(venv_python, data_dir, repos, dry_run=False):
         raise SystemExit(f"verify step returned non-JSON output: {exc}")
 
 
+def _opencode_plugin_report(scope, state, canonical_dir) -> dict[str, object]:
+    """The doctor's limited plugin verdict: duplicate, mismatch, unknown, absent."""
+    entries = state["entries"]
+    unreadable = state["unreadable"]
+    if unreadable:
+        return {
+            "scope": scope,
+            "status": "unreadable",
+            "reason": "; ".join(
+                str(item.get("reason", "unreadable")) for item in unreadable
+            ),
+            "observed": [item.get("path") for item in entries],
+        }
+    user = [item for item in entries if item["artifact"] in ("global-user", "target")]
+    managed = [item for item in entries if item["artifact"] == "global-managed"]
+    stale_managed = [
+        item for item in managed if not _same_path(item["path"], canonical_dir)
+    ]
+    if scope is None:
+        return {
+            "scope": None,
+            "status": "scope_unknown",
+            "reason": (
+                "the install receipt records no OpenCode plugin scope; rerun "
+                "span-install --opencode-plugin-scope global|local|none"
+            ),
+            "observed": [item["path"] for item in entries],
+        }
+    if scope == "global":
+        duplicates = [*stale_managed, *user]
+        if duplicates:
+            return {
+                "scope": scope,
+                "status": "conflict",
+                "reason": (
+                    "Span-owned plugin outside the canonical global registration"
+                ),
+                "observed": [item["path"] for item in duplicates],
+            }
+        return {"scope": scope, "status": "wired", "observed": []}
+    global_present = bool(managed) or bool(state.get("canonical_exists"))
+    if global_present:
+        return {
+            "scope": scope,
+            "status": "conflict",
+            "reason": (
+                "scope mismatch: a Span-managed global plugin remains while the "
+                f"configured scope is {scope}"
+            ),
+            "observed": [
+                *[item["path"] for item in managed],
+                *([str(canonical_dir)] if state.get("canonical_exists") else []),
+            ],
+        }
+    if len(user) > 1:
+        return {
+            "scope": scope,
+            "status": "conflict",
+            "reason": ("more than one user-managed Span plugin declares span-hooks"),
+            "observed": [item["path"] for item in user],
+        }
+    if scope == "local":
+        status = "external" if user else "absent"
+    else:
+        status = "external" if user else "disabled"
+    return {
+        "scope": scope,
+        "status": status,
+        "observed": [item["path"] for item in user],
+    }
+
+
 def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     """Re-verify an existing installation without changing anything."""
     print("== span install doctor ==")
@@ -53,6 +134,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     if resolved is None and not dry_run:
         raise SystemExit("span-mcp not found on PATH")
     receipt_path = Path(data_dir) / "install.json"
+    receipt = read_receipt(data_dir) or {}
     if receipt_path.exists() and not dry_run:
         print(f"receipt: {receipt_path}")
     else:
@@ -80,6 +162,38 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         f"codex registration: {codex_state['status']} "
         f"({codex_state.get('reason', '')})"
     )
+    receipt_targets = tuple(
+        Path(repo) for repo in receipt.get("repos", []) if isinstance(repo, str)
+    )
+    inspection_targets = tuple(
+        dict.fromkeys([*(Path(repo) for repo in repos), *receipt_targets])
+    )
+    span_root = Path(data_dir).parent
+    canonical_dir = span_root / "opencode-plugin"
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    plugin_config = config_home / "opencode" / "opencode.json"
+    configs = tuple(
+        dict.fromkeys(
+            str(path) for path in (selected_config, plugin_config) if path is not None
+        )
+    )
+    states = [
+        inspect_opencode_plugin_state(
+            path, span_root, canonical_dir, inspection_targets
+        )
+        for path in configs
+    ]
+    plugin_state = {
+        "entries": [item for state in states for item in state["entries"]],
+        "unreadable": [item for state in states for item in state["unreadable"]],
+        "canonical_exists": Path(canonical_dir).is_dir(),
+    }
+    scope = receipt_opencode_scope(receipt) if receipt else None
+    plugin_report = _opencode_plugin_report(scope, plugin_state, canonical_dir)
+    print(f"opencode plugin scope: {scope if scope is not None else 'unknown'}")
+    print(f"opencode plugin: {plugin_report['status']}")
+    if plugin_report.get("reason"):
+        print(f"  {plugin_report['reason']}")
     report = verify_installation(venv_python, data_dir, repos, dry_run)
     print(f"runtime verification: span-mcp={resolved}")
     readiness = report.get("repos", []) if isinstance(report, dict) else []
@@ -91,5 +205,6 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         },
         "store_readiness": report,
         "opencode_registration": opencode_state,
+        "opencode_plugin": plugin_report,
         "codex_registration": codex_state,
     }

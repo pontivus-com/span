@@ -1,5 +1,115 @@
 # Changelog
 
+## 0.9.2 — 2026-11-04
+
+**A bug-fix release. It makes upgrades from 0.9.0/0.9.1 safe, returns the
+historical and stale content the lifecycle contract already required, and
+accepts evidence-only verification runs. No public operation is added or
+renamed.**
+
+### Upgrade from 0.9.0/0.9.1
+
+A bare package upgrade does not migrate the host. Run the installer once with
+an explicit OpenCode plugin scope and the target to migrate, then restart the
+host:
+
+```bash
+span-install --repo <TARGET_REPO> --opencode-plugin-scope global
+```
+
+- The scope is an explicit end-user choice: `global`, `local`, or `none`. A
+  fresh install defaults to `global` and prints it. An upgrade uses the scope in
+  the install receipt; if the receipt records no unambiguous scope, the
+  installer stops and names the flag rather than guessing.
+- Under `global`, the installer deploys the plugin under Span's own data root
+  and moves a legacy `<target>/.opencode/plugins/span-hooks.js` copy to
+  `<target>/.opencode/span-retired/`. It never deletes it. That directory is
+  operator-owned; Span has no TTL, reaper, or restore path for it.
+- Only targets passed with `--repo` are migrated. A receipt target that was not
+  selected is inspected read-only; a remaining Span-owned copy yields
+  `conflict`, never `wired`.
+- `local` and `none` leave the target plugin to the user, remove Span's global
+  registration, and report each local copy with a hash match/mismatch. Exactly
+  one user-managed copy is `external`; more than one is `conflict`; none is
+  `absent` (`local`) or `disabled` (`none`).
+- Result statuses are explicit: `wired`, `conflict`, `external`, `absent`,
+  `disabled`, `unreadable`. A known duplicate never reports `wired`.
+
+### Installer and host integration
+
+- Duplicate Span-owned plugin registrations and legacy config entries are
+  detected and removed only inside Span's own data root. A Span-owned copy in a
+  user-managed global directory is reported as a conflict and left untouched.
+- The receipt records `host_integration_migration`: the effective
+  `opencode_plugin.scope`, every `retired_target_plugins` entry (`from`, `to`,
+  `sha256`), and every `removed_config_entries` entry.
+- Codex `span-hooks` entries are replaced with the current three, so an upgrade
+  does not accumulate stale paths or matchers.
+- Legacy Span-owned Claude hooks are removed from `~/.claude/settings.json`.
+
+### Lifecycle conformance
+
+- `Gap.historical` now carries historical **content**: the exact conclusion
+  revision, the understanding version that holds it, the statement, the
+  evidence references, and the present non-current support state. Historical
+  content is never mixed into `conclusions`. The prior statement is recoverable
+  without the transcript, and the list is bounded with the rest of the response.
+- `SurfaceStatus.stale_refs` names each stale conclusion by exact revision,
+  understanding version, and present non-current state. The count and the
+  references describe the same set; descendant statuses carry their own refs.
+  The status remains references and counts, never statement content.
+
+### Verification
+
+- A verification run requires `observations` or `evidence`; either is accepted.
+  Only sending neither is rejected, with the exact cause and both remedies.
+- A run applies to the surfaces **within** its declared scope (a scope path
+  covers a surface path when it is equal or an ancestor). A multi-file run is
+  now visible on each file it covers; a one-file run is not widened to a
+  broader service; a symbol matches through its containing file or is excluded.
+- The typed and wire verification submissions share one canonical write path.
+
+### Results
+
+- The `reconsider` description and the MCP reference example state the filter
+  rule: `surfaces` is the complete containment set; a surface with no
+  `conclusions` is containment-only; act only on `REASSESSMENT_REQUIRED` or
+  `UNVERIFIABLE` conclusions; keep the deterministic order. No new response
+  field was added.
+
+### Compatibility
+
+- Store schema 11 is unchanged. No store migration is required.
+- The changes to `Gap.historical` and `SurfaceStatus` are additive/enriched wire
+  fields; the host reconnects and reads the new shape. No wire payload is
+  persisted, and no compatibility-flattened shape is introduced.
+- No new MCP tool or operation family. `ask`, `record`, and `reconsider` remain
+  the complete public surface.
+
+### Known limitations
+
+- A bare package upgrade does not migrate the host; run `span-install` once as
+  above.
+- Receipt-only and unregistered targets are reported, not changed.
+- `local` scope requires the user to manage the local plugin.
+- `none` removes the Span-managed plugin; a user-managed Span copy may remain
+  and is reported as `external` or `conflict`.
+- The `reconsider` noise is reduced by its description; the complete `surfaces`
+  set is still returned.
+- `.opencode/span-retired/` is operator-owned; there is no TTL or reaper.
+- Codex notice delivery is not claimed in this release until a capture proves
+  it. OpenCode edit-time notice delivery is proven by
+  `tests/plugin/test_span_hooks_notice.mjs`.
+- Foundations §1 is interpreted as binding the MCP server, not the installer;
+  the server still makes no target edits.
+
+### Not in this release
+
+No `actionable` field, no `span_version` receipt field, no doctor listing of
+retired files, no per-status resolution string, no admin stale report, no
+Span-managed local plugin deployment, no machine-wide scan, no target deletion,
+no store schema change, and no new MCP tool.
+
 ## 0.9.1 — 2026-11-03
 
 **This 0.9.1 carries the replacement for the withdrawn internal pre-release

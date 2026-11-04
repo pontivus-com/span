@@ -389,6 +389,175 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(answer["verification"][0]["run"]["outcome"], "PASS")
         self.assertEqual(answer["verification"][0]["qualification"]["state"], "CURRENT")
 
+    async def test_invalidated_ask_returns_historical_content(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            await self._record_create(session, "sub-historical")
+            _write(self.repo, "src/app.py", "changed\n")
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-historical",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                },
+            )
+
+        result = await self._session(journey)
+        self.assertEqual(result["$type"], "Gap")
+        self.assertEqual(result["reason"], "invalidated")
+        historical = result["historical"][0]
+        self.assertEqual(historical["statement"], "The app emits line1.")
+        self.assertEqual(historical["state"], "REASSESSMENT_REQUIRED")
+        self.assertEqual(historical["understanding_version"]["value"], 1)
+        self.assertTrue(historical["evidence"])
+
+    async def test_stale_sibling_is_referenced_in_status(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            created = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-status",
+                    "kind": "understanding",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                    "scope_paths": ["src/app.py", "styles/site.css"],
+                    "conclusion": "The app emits line1.",
+                    "locator": "src/app.py",
+                },
+            )
+            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
+                "value"
+            ]
+            added = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-status-add",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": 1,
+                    "actions": {
+                        "add": [
+                            {
+                                "conclusion_id": "c-2",
+                                "statement": "The site styles are red.",
+                                "assertion_nature": "DESCRIPTIVE",
+                                "scope_paths": ["styles/site.css"],
+                                "scope_evidence_refs": [],
+                                "support": [
+                                    {
+                                        "$type": "SourceSupportWire",
+                                        "locator": "styles/site.css",
+                                        "ranges": [],
+                                    }
+                                ],
+                                "basis_derivation": "EXPLICIT_EVIDENCE",
+                                "basis_summary": "read the stylesheet",
+                                "basis_input_refs": [],
+                            }
+                        ]
+                    },
+                },
+            )
+            self.assertEqual(added["$type"], "UnderstandingRecorded", added)
+            _write(self.repo, "styles/site.css", "body { color: blue; }\n")
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-status",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                },
+            )
+
+        result = await self._session(journey)
+        self.assertEqual(result["$type"], "Answer")
+        self.assertEqual(result["status"]["stale"], 1)
+        stale = result["status"]["stale_refs"][0]
+        self.assertEqual(stale["ref"]["conclusion_id"]["value"], "c-2")
+        self.assertEqual(stale["understanding_version"]["value"], 2)
+        self.assertEqual(stale["state"], "REASSESSMENT_REQUIRED")
+
+    async def test_multi_file_verification_run_is_visible_on_each_file(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            await self._record_create(session, "sub-multi-app")
+            _write(self.repo, "src/other.py", "other\n")
+            other = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-multi-other",
+                    "kind": "understanding",
+                    "surface": {"kind": "FILE", "locator": "src/other.py"},
+                    "question": "What happens in the other module?",
+                    "scope_paths": ["src/other.py"],
+                    "conclusion": "The other module emits other.",
+                    "locator": "src/other.py",
+                },
+            )
+            self.assertEqual(other["$type"], "UnderstandingRecorded")
+            verified = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "verify-multi",
+                    "kind": "verification",
+                    "run": {
+                        "repository_id": REPOSITORY_ID,
+                        "scope_description": "both modules",
+                        "scope_paths": ["src/app.py", "src/other.py"],
+                        "observations": [],
+                        "evidence": [
+                            {
+                                "$type": "SourceSupportWire",
+                                "locator": "src/app.py",
+                                "ranges": [],
+                            }
+                        ],
+                        "command": "pytest -q",
+                        "scenario": None,
+                        "outcome": "PASS",
+                        "observed_at": "2026-11-02T12:00:00Z",
+                        "observer": "tester",
+                    },
+                },
+            )
+            self.assertEqual(verified["$type"], "VerificationRecorded")
+            app = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-multi-app",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                },
+            )
+            other_answer = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-multi-other",
+                    "surface": {"kind": "FILE", "locator": "src/other.py"},
+                    "question": "What happens in the other module?",
+                },
+            )
+            return {"app": app, "other": other_answer}
+
+        result = await self._session(journey)
+        self.assertEqual(len(result["app"]["verification"]), 1)
+        self.assertEqual(len(result["other"]["verification"]), 1)
+
     async def test_continuation_recovers_omitted_evidence(self) -> None:
         _write(self.repo, "src/big.py", "line\n" * 500)
 

@@ -127,7 +127,7 @@ class AnswerService:
                 ),
             )
         current: list[m.ConclusionView] = []
-        historical: list[m.ConclusionRevisionRef] = []
+        historical: list[m.HistoricalConclusion] = []
         gaps: list[m.RecordedQuestionGap] = []
         states: list[m.SupportState] = []
         for understanding in matched:
@@ -150,7 +150,9 @@ class AnswerService:
                 if item.evaluation.state is m.SupportState.CURRENT:
                     current.append(self._view(item, revisions))
                 else:
-                    historical.append(item.ref)
+                    historical.append(
+                        self._historical(item, revisions, understanding.current_version)
+                    )
         if current:
             return self._fit(
                 request,
@@ -225,6 +227,29 @@ class AnswerService:
             assertion_nature=content.assertion_nature,
             scope=content.scope,
             support=support,
+            evidence=self._evidence_refs(content.support),
+        )
+
+    def _historical(
+        self,
+        support: m.ConclusionSupport,
+        revisions: dict[tuple[str, int], m.ConclusionRevision],
+        understanding_version: m.UnderstandingVersionNumber,
+    ) -> m.HistoricalConclusion:
+        """Project one non-current revision as historical content (L2, F3)."""
+        revision = revisions.get(
+            (support.ref.conclusion_id.value, support.ref.revision.value)
+        )
+        if revision is None or not isinstance(revision.content, m.SupportedConclusion):
+            raise RecordingValidationError(
+                "a historical conclusion has no supported revision content"
+            )
+        content = revision.content
+        return m.HistoricalConclusion(
+            ref=support.ref,
+            understanding_version=understanding_version,
+            statement=content.statement,
+            state=support.evaluation.state,
             evidence=self._evidence_refs(content.support),
         )
 
@@ -326,33 +351,68 @@ class AnswerService:
         )
         return context.context_id
 
+    def _verification_members(self, surface: m.SurfaceKey) -> tuple[str, ...] | None:
+        """The file members the asked surface denotes, or None when unresolvable.
+
+        A file is itself. A symbol is matched through its containing file; a
+        symbol identity with no file prefix is excluded explicitly. A declared
+        surface denotes its boundary paths and the containing files of its
+        declared symbols.
+        """
+        if surface.kind is m.SurfaceKind.FILE:
+            return (surface.locator,)
+        if surface.kind is m.SurfaceKind.SYMBOL:
+            containing = containment.surface_file_locator(surface.locator)
+            return None if containing is None else (containing,)
+        declared = self._store.find_surface(surface)
+        if declared is None:
+            return None
+        members = list(declared.boundary.paths)
+        for symbol in declared.boundary.symbols:
+            containing = containment.surface_file_locator(symbol)
+            if containing is not None:
+                members.append(containing)
+        return tuple(dict.fromkeys(members))
+
+    def _run_scope_covers(
+        self,
+        scope: m.EvidenceScope,
+        repository_id: str,
+        members: tuple[str, ...],
+    ) -> bool:
+        """True when the run's declared scope covers every surface member.
+
+        A run scope path covers a member when it is equal or an ancestor
+        (FD-5, FD-17). Declared evidence references are scope members too; a
+        reference from another repository cannot cover this surface.
+        """
+        atoms: list[str] = list(scope.paths)
+        for ref in scope.evidence_refs:
+            if ref.repository_id != repository_id:
+                return False
+            atoms.append(containment.surface_file_locator(ref.locator) or ref.locator)
+        if not atoms:
+            return False
+        covered = set(atoms)
+        return all(self._covers(member, covered) for member in members)
+
     def _verification(self, surface: m.SurfaceKey) -> tuple[m.VerificationView, ...]:
-        paths = self._surface_paths(surface)
+        members = self._verification_members(surface)
+        if not members:
+            return ()
         selected: list[m.VerificationView] = []
         for run in self._store.list_verification_runs(surface.repository_id):
-            scope = run.scope.scope
-            if not scope.paths and not scope.evidence_refs:
-                continue
-            if all(
-                any(
-                    path == prefix.rstrip("/")
-                    or path.startswith(prefix.rstrip("/") + "/")
-                    for prefix in paths
-                )
-                for path in scope.paths
-            ) and all(
-                ref.repository_id == surface.repository_id
-                for ref in scope.evidence_refs
+            if not self._run_scope_covers(
+                run.scope.scope, surface.repository_id, members
             ):
-                try:
-                    qualification: m.VerificationSupport | m.SupportUnavailable = (
-                        self._support.evaluate_verification(run.run_id.value)
-                    )
-                except (OSError, ValueError) as exc:
-                    qualification = m.SupportUnavailable(str(exc))
-                selected.append(
-                    m.VerificationView(run=run, qualification=qualification)
+                continue
+            try:
+                qualification: m.VerificationSupport | m.SupportUnavailable = (
+                    self._support.evaluate_verification(run.run_id.value)
                 )
+            except (OSError, ValueError) as exc:
+                qualification = m.SupportUnavailable(str(exc))
+            selected.append(m.VerificationView(run=run, qualification=qualification))
         return tuple(selected)
 
     def _exact_reference(
@@ -552,6 +612,7 @@ class AnswerService:
                     children.setdefault(item.parent, []).append(item.key)
         current = 0
         stale = 0
+        stale_refs: list[m.StaleConclusionRef] = []
         unassessed = 0
         for understanding in understandings:
             support = self._support.evaluate_version(
@@ -564,6 +625,13 @@ class AnswerService:
                     current += 1
                 else:
                     stale += 1
+                    stale_refs.append(
+                        m.StaleConclusionRef(
+                            ref=conclusion.ref,
+                            understanding_version=understanding.current_version,
+                            state=conclusion.evaluation.state,
+                        )
+                    )
         unexamined, limited = self._unexamined(
             surface, understandings, examined_paths, covers_all
         )
@@ -583,6 +651,7 @@ class AnswerService:
             surface=surface,
             current=current,
             stale=stale,
+            stale_refs=tuple(stale_refs),
             unassessed=unassessed,
             unexamined=unexamined,
             unexamined_limited=limited,
@@ -675,6 +744,7 @@ class AnswerService:
     ) -> m.AskResult:
         grouped: dict[str, list[m.ConclusionView]] = {}
         gaps: list[m.RecordedQuestionGap] = []
+        historical: list[m.HistoricalConclusion] = []
         for understanding in understandings:
             support = self._support.evaluate_version(
                 understanding.understanding_id.value
@@ -695,6 +765,11 @@ class AnswerService:
                 for item in support.conclusions
                 if item.evaluation.state is m.SupportState.CURRENT
             ]
+            historical.extend(
+                self._historical(item, revisions, understanding.current_version)
+                for item in support.conclusions
+                if item.evaluation.state is not m.SupportState.CURRENT
+            )
             if current:
                 grouped.setdefault(understanding.question, []).extend(current)
         if not grouped:
@@ -711,6 +786,7 @@ class AnswerService:
                 surface=surface,
                 reason=reason,
                 recovery=gap_recovery(reason),
+                historical=tuple(historical),
                 missing=("no current conclusion on this surface",),
             )
         return m.Answer(
@@ -771,6 +847,13 @@ class AnswerService:
         evidence = list(gap.evidence)
         observations = list(gap.observations)
         historical = list(gap.historical)
+        recovery = gap.recovery
+        if gap.historical:
+            recovery = (
+                f"{gap.recovery} For the prior statement, call "
+                "ask(selector=UnderstandingSnapshotSelector"
+                "{understanding_id, version})."
+            )
         omitted: list[str] = []
         while True:
             continuation = None
@@ -794,6 +877,7 @@ class AnswerService:
                 evidence=tuple(evidence),
                 observations=tuple(observations),
                 historical=tuple(historical),
+                recovery=recovery,
                 omitted=tuple(omitted),
                 continuation=continuation,
                 truncated=True,
@@ -809,7 +893,7 @@ class AnswerService:
                 )
                 continue
             if historical:
-                omitted.append(historical.pop().label)
+                omitted.append(historical.pop().ref.label)
                 continue
             return self._refuse(gap, limit)
 
@@ -854,7 +938,8 @@ def _replace_gap(
     *,
     evidence: tuple[m.EvidenceUnit, ...],
     observations: tuple[m.SourceObservationId, ...],
-    historical: tuple[m.ConclusionRevisionRef, ...],
+    historical: tuple[m.HistoricalConclusion, ...],
+    recovery: str,
     omitted: tuple[str, ...],
     continuation: str | None,
     truncated: bool,
@@ -862,7 +947,7 @@ def _replace_gap(
     return m.Gap(
         surface=gap.surface,
         reason=gap.reason,
-        recovery=gap.recovery,
+        recovery=recovery,
         question=gap.question,
         changed_evidence=gap.changed_evidence,
         historical=historical,

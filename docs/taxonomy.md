@@ -20,6 +20,16 @@ Conclusion revisions and understanding versions are different counters.
 An update preserves unmentioned membership and challenges. Replacement and
 withdrawal are explicit operations, not omission-based deletion.
 
+## Result composition carriers
+
+| Carrier | Meaning |
+| --- | --- |
+| `HistoricalConclusion` | Non-current conclusion content returned in an ask `Gap`: exact revision, understanding version, statement, evidence references, and present non-current state. |
+| `StaleConclusionRef` | Exact stale revision reference in a surface status: revision identity, understanding version, and present non-current state. |
+
+These are read-time projections over stored revisions. They are not a second
+stored shape; historical content never becomes current answer content.
+
 ## Support
 
 Source, authority, premise, and discovery dependencies use a closed tagged

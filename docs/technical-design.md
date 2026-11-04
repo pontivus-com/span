@@ -8,10 +8,10 @@ the proposed refactoring boundary for layers 0–3. It chooses mechanisms; it
 adds no product requirement. Where it conflicts with a higher layer, the higher
 layer governs.
 
-**Release identity (2026-11-03).** The only public release described here is
-**0.9.1** (2026-11-03). The prior internal pre-release artifacts were withdrawn
-and were never public. References below to the withdrawn internal baseline
-describe that artifact, not the public release.
+**Release identity (2026-11-04).** The current public release is **0.9.2**
+(2026-11-04), a bug-fix release over 0.9.1. The prior internal pre-release
+artifacts were withdrawn and were never public. References below to the
+withdrawn internal baseline describe that artifact, not the public release.
 
 **Baseline measured at:** withdrawn internal baseline = repository revision `aa580b3`; 0.8.3 = tag
 `v0.8.3`. Counts below are measurements of those trees, not estimates.
@@ -304,9 +304,10 @@ Status: **RESOLVED**. §12 records the accepted path: a run cites the
 `SourceObservationId`s actually exercised, which are the observations admitted
 for the operation's context — the context returned by a preceding
 `ask`/`reconsider`, or the locators/ranges the operation admits internally before
-recording. The exact IDs are stored with the run, so the run names what it
-actually exercised. No separate public admission step and no inferred run
-provenance is introduced.
+recording. The wire accepts `run.observations` or `run.evidence`; evidence
+locators are admitted before the same command path. The exact IDs are stored
+with the run, so the run names what it actually exercised. No separate public
+admission step and no inferred run provenance is introduced.
 
 ### O-8 — Boundary-update encoding and historical references (resolved 2026-11-01)
 
@@ -320,10 +321,11 @@ mapping of existing schema-10 records.
 
 ### O-9 — Package release version
 
-Status: **RESOLVED — owner direction 2026-11-03: `0.9.1`.** This restores D-17:
-the replacement ships as 0.9.1, and the prior internal pre-release artifacts
-are withdrawn and were never public. The public release is
-0.9.1 (2026-11-03). FP-6 freezes release metadata against this value.
+Status: **RESOLVED — owner direction 2026-11-03: `0.9.1`; 2026-11-04:
+`0.9.2`.** The 0.9.1 decision restored D-17: the replacement ships as 0.9.1,
+and the prior internal pre-release artifacts are withdrawn and were never
+public. 0.9.2 (2026-11-04) is a bug-fix release over 0.9.1 and changes no public
+operation. FP-6 freezes release metadata against the current value.
 
 ### O-10 — Supported host set and recovery scope (resolved 2026-11-01)
 
@@ -635,6 +637,13 @@ membership plus shared support evaluations; the 0.9 snapshot projection is not
 the new answer composer. The no-question view uses the same composition path,
 grouped by recorded question, rather than another writer or stored rendering.
 
+The read composer returns historical `Gap` content through
+`HistoricalConclusion` and stale surface references through
+`StaleConclusionRef`; both are read-time projections over stored revisions, not
+a second stored shape. Verification applicability uses the shared containment
+rule: a run applies when the asked surface is within its declared scope, and a
+single-file run is not widened to a broader service.
+
 Implement one containment resolver shared by query resolution, status, and
 change mapping. Add `service/reconsider.py` for the operation composition. Use
 `source_observation_ids_for_locator` and `support_dependents` as lookup building
@@ -673,7 +682,9 @@ independent run actually exercised. Those are the observations admitted for the
 operation's context: the context returned by a preceding `ask`/`reconsider`, or
 the locators/ranges the operation admits internally before recording. The service
 stores those exact IDs with the run, so the run names what it actually exercised.
-No separate public admission step and no inferred run provenance is introduced.
+The wire accepts `run.observations` or `run.evidence`; evidence locators are
+admitted before the same command path. No separate public admission step and no
+inferred run provenance is introduced.
 
 Split the core confirm/correct branches in `_apply_action`. The service supplies
 the prior and newly observed support needed by FD-31; the core transition selects
@@ -810,7 +821,29 @@ currency, and names no surface. The installer deploys the plugin under Span's
 own data root and registers it once in the host's global `opencode.json`; it
 never writes the plugin into a target. Codex continues to use the managed
 `AGENTS.md` block. The notice's bytes are counted in the F8 class measurement.
-FD-53 applies: the notice is not claimed delivered until captured.
+FD-53 applies: the notice is not claimed delivered until captured. An edit-time
+notice is computed on a tool edit, held once per session, and delivered by the
+next `context` hook; it names the changed paths and the exact
+`reconsider(changed_paths=[...])` call. It asserts support state only and is
+silent on failure.
+
+**OpenCode plugin scope (0.9.2).** The lifecycle plugin is managed under an
+explicit `--opencode-plugin-scope global|local|none`; the installer never infers
+the scope from disk. `global` deploys the canonical plugin and retires
+Span-owned legacy copies only in targets passed with `--repo`, moving them to
+`<target>/.opencode/span-retired/` (no deletion, no backup store, no TTL).
+`local` and `none` remove Span's global registration and leave the target plugin
+to the user, reporting each copy. Receipt targets not selected with `--repo` are
+inspected read-only and yield `conflict`, never `wired`. A fresh install
+defaults to `global`; an upgrade uses the receipt scope and a receipt with no
+unambiguous scope stops the upgrade and names the flag. The receipt records the
+migration under `host_integration_migration`
+(`opencode_plugin.scope`, `retired_target_plugins`, `removed_config_entries`),
+so a later upgrade reuses the selected scope instead of inferring it. The
+authoritative full scope matrix is in [install](install.md#opencode).
+Foundations §1 binds the MCP **server**, which still makes no target edits; host
+integration and the upgrade migration are installer behaviour. See
+[install](install.md#upgrading-from-09091).
 
 **Measured 2026-11-03 (OpenCode):** with the readiness wait and the notice,
 **5/5** clean runs put the first `ask` before the first source read; without the

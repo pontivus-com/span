@@ -63,6 +63,29 @@ class SurfaceCarrierTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.Surface(key=KEY, boundary_version=0)
 
+    def test_stale_refs_name_every_stale_conclusion(self) -> None:
+        ref = m.StaleConclusionRef(
+            ref=m.ConclusionRevisionRef(
+                understanding_id=m.UnderstandingId("u-1"),
+                conclusion_id=m.ConclusionId("c-1"),
+                revision=m.ConclusionRevisionNumber(1),
+            ),
+            understanding_version=m.UnderstandingVersionNumber(1),
+            state=m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        with self.assertRaises(ValueError):
+            m.SurfaceStatus(surface=KEY, stale=1)
+        with self.assertRaises(ValueError):
+            m.SurfaceStatus(surface=KEY, stale=0, stale_refs=(ref,))
+        with self.assertRaises(ValueError):
+            m.StaleConclusionRef(
+                ref=ref.ref,
+                understanding_version=ref.understanding_version,
+                state=m.SupportState.CURRENT,
+            )
+        status = m.SurfaceStatus(surface=KEY, stale=1, stale_refs=(ref,))
+        self.assertEqual(status.stale_refs, (ref,))
+
     def test_status_counts_are_non_negative(self) -> None:
         m.SurfaceStatus(surface=KEY)
         with self.assertRaises(ValueError):

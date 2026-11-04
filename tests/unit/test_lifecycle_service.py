@@ -702,6 +702,48 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertEqual(run.outcome, m.VerificationOutcome.PASS)
 
+    def test_verification_accepts_evidence_only(self) -> None:
+        wire = w.RecordVerificationWire(
+            identity=_identity("sub-v-evidence"),
+            run=w.VerificationRunWire(
+                repository_id="repo-1",
+                scope_description="fixture",
+                scope_paths=("src/a.py",),
+                command="python3 -m unittest",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="test",
+                evidence=(w.SourceSupportWire(locator="src/a.py"),),
+            ),
+        )
+        receipt = self.service.verification(wire)
+        run = self.store.get_verification_run(
+            receipt.accepted_verification_run_ids[0].value
+        )
+        self.assertTrue(run.observations)
+
+    def test_record_verification_accepts_evidence_only(self) -> None:
+        request = w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id="sub-v-wire",
+            context_id="ctx-1",
+            kind=m.RecordKind.VERIFICATION,
+            run=w.VerificationRunWire(
+                repository_id="repo-1",
+                scope_description="fixture",
+                scope_paths=("src/a.py",),
+                command="python3 -m unittest",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="test",
+                evidence=(w.SourceSupportWire(locator="src/a.py"),),
+            ),
+        )
+        result = self.service.record(request)
+        self.assertIsInstance(result, m.VerificationRecorded)
+
     # -- retention ---------------------------------------------------------
 
     def test_receipt_readable_after_context_expiry(self) -> None:

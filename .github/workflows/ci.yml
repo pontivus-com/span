@@ -82,6 +82,11 @@ jobs:
           coverage report --show-missing
           coverage xml
 
+      # FD-53: the edit-time notice must be shown to reach event.system.
+      # This is the named capture artifact, run in CI where Node is available.
+      - name: Plugin notice delivery
+        run: node --test tests/plugin/test_span_hooks_notice.mjs
+
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         with:

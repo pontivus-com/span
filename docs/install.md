@@ -92,6 +92,9 @@ It does **not** mean Span already understands your repository.
 
 Managed registration and skills are implemented for Codex and OpenCode, with
 host-specific optional hooks. These are the supported registration targets.
+Claude Code is not a supported registration target. If an earlier version wired
+Span hooks into `~/.claude/settings.json`, install and uninstall remove those
+Span-owned entries and preserve every foreign hook and setting.
 Delivery of the declared grammar and preservation of caller request identity
 are established by recorded captures on both hosts: exact declared schemas,
 cold→record→warm delivery, closed-union rejection, context-free recording,
@@ -154,14 +157,47 @@ The supported manual `opencode.json` entry is:
 `disabled` may be omitted or set to `false`. Do not use the legacy
 flat `mcp.span` registration.
 
-The installer also deploys the Span lifecycle plugin under
+The installer manages the Span lifecycle plugin under an explicit scope. The
+scope is an end-user choice; the installer never infers it from what happens to
+exist on disk:
+
+| Scope | Global `opencode.json` | Span data-root plugin | Targets passed with `--repo` | Receipt target not selected | Unregistered repos | User-managed global dirs |
+| --- | --- | --- | --- | --- | --- | --- |
+| `global` | update | update | retire Span-owned copies | read-only; conflict if present | never | report; conflict if present |
+| `local` | remove Span-owned entry | remove Span-owned dir | report only | read-only; report only | never | report only |
+| `none` | remove Span-owned entry | remove Span-owned dir | report only | read-only; report only | never | report only |
+
+A fresh install defaults to `global`, printed. An upgrade uses the scope in the
+install receipt; when the receipt records no unambiguous scope, the installer
+stops and requires `--opencode-plugin-scope global|local|none`. It does not
+guess. A flag that changes the recorded scope prints the old and new values and
+cleans Span's old registration.
+
+Under `global`, the installer deploys the plugin under
 `<DATA_DIR>/../../opencode-plugin` and registers that directory once in the
 host's global `~/.config/opencode/opencode.json` (`plugins`). It does not write
-the plugin into a target repository. The plugin waits a bounded three seconds at
-prompt admission for the local MCP connection, so the first model request
-already sees the Span tools, and injects one advisory notice at session start
-when the repository has recorded understanding. The notice is advisory: if it
-does not fire, the session still runs, just without the first-move reminder.
+the plugin into a target repository. For every target passed with `--repo`, a
+legacy `.opencode/plugins/span-hooks.js` copy from versions before 0.9.0 is moved
+to `<target>/.opencode/span-retired/`, never deleted. That directory is
+operator-owned relocated content: Span has no backup store, TTL, reaper, or
+restore path for it. Remove or restore it yourself. A receipt target that is not
+passed with `--repo` is inspected read-only; if a Span-owned copy remains there,
+the result is `conflict`, never `wired`.
+
+Under `local` and `none`, the target plugin is user-managed. Span removes only
+its own global registration and the data-root plugin, reports every local copy
+it finds, and leaves the target untouched. Exactly one user-managed copy is
+`external`; more than one is `conflict`; none is `absent` (`local`) or `disabled`
+(`none`).
+
+The MCP server itself never edits a target repository; host integration and the
+upgrade migration belong to the installer. The plugin waits a bounded three
+seconds at prompt admission for the local MCP connection, so the first model
+request already sees the Span tools, and injects one advisory notice at session
+start when the repository has recorded understanding. An edit-time notice names
+the changed paths and the exact `reconsider(changed_paths=[...])` call on the
+next context turn. The notices are advisory: if one does not fire, the session
+still runs, just without the reminder.
 
 OpenCode exposes the server's tools to the agent directly (`ask`, `record`,
 `reconsider`, prefixed by the server name). Its code-mode sandbox does not
@@ -169,6 +205,26 @@ include MCP tools, so an agent that routes Span through `execute` sees
 `Unknown tool`; tell it to call the MCP tools directly, not through code mode.
 
 Reload OpenCode after changing its MCP configuration.
+
+### Upgrading from 0.9.0/0.9.1
+
+A bare package upgrade does not migrate the host. After upgrading, run the
+installer once with the explicit scope and the target you want migrated:
+
+```bash
+span-install --repo <TARGET_REPO> --opencode-plugin-scope global
+```
+
+Then restart the host. If you prefer to manage the plugin yourself, use
+`--opencode-plugin-scope local`; use `none` to remove Span's managed plugin
+entirely. `span-install --verify-only` reports an unresolved duplicate, a scope
+mismatch, an unknown scope, or a `local` scope with no local plugin. It does not
+list inert files under `.opencode/span-retired/`.
+
+The receipt records the migration under `host_integration_migration`:
+`opencode_plugin.scope`, `retired_target_plugins` (`from`, `to`, `sha256`), and
+`removed_config_entries`. A later upgrade reuses the recorded scope; if it is
+absent or ambiguous, the installer stops and names the flag.
 
 ---
 
@@ -219,7 +275,7 @@ data is unused.
 
 ## Upgrade an existing store
 
-Span 0.9.1 uses schema 11. The runtime never migrates at open; an older store
+Span 0.9.2 uses schema 11. The runtime never migrates at open; an older store
 fails closed with a transition action. `--migrate-store` is removed.
 
 Stop every process using the store, then run one phase at a time for each

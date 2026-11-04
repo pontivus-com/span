@@ -222,6 +222,7 @@ from span.core.model.outcomes import (  # noqa: F401
     VerificationRecorded,
 )
 from span.core.model.surfaces import (  # noqa: F401
+    StaleConclusionRef,
     Surface,
     SurfaceBoundary,
     SurfaceKey,
@@ -243,6 +244,7 @@ from span.core.model.answers import (  # noqa: F401
     EvidencePage,
     Gap,
     GapReason,
+    HistoricalConclusion,
     ReconsiderResult,
     RecordResult,
     Rejected,
@@ -498,6 +500,7 @@ __all__ = [
     "SurfaceKind",
     "SurfaceReference",
     "SurfaceStatus",
+    "StaleConclusionRef",
     "AmbiguousSurface",
     "Answer",
     "AnswerGroup",
@@ -511,6 +514,7 @@ __all__ = [
     "EvidencePage",
     "Gap",
     "GapReason",
+    "HistoricalConclusion",
     "SurfaceDeclared",
     "VerificationView",
     "RecordKind",

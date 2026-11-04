@@ -28,9 +28,16 @@ from span.shell.install.constants import HOST_RESPONSE_BUDGETS, INSTALL_VERSION
 from span.shell.install.host_inspect import detect_hosts
 from span.shell.install.hosts import (
     _hook_bin,
+    _sha256_file,
+    _span_plugin_file,
     deploy_opencode_plugin,
+    inspect_target_opencode_plugins,
     merge_opencode_config,
     register_codex,
+    remove_claude_hooks,
+    remove_opencode_plugin,
+    resolve_opencode_scope,
+    retire_stale_target_opencode_plugins,
     wire_codex_hooks,
 )
 from span.shell.install.indexer import (
@@ -46,7 +53,7 @@ from span.shell.install.paths import (
     platform_paths,
 )
 from span.shell.install.preflight import load_seeds, preflight_facts
-from span.shell.install.receipt import write_receipt
+from span.shell.install.receipt import read_receipt, write_receipt
 from span.shell.install.skills import deploy_agents_rules, deploy_skills
 from span.shell.install.uninstall import list_orphans, purge_repository, uninstall
 from span.shell.install.venv import (
@@ -297,7 +304,7 @@ def _host_command(command: list[str], host: str) -> list[str]:
     return [*command, "--response-budget-bytes", str(budget)]
 
 
-def _register_hosts(env: _Environment) -> dict[str, object]:
+def _register_hosts(env: _Environment, scope: str | None) -> dict[str, object]:
     """Register hosts and deploy skills; each host's refusal stays typed."""
     args = env.args
     span_cmd = _span_command(env)
@@ -344,7 +351,7 @@ def _register_hosts(env: _Environment) -> dict[str, object]:
             "status": "skipped",
             "reason": _codex_reason,
         }
-    host_registration["hooks"] = _wire_hooks(env)
+    host_registration["hooks"] = _wire_hooks(env, scope)
     if not args.no_skills:
         host_registration["skills"] = deploy_skills(env.span_repo, dry_run=env.dry)
     else:
@@ -356,34 +363,219 @@ def _register_hosts(env: _Environment) -> dict[str, object]:
     return host_registration
 
 
-def _wire_hooks(env: _Environment) -> dict[str, object]:
+def _wire_hooks(env: _Environment, scope: str | None) -> dict[str, object]:
     args = env.args
     if not args.with_hooks:
         print("skipping hook wiring (--no-hooks).")
         return {
             "codex": {"status": "skipped", "reason": "hooks disabled (--no-hooks)"},
-            "opencode_plugin": {},
+            "claude": {"status": "skipped", "reason": "hooks disabled (--no-hooks)"},
+            "opencode_plugin": {
+                "scope": scope,
+                "status": "skipped",
+                "reason": "hooks disabled (--no-hooks)",
+            },
+            "opencode_target_plugins": {
+                "status": "skipped",
+                "reason": "hooks disabled (--no-hooks)",
+            },
         }
     hook_bin = _hook_bin(env.venv_dir, env.bin_dir)
-    try:
-        codex_hooks = wire_codex_hooks(hook_bin, dry_run=env.dry)
-    except SystemExit:
-        raise
-    # The adoption notice is deployed under Span's own data root and
-    # registered once in the host's global config. Nothing is written into a
-    # target repository.
+    codex_hooks = wire_codex_hooks(hook_bin, dry_run=env.dry)
+    claude_hooks = remove_claude_hooks(dry_run=env.dry)
+    receipt = read_receipt(env.data_dir) or {}
+    selected = tuple(Path(target).resolve() for target in env.targets)
+    receipt_targets = tuple(
+        Path(repo).resolve()
+        for repo in receipt.get("repos", [])
+        if isinstance(repo, str) and repo
+    )
+    receipt_only = tuple(
+        target for target in dict.fromkeys(receipt_targets) if target not in selected
+    )
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    plugin = deploy_opencode_plugin(
-        opencode_plugin_path(env.span_repo),
-        env.data_dir.parent / "opencode-plugin",
+    plugin, target_plugins = _apply_opencode_scope(
+        env,
+        scope,
         config_home / "opencode" / "opencode.json",
+        env.data_dir.parent / "opencode-plugin",
+        env.data_dir.parent,
+        selected,
+        receipt_only,
         hook_bin,
-        env.data_dir,
-        dry_run=env.dry,
     )
     return {
         "codex": codex_hooks,
+        "claude": claude_hooks,
         "opencode_plugin": plugin,
+        "opencode_target_plugins": target_plugins,
+    }
+
+
+def _apply_opencode_scope(
+    env: _Environment,
+    scope: str | None,
+    global_config: Path,
+    canonical_dir: Path,
+    span_root: Path,
+    selected: tuple[Path, ...],
+    receipt_only: tuple[Path, ...],
+    hook_bin: str,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Apply exactly the selected scope; never act outside it."""
+    if scope == "global":
+        return _apply_global_scope(
+            env,
+            global_config,
+            canonical_dir,
+            span_root,
+            selected,
+            receipt_only,
+            hook_bin,
+        )
+    return _apply_user_managed_scope(
+        env, scope, global_config, canonical_dir, span_root, selected, receipt_only
+    )
+
+
+def _apply_global_scope(
+    env: _Environment,
+    global_config: Path,
+    canonical_dir: Path,
+    span_root: Path,
+    selected: tuple[Path, ...],
+    receipt_only: tuple[Path, ...],
+    hook_bin: str,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Retire selected-target copies and deploy the canonical global plugin."""
+    retirement = retire_stale_target_opencode_plugins(selected, dry_run=env.dry)
+    plugin = deploy_opencode_plugin(
+        opencode_plugin_path(env.span_repo),
+        canonical_dir,
+        global_config,
+        hook_bin,
+        env.data_dir,
+        dry_run=env.dry,
+        span_root=span_root,
+    )
+    receipt_targets, receipt_unreadable = inspect_target_opencode_plugins(receipt_only)
+    conflicts = list(plugin.get("conflicts", []))
+    for target, entries in receipt_targets.items():
+        conflicts.extend(
+            {
+                "path": item["path"],
+                "reason": "receipt target was not selected with --repo",
+                "manual_action": (
+                    f"span-install --repo {target} --opencode-plugin-scope global"
+                ),
+            }
+            for item in entries
+        )
+    retirement_conflicts = retirement.get("conflicts", [])
+    if isinstance(retirement_conflicts, list):
+        conflicts.extend(retirement_conflicts)
+    unreadable = receipt_unreadable
+    if unreadable:
+        status = "unreadable"
+    elif conflicts:
+        status = "conflict"
+    else:
+        status = "wired"
+    plugin.update(
+        {
+            "scope": "global",
+            "status": status,
+            "retired": retirement["retired"],
+            "retired_status": retirement["status"],
+            "conflicts": conflicts,
+            "unreadable": unreadable,
+        }
+    )
+    return plugin, {
+        "status": retirement["status"],
+        "receipt_only": {
+            "targets": receipt_targets,
+            "unreadable": receipt_unreadable,
+        },
+    }
+
+
+def _apply_user_managed_scope(
+    env: _Environment,
+    scope: str | None,
+    global_config: Path,
+    canonical_dir: Path,
+    span_root: Path,
+    selected: tuple[Path, ...],
+    receipt_only: tuple[Path, ...],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Remove Span's global registration; report user-managed copies only."""
+    plugin = remove_opencode_plugin(
+        global_config, canonical_dir, dry_run=env.dry, span_root=span_root
+    )
+    selected_targets, selected_unreadable = inspect_target_opencode_plugins(selected)
+    receipt_targets, receipt_unreadable = inspect_target_opencode_plugins(receipt_only)
+    source = opencode_plugin_path(env.span_repo)
+    expected_hash = _sha256_file(source) if source.is_file() else None
+    copies = []
+    for path in plugin.get("user_managed", []):
+        plugin_file = _span_plugin_file(path)
+        digest = _sha256_file(plugin_file) if plugin_file is not None else None
+        copies.append(
+            {
+                "path": path,
+                "sha256": digest,
+                "matches_installed": (
+                    None
+                    if expected_hash is None or digest is None
+                    else digest == expected_hash
+                ),
+            }
+        )
+    for target, entries in (
+        *selected_targets.items(),
+        *receipt_targets.items(),
+    ):
+        copies.extend(
+            {
+                "target": target,
+                "path": item["path"],
+                "sha256": item["sha256"],
+                "matches_installed": (
+                    None if expected_hash is None else item["sha256"] == expected_hash
+                ),
+            }
+            for item in entries
+        )
+    unreadable = [*selected_unreadable, *receipt_unreadable]
+    if unreadable:
+        status = "unreadable"
+    elif len(copies) > 1:
+        status = "conflict"
+    elif len(copies) == 1:
+        status = "external"
+    else:
+        status = "absent" if scope == "local" else "disabled"
+    plugin.update(
+        {
+            "scope": scope,
+            "status": status,
+            "retired": [],
+            "user_managed": copies,
+            "conflicts": copies if len(copies) > 1 else [],
+            "unreadable": unreadable,
+        }
+    )
+    return plugin, {
+        "status": status,
+        "selected": {
+            "targets": selected_targets,
+            "unreadable": selected_unreadable,
+        },
+        "receipt_only": {
+            "targets": receipt_targets,
+            "unreadable": receipt_unreadable,
+        },
     }
 
 
@@ -393,6 +585,9 @@ def _build_receipt(
     host_registration: dict[str, object],
     report: dict[str, object],
 ) -> dict[str, object]:
+    hooks = host_registration.get("hooks", {})
+    plugin = hooks.get("opencode_plugin", {}) if isinstance(hooks, dict) else {}
+    plugin = plugin if isinstance(plugin, dict) else {}
     return {
         "install_version": INSTALL_VERSION,
         "span_repo": str(env.span_repo),
@@ -402,6 +597,15 @@ def _build_receipt(
         "repos": [str(target) for target in env.targets],
         "verify": report,
         "host_registration": host_registration,
+        "host_integration_migration": {
+            "opencode_plugin": {
+                "scope": plugin.get("scope"),
+                "status": plugin.get("status"),
+                "plugin": plugin.get("plugin"),
+            },
+            "retired_target_plugins": plugin.get("retired", []),
+            "removed_config_entries": plugin.get("removed_config_entries", []),
+        },
         "target_census": state.target_census,
         "structural_indexer": {
             # Neutral summary only: the managed binary path is internal
@@ -427,8 +631,13 @@ def main(argv=None):
     env = _environment(args)
     if _run_one_shot(env):
         return
+    scope = None
+    if not args.no_hooks:
+        scope, _ = resolve_opencode_scope(
+            args.opencode_plugin_scope, read_receipt(env.data_dir)
+        )
     state = _provision_runtime(env)
-    host_registration = _register_hosts(env)
+    host_registration = _register_hosts(env, scope)
     report = verify_installation(state.venv_python, env.data_dir, env.targets, env.dry)
     receipt = _build_receipt(env, state, host_registration, report)
     write_receipt(env.data_dir, receipt, dry_run=env.dry)

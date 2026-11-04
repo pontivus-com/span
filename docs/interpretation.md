@@ -63,9 +63,12 @@ write and is not a support verdict.
 ## Independent verification
 
 Use `record(kind="verification")` after an actual external execution, independently of
-semantic recording. Record command or scenario, tested source observations,
-observer, time, `PASS`/`FAIL`/`INCONCLUSIVE`, and environment limitations.
-`ask` returns the run with its live qualification without rerunning the work.
+semantic recording. Record command or scenario, tested source observations or
+evidence, observer, time, `PASS`/`FAIL`/`INCONCLUSIVE`, and environment
+limitations. A run requires observations or evidence; either is accepted. It
+applies to the surfaces within its declared scope; a single-file run is not
+widened to a broader service. `ask` returns the run with its live qualification
+without rerunning the work.
 
 See [MCP reference](mcp.md) for the authoritative request/result grammar and
 [lifecycle](lifecycle.md) for context expiry and operational retention.

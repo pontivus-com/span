@@ -21,7 +21,9 @@ The result is `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 
 Each conclusion carries its own support state. `CURRENT` means the surface was
 considered but the conclusion still holds. `REASSESSMENT_REQUIRED` or
-`UNVERIFIABLE` means actual loss: investigate and re-establish it.
+`UNVERIFIABLE` means actual loss: investigate and re-establish it. A surface
+with no `conclusions` is containment-only. Keep the returned order; act only on
+conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
 
 ## Then
 

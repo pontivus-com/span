@@ -20,7 +20,7 @@ never auto-declares a surface from an understanding.
 Ordinary coding work can start with saved answers, a cold investigation,
 or evidence gathered outside Span. Recording is an explicit action, with an
 inspectable receipt. There is no required whole-repository campaign, internal
-question taxonomy, or suspended interpretation exchange in 0.9.1.
+question taxonomy, or suspended interpretation exchange in 0.9.2.
 
 ## Reuse has qualifications
 
@@ -62,6 +62,10 @@ Investigation scope is explicit. Broader work requires the agent to choose
 and examine the broader scope; Span does not turn a local question into an
 automatic semantic crawl. There is no repository coverage score or promise
 that installation establishes repository understanding.
+
+Verification has its own declared scope. A run applies to the surfaces within
+that scope: a single-file run is not widened to a broader service, and a
+service-wide run applies to the files it covers.
 
 ## Local storage and operational effects
 

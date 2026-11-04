@@ -40,6 +40,23 @@ def _add_transition_arguments(parser) -> None:
     )
 
 
+def _add_opencode_plugin_scope_argument(parser) -> None:
+    """The explicit OpenCode plugin scope; never inferred from disk."""
+    parser.add_argument(
+        "--opencode-plugin-scope",
+        choices=("global", "local", "none"),
+        default=None,
+        help=(
+            "Where Span manages the OpenCode lifecycle plugin. `global` "
+            "installs it under Span's data root and retires legacy copies in "
+            "targets passed with --repo. `local` and `none` leave the target "
+            "plugin to the user and remove Span's global registration. A "
+            "fresh install defaults to global; an upgrade uses the receipt "
+            "scope and stops if it is absent or ambiguous."
+        ),
+    )
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="span-install",
@@ -113,6 +130,7 @@ def parse_args(argv=None):
         action="store_true",
         help="Skip hook wiring even when hosts are detected.",
     )
+    _add_opencode_plugin_scope_argument(parser)
     parser.add_argument(
         "--no-skills",
         action="store_true",
