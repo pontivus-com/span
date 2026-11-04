@@ -2785,15 +2785,17 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             root = pathlib.Path(tmp)
             data_dir = root / "data"
             data_dir.mkdir()
+            repo = root / "repo"
+            repo.mkdir()
             expected = install.expected_span_command(
-                "/bin/span-mcp", str(data_dir), [], host="opencode"
+                "/bin/span-mcp", str(data_dir), [repo], host="opencode"
             )
             config = self._config(tmp, expected)
             (data_dir / "install.json").write_text(
                 json.dumps(
                     {
                         "install_version": install.INSTALL_VERSION,
-                        "repos": [],
+                        "repos": [str(repo)],
                         "host_registration": {"opencode": {"config": str(config)}},
                     }
                 )
@@ -2808,7 +2810,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                     patch(
                         "span.shell.install.verify.verify_installation",
                         return_value={"repos": []},
-                    ),
+                    ) as verify_installation,
                     patch("span.shell.install.verify.check_skills"),
                 ):
                     report = install.doctor(
@@ -2820,6 +2822,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             finally:
                 os.chdir(previous)
         self.assertEqual(report["opencode_registration"]["status"], "matched")
+        self.assertEqual(verify_installation.call_args.args[2], (repo,))
 
     def test_doctor_does_not_inspect_unrecorded_global_mcp_config(self):
         import os
