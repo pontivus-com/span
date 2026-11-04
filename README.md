@@ -171,18 +171,19 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.9.3**: three lifecycle tools (`ask`, `record`,
+This checkout describes **0.9.4**: three lifecycle tools (`ask`, `record`,
 `reconsider`), schema-11 storage, surface-scoped answers, explicit store
-transition, and live support qualification. 0.9.3 is a bug-fix release over
+transition, and live support qualification. 0.9.4 is a bug-fix release over
 0.9.2: it shares the selected OpenCode configuration between MCP registration
 and global plugin wiring, makes verification and uninstall receipt-backed,
+including receipt-bound repositories during bare verification,
 restores Claude Code as a supported managed host, and removes superseded
 MCP, receipt, target-plugin, host-contract, and structural-indexer compatibility
 paths. `--no-hooks` disables lifecycle hook and plugin wiring without disabling
 MCP registration; current receipts fail closed and foreign host state remains
 untouched.
 The 0.9.2 release history is recorded in the changelog; its migration behavior
-is not a current 0.9.3 implementation promise. The current installer preserves
+is not a current 0.9.4 implementation promise. The current installer preserves
 the selected OpenCode configuration and does not perform obsolete target-plugin
 compatibility migration.
 Host delivery is captured for the three-tool surface on Codex and OpenCode;

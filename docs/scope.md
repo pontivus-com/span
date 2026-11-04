@@ -20,7 +20,7 @@ never auto-declares a surface from an understanding.
 Ordinary coding work can start with saved answers, a cold investigation,
 or evidence gathered outside Span. Recording is an explicit action, with an
 inspectable receipt. There is no required whole-repository campaign, internal
-question taxonomy, or suspended interpretation exchange in 0.9.3.
+question taxonomy, or suspended interpretation exchange in 0.9.4.
 
 ## Reuse has qualifications
 

@@ -70,7 +70,7 @@ references (`test_invalidated_ask_returns_historical_content`,
 notice is proven at the `event.system` boundary by
 `tests/plugin/test_span_hooks_notice.mjs`, run in CI.
 
-0.9.3 adds named coverage for the installer and host contract: shared default
+0.9.4 adds named coverage for the installer and host contract: shared default
 OpenCode MCP/plugin selection, receipt-backed verification and uninstall,
 explicit relocation, `--no-hooks` MCP preservation, fail-closed current
 receipts, conflict-preserving target inspection, ownership-based skill cleanup,

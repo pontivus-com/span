@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.9.3 — 2026-11-04
+## 0.9.4 — 2026-11-04
 
-**A host-contract and legacy-boundary release.** 0.9.3 completes the current
+**A host-contract and legacy-boundary release.** 0.9.4 completes the current
 three-tool Span contract, repairs installer-produced host state, restores
 managed Claude Code support, and removes executable compatibility residue that
 contradicted the current lifecycle.
