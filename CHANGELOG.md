@@ -2,31 +2,94 @@
 
 ## 0.9.3 — 2026-11-04
 
-**A bug-fix release.** OpenCode MCP registration now shares the selected
-configuration with global plugin wiring, receipt-backed verification reuses the
-recorded MCP path, and uninstall removes MCP and plugin artifacts from their
-respective recorded configurations. Unselected MCP configuration is reported
-distinctly from an inspected configuration without a Span registration. New
-receipts store absolute OpenCode paths, repeat installs preserve the recorded
-MCP path across working directories, and an explicit relocation removes the
-old Span registration only after the new one is written.
-Legacy relative MCP paths no longer fall through to an automatically selected
-local or global file; they require explicit recovery. Relocation validates the
-old receipt-owned configuration is valid and writable before creating the new
-registration.
+**A host-contract and legacy-boundary release.** 0.9.3 completes the current
+three-tool Span contract, repairs installer-produced host state, restores
+managed Claude Code support, and removes executable compatibility residue that
+contradicted the current lifecycle.
 
-`--no-hooks` now disables lifecycle hook and plugin wiring without disabling
-MCP registration; the selected configuration is still rewritten with the
-current data directory and repository bindings. The release also removes
-superseded MCP-operation, migration-only receipt, target-plugin retirement,
-structural-indexer `PATH` fallback, and retired host-contract paths. Current
-receipts fail closed when invalid or unsupported, while foreign host state and
-historical changelog records remain untouched.
+### Lifecycle and MCP contract
 
-Managed Claude Code support is restored after its erroneous removal from the
-replacement-host set. Current registration, inspection, skills, hooks, and
-uninstall behavior are supported; authenticated Claude model delivery remains
-**UNVERIFIED** and is not claimed by this release.
+- The registered MCP surface is exactly `ask`, `record`, and `reconsider`.
+  Retired operation names are ordinary `unknown_tool` failures; no replacement
+  map or compatibility alias is retained.
+- The current `record` contract remains explicit: understanding creation is a
+  flat conclusion with `locator` or `observation_id`, update actions are
+  update-only, and surface actions are surface-only. Guidance and wire schemas
+  are aligned with the first-pass request shapes.
+- The explicit offline store transition remains the supported path for schema
+  7, 8, 9, and 10 stores. Runtime/store transition semantics, persisted
+  observation identities, replay digests, and schema-10 mapping behavior are
+  unchanged; hidden migration-only command paths are not parsed.
+
+### Installer and host state
+
+- A default/global OpenCode install selects one configuration for both the
+  lifecycle plugin and `mcp.servers.span`. Explicit `--opencode-config`, the
+  prior receipt path, an intentional local `./opencode.json`, and the global
+  configuration are resolved in that order.
+- Selected OpenCode paths are recorded as absolute receipt identities. Bare
+  repeat installs reuse the recorded path across working directories. Explicit
+  relocation validates the previous target, writes the new registration first,
+  then removes the old Span registration.
+- `--verify-only` reuses the receipt-selected MCP path. Uninstall removes MCP
+  registration and plugin wiring from their independently recorded
+  configurations, preserving foreign entries and supporting legitimate split
+  installations.
+- `--no-hooks` disables lifecycle hook and plugin wiring only; it does not
+  disable MCP registration. The selected MCP configuration is still rewritten
+  with the current data directory and all `--repo` bindings.
+- MCP inspection distinguishes `unselected`, `unreadable`, `missing`,
+  `mismatched`, and `matched`. A global configuration that Span did not select
+  is not silently inspected.
+- Current receipts are a single versioned contract. Invalid, unsupported,
+  unsafe-relative, or historical-layout receipts fail closed; historical receipt
+  fields are not interpreted as migration authority.
+- Explicitly inspected target-local Span plugins are reported as conflicts and
+  left in place. The installer does not create `.opencode/span-retired` or
+  migrate obsolete target-plugin copies.
+
+### Managed hosts, hooks, and skills
+
+- Claude Code is restored as a supported managed host with automatic detection,
+  `--with-claude`/`--no-claude`, user-scope registration, read-only inspection,
+  report-only hooks, ownership-marked skills, receipt coverage, and scoped
+  uninstall. Foreign Claude settings, hooks, and skills remain untouched.
+- Codex, OpenCode, and Claude hook wiring uses the canonical host-neutral hook
+  contract. Hook commands carry the installed data directory, and missing host
+  files or CLIs are reported as skipped rather than treated as successful
+  delivery.
+- Stale skill reconciliation and uninstall are ownership-based. A strict
+  current `.span-origin.json` marker must match the directory name, install
+  mode, and mode-specific provenance before Span removes anything; foreign,
+  malformed, mismatched, and historical-looking directories are preserved.
+- Authenticated Claude model delivery remains **UNVERIFIED** and is not claimed
+  by this release. Codex registration remains manual, and host delivery is
+  claimed only where the documented capture exists.
+
+### Legacy-residue cleanup
+
+- The unreferenced host roster and executable historical host-contract probe are
+  removed, along with test-only retired-operation catalogs and the vacuous
+  retired-name conformance test.
+- Hook repository access uses the canonical versioned receipt reader; an
+  unversioned or invalid receipt cannot route a hook into a repository.
+- Structural indexer resolution accepts only the explicit contributor override
+  or the installer-managed pointer. The pre-managed `PATH` fallback is gone.
+- Current host documentation, MCP wording, ownership comments, schema-11 target
+  wording, release metadata, and public version fields are aligned with the
+  implementation. Historical changelog entries remain historical records.
+
+### Verification
+
+- `.venv/bin/pytest -q`: 629 passed, 1 skipped, and 20 subtests passed.
+- `.venv/bin/ruff check .`, `.venv/bin/black --check .`, and
+  `.venv/bin/python scripts/typecheck.py`: passed; typing ratchet at 0 errors.
+- `node --test tests/plugin/test_span_hooks_notice.mjs`: 2 passed.
+- `git diff --check` and the release quality-delta check: passed.
+
+No new MCP operation, lifecycle phase, host-directory scan, semantic truth
+scoring, Codex registration inspector, store schema, or target-repository
+write path is introduced by this release.
 
 ## 0.9.2 — 2026-11-04
 
