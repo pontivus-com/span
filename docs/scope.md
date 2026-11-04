@@ -89,10 +89,13 @@ exported as history, not promoted as current understanding. See the
 
 ## Beta delivery boundary
 
-The supported live targets are Codex and OpenCode. Both have candidate-specific
-captures of the declared grammar, request identity, and recovery behavior.
-Implemented registration, configured hooks, and observed model behavior remain
-separate facts. Hooks are optional notices; ordinary retrieval
-and recording still check support when hooks are disabled.
+Codex and OpenCode are the supported live delivery targets, with
+candidate-specific captures of the declared grammar, request identity, and
+recovery behavior. Claude Code is also a supported managed host for
+registration, health inspection, installer behavior, skills, and optional
+lifecycle hooks; its authenticated model-delivery grammar and caller identity
+remain **UNVERIFIED**. Implemented registration, configured hooks, and observed
+model behavior remain separate facts. Hooks are optional notices; ordinary
+retrieval and recording still check support when hooks are disabled.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).

@@ -269,12 +269,14 @@ separately by FD-13 and is not reopened.
 
 Status: **PARTIAL for the flat-create schema (Codex and OpenCode)**. §15 requires
 an identified candidate, supported host/version, invocation-identity owner, and
-raw delivery capture. Both supported hosts have a three-tool capture
+raw delivery capture. Codex and OpenCode have three-tool captures
 (`host-contract/2026-11-02-three-tool/RECEIPTS.md`), and OpenCode passes the
 flat-create re-capture including verification and replay. Codex could not run
 the flat-create capture because the account hit its usage limit; that arm is
-blocked, not failed. The older twenty-tool captures are historical/void and do
-not certify the current `ask`/`record`/`reconsider` surface.
+blocked, not failed. Claude's managed-host registration and health evidence is
+covered by O-10, but its authenticated model-delivery grammar and caller
+identity remain unverified. The older twenty-tool captures are historical/void
+and do not certify the current `ask`/`record`/`reconsider` surface.
 
 **Observed 2026-11-01 (OpenCode).** A candidate-specific capture established
 the declared 20-tool schema exactly, a cold→record→warm journey on the real
@@ -291,8 +293,10 @@ same-identity calls that both returned one retained receipt.
 **Re-observed after contract closure (2026-11-02).** Codex and OpenCode both
 delivered the closed result unions (`Rejected` as a structured result), a
 context-free recording that issued its own context, a challenge through
-`reconsider` returning `Challenged`, and an identical replay. The declared
-20-tool schemas still match the packaged schemas exactly. Evidence:
+`reconsider` returning `Challenged`, and an identical replay. The historical
+20-tool capture schemas matched the then-packaged schemas; that evidence is
+retained for its historical scope and does not describe the current public
+surface. Evidence:
 `.context/evidence/host-contract/2026-11-02-closure/RECEIPTS.md`. Codex inlined the
 full 62,589-byte truncated answer, so O-3 has a Codex lower bound at that size.
 The earlier capture is in
