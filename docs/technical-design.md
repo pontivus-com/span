@@ -8,8 +8,8 @@ the proposed refactoring boundary for layers 0–3. It chooses mechanisms; it
 adds no product requirement. Where it conflicts with a higher layer, the higher
 layer governs.
 
-**Release identity (2026-11-04).** The current public release is **0.9.2**
-(2026-11-04), a bug-fix release over 0.9.1. The prior internal pre-release
+**Release identity (2026-11-04).** The current public release is **0.9.3**
+(2026-11-04), a bug-fix release over 0.9.2. The prior internal pre-release
 artifacts were withdrawn and were never public. References below to the
 withdrawn internal baseline describe that artifact, not the public release.
 
@@ -269,12 +269,14 @@ separately by FD-13 and is not reopened.
 
 Status: **PARTIAL for the flat-create schema (Codex and OpenCode)**. §15 requires
 an identified candidate, supported host/version, invocation-identity owner, and
-raw delivery capture. Both supported hosts have a three-tool capture
+raw delivery capture. Codex and OpenCode have three-tool captures
 (`host-contract/2026-11-02-three-tool/RECEIPTS.md`), and OpenCode passes the
 flat-create re-capture including verification and replay. Codex could not run
 the flat-create capture because the account hit its usage limit; that arm is
-blocked, not failed. The older twenty-tool captures are historical/void and do
-not certify the current `ask`/`record`/`reconsider` surface.
+blocked, not failed. Claude's managed-host registration and health evidence is
+covered by O-10, but its authenticated model-delivery grammar and caller
+identity remain unverified. The older twenty-tool captures are historical/void
+and do not certify the current `ask`/`record`/`reconsider` surface.
 
 **Observed 2026-11-01 (OpenCode).** A candidate-specific capture established
 the declared 20-tool schema exactly, a cold→record→warm journey on the real
@@ -291,8 +293,10 @@ same-identity calls that both returned one retained receipt.
 **Re-observed after contract closure (2026-11-02).** Codex and OpenCode both
 delivered the closed result unions (`Rejected` as a structured result), a
 context-free recording that issued its own context, a challenge through
-`reconsider` returning `Challenged`, and an identical replay. The declared
-20-tool schemas still match the packaged schemas exactly. Evidence:
+`reconsider` returning `Challenged`, and an identical replay. The historical
+20-tool capture schemas matched the then-packaged schemas; that evidence is
+retained for its historical scope and does not describe the current public
+surface. Evidence:
 `.context/evidence/host-contract/2026-11-02-closure/RECEIPTS.md`. Codex inlined the
 full 62,589-byte truncated answer, so O-3 has a Codex lower bound at that size.
 The earlier capture is in
@@ -322,21 +326,26 @@ mapping of existing schema-10 records.
 ### O-9 — Package release version
 
 Status: **RESOLVED — owner direction 2026-11-03: `0.9.1`; 2026-11-04:
-`0.9.2`.** The 0.9.1 decision restored D-17: the replacement ships as 0.9.1,
+`0.9.2`, `0.9.3`.** The 0.9.1 decision restored D-17: the replacement ships as 0.9.1,
 and the prior internal pre-release artifacts are withdrawn and were never
-public. 0.9.2 (2026-11-04) is a bug-fix release over 0.9.1 and changes no public
-operation. FP-6 freezes release metadata against the current value.
+public. 0.9.2 (2026-11-04) was a bug-fix release over 0.9.1 and changed no
+public operation. 0.9.3 (2026-11-04) is a bug-fix release over 0.9.2 and also
+changes no public operation. FP-6 freezes release metadata against the current
+value.
 
 ### O-10 — Supported host set and recovery scope (resolved 2026-11-01)
 
-Status: **RESOLVED — owner direction 2026-11-02.** The supported registration
-targets are **Codex** and **OpenCode** (see `docs/install.md` §Supported hosts).
-Claude Code is not a supported target and carries no requirement, capture, or
-waiver. Both supported hosts have candidate-specific delivery captures of the
-declared grammar, closed-union results, context-free recording, challenge, and
-replay. The recovery promise is conditional per FD-50: replay safety is claimed
-only where the host preserves request identity, and the replay window is
-measured per host at FP-4a (O-2) rather than assumed.
+Status: **RESOLVED — corrected 2026-11-04.** The supported managed hosts are
+**Codex, OpenCode, and Claude Code** (see `docs/install.md` §Supported hosts).
+Claude has supported registration, inspection, skills, and optional lifecycle
+hook integration. Its registration/health evidence is available, but its
+authenticated model-delivered grammar and caller identity remain
+**UNVERIFIED** because no usable authenticated capture exists. That state is
+not `UNSUPPORTED` and does not remove Claude from the managed-host set. The
+earlier 2026-11-02 statement that Claude was unsupported is explicitly
+retracted and superseded. Recovery claims remain conditional per FD-50: replay
+safety is claimed only where the host preserves request identity, and the
+replay window is measured per host at FP-4a (O-2) rather than assumed.
 
 ## 7. What not to do
 
@@ -405,10 +414,9 @@ The deliverable is an executable schema/example set, not this prose table.
 ### 9.1 Delivered public surface (2026-11-02)
 
 The three-tool surface is implemented in the working tree. `ask`, `record`, and
-`reconsider` are the only default registrations; `structure` and `setup` remain
-optional and are exposed only when the host lacks navigation or an installer
-path. Retired names reject with their replacement and perform no work. There
-are no aliases and no dual grammar.
+`reconsider` are the only registered operations. Any other operation name is
+unknown. There are no aliases, removed-name compatibility mappings, or dual
+grammars.
 
 `ask` accepts exactly one of an exact `surface={kind, locator}`, a `reference`,
 a snapshot/receipt selector, or a continuation. With no question, it returns the
@@ -736,8 +744,8 @@ remain unmeasured, so FG-4 stays `OPEN`.
 **Authority:** F3, F7, L4; FD-1, FD-6, FD-35–FD-36, FD-42–FD-45.
 
 Extend `shell/store_transition.py` and the existing installer transition command.
-The current `SUPPORTED_SOURCE_SCHEMAS` contains 7–9, and staging imports binding
-and seeds into an otherwise empty schema-10 store. A schema-10 input needs its
+The current `SUPPORTED_SOURCE_SCHEMAS` contains 7–10, and staging imports binding
+and seeds into an otherwise empty schema-11 store. A schema-10 input needs its
 own mapping and staged verification; the old export mechanism alone is not that
 mapping. Retain historical old-format exports without a second active decoder
 or semantic writer in the MCP runtime.
@@ -827,22 +835,26 @@ next `context` hook; it names the changed paths and the exact
 `reconsider(changed_paths=[...])` call. It asserts support state only and is
 silent on failure.
 
-**OpenCode plugin scope (0.9.2).** The lifecycle plugin is managed under an
+**OpenCode plugin scope (0.9.3).** The lifecycle plugin is managed under an
 explicit `--opencode-plugin-scope global|local|none`; the installer never infers
-the scope from disk. `global` deploys the canonical plugin and retires
-Span-owned legacy copies only in targets passed with `--repo`, moving them to
-`<target>/.opencode/span-retired/` (no deletion, no backup store, no TTL).
-`local` and `none` remove Span's global registration and leave the target plugin
-to the user, reporting each copy. Receipt targets not selected with `--repo` are
-inspected read-only and yield `conflict`, never `wired`. A fresh install
-defaults to `global`; an upgrade uses the receipt scope and a receipt with no
-unambiguous scope stops the upgrade and names the flag. The receipt records the
-migration under `host_integration_migration`
-(`opencode_plugin.scope`, `retired_target_plugins`, `removed_config_entries`),
-so a later upgrade reuses the selected scope instead of inferring it. The
-authoritative full scope matrix is in [install](install.md#opencode).
+the scope from disk. `global` deploys the canonical plugin and reports a
+conflict when an explicitly inspected target contains another Span plugin; it
+does not move or delete that target-owned artifact. `local` and `none` remove
+Span's global registration and leave target plugins to the user, reporting each
+copy. Receipt targets not selected with `--repo` are inspected read-only and
+yield `conflict`, never `wired`. A fresh install defaults to `global`; an
+upgrade uses the current receipt's scope and a receipt with no unambiguous scope
+stops and names the flag. The authoritative full scope matrix is in
+[install](install.md#opencode).
 Foundations §1 binds the MCP **server**, which still makes no target edits; host
-integration and the upgrade migration are installer behaviour. See
+integration and the upgrade migration are installer behaviour. Under the global
+scope, the installer uses that same fixed global configuration for the MCP
+registration unless an explicit, prior-receipt, or local MCP path takes
+precedence. Selected paths are absolute receipt identities; an explicit
+relocation removes the prior Span registration after the new registration
+succeeds. The receipt retains the MCP and plugin configuration paths independently; doctor reuses the
+recorded MCP path and uninstall removes each owned artifact from its recorded
+configuration. See
 [install](install.md#upgrading-from-09091).
 
 **Measured 2026-11-03 (OpenCode):** with the readiness wait and the notice,

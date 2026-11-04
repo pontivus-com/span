@@ -921,7 +921,7 @@ class DispatchTest(unittest.TestCase):
 
 
 class InstallerCommandTest(unittest.TestCase):
-    def test_migrate_store_rejects_with_replacement_guidance(self):
+    def test_migrate_store_is_an_unknown_argument(self):
         from span.shell import install
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -929,9 +929,7 @@ class InstallerCommandTest(unittest.TestCase):
             data.mkdir()
             with self.assertRaises(SystemExit) as raised:
                 install.main(["--migrate-store", "demo", "--data-dir", str(data)])
-            message = str(raised.exception)
-            self.assertIn("--migrate-store was removed", message)
-            self.assertIn("--transition-phase inspect", message)
+            self.assertEqual(raised.exception.code, 2)
             self.assertEqual(list(data.iterdir()), [])
 
     def test_transition_phase_requires_store(self):

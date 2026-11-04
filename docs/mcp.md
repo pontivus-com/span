@@ -28,9 +28,9 @@ part of the default surface.
 `record` carries `kind` (`understanding`, `verification`, or `surface`). An
 understanding create is flat — one `conclusion` plus `locator` or
 `observation_id`; `actions` is for updates and `action` for a surface
-declaration. Those are semantic fields, not separate tools. The retired names
-are not registered; calling one returns a typed `removed` error with its
-replacement and performs no work.
+declaration. Those are semantic fields, not separate tools. Only the current
+three names are registered. Any other operation name follows the ordinary typed
+`unknown_tool` error path and performs no work.
 
 Every repository-scoped request carries its canonical `repository_id`. Paths are
 never accepted as IDs.

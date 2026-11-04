@@ -115,14 +115,11 @@ The public MCP operations are exactly three, one per lifecycle moment:
 understanding create is flat — one `conclusion` plus `locator` or
 `observation_id`; `actions` is for updates and `action` for a surface
 declaration. Those are semantic fields, not separate tools. Setup belongs
-to the installer; structural navigation belongs to the host. The retired operations
-`understand_question`, `understand_retrieve`, `start_context`,
-`evidence_start`, `evidence_extend`, `reassess`, `verification_support`,
-`record_create`, `record_add`, `record_confirm`, `record_correct`,
-`record_replace`, `record_withdraw`, `record_challenge`, `record_update`,
-`record_verification`, `initialize_repository`, `locate`, and `neighbors` are
-not registered and reject with their replacement. There are no aliases,
-`semantic_*` names, or dual grammar. Span never selects a model, calls a
+to the installer; structural navigation belongs to the host. Any other
+operation name follows the ordinary unknown-tool path. Span carries no
+retired-name map, aliases, compatibility grammar, or replacement routing for
+removed public operations. There are no `semantic_*` names or dual grammar.
+Span never selects a model, calls a
 provider, edits a target repository, or runs tests on the user's behalf.
 
 ## Contributions

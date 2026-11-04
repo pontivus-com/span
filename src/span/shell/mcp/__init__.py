@@ -9,7 +9,6 @@ from span.shell.mcp.models import (  # noqa: F401
     ToolResult,
 )
 from span.shell.mcp.schemas import (  # noqa: F401
-    REMOVED_TOOLS,
     TOOL_DESCRIPTIONS,
     TOOL_EXAMPLES,
     TOOL_NAMES,
@@ -26,7 +25,6 @@ from span.shell.mcp.wire import (  # noqa: F401
 )
 
 __all__ = [
-    "REMOVED_TOOLS",
     "TOOL_NAMES",
     "TOOL_SCHEMAS",
     "TOOL_EXAMPLES",

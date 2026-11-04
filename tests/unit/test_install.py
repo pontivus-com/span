@@ -58,6 +58,7 @@ class NoSpanImportTest(unittest.TestCase):
             "sys",
             "pathlib",
             "re",
+            "typing",
         }
         for node in _module_level_imports(tree):
             if isinstance(node, ast.Import):
@@ -109,7 +110,7 @@ class OpencodeInstallGuidanceTest(unittest.TestCase):
         self.assertIn('"servers"', block)
         self.assertIn('"codemode": false', block)
         self.assertNotIn('"enabled"', block)
-        self.assertIn("Do not use the legacy", block)
+        self.assertIn("Only `mcp.servers.span`", block)
         json_start = block.index("```json") + len("```json")
         json_end = block.index("```", json_start)
         example = json.loads(block[json_start:json_end])
@@ -123,7 +124,7 @@ class OpencodeInstallGuidanceTest(unittest.TestCase):
 
 
 class OpencodeMergeTest(unittest.TestCase):
-    def test_merge_rejects_flat_span_entry(self):
+    def test_merge_preserves_flat_foreign_entry(self):
         import tempfile
 
         original = {
@@ -140,15 +141,12 @@ class OpencodeMergeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = pathlib.Path(tmp) / "opencode.json"
             config_path.write_text(json.dumps(original))
-            with self.assertRaises(SystemExit) as ctx:
-                install.merge_opencode_config(
-                    str(config_path),
-                    ["span-mcp", "--data-dir", "/d"],
-                    dry_run=False,
-                )
-            self.assertIn("unsupported flat mcp.span", str(ctx.exception))
-            # Rejected, never migrated: the config is left untouched.
-            self.assertEqual(json.loads(config_path.read_text()), original)
+            install.merge_opencode_config(
+                str(config_path), ["span-mcp", "--data-dir", "/d"], dry_run=False
+            )
+            config = json.loads(config_path.read_text())
+            self.assertEqual(config["mcp"]["span"], original["mcp"]["span"])
+            self.assertIn("span", config["mcp"]["servers"])
 
     def test_merge_preserves_unrelated_entries(self):
         import tempfile
@@ -195,6 +193,13 @@ class OpencodeMergeTest(unittest.TestCase):
             self.assertIs(nested["codemode"], False)
             self.assertNotIn("enabled", nested)
             self.assertNotIn("disabled", nested)
+
+    def test_merge_creates_missing_config_and_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = pathlib.Path(tmp) / "config" / "opencode.json"
+            install.merge_opencode_config(str(config_path), ["span-mcp"])
+            config = json.loads(config_path.read_text())
+            self.assertEqual(config["mcp"]["servers"]["span"]["command"], ["span-mcp"])
 
     def test_merge_keeps_correct_nested_entry(self):
         import tempfile
@@ -246,7 +251,7 @@ class OpencodeMergeTest(unittest.TestCase):
             nested = json.loads(config_path.read_text())["mcp"]["servers"]["span"]
             self.assertNotIn("disabled", nested)
 
-    def test_merge_rejects_flat_and_nested_duplicate(self):
+    def test_merge_preserves_flat_entry_alongside_current_registration(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -271,10 +276,10 @@ class OpencodeMergeTest(unittest.TestCase):
                     }
                 )
             )
-            with self.assertRaises(SystemExit):
-                install.merge_opencode_config(
-                    str(config_path), ["span-mcp"], dry_run=False
-                )
+            install.merge_opencode_config(str(config_path), ["span-mcp"], dry_run=False)
+            config = json.loads(config_path.read_text())
+            self.assertIn("span", config["mcp"])
+            self.assertIn("span", config["mcp"]["servers"])
 
     def test_dry_run_writes_nothing(self):
         import tempfile
@@ -397,87 +402,462 @@ class OpencodePluginTest(unittest.TestCase):
                 [str(foreign_dir), str(plugin_dir)],
             )
 
-    def test_retire_moves_only_span_copies_and_preserves_content(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = pathlib.Path(tmp) / "target"
-            plugins = target / ".opencode" / "plugins"
-            plugins.mkdir(parents=True)
-            stale = plugins / "span-hooks.js"
-            content = 'export default { id: "span-hooks" }\n'
-            stale.write_text(content)
-            foreign = plugins / "custom.js"
-            foreign.write_text('export default { id: "custom" }\n')
-            result = install.retire_stale_target_opencode_plugins(
-                [target], dry_run=False
-            )
-            retired = target / ".opencode" / "span-retired" / "span-hooks.js"
-            self.assertEqual(result["status"], "retired")
-            self.assertFalse(stale.exists())
-            self.assertTrue(retired.is_file())
-            self.assertEqual(retired.read_text(), content)
-            self.assertTrue(foreign.exists())
-            self.assertEqual(result["retired"][0]["from"], str(stale))
-            self.assertEqual(result["retired"][0]["to"], str(retired))
-            self.assertTrue(result["retired"][0]["sha256"].startswith("sha256:"))
-
-    def test_retire_collision_uses_deterministic_suffix(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = pathlib.Path(tmp) / "target"
-            plugins = target / ".opencode" / "plugins"
-            plugins.mkdir(parents=True)
-            retired_dir = target / ".opencode" / "span-retired"
-            retired_dir.mkdir(parents=True)
-            (retired_dir / "span-hooks.js").write_text("older\n")
-            stale = plugins / "span-hooks.js"
-            stale.write_text('export default { id: "span-hooks" }\n')
-            result = install.retire_stale_target_opencode_plugins(
-                [target], dry_run=False
-            )
-            self.assertEqual(
-                result["retired"][0]["to"],
-                str(retired_dir / "span-hooks.js.1"),
-            )
-            self.assertTrue((retired_dir / "span-hooks.js.1").is_file())
-
-    def test_retire_dry_run_reports_without_moving(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = pathlib.Path(tmp) / "target"
-            plugins = target / ".opencode" / "plugins"
-            plugins.mkdir(parents=True)
-            stale = plugins / "span-hooks.js"
-            stale.write_text('export default { id: "span-hooks" }\n')
-            result = install.retire_stale_target_opencode_plugins(
-                [target], dry_run=True
-            )
-            self.assertEqual(result["status"], "retired")
-            self.assertTrue(stale.is_file())
-            self.assertFalse((target / ".opencode" / "span-retired").exists())
-
-    def test_retire_is_idempotent(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = pathlib.Path(tmp) / "target"
-            plugins = target / ".opencode" / "plugins"
-            plugins.mkdir(parents=True)
-            (plugins / "span-hooks.js").write_text(
-                'export default { id: "span-hooks" }\n'
-            )
-            install.retire_stale_target_opencode_plugins([target], dry_run=False)
-            second = install.retire_stale_target_opencode_plugins(
-                [target], dry_run=False
-            )
-            self.assertEqual(second["status"], "absent")
-            self.assertEqual(second["retired"], [])
-
 
 class OpencodeScopeTest(unittest.TestCase):
+    def test_upgrade_rewrites_stale_global_command_with_repository_bindings(self):
+        import os
+        from types import SimpleNamespace
+
+        cli_module = importlib.import_module("span.shell.install.cli")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            config_home = root / "config"
+            target = root / "target"
+            target.mkdir()
+            config_path = config_home / "opencode" / "opencode.json"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "mcp": {
+                            "servers": {
+                                "span": {
+                                    "type": "local",
+                                    "command": [
+                                        "/old/span-mcp",
+                                        "--data-dir",
+                                        "/tmp/stale/data",
+                                    ],
+                                }
+                            }
+                        }
+                    }
+                )
+            )
+            args = SimpleNamespace(
+                opencode_config=None,
+                with_codex=False,
+                no_codex=True,
+                with_claude=False,
+                no_claude=True,
+                with_hooks=True,
+                no_hooks=False,
+                no_skills=True,
+            )
+            env = SimpleNamespace(
+                args=args,
+                bin_dir=root / "bin",
+                data_dir=root / "data",
+                venv_dir=root / "venv",
+                span_repo=pathlib.Path(__file__).resolve().parents[2],
+                targets=(target,),
+                dry=False,
+            )
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                with (
+                    mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(config_home)}),
+                    mock.patch.object(
+                        cli_module.shutil, "which", return_value="/bin/span-mcp"
+                    ),
+                    mock.patch.object(cli_module, "wire_codex_hooks", return_value={}),
+                    mock.patch.object(
+                        cli_module, "_hook_bin", return_value="/bin/hooks"
+                    ),
+                ):
+                    registration = cli_module._register_hosts(
+                        env,
+                        "global",
+                        {
+                            "host_registration": {
+                                "opencode": {
+                                    "status": "skipped",
+                                    "reason": "no opencode.json found",
+                                },
+                                "hooks": {
+                                    "opencode_plugin": {
+                                        "scope": "global",
+                                    }
+                                },
+                            }
+                        },
+                    )
+            finally:
+                os.chdir(previous)
+
+            command = json.loads(config_path.read_text())["mcp"]["servers"]["span"][
+                "command"
+            ]
+            self.assertEqual(registration["opencode"]["status"], "merged")
+            self.assertEqual(command[0], "/bin/span-mcp")
+            self.assertIn("--repo", command)
+            self.assertIn(str(target), command)
+
+    def test_no_hooks_still_rewrites_global_mcp_registration(self):
+        import os
+        from types import SimpleNamespace
+
+        cli_module = importlib.import_module("span.shell.install.cli")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            config_home = root / "config"
+            target = root / "target"
+            target.mkdir()
+            args = SimpleNamespace(
+                opencode_config=None,
+                with_codex=False,
+                no_codex=True,
+                with_claude=False,
+                no_claude=True,
+                with_hooks=False,
+                no_hooks=True,
+                no_skills=True,
+            )
+            env = SimpleNamespace(
+                args=args,
+                bin_dir=root / "bin",
+                data_dir=root / "data",
+                venv_dir=root / "venv",
+                span_repo=pathlib.Path(__file__).resolve().parents[2],
+                targets=(target,),
+                dry=False,
+            )
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(config_home)}):
+                    cli_module._register_hosts(env, None)
+            finally:
+                os.chdir(previous)
+
+            command = json.loads(
+                (config_home / "opencode" / "opencode.json").read_text()
+            )["mcp"]["servers"]["span"]["command"]
+            self.assertIn("--repo", command)
+            self.assertIn(str(target), command)
+
+    def test_default_global_install_shares_plugin_and_mcp_config(self):
+        import os
+        from types import SimpleNamespace
+
+        cli_module = importlib.import_module("span.shell.install.cli")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            config_home = root / "config"
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                args = SimpleNamespace(
+                    opencode_config=None,
+                    with_codex=False,
+                    no_codex=True,
+                    with_claude=False,
+                    no_claude=True,
+                    with_hooks=True,
+                    no_hooks=False,
+                    no_skills=True,
+                )
+                env = SimpleNamespace(
+                    args=args,
+                    bin_dir=root / "bin",
+                    data_dir=root / "data",
+                    venv_dir=root / "venv",
+                    span_repo=pathlib.Path(__file__).resolve().parents[2],
+                    targets=(),
+                    dry=False,
+                )
+
+                with (
+                    mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(config_home)}),
+                    mock.patch.object(cli_module, "wire_codex_hooks", return_value={}),
+                    mock.patch.object(
+                        cli_module, "_hook_bin", return_value="/bin/hooks"
+                    ),
+                ):
+                    registration = cli_module._register_hosts(env, "global")
+
+                config_path = config_home / "opencode" / "opencode.json"
+                config = json.loads(config_path.read_text())
+                self.assertEqual(registration["opencode"]["config"], str(config_path))
+                self.assertEqual(
+                    registration["hooks"]["opencode_plugin"]["config"],
+                    str(config_path),
+                )
+                self.assertIn("span", config["mcp"]["servers"])
+                self.assertTrue(config["plugins"])
+            finally:
+                os.chdir(previous)
+
+    def test_mcp_selection_uses_explicit_local_global_precedence(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            global_config = root / "global" / "opencode.json"
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                self.assertEqual(
+                    install.select_opencode_mcp_config(
+                        "/explicit.json", "global", global_config
+                    ),
+                    "/explicit.json",
+                )
+                self.assertEqual(
+                    install.select_opencode_mcp_config(None, "global", global_config),
+                    str(global_config.absolute()),
+                )
+                self.assertIsNone(
+                    install.select_opencode_mcp_config(None, "none", global_config)
+                )
+                (root / "opencode.json").write_text("{}")
+                self.assertEqual(
+                    install.select_opencode_mcp_config(None, "global", global_config),
+                    str((root / "opencode.json").absolute()),
+                )
+            finally:
+                os.chdir(previous)
+
+    def test_mcp_selection_preserves_receipt_before_local_or_global(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                receipt_config = root / "custom" / "opencode.json"
+                (root / "opencode.json").write_text("{}")
+                self.assertEqual(
+                    install.select_opencode_mcp_config(
+                        None,
+                        "global",
+                        root / "global" / "opencode.json",
+                        receipt_config,
+                    ),
+                    str(receipt_config),
+                )
+            finally:
+                os.chdir(previous)
+
+    def test_explicit_mcp_relocation_removes_previous_registration(self):
+        import os
+        from types import SimpleNamespace
+
+        cli_module = importlib.import_module("span.shell.install.cli")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            old_config = root / "old" / "opencode.json"
+            new_config = root / "new" / "opencode.json"
+            old_config.parent.mkdir()
+            old_config.write_text(
+                json.dumps({"mcp": {"servers": {"span": {"type": "local"}}}})
+            )
+            (root / "opencode.json").write_text("{}")
+            args = SimpleNamespace(
+                opencode_config=str(new_config),
+                with_codex=False,
+                no_codex=True,
+                with_claude=False,
+                no_claude=True,
+                with_hooks=False,
+                no_hooks=True,
+                no_skills=True,
+            )
+            env = SimpleNamespace(
+                args=args,
+                bin_dir=root / "bin",
+                data_dir=root / "data",
+                venv_dir=root / "venv",
+                span_repo=pathlib.Path(__file__).resolve().parents[2],
+                targets=(),
+                dry=False,
+            )
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                registration = cli_module._register_hosts(
+                    env,
+                    "global",
+                    {"host_registration": {"opencode": {"config": str(old_config)}}},
+                )
+            finally:
+                os.chdir(previous)
+            self.assertEqual(
+                registration["opencode_transition"]["removal"]["status"], "removed"
+            )
+            self.assertNotIn(
+                "span", json.loads(old_config.read_text())["mcp"]["servers"]
+            )
+            self.assertIn(
+                "span",
+                json.loads(new_config.read_text())["mcp"]["servers"],
+            )
+
+    def test_repeat_install_keeps_recorded_mcp_path_over_local_candidate(self):
+        import os
+        from types import SimpleNamespace
+
+        cli_module = importlib.import_module("span.shell.install.cli")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            recorded = root / "recorded" / "opencode.json"
+            recorded.parent.mkdir()
+            recorded.write_text(json.dumps({"mcp": {"servers": {}}}))
+            local = root / "opencode.json"
+            local.write_text(json.dumps({"mcp": {"servers": {"foreign": {}}}}))
+            args = SimpleNamespace(
+                opencode_config=None,
+                with_codex=False,
+                no_codex=True,
+                with_claude=False,
+                no_claude=True,
+                with_hooks=False,
+                no_hooks=True,
+                no_skills=True,
+            )
+            env = SimpleNamespace(
+                args=args,
+                bin_dir=root / "bin",
+                data_dir=root / "data",
+                venv_dir=root / "venv",
+                span_repo=pathlib.Path(__file__).resolve().parents[2],
+                targets=(),
+                dry=False,
+            )
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                registration = cli_module._register_hosts(
+                    env,
+                    "global",
+                    {"host_registration": {"opencode": {"config": str(recorded)}}},
+                )
+            finally:
+                os.chdir(previous)
+            self.assertEqual(registration["opencode"]["config"], str(recorded))
+            self.assertIn(
+                "span",
+                json.loads(recorded.read_text())["mcp"]["servers"],
+            )
+            self.assertNotIn(
+                "span",
+                json.loads(local.read_text())["mcp"]["servers"],
+            )
+
+    def test_relocation_validates_old_config_before_writing_new_config(self):
+        from types import SimpleNamespace
+
+        cli_module = importlib.import_module("span.shell.install.cli")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            old_config = root / "old" / "opencode.json"
+            new_config = root / "new" / "opencode.json"
+            old_config.parent.mkdir()
+            old_config.write_text("{not json")
+            args = SimpleNamespace(
+                opencode_config=str(new_config),
+                with_codex=False,
+                no_codex=True,
+                with_claude=False,
+                no_claude=True,
+                with_hooks=False,
+                no_hooks=True,
+                no_skills=True,
+            )
+            env = SimpleNamespace(
+                args=args,
+                bin_dir=root / "bin",
+                data_dir=root / "data",
+                venv_dir=root / "venv",
+                span_repo=pathlib.Path(__file__).resolve().parents[2],
+                targets=(),
+                dry=False,
+            )
+            with self.assertRaises(SystemExit) as ctx:
+                cli_module._register_hosts(
+                    env,
+                    "global",
+                    {"host_registration": {"opencode": {"config": str(old_config)}}},
+                )
+            self.assertIn("cannot read opencode config", str(ctx.exception))
+            self.assertFalse(new_config.exists())
+
+    def test_relocation_rejects_unwritable_old_config_before_new_write(self):
+        from types import SimpleNamespace
+
+        cli_module = importlib.import_module("span.shell.install.cli")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            old_config = root / "old" / "opencode.json"
+            new_config = root / "new" / "opencode.json"
+            old_config.parent.mkdir()
+            old_payload = {"mcp": {"servers": {"span": {"type": "local"}}}}
+            old_config.write_text(json.dumps(old_payload))
+            old_bytes = old_config.read_bytes()
+            old_config.chmod(0o444)
+            args = SimpleNamespace(
+                opencode_config=str(new_config),
+                with_codex=False,
+                no_codex=True,
+                with_claude=False,
+                no_claude=True,
+                with_hooks=False,
+                no_hooks=True,
+                no_skills=True,
+            )
+            env = SimpleNamespace(
+                args=args,
+                bin_dir=root / "bin",
+                data_dir=root / "data",
+                venv_dir=root / "venv",
+                span_repo=pathlib.Path(__file__).resolve().parents[2],
+                targets=(),
+                dry=False,
+            )
+            try:
+                with self.assertRaises(SystemExit) as ctx:
+                    cli_module._register_hosts(
+                        env,
+                        "global",
+                        {
+                            "host_registration": {
+                                "opencode": {"config": str(old_config)}
+                            }
+                        },
+                    )
+            finally:
+                old_config.chmod(0o644)
+            self.assertIn("file is not writable", str(ctx.exception))
+            self.assertEqual(old_config.read_bytes(), old_bytes)
+            self.assertFalse(new_config.exists())
+
+    def test_receipt_records_mcp_and_plugin_configs_independently(self):
+        receipt = {
+            "host_registration": {
+                "opencode": {"config": "/mcp/opencode.json"},
+                "hooks": {"opencode_plugin": {"config": "/plugin/opencode.json"}},
+            }
+        }
+        self.assertEqual(
+            install.receipt_opencode_mcp_config(receipt), "/mcp/opencode.json"
+        )
+        self.assertEqual(
+            install.receipt_opencode_plugin_config(receipt),
+            "/plugin/opencode.json",
+        )
+
+    def test_relative_receipt_paths_are_not_reused_as_stable_identity(self):
+        receipt = {
+            "host_registration": {
+                "opencode": {"config": "opencode.json"},
+                "hooks": {"opencode_plugin": {"config": "opencode.json"}},
+            }
+        }
+        self.assertIsNone(install.receipt_opencode_mcp_config(receipt))
+        self.assertIsNone(install.receipt_opencode_plugin_config(receipt))
+
     def test_fresh_install_defaults_to_global(self):
         with mock.patch("builtins.print") as printed:
             scope, previous = install.resolve_opencode_scope(None, None)
@@ -488,7 +868,9 @@ class OpencodeScopeTest(unittest.TestCase):
         )
 
     def test_receipt_scope_is_reused(self):
-        receipt = {"host_registration": {"opencode_plugin": {"scope": "local"}}}
+        receipt = {
+            "host_registration": {"hooks": {"opencode_plugin": {"scope": "local"}}}
+        }
         scope, previous = install.resolve_opencode_scope(None, receipt)
         self.assertEqual(scope, "local")
         self.assertEqual(previous, "local")
@@ -503,21 +885,17 @@ class OpencodeScopeTest(unittest.TestCase):
         self.assertEqual(previous, "global")
 
     def test_upgrade_without_scope_stops_and_names_the_flag(self):
-        receipt = {"host_registration": {"opencode_plugin": {"status": "wired"}}}
+        receipt = {
+            "host_registration": {"hooks": {"opencode_plugin": {"status": "wired"}}}
+        }
         with self.assertRaises(SystemExit) as ctx:
             install.resolve_opencode_scope(None, receipt)
         self.assertIn("--opencode-plugin-scope", str(ctx.exception))
 
-    def test_conflicting_receipt_scopes_are_ambiguous(self):
-        receipt = {
-            "host_registration": {"opencode_plugin": {"scope": "global"}},
-            "host_integration_migration": {"opencode_plugin": {"scope": "local"}},
-        }
-        with self.assertRaises(SystemExit):
-            install.resolve_opencode_scope(None, receipt)
-
     def test_flag_overrides_receipt_and_reports_change(self):
-        receipt = {"host_registration": {"opencode_plugin": {"scope": "local"}}}
+        receipt = {
+            "host_registration": {"hooks": {"opencode_plugin": {"scope": "local"}}}
+        }
         with mock.patch("builtins.print") as printed:
             scope, previous = install.resolve_opencode_scope("global", receipt)
         self.assertEqual(scope, "global")
@@ -613,7 +991,17 @@ class ScopeApplicationTest(unittest.TestCase):
             root = pathlib.Path(tmp)
             data = root / "data"
             data.mkdir()
-            (data / "install.json").write_text(json.dumps({"repos": []}))
+            (data / "install.json").write_text(
+                json.dumps(
+                    {
+                        "install_version": install.INSTALL_VERSION,
+                        "repos": [],
+                        "host_registration": {
+                            "hooks": {"opencode_plugin": {"status": "wired"}}
+                        },
+                    }
+                )
+            )
             with self.assertRaises(SystemExit) as ctx:
                 install.main(
                     [
@@ -630,7 +1018,7 @@ class ScopeApplicationTest(unittest.TestCase):
             self.assertIn("--opencode-plugin-scope", str(ctx.exception))
             self.assertFalse((root / "venv").exists())
 
-    def test_global_retires_selected_and_reports_receipt_only(self):
+    def test_global_reports_selected_and_receipt_only_conflicts(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -646,7 +1034,7 @@ class ScopeApplicationTest(unittest.TestCase):
             plugin, targets = self._apply("global", root, [selected], [receipt_only])
             self.assertEqual(plugin["status"], "conflict")
             self.assertTrue(
-                (selected / ".opencode" / "span-retired" / "span-hooks.js").is_file()
+                (selected / ".opencode" / "plugins" / "span-hooks.js").is_file()
             )
             self.assertTrue(
                 (receipt_only / ".opencode" / "plugins" / "span-hooks.js").is_file()
@@ -829,66 +1217,6 @@ class DoctorPluginReportTest(unittest.TestCase):
         )
         self.assertEqual(report["status"], "unreadable")
 
-    def test_retired_files_are_never_listed(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = pathlib.Path(tmp) / "target"
-            retired = target / ".opencode" / "span-retired"
-            retired.mkdir(parents=True)
-            (retired / "span-hooks.js").write_text("retired\n")
-            targets_state, unreadable = install.inspect_target_opencode_plugins(
-                [target]
-            )
-            self.assertEqual(targets_state[str(target)], [])
-            self.assertEqual(unreadable, [])
-
-
-class ReceiptMigrationTest(unittest.TestCase):
-    def test_receipt_records_scope_retirement_and_removed_entries(self):
-        from types import SimpleNamespace
-
-        from span.shell.install.cli import _build_receipt
-
-        env = SimpleNamespace(
-            span_repo=pathlib.Path("/r"),
-            dry=True,
-            venv_dir=pathlib.Path("/v"),
-            data_dir=pathlib.Path("/d"),
-            targets=(pathlib.Path("/t"),),
-        )
-        state = SimpleNamespace(
-            target_census={},
-            seeds=[],
-            preflight={},
-            venv_python=pathlib.Path("/v/bin/python"),
-            indexer_pointer=None,
-            source_venv_sync={},
-            data_backup=None,
-            post_install_verified=None,
-        )
-        retired = [
-            {"from": "/t/span-hooks.js", "to": "/t/span-retired", "sha256": "sha256:x"}
-        ]
-        host = {
-            "hooks": {
-                "opencode_plugin": {
-                    "scope": "global",
-                    "status": "wired",
-                    "plugin": "/span/opencode-plugin",
-                    "retired": retired,
-                    "removed_config_entries": ["/old"],
-                }
-            }
-        }
-        receipt = _build_receipt(env, state, host, {})
-        migration = receipt["host_integration_migration"]
-        self.assertEqual(migration["opencode_plugin"]["scope"], "global")
-        self.assertEqual(migration["opencode_plugin"]["status"], "wired")
-        self.assertEqual(migration["retired_target_plugins"], retired)
-        self.assertEqual(migration["removed_config_entries"], ["/old"])
-        self.assertNotIn("span_version", migration)
-
 
 class AgentsRuleIsolationTest(unittest.TestCase):
     def test_deploy_changes_only_the_managed_agents_block(self):
@@ -928,9 +1256,10 @@ class ReceiptScopeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = str(pathlib.Path(tmp) / "data")
             payload = {
-                "install_version": 1,
+                "install_version": install.INSTALL_VERSION,
                 "repos": ["/r/alpha", "/r/beta"],
                 "verify": {"repos": []},
+                "host_registration": {},
             }
             install.write_receipt(data_dir, payload, dry_run=False)
             stored = json.loads((pathlib.Path(data_dir) / "install.json").read_text())
@@ -945,6 +1274,81 @@ class ReceiptScopeTest(unittest.TestCase):
             data_dir = str(pathlib.Path(tmp) / "data")
             install.write_receipt(data_dir, {"repos": []}, dry_run=True)
             self.assertFalse(pathlib.Path(data_dir).exists())
+
+    def test_read_receipt_fails_closed_for_invalid_present_receipts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = pathlib.Path(tmp) / "data"
+            data_dir.mkdir()
+            receipt = data_dir / "install.json"
+            for content in (
+                "not-json",
+                json.dumps(
+                    {"install_version": 1, "repos": [], "host_registration": {}}
+                ),
+                json.dumps(
+                    {
+                        "install_version": install.INSTALL_VERSION,
+                        "repos": [],
+                        "host_registration": {"opencode": {"config": "relative.json"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "install_version": install.INSTALL_VERSION,
+                        "repos": [],
+                        "host_registration": {
+                            "hooks": {"opencode_plugin": {"scope": "old"}}
+                        },
+                    }
+                ),
+            ):
+                receipt.write_text(content)
+                with self.assertRaises(SystemExit):
+                    install.read_receipt(data_dir)
+
+    def test_read_receipt_accepts_current_shape(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = pathlib.Path(tmp) / "data"
+            install.write_receipt(
+                data_dir,
+                {
+                    "install_version": install.INSTALL_VERSION,
+                    "repos": [],
+                    "host_registration": {
+                        "opencode": {"config": "/tmp/opencode.json"},
+                        "hooks": {
+                            "opencode_plugin": {
+                                "config": "/tmp/opencode.json",
+                                "scope": "global",
+                            }
+                        },
+                    },
+                },
+            )
+            self.assertIsNotNone(install.read_receipt(data_dir))
+
+    def test_read_receipt_ignores_unknown_fields(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = pathlib.Path(tmp) / "data"
+            install.write_receipt(
+                data_dir,
+                {
+                    "install_version": install.INSTALL_VERSION,
+                    "repos": [],
+                    "host_registration": {
+                        "extra_host_state": {"status": "recorded"},
+                        "hooks": {"extra_hook_state": {"status": "recorded"}},
+                    },
+                    "extra_receipt_state": {"status": "recorded"},
+                },
+            )
+            self.assertIsNotNone(install.read_receipt(data_dir))
 
 
 class PlanningTest(unittest.TestCase):
@@ -1651,12 +2055,112 @@ class HookWiringTest(unittest.TestCase):
             self.assertIn("/bin/foreign-hook", commands)
             self.assertEqual(sum("span-hooks" in command for command in commands), 3)
 
-    def test_claude_retirement_removes_only_span_commands(self):
+    def test_claude_merge_preserves_foreign_hooks_and_converges(self):
         import os
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            home = pathlib.Path(tmp)
+            home = pathlib.Path(tmp) / "home"
+            settings_path = home / ".claude" / "settings.json"
+            settings_path.parent.mkdir(parents=True)
+            settings_path.write_text(
+                json.dumps(
+                    {
+                        "theme": "dark",
+                        "hooks": {
+                            "SessionStart": [
+                                {
+                                    "matcher": "startup|resume|compact",
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": "/old/span-hooks session-start",
+                                        },
+                                        {
+                                            "type": "command",
+                                            "command": "/foreign-hook",
+                                        },
+                                    ],
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                first = install.wire_claude_hooks(
+                    "/new/span-hooks", "/isolated/data", dry_run=False
+                )
+                second = install.wire_claude_hooks(
+                    "/new/span-hooks", "/isolated/data", dry_run=False
+                )
+            finally:
+                os.path.expanduser = real_expanduser
+            config = json.loads(settings_path.read_text())
+            commands = [
+                hook["command"]
+                for group in config["hooks"].values()
+                for block in group
+                for hook in block["hooks"]
+            ]
+            self.assertEqual(first["status"], "wired")
+            self.assertEqual(second["replaced"], 3)
+            self.assertIn("/foreign-hook", commands)
+            self.assertEqual(
+                sum("/new/span-hooks" in command for command in commands), 3
+            )
+            self.assertTrue(
+                all(
+                    "--data-dir /isolated/data" in command
+                    for command in commands
+                    if "/new/span-hooks" in command
+                )
+            )
+            self.assertTrue((settings_path.with_suffix(".json.bak-span")).is_file())
+
+    def test_claude_missing_settings_skips(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp) / "home"
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                result = install.wire_claude_hooks("/bin/span-hooks", "/d")
+            finally:
+                os.path.expanduser = real_expanduser
+        self.assertEqual(result["status"], "skipped")
+
+    def test_claude_malformed_settings_fails_without_rewrite(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp) / "home"
+            settings_path = home / ".claude" / "settings.json"
+            settings_path.parent.mkdir(parents=True)
+            settings_path.write_text("[]")
+            before = settings_path.read_bytes()
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                with self.assertRaises(SystemExit):
+                    install.wire_claude_hooks("/bin/span-hooks", "/d")
+            finally:
+                os.path.expanduser = real_expanduser
+            self.assertEqual(settings_path.read_bytes(), before)
+
+    def test_claude_hook_removal_preserves_foreign_state_and_is_idempotent(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp) / "home"
             settings_path = home / ".claude" / "settings.json"
             settings_path.parent.mkdir(parents=True)
             settings_path.write_text(
@@ -1678,29 +2182,64 @@ class HookWiringTest(unittest.TestCase):
                                         },
                                     ],
                                 }
-                            ]
+                            ],
+                            "Stop": [
+                                {
+                                    "matcher": "",
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": "/bin/span-hooks stop",
+                                        }
+                                    ],
+                                }
+                            ],
                         },
                     }
                 )
             )
+            backup = settings_path.with_suffix(".json.bak-span")
+            backup.write_text("backup")
             real_expanduser = os.path.expanduser
             os.path.expanduser = lambda p: (
                 str(home) + p[1:] if p.startswith("~") else p
             )
             try:
-                result = install.remove_claude_hooks(dry_run=False)
+                first = install.remove_claude_hooks(dry_run=False)
+                second = install.remove_claude_hooks(dry_run=False)
             finally:
                 os.path.expanduser = real_expanduser
-            self.assertEqual(result["status"], "removed")
+
             config = json.loads(settings_path.read_text())
+            self.assertEqual(first["status"], "removed")
+            self.assertEqual(first["removed"], 2)
+            self.assertEqual(second["status"], "absent")
             self.assertEqual(config["theme"], "dark")
-            commands = [
-                hook["command"]
-                for group in config["hooks"].values()
-                for block in group
-                for hook in block["hooks"]
-            ]
-            self.assertEqual(commands, ["/bin/foreign-hook"])
+            self.assertEqual(
+                config["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+                "/bin/foreign-hook",
+            )
+            self.assertFalse(backup.exists())
+
+    def test_claude_registration_removal_is_scoped_and_idempotent(self):
+        hosts_module = importlib.import_module("span.shell.install.hosts")
+        with (
+            mock.patch.object(hosts_module.shutil, "which", return_value="/bin/claude"),
+            mock.patch.object(
+                hosts_module.subprocess,
+                "run",
+                side_effect=[mock.Mock(returncode=0), mock.Mock(returncode=1)],
+            ) as run,
+        ):
+            first = install.remove_claude_registration(dry_run=False)
+            second = install.remove_claude_registration(dry_run=False)
+
+        self.assertEqual(first["status"], "removed")
+        self.assertEqual(second["status"], "absent")
+        self.assertEqual(
+            run.call_args_list[0].args[0],
+            ["claude", "mcp", "remove", "span", "--scope", "user"],
+        )
 
 
 class SkillDeployTest(unittest.TestCase):
@@ -1722,9 +2261,10 @@ class SkillDeployTest(unittest.TestCase):
             try:
                 (home / ".config" / "opencode" / "skills").mkdir(parents=True)
                 (home / ".codex" / "skills").mkdir(parents=True)
+                (home / ".claude").mkdir(parents=True)
                 deployed = install.deploy_skills(span_repo, dry_run=False)
                 # Both skill dirs land on both hosts (whole-dir copy).
-                self.assertEqual(len(deployed), 4)
+                self.assertEqual(len(deployed), 6)
                 opencode_span = home / ".config" / "opencode" / "skills" / "span"
                 self.assertEqual((opencode_span / "SKILL.md").read_text(), "# Span\n")
                 origin = json.loads((opencode_span / ".span-origin.json").read_text())
@@ -1732,7 +2272,7 @@ class SkillDeployTest(unittest.TestCase):
             finally:
                 os.path.expanduser = real_expanduser
 
-    def test_skills_deploy_removes_retired_skill_directories(self):
+    def test_skills_deploy_reconciles_only_owned_stale_directories(self):
         import os
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1746,17 +2286,96 @@ class SkillDeployTest(unittest.TestCase):
                 str(home) + p[1:] if p.startswith("~") else p
             )
             try:
-                retired = ("span", "span-change-context", "span-document")
-                for host in (".config/opencode", ".codex"):
+                for host in (".config/opencode", ".codex", ".claude"):
                     root = home / host / "skills"
-                    for name in retired:
-                        (root / name).mkdir(parents=True)
+                    owned = root / "arbitrary-stale"
+                    owned.mkdir(parents=True)
+                    (owned / ".span-origin.json").write_text(
+                        json.dumps(
+                            {
+                                "skill": "arbitrary-stale",
+                                "install_mode": "checkout",
+                                "span_repo": str(span_repo),
+                                "span_rev": "abc",
+                            }
+                        )
+                    )
+                    mismatched = root / "mismatched"
+                    mismatched.mkdir()
+                    (mismatched / ".span-origin.json").write_text(
+                        json.dumps(
+                            {
+                                "skill": "different-name",
+                                "install_mode": "checkout",
+                                "span_repo": str(span_repo),
+                                "span_rev": "abc",
+                            }
+                        )
+                    )
+                    malformed = root / "malformed"
+                    malformed.mkdir()
+                    (malformed / ".span-origin.json").write_text("{not json")
+                    (root / "foreign").mkdir()
+                    (root / "span").mkdir()
                 install.deploy_skills(span_repo, dry_run=False)
-                for host in (".config/opencode", ".codex"):
+                for host in (".config/opencode", ".codex", ".claude"):
                     root = home / host / "skills"
-                    for name in retired:
-                        self.assertFalse((root / name).exists(), (host, name))
+                    self.assertFalse((root / "arbitrary-stale").exists(), host)
+                    self.assertTrue((root / "mismatched").is_dir(), host)
+                    self.assertTrue((root / "malformed").is_dir(), host)
+                    self.assertTrue((root / "foreign").is_dir(), host)
+                    self.assertTrue((root / "span").is_dir(), host)
                     self.assertTrue((root / "span-router" / "SKILL.md").is_file(), host)
+            finally:
+                os.path.expanduser = real_expanduser
+
+    def test_skill_uninstall_removes_only_current_owned_markers(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp) / "home"
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                for host in (".config/opencode", ".codex", ".claude"):
+                    root = home / host / "skills"
+                    owned = root / "owned"
+                    owned.mkdir(parents=True)
+                    (owned / ".span-origin.json").write_text(
+                        json.dumps(
+                            {
+                                "skill": "owned",
+                                "install_mode": "checkout",
+                                "span_repo": str(home / "span"),
+                                "span_rev": "abc",
+                            }
+                        )
+                    )
+                    mismatched = root / "mismatched"
+                    mismatched.mkdir()
+                    (mismatched / ".span-origin.json").write_text(
+                        json.dumps(
+                            {
+                                "skill": "owned",
+                                "install_mode": "checkout",
+                                "span_repo": str(home / "span"),
+                                "span_rev": "abc",
+                            }
+                        )
+                    )
+                    malformed = root / "malformed"
+                    malformed.mkdir()
+                    (malformed / ".span-origin.json").write_text("[]")
+                report = install.remove_deployed_skills()
+                self.assertEqual(report["status"], "removed")
+                self.assertEqual(len(report["removed"]), 3)
+                for host in (".config/opencode", ".codex", ".claude"):
+                    root = home / host / "skills"
+                    self.assertFalse((root / "owned").exists(), host)
+                    self.assertTrue((root / "mismatched").is_dir(), host)
+                    self.assertTrue((root / "malformed").is_dir(), host)
             finally:
                 os.path.expanduser = real_expanduser
 
@@ -1836,11 +2455,19 @@ class SkillDeployTest(unittest.TestCase):
         hosts = install.detect_hosts()
         self.assertTrue(hosts["opencode"])
         self.assertIn("codex", hosts)
-        self.assertNotIn("claude", hosts)
+        self.assertIn("claude", hosts)
 
 
 class HostRegistrationInspectionTest(unittest.TestCase):
     """SPMCP-01: read-only, truthful host-registration discovery."""
+
+    def test_claude_selection_flags_are_explicit(self):
+        enabled = install.parse_args(["--with-claude"])
+        disabled = install.parse_args(["--no-claude"])
+        self.assertTrue(enabled.with_claude)
+        self.assertFalse(enabled.no_claude)
+        self.assertIsNone(disabled.with_claude)
+        self.assertTrue(disabled.no_claude)
 
     def _config(self, tmp, command, enabled=True, codemode=False):
         entry = {
@@ -1868,6 +2495,100 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             path = self._config(tmp, expected)
             result = install.inspect_opencode_registration(str(path), expected)
         self.assertEqual(result["status"], "matched")
+
+    def test_claude_inspection_reports_matched_mismatched_missing_and_unreadable(self):
+        import os
+
+        expected = ["/bin/span-mcp", "--data-dir", "/d"]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp) / "home"
+            home.mkdir()
+            config_path = home / ".claude.json"
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                self.assertEqual(
+                    install.inspect_claude_registration(expected)["status"],
+                    "missing",
+                )
+                config_path.write_text("{not json")
+                self.assertEqual(
+                    install.inspect_claude_registration(expected)["status"],
+                    "unreadable",
+                )
+                config_path.write_text(
+                    json.dumps(
+                        {
+                            "mcpServers": {
+                                "span": {
+                                    "command": expected[0],
+                                    "args": expected[1:],
+                                }
+                            }
+                        }
+                    )
+                )
+                before = config_path.read_bytes()
+                self.assertEqual(
+                    install.inspect_claude_registration(expected)["status"],
+                    "matched",
+                )
+                payload = json.loads(config_path.read_text())
+                payload["mcpServers"]["span"]["args"] = ["--data-dir", "/other"]
+                config_path.write_text(json.dumps(payload))
+                self.assertEqual(
+                    install.inspect_claude_registration(expected)["status"],
+                    "mismatched",
+                )
+                self.assertEqual(config_path.read_bytes(), json.dumps(payload).encode())
+                self.assertNotEqual(before, config_path.read_bytes())
+            finally:
+                os.path.expanduser = real_expanduser
+
+    def test_claude_registration_uses_user_scope_stdio_command(self):
+        hosts_module = importlib.import_module("span.shell.install.hosts")
+        calls = []
+        with (
+            mock.patch.object(hosts_module.shutil, "which", return_value="/bin/claude"),
+            mock.patch.object(
+                hosts_module.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 1),
+            ) as remove,
+            mock.patch.object(
+                hosts_module,
+                "_run",
+                side_effect=lambda command, dry_run=False: calls.append(command),
+            ),
+        ):
+            result = install.register_claude(["/bin/span-mcp", "--data-dir", "/d"])
+        remove.assert_called_once_with(
+            ["claude", "mcp", "remove", "span", "--scope", "user"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result["status"], "registered")
+        self.assertEqual(
+            calls,
+            [
+                [
+                    "claude",
+                    "mcp",
+                    "add",
+                    "--scope",
+                    "user",
+                    "--transport",
+                    "stdio",
+                    "span",
+                    "--",
+                    "/bin/span-mcp",
+                    "--data-dir",
+                    "/d",
+                ]
+            ],
+        )
 
     def test_wrong_data_dir_is_mismatched(self):
         import tempfile
@@ -1944,7 +2665,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             result = install.inspect_opencode_registration(str(path), ["/bin/span-mcp"])
         self.assertEqual(result["status"], "missing")
 
-    def test_flat_entry_is_mismatched(self):
+    def test_flat_entry_is_unrelated_to_current_registration(self):
         import tempfile
 
         expected = ["/bin/span-mcp"]
@@ -1964,10 +2685,9 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                 )
             )
             result = install.inspect_opencode_registration(str(path), expected)
-        self.assertEqual(result["status"], "mismatched")
-        self.assertIn("unsupported flat mcp.span", result["reason"])
+        self.assertEqual(result["status"], "missing")
 
-    def test_duplicate_registrations_are_mismatched(self):
+    def test_current_entry_wins_over_unrelated_flat_key(self):
         import tempfile
 
         expected = ["/bin/span-mcp"]
@@ -1994,12 +2714,20 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                 )
             )
             result = install.inspect_opencode_registration(str(path), expected)
-        self.assertEqual(result["status"], "mismatched")
-        self.assertIn("duplicate", result["reason"])
+        self.assertEqual(result["status"], "matched")
 
-    def test_no_config_available_is_missing(self):
+    def test_no_config_available_is_unselected(self):
         result = install.inspect_opencode_registration(None, ["/bin/span-mcp"])
+        self.assertEqual(result["status"], "unselected")
+
+    def test_selected_config_without_registration_names_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "opencode.json"
+            path.write_text("{}")
+            result = install.inspect_opencode_registration(str(path), ["/bin/span-mcp"])
         self.assertEqual(result["status"], "missing")
+        self.assertIn("rerun installation", result["reason"])
+        self.assertIn(str(path), result["reason"])
 
     def test_invalid_json_is_unreadable(self):
         import tempfile
@@ -2047,6 +2775,113 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                 )
             self.assertEqual(path.read_bytes(), before)
         self.assertEqual(report["opencode_registration"]["status"], "matched")
+
+    def test_doctor_reuses_receipt_mcp_config(self):
+        import tempfile
+        import os
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            expected = install.expected_span_command(
+                "/bin/span-mcp", str(data_dir), [], host="opencode"
+            )
+            config = self._config(tmp, expected)
+            (data_dir / "install.json").write_text(
+                json.dumps(
+                    {
+                        "install_version": install.INSTALL_VERSION,
+                        "repos": [],
+                        "host_registration": {"opencode": {"config": str(config)}},
+                    }
+                )
+            )
+            other_cwd = root / "other-cwd"
+            other_cwd.mkdir()
+            previous = os.getcwd()
+            os.chdir(other_cwd)
+            try:
+                with (
+                    patch.object(shutil, "which", return_value="/bin/span-mcp"),
+                    patch(
+                        "span.shell.install.verify.verify_installation",
+                        return_value={"repos": []},
+                    ),
+                    patch("span.shell.install.verify.check_skills"),
+                ):
+                    report = install.doctor(
+                        "/venv/bin/python",
+                        str(data_dir),
+                        [],
+                        None,
+                    )
+            finally:
+                os.chdir(previous)
+        self.assertEqual(report["opencode_registration"]["status"], "matched")
+
+    def test_doctor_does_not_inspect_unrecorded_global_mcp_config(self):
+        import os
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            config_home = root / "config" / "opencode"
+            config_home.mkdir(parents=True)
+            (config_home / "opencode.json").write_text(
+                json.dumps(
+                    {
+                        "mcp": {
+                            "servers": {
+                                "span": {"type": "local"},
+                            }
+                        }
+                    }
+                )
+            )
+            data_dir = root / "data"
+            data_dir.mkdir()
+            previous = os.getcwd()
+            os.chdir(root)
+            try:
+                with (
+                    patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / "config")}),
+                    patch.object(shutil, "which", return_value="/bin/span-mcp"),
+                    patch(
+                        "span.shell.install.verify.verify_installation",
+                        return_value={"repos": []},
+                    ),
+                    patch("span.shell.install.verify.check_skills"),
+                ):
+                    report = install.doctor(
+                        "/venv/bin/python",
+                        str(data_dir),
+                        [],
+                        None,
+                    )
+            finally:
+                os.chdir(previous)
+        self.assertEqual(report["opencode_registration"]["status"], "unselected")
+
+    def test_doctor_fails_closed_for_relative_receipt_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = pathlib.Path(tmp) / "data"
+            data_dir.mkdir()
+            (data_dir / "install.json").write_text(
+                json.dumps(
+                    {
+                        "install_version": install.INSTALL_VERSION,
+                        "repos": [],
+                        "host_registration": {"opencode": {"config": "opencode.json"}},
+                    }
+                )
+            )
+            with self.assertRaises(SystemExit):
+                install.doctor(
+                    "/venv/bin/python", str(data_dir), [], None, dry_run=True
+                )
 
     def test_codex_present_reports_manual_without_registry_query(self):
         from unittest.mock import patch
@@ -2112,6 +2947,104 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         source = install_source()
         self.assertNotIn('"--verify"', source)
         self.assertIn('"--verify-only"', source)
+
+
+class UninstallLifecycleTest(unittest.TestCase):
+    def test_uninstall_removes_mcp_and_plugin_from_recorded_configs(self):
+        import os
+
+        uninstall_module = importlib.import_module("span.shell.install.uninstall")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            mcp_config = root / "mcp-opencode.json"
+            mcp_config.write_text(
+                json.dumps(
+                    {
+                        "theme": "dark",
+                        "mcp": {
+                            "servers": {
+                                "span": {"type": "local"},
+                                "foreign": {"type": "local"},
+                            }
+                        },
+                    }
+                )
+            )
+            plugin_config = root / "plugin-opencode.json"
+            plugin_dir = root / "opencode-plugin"
+            plugin_dir.mkdir()
+            (plugin_dir / "index.js").write_text(
+                'export default { id: "span-hooks" }\n'
+            )
+            plugin_config.write_text(
+                json.dumps(
+                    {
+                        "plugins": ["/foreign/plugin", str(plugin_dir)],
+                    }
+                )
+            )
+            (data_dir / "install.json").write_text(
+                json.dumps(
+                    {
+                        "install_version": install.INSTALL_VERSION,
+                        "repos": [],
+                        "host_registration": {
+                            "opencode": {"config": str(mcp_config)},
+                            "hooks": {
+                                "opencode_plugin": {"config": str(plugin_config)}
+                            },
+                        },
+                    }
+                )
+            )
+            other_cwd = root / "other-cwd"
+            other_cwd.mkdir()
+            previous = os.getcwd()
+            os.chdir(other_cwd)
+            try:
+                with (
+                    mock.patch.object(
+                        uninstall_module,
+                        "remove_codex_registration",
+                        return_value={"status": "absent"},
+                    ),
+                    mock.patch.object(
+                        uninstall_module,
+                        "remove_codex_hooks",
+                        return_value={"status": "absent"},
+                    ),
+                    mock.patch.object(
+                        uninstall_module,
+                        "remove_claude_registration",
+                        return_value={"status": "removed"},
+                    ),
+                    mock.patch.object(
+                        uninstall_module,
+                        "remove_claude_hooks",
+                        return_value={"status": "removed"},
+                    ),
+                    mock.patch.object(
+                        uninstall_module,
+                        "remove_deployed_skills",
+                        return_value=[],
+                    ),
+                ):
+                    report = install.uninstall(str(data_dir), [], None)
+            finally:
+                os.chdir(previous)
+
+            mcp = json.loads(mcp_config.read_text())
+            plugins = json.loads(plugin_config.read_text())["plugins"]
+            self.assertEqual(report["opencode"]["status"], "removed")
+            self.assertEqual(report["opencode_plugin"]["status"], "removed")
+            self.assertEqual(report["claude"]["status"], "removed")
+            self.assertEqual(report["hooks"]["claude"]["status"], "removed")
+            self.assertNotIn("span", mcp["mcp"]["servers"])
+            self.assertIn("foreign", mcp["mcp"]["servers"])
+            self.assertEqual(plugins, ["/foreign/plugin"])
+            self.assertFalse(plugin_dir.exists())
 
 
 if __name__ == "__main__":

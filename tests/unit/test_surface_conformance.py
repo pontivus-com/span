@@ -1,8 +1,8 @@
 """Surface conformance: three lifecycle tools and no internal-boundary escape.
 
-This is the gate that fails on the retired twenty-tool surface. It checks the
-registered names, the absence of per-action or internal-preflight tools, the
-declared/packaged schema agreement, and the public request shapes.
+This gate checks the registered names, the absence of per-action or
+internal-preflight tools, the declared/packaged schema agreement, and the
+public request shapes.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ import unittest
 from span.core import model as m
 from span.core.schema import record_wire as rw
 from span.shell.mcp import (
-    REMOVED_TOOLS,
     TOOL_EXAMPLES,
     TOOL_NAMES,
     TOOL_OUTPUT_SCHEMAS,
@@ -81,24 +80,6 @@ class SurfaceConformanceTest(unittest.TestCase):
         for name in TOOL_NAMES:
             for fragment in forbidden_fragments:
                 self.assertNotIn(fragment, name, name)
-
-    def test_no_removed_name_is_registered(self):
-        self.assertFalse(set(REMOVED_TOOLS) & set(TOOL_NAMES))
-
-    def test_removed_names_name_a_live_replacement(self):
-        for name, replacement in REMOVED_TOOLS.items():
-            self.assertTrue(replacement)
-            if name not in {
-                "locate",
-                "neighbors",
-                "initialize_repository",
-                "trace",
-                "initialize_target",
-            }:
-                self.assertTrue(
-                    any(tool in replacement for tool in CORE),
-                    f"{name}: {replacement}",
-                )
 
     def test_declared_and_packaged_request_types_agree(self):
         for name in TOOL_NAMES:
@@ -194,17 +175,6 @@ class SurfaceConformanceTest(unittest.TestCase):
         tabulated = set(re.findall(r"^\| `([a-z_]+)` \|", table.group(1), re.M))
         self.assertEqual(tabulated, wire)
 
-    def test_refusals_name_only_registered_operations(self):
-        """A replacement must not send the caller to an unregistered tool."""
-        for retired, replacement in REMOVED_TOOLS.items():
-            for name in ("structure", "setup"):
-                if name in replacement:
-                    self.assertIn(
-                        name,
-                        TOOL_NAMES,
-                        f"retired {retired!r} points at unregistered {name!r}",
-                    )
-
     def test_record_description_carries_every_call_template(self):
         text = TOOL_SCHEMAS["record"]["description"]
         for marker in (
@@ -246,36 +216,6 @@ class SurfaceConformanceTest(unittest.TestCase):
         self.assertIn("§4.1", section)
         self.assertIn("§4.5", section)
         self.assertTrue(reconsider)
-
-    def test_no_retired_tool_name_in_current_docs(self):
-        captures = DOCS / "acceptance-evidence"
-        changelog = REPO_ROOT / "CHANGELOG.md"
-        paths = [
-            REPO_ROOT / "README.md",
-            *DOCS.rglob("*.md"),
-            *(REPO_ROOT / "skills").rglob("*.md"),
-        ]
-        offenders: list[str] = []
-        for path in paths:
-            if path == changelog or captures in path.parents:
-                continue
-            retire_section = False
-            for number, line in enumerate(
-                path.read_text(encoding="utf-8").splitlines(), 1
-            ):
-                if line.startswith("### Retire from"):
-                    retire_section = True
-                    continue
-                if retire_section and line.startswith("### "):
-                    retire_section = False
-                if retire_section:
-                    continue
-                for name in REMOVED_TOOLS:
-                    if f"`{name}`" in line:
-                        offenders.append(
-                            f"{path.relative_to(REPO_ROOT)}:{number}: {name}"
-                        )
-        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":

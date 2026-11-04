@@ -2,8 +2,8 @@
 
 The adapter owns no semantic rule. It routes a tool to exactly one service
 operation, serializes the canonical result, and maps failures onto the typed
-transport envelope. Retired tool names reject with an exact replacement and
-perform no work.
+transport envelope. Unknown tool names reject without compatibility dispatch
+and perform no work.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from span.core.rejection import Rejection
 from span.core.schema import record_wire as _rw
 from span.ports.structural import StaleContinuationError
 from span.shell.mcp.models import ServiceContext, ToolResult
-from span.shell.mcp.schemas import REMOVED_TOOLS, TOOL_REQUEST_TYPES
+from span.shell.mcp.schemas import TOOL_REQUEST_TYPES
 from span.shell.mcp.wire import (
     RoutingError,
     canonical_result_payload,
@@ -106,12 +106,6 @@ class McpAdapter:
 
     def dispatch(self, tool_name: str, arguments: dict[str, object]) -> ToolResult:
         """Invoke one tool; every failure stays a typed envelope."""
-        if tool_name in REMOVED_TOOLS:
-            return encode_error(
-                "removed",
-                f"{tool_name} was removed in 0.9.0",
-                REMOVED_TOOLS[tool_name],
-            )
         if tool_name not in TOOL_REQUEST_TYPES:
             return encode_error("unknown_tool", f"unknown tool: {tool_name}")
         try:

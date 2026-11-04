@@ -71,7 +71,7 @@ __all__ = [
 #: Managed structural-indexer identity. The installer provisions exactly
 #: this npm package version into Span's tools directory; keep in sync
 #: with ``STRUCTURAL_INDEXER_{PACKAGE,VERSION}`` in
-#: ``span/shell/install.py`` (which must stay stdlib-only, so the
+#: ``span/shell/install/constants.py`` (which must stay stdlib-only, so the
 #: constants are duplicated, not imported).
 STRUCTURAL_INDEXER_PACKAGE = "@nanonets/graft"
 STRUCTURAL_INDEXER_VERSION = "0.25.0"
@@ -232,8 +232,7 @@ def resolve_indexer_binary(
     """Resolve the structural-indexer binary without user configuration.
 
     Order: explicit ``SPAN_GRAFT_BIN`` env override, installer-managed
-    pointer under ``data_dir``, then ``PATH`` fallback (transitional for
-    pre-managed installs). Returns the binary path or None.
+    pointer under ``data_dir``. Returns the binary path or None.
     """
     override = _os.environ.get(INDEXER_BINARY_ENV_VAR)
     if override:
@@ -244,7 +243,7 @@ def resolve_indexer_binary(
             binary = pointer.get("binary")
             if isinstance(binary, str) and binary:
                 return binary
-    return _shutil.which("graft")
+    return None
 
 
 def _data_dir_from_artifact_dir(
@@ -492,8 +491,8 @@ def _run_index_build(
     Flags: ``--no-gitignore --no-ignore`` (never write target
     dotfiles), never ``--deep`` (wiring only, no LLM), never provider /
     model / API-key flags (no credentials). Bounded 600s timeout.
-    The binary resolves without user configuration (installer-managed
-    pointer, then ``PATH`` fallback). Returns (ok, detail) with
+    The binary resolves from an explicit override or the installer-managed
+    pointer. Returns (ok, detail) with
     provider-neutral details; never raises.
 
     ``DO_NOT_TRACK=1`` is part of the environment. The provider's

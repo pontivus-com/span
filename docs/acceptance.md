@@ -70,6 +70,16 @@ references (`test_invalidated_ask_returns_historical_content`,
 notice is proven at the `event.system` boundary by
 `tests/plugin/test_span_hooks_notice.mjs`, run in CI.
 
+0.9.3 adds named coverage for the installer and host contract: shared default
+OpenCode MCP/plugin selection, receipt-backed verification and uninstall,
+explicit relocation, `--no-hooks` MCP preservation, fail-closed current
+receipts, conflict-preserving target inspection, ownership-based skill cleanup,
+restored Claude registration/inspection/hooks/teardown, and removal of the
+structural-indexer `PATH` fallback. The representative owners are
+`tests/unit/test_install.py`, `tests/unit/test_claude_adapter.py`,
+`tests/unit/test_lifecycle_hooks.py`, and
+`tests/unit/test_graft_provisioning.py`.
+
 Use [contributing](contributing.md) for commands. The zero-error typing baseline
 is the beta gate; a passing ratchet with pre-existing errors is insufficient.
 Clean builds, packaged assets, docs, version, and changelog extraction are
@@ -79,9 +89,11 @@ separate release checks.
 
 Capture installed build/command, advertised schemas, model-delivered
 declarations, requests/results, representation duplication, and recovery and
-concurrency behavior. Codex and OpenCode are the supported live targets; both
-have candidate-specific delivery captures. Hook wiring is separate from
-observed arrival.
+concurrency behavior. Codex and OpenCode are supported live targets with
+candidate-specific delivery captures. Claude Code is a supported managed host
+for registration, health inspection, and installer behavior, but its
+authenticated model-delivery grammar and caller identity remain
+**UNVERIFIED**. Hook wiring is separate from observed arrival.
 
 ## Product value
 

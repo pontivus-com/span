@@ -1,22 +1,11 @@
-"""Host-neutral hook contract (bounded, optional, never authoritative).
-
-Host adapters map native lifecycle events onto ``HookIntent`` values. The
-contract only names the event and its changed-path scope; the shell hook
-runner performs one bounded readiness/dependent check. Hooks never
-initialize, record, re-check, interpret, rebuild, or run repository-scale
-work, and missing delivery can never establish freshness.
-"""
+"""Host-neutral hook contract (bounded, optional, never authoritative)."""
 
 from __future__ import annotations
 
 import enum as _enum
 from dataclasses import dataclass as _dataclass
 
-__all__ = [
-    "HookIntent",
-    "MappedEvent",
-    "map_to_intent",
-]
+__all__ = ["HookIntent", "MappedEvent", "map_to_intent"]
 
 
 class HookIntent(_enum.Enum):
@@ -39,10 +28,7 @@ def map_to_intent(
     intent: HookIntent,
     changed_paths: tuple[str, ...] = (),
 ) -> MappedEvent:
-    """Build the mapped event for an intent (pure)."""
+    """Build one mapped event without owning runtime or semantic behavior."""
     if intent is HookIntent.SESSION_START:
         return MappedEvent(intent=intent)
-    return MappedEvent(
-        intent=intent,
-        changed_paths=tuple(changed_paths),
-    )
+    return MappedEvent(intent=intent, changed_paths=tuple(changed_paths))

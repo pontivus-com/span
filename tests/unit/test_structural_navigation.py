@@ -642,9 +642,7 @@ class RemovedNavigationToolTest(unittest.TestCase):
             },
         )
         self.assertTrue(out.is_error)
-        self.assertIn("removed", out.content)
-        self.assertIn("host", out.content)
-        self.assertNotIn("use structure", out.content)
+        self.assertIn("unknown_tool", out.content)
 
 
 if __name__ == "__main__":
