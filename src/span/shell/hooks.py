@@ -24,6 +24,7 @@ import sys
 
 from span.core import model as m
 from span.core import support_rules as _support_rules
+from span.shell.install.receipt import read_receipt
 from span.shell.policy import HOOK_DIAGNOSTIC_LIMIT
 from span.shell.readiness import probe_store
 
@@ -54,13 +55,11 @@ def _fail_silent(message):
 
 
 def load_receipt(data_dir):
-    receipt_path = os.path.join(data_dir, "install.json")
     try:
-        with open(receipt_path, encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, ValueError) as exc:
-        _fail_silent(f"no readable install receipt at {receipt_path}: {exc}")
-    return {}
+        return read_receipt(data_dir)
+    except SystemExit as exc:
+        _fail_silent(str(exc))
+    return None
 
 
 def repo_map(data_dir):

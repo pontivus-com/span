@@ -13,6 +13,7 @@ from span.core import model as m
 from span.core.schema import record_wire as rw
 from span.shell import hooks
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
+from span.shell.install.constants import INSTALL_VERSION
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 from span.service.evidence import EvidenceService
@@ -25,7 +26,14 @@ FILES = {"src/app.py": "line1\nline2\n", "README.md": "# hooks\n"}
 
 def _write_receipt(data: pathlib.Path, root: pathlib.Path) -> None:
     (data / "install.json").write_text(
-        json.dumps({"repos": [str(root)]}), encoding="utf-8"
+        json.dumps(
+            {
+                "install_version": INSTALL_VERSION,
+                "repos": [str(root)],
+                "host_registration": {},
+            }
+        ),
+        encoding="utf-8",
     )
 
 
@@ -130,7 +138,16 @@ class LifecycleHooksTest(unittest.TestCase):
             (base / "elsewhere").mkdir()
             data = base / "data"
             data.mkdir()
-            (data / "install.json").write_text('{"repos": []}', encoding="utf-8")
+            (data / "install.json").write_text(
+                json.dumps(
+                    {
+                        "install_version": INSTALL_VERSION,
+                        "repos": [],
+                        "host_registration": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
             self.assertEqual(
                 _capture(hooks.cmd_adoption_primer, data, str(base / "elsewhere")),
                 "",
@@ -148,6 +165,19 @@ class LifecycleHooksTest(unittest.TestCase):
             self.assertIn("no store", output)
             self.assertIn("installer", output)
             self.assertEqual(sorted(p.name for p in data.iterdir()), ["install.json"])
+
+    def test_unversioned_receipt_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / REPO
+            root.mkdir()
+            data = base / "data"
+            data.mkdir()
+            (data / "install.json").write_text(
+                json.dumps({"repos": [str(root)]}), encoding="utf-8"
+            )
+            with self.assertRaises(SystemExit):
+                hooks.cmd_session_start(data, str(root))
 
     def test_source_change_reports_bounded_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:

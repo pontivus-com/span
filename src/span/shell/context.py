@@ -3,7 +3,7 @@
 One opener serves every repository-scoped path that needs a working context
 without performing setup: the MCP adapter's lazy first call and the lifecycle
 hook runner. Opening constructs the structural source, filesystem evidence,
-the existing schema-10 store and its services. It never builds a structural
+the existing schema-11 store and its services. It never builds a structural
 index, never writes to the target repository, and never creates or migrates a
 store. A repository without a store fails closed with the explicit setup
 action; an old schema fails closed with the transition action.

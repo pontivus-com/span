@@ -14,7 +14,6 @@ from span.core.schema import record_wire as rw
 from span.core.schema import schema_for_request, schema_for_result
 
 __all__ = [
-    "REMOVED_TOOLS",
     "TOOL_DESCRIPTIONS",
     "TOOL_EXAMPLES",
     "TOOL_NAMES",
@@ -232,34 +231,3 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
 
 for _name, _examples in TOOL_EXAMPLES.items():
     TOOL_SCHEMAS[_name]["examples"] = _examples
-
-#: Retired tool names reject with an exact replacement and no side effects.
-REMOVED_TOOLS: dict[str, str] = {
-    "understand_question": "use ask",
-    "understand_retrieve": "use ask with an exact selector",
-    "reassess": "use ask; support is in every answer",
-    "verification_support": "use ask; the run and support are in every answer",
-    "start_context": "removed; context is issued inside ask and record",
-    "evidence_start": "removed; evidence is admitted inside ask and record",
-    "evidence_extend": "removed; evidence is admitted inside ask and record",
-    "record_create": "use record with conclusion and locator or observation_id",
-    "record_add": "use record with actions.add",
-    "record_confirm": "use record with actions.confirm",
-    "record_correct": "use record with actions.correct",
-    "record_replace": "use record with actions.replace",
-    "record_withdraw": "use record with actions.withdraw",
-    "record_challenge": "use reconsider with a challenge",
-    "record_update": "use record with an actions object",
-    "record_verification": 'use record with kind="verification"',
-    "initialize_repository": "run the installer (span-install) to bind the repository",
-    "locate": "use the host's own file navigation; this build registers no structural tool",
-    "neighbors": "use the host's own file navigation; this build registers no structural tool",
-    "explain": "use ask",
-    "trace": "use the host's own file navigation; this build registers no structural tool",
-    "impact": "use ask, then reconsider after editing",
-    "authority": "authority is qualified inside ask",
-    "status": "use ask; status is in every answer",
-    "refresh": "re-record the affected conclusions with record",
-    "initialize_target": "run the installer (span-install) to bind the repository",
-    "submit_interpretation": "use record",
-}

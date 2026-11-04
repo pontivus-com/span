@@ -32,12 +32,6 @@ def _add_transition_arguments(parser) -> None:
         help="Explicit repository root for the transition binding. "
         "Required for apply; reported by inspect when supplied.",
     )
-    parser.add_argument(
-        "--migrate-store",
-        default=None,
-        metavar="REPOSITORY_ID",
-        help=argparse.SUPPRESS,
-    )
 
 
 def _add_opencode_plugin_scope_argument(parser) -> None:
@@ -48,12 +42,26 @@ def _add_opencode_plugin_scope_argument(parser) -> None:
         default=None,
         help=(
             "Where Span manages the OpenCode lifecycle plugin. `global` "
-            "installs it under Span's data root and retires legacy copies in "
-            "targets passed with --repo. `local` and `none` leave the target "
+            "installs it under Span's data root. `local` and `none` leave the target "
             "plugin to the user and remove Span's global registration. A "
             "fresh install defaults to global; an upgrade uses the receipt "
             "scope and stops if it is absent or ambiguous."
         ),
+    )
+
+
+def _add_claude_arguments(parser) -> None:
+    parser.add_argument(
+        "--with-claude",
+        action="store_true",
+        default=None,
+        help="Register via `claude mcp add` (default: automatic when "
+        "the Claude CLI or host footprint is present; --no-claude to skip).",
+    )
+    parser.add_argument(
+        "--no-claude",
+        action="store_true",
+        help="Skip all Claude Code integration even when detected.",
     )
 
 
@@ -101,8 +109,9 @@ def parse_args(argv=None):
     parser.add_argument(
         "--opencode-config",
         default=None,
-        help="opencode.json to merge the span MCP entry into. "
-        "Default: ./opencode.json when present, else skipped.",
+        help="opencode.json to merge the Span MCP entry into. "
+        "Default: ./opencode.json when present, otherwise the global "
+        "OpenCode config for a global plugin scope.",
     )
     parser.add_argument(
         "--with-codex",
@@ -116,6 +125,7 @@ def parse_args(argv=None):
         action="store_true",
         help="Skip all Codex integration even when detected.",
     )
+    _add_claude_arguments(parser)
     parser.add_argument(
         "--with-hooks",
         action="store_true",

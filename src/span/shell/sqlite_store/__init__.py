@@ -1,4 +1,4 @@
-"""SQLite lifecycle store (schema 10)."""
+"""SQLite lifecycle store (schema 11)."""
 
 from __future__ import annotations
 

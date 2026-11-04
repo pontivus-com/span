@@ -10,7 +10,6 @@ from unittest import mock
 from span.core import model as m
 from span.core.schema import record_wire as rw
 from span.shell.mcp import (
-    REMOVED_TOOLS,
     TOOL_NAMES,
     TOOL_OUTPUT_SCHEMAS,
     TOOL_SCHEMAS,
@@ -90,29 +89,15 @@ class ToolListTest(unittest.TestCase):
             self.assertEqual(TOOL_SCHEMAS[name]["type"], "object", name)
             self.assertEqual(TOOL_OUTPUT_SCHEMAS[name]["type"], "object", name)
 
-    def test_retired_names_are_not_registered(self):
-        self.assertFalse(set(REMOVED_TOOLS) & set(TOOL_NAMES))
-        for name in (
-            "understand_question",
-            "understand_retrieve",
-            "record_create",
-            "record_update",
-            "record_verification",
-            "start_context",
-            "evidence_start",
-            "initialize_repository",
-        ):
-            self.assertIn(name, REMOVED_TOOLS)
-
-    def test_retired_name_rejects_with_replacement_and_no_work(self):
+    def test_non_current_name_uses_unknown_tool_path(self):
         context = _context()
         adapter = _adapter(context)
         result = adapter.dispatch("understand_question", {"repository_id": REPO})
         self.assertTrue(result.is_error)
         payload = json.loads(result.content)
         self.assertEqual(payload["$type"], "ToolError")
-        self.assertEqual(payload["kind"], "removed")
-        self.assertIn("ask", payload["replacement"])
+        self.assertEqual(payload["kind"], "unknown_tool")
+        self.assertIsNone(payload["replacement"])
         context.answer.ask.assert_not_called()
 
     def test_unknown_tool_rejects(self):

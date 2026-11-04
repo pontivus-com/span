@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.9.3 — 2026-11-04
+
+**A bug-fix release.** OpenCode MCP registration now shares the selected
+configuration with global plugin wiring, receipt-backed verification reuses the
+recorded MCP path, and uninstall removes MCP and plugin artifacts from their
+respective recorded configurations. Unselected MCP configuration is reported
+distinctly from an inspected configuration without a Span registration. New
+receipts store absolute OpenCode paths, repeat installs preserve the recorded
+MCP path across working directories, and an explicit relocation removes the
+old Span registration only after the new one is written.
+Legacy relative MCP paths no longer fall through to an automatically selected
+local or global file; they require explicit recovery. Relocation validates the
+old receipt-owned configuration is valid and writable before creating the new
+registration.
+
+`--no-hooks` now disables lifecycle hook and plugin wiring without disabling
+MCP registration; the selected configuration is still rewritten with the
+current data directory and repository bindings. The release also removes
+superseded MCP-operation, migration-only receipt, target-plugin retirement,
+structural-indexer `PATH` fallback, and retired host-contract paths. Current
+receipts fail closed when invalid or unsupported, while foreign host state and
+historical changelog records remain untouched.
+
+Managed Claude Code support is restored after its erroneous removal from the
+replacement-host set. Current registration, inspection, skills, hooks, and
+uninstall behavior are supported; authenticated Claude model delivery remains
+**UNVERIFIED** and is not claimed by this release.
+
 ## 0.9.2 — 2026-11-04
 
 **A bug-fix release. It makes upgrades from 0.9.0/0.9.1 safe, returns the

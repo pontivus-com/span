@@ -128,8 +128,12 @@ manager and run `span-install --repo /path/to/your/repo`. See
 offline store transition.
 
 The installer provisions the managed structural indexer, runtime, skills, and
-host integration. Reconnect your coding agent after upgrade so it receives the
-new tools and instructions. Verify operational setup with:
+host integration. With the default global OpenCode scope, it registers the
+Span lifecycle plugin and MCP server in the same global OpenCode configuration.
+Repeat installs use the receipt's absolute MCP path unless
+`--opencode-config` explicitly relocates it.
+Reconnect your coding agent after upgrade so it receives the new tools and
+instructions. Verify operational setup with:
 
 ```bash
 span-install --verify-only
@@ -144,6 +148,7 @@ see [using Span](docs/usage.md).
 | --- | --- |
 | Codex | Supported; three-tool delivery captured with hooks disabled. The flat-create re-capture is pending (account quota). |
 | OpenCode | Supported; three-tool and flat-create delivery captured. The installer plugin puts the first `ask` before the first source read in 5/5 measured runs. |
+| Claude Code | Supported managed host; registration/health and installer behavior are covered. Authenticated model-delivery grammar and caller identity remain **UNVERIFIED**. |
 | Other MCP hosts | Manual stdio connection is available; model-delivery behavior needs host-specific verification. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
@@ -166,13 +171,15 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.9.2**: three lifecycle tools (`ask`, `record`,
+This checkout describes **0.9.3**: three lifecycle tools (`ask`, `record`,
 `reconsider`), schema-11 storage, surface-scoped answers, explicit store
-transition, and live support qualification. 0.9.2 is a bug-fix release: it
-makes the OpenCode plugin scope explicit, retires legacy target copies instead
-of deleting them, and returns historical content and stale references in the
-documented shapes. Upgrading from 0.9.0/0.9.1 requires one
-`span-install --opencode-plugin-scope global|local|none` run and a host restart.
+transition, and live support qualification. 0.9.3 is a bug-fix release over
+0.9.2: it shares the selected OpenCode configuration between MCP registration
+and global plugin wiring, and makes verification and uninstall receipt-backed.
+The 0.9.2 release history is recorded in the changelog; its migration behavior
+is not a current 0.9.3 implementation promise. The current installer preserves
+the selected OpenCode configuration and does not perform obsolete target-plugin
+compatibility migration.
 Host delivery is captured for the three-tool surface on Codex and OpenCode;
 the flat-create re-capture passes on OpenCode and is pending on Codex (account
 quota). Comparative fitness remains class-scoped (FD-53, FG-7).

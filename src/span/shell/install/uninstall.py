@@ -7,7 +7,10 @@ import shutil
 from pathlib import Path
 
 from span.shell.install.hosts import (
+    receipt_opencode_mcp_config,
+    receipt_opencode_plugin_config,
     remove_claude_hooks,
+    remove_claude_registration,
     remove_codex_hooks,
     remove_codex_registration,
     remove_opencode_plugin,
@@ -34,31 +37,26 @@ def uninstall(data_dir, targets, opencode_config, dry_run=False):
     receipt = read_receipt(data_dir) or {}
     registered = [Path(repo) for repo in receipt.get("repos", [])]
     effective_targets = list(dict.fromkeys([*targets, *registered]))
-    config = opencode_config
-    if config is None:
-        registration = receipt.get("host_registration", {})
-        opencode = (
-            registration.get("opencode", {}) if isinstance(registration, dict) else {}
-        )
-        if isinstance(opencode, dict) and opencode.get("config"):
-            config = opencode["config"]
+    mcp_config = opencode_config or receipt_opencode_mcp_config(receipt)
+    plugin_config = receipt_opencode_plugin_config(receipt)
     report = {
         "opencode": (
-            remove_opencode_registration(config, dry_run=dry_run)
-            if config is not None
+            remove_opencode_registration(mcp_config, dry_run=dry_run)
+            if mcp_config is not None
             else {"status": "absent", "reason": "no opencode config known"}
         ),
         "opencode_plugin": (
             remove_opencode_plugin(
-                config,
+                plugin_config,
                 Path(data_dir).parent / "opencode-plugin",
                 dry_run=dry_run,
                 span_root=Path(data_dir).parent,
             )
-            if config is not None
+            if plugin_config is not None
             else {"status": "absent", "reason": "no opencode config known"}
         ),
         "codex": remove_codex_registration(dry_run=dry_run),
+        "claude": remove_claude_registration(dry_run=dry_run),
         "hooks": {
             "codex": remove_codex_hooks(dry_run=dry_run),
             "claude": remove_claude_hooks(dry_run=dry_run),

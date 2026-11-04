@@ -53,6 +53,12 @@ def _git_init(root):
 
 
 class ProvisioningLifecycleTest(unittest.TestCase):
+    def test_indexer_resolution_does_not_use_path_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict("os.environ", {}, clear=True):
+                with mock.patch.object(g._shutil, "which", return_value="graft"):
+                    self.assertIsNone(g.resolve_indexer_binary(pathlib.Path(tmp)))
+
     def test_fresh_repo_builds_on_ensure_current(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = pathlib.Path(tmp) / "repo"

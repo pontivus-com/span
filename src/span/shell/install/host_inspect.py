@@ -19,26 +19,34 @@ def detect_hosts():
     hosts = {"opencode": True}  # MCP config merge is file-local.
     home = Path(os.path.expanduser("~"))
     hosts["codex"] = shutil.which("codex") is not None or (home / ".codex").exists()
+    hosts["claude"] = (
+        shutil.which("claude") is not None
+        or (home / ".claude").exists()
+        or (home / ".claude.json").exists()
+    )
     return hosts
 
 
 def inspect_opencode_registration(config_path, span_cmd):
     """Read-only OpenCode ``mcp.servers.span`` registration inspection.
 
-    Returns exactly one of ``matched``, ``mismatched``, ``missing``, or
-    ``unreadable``. Never calls ``merge_opencode_config`` and never
-    writes the config. A missing config path means no OpenCode config is
-    available; an explicitly supplied but unreadable path is reported as
-    unreadable rather than guessed.
+    Returns exactly one of ``matched``, ``mismatched``, ``missing``,
+    ``unselected``, or ``unreadable``. Never calls ``merge_opencode_config``
+    and never writes the config. A missing config path means no OpenCode MCP
+    configuration was selected; an explicitly supplied but unreadable path is
+    reported as unreadable rather than guessed.
     """
     expected = list(span_cmd)
-    result = {
-        "status": "missing",
+    result: dict[str, object] = {
+        "status": "unselected",
         "config": None if config_path is None else str(config_path),
         "expected_command": expected,
     }
     if config_path is None:
-        result["reason"] = "no OpenCode config available"
+        result["reason"] = (
+            "no OpenCode MCP config selected; pass --opencode-config PATH "
+            "or rerun installation"
+        )
         return result
     path = Path(config_path)
     try:
@@ -53,26 +61,15 @@ def inspect_opencode_registration(config_path, span_cmd):
         result["status"] = "unreadable"
         result["reason"] = f"cannot parse OpenCode config: {exc}"
         return result
+    result["status"] = "missing"
     mcp = config.get("mcp") if isinstance(config, dict) else None
     servers = mcp.get("servers") if isinstance(mcp, dict) else None
     nested = servers.get("span") if isinstance(servers, dict) else None
-    flat = mcp.get("span") if isinstance(mcp, dict) else None
-    if isinstance(flat, dict) and isinstance(nested, dict):
-        result["status"] = "mismatched"
-        result["reason"] = (
-            "duplicate Span registrations: both mcp.span and "
-            "mcp.servers.span exist; normalize to mcp.servers.span"
-        )
-        return result
-    if isinstance(flat, dict):
-        result["status"] = "mismatched"
-        result["configured_command"] = flat.get("command")
-        result["reason"] = (
-            "unsupported flat mcp.span registration; use " "mcp.servers.span"
-        )
-        return result
     if not isinstance(nested, dict):
-        result["reason"] = "no mcp.servers.span entry"
+        result["reason"] = (
+            "no mcp.servers.span entry; rerun installation with "
+            f"--opencode-config {path} to register Span"
+        )
         return result
     result["configured_command"] = nested.get("command")
     if nested.get("type") != "local":
@@ -107,8 +104,7 @@ def inspect_opencode_plugin_state(
     """Read-only discovery of Span-owned plugin artifacts for one scope.
 
     Only the global configuration's ``plugins`` entries and the explicitly
-    named targets' ``.opencode/plugins`` directories are inspected. Retired
-    files under ``.opencode/span-retired`` are inert and never listed.
+    named targets' ``.opencode/plugins`` directories are inspected.
     """
     entries: list[dict[str, str]] = []
     unreadable: list[dict[str, str]] = []
@@ -173,3 +169,53 @@ def inspect_codex_registration():
             ),
         }
     return {"status": "skipped", "reason": "codex CLI not detected"}
+
+
+def inspect_claude_registration(span_cmd) -> dict[str, object]:
+    """Read-only inspection of Claude Code's user-scope MCP entry."""
+    config_path = Path(os.path.expanduser("~")) / ".claude.json"
+    expected = [str(part) for part in span_cmd]
+    result: dict[str, object] = {
+        "status": "missing",
+        "config": str(config_path),
+        "expected_command": expected,
+    }
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return result
+    try:
+        config = json.loads(raw)
+    except ValueError:
+        result["status"] = "unreadable"
+        result["reason"] = "cannot parse Claude user-scope MCP configuration"
+        return result
+    if not isinstance(config, dict):
+        result["status"] = "unreadable"
+        result["reason"] = "Claude user-scope MCP configuration is not an object"
+        return result
+    servers = config.get("mcpServers")
+    if servers is not None and not isinstance(servers, dict):
+        result["status"] = "unreadable"
+        result["reason"] = "Claude mcpServers is not an object"
+        return result
+    entry = servers.get("span") if isinstance(servers, dict) else None
+    if entry is None:
+        result["reason"] = "no user-scope mcpServers.span entry"
+        return result
+    if not isinstance(entry, dict):
+        result["status"] = "unreadable"
+        result["reason"] = "Claude mcpServers.span is not an object"
+        return result
+    command = entry.get("command")
+    args = entry.get("args", [])
+    if not isinstance(command, str) or not isinstance(args, list):
+        result["status"] = "unreadable"
+        result["reason"] = "Claude mcpServers.span has an invalid command shape"
+        return result
+    actual = [command] + [str(arg) for arg in args]
+    result["actual_command"] = actual
+    result["status"] = "matched" if actual == expected else "mismatched"
+    if result["status"] == "mismatched":
+        result["reason"] = "Claude user-scope Span command does not match"
+    return result
