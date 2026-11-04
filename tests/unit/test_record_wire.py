@@ -248,6 +248,37 @@ class RecordWireCodecTest(unittest.TestCase):
         self.assertEqual(command.add[0].conclusion_id.value, "c-2")
         self.assertEqual(command.withdraw[0].conclusion_id.value, "c-1")
 
+    def test_verification_requires_observations_or_evidence(self):
+        with self.assertRaises(ValueError) as raised:
+            w.VerificationRunWire(
+                repository_id="repo-1",
+                scope_description="probe",
+                scope_paths=("src/a.py",),
+                command="python3 -m unittest",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="test",
+            )
+        self.assertIn("observations or evidence", str(raised.exception))
+        self.assertIn("obs:", str(raised.exception))
+        self.assertIn("locator", str(raised.exception))
+
+    def test_verification_accepts_evidence_only(self):
+        run = w.VerificationRunWire(
+            repository_id="repo-1",
+            scope_description="probe",
+            scope_paths=("src/a.py",),
+            command="python3 -m unittest",
+            scenario=None,
+            outcome=m.VerificationOutcome.PASS,
+            observed_at=NOW,
+            observer="test",
+            evidence=(w.SourceSupportWire(locator="src/a.py"),),
+        )
+        self.assertEqual(run.observations, ())
+        self.assertEqual(run.evidence[0].locator, "src/a.py")
+
     def test_verification_maps_to_domain_command(self):
         wire = w.RecordVerificationWire(
             identity=_identity(),

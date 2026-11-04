@@ -70,11 +70,18 @@ Results: `Answer`, `Gap`, `AmbiguousSurface`, `RetrievedUnderstanding`,
 
 - `Answer` carries `ConclusionView`s (ref, statement, nature, scope, support,
   evidence), surface status, gaps, applicable `VerificationView`s (run plus
-  qualification), context, and explicit truncation state.
+  qualification), context, and explicit truncation state. The surface status
+  carries `stale_refs`: each names the exact conclusion revision, the
+  understanding version that holds it, and its present non-current support
+  state. Descendant statuses keep their own refs.
 - `Gap` carries one reason (`invalidated`, `unverifiable`, `unassessed`,
-  `no_match`), historical conclusions, admitted evidence, observations,
+  `no_match`), historical conclusions with their statement, evidence
+  references, and present non-current state, admitted evidence, observations,
   context, a recovery, and a `continuation` when evidence was omitted. A
   `no_match` gap tells the agent to ask the same surface without a question.
+  Historical content is never mixed into `conclusions`. To read a referenced
+  stale statement directly, use
+  `ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`.
 - `AmbiguousSurface` carries exact `SurfaceKey` candidates. Copy one into
   `surface`; do not re-resolve the path.
 - `EvidencePage` carries evidence units and an optional further continuation.
@@ -147,11 +154,14 @@ parent and cycles are rejected. A stale boundary version or a kind conflict is
 
 Verification uses `kind="verification"` with a `run` carrying the command,
 scope, outcome, observed time, observer, and the evidence it actually tested. A
-run applies to the surfaces in its declared scope and is not widened by a
-broader question. `run.observations` takes the `obs:` ids that `ask` returned
-for the request context; to cite a source instead, put it in `run.evidence` with
-the same `context_id` and Span admits it. An id that was never admitted is
-`Rejected` with `cause_kind=observation_not_admitted`, not a transport error.
+run applies to the surfaces **within** its declared scope (a run scope path
+covers a surface path when it is equal or an ancestor) and is not widened by a
+broader question. A run requires `observations` or `evidence`: `run.observations`
+takes the `obs:` ids that `ask` returned for the request context; to cite a
+source instead, put it in `run.evidence` with the same `context_id` and Span
+admits it. Sending neither is rejected; sending either is accepted. An id that
+was never admitted is `Rejected` with `cause_kind=observation_not_admitted`, not
+a transport error.
 
 Support wires preserve source, admitted-source, authority, premise,
 discovery-boundary, and admitted-discovery support. A discovery boundary is the
@@ -193,10 +203,18 @@ Results: `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 
 `Changed` names every surface to re-examine, the reasons it was considered
 (`containment`, `direct`, `indirect`), per-conclusion support state, and a
-context for re-establishment. Inclusion is not a verdict: a considered
-conclusion may remain `CURRENT`. Discovery dependents are part of the direct
-set. `Challenged` carries the challenge and its derived context; settle it
-through `record`.
+context for re-establishment. `surfaces` is the complete containment set: a
+surface with no `conclusions` is containment-only, not a finding. Act only on
+conclusions whose support state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`; a
+`CURRENT` conclusion in the set needs no work. Inclusion is not a verdict.
+Discovery dependents are part of the direct set. The order is deterministic;
+do not re-sort it. `Challenged` carries the challenge and its derived context;
+settle it through `record`.
+
+For example, a `Changed` result may list `src/a.py` with one `CURRENT`
+conclusion and `billing` with no `conclusions`. Neither is a finding by itself:
+act only on conclusions whose `support.state` is `REASSESSMENT_REQUIRED` or
+`UNVERIFIABLE`, and keep the returned surface order.
 
 ## Egress and errors
 

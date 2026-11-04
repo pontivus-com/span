@@ -15,7 +15,12 @@ saved version. It is not a supported conclusion.
 
 **Gap** — The `ask` result when no matched conclusion is current. It carries
 exactly one reason: `invalidated`, `unverifiable`, `unassessed`, or `no_match`,
-plus a recovery that names the next action.
+the prior non-current conclusions as historical content, and a recovery that
+names the next action.
+
+**Historical conclusion** — A non-current conclusion returned as content in a
+`Gap`: exact revision, understanding version, statement, evidence references,
+and present non-current state. It never becomes current answer content.
 
 **Surface document view** — The `ask` result when the question is omitted:
 current conclusions grouped by the question they answer, plus status, gaps, and
@@ -55,10 +60,17 @@ its surface or dependency was considered. It may still be `CURRENT`.
 `UNVERIFIABLE`; it requires re-establishment.
 
 **Answer** — Current conclusions for one surface with per-conclusion support,
-surface status, recorded gaps, and applicable verification.
+surface status (including `stale_refs`), recorded gaps, and applicable
+verification.
 
-**Scope** — The declared paths/evidence references bounding the investigation
-or conclusion. Unexamined and truncated scope stays explicit.
+**Surface status** — The distribution over a surface: current, stale,
+unassessed, unexamined, and descendant statuses. `stale_refs` names each stale
+conclusion by exact revision, understanding version, and present state; the
+count and references describe the same set. The status carries no statement
+content.
+
+**Scope** — The declared paths/evidence references bounding the investigation,
+conclusion, or verification run. Unexamined and truncated scope stays explicit.
 
 **Observation** — Immutable admitted source content identity and excerpts, or
 a recorded discovery-membership fingerprint. See [authority](authority-trust.md).
@@ -96,9 +108,11 @@ by the caller before dispatch. Same identity with different content conflicts.
 **Compare-and-set** — Accept an update only at the expected understanding or
 challenge revision, preventing conflicting concurrent changes.
 
-**Verification run** — Independent record of actual external execution and
-its tested observations, outcome, time, observer, and limitations.
-Qualification checks currency and does not rerun it or change its outcome.
+**Verification run** — Independent record of actual external execution with its
+declared scope, command or scenario, outcome, time, observer, limitations, and
+the observations or evidence it tested. It applies to surfaces within its
+declared scope. Qualification checks currency and does not rerun it or change
+its outcome.
 
 **Cursor** — Opaque listing position. Resume the same operation with the same
 request arguments and identity. It is not an interpretation continuation.

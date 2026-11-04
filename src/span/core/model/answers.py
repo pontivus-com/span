@@ -21,12 +21,14 @@ from span.core.model.primitives import (
     EvidenceScope,
     InvestigationContextId,
     SourceObservationId,
+    UnderstandingVersionNumber,
     _require_non_empty,
 )
 from span.core.model.repository import EvidenceUnit
 from span.core.model.support import (
     ConclusionSupport,
     SupportEvaluation,
+    SupportState,
     SupportUnavailable,
     VerificationSupport,
 )
@@ -149,6 +151,32 @@ class Answer:
 
 
 @_dataclass(frozen=True)
+class HistoricalConclusion:
+    """One non-current conclusion served as historical content in a Gap.
+
+    ``L2`` requires unsupported content to appear as historical content, not
+    only as a reference. The carrier keeps the exact revision identity, the
+    understanding version that holds it, the statement the agent needs, the
+    evidence references the conclusion cites, and the present non-current
+    support state that makes it historical. Evidence bodies are never copied.
+    """
+
+    ref: ConclusionRevisionRef
+    understanding_version: UnderstandingVersionNumber
+    statement: str
+    state: SupportState
+    evidence: tuple[EvidenceRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_non_empty("HistoricalConclusion.statement", self.statement)
+        if self.state is SupportState.CURRENT:
+            raise ValueError(
+                "HistoricalConclusion.state must be non-current; a current "
+                "conclusion belongs in Answer.conclusions"
+            )
+
+
+@_dataclass(frozen=True)
 class Gap:
     """No current conclusion, with exactly one reason (FD-25)."""
 
@@ -157,7 +185,7 @@ class Gap:
     recovery: str
     question: str = ""
     changed_evidence: tuple[EvidenceRef, ...] = ()
-    historical: tuple[ConclusionRevisionRef, ...] = ()
+    historical: tuple[HistoricalConclusion, ...] = ()
     missing: tuple[str, ...] = ()
     evidence: tuple[EvidenceUnit, ...] = ()
     observations: tuple[SourceObservationId, ...] = ()

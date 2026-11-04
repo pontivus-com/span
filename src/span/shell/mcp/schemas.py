@@ -94,10 +94,12 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '"scope_paths":["<path>"],"observations":["<obs id from ask>"],'
         '"command":"<command>","scenario":"<scenario>","outcome":"PASS",'
         '"observed_at":"<ISO 8601>","observer":"<agent>"}} '
-        "run.observations takes the obs: ids ask returned for that context; to "
-        'cite a locator instead, add "evidence":[{"locator":"<path>"}] to run '
-        "and keep the same context_id. A run applies only to the surfaces in "
-        "its declared scope, so record it against the surface it verifies. "
+        "A run requires either observations or evidence, not both: "
+        "run.observations takes the obs: ids ask returned for that context, or "
+        'add "evidence":[{"locator":"<path>"}] to run and keep the same '
+        "context_id. A run applies to the surfaces within its declared scope "
+        "and is not widened by a broader question, so record it against the "
+        "surface it verifies. "
         "Do not choose a record variant; kind is a field.",
         rw.RecordRequestWire,
         m.RecordResult,
@@ -106,8 +108,12 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "reconsider",
         "Call this after editing files or when disputing a conclusion. "
         "Returns every surface that must be re-examined, why, what to "
-        "re-establish, and the context for doing so. Start from `examples` in "
-        "the input schema.",
+        "re-establish, and the context for doing so. `surfaces` is the complete "
+        "containment set: a surface with no `conclusions` is containment-only, "
+        "not a finding. Act only on conclusions whose support state is "
+        "`REASSESSMENT_REQUIRED` or `UNVERIFIABLE`; a `CURRENT` conclusion in "
+        "the set needs no work. The order is deterministic and must not be "
+        "re-sorted. Start from `examples` in the input schema.",
         m.ReconsiderRequest,
         m.ReconsiderResult,
     ),

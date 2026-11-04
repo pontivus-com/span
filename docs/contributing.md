@@ -35,6 +35,12 @@ Or with the standard-library runner:
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
+The OpenCode edit-time notice has a named delivery test:
+
+```bash
+node --test tests/plugin/test_span_hooks_notice.mjs
+```
+
 Node and npm are needed for the installer's structural-indexer
 provisioning and for the installed-MCP integration lane. The managed indexer
 version is a constant, not a lockfile entry, so

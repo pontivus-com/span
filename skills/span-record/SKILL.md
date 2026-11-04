@@ -39,11 +39,12 @@ issues its own evidence-only context from the scope and cited locators.
 ## Verification
 
 Use `kind="verification"` with a `run` carrying the command, scope, outcome,
-observed time, and the evidence it actually tested. `run.observations` takes the
+observed time, and the evidence it actually tested. A run requires
+`observations` or `evidence`; either is accepted. `run.observations` takes the
 `obs:` ids that `ask` returned for the request context; to cite a source
 instead, put its locator in `run.evidence` with the same `context_id`. The run
-applies to the surfaces in its declared scope; record it against the surface it
-verifies.
+applies to the surfaces within its declared scope; a single-file run is not
+widened to a broader service. Record it against the surface it verifies.
 
 ## Surface
 

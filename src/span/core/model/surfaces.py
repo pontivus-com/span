@@ -10,7 +10,12 @@ import enum as _enum
 from dataclasses import dataclass as _dataclass
 from dataclasses import field as _field
 
-from span.core.model.primitives import _require_non_empty
+from span.core.model.primitives import (
+    ConclusionRevisionRef,
+    UnderstandingVersionNumber,
+    _require_non_empty,
+)
+from span.core.model.support import SupportState
 
 
 class SurfaceKind(_enum.Enum):
@@ -102,12 +107,35 @@ class Surface:
 
 
 @_dataclass(frozen=True)
+class StaleConclusionRef:
+    """One non-current conclusion addressed by the surface status (L2, L9).
+
+    A count alone is not actionable. The reference names the exact conclusion
+    revision, the understanding version that holds it, and the present support
+    state. The statement stays out of the status; ``ask`` with the version
+    returns it when the agent needs the content.
+    """
+
+    ref: ConclusionRevisionRef
+    understanding_version: UnderstandingVersionNumber
+    state: SupportState
+
+    def __post_init__(self) -> None:
+        if self.state is SupportState.CURRENT:
+            raise ValueError(
+                "StaleConclusionRef.state must be non-current; a current "
+                "conclusion is counted, not referenced as stale"
+            )
+
+
+@_dataclass(frozen=True)
 class SurfaceStatus:
     """The reported distribution over one surface (L2 surface status)."""
 
     surface: SurfaceKey
     current: int = 0
     stale: int = 0
+    stale_refs: tuple[StaleConclusionRef, ...] = ()
     unassessed: int = 0
     unexamined: int = 0
     unexamined_limited: bool = False
@@ -122,3 +150,7 @@ class SurfaceStatus:
         ):
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"SurfaceStatus.{name} must be a non-negative int")
+        if len(self.stale_refs) != self.stale:
+            raise ValueError(
+                "SurfaceStatus.stale_refs must name every and only stale conclusion"
+            )

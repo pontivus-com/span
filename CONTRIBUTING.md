@@ -16,10 +16,15 @@ pytest
 ```
 
 The installed-MCP acceptance lane also needs `uv`, Node, and npm. Before a pull
-request, run `ruff check .` and `black --check .` (or `black .`).
+request, run `ruff check .`, `black --check .` (or `black .`), and the named
+OpenCode delivery test:
+
+```bash
+node --test tests/plugin/test_span_hooks_notice.mjs
+```
 
 
-For the 0.9.0 beta, also run `python scripts/typecheck.py`: the configured
+For the current beta, also run `python scripts/typecheck.py`: the configured
 mypy run and recorded baseline must both have zero errors. The pinned
 structural indexer is required for its integration lane; an indexer-version
 skip is deferred verification, not a full pass. Installed-process checks do

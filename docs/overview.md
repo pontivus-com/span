@@ -26,10 +26,13 @@ MCP request → strict ingress → lifecycle service → typed ports and pure ru
             → atomic store operation when requested → canonical result → MCP
 ```
 
-`ask` returns current content with evidence, a gap with inspectable evidence and
-an optional continuation, or the surface document view. With no question, `ask`
-returns the document view; that is the normal reuse path. An exact question is a
-targeted query; a paraphrase returns `no_match` with a recovery to the view.
+`ask` returns current content with evidence; a gap with inspectable evidence,
+the prior statement as historical content, and an optional continuation; or the
+surface document view. The surface status names stale conclusions as
+`stale_refs`; historical content and stale references are never current-answer
+content. With no question, `ask` returns the document view; that is the normal
+reuse path. An exact question is a targeted query; a paraphrase returns
+`no_match` with a recovery to the view.
 `record` accepts supported understanding, a declared service/domain boundary, or
 an independent verification run. `reconsider` maps a changed scope to every
 surface that must be re-examined, with per-conclusion support state. Exact

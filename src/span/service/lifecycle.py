@@ -339,9 +339,22 @@ class LifecycleService:
     def _record_verification_request(
         self, wire: _rw.RecordRequestWire
     ) -> m.RecordResult:
+        return self.qualify_verification(self._store_verification(wire))
+
+    def _store_verification(self, wire: _rw.RecordRequestWire) -> m.RecordReceipt:
+        """The one verification write path for wire and typed submissions.
+
+        Evidence-only and observation-only runs are both accepted: cited
+        evidence is admitted first, then the resulting observation ids travel
+        through the same command and admission checks. The two submissions
+        never take a divergent route.
+        """
         original = wire
         wire = self._resolve_record_request(wire)
-        if wire.run is not None and wire.run.evidence:
+        run = wire.run
+        if run is None:
+            raise RecordingValidationError("a verification record requires run")
+        if run.evidence:
             admitted = [
                 self._admit_source(
                     wire.repository_id,
@@ -355,12 +368,12 @@ class LifecycleService:
                         for value in item.ranges
                     ),
                 )
-                for item in wire.run.evidence
+                for item in run.evidence
             ]
             run = _dataclasses.replace(
-                wire.run,
+                run,
                 observations=tuple(
-                    [*wire.run.observations, *(item.value for item in admitted)]
+                    [*run.observations, *(item.value for item in admitted)]
                 ),
             )
             wire = _dataclasses.replace(wire, run=run)
@@ -369,15 +382,13 @@ class LifecycleService:
             wire.identity.repository_id, wire.identity.request_id, digest
         )
         if replay is not None:
-            return self.qualify_verification(replay)
+            return replay
         command = _rw.record_command(wire, self._resolver(wire.identity))
         if not isinstance(command, m.RecordVerificationCommand):
             raise RecordingValidationError("verification record produced no run")
         self._require_admitted_verification(command)
         self._support.assert_observations(command.run.observations)
-        return self.qualify_verification(
-            self._store.record_verification(command, content_digest=digest)
-        )
+        return self._store.record_verification(command, content_digest=digest)
 
     def create(self, wire: _rw.RecordCreateWire) -> m.RecordReceipt:
         digest = _rw.wire_content_digest(wire)
@@ -447,20 +458,16 @@ class LifecycleService:
         return self._store.record_challenge(command, content_digest=digest)
 
     def verification(self, wire: _rw.RecordVerificationWire) -> m.RecordReceipt:
-        digest = _rw.wire_content_digest(wire)
-        replay = self._replay(
-            wire.identity.repository_id, wire.identity.request_id, digest
-        )
-        if replay is not None:
-            return replay
-        if wire.identity.context_id is None:
-            raise RecordingValidationError(
-                "a verification run cites admitted observations; supply context_id"
+        """Record one verification run through the one canonical write path."""
+        return self._store_verification(
+            _rw.RecordRequestWire(
+                repository_id=wire.identity.repository_id,
+                request_id=wire.identity.request_id,
+                context_id=wire.identity.context_id,
+                kind=m.RecordKind.VERIFICATION,
+                run=wire.run,
             )
-        command = _rw.verification_command(wire)
-        self._require_admitted_verification(command)
-        self._support.assert_observations(command.run.observations)
-        return self._store.record_verification(command, content_digest=digest)
+        )
 
     def receipt(self, identity: m.RecordingIdentity) -> m.RecordReceipt | None:
         """Return the retained receipt for one caller-known request identity."""

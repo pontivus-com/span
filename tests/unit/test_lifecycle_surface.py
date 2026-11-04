@@ -53,6 +53,21 @@ class ToolListTest(unittest.TestCase):
         for name, schema in TOOL_OUTPUT_SCHEMAS.items():
             self.assertIsInstance(json.dumps(schema), str, name)
 
+    def test_reconsider_description_states_the_filter_rule(self):
+        description = TOOL_SCHEMAS["reconsider"]["description"]
+        self.assertIn("complete containment set", description)
+        self.assertIn("containment-only", description)
+        self.assertIn("REASSESSMENT_REQUIRED", description)
+        self.assertIn("UNVERIFIABLE", description)
+        self.assertIn("must not be re-sorted", description)
+
+    def test_ask_output_schema_carries_historical_content_and_stale_refs(self):
+        ask = json.dumps(TOOL_OUTPUT_SCHEMAS["ask"])
+        self.assertIn("HistoricalConclusion", ask)
+        self.assertIn("understanding_version", ask)
+        self.assertIn("StaleConclusionRef", ask)
+        self.assertIn("stale_refs", ask)
+
     def test_record_exposes_the_closed_result_union(self):
         text = json.dumps(TOOL_OUTPUT_SCHEMAS["record"])
         for variant in (

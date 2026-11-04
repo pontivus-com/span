@@ -169,6 +169,16 @@ status, never as answer content. A supported conclusion is never withheld becaus
 another matched conclusion is stale: that would discard usable understanding
 (A9) and force re-derivation (F8). See §13. *(F2, L2)*
 
+The historical view is assembled at read time from the stored revisions. Each
+`Gap.historical` entry carries the exact revision, the understanding version
+that holds it, the statement, the evidence **references**, and the present
+non-current support state. It is never a stored second copy, never a
+compatibility shape, and never mixed into `conclusions`. The surface status
+names the same set through `stale_refs`: exact revision, understanding version,
+and present state, alongside the count. Descendant statuses keep their own
+references. Neither view auto-withdraws or rewrites history; recovery is an
+explicit `record` action. *(FD-20, FD-21, FD-23, FD-35, FD-36)*
+
 **FD-24 — Partial answers are usable.**
 An `Answer` may therefore contain current conclusions while the surface status
 reports stale and unassessed items, and while recorded gaps are returned. The
@@ -372,8 +382,8 @@ it. The continuation contract is `lifecycle-contract` §4.1. A response is
 complete or explicitly truncated. *(A8)*
 
 **FD-56 — Truncation never substitutes stale content.**
-A budget limit never promotes historical conclusions into answer content and
-never omits the fact that truncation occurred. *(F2, A7)*
+A budget limit never promotes historical content into answer content and never
+omits the fact that truncation occurred. *(F2, A7)*
 
 **FD-57 — A result too small to be safe is refused.**
 If the budget cannot carry the result kind, the surface identity, and the fact of

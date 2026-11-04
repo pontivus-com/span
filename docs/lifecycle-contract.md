@@ -36,7 +36,7 @@ direction of derivation are defined in the [requirements pyramid model](requirem
 | **Surface status** | The distribution over a surface's own conclusions and its boundary: current, stale, unassessed, and unexamined, with descendant status reported separately. |
 | **Gap** | The absence of usable understanding, with its cause and the means to resolve it. |
 | **Challenge** | An explicit dispute against a conclusion revision. |
-| **Verification** | An independent run recorded against observations actually tested. |
+| **Verification** | An independent run recorded against the observations or evidence actually tested. |
 
 An understanding may be unsupported. An **answer never is** — that asymmetry is
 the point of the whole system.
@@ -160,19 +160,27 @@ internal/admin retrieval, not an agent operation.
 | Result | Contains | Guarantee |
 | --- | --- | --- |
 | `Answer` | `ConclusionView`s (ref, statement, nature, scope, support, evidence), **surface status**, recorded gaps, applicable `VerificationView`s (run plus qualification), context | every listed conclusion is `CURRENT`; stale content is referenced, never served as the answer |
-| `Gap` | reason (`invalidated` / `unverifiable` / `unassessed` / `no_match`), changed evidence, historical conclusions, missing items, admitted evidence, a context when the gap is question-bound, recovery, optional continuation | never a dead end; the recovery names the next action; omitted evidence is recoverable |
+| `Gap` | reason (`invalidated` / `unverifiable` / `unassessed` / `no_match`), changed evidence, historical conclusions with their statement, evidence references, and present non-current state, missing items, admitted evidence, a context when the gap is question-bound, recovery, optional continuation | never a dead end; the recovery names the next action; omitted evidence is recoverable |
 | `AmbiguousSurface` | exact candidate identities and the missing decision | no arbitrary scope chosen |
 | `RetrievedUnderstanding` | one exact snapshot, its conclusions, live support, challenges | historical, never current-answer content |
 | `RetrievedReceipt` | one retained receipt and its context when present | historical, never current-answer content |
 | `EvidencePage` | omitted evidence units and an optional further continuation | always advances |
 | `Unavailable` | the failure and its recovery | never an empty success |
 
+A `Gap`'s `historical` list is historical **content**, not a pointer: each entry
+carries the exact conclusion revision, the understanding version that holds it,
+the statement, the evidence references it cites, and the present non-current
+state that made it historical. It stays structurally separate from
+`conclusions`; historical content never becomes current answer content. The list
+is bounded with the rest of the response, and a truncated list names what was
+omitted and the snapshot retrieval path (FD-54–FD-57). *(L2, L3)*
+
 **Surface status** is a distribution, not a verdict:
 
 | Component | Meaning |
 | --- | --- |
 | `current` | conclusions in this surface that are supported by present code |
-| `stale` | conclusions whose support no longer holds, directly or through a premise; returned as references and counted, never as answer content |
+| `stale` | conclusions whose support no longer holds, directly or through a premise; counted and returned as `stale_refs`, never as answer content |
 | `unassessed` | recorded gaps or declared questions with no supported conclusion |
 | `unexamined` | boundary members with no understanding at all; computed from the boundary, reported, never required (A9) |
 | `descendants` | status of contained surfaces, summarised separately |
@@ -180,6 +188,16 @@ internal/admin retrieval, not an agent operation.
 A parent surface's own conclusions are its own; descendant status is reported
 alongside and never merged into the parent answer. That is what makes a domain
 honestly reportable while it still holds both current and stale understanding.
+
+`stale_refs` names each stale conclusion by its exact revision identity, the
+understanding version that holds it, and its present non-current support state
+(`REASSESSMENT_REQUIRED` or `UNVERIFIABLE`). The count and the references
+describe the same set: no stale conclusion is counted without a reference, and
+no reference is returned for a current conclusion. Descendant statuses carry
+their own references; they are never merged into the parent. A reference is not
+answer content: to read the statement, `ask` with
+`UnderstandingSnapshotSelector{understanding_id, version}`. The status never
+auto-withdraws or auto-corrects a conclusion (FD-23, FD-35, FD-36). *(L2, L9)*
 
 **How it helps.** One call replaces re-reading the code, tells the agent what of
 it is current, and names what is not.
@@ -266,10 +284,12 @@ inspected and Span derives the observation, or it supplies a discovery
 observation from a preceding answer. There is no separate discovery admission
 call.
 
-**Verification scope.** A recorded run applies to the surfaces in its declared
-scope. It is returned in an answer for those surfaces and is not widened by a
-broader question. Record the run against the surface it actually verifies.
-*(A8, F4)*
+**Verification scope.** A recorded run applies to the surfaces **within** its
+declared scope: a run scope path covers a surface path when it is equal or an
+ancestor. It is returned in an answer for those surfaces and is not widened by
+a broader question; a single-file run does not apply to a broader service.
+Record the run against the surface it actually verifies. A run requires
+observations or evidence; either is accepted. *(A8, F4)*
 
 There is no third evidence mode and no separate evidence-admission call. This is
 F7's test: recording requires nothing the agent does not already hold.

@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 from span.shell.install.hosts import (
+    remove_claude_hooks,
     remove_codex_hooks,
     remove_codex_registration,
     remove_opencode_plugin,
@@ -49,7 +50,10 @@ def uninstall(data_dir, targets, opencode_config, dry_run=False):
         ),
         "opencode_plugin": (
             remove_opencode_plugin(
-                config, Path(data_dir).parent / "opencode-plugin", dry_run=dry_run
+                config,
+                Path(data_dir).parent / "opencode-plugin",
+                dry_run=dry_run,
+                span_root=Path(data_dir).parent,
             )
             if config is not None
             else {"status": "absent", "reason": "no opencode config known"}
@@ -57,6 +61,7 @@ def uninstall(data_dir, targets, opencode_config, dry_run=False):
         "codex": remove_codex_registration(dry_run=dry_run),
         "hooks": {
             "codex": remove_codex_hooks(dry_run=dry_run),
+            "claude": remove_claude_hooks(dry_run=dry_run),
         },
         "skills": remove_deployed_skills(dry_run=dry_run),
         "agents": {

@@ -35,7 +35,8 @@ question and ask for the surface document view. Never fetch a context id.
   when a path matches more than one granularity. A paraphrased question returns
   `no_match`; its recovery points to the document view. `Answer` carries
   current conclusions, support, evidence, and applicable verification runs.
-  `Gap` carries the evidence you need to record.
+  `Gap` carries the prior statement as historical content and the evidence you
+  need to record.
 - **After establishing:** `record` one `kind`. Use `kind="understanding"` to
   create or update, `kind="verification"` to record a test/run, and
   `kind="surface"` to declare a service/domain boundary. A create is flat —
@@ -43,7 +44,9 @@ question and ask for the surface document view. Never fetch a context id.
   and `action` only for a surface declaration.
 - **After editing:** `reconsider` the paths you just changed. It returns every
   surface to re-examine, why it was considered, per-conclusion support state,
-  and the context for re-establishing what actually changed.
+  and the context for re-establishing what actually changed. A surface with no
+  `conclusions` is containment-only; act only on conclusions whose state is
+  `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`, and keep the returned order.
 
 ## Boundaries
 

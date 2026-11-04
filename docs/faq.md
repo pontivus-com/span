@@ -85,3 +85,9 @@ The beta does not claim a universal saving or a completed comparative ACCEPT.
 In an external data directory. The active store is schema 11; older supported
 stores use the explicit offline archive/export/stage/activate transition.
 [Install](install.md) documents verification, rollback, removal, and retention.
+
+A bare package upgrade does not migrate the host. Upgrading from 0.9.0/0.9.1
+requires one `span-install --repo <target> --opencode-plugin-scope
+global|local|none` run and a host restart. The receipt records the effective
+scope and any retired target copies; `.opencode/span-retired/` is
+operator-owned.

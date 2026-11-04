@@ -15,9 +15,12 @@ path you are looking at) or an exact `surface={kind, locator}`. For example:
 “How does this request reach persistence?” with the relevant service surface.
 
 Span returns an `Answer` with current conclusions, their support and evidence,
-and surface status; a `Gap` with inspectable evidence and a context; an
-`AmbiguousSurface` when more than one granularity matches; or `Unavailable` with
-its recovery. Omitting the question returns the surface document view. That view
+and surface status; a `Gap` with inspectable evidence, the prior statement as
+historical content, and a context; an `AmbiguousSurface` when more than one
+granularity matches; or `Unavailable` with its recovery. The surface status
+carries `stale_refs`: each names the exact stale conclusion revision, the
+understanding version, and its present non-current state. Omitting the question
+returns the surface document view. That view
 is the normal reuse path: a fresh agent that does not know the exact recorded
 question reads it and selects the conclusion it needs. An exact question is a
 targeted query; a paraphrase returns `no_match` with a recovery that points back
@@ -68,9 +71,13 @@ gaps remain relevant even when source bytes match.
 
 Use your normal tools to edit and test. Call `reconsider` with the paths you
 just edited. It returns every affected surface, the reasons each was considered,
-and each conclusion's present support. Changed source bytes, authority,
-premises, or discovery membership can produce actual loss; unrelated changes
-leave conclusions current when they do not affect a declared dependency.
+and each conclusion's present support. `surfaces` is the complete containment
+set: a surface with no `conclusions` is containment-only. Act only on
+conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`; a
+`CURRENT` conclusion in the set needs no work. Keep the returned order.
+Changed source bytes, authority, premises, or discovery membership can produce
+actual loss; unrelated changes leave conclusions current when they do not
+affect a declared dependency.
 
 Investigate the changed support, then record the matching update. Updates use an
 expected version and create a new immutable snapshot; omission is not deletion.
@@ -85,17 +92,23 @@ settle it.
 ## Verification and recovery
 
 Record an actual external test or review with `record(kind="verification")`,
-including its tested evidence, outcome, and limitations. A run applies to the
-surfaces in its declared scope; record it against the surface it verifies. `ask`
-returns the applicable verification runs and their present qualification; it
-does not rerun the test or turn a recorded failure into a pass.
+including its tested evidence, outcome, and limitations. A run needs
+`observations` or `evidence`; either is accepted. It applies to the surfaces
+**within** its declared scope (a scope path covers a surface path when it is
+equal or an ancestor); record it against the surface it verifies. `ask` returns
+the applicable verification runs and their present qualification; it does not
+rerun the test or turn a recorded failure into a pass.
 
 A gap whose evidence was omitted carries a continuation. Call `ask` with only
 the repository and that continuation until the evidence is complete. Never
-fetch or construct a context id. After a lost recording response, resend the
-exact identity and content. After receipt retention expires, inspect stored
-history before deciding what new work to record. Do not assume that a missing
-receipt means the original write never happened.
+fetch or construct a context id. A `stale_refs` entry is a reference, not
+content: read the prior statement with
+`ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`, then
+settle it with `record(kind="understanding", understanding_id=..., expected_version=...,
+actions={withdraw|correct|replace: ...})`. After a lost recording response,
+resend the exact identity and content. After receipt retention expires, inspect
+stored history before deciding what new work to record. Do not assume that a
+missing receipt means the original write never happened.
 
 Hooks are optional notices. Retrieval and recording check support even when
 hooks are disabled. See [lifecycle](lifecycle.md), [freshness](freshness.md), and
