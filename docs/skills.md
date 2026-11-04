@@ -23,9 +23,9 @@ support explicit. `reconsider` is described as an after-edit operation;
 
 Canonical skills and the snippet are copied into package assets by the build
 owner, `scripts/sync_assets.py` through `setup.py`. Generated copies are never
-edited manually. The installer deploys the current four skills, removes the
-retired `span`, `span-change-context`, and `span-document` directories on
-upgrade, and preserves foreign configuration. See [install](install.md).
+edited manually. The installer deploys the canonical current skill set and
+removes only stale skill directories with valid Span ownership metadata;
+foreign or unowned directories are preserved. See [install](install.md).
 
 Restart/reconnect hosts after upgrading and check that active skills and managed
 rules describe the same surface as the installed binary. A stale host-local

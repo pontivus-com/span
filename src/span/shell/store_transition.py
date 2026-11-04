@@ -429,7 +429,7 @@ def _file_bytes(path: _pathlib.Path) -> int:
 
 
 def _empty_target_bytes() -> int:
-    """Measured size of an empty schema-10 store (not an invented floor)."""
+    """Measured size of an empty schema-11 store (not an invented floor)."""
     connection = _sqlite3.connect(":memory:")
     try:
         from span.shell.sqlite_store.lifecycle import _DDL
@@ -437,7 +437,8 @@ def _empty_target_bytes() -> int:
         for statement in _DDL:
             connection.execute(statement)
         connection.execute(
-            "INSERT INTO meta(key, value) VALUES('schema_version', '10')"
+            "INSERT INTO meta(key, value) VALUES('schema_version', ?)",
+            (str(TARGET_SCHEMA),),
         )
         connection.commit()
         page_count = connection.execute("PRAGMA page_count").fetchone()[0]
@@ -482,7 +483,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
     file_bytes = _file_bytes(source)
     empty_target = _empty_target_bytes()
     # Archive copy + lossless export (raw rows cannot exceed the logical
-    # database bytes) + one empty schema-10 store.
+    # database bytes) + one empty schema-11 store.
     required = file_bytes + logical + empty_target
     limitations: list[str] = []
     if version is None:
@@ -1251,7 +1252,7 @@ def _check_space(config: TransitionConfig, inspection: LegacyInspection) -> None
         raise TransitionError(
             "insufficient free space for a lossless transition: "
             f"{free} bytes free, {inspection.required_free_bytes} required "
-            "(archive copy + raw export + staged schema-10 store)"
+            "(archive copy + raw export + staged schema-11 store)"
         )
 
 
@@ -1435,7 +1436,7 @@ def _activate_step(
         TransitionState.VERIFIED,
         "activate",
         clock=config.clock,
-        detail="schema-10 store is active",
+        detail=f"schema-{TARGET_SCHEMA} store is active",
     )
     _write_manifest(paths, manifest)
     return manifest, effects, ()
@@ -1454,7 +1455,9 @@ def verify(config: TransitionConfig) -> TransitionReport:
                 state=TransitionState.ALREADY_CURRENT,
                 repository_id=config.repository_id,
                 changed=False,
-                effects=("active store is schema 10 with no transition manifest",),
+                effects=(
+                    f"active store is schema {TARGET_SCHEMA} with no transition manifest",
+                ),
                 inspection=inspection,
                 manifest=None,
                 limitations=inspection.limitations,
@@ -1466,10 +1469,10 @@ def verify(config: TransitionConfig) -> TransitionReport:
         raise TransitionError("transition manifest belongs to another repository")
     if inspection.schema_version != TARGET_SCHEMA:
         raise TransitionError(
-            "active store is not schema 10; the transition is not activated"
+            f"active store is not schema {TARGET_SCHEMA}; the transition is not activated"
         )
     effects = [
-        "active store opens as schema 10",
+        f"active store opens as schema {TARGET_SCHEMA}",
         f"archive integrity: {inspection.integrity}",
     ]
     reconciled = _reconcile_export(paths)

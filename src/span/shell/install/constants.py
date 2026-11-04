@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-INSTALL_VERSION = 1
+INSTALL_VERSION = 2
 
 
 STRUCTURAL_INDEXER_PACKAGE = "@nanonets/graft"
@@ -37,7 +37,6 @@ PLATFORM_PATHS = {
 
 #: Skills replaced by the three-moment surface. The installer removes these
 #: on upgrade; it never merges or keeps a second lifecycle grammar.
-RETIRED_SKILLS = ("span", "span-change-context", "span-document")
 
 
 AGENTS_START = "<!-- span:start -->"

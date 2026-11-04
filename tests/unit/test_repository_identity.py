@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from span.core import model as m
 from span.shell.context import provision_repository
@@ -86,12 +88,17 @@ class BindingTest(unittest.TestCase):
             root.mkdir()
             (root / "README.md").write_text("# fixture\n", encoding="utf-8")
             data = Path(tmp) / "data"
-            context, result = provision_repository(
-                data,
-                m.InitializeRepositoryRequest(
-                    repository_locator=str(root), authority_seeds=()
-                ),
-            )
+
+            graft_binary = shutil.which("graft")
+            if graft_binary is None:
+                self.skipTest("structural indexer is not available")
+            with mock.patch.dict("os.environ", {"SPAN_GRAFT_BIN": graft_binary}):
+                context, result = provision_repository(
+                    data,
+                    m.InitializeRepositoryRequest(
+                        repository_locator=str(root), authority_seeds=()
+                    ),
+                )
             try:
                 self.assertEqual(result.canonical_root, str(root.resolve()))
                 self.assertEqual(result.repository_id, "repo")

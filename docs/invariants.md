@@ -34,7 +34,7 @@ semantic interpretation or every host. Execution receipts are separate.
 | I-21 | Reference-safe reaping | Review | Reaping removes operational state only; semantic history stays reference-safe |
 | I-22 | Missing authority remains missing | Test | `test_declared_authority_resolution`; `SupportServiceTest` (unverifiable stays unverifiable) |
 | I-23 | Skill non-authority | Test | `SkillNonAuthorityTest` (no second authorities, scores, or lifecycle actions) |
-| I-24 | Skill/API consistency | Test | `test_only_canonical_operations` (canonical operations only, across all skills); `test_json_examples_decode_through_the_mcp_wire` (each skill example decodes as its tool); `test_record_description_carries_every_call_template`; `test_contract_action_vocabulary_matches_the_wire`; `test_refusals_name_only_registered_operations` |
+| I-24 | Skill/API consistency | Test | `test_only_canonical_operations` (canonical operations only, across all skills); `test_json_examples_decode_through_the_mcp_wire` (each skill example decodes as its tool); `test_record_description_carries_every_call_template`; `test_contract_action_vocabulary_matches_the_wire` |
 | I-25 | Skill optionality | Test | `test_implementation_ignores_skills` (no implementation file depends on skill content) |
 | I-26 | Lifecycle placement | Test | `AnswerServiceTest`; `test_unknown_surface_is_unassessed` |
 | I-27 | Offline bootstrap isolation | Test | `InitializationContractTest`; `test_cs07_uninitialized_context_creates_no_store` |

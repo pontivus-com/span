@@ -17,21 +17,26 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-INSTALL = ROOT / "src" / "span" / "shell" / "install.py"
-PACKAGE = "@nanonets/graft"
+CONSTANTS = ROOT / "src" / "span" / "shell" / "install" / "constants.py"
 
 
-def pinned_version() -> str:
-    text = INSTALL.read_text(encoding="utf-8")
-    match = re.search(r'STRUCTURAL_INDEXER_VERSION = "([^"]+)"', text)
-    if match is None:
-        raise SystemExit(f"cannot read the indexer pin from {INSTALL}")
-    return match.group(1)
+def pinned_identity() -> tuple[str, str]:
+    try:
+        text = CONSTANTS.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(f"cannot read the indexer constants from {CONSTANTS}: {exc}")
+    values: dict[str, str] = {}
+    for name in ("STRUCTURAL_INDEXER_PACKAGE", "STRUCTURAL_INDEXER_VERSION"):
+        match = re.search(rf"^{name} = \"([^\"]+)\"$", text, re.MULTILINE)
+        if match is None:
+            raise SystemExit(f"cannot read {name} from {CONSTANTS}")
+        values[name] = match.group(1)
+    return values["STRUCTURAL_INDEXER_PACKAGE"], values["STRUCTURAL_INDEXER_VERSION"]
 
 
-def published_version() -> str:
+def published_version(package: str) -> str:
     completed = subprocess.run(
-        ["npm", "view", PACKAGE, "version", "--json"],
+        ["npm", "view", package, "version", "--json"],
         capture_output=True,
         text=True,
         timeout=60,
@@ -42,15 +47,16 @@ def published_version() -> str:
 
 
 def main() -> int:
-    pinned = pinned_version()
-    published = published_version()
+    package, pinned = pinned_identity()
+    published = published_version(package)
     if pinned == published:
-        print(f"{PACKAGE} pin is current at {pinned}")
+        print(f"{package} pin is current at {pinned}")
         return 0
     print(
-        f"{PACKAGE} pin is {pinned}, npm publishes {published}.\n"
+        f"{package} pin is {pinned}, npm publishes {published}.\n"
         "Review the upstream release, then update STRUCTURAL_INDEXER_VERSION in\n"
-        "src/span/shell/install.py and src/span/shell/structural/graft.py with the\n"
+        "src/span/shell/install/constants.py and\n"
+        "src/span/shell/structural/graft.py with the\n"
         "matching test fixture update."
     )
     return 1

@@ -2,11 +2,9 @@
 
 Status: **HISTORICAL/VOID for the current `ask`/`record`/`reconsider` surface.**
 
-This directory holds test-only diagnostics for the retired twenty-tool
-host-contract probe. `probe_server.py` is not imported or run by the test
-suite; it is kept only as a record of the grammar it exercised.
-`schema_lab_server.py` remains a generic schema-construct diagnostic. Neither
-file certifies live host delivery for the current surface.
+This directory holds test-only schema diagnostics for host delivery.
+`schema_lab_server.py` is a generic schema-construction diagnostic; it does not
+certify live host delivery for the current surface.
 
 The delivered three-tool journey, exact surface selection, declared surfaces,
 continuation, replay/restart, and challenge settlement are covered by:

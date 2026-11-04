@@ -21,28 +21,6 @@ from span.shell import install
 
 CANONICAL_OPS = {"ask", "record", "reconsider"}
 
-RETIRED_OPS = (
-    "initialize_repository",
-    "start_context",
-    "understand_question",
-    "understand_retrieve",
-    "reassess",
-    "verification_support",
-    "evidence_start",
-    "evidence_extend",
-    "record_create",
-    "record_add",
-    "record_confirm",
-    "record_correct",
-    "record_replace",
-    "record_withdraw",
-    "record_challenge",
-    "record_update",
-    "record_verification",
-    "locate",
-    "neighbors",
-)
-
 FORBIDDEN_PHRASES = (
     "source of truth",
     "confidence",
@@ -81,8 +59,6 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertTrue(mentioned)
         self.assertEqual(set(re.findall(r"span_[a-z_]+", text)), set())
         self.assertNotIn("semantic_", text)
-        for retired in RETIRED_OPS:
-            self.assertNotRegex(text, rf"`{retired}`", retired)
 
     def test_no_rule_flavored_vocabulary(self):
         lowered = _text(SNIPPET).lower()

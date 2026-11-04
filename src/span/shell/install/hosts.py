@@ -26,9 +26,38 @@ _SPAN_PLUGIN_ID_PATTERN = re.compile(
 #: Explicit OpenCode plugin scopes. The installer never infers one from disk.
 OPENCODE_PLUGIN_SCOPES = ("global", "local", "none")
 
-#: Legacy target copies are relocated here, never deleted. The directory is
-#: operator-owned; Span has no TTL, reaper, or restore path for it.
-SPAN_RETIRED_DIRNAME = "span-retired"
+
+def opencode_global_config_path() -> Path:
+    """Return the fixed global OpenCode config used by plugin wiring."""
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return config_home / "opencode" / "opencode.json"
+
+
+def _absolute_path(value: str | Path) -> str:
+    """Return a stable, non-resolving absolute path for a receipt."""
+    return os.path.abspath(os.path.expanduser(str(value)))
+
+
+def select_opencode_mcp_config(
+    explicit: str | Path | None,
+    scope: str | None,
+    global_config: str | Path | None = None,
+    receipt_config: str | Path | None = None,
+) -> str | None:
+    """Select and stabilize the MCP config without scanning the machine.
+
+    An existing install owns the configuration recorded by its receipt. An
+    explicit path is the only supported way to relocate that ownership.
+    """
+    if explicit is not None:
+        return _absolute_path(explicit)
+    if receipt_config is not None:
+        return _absolute_path(receipt_config)
+    if Path("opencode.json").exists():
+        return _absolute_path("opencode.json")
+    if scope == "global":
+        return _absolute_path(global_config or opencode_global_config_path())
+    return None
 
 
 def _same_path(left, right) -> bool:
@@ -48,7 +77,7 @@ def _is_under(path, root) -> bool:
 
 
 def _sha256_file(path) -> str:
-    """Content hash of one plugin file, for the migration record."""
+    """Content hash of one plugin file for ownership comparison."""
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
         for chunk in iter(lambda: handle.read(65536), b""):
@@ -72,57 +101,40 @@ def _is_span_managed_entry(item, canonical_dir, span_root) -> bool:
     return _span_plugin_file(item) is not None
 
 
-def _unique_destination(directory, name) -> Path:
-    """A deterministic non-colliding destination inside ``directory``."""
-    base = Path(directory)
-    candidate = base / name
-    if not candidate.exists():
-        return candidate
-    index = 1
-    while True:
-        candidate = base / f"{name}.{index}"
-        if not candidate.exists():
-            return candidate
-        index += 1
-
-
-def _scope_from_mapping(mapping) -> str | None:
-    """One recorded plugin scope from a receipt section, if unambiguous.
-
-    The live receipt stores the plugin result under ``host_registration.hooks``;
-    an older or synthetic shape may place it directly under the section. Both
-    are read, and the value must still be a supported scope.
-    """
-    if not isinstance(mapping, dict):
-        return None
-    candidates = [mapping.get("opencode_plugin")]
-    hooks = mapping.get("hooks")
-    if isinstance(hooks, dict):
-        candidates.append(hooks.get("opencode_plugin"))
-    for plugin in candidates:
-        if not isinstance(plugin, dict):
-            continue
-        scope = plugin.get("scope")
-        if scope in OPENCODE_PLUGIN_SCOPES:
-            return scope
-    return None
-
-
 def receipt_opencode_scope(receipt) -> str | None:
-    """The single recorded OpenCode plugin scope, or None when absent/ambiguous."""
+    """Read the current receipt's sole OpenCode plugin scope."""
     if not isinstance(receipt, dict):
         return None
-    found = {
-        scope
-        for scope in (
-            _scope_from_mapping(receipt.get("host_registration")),
-            _scope_from_mapping(receipt.get("host_integration_migration")),
-        )
-        if scope is not None
-    }
-    if len(found) == 1:
-        return found.pop()
-    return None
+    registration = receipt.get("host_registration")
+    hooks = registration.get("hooks") if isinstance(registration, dict) else None
+    plugin = hooks.get("opencode_plugin") if isinstance(hooks, dict) else None
+    scope = plugin.get("scope") if isinstance(plugin, dict) else None
+    return scope if scope in OPENCODE_PLUGIN_SCOPES else None
+
+
+def receipt_opencode_mcp_config(receipt: object) -> str | None:
+    """Return the stable config recorded for Span's MCP registration, if any."""
+    if not isinstance(receipt, dict):
+        return None
+    registration = receipt.get("host_registration")
+    opencode = registration.get("opencode") if isinstance(registration, dict) else None
+    config = opencode.get("config") if isinstance(opencode, dict) else None
+    if config is None or not os.path.isabs(config):
+        return None
+    return config
+
+
+def receipt_opencode_plugin_config(receipt: object) -> str | None:
+    """Return the config recorded for Span's lifecycle plugin, if any."""
+    if not isinstance(receipt, dict):
+        return None
+    registration = receipt.get("host_registration")
+    hooks = registration.get("hooks") if isinstance(registration, dict) else None
+    plugin = hooks.get("opencode_plugin") if isinstance(hooks, dict) else None
+    config = plugin.get("config") if isinstance(plugin, dict) else None
+    if not isinstance(config, str) or not config or not os.path.isabs(config):
+        return None
+    return config
 
 
 def resolve_opencode_scope(flag, receipt) -> tuple[str, str | None]:
@@ -176,40 +188,71 @@ def merge_opencode_config(config_path, span_cmd, dry_run=False):
 
     The only supported contract is ``mcp.servers.span`` with
     ``type: local``, the installed command, ``codemode: false``, and
-    ``disabled`` absent or false. An unsupported flat ``mcp.span``
-    registration is rejected, never migrated; the operator removes it
-    and reruns. Unknown MCP entries are left untouched: Span owns only
+    ``disabled`` absent or false. Unknown MCP entries are left untouched: Span owns only
     its own registration and performs no cross-server cleanup.
     """
     print(f"+ merge opencode config: {config_path}")
     if dry_run:
         return {"status": "skipped", "reason": "dry-run"}
-    path = Path(config_path)
+    path = Path(_absolute_path(config_path))
     try:
-        config = json.loads(path.read_text())
-    except (OSError, ValueError) as exc:
+        text = path.read_text()
+    except FileNotFoundError:
+        config = {}
+    except OSError as exc:
         raise SystemExit(f"cannot read opencode config {config_path}: {exc}")
+    else:
+        try:
+            config = json.loads(text)
+        except ValueError as exc:
+            raise SystemExit(f"cannot read opencode config {config_path}: {exc}")
     mcp = config.setdefault("mcp", {})
     servers = mcp.get("servers")
     if not isinstance(servers, dict):
         servers = {}
-    if isinstance(mcp.get("span"), dict):
-        raise SystemExit(
-            f"unsupported flat mcp.span registration in {config_path}; "
-            "remove it and register Span under mcp.servers.span"
-        )
     servers["span"] = {
         "type": "local",
         "command": list(span_cmd),
         "codemode": False,
     }
     mcp["servers"] = servers
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"opencode config updated: {config_path}")
     return {
         "status": "merged",
-        "config": str(config_path),
+        "config": str(path),
     }
+
+
+def validate_opencode_registration_removal(config_path) -> dict[str, object]:
+    """Validate that an old MCP config can be safely removed before a move."""
+    path = Path(_absolute_path(config_path))
+    if not path.is_file():
+        return {"status": "absent", "config": str(path)}
+    try:
+        config = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"cannot read opencode config {config_path}: {exc}")
+    if not isinstance(config, dict):
+        raise SystemExit(
+            f"cannot read opencode config {config_path}: " "top level is not an object"
+        )
+    mcp = config.get("mcp")
+    servers = mcp.get("servers") if isinstance(mcp, dict) else None
+    if not isinstance(servers, dict) or "span" not in servers:
+        return {"status": "absent", "config": str(path)}
+    if not (path.stat().st_mode & 0o222) or not os.access(path, os.W_OK):
+        raise SystemExit(
+            f"cannot modify opencode config {config_path}: file is not writable"
+        )
+    parent = path.parent
+    if not (parent.stat().st_mode & 0o222) or not os.access(parent, os.W_OK):
+        raise SystemExit(
+            f"cannot modify opencode config {config_path}: "
+            "parent directory is not writable"
+        )
+    return {"status": "ready", "config": str(path)}
 
 
 def deploy_opencode_plugin(
@@ -248,7 +291,7 @@ def deploy_opencode_plugin(
         encoding="utf-8",
     )
     wrapper.chmod(0o755)
-    path = Path(config_path)
+    path = Path(_absolute_path(config_path))
     config: dict[str, object] = {}
     if path.is_file():
         try:
@@ -308,68 +351,6 @@ def deploy_opencode_plugin(
     }
 
 
-def retire_stale_target_opencode_plugins(targets, dry_run=False) -> dict[str, object]:
-    """Relocate Span's own legacy per-target OpenCode plugin copies.
-
-    Versions before 0.9.0 wrote ``span-hooks.js`` into a target's
-    ``.opencode/plugins`` directory. OpenCode still auto-loads that directory,
-    so the stale copy and the installed plugin both declare ``span-hooks`` and
-    the host rejects the installed one. Only files declaring Span's plugin id
-    are moved; user-authored plugins are preserved. Nothing is deleted: the
-    legacy copy is operator-owned content moved to
-    ``<target>/.opencode/span-retired/``.
-    """
-    print("+ retire legacy opencode plugins in selected targets")
-    retired = []
-    conflicts = []
-    for target in targets:
-        target_path = Path(target)
-        plugins_dir = target_path / ".opencode" / "plugins"
-        if not plugins_dir.is_dir():
-            continue
-        for candidate in sorted(plugins_dir.iterdir()):
-            plugin_file = _span_plugin_file(candidate)
-            if plugin_file is None:
-                continue
-            destination_dir = target_path / ".opencode" / SPAN_RETIRED_DIRNAME
-            destination = _unique_destination(destination_dir, candidate.name)
-            record = {
-                "from": str(candidate),
-                "to": str(destination),
-                "sha256": _sha256_file(plugin_file),
-            }
-            print(f"+ retire stale opencode plugin: {candidate} -> {destination}")
-            if not dry_run:
-                try:
-                    destination_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(candidate), str(destination))
-                except OSError as exc:
-                    conflicts.append(
-                        {
-                            **record,
-                            "error": str(exc),
-                            "manual_action": (
-                                f"move {candidate} to {destination_dir} manually, "
-                                "then rerun span-install"
-                            ),
-                        }
-                    )
-                    continue
-            retired.append(record)
-    if conflicts:
-        status = "conflict"
-    elif retired:
-        status = "retired"
-    else:
-        status = "absent"
-    return {
-        "status": status,
-        "retired": retired,
-        "conflicts": conflicts,
-        "retired_dir": SPAN_RETIRED_DIRNAME,
-    }
-
-
 def inspect_target_opencode_plugins(
     targets,
 ) -> tuple[dict[str, list[dict[str, str]]], list[dict[str, str]]]:
@@ -407,7 +388,7 @@ def remove_opencode_plugin(config_path, plugin_dir, dry_run=False, span_root=Non
     print(f"+ remove opencode plugin: {plugin_dir}")
     if dry_run:
         return {"status": "skipped", "reason": "dry-run"}
-    path = Path(config_path)
+    path = Path(_absolute_path(config_path))
     entry = str(Path(plugin_dir))
     root = Path(plugin_dir).parent if span_root is None else Path(span_root)
     removed_entries = []
@@ -455,7 +436,7 @@ def remove_opencode_registration(config_path, dry_run=False):
     rewrites unrelated configuration.
     """
     print(f"+ remove opencode registration: {config_path}")
-    path = Path(config_path)
+    path = Path(_absolute_path(config_path))
     if dry_run:
         return {"status": "skipped", "reason": "dry-run"}
     if not path.is_file():
@@ -490,6 +471,41 @@ def register_codex(span_cmd, dry_run=False):
         print(f"codex registration failed, continuing: {exc}")
         return {"status": "failed", "error": str(exc)}
     return {"status": "registered"}
+
+
+def register_claude(span_cmd, dry_run=False) -> dict[str, object]:
+    """Register Span with Claude Code at user scope through its CLI."""
+    if shutil.which("claude") is None:
+        print("claude CLI absent; skipping claude registration.")
+        return {"status": "skipped", "reason": "claude CLI absent"}
+    if dry_run:
+        print("+ register claude (dry-run, skipped)")
+        return {"status": "skipped", "reason": "dry-run"}
+    subprocess.run(
+        ["claude", "mcp", "remove", "span", "--scope", "user"],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        _run(
+            [
+                "claude",
+                "mcp",
+                "add",
+                "--scope",
+                "user",
+                "--transport",
+                "stdio",
+                "span",
+                "--",
+            ]
+            + span_cmd,
+            dry_run=dry_run,
+        )
+    except SystemExit as exc:
+        print(f"claude registration failed, continuing: {exc}")
+        return {"status": "failed", "error": str(exc)}
+    return {"status": "registered", "scope": "user"}
 
 
 def _hook_bin(venv_dir, bin_dir):
@@ -554,6 +570,98 @@ def wire_codex_hooks(hook_bin, dry_run=False):
     return {"status": "wired", "added": added, "replaced": replaced}
 
 
+def wire_claude_hooks(hook_bin, data_dir, dry_run=False) -> dict[str, object]:
+    """Converge Span-owned advisory hooks in Claude's user settings."""
+    settings_path = Path(os.path.expanduser("~")) / ".claude" / "settings.json"
+    print(f"+ wire claude hooks: {settings_path}")
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    if not settings_path.exists():
+        print("no claude settings.json; skipping claude hook wiring.")
+        return {"status": "skipped", "reason": "no claude settings.json"}
+    try:
+        config = json.loads(settings_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise SystemExit(f"cannot read claude settings.json: {exc}") from exc
+    except ValueError as exc:
+        raise SystemExit(f"cannot parse claude settings.json: {exc}") from exc
+    if not isinstance(config, dict):
+        raise SystemExit(
+            "cannot parse claude settings.json: top level is not an object"
+        )
+    hooks = config.get("hooks")
+    if hooks is not None and not isinstance(hooks, dict):
+        raise SystemExit("cannot parse claude settings.json: hooks is not an object")
+    entries = [
+        (
+            "SessionStart",
+            "startup|resume|compact",
+            [hook_bin, "session-start", "--data-dir", str(data_dir)],
+        ),
+        (
+            "PostToolUse",
+            "Write|Edit|MultiEdit",
+            [hook_bin, "source-changed", "--data-dir", str(data_dir)],
+        ),
+        ("Stop", "", [hook_bin, "session-stop", "--data-dir", str(data_dir)]),
+    ]
+    hooks = {} if hooks is None else hooks
+    added = 0
+    replaced = 0
+    for event, matcher, command_parts in entries:
+        group = hooks.get(event)
+        if group is None:
+            group = []
+        if not isinstance(group, list):
+            raise SystemExit(
+                f"cannot parse claude settings.json: hooks.{event} is not a list"
+            )
+        command = " ".join(command_parts)
+        kept_blocks = []
+        for block in group:
+            if not isinstance(block, dict):
+                kept_blocks.append(block)
+                continue
+            block_hooks = block.get("hooks", [])
+            if not isinstance(block_hooks, list):
+                raise SystemExit(
+                    f"cannot parse claude settings.json: hooks.{event} entry is invalid"
+                )
+            kept = [
+                hook
+                for hook in block_hooks
+                if not isinstance(hook, dict)
+                or not _span_hook_command(hook.get("command"))
+            ]
+            replaced += len(block_hooks) - len(kept)
+            if kept:
+                kept_blocks.append({**block, "hooks": kept})
+        group = kept_blocks
+        group.append(
+            {
+                "matcher": matcher,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": command,
+                        "timeout": 10,
+                        "statusMessage": "Span lifecycle notice",
+                    }
+                ],
+            }
+        )
+        hooks[event] = group
+        added += 1
+    config["hooks"] = hooks
+    backup = settings_path.with_suffix(".json.bak-span")
+    if not backup.exists():
+        shutil.copy2(settings_path, backup)
+        print(f"claude settings backed up: {backup}")
+    settings_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    print(f"claude hooks updated ({added} entries).")
+    return {"status": "wired", "added": added, "replaced": replaced}
+
+
 def remove_codex_registration(dry_run=False):
     """Remove the Span entry through the Codex CLI when it is present."""
     if shutil.which("codex") is None:
@@ -565,6 +673,22 @@ def remove_codex_registration(dry_run=False):
     )
     if proc.returncode != 0:
         # An absent entry is the normal already-uninstalled case.
+        return {"status": "absent"}
+    return {"status": "removed"}
+
+
+def remove_claude_registration(dry_run=False) -> dict[str, object]:
+    """Remove only Span's user-scope Claude MCP registration."""
+    if shutil.which("claude") is None:
+        return {"status": "absent", "reason": "claude CLI absent"}
+    if dry_run:
+        return {"status": "skipped", "reason": "dry-run"}
+    proc = subprocess.run(
+        ["claude", "mcp", "remove", "span", "--scope", "user"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
         return {"status": "absent"}
     return {"status": "removed"}
 
@@ -651,18 +775,8 @@ def remove_codex_hooks(dry_run=False):
 
 
 def remove_claude_hooks(dry_run=False):
-    """Retire Span hook entries from the legacy Claude Code settings path.
-
-    Claude Code is not a supported registration target in this release.
-    Versions that did wire it left ``span-hooks`` commands in
-    ``~/.claude/settings.json``. Install and uninstall remove exactly those
-    Span-owned commands; foreign hooks and every other setting are preserved.
-    A broken Claude configuration is outside Span and is reported rather than
-    aborting the install.
-    """
-    path = Path(os.path.expanduser("~")) / ".claude" / "settings.json"
-    try:
-        return _remove_span_hooks(path, dry_run=dry_run)
-    except SystemExit as exc:
-        print(f"claude hook cleanup skipped: {exc}")
-        return {"status": "failed", "error": str(exc)}
+    """Remove only Span-owned Claude lifecycle hook entries."""
+    return _remove_span_hooks(
+        Path(os.path.expanduser("~")) / ".claude" / "settings.json",
+        dry_run=dry_run,
+    )

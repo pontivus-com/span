@@ -33,15 +33,18 @@ preserving foreign entries and avoiding duplicate Span hooks. On upgrade it
 replaces Span entries whose binary path or matcher changed, so exactly one
 installed invocation remains. Missing files or CLIs are reported as skipped.
 
+For Claude Code, the installer converges `SessionStart`, edit-tool
+`PostToolUse`, and `Stop` entries in an existing `~/.claude/settings.json`.
+Commands use the installation's exact data directory. Foreign settings and
+hooks remain untouched; missing settings are an explicit skipped result, and
+malformed settings fail without a rewrite.
+
 For OpenCode, the installer manages the server plugin under an explicit
 `--opencode-plugin-scope global|local|none`. Under `global` it deploys the
 plugin under Span's own data root and registers it once in the host's global
 `opencode.json` (`plugins`); it writes nothing into a target repository. A
-legacy per-target `.opencode/plugins/span-hooks.js` copy left by versions before
-0.9.0 is moved to `<target>/.opencode/span-retired/`, never deleted, because
-OpenCode still auto-loads `.opencode/plugins` and would reject a second plugin
-with the same id. The retired directory is operator-owned; Span has no TTL or
-reaper for it. Under `local` and `none`, the target plugin is user-managed:
+Span plugin found in an explicitly inspected target is reported as a conflict
+and left untouched. Under `local` and `none`, the target plugin is user-managed:
 Span removes its own global registration and reports the local copy without
 modifying it. Only targets passed with `--repo` are mutable; receipt targets not
 selected are inspected read-only and yield `conflict` if a Span-owned copy
@@ -49,7 +52,7 @@ remains.
 
 | Scope | Selected target (`--repo`) | Receipt-only target | Global registration |
 | --- | --- | --- | --- |
-| `global` | retire Span-owned copies | read-only; `conflict` if present | update |
+| `global` | report `conflict`; leave copy in place | read-only; `conflict` if present | update |
 | `local` | report only | read-only; report only | remove Span-owned |
 | `none` | report only | read-only; report only | remove Span-owned |
 

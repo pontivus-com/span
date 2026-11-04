@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 
 from span.shell.install.host_inspect import (
+    inspect_claude_registration,
     inspect_codex_registration,
     inspect_opencode_plugin_state,
     inspect_opencode_registration,
 )
 from span.shell.install.hosts import (
     _same_path,
+    opencode_global_config_path,
+    receipt_opencode_mcp_config,
     receipt_opencode_scope,
 )
 from span.shell.install.paths import (
@@ -142,7 +144,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     check_skills(dry_run=dry_run)
     # Read-only host-registration inspection: file inspection only, no
     # MCP registry/process enumeration and no host configuration writes.
-    selected_config = opencode_config
+    selected_config = opencode_config or receipt_opencode_mcp_config(receipt)
     if selected_config is None and Path("opencode.json").exists():
         selected_config = "opencode.json"
     opencode_state = inspect_opencode_registration(
@@ -155,12 +157,23 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         ),
     )
     codex_state = inspect_codex_registration()
+    claude_state = inspect_claude_registration(
+        expected_span_command(
+            resolved if resolved is not None else "span-mcp",
+            data_dir,
+            repos,
+        )
+    )
     print(f"opencode registration: {opencode_state['status']}")
     if opencode_state.get("reason"):
         print(f"  {opencode_state['reason']}")
     print(
         f"codex registration: {codex_state['status']} "
         f"({codex_state.get('reason', '')})"
+    )
+    print(
+        f"claude registration: {claude_state['status']} "
+        f"({claude_state.get('config', '')})"
     )
     receipt_targets = tuple(
         Path(repo) for repo in receipt.get("repos", []) if isinstance(repo, str)
@@ -170,8 +183,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     )
     span_root = Path(data_dir).parent
     canonical_dir = span_root / "opencode-plugin"
-    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    plugin_config = config_home / "opencode" / "opencode.json"
+    plugin_config = opencode_global_config_path()
     configs = tuple(
         dict.fromkeys(
             str(path) for path in (selected_config, plugin_config) if path is not None
@@ -207,4 +219,5 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         "opencode_registration": opencode_state,
         "opencode_plugin": plugin_report,
         "codex_registration": codex_state,
+        "claude_registration": claude_state,
     }

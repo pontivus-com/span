@@ -30,7 +30,7 @@ _SOURCE_SET = ("src", "pyproject.toml", "README.md")
 
 _EXPECTED_TOOLS = {"ask", "record", "reconsider"}
 
-_RETIRED_TOOLS = {
+_NON_CURRENT_TOOLS = {
     "explain",
     "trace",
     "impact",
@@ -203,10 +203,10 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         observed = _json.loads(proc.stdout.strip().splitlines()[-1])
 
         self.assertEqual(set(observed["tools"]), _EXPECTED_TOOLS)
-        self.assertFalse(_RETIRED_TOOLS & set(observed["tools"]))
-        self.assertTrue(observed["removed_error"])
-        self.assertEqual(observed["removed"]["kind"], "removed")
-        self.assertIn("ask", observed["removed"]["replacement"])
+        self.assertFalse(_NON_CURRENT_TOOLS & set(observed["tools"]))
+        self.assertTrue(observed["unknown_error"])
+        self.assertEqual(observed["unknown"]["kind"], "unknown_tool")
+        self.assertIsNone(observed["unknown"]["replacement"])
         for key in (
             "cold_error",
             "created_error",

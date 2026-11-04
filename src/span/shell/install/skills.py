@@ -12,7 +12,6 @@ from pathlib import Path
 from span.shell.install.constants import (
     AGENTS_END,
     AGENTS_START,
-    RETIRED_SKILLS,
 )
 from span.shell.install.paths import (
     agents_snippet_path,
@@ -123,6 +122,30 @@ def deploy_agents_rules(span_repo, targets, dry_run=False):
     }
 
 
+def _span_owned_skill(path: Path) -> bool:
+    """Prove ownership from the current marker before removing a skill."""
+    marker = path / ".span-origin.json"
+    if not marker.is_file():
+        return False
+    try:
+        record = json.loads(marker.read_text())
+    except (OSError, ValueError):
+        return False
+    if not isinstance(record, dict):
+        return False
+    if record.get("skill") != path.name:
+        return False
+    if record.get("install_mode") not in {"checkout", "distribution"}:
+        return False
+    if not isinstance(record.get("span_rev"), str) or not record["span_rev"]:
+        return False
+    if record["install_mode"] == "checkout":
+        return isinstance(record.get("span_repo"), str) and bool(record["span_repo"])
+    return isinstance(record.get("distribution_version"), str) and bool(
+        record["distribution_version"]
+    )
+
+
 def deploy_skills(span_repo, dry_run=False):
     """Copy span skills into each detected host's skills directory.
 
@@ -149,6 +172,7 @@ def deploy_skills(span_repo, dry_run=False):
     destinations = [
         home / ".config" / "opencode",
         home / ".codex",
+        home / ".claude",
     ]
     mode = install_mode(span_repo)
     version = distribution_version() if mode == "distribution" else None
@@ -170,10 +194,13 @@ def deploy_skills(span_repo, dry_run=False):
         dest_root = host_root / "skills"
         if not dry_run:
             dest_root.mkdir(exist_ok=True)
-            for retired in RETIRED_SKILLS:
-                stale = dest_root / retired
-                if stale.is_dir():
-                    print(f"- remove retired skill {stale}")
+            for stale in sorted(dest_root.iterdir()):
+                if (
+                    stale.is_dir()
+                    and stale.name not in names
+                    and _span_owned_skill(stale)
+                ):
+                    print(f"- remove stale Span-owned skill {stale}")
                     shutil.rmtree(stale)
         for name in names:
             src = skills_dir / name
@@ -209,6 +236,7 @@ def check_skills(dry_run=False):
     for dest_root in (
         home / ".config" / "opencode" / "skills",
         home / ".codex" / "skills",
+        home / ".claude" / "skills",
     ):
         if not dest_root.is_dir():
             continue
@@ -235,16 +263,17 @@ def remove_deployed_skills(dry_run=False):
     """
     home = Path(os.path.expanduser("~"))
     removed = []
-    for host_root in (home / ".config" / "opencode", home / ".codex"):
+    for host_root in (
+        home / ".config" / "opencode",
+        home / ".codex",
+        home / ".claude",
+    ):
         dest_root = host_root / "skills"
         if not dest_root.is_dir():
             continue
         removed_here = 0
         for candidate in sorted(dest_root.iterdir()):
-            if (
-                not candidate.is_dir()
-                or not (candidate / ".span-origin.json").is_file()
-            ):
+            if not candidate.is_dir() or not _span_owned_skill(candidate):
                 continue
             print(f"+ remove skill {candidate}")
             if not dry_run:

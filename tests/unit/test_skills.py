@@ -20,28 +20,6 @@ SKILLS = (ROUTER, BEFORE, AFTER, RECORD)
 
 CANONICAL_OPS = {"ask", "record", "reconsider"}
 
-RETIRED_OPS = {
-    "initialize_repository",
-    "start_context",
-    "understand_question",
-    "understand_retrieve",
-    "reassess",
-    "verification_support",
-    "evidence_start",
-    "evidence_extend",
-    "record_create",
-    "record_add",
-    "record_confirm",
-    "record_correct",
-    "record_replace",
-    "record_withdraw",
-    "record_challenge",
-    "record_update",
-    "record_verification",
-    "locate",
-    "neighbors",
-}
-
 FORBIDDEN_PHRASES = (
     "source of truth",
     "confidence",
@@ -87,8 +65,6 @@ class SkillNonAuthorityTest(unittest.TestCase):
             self.assertTrue(mentioned, path)
             self.assertEqual(set(re.findall(r"span_[a-z_]+", text)), set(), path)
             self.assertNotIn("semantic_", text, path)
-            for retired in RETIRED_OPS:
-                self.assertNotRegex(text, rf"`{retired}`", path)
 
     def test_no_rule_flavored_vocabulary(self):
         for path in SKILLS:
@@ -167,34 +143,30 @@ class SpecializedSkillTest(unittest.TestCase):
 
 class SkillLifecycleConsistencyTest(unittest.TestCase):
     def test_every_operation_is_known(self):
-        allowed = (
-            CANONICAL_OPS
-            | RETIRED_OPS
-            | {
-                "repository_id",
-                "context_id",
-                "request_id",
-                "version",
-                "understanding_id",
-                "observation_id",
-                "invalidated",
-                "unverifiable",
-                "unassessed",
-                "no_match",
-                "kind",
-                "surface",
-                "actions",
-                "create",
-                "add",
-                "confirm",
-                "correct",
-                "replace",
-                "withdraw",
-                "challenge_dispositions",
-                "expected_boundary_version",
-                "expected_version",
-            }
-        )
+        allowed = CANONICAL_OPS | {
+            "repository_id",
+            "context_id",
+            "request_id",
+            "version",
+            "understanding_id",
+            "observation_id",
+            "invalidated",
+            "unverifiable",
+            "unassessed",
+            "no_match",
+            "kind",
+            "surface",
+            "actions",
+            "create",
+            "add",
+            "confirm",
+            "correct",
+            "replace",
+            "withdraw",
+            "challenge_dispositions",
+            "expected_boundary_version",
+            "expected_version",
+        }
         for path in SKILLS:
             text = _text(path)
             for name in set(re.findall(r"`([a-z_]+)`", text)):

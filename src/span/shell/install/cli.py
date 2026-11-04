@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import os
 import shutil
 import sys
 from dataclasses import dataclass as _dataclass
@@ -28,16 +27,22 @@ from span.shell.install.constants import HOST_RESPONSE_BUDGETS, INSTALL_VERSION
 from span.shell.install.host_inspect import detect_hosts
 from span.shell.install.hosts import (
     _hook_bin,
+    _same_path,
     _sha256_file,
     _span_plugin_file,
     deploy_opencode_plugin,
     inspect_target_opencode_plugins,
     merge_opencode_config,
+    opencode_global_config_path,
+    register_claude,
     register_codex,
-    remove_claude_hooks,
     remove_opencode_plugin,
+    remove_opencode_registration,
     resolve_opencode_scope,
-    retire_stale_target_opencode_plugins,
+    receipt_opencode_mcp_config,
+    select_opencode_mcp_config,
+    validate_opencode_registration_removal,
+    wire_claude_hooks,
     wire_codex_hooks,
 )
 from span.shell.install.indexer import (
@@ -119,14 +124,6 @@ def _run_one_shot(env: _Environment) -> bool:
     if args.list_orphans:
         list_orphans(env.data_dir)
         return True
-    if args.migrate_store is not None:
-        raise SystemExit(
-            "--migrate-store was removed in 0.9.0. Use "
-            "`span-install --transition-store <repository-id> "
-            "--transition-phase inspect` for a read-only assessment, then "
-            "`--transition-phase apply` with --transition-root for the "
-            "authorized offline transition. Nothing was changed."
-        )
     if args.transition_phase is not None or args.transition_root is not None:
         if args.transition_store is None:
             raise SystemExit(
@@ -304,18 +301,53 @@ def _host_command(command: list[str], host: str) -> list[str]:
     return [*command, "--response-budget-bytes", str(budget)]
 
 
-def _register_hosts(env: _Environment, scope: str | None) -> dict[str, object]:
+def _select_opencode_install_config(
+    args: argparse.Namespace,
+    scope: str | None,
+    prior_receipt: dict[str, object] | None,
+) -> tuple[str | None, str | None, bool]:
+    """Resolve the MCP path and whether this invocation explicitly relocates it."""
+    prior_mcp_config = receipt_opencode_mcp_config(prior_receipt)
+    opencode_config = select_opencode_mcp_config(
+        args.opencode_config,
+        scope,
+        global_config=opencode_global_config_path(),
+        receipt_config=prior_mcp_config,
+    )
+    relocating = (
+        args.opencode_config is not None
+        and prior_mcp_config is not None
+        and not _same_path(opencode_config, prior_mcp_config)
+    )
+    return prior_mcp_config, opencode_config, relocating
+
+
+def _mcp_selection_scope(args: argparse.Namespace, scope: str | None) -> str | None:
+    """Keep MCP registration active when lifecycle hooks are disabled."""
+    if scope is not None:
+        return scope
+    return "global" if args.no_hooks else None
+
+
+def _register_hosts(
+    env: _Environment,
+    scope: str | None,
+    prior_receipt: dict[str, object] | None = None,
+) -> dict[str, object]:
     """Register hosts and deploy skills; each host's refusal stays typed."""
     args = env.args
     span_cmd = _span_command(env)
     opencode_cmd = _host_command(span_cmd, "opencode")
     codex_cmd = _host_command(span_cmd, "codex")
     host_registration: dict[str, object] = {}
-    opencode_config = args.opencode_config
-    if opencode_config is None and Path("opencode.json").exists():
-        opencode_config = "opencode.json"
+    mcp_scope = _mcp_selection_scope(args, scope)
+    prior_mcp_config, opencode_config, relocating = _select_opencode_install_config(
+        args, mcp_scope, prior_receipt
+    )
     if opencode_config is not None:
         try:
+            if relocating:
+                validate_opencode_registration_removal(prior_mcp_config)
             host_registration["opencode"] = merge_opencode_config(
                 opencode_config, opencode_cmd, dry_run=env.dry
             )
@@ -325,14 +357,25 @@ def _register_hosts(env: _Environment, scope: str | None) -> dict[str, object]:
                 "error": str(exc),
             }
             raise
+        if relocating:
+            host_registration["opencode_transition"] = {
+                "from": prior_mcp_config,
+                "to": opencode_config,
+                "removal": remove_opencode_registration(
+                    prior_mcp_config, dry_run=env.dry
+                ),
+            }
     else:
         print(
-            "no opencode.json found; skipping host registration "
-            "(pass --opencode-config PATH)."
+            "no OpenCode MCP config selected; skipping host registration "
+            "(pass --opencode-config PATH or create ./opencode.json)."
         )
         host_registration["opencode"] = {
             "status": "skipped",
-            "reason": "no opencode.json found (pass --opencode-config PATH)",
+            "reason": (
+                "no OpenCode MCP config selected (pass --opencode-config PATH "
+                "or create ./opencode.json)"
+            ),
         }
     if args.with_codex is None:
         args.with_codex = detect_hosts()["codex"] and not args.no_codex
@@ -350,6 +393,23 @@ def _register_hosts(env: _Environment, scope: str | None) -> dict[str, object]:
         host_registration["codex"] = {
             "status": "skipped",
             "reason": _codex_reason,
+        }
+    if args.with_claude is None:
+        args.with_claude = detect_hosts()["claude"] and not args.no_claude
+    elif args.no_claude:
+        args.with_claude = False
+    if args.with_claude:
+        host_registration["claude"] = register_claude(span_cmd, dry_run=env.dry)
+    else:
+        _claude_reason = (
+            "claude disabled (--no-claude)"
+            if args.no_claude
+            else "claude host not detected"
+        )
+        print(f"skipping claude registration ({_claude_reason}).")
+        host_registration["claude"] = {
+            "status": "skipped",
+            "reason": _claude_reason,
         }
     host_registration["hooks"] = _wire_hooks(env, scope)
     if not args.no_skills:
@@ -375,14 +435,14 @@ def _wire_hooks(env: _Environment, scope: str | None) -> dict[str, object]:
                 "status": "skipped",
                 "reason": "hooks disabled (--no-hooks)",
             },
-            "opencode_target_plugins": {
-                "status": "skipped",
-                "reason": "hooks disabled (--no-hooks)",
-            },
         }
     hook_bin = _hook_bin(env.venv_dir, env.bin_dir)
     codex_hooks = wire_codex_hooks(hook_bin, dry_run=env.dry)
-    claude_hooks = remove_claude_hooks(dry_run=env.dry)
+    claude_hooks = (
+        wire_claude_hooks(hook_bin, env.data_dir, dry_run=env.dry)
+        if args.with_claude
+        else {"status": "skipped", "reason": "claude integration not enabled"}
+    )
     receipt = read_receipt(env.data_dir) or {}
     selected = tuple(Path(target).resolve() for target in env.targets)
     receipt_targets = tuple(
@@ -393,11 +453,10 @@ def _wire_hooks(env: _Environment, scope: str | None) -> dict[str, object]:
     receipt_only = tuple(
         target for target in dict.fromkeys(receipt_targets) if target not in selected
     )
-    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     plugin, target_plugins = _apply_opencode_scope(
         env,
         scope,
-        config_home / "opencode" / "opencode.json",
+        opencode_global_config_path(),
         env.data_dir.parent / "opencode-plugin",
         env.data_dir.parent,
         selected,
@@ -447,8 +506,7 @@ def _apply_global_scope(
     receipt_only: tuple[Path, ...],
     hook_bin: str,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    """Retire selected-target copies and deploy the canonical global plugin."""
-    retirement = retire_stale_target_opencode_plugins(selected, dry_run=env.dry)
+    """Deploy the canonical global plugin and report target conflicts."""
     plugin = deploy_opencode_plugin(
         opencode_plugin_path(env.span_repo),
         canonical_dir,
@@ -458,8 +516,21 @@ def _apply_global_scope(
         dry_run=env.dry,
         span_root=span_root,
     )
+    selected_targets, selected_unreadable = inspect_target_opencode_plugins(selected)
     receipt_targets, receipt_unreadable = inspect_target_opencode_plugins(receipt_only)
     conflicts = list(plugin.get("conflicts", []))
+    for target, entries in selected_targets.items():
+        conflicts.extend(
+            {
+                "path": item["path"],
+                "target": target,
+                "reason": "target-local Span plugin conflicts with global scope",
+                "manual_action": (
+                    f"remove or manage {item['path']} manually before rerunning"
+                ),
+            }
+            for item in entries
+        )
     for target, entries in receipt_targets.items():
         conflicts.extend(
             {
@@ -471,10 +542,7 @@ def _apply_global_scope(
             }
             for item in entries
         )
-    retirement_conflicts = retirement.get("conflicts", [])
-    if isinstance(retirement_conflicts, list):
-        conflicts.extend(retirement_conflicts)
-    unreadable = receipt_unreadable
+    unreadable = [*selected_unreadable, *receipt_unreadable]
     if unreadable:
         status = "unreadable"
     elif conflicts:
@@ -485,14 +553,18 @@ def _apply_global_scope(
         {
             "scope": "global",
             "status": status,
-            "retired": retirement["retired"],
-            "retired_status": retirement["status"],
             "conflicts": conflicts,
             "unreadable": unreadable,
         }
     )
     return plugin, {
-        "status": retirement["status"],
+        "status": (
+            "unreadable" if unreadable else ("conflict" if conflicts else "wired")
+        ),
+        "selected": {
+            "targets": selected_targets,
+            "unreadable": selected_unreadable,
+        },
         "receipt_only": {
             "targets": receipt_targets,
             "unreadable": receipt_unreadable,
@@ -560,7 +632,6 @@ def _apply_user_managed_scope(
         {
             "scope": scope,
             "status": status,
-            "retired": [],
             "user_managed": copies,
             "conflicts": copies if len(copies) > 1 else [],
             "unreadable": unreadable,
@@ -585,9 +656,6 @@ def _build_receipt(
     host_registration: dict[str, object],
     report: dict[str, object],
 ) -> dict[str, object]:
-    hooks = host_registration.get("hooks", {})
-    plugin = hooks.get("opencode_plugin", {}) if isinstance(hooks, dict) else {}
-    plugin = plugin if isinstance(plugin, dict) else {}
     return {
         "install_version": INSTALL_VERSION,
         "span_repo": str(env.span_repo),
@@ -597,15 +665,6 @@ def _build_receipt(
         "repos": [str(target) for target in env.targets],
         "verify": report,
         "host_registration": host_registration,
-        "host_integration_migration": {
-            "opencode_plugin": {
-                "scope": plugin.get("scope"),
-                "status": plugin.get("status"),
-                "plugin": plugin.get("plugin"),
-            },
-            "retired_target_plugins": plugin.get("retired", []),
-            "removed_config_entries": plugin.get("removed_config_entries", []),
-        },
         "target_census": state.target_census,
         "structural_indexer": {
             # Neutral summary only: the managed binary path is internal
@@ -631,13 +690,12 @@ def main(argv=None):
     env = _environment(args)
     if _run_one_shot(env):
         return
+    prior_receipt = read_receipt(env.data_dir)
     scope = None
     if not args.no_hooks:
-        scope, _ = resolve_opencode_scope(
-            args.opencode_plugin_scope, read_receipt(env.data_dir)
-        )
+        scope, _ = resolve_opencode_scope(args.opencode_plugin_scope, prior_receipt)
     state = _provision_runtime(env)
-    host_registration = _register_hosts(env, scope)
+    host_registration = _register_hosts(env, scope, prior_receipt)
     report = verify_installation(state.venv_python, env.data_dir, env.targets, env.dry)
     receipt = _build_receipt(env, state, host_registration, report)
     write_receipt(env.data_dir, receipt, dry_run=env.dry)

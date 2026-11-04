@@ -20,7 +20,7 @@ never auto-declares a surface from an understanding.
 Ordinary coding work can start with saved answers, a cold investigation,
 or evidence gathered outside Span. Recording is an explicit action, with an
 inspectable receipt. There is no required whole-repository campaign, internal
-question taxonomy, or suspended interpretation exchange in 0.9.2.
+question taxonomy, or suspended interpretation exchange in 0.9.3.
 
 ## Reuse has qualifications
 
@@ -89,10 +89,13 @@ exported as history, not promoted as current understanding. See the
 
 ## Beta delivery boundary
 
-The supported live targets are Codex and OpenCode. Both have candidate-specific
-captures of the declared grammar, request identity, and recovery behavior.
-Implemented registration, configured hooks, and observed model behavior remain
-separate facts. Hooks are optional notices; ordinary retrieval
-and recording still check support when hooks are disabled.
+Codex and OpenCode are the supported live delivery targets, with
+candidate-specific captures of the declared grammar, request identity, and
+recovery behavior. Claude Code is also a supported managed host for
+registration, health inspection, installer behavior, skills, and optional
+lifecycle hooks; its authenticated model-delivery grammar and caller identity
+remain **UNVERIFIED**. Implemented registration, configured hooks, and observed
+model behavior remain separate facts. Hooks are optional notices; ordinary
+retrieval and recording still check support when hooks are disabled.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).

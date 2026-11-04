@@ -4,7 +4,7 @@
 Runs under the isolated installed interpreter with ``PYTHONPATH`` removed and
 imports no ``span`` module. It drives the shipped three-tool surface over MCP
 stdio: list tools, ask cold, record, ask warm, retrieve an exact snapshot, and
-confirm a retired tool name rejects with replacement guidance.
+confirm a non-current tool name follows the ordinary unknown-tool path.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ async def _run(exe, repo, data_dir, repository_id):
             listed = await session.list_tools()
             names = [tool.name for tool in listed.tools]
 
-            removed, removed_error = await _call(
+            unknown, unknown_error = await _call(
                 session, "explain", {"repository_id": repository_id}
             )
             cold, cold_error = await _call(
@@ -103,8 +103,8 @@ async def _run(exe, repo, data_dir, repository_id):
             return {
                 "server_version": initialized.server_info.version,
                 "tools": names,
-                "removed": removed,
-                "removed_error": removed_error,
+                "unknown": unknown,
+                "unknown_error": unknown_error,
                 "cold_error": cold_error,
                 "cold_kind": cold.get("$type"),
                 "created_error": created_error,

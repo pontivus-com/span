@@ -274,9 +274,10 @@ that invalidates a premise must name the affected dependents in the same result.
 ## 8. Failure taxonomy
 
 **FD-38 — Closed unions.**
-`ask`, `record`, `reconsider`, and the optional operations each return exactly
-the results declared in `lifecycle-contract` §4.1–§4.5. No result is invented at
-runtime and no result crosses operations. *(L3)*
+`ask`, `record`, and `reconsider` each return exactly the results declared in
+`lifecycle-contract` §4.1–§4.5. There are no optional public operations in the
+current build. No result is invented at runtime and no result crosses
+operations. *(L3)*
 
 **FD-39 — Rejection is not replay and not unavailability.**
 A replay returns the original acceptance. A rejection returns the offending

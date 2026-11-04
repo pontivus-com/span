@@ -146,7 +146,7 @@ class StartupRegistrationTest(unittest.TestCase):
 
             self.assertTrue(dispatched.is_error)
             payload = json.loads(dispatched.content)
-            self.assertEqual(payload["kind"], "removed")
+            self.assertEqual(payload["kind"], "unknown_tool")
             provisioner.assert_not_called()
 
     def test_cs05_provisioning_is_installer_only(self):
