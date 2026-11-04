@@ -137,6 +137,10 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         raise SystemExit("span-mcp not found on PATH")
     receipt_path = Path(data_dir) / "install.json"
     receipt = read_receipt(data_dir) or {}
+    receipt_targets = tuple(
+        Path(repo) for repo in receipt.get("repos", []) if isinstance(repo, str)
+    )
+    effective_repos = tuple(repos) or receipt_targets
     if receipt_path.exists() and not dry_run:
         print(f"receipt: {receipt_path}")
     else:
@@ -152,7 +156,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         expected_span_command(
             resolved if resolved is not None else "span-mcp",
             data_dir,
-            repos,
+            effective_repos,
             host="opencode",
         ),
     )
@@ -161,7 +165,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         expected_span_command(
             resolved if resolved is not None else "span-mcp",
             data_dir,
-            repos,
+            effective_repos,
         )
     )
     print(f"opencode registration: {opencode_state['status']}")
@@ -175,12 +179,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         f"claude registration: {claude_state['status']} "
         f"({claude_state.get('config', '')})"
     )
-    receipt_targets = tuple(
-        Path(repo) for repo in receipt.get("repos", []) if isinstance(repo, str)
-    )
-    inspection_targets = tuple(
-        dict.fromkeys([*(Path(repo) for repo in repos), *receipt_targets])
-    )
+    inspection_targets = tuple(dict.fromkeys([*effective_repos, *receipt_targets]))
     span_root = Path(data_dir).parent
     canonical_dir = span_root / "opencode-plugin"
     plugin_config = opencode_global_config_path()
@@ -206,7 +205,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     print(f"opencode plugin: {plugin_report['status']}")
     if plugin_report.get("reason"):
         print(f"  {plugin_report['reason']}")
-    report = verify_installation(venv_python, data_dir, repos, dry_run)
+    report = verify_installation(venv_python, data_dir, effective_repos, dry_run)
     print(f"runtime verification: span-mcp={resolved}")
     readiness = report.get("repos", []) if isinstance(report, dict) else []
     print(f"repository store_readiness: {readiness}")

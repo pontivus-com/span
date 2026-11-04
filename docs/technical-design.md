@@ -8,7 +8,7 @@ the proposed refactoring boundary for layers 0–3. It chooses mechanisms; it
 adds no product requirement. Where it conflicts with a higher layer, the higher
 layer governs.
 
-**Release identity (2026-11-04).** The current public release is **0.9.3**
+**Release identity (2026-11-04).** The current public release is **0.9.4**
 (2026-11-04), a bug-fix release over 0.9.2. The prior internal pre-release
 artifacts were withdrawn and were never public. References below to the
 withdrawn internal baseline describe that artifact, not the public release.
@@ -326,10 +326,10 @@ mapping of existing schema-10 records.
 ### O-9 — Package release version
 
 Status: **RESOLVED — owner direction 2026-11-03: `0.9.1`; 2026-11-04:
-`0.9.2`, `0.9.3`.** The 0.9.1 decision restored D-17: the replacement ships as 0.9.1,
+`0.9.2`, `0.9.4`.** The 0.9.1 decision restored D-17: the replacement ships as 0.9.1,
 and the prior internal pre-release artifacts are withdrawn and were never
 public. 0.9.2 (2026-11-04) was a bug-fix release over 0.9.1 and changed no
-public operation. 0.9.3 (2026-11-04) is a bug-fix release over 0.9.2 and also
+public operation. 0.9.4 (2026-11-04) is a bug-fix release over 0.9.2 and also
 changes no public operation. FP-6 freezes release metadata against the current
 value.
 
@@ -835,7 +835,7 @@ next `context` hook; it names the changed paths and the exact
 `reconsider(changed_paths=[...])` call. It asserts support state only and is
 silent on failure.
 
-**OpenCode plugin scope (0.9.3).** The lifecycle plugin is managed under an
+**OpenCode plugin scope (0.9.4).** The lifecycle plugin is managed under an
 explicit `--opencode-plugin-scope global|local|none`; the installer never infers
 the scope from disk. `global` deploys the canonical plugin and reports a
 conflict when an explicitly inspected target contains another Span plugin; it
