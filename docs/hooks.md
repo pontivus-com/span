@@ -29,17 +29,41 @@ kept separate.
 ## Host wiring and evidence
 
 The installer can append Codex hooks to an existing `~/.codex/hooks.json`,
-preserving foreign entries and avoiding duplicate Span hooks. Missing files or
-CLIs are reported as skipped.
+preserving foreign entries and avoiding duplicate Span hooks. On upgrade it
+replaces Span entries whose binary path or matcher changed, so exactly one
+installed invocation remains. Missing files or CLIs are reported as skipped.
 
-For OpenCode, the installer deploys the server plugin under Span's own data root
-and registers it once in the host's global `opencode.json` (`plugins`); it writes
-nothing into a target repository. The plugin waits a bounded three seconds at
-prompt admission for the local MCP connection, then injects the FD-58 adoption
-notice once per session through the `context` hook. The notice is advisory: a
-missed or failed injection changes only the first-move efficiency, never
-currency. A five-run OpenCode capture recorded the first `ask` before the first
-source read in 5/5 runs; see
+For OpenCode, the installer manages the server plugin under an explicit
+`--opencode-plugin-scope global|local|none`. Under `global` it deploys the
+plugin under Span's own data root and registers it once in the host's global
+`opencode.json` (`plugins`); it writes nothing into a target repository. A
+legacy per-target `.opencode/plugins/span-hooks.js` copy left by versions before
+0.9.0 is moved to `<target>/.opencode/span-retired/`, never deleted, because
+OpenCode still auto-loads `.opencode/plugins` and would reject a second plugin
+with the same id. The retired directory is operator-owned; Span has no TTL or
+reaper for it. Under `local` and `none`, the target plugin is user-managed:
+Span removes its own global registration and reports the local copy without
+modifying it. Only targets passed with `--repo` are mutable; receipt targets not
+selected are inspected read-only and yield `conflict` if a Span-owned copy
+remains.
+
+| Scope | Selected target (`--repo`) | Receipt-only target | Global registration |
+| --- | --- | --- | --- |
+| `global` | retire Span-owned copies | read-only; `conflict` if present | update |
+| `local` | report only | read-only; report only | remove Span-owned |
+| `none` | report only | read-only; report only | remove Span-owned |
+
+A fresh install defaults to `global`; an upgrade uses the receipt scope and
+stops if it is absent or ambiguous. The authoritative full matrix is in
+[install](install.md#opencode).
+
+The plugin waits a bounded three seconds at prompt admission for the local MCP
+connection, then injects the FD-58 adoption notice once per session through the
+`context` hook. An edit-time notice is stored when a tool edit runs and is
+delivered once on the next `context` hook, naming the changed paths and the exact
+`reconsider(changed_paths=[...])` call. The notices are advisory: a missed or
+failed injection changes only efficiency, never currency. A five-run OpenCode
+capture recorded the first `ask` before the first source read in 5/5 runs; see
 `.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
 
 Implemented wiring, configured entries, actual invocation, affected scope,

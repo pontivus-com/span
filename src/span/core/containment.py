@@ -46,6 +46,20 @@ def symbol_surface(repository_id: str, locator: str) -> SurfaceKey:
     )
 
 
+def surface_file_locator(locator: str) -> str | None:
+    """The containing repository-relative file of a structural locator.
+
+    A symbol identity is prefixed by its containing file; the structural
+    provider's own rule is ``locator.split(":")[0]``. A locator with no file
+    delimiter, or whose prefix is empty, cannot be resolved from the identity
+    alone, so the caller must exclude it rather than guess.
+    """
+    if ":" not in locator:
+        return None
+    prefix = locator.split(":", 1)[0]
+    return prefix or None
+
+
 def boundary_contains_path(boundary: SurfaceBoundary, locator: str) -> bool:
     """True when a file locator is inside the declared path boundary."""
     for prefix in boundary.paths:

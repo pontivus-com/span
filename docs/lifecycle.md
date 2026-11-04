@@ -50,6 +50,11 @@ declaration.
 - `kind="surface"` creates a service/domain boundary or updates it with
   compare-and-set.
 
+A verification run applies to the surfaces within its declared scope. A
+single-file run is not widened to a broader service, and a service-wide run
+applies to the files it covers. A run requires observations or evidence; either
+is accepted.
+
 A validation, identity, conflict, or source-drift rejection commits no semantic
 transition and names the offending identity. A post-commit `SupportUnavailable`
 preserves the receipt and reports qualification failure separately from
@@ -67,7 +72,15 @@ stays explicit; it is never promoted to current.
 `reconsider` returns every affected surface and every conclusion it considered,
 with that conclusion's own support state. Inclusion is not a verdict: a
 considered conclusion can remain `CURRENT`. Only non-current states require
-re-establishment.
+re-establishment. A surface with no `conclusions` is containment-only, and the
+returned order is deterministic.
+
+A non-current conclusion is still recoverable as historical **content**: an
+invalidated `ask` returns the prior statement with its exact revision,
+understanding version, evidence references, and present non-current state in
+`Gap.historical`. A surface status names the same set through `stale_refs`,
+alongside the count. Neither is current answer content; to read the statement,
+use `ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`.
 
 Challenges settle only through an explicit disposition in `record`. A new
 version, a passing test, or a matching fingerprint does not settle a dispute.

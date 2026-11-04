@@ -105,7 +105,7 @@ returned conclusion is a starting point for judgment.
 
 Gaps and challenges remain visible independently of support currency. Matching
 bytes do not settle a dispute, and test existence does not establish a pass.
-Independent verification records the observations actually tested and preserves
+Independent verification records the observations or evidence actually tested and preserves
 failures as failures.
 
 Recording is atomic and returns a receipt. The caller preserves identity
@@ -166,12 +166,16 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.9.1**: three lifecycle tools (`ask`, `record`,
+This checkout describes **0.9.2**: three lifecycle tools (`ask`, `record`,
 `reconsider`), schema-11 storage, surface-scoped answers, explicit store
-transition, and live support qualification. Host delivery is captured for the
-three-tool surface on Codex and OpenCode; the flat-create re-capture passes on
-OpenCode and is pending on Codex (account quota). Comparative fitness remains
-class-scoped (FD-53, FG-7).
+transition, and live support qualification. 0.9.2 is a bug-fix release: it
+makes the OpenCode plugin scope explicit, retires legacy target copies instead
+of deleting them, and returns historical content and stale references in the
+documented shapes. Upgrading from 0.9.0/0.9.1 requires one
+`span-install --opencode-plugin-scope global|local|none` run and a host restart.
+Host delivery is captured for the three-tool surface on Codex and OpenCode;
+the flat-create re-capture passes on OpenCode and is pending on Codex (account
+quota). Comparative fitness remains class-scoped (FD-53, FG-7).
 macOS and Windows installation paths remain unverified. Publication and
 product acceptance are separate from the implementation version.
 

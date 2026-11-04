@@ -28,12 +28,16 @@ question and returns `no_match`, whose recovery points back to the document view
 ## Read the result
 
 - `Answer` — current conclusions with statement, nature, scope, support, and
-  evidence. Use it instead of re-deriving the same understanding.
-- `Gap` — no current conclusion. It carries the reason, historical conclusions,
-  admitted evidence, observations, a context when the gap is question-bound, and
-  a recovery. If the reason is
-  `no_match`, ask the same surface without a question to read its current
-  document view. Otherwise read the evidence, then `record` what you establish.
+  evidence, plus surface status. `status.stale_refs` names each stale
+  conclusion by exact revision, understanding version, and present state. Use
+  it instead of re-deriving the same understanding.
+- `Gap` — no current conclusion. It carries the reason, the prior non-current
+  conclusions as historical content (statement, exact revision, understanding
+  version, evidence references, present state), admitted evidence,
+  observations, a context when the gap is question-bound, and a recovery. If
+  the reason is `no_match`, ask the same surface without a question to read its
+  current document view. Otherwise read the evidence, then `record` what you
+  establish. A truncated gap's recovery names the snapshot selector.
 - `AmbiguousSurface` — choose the file, symbol, service, or domain surface.
 - `Unavailable` — an operational failure or a response too small for the
   minimum result. Follow its recovery.

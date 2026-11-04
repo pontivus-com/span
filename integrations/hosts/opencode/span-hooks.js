@@ -57,6 +57,56 @@ function run(bin, args) {
   }
 }
 
+//: One bounded pending notice per session. The edit-time notice is computed
+//: in `tool.execute.after`, but only the session `context` hook is proven to
+//: reach the model, so the notice waits for the next context call and is
+//: consumed once. A session that never calls context loses the notice; no
+//: correctness property depends on it (FD-52, FD-53).
+const PENDING_LIMIT = 8;
+const NOTICE_LIMIT = 2000;
+
+function sessionKey(event) {
+  const value =
+    (event && (event.sessionID || event.session_id)) ||
+    (event && event.session && event.session.id) ||
+    "";
+  return typeof value === "string" && value ? value : "*";
+}
+
+function relativePaths(paths, root) {
+  const rootPath = root ? path.resolve(root) : null;
+  const found = [];
+  for (const item of paths) {
+    let value = item;
+    if (rootPath && path.isAbsolute(item)) {
+      const relative = path.relative(rootPath, item);
+      if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+        continue;
+      }
+      value = relative;
+    }
+    if (
+      typeof value !== "string" ||
+      !value ||
+      path.isAbsolute(value) ||
+      value.startsWith("..")
+    ) {
+      continue;
+    }
+    found.push(value.split(path.sep).join("/"));
+  }
+  return [...new Set(found)];
+}
+
+function rememberNotice(pending, sessionID, notice) {
+  if (!notice) return;
+  if (pending.size >= PENDING_LIMIT && !pending.has(sessionID)) {
+    const oldest = pending.keys().next().value;
+    pending.delete(oldest);
+  }
+  pending.set(sessionID, notice.slice(0, NOTICE_LIMIT));
+}
+
 function filePathsFromArgs(args) {
   const found = [];
   const walk = (node, depth) => {
@@ -112,6 +162,7 @@ export default {
     const controller = new AbortController();
     const locationRoot =
       (ctx && ctx.location && ctx.location.directory) || process.cwd();
+    const pending = new Map();
 
     if (
       ctx &&
@@ -130,14 +181,14 @@ export default {
                 locationRoot,
                 "session-start",
               ]);
-              if (notice) console.log(notice);
+              rememberNotice(pending, sessionKey(event), notice);
             } else if (event.type === "session.idle") {
               const notice = run(resolveBin(), [
                 "--repo-root",
                 locationRoot,
                 "session-stop",
               ]);
-              if (notice) console.log(notice);
+              rememberNotice(pending, sessionKey(event), notice);
             }
           }
         } catch {
@@ -163,13 +214,22 @@ export default {
                 "")) ||
             "";
           if (!["edit", "write"].includes(toolName)) return;
-          const paths = filePathsFromArgs(event || {});
+          const changed = event || {};
+          const paths = filePathsFromArgs(changed);
           if (paths.length === 0) return;
-          const notice = run(resolveBin(), [
-            "source-changed",
-            ...paths,
-          ]);
-          if (notice) console.log(notice);
+          const notice = run(resolveBin(), ["source-changed", ...paths]);
+          if (!notice) return;
+          const relative = relativePaths(paths, locationRoot);
+          const reminder = relative.length
+            ? " call reconsider(changed_paths=" +
+              JSON.stringify(relative) +
+              ") before reusing recorded understanding."
+            : "";
+          rememberNotice(
+            pending,
+            sessionKey(changed),
+            notice + reminder,
+          );
         } catch {
           // Never break the session on hook failure.
         }
@@ -208,8 +268,20 @@ export default {
       const checked = new Set();
       contextRegistration = await ctx.session.hook("context", (event) => {
         try {
-          const sessionID = event && event.sessionID;
-          if (!sessionID || checked.has(sessionID)) return;
+          const sessionID = sessionKey(event || {});
+          // The edit-time notice is delivered once, on the next context call.
+          // A host that omitted the session id on the producing event used the
+          // shared fallback slot; consume it here rather than losing it.
+          const pendingNotice =
+            pending.get(sessionID) ?? pending.get("*");
+          if (pendingNotice !== undefined) {
+            pending.delete(sessionID);
+            pending.delete("*");
+            if (event && Array.isArray(event.system)) {
+              event.system.push({ type: "text", text: pendingNotice });
+            }
+          }
+          if (sessionID === "*" || checked.has(sessionID)) return;
           checked.add(sessionID);
           const notice = run(resolveBin(), [
             "--repo-root",

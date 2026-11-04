@@ -364,15 +364,23 @@ class VerificationRunWire:
     repository_id: str
     scope_description: str
     scope_paths: tuple[str, ...]
-    observations: tuple[str, ...]
     command: str | None
     scenario: str | None
     outcome: _v.VerificationOutcome
     observed_at: _datetime.datetime
     observer: str
+    observations: tuple[str, ...] = ()
     evidence: tuple[SourceSupportWire, ...] = ()
     environment_limitations: tuple[str, ...] = ()
     provenance: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.observations and not self.evidence:
+            raise ValueError(
+                "a verification run requires observations or evidence; supply "
+                "the obs: ids ask returned for the context, or run.evidence "
+                "with a locator"
+            )
 
 
 @_dataclass(frozen=True)

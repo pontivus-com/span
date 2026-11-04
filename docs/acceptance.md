@@ -19,7 +19,7 @@ The functional scenario set covers:
 | F-07 | Explicit challenges retain unresolved state and settlement history. | `test_record_settles_a_challenge_through_dispositions`, challenge transition and lifecycle-store tests |
 | F-08 | Exact CSS/config evidence works without symbols. | `test_cross_file_batch_admits_each_source` |
 | F-09 | Retry, restart, lost-response, and concurrent identities recover safely. | lifecycle service/store replay and concurrency tests |
-| F-10 | Independent verification remains tied to tested observations. | `test_verification_runs_are_independent_and_source_aware` |
+| F-10 | Independent verification remains tied to the observations or evidence it tested. | `test_verification_runs_are_independent_and_source_aware`, `test_verification_accepts_evidence_only`, `test_record_verification_accepts_evidence_only` |
 | F-11 | Correctness holds without hooks. | lifecycle tests, hooks-disabled Codex capture |
 | F-12 | Batch outcomes, reference reuse, and membership changes remain explicit. | evidence/discovery/support service tests |
 | F-13 | Missing, ambiguous, failed, expired, and truncated outcomes differ. | `test_multiple_granularities_are_ambiguous`, `test_budget_below_minimum_is_refused`, evidence and lifecycle tests |
@@ -47,7 +47,7 @@ marked pending are not current coverage.
 | F-22 | A create with a question context uses the bound target; supplying an explicit question or scope is rejected. | implemented | `test_context_bound_create_rejects_an_explicit_target`, `test_question_context_rejects_an_explicit_target` |
 | F-23 | A stale surface boundary version or surface kind conflict is `Rejected`, not `Unavailable`. | implemented | `test_surface_update_stale_boundary_returns_rejected`, `test_surface_kind_conflict_returns_rejected` |
 | F-24 | A declared surface parent must be declared, same-repository, and acyclic. | implemented | `test_surface_parent_must_be_declared`, `test_surface_update_rejects_a_parent_cycle` |
-| F-25 | A verification run appears only on the surfaces in its declared scope. | implemented | `test_verification_run_appears_only_on_its_scope` |
+| F-25 | A verification run appears only on the surfaces in its declared scope. | implemented | `test_verification_run_appears_only_on_its_scope`, `test_multi_file_run_is_visible_on_each_file`, `test_one_file_run_is_not_visible_on_a_broader_service`, `test_service_wide_run_is_visible_on_service_and_files`, `test_directory_scoped_run_covers_files_under_it`, `test_symbol_run_matches_through_containing_file`, `test_symbol_without_a_file_prefix_is_excluded`, `test_multi_file_verification_run_is_visible_on_each_file` (installed MCP lane) |
 | F-26 | With the delivered product surface (server plus installer-managed pre-read notice and readiness wait), the first Span call precedes the first source read; bare registration is not claimed. | implemented — OpenCode 5/5 | `natural-use/F10-2026-11-03.md`; Codex 5/5 pre-remediation in `natural-use/realistic/REALISTIC.md` |
 | F-27 | Cost is claimed only for a named task class with positive measured value. | implemented | `five-task/MATRIX.md` (reuse, break-even 2), `g5/REUSE.md` (break-even 11); single-use cross-file is negative and not claimed |
 | F-29 | A create without a surface derives it from one scope path or the question context; multiple paths are rejected with the candidates, and a supplied surface must agree with the carried scope. | implemented | `test_create_without_surface_derives_from_one_scope_path`, `test_create_without_surface_uses_the_question_context_scope`, `test_create_without_surface_rejects_multiple_paths`, `test_create_surface_must_agree_with_the_carried_scope`, `five-task/DERIVED-SURFACE.md` |
@@ -61,6 +61,14 @@ hooks, isolation, skills, and managed assets. The installed-MCP lane builds a
 non-editable install and drives `span-mcp` over stdio outside the source tree.
 The transition lane uses disposable stores, including archive/export/verify,
 interruption recovery, active-writer refusal, and rollback preservation.
+
+0.9.2 adds named coverage for historical `Gap` content and stale surface
+references (`test_invalidated_ask_returns_historical_content`,
+`test_stale_sibling_is_referenced_in_status`,
+`test_descendant_stale_ref_is_not_merged_into_parent`,
+`test_truncated_gap_names_the_snapshot_retrieval_path`). The OpenCode edit-time
+notice is proven at the `event.system` boundary by
+`tests/plugin/test_span_hooks_notice.mjs`, run in CI.
 
 Use [contributing](contributing.md) for commands. The zero-error typing baseline
 is the beta gate; a passing ratchet with pre-existing errors is insufficient.

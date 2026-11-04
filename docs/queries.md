@@ -10,12 +10,16 @@ agent investigates and then records the result.
 
 - `Answer`: every matched conclusion is current. It carries `ConclusionView`s
   with statement, nature, scope, support, and evidence; the surface status
-  distribution; recorded gaps; applicable `VerificationView`s; and an explicit
-  truncation state when the server budget omitted content.
+  distribution (including `stale_refs`); recorded gaps; applicable
+  `VerificationView`s; and an explicit truncation state when the server budget
+  omitted content.
 - `Gap`: exactly one reason — `invalidated`, `unverifiable`, `unassessed`, or
-  `no_match` — with historical conclusions, admitted evidence, the context, the
-  missing items, and a recovery. It carries a continuation when evidence was
-  omitted. A `no_match` gap points back to the surface document view.
+  `no_match` — with the prior non-current conclusions as historical content
+  (statement, exact revision, understanding version, evidence references, and
+  present state), admitted evidence, the context, the missing items, and a
+  recovery. It carries a continuation when evidence was omitted. A `no_match`
+  gap points back to the surface document view. A truncated gap's recovery
+  names the snapshot selector.
 - `AmbiguousSurface`: more than one granularity matches the reference; the
   candidates are exact identities. Copy one into `surface`; Span never guesses.
 - `RetrievedUnderstanding` / `RetrievedReceipt`: exact-reference history. They
@@ -42,8 +46,10 @@ acceptance. Snapshot retrieval evaluates support and returns challenges
 alongside the recorded content.
 
 `ask` also returns applicable verification runs and their live qualification.
-There is no separate qualification call. Neither retrieval nor qualification
-performs semantic reinterpretation or external test execution.
+A run applies to the surfaces within its declared scope; a single-file run is
+not widened to a broader service. There is no separate qualification call.
+Neither retrieval nor qualification performs semantic reinterpretation or
+external test execution.
 
 ## Bounds and truncation
 

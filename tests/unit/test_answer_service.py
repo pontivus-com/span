@@ -280,6 +280,78 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(result.status.current, 1)
         self.assertEqual(result.status.descendants[0].current, 1)
 
+    def test_descendant_stale_ref_is_not_merged_into_parent(self) -> None:
+        (self.root / "src/b.py").write_text("b\n", encoding="utf-8")
+        self._observation("obs-b", "src/b.py")
+        parent = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.DOMAIN, locator="domain"
+        )
+        child = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.SERVICE, locator="svc"
+        )
+        self.store.put_surface(
+            m.Surface(key=parent, boundary=m.SurfaceBoundary(paths=("src",)))
+        )
+        self.store.put_surface(
+            m.Surface(
+                key=child,
+                boundary=m.SurfaceBoundary(paths=("src",)),
+                parent=parent,
+            )
+        )
+        self._create_on_surface("u-domain", parent, "What does domain do?")
+        self.store.record_understanding(
+            m.CreateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-child-stale"),
+                    context_id=CONTEXT_ID,
+                ),
+                surface=child,
+                target=m.ExplicitTarget(
+                    question="What does svc do?",
+                    scope=m.EvidenceScope(paths=("src/a.py", "src/b.py")),
+                ),
+                conclusions=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-1"),
+                        statement="A does X.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-a")
+                            ),
+                        ),
+                        basis=_basis(),
+                    ),
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-2"),
+                        statement="B does Y.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/b.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-b")
+                            ),
+                        ),
+                        basis=_basis(),
+                    ),
+                ),
+            ),
+            understanding_id=m.UnderstandingId("u-child-stale"),
+        )
+        (self.root / "src/b.py").write_text("changed\n", encoding="utf-8")
+        result = self._ask("domain", "What does domain do?")
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.status.stale, 0)
+        self.assertEqual(result.status.stale_refs, ())
+        self.assertEqual(len(result.status.descendants), 1)
+        child_status = result.status.descendants[0]
+        self.assertEqual(child_status.surface, child)
+        self.assertEqual(child_status.stale, 1)
+        self.assertEqual(child_status.stale_refs[0].ref.conclusion_id.value, "c-2")
+
     def test_ranged_support_ignores_an_unrelated_edit(self) -> None:
         (self.root / "src/a.py").write_text("one\ntwo\nthree\n", encoding="utf-8")
         evidence = EvidenceService(
@@ -469,6 +541,81 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Gap)
         self.assertEqual(result.reason, m.GapReason.INVALIDATED)
         self.assertEqual(len(result.historical), 1)
+        historical = result.historical[0]
+        self.assertEqual(historical.statement, "A does X number 1.")
+        self.assertEqual(historical.understanding_version.value, 1)
+        self.assertIs(historical.state, m.SupportState.REASSESSMENT_REQUIRED)
+        self.assertEqual(
+            [item.evidence_id.value for item in historical.evidence],
+            ["ev-src/a.py"],
+        )
+
+    def test_stale_sibling_is_referenced_in_status(self) -> None:
+        (self.root / "src/b.py").write_text("b\n", encoding="utf-8")
+        self._observation("obs-b", "src/b.py")
+        self.store.record_understanding(
+            m.CreateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-sibling"),
+                    context_id=CONTEXT_ID,
+                ),
+                surface=m.SurfaceKey(
+                    repository_id="repo-1",
+                    kind=m.SurfaceKind.FILE,
+                    locator="src/a.py",
+                ),
+                target=m.ExplicitTarget(
+                    question="What else does A do?",
+                    scope=m.EvidenceScope(paths=("src/a.py", "src/b.py")),
+                ),
+                conclusions=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-1"),
+                        statement="A does X.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-a")
+                            ),
+                        ),
+                        basis=_basis(),
+                    ),
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-2"),
+                        statement="B does Y.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/b.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-b")
+                            ),
+                        ),
+                        basis=_basis(),
+                    ),
+                ),
+            ),
+            understanding_id=m.UnderstandingId("u-sibling"),
+        )
+        (self.root / "src/b.py").write_text("changed\n", encoding="utf-8")
+        result = self._ask("src/a.py", "What else does A do?", "req-sibling-ask")
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.status.stale, 1)
+        self.assertEqual(len(result.status.stale_refs), 1)
+        stale = result.status.stale_refs[0]
+        self.assertEqual(stale.ref.conclusion_id.value, "c-2")
+        self.assertEqual(stale.ref.understanding_id.value, "u-sibling")
+        self.assertEqual(stale.understanding_version.value, 1)
+        self.assertIs(stale.state, m.SupportState.REASSESSMENT_REQUIRED)
+        self.assertEqual(len(result.conclusions), 1)
+
+    def test_document_view_gap_carries_historical_content(self) -> None:
+        (self.root / "src/a.py").write_text("changed\n", encoding="utf-8")
+        result = self._ask("src/a.py", None)
+        assert isinstance(result, m.Gap)
+        self.assertEqual(result.reason, m.GapReason.INVALIDATED)
+        self.assertEqual(result.historical[0].statement, "A does X number 1.")
 
     def test_unknown_surface_is_unassessed(self) -> None:
         result = self._ask("src/missing.py", "What does it do?")
@@ -548,6 +695,207 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(off_scope, m.Answer)
         self.assertEqual(off_scope.verification, ())
 
+    def _record_verification_paths(
+        self, request_id: str, paths: tuple[str, ...]
+    ) -> m.RecordReceipt:
+        verification_context = m.InvestigationContextId(f"ctx-{request_id}")
+        self.store.put_context(
+            m.InvestigationContext(
+                context_id=verification_context,
+                repository_id="repo-1",
+                request_id=m.RequestId(request_id),
+                request_digest=m.ContentDigest(f"sha256:{request_id}"),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(),
+                created_at=NOW,
+                expires_at=NOW + RETENTION.context_lifetime,
+            )
+        )
+        return self.store.record_verification(
+            m.RecordVerificationCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId(request_id),
+                    context_id=verification_context,
+                ),
+                run=m.ProposedVerificationRun(
+                    repository_id="repo-1",
+                    scope=m.VerificationScope(
+                        description=request_id,
+                        scope=m.EvidenceScope(paths=paths),
+                    ),
+                    observations=(m.SourceObservationId("obs-a"),),
+                    command="python3 -m unittest",
+                    scenario=None,
+                    outcome=m.VerificationOutcome.PASS,
+                    observed_at=NOW,
+                    observer="test",
+                ),
+            )
+        )
+
+    def _create_on_surface(
+        self,
+        understanding_id: str,
+        surface: m.SurfaceKey,
+        question: str,
+        *,
+        conclusion_id: str = "c-1",
+    ) -> None:
+        self.store.record_understanding(
+            m.CreateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId(f"req-{understanding_id}"),
+                    context_id=CONTEXT_ID,
+                ),
+                surface=surface,
+                target=m.ExplicitTarget(
+                    question=question,
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                ),
+                conclusions=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId(conclusion_id),
+                        statement="A does X.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-a")
+                            ),
+                        ),
+                        basis=_basis(),
+                    ),
+                ),
+            ),
+            understanding_id=m.UnderstandingId(understanding_id),
+        )
+
+    def test_multi_file_run_is_visible_on_each_file(self) -> None:
+        (self.root / "src/b.py").write_text("b\n", encoding="utf-8")
+        self._observation("obs-b", "src/b.py")
+        self._create("u-b", "src/b.py", "What does B do?")
+        self._record_verification_paths("req-multi", ("src/a.py", "src/b.py"))
+        for reference, question, request_id in (
+            ("src/a.py", "What does A do?", "req-ask-a"),
+            ("src/b.py", "What does B do?", "req-ask-b"),
+        ):
+            result = self._ask(reference, question, request_id)
+            assert isinstance(result, m.Answer)
+            self.assertEqual(len(result.verification), 1, reference)
+
+    def test_one_file_run_is_not_visible_on_a_broader_service(self) -> None:
+        service_key = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.SERVICE, locator="svc"
+        )
+        self.store.put_surface(
+            m.Surface(key=service_key, boundary=m.SurfaceBoundary(paths=("src",)))
+        )
+        self._create_on_surface("u-svc", service_key, "What does S do?")
+        self._record_verification_paths("req-one", ("src/a.py",))
+        result = self.service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                request_id="req-service",
+                surface=m.SurfaceReference(kind=m.SurfaceKind.SERVICE, locator="svc"),
+                question="What does S do?",
+            )
+        )
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.verification, ())
+
+    def test_service_wide_run_is_visible_on_service_and_files(self) -> None:
+        service_key = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.SERVICE, locator="svc"
+        )
+        self.store.put_surface(
+            m.Surface(key=service_key, boundary=m.SurfaceBoundary(paths=("src",)))
+        )
+        self._create_on_surface("u-svc", service_key, "What does S do?")
+        self._record_verification_paths("req-service", ("src",))
+        service_result = self.service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                request_id="req-svc-ask",
+                surface=m.SurfaceReference(kind=m.SurfaceKind.SERVICE, locator="svc"),
+                question="What does S do?",
+            )
+        )
+        assert isinstance(service_result, m.Answer)
+        self.assertEqual(len(service_result.verification), 1)
+        file_result = self.service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                request_id="req-file-ask",
+                surface=m.SurfaceReference(kind=m.SurfaceKind.FILE, locator="src/a.py"),
+                question="What does A do?",
+            )
+        )
+        assert isinstance(file_result, m.Answer)
+        self.assertEqual(len(file_result.verification), 1)
+
+    def test_directory_scoped_run_covers_files_under_it(self) -> None:
+        self._record_verification_paths("req-dir", ("src",))
+        result = self._ask("src/a.py", "What does A do?", "req-dir-ask")
+        assert isinstance(result, m.Answer)
+        self.assertEqual(len(result.verification), 1)
+
+    def test_verification_selection_order_is_deterministic(self) -> None:
+        first = self._record_verification_paths("req-order-a", ("src/a.py",))
+        second = self._record_verification_paths("req-order-b", ("src/a.py",))
+        result = self._ask("src/a.py", "What does A do?", "req-order-ask")
+        assert isinstance(result, m.Answer)
+        expected = sorted(
+            [
+                first.accepted_verification_run_ids[0].value,
+                second.accepted_verification_run_ids[0].value,
+            ]
+        )
+        self.assertEqual(
+            [view.run.run_id.value for view in result.verification],
+            expected,
+        )
+
+    def test_symbol_run_matches_through_containing_file(self) -> None:
+        symbol_key = m.SurfaceKey(
+            repository_id="repo-1",
+            kind=m.SurfaceKind.SYMBOL,
+            locator="src/a.py::A",
+        )
+        self._create_on_surface("u-sym", symbol_key, "What is A?")
+        self._record_verification_paths("req-sym", ("src/a.py",))
+        result = self.service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                request_id="req-sym-ask",
+                surface=m.SurfaceReference(
+                    kind=m.SurfaceKind.SYMBOL, locator="src/a.py::A"
+                ),
+                question="What is A?",
+            )
+        )
+        assert isinstance(result, m.Answer)
+        self.assertEqual(len(result.verification), 1)
+
+    def test_symbol_without_a_file_prefix_is_excluded(self) -> None:
+        symbol_key = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.SYMBOL, locator="Money"
+        )
+        self._create_on_surface("u-money", symbol_key, "What is Money?")
+        self._record_verification_paths("req-money", ("Money",))
+        result = self.service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                request_id="req-money-ask",
+                surface=m.SurfaceReference(kind=m.SurfaceKind.SYMBOL, locator="Money"),
+                question="What is Money?",
+            )
+        )
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.verification, ())
+
     def test_multiple_granularities_are_ambiguous(self) -> None:
         self.store.put_surface(
             m.Surface(
@@ -614,6 +962,89 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertTrue(result.omitted)
         self.assertTrue(result.conclusions)
         self.assertIn("u-wide", result.references)
+
+    def test_enriched_status_and_gap_fit_the_default_budget(self) -> None:
+        from span.service.answer import _encoded_size
+
+        limit = DEFAULT_SERVICE_BOUNDS_POLICY.max_response_bytes
+        refs = tuple(
+            m.StaleConclusionRef(
+                ref=m.ConclusionRevisionRef(
+                    understanding_id=m.UnderstandingId("u-1"),
+                    conclusion_id=m.ConclusionId(f"c-{index}"),
+                    revision=m.ConclusionRevisionNumber(1),
+                ),
+                understanding_version=m.UnderstandingVersionNumber(1),
+                state=m.SupportState.REASSESSMENT_REQUIRED,
+            )
+            for index in range(100)
+        )
+        status = m.SurfaceStatus(
+            surface=m.SurfaceKey(
+                repository_id="repo-1", kind=m.SurfaceKind.FILE, locator="src/a.py"
+            ),
+            current=1,
+            stale=len(refs),
+            stale_refs=refs,
+        )
+        self.assertLessEqual(_encoded_size(status), limit)
+        historical = m.HistoricalConclusion(
+            ref=refs[0].ref,
+            understanding_version=refs[0].understanding_version,
+            statement="A does X.",
+            state=m.SupportState.REASSESSMENT_REQUIRED,
+            evidence=(
+                m.EvidenceRef(
+                    evidence_id=m.EvidenceId("ev-src/a.py"),
+                    repository_id="repo-1",
+                    source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                    locator="src/a.py",
+                ),
+            ),
+        )
+        gap = m.Gap(
+            surface=status.surface,
+            reason=m.GapReason.INVALIDATED,
+            recovery="re-read the cited evidence, then record against the current revision",
+            historical=(historical,),
+        )
+        self.assertLessEqual(_encoded_size(gap), limit)
+
+    def test_truncated_gap_names_the_snapshot_retrieval_path(self) -> None:
+        from span.service.answer import _encoded_size
+
+        surface = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.FILE, locator="src/a.py"
+        )
+        historical = m.HistoricalConclusion(
+            ref=m.ConclusionRevisionRef(
+                understanding_id=m.UnderstandingId("u-1"),
+                conclusion_id=m.ConclusionId("c-1"),
+                revision=m.ConclusionRevisionNumber(1),
+            ),
+            understanding_version=m.UnderstandingVersionNumber(1),
+            statement="A does X.",
+            state=m.SupportState.REASSESSMENT_REQUIRED,
+            evidence=(
+                m.EvidenceRef(
+                    evidence_id=m.EvidenceId("ev-src/a.py"),
+                    repository_id="repo-1",
+                    source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                    locator="src/a.py",
+                ),
+            ),
+        )
+        gap = m.Gap(
+            surface=surface,
+            reason=m.GapReason.INVALIDATED,
+            recovery="base recovery",
+            historical=(historical,),
+        )
+        result = self.service._fit_gap(gap, _encoded_size(gap) - 1)
+        assert isinstance(result, m.Gap)
+        self.assertTrue(result.truncated)
+        self.assertEqual(result.historical, ())
+        self.assertIn("UnderstandingSnapshotSelector", result.recovery)
 
     def test_budget_below_minimum_is_refused(self) -> None:
         result = self._service(10).ask(

@@ -57,6 +57,7 @@ class NoSpanImportTest(unittest.TestCase):
             "subprocess",
             "sys",
             "pathlib",
+            "re",
         }
         for node in _module_level_imports(tree):
             if isinstance(node, ast.Import):
@@ -355,6 +356,538 @@ class OpencodePluginTest(unittest.TestCase):
                 )["status"],
                 "absent",
             )
+
+    def test_deploy_removes_duplicate_span_plugin_registrations(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            source = root / "span-hooks.js"
+            source.write_text('export default { id: "span-hooks" }\n')
+            plugin_dir = root / "opencode-plugin"
+            stale_dir = root / "old-opencode-plugin"
+            stale_dir.mkdir()
+            (stale_dir / "index.js").write_text('export default { id: "span-hooks" }\n')
+            foreign_dir = root / "foreign-plugin"
+            foreign_dir.mkdir()
+            (foreign_dir / "index.js").write_text('export default { id: "other" }\n')
+            config = root / "opencode.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "plugins": [
+                            str(stale_dir),
+                            str(foreign_dir),
+                            str(plugin_dir),
+                        ]
+                    }
+                )
+            )
+            result = install.deploy_opencode_plugin(
+                str(source),
+                str(plugin_dir),
+                str(config),
+                "/bin/span-hooks",
+                "/data",
+                dry_run=False,
+            )
+            self.assertEqual(result["removed_config_entries"], [str(stale_dir)])
+            self.assertEqual(
+                json.loads(config.read_text())["plugins"],
+                [str(foreign_dir), str(plugin_dir)],
+            )
+
+    def test_retire_moves_only_span_copies_and_preserves_content(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "target"
+            plugins = target / ".opencode" / "plugins"
+            plugins.mkdir(parents=True)
+            stale = plugins / "span-hooks.js"
+            content = 'export default { id: "span-hooks" }\n'
+            stale.write_text(content)
+            foreign = plugins / "custom.js"
+            foreign.write_text('export default { id: "custom" }\n')
+            result = install.retire_stale_target_opencode_plugins(
+                [target], dry_run=False
+            )
+            retired = target / ".opencode" / "span-retired" / "span-hooks.js"
+            self.assertEqual(result["status"], "retired")
+            self.assertFalse(stale.exists())
+            self.assertTrue(retired.is_file())
+            self.assertEqual(retired.read_text(), content)
+            self.assertTrue(foreign.exists())
+            self.assertEqual(result["retired"][0]["from"], str(stale))
+            self.assertEqual(result["retired"][0]["to"], str(retired))
+            self.assertTrue(result["retired"][0]["sha256"].startswith("sha256:"))
+
+    def test_retire_collision_uses_deterministic_suffix(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "target"
+            plugins = target / ".opencode" / "plugins"
+            plugins.mkdir(parents=True)
+            retired_dir = target / ".opencode" / "span-retired"
+            retired_dir.mkdir(parents=True)
+            (retired_dir / "span-hooks.js").write_text("older\n")
+            stale = plugins / "span-hooks.js"
+            stale.write_text('export default { id: "span-hooks" }\n')
+            result = install.retire_stale_target_opencode_plugins(
+                [target], dry_run=False
+            )
+            self.assertEqual(
+                result["retired"][0]["to"],
+                str(retired_dir / "span-hooks.js.1"),
+            )
+            self.assertTrue((retired_dir / "span-hooks.js.1").is_file())
+
+    def test_retire_dry_run_reports_without_moving(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "target"
+            plugins = target / ".opencode" / "plugins"
+            plugins.mkdir(parents=True)
+            stale = plugins / "span-hooks.js"
+            stale.write_text('export default { id: "span-hooks" }\n')
+            result = install.retire_stale_target_opencode_plugins(
+                [target], dry_run=True
+            )
+            self.assertEqual(result["status"], "retired")
+            self.assertTrue(stale.is_file())
+            self.assertFalse((target / ".opencode" / "span-retired").exists())
+
+    def test_retire_is_idempotent(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "target"
+            plugins = target / ".opencode" / "plugins"
+            plugins.mkdir(parents=True)
+            (plugins / "span-hooks.js").write_text(
+                'export default { id: "span-hooks" }\n'
+            )
+            install.retire_stale_target_opencode_plugins([target], dry_run=False)
+            second = install.retire_stale_target_opencode_plugins(
+                [target], dry_run=False
+            )
+            self.assertEqual(second["status"], "absent")
+            self.assertEqual(second["retired"], [])
+
+
+class OpencodeScopeTest(unittest.TestCase):
+    def test_fresh_install_defaults_to_global(self):
+        with mock.patch("builtins.print") as printed:
+            scope, previous = install.resolve_opencode_scope(None, None)
+        self.assertEqual(scope, "global")
+        self.assertIsNone(previous)
+        self.assertTrue(
+            any("global (default" in str(call) for call in printed.call_args_list)
+        )
+
+    def test_receipt_scope_is_reused(self):
+        receipt = {"host_registration": {"opencode_plugin": {"scope": "local"}}}
+        scope, previous = install.resolve_opencode_scope(None, receipt)
+        self.assertEqual(scope, "local")
+        self.assertEqual(previous, "local")
+
+    def test_receipt_scope_reads_the_live_hooks_path(self):
+        receipt = {
+            "host_registration": {"hooks": {"opencode_plugin": {"scope": "global"}}}
+        }
+        self.assertEqual(install.receipt_opencode_scope(receipt), "global")
+        scope, previous = install.resolve_opencode_scope(None, receipt)
+        self.assertEqual(scope, "global")
+        self.assertEqual(previous, "global")
+
+    def test_upgrade_without_scope_stops_and_names_the_flag(self):
+        receipt = {"host_registration": {"opencode_plugin": {"status": "wired"}}}
+        with self.assertRaises(SystemExit) as ctx:
+            install.resolve_opencode_scope(None, receipt)
+        self.assertIn("--opencode-plugin-scope", str(ctx.exception))
+
+    def test_conflicting_receipt_scopes_are_ambiguous(self):
+        receipt = {
+            "host_registration": {"opencode_plugin": {"scope": "global"}},
+            "host_integration_migration": {"opencode_plugin": {"scope": "local"}},
+        }
+        with self.assertRaises(SystemExit):
+            install.resolve_opencode_scope(None, receipt)
+
+    def test_flag_overrides_receipt_and_reports_change(self):
+        receipt = {"host_registration": {"opencode_plugin": {"scope": "local"}}}
+        with mock.patch("builtins.print") as printed:
+            scope, previous = install.resolve_opencode_scope("global", receipt)
+        self.assertEqual(scope, "global")
+        self.assertEqual(previous, "local")
+        self.assertTrue(
+            any("local -> global" in str(call) for call in printed.call_args_list)
+        )
+
+    def test_deploy_reports_user_managed_span_copy_as_conflict(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            span_root = root / "span"
+            span_root.mkdir()
+            source = root / "span-hooks.js"
+            source.write_text('export default { id: "span-hooks" }\n')
+            canonical = span_root / "opencode-plugin"
+            user = root / "my-plugins" / "span-hooks.js"
+            user.parent.mkdir()
+            user.write_text('export default { id: "span-hooks" }\n')
+            config = root / "opencode.json"
+            config.write_text(json.dumps({"plugins": [str(user), str(canonical)]}))
+            result = install.deploy_opencode_plugin(
+                str(source),
+                str(canonical),
+                str(config),
+                "/bin/span-hooks",
+                str(span_root / "data"),
+                span_root=span_root,
+            )
+            self.assertEqual(result["status"], "conflict")
+            self.assertIn(str(user), result["user_managed"])
+            plugins = json.loads(config.read_text())["plugins"]
+            self.assertIn(str(user), plugins)
+            self.assertTrue(user.is_file())
+
+    def test_remove_opencode_plugin_keeps_user_managed_entries(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            span_root = root / "span"
+            canonical = span_root / "opencode-plugin"
+            canonical.mkdir(parents=True)
+            (canonical / "index.js").write_text("// plugin\n")
+            user = root / "user-plugin"
+            user.mkdir()
+            (user / "index.js").write_text('export default { id: "span-hooks" }\n')
+            config = root / "opencode.json"
+            config.write_text(json.dumps({"plugins": [str(canonical), str(user)]}))
+            result = install.remove_opencode_plugin(
+                str(config), str(canonical), span_root=span_root
+            )
+            self.assertEqual(result["removed_config_entries"], [str(canonical)])
+            self.assertEqual(result["user_managed"], [str(user)])
+            self.assertFalse(canonical.exists())
+            self.assertTrue(user.is_dir())
+            self.assertEqual(json.loads(config.read_text())["plugins"], [str(user)])
+
+
+class ScopeApplicationTest(unittest.TestCase):
+    def _env(self, root, dry=False):
+        repo = root / "repo"
+        (repo / "src" / "span").mkdir(parents=True, exist_ok=True)
+        source = repo / "integrations" / "hosts" / "opencode" / "span-hooks.js"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('export default { id: "span-hooks" }\n')
+        return mock.Mock(dry=dry, span_repo=repo, data_dir=root / "span" / "data")
+
+    def _apply(self, scope, root, selected=(), receipt_only=()):
+        from span.shell.install.cli import _apply_opencode_scope
+
+        env = self._env(root)
+        span_root = root / "span"
+        canonical = span_root / "opencode-plugin"
+        config = root / "opencode.json"
+        return _apply_opencode_scope(
+            env,
+            scope,
+            config,
+            canonical,
+            span_root,
+            tuple(selected),
+            tuple(receipt_only),
+            "/bin/span-hooks",
+        )
+
+    def test_upgrade_without_a_recorded_scope_stops_before_provisioning(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            data = root / "data"
+            data.mkdir()
+            (data / "install.json").write_text(json.dumps({"repos": []}))
+            with self.assertRaises(SystemExit) as ctx:
+                install.main(
+                    [
+                        "--span-repo",
+                        tmp,
+                        "--data-dir",
+                        str(data),
+                        "--venv-dir",
+                        str(root / "venv"),
+                        "--bin-dir",
+                        str(root / "bin"),
+                    ]
+                )
+            self.assertIn("--opencode-plugin-scope", str(ctx.exception))
+            self.assertFalse((root / "venv").exists())
+
+    def test_global_retires_selected_and_reports_receipt_only(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            selected = root / "selected"
+            receipt_only = root / "receipt-only"
+            for target in (selected, receipt_only):
+                plugins = target / ".opencode" / "plugins"
+                plugins.mkdir(parents=True)
+                (plugins / "span-hooks.js").write_text(
+                    'export default { id: "span-hooks" }\n'
+                )
+            plugin, targets = self._apply("global", root, [selected], [receipt_only])
+            self.assertEqual(plugin["status"], "conflict")
+            self.assertTrue(
+                (selected / ".opencode" / "span-retired" / "span-hooks.js").is_file()
+            )
+            self.assertTrue(
+                (receipt_only / ".opencode" / "plugins" / "span-hooks.js").is_file()
+            )
+            self.assertEqual(
+                targets["receipt_only"]["targets"][str(receipt_only)][0]["path"],
+                str(receipt_only / ".opencode" / "plugins" / "span-hooks.js"),
+            )
+            self.assertTrue(
+                any(
+                    "--repo" in str(item.get("manual_action", ""))
+                    for item in plugin["conflicts"]
+                )
+            )
+
+    def test_global_does_not_scan_an_unregistered_target(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            selected = root / "selected"
+            selected.mkdir()
+            unregistered = root / "unregistered"
+            plugins = unregistered / ".opencode" / "plugins"
+            plugins.mkdir(parents=True)
+            (plugins / "span-hooks.js").write_text(
+                'export default { id: "span-hooks" }\n'
+            )
+            plugin, _ = self._apply("global", root, [selected])
+            self.assertEqual(plugin["status"], "wired")
+            self.assertTrue((plugins / "span-hooks.js").is_file())
+
+    def test_global_move_failure_is_a_conflict(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            selected = root / "selected"
+            plugins = selected / ".opencode" / "plugins"
+            plugins.mkdir(parents=True)
+            (plugins / "span-hooks.js").write_text(
+                'export default { id: "span-hooks" }\n'
+            )
+            with mock.patch.object(shutil, "move", side_effect=OSError("read-only")):
+                plugin, _ = self._apply("global", root, [selected])
+            self.assertEqual(plugin["status"], "conflict")
+            self.assertTrue(plugin["conflicts"])
+
+    def test_local_without_a_copy_is_absent(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            plugin, _ = self._apply("local", pathlib.Path(tmp))
+            self.assertEqual(plugin["status"], "absent")
+            self.assertEqual(plugin["scope"], "local")
+
+    def test_none_without_a_copy_is_disabled(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            plugin, _ = self._apply("none", pathlib.Path(tmp))
+            self.assertEqual(plugin["status"], "disabled")
+
+    def test_local_with_one_target_copy_is_external_and_untouched(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            target = root / "target"
+            plugins = target / ".opencode" / "plugins"
+            plugins.mkdir(parents=True)
+            (plugins / "span-hooks.js").write_text(
+                'export default { id: "span-hooks" }\n'
+            )
+            plugin, _ = self._apply("local", root, [target])
+            self.assertEqual(plugin["status"], "external")
+            self.assertTrue(plugin["user_managed"][0]["matches_installed"])
+            self.assertTrue((plugins / "span-hooks.js").is_file())
+
+    def test_none_with_two_copies_is_a_conflict(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            first = root / "first"
+            second = root / "second"
+            for target in (first, second):
+                plugins = target / ".opencode" / "plugins"
+                plugins.mkdir(parents=True)
+                (plugins / "span-hooks.js").write_text(
+                    'export default { id: "span-hooks" }\n'
+                )
+            plugin, _ = self._apply("none", root, [first, second])
+            self.assertEqual(plugin["status"], "conflict")
+            self.assertEqual(len(plugin["conflicts"]), 2)
+
+
+class DoctorPluginReportTest(unittest.TestCase):
+    def _report(self, scope, entries=(), unreadable=(), canonical_exists=False):
+        from span.shell.install.verify import _opencode_plugin_report
+
+        canonical = pathlib.Path("/span/opencode-plugin")
+        return _opencode_plugin_report(
+            scope,
+            {
+                "entries": list(entries),
+                "unreadable": list(unreadable),
+                "canonical_exists": canonical_exists,
+            },
+            canonical,
+        )
+
+    def test_scope_unknown_when_receipt_has_no_scope(self):
+        self.assertEqual(self._report(None)["status"], "scope_unknown")
+
+    def test_global_clean_is_wired(self):
+        self.assertEqual(self._report("global")["status"], "wired")
+
+    def test_global_user_managed_copy_is_a_conflict(self):
+        report = self._report(
+            "global",
+            [{"artifact": "global-user", "path": "/user/span-hooks"}],
+        )
+        self.assertEqual(report["status"], "conflict")
+        self.assertIn("/user/span-hooks", report["observed"])
+
+    def test_local_without_a_copy_is_absent(self):
+        self.assertEqual(self._report("local")["status"], "absent")
+
+    def test_none_without_a_copy_is_disabled(self):
+        self.assertEqual(self._report("none")["status"], "disabled")
+
+    def test_local_with_one_copy_is_external(self):
+        report = self._report(
+            "local",
+            [
+                {
+                    "artifact": "target",
+                    "target": "/t",
+                    "path": "/t/.opencode/plugins/span-hooks.js",
+                    "sha256": "sha256:x",
+                }
+            ],
+        )
+        self.assertEqual(report["status"], "external")
+
+    def test_two_copies_are_a_conflict(self):
+        report = self._report(
+            "none",
+            [
+                {
+                    "artifact": "target",
+                    "target": "/a",
+                    "path": "/a/.opencode/plugins/span-hooks.js",
+                    "sha256": "sha256:x",
+                },
+                {
+                    "artifact": "target",
+                    "target": "/b",
+                    "path": "/b/.opencode/plugins/span-hooks.js",
+                    "sha256": "sha256:x",
+                },
+            ],
+        )
+        self.assertEqual(report["status"], "conflict")
+
+    def test_a_global_artifact_outside_local_scope_is_a_mismatch(self):
+        report = self._report(
+            "local",
+            [{"artifact": "global-managed", "path": "/span/opencode-plugin"}],
+            canonical_exists=True,
+        )
+        self.assertEqual(report["status"], "conflict")
+        self.assertIn("scope mismatch", report["reason"])
+
+    def test_unreadable_is_reported_not_guessed(self):
+        report = self._report(
+            "global",
+            unreadable=[{"artifact": "global-config", "reason": "denied"}],
+        )
+        self.assertEqual(report["status"], "unreadable")
+
+    def test_retired_files_are_never_listed(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "target"
+            retired = target / ".opencode" / "span-retired"
+            retired.mkdir(parents=True)
+            (retired / "span-hooks.js").write_text("retired\n")
+            targets_state, unreadable = install.inspect_target_opencode_plugins(
+                [target]
+            )
+            self.assertEqual(targets_state[str(target)], [])
+            self.assertEqual(unreadable, [])
+
+
+class ReceiptMigrationTest(unittest.TestCase):
+    def test_receipt_records_scope_retirement_and_removed_entries(self):
+        from types import SimpleNamespace
+
+        from span.shell.install.cli import _build_receipt
+
+        env = SimpleNamespace(
+            span_repo=pathlib.Path("/r"),
+            dry=True,
+            venv_dir=pathlib.Path("/v"),
+            data_dir=pathlib.Path("/d"),
+            targets=(pathlib.Path("/t"),),
+        )
+        state = SimpleNamespace(
+            target_census={},
+            seeds=[],
+            preflight={},
+            venv_python=pathlib.Path("/v/bin/python"),
+            indexer_pointer=None,
+            source_venv_sync={},
+            data_backup=None,
+            post_install_verified=None,
+        )
+        retired = [
+            {"from": "/t/span-hooks.js", "to": "/t/span-retired", "sha256": "sha256:x"}
+        ]
+        host = {
+            "hooks": {
+                "opencode_plugin": {
+                    "scope": "global",
+                    "status": "wired",
+                    "plugin": "/span/opencode-plugin",
+                    "retired": retired,
+                    "removed_config_entries": ["/old"],
+                }
+            }
+        }
+        receipt = _build_receipt(env, state, host, {})
+        migration = receipt["host_integration_migration"]
+        self.assertEqual(migration["opencode_plugin"]["scope"], "global")
+        self.assertEqual(migration["opencode_plugin"]["status"], "wired")
+        self.assertEqual(migration["retired_target_plugins"], retired)
+        self.assertEqual(migration["removed_config_entries"], ["/old"])
+        self.assertNotIn("span_version", migration)
 
 
 class AgentsRuleIsolationTest(unittest.TestCase):
@@ -1065,6 +1598,109 @@ class HookWiringTest(unittest.TestCase):
                 install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
             finally:
                 os.path.expanduser = real_expanduser
+
+    def test_codex_merge_replaces_span_entry_with_changed_path(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp)
+            hooks_path = home / ".codex" / "hooks.json"
+            hooks_path.parent.mkdir(parents=True)
+            hooks_path.write_text(
+                json.dumps(
+                    {
+                        "hooks": {
+                            "SessionStart": [
+                                {
+                                    "matcher": "startup|resume|compact",
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": "/old/bin/span-hooks session-start",
+                                        },
+                                        {
+                                            "type": "command",
+                                            "command": "/bin/foreign-hook",
+                                        },
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                )
+            )
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                result = install.wire_codex_hooks("/new/bin/span-hooks", dry_run=False)
+            finally:
+                os.path.expanduser = real_expanduser
+            self.assertEqual(result["replaced"], 1)
+            config = json.loads(hooks_path.read_text())
+            commands = [
+                hook["command"]
+                for group in config["hooks"].values()
+                for block in group
+                for hook in block["hooks"]
+            ]
+            self.assertNotIn("/old/bin/span-hooks session-start", commands)
+            self.assertIn("/new/bin/span-hooks session-start", commands)
+            self.assertIn("/bin/foreign-hook", commands)
+            self.assertEqual(sum("span-hooks" in command for command in commands), 3)
+
+    def test_claude_retirement_removes_only_span_commands(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp)
+            settings_path = home / ".claude" / "settings.json"
+            settings_path.parent.mkdir(parents=True)
+            settings_path.write_text(
+                json.dumps(
+                    {
+                        "theme": "dark",
+                        "hooks": {
+                            "SessionStart": [
+                                {
+                                    "matcher": "startup",
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": "/bin/span-hooks session-start",
+                                        },
+                                        {
+                                            "type": "command",
+                                            "command": "/bin/foreign-hook",
+                                        },
+                                    ],
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+            real_expanduser = os.path.expanduser
+            os.path.expanduser = lambda p: (
+                str(home) + p[1:] if p.startswith("~") else p
+            )
+            try:
+                result = install.remove_claude_hooks(dry_run=False)
+            finally:
+                os.path.expanduser = real_expanduser
+            self.assertEqual(result["status"], "removed")
+            config = json.loads(settings_path.read_text())
+            self.assertEqual(config["theme"], "dark")
+            commands = [
+                hook["command"]
+                for group in config["hooks"].values()
+                for block in group
+                for hook in block["hooks"]
+            ]
+            self.assertEqual(commands, ["/bin/foreign-hook"])
 
 
 class SkillDeployTest(unittest.TestCase):
