@@ -35,9 +35,6 @@ contradicted the current lifecycle.
   registration and plugin wiring from their independently recorded
   configurations, preserving foreign entries and supporting legitimate split
   installations.
-- Bare `--verify-only` also reuses the receipt's repository bindings when no
-  `--repo` arguments are supplied, so OpenCode inspection, plugin inspection,
-  and runtime readiness verification all evaluate the installed targets.
 - `--no-hooks` disables lifecycle hook and plugin wiring only; it does not
   disable MCP registration. The selected MCP configuration is still rewritten
   with the current data directory and all `--repo` bindings.
