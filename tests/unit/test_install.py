@@ -2811,6 +2811,9 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                         "span.shell.install.verify.verify_installation",
                         return_value={"repos": []},
                     ) as verify_installation,
+                    patch(
+                        "span.shell.install.verify.inspect_claude_registration"
+                    ) as inspect_claude,
                     patch("span.shell.install.verify.check_skills"),
                 ):
                     report = install.doctor(
@@ -2823,6 +2826,10 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                 os.chdir(previous)
         self.assertEqual(report["opencode_registration"]["status"], "matched")
         self.assertEqual(verify_installation.call_args.args[2], (repo,))
+        self.assertEqual(
+            inspect_claude.call_args.args[0],
+            install.expected_span_command("/bin/span-mcp", str(data_dir), [repo]),
+        )
 
     def test_doctor_does_not_inspect_unrecorded_global_mcp_config(self):
         import os

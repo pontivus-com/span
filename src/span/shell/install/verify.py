@@ -165,7 +165,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
         expected_span_command(
             resolved if resolved is not None else "span-mcp",
             data_dir,
-            repos,
+            effective_repos,
         )
     )
     print(f"opencode registration: {opencode_state['status']}")

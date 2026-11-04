@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.9.3 — 2026-11-04
+## 0.9.4 — 2026-11-04
 
-**A host-contract and legacy-boundary release.** 0.9.3 completes the current
+**A host-contract and legacy-boundary release.** 0.9.4 completes the current
 three-tool Span contract, repairs installer-produced host state, restores
 managed Claude Code support, and removes executable compatibility residue that
 contradicted the current lifecycle.
@@ -35,6 +35,9 @@ contradicted the current lifecycle.
   registration and plugin wiring from their independently recorded
   configurations, preserving foreign entries and supporting legitimate split
   installations.
+- Bare `--verify-only` also reuses the receipt's repository bindings when no
+  `--repo` arguments are supplied, so OpenCode inspection, plugin inspection,
+  and runtime readiness verification all evaluate the installed targets.
 - `--no-hooks` disables lifecycle hook and plugin wiring only; it does not
   disable MCP registration. The selected MCP configuration is still rewritten
   with the current data directory and all `--repo` bindings.
