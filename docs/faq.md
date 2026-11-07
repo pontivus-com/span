@@ -69,9 +69,12 @@ prove the original commit failed.
 ## Which clients are verified for this beta?
 
 Codex and OpenCode are supported live targets with three-tool captures of the
-declared grammar, request identity, and recovery behavior. OpenCode also has
-the flat-create re-capture and adoption measurement; Codex's flat-create
-capture is pending. Claude Code is a supported managed host for registration,
+declared grammar, request identity, and recovery behavior. The 2026-11-07
+candidate adds an OpenCode compact create/add/correct/replace journey and a
+Codex flat-create smoke journey; Codex's full compact add/correct/replace
+journey is still pending. OpenCode removes an unknown old-form field before
+delivery, so strict unknown-field rejection is not established through that
+host. Claude Code is a supported managed host for registration,
 health inspection, and installer behavior, but its authenticated
 model-delivery grammar and caller identity remain **UNVERIFIED**. Registration
 health alone is not model-delivery evidence.
@@ -89,7 +92,7 @@ stores use the explicit offline archive/export/stage/activate transition.
 [Install](install.md) documents verification, rollback, removal, and retention.
 
 A bare package upgrade does not migrate the host. Rerun `span-install` for the
-target and restart the host after configuration changes. A current 0.9.4
+target and restart the host after configuration changes. A current 0.10.0
 receipt preserves its absolute OpenCode MCP and plugin paths; the installer
 does not migrate obsolete target-plugin copies. See [install](install.md) for
 the current selection, verification, and uninstall behavior.

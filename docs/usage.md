@@ -36,11 +36,15 @@ strength of its wording.
    paths to see every affected surface, why it was considered, and which
    conclusions actually lost support.
 2. Record a coherent result with `record(kind="understanding")`. A create is
-   one conclusion: `conclusion` plus `locator` (or the `observation_id` from the
-   ask gap), with an optional `surface`. Cite what you already hold.
+   one conclusion with exactly one evidence mode: `locator`, the
+   `observation_id` from the ask gap, or non-empty `support`. Scope is supplied
+   or derived independently through `scope_paths`, the context, or a surface.
+   Cite what you already hold.
    Distinguish observed behavior from governing intent, and include unresolved
    questions with their basis as gaps. Use `actions.add`, `confirm`, `correct`,
-   `replace`, or `withdraw` for an update.
+   `replace`, or `withdraw` for an update; each action names the conclusion and
+   exactly one evidence mode, and Span derives the old revision and unchanged
+   content metadata.
 3. Preserve the caller identity and full submission before sending. Retrying
    identical content with the same identity returns the retained receipt.
 4. Read back an exact snapshot or receipt with `ask(selector=...)` if needed.
@@ -81,8 +85,10 @@ affect a declared dependency.
 
 Investigate the changed support, then record the matching update. Updates use an
 expected version and create a new immutable snapshot; omission is not deletion.
-A confirmation records a substantive reassessment, including its current
-support and basis.
+A confirmation records a substantive reassessment with its current support; a
+correction supplies the new statement and complete support; a replacement adds
+its reason. `Changed` already carries the expected version and context, so the
+continuation into `record` needs no extra `ask`.
 
 Raise a challenge through `reconsider` when an explanation is disputed even with
 unchanged sources. Settle or carry the dispute forward explicitly through

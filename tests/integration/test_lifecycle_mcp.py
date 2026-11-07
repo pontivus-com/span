@@ -25,32 +25,6 @@ def _write(root: pathlib.Path, relative: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def _conclusion(
-    *,
-    conclusion_id: str = "c-1",
-    statement: str = "The app emits line1.",
-    support: list[dict] | None = None,
-) -> dict:
-    return {
-        "conclusion_id": conclusion_id,
-        "statement": statement,
-        "assertion_nature": "DESCRIPTIVE",
-        "scope_paths": ["src/app.py"],
-        "scope_evidence_refs": [],
-        "support": support
-        or [
-            {
-                "$type": "SourceSupportWire",
-                "locator": "src/app.py",
-                "ranges": [],
-            }
-        ],
-        "basis_derivation": "EXPLICIT_EVIDENCE",
-        "basis_summary": "read the source",
-        "basis_input_refs": [],
-    }
-
-
 class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -100,6 +74,15 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 return await callback(session)
+
+    def _qualification_ids(self, recorded: dict) -> set[str]:
+        return {
+            item["ref"]["conclusion_id"]["value"]
+            for item in recorded["qualification"]["conclusions"]
+        }
+
+    def _created_conclusion_id(self, recorded: dict) -> str:
+        return next(iter(self._qualification_ids(recorded)))
 
     async def _record_create(self, session: ClientSession, request: str) -> dict:
         return await self._call(
@@ -432,6 +415,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             understanding_id = created["receipt"]["accepted_understanding_ids"][0][
                 "value"
             ]
+            existing_ids = self._qualification_ids(created)
             added = await self._call(
                 session,
                 "record",
@@ -444,29 +428,18 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "actions": {
                         "add": [
                             {
-                                "conclusion_id": "c-2",
-                                "statement": "The site styles are red.",
-                                "assertion_nature": "DESCRIPTIVE",
+                                "conclusion": "The site styles are red.",
                                 "scope_paths": ["styles/site.css"],
-                                "scope_evidence_refs": [],
-                                "support": [
-                                    {
-                                        "$type": "SourceSupportWire",
-                                        "locator": "styles/site.css",
-                                        "ranges": [],
-                                    }
-                                ],
-                                "basis_derivation": "EXPLICIT_EVIDENCE",
-                                "basis_summary": "read the stylesheet",
-                                "basis_input_refs": [],
+                                "locator": "styles/site.css",
                             }
                         ]
                     },
                 },
             )
             self.assertEqual(added["$type"], "UnderstandingRecorded", added)
+            added_id = (self._qualification_ids(added) - existing_ids).pop()
             _write(self.repo, "styles/site.css", "body { color: blue; }\n")
-            return await self._call(
+            answer = await self._call(
                 session,
                 "ask",
                 {
@@ -476,12 +449,14 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "question": "What happens in the app?",
                 },
             )
+            return {"answer": answer, "added_id": added_id}
 
-        result = await self._session(journey)
+        outcome = await self._session(journey)
+        result = outcome["answer"]
         self.assertEqual(result["$type"], "Answer")
         self.assertEqual(result["status"]["stale"], 1)
         stale = result["status"]["stale_refs"][0]
-        self.assertEqual(stale["ref"]["conclusion_id"]["value"], "c-2")
+        self.assertEqual(stale["ref"]["conclusion_id"]["value"], outcome["added_id"])
         self.assertEqual(stale["understanding_version"]["value"], 2)
         self.assertEqual(stale["state"], "REASSESSMENT_REQUIRED")
 
@@ -621,6 +596,374 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(page["$type"], "EvidencePage")
         self.assertTrue(page["evidence"])
 
+    async def test_reconsider_record_succeeds_without_an_intervening_ask(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            created = await self._record_create(session, "sub-create-reconsider")
+            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
+                "value"
+            ]
+            target_id = self._created_conclusion_id(created)
+            _write(self.repo, "src/app.py", "changed\n")
+            changed = await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "changed_paths": ["src/app.py"],
+                },
+            )
+            surface = next(
+                item
+                for item in changed["surfaces"]
+                if item["surface"]["locator"] == "src/app.py"
+            )
+            conclusion = next(
+                item
+                for item in surface["conclusions"]
+                if item["ref"]["understanding_id"]["value"] == understanding_id
+            )
+            self.assertEqual(conclusion["expected_version"]["value"], 1)
+            updated = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-correct-reconsider",
+                    "context_id": changed["context"]["value"],
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": conclusion["expected_version"]["value"],
+                    "actions": {
+                        "correct": [
+                            {
+                                "conclusion_id": target_id,
+                                "conclusion": "The app emits changed.",
+                                "locator": "src/app.py",
+                            }
+                        ]
+                    },
+                },
+            )
+            self.assertEqual(updated["$type"], "UnderstandingRecorded", updated)
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "req-after-reconsider",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                },
+            )
+
+        answer = await self._session(journey)
+        self.assertEqual(answer["$type"], "Answer")
+        self.assertEqual(
+            answer["conclusions"][0]["statement"], "The app emits changed."
+        )
+
+    async def test_reconsider_race_rejects_on_stale_expected_version(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            created = await self._record_create(session, "sub-race")
+            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
+                "value"
+            ]
+            target_id = self._created_conclusion_id(created)
+            _write(self.repo, "src/app.py", "changed\n")
+            changed = await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "changed_paths": ["src/app.py"],
+                },
+            )
+            surface = next(
+                item
+                for item in changed["surfaces"]
+                if item["surface"]["locator"] == "src/app.py"
+            )
+            expected = surface["conclusions"][0]["expected_version"]["value"]
+            advanced = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-race-advance",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": expected,
+                    "actions": {
+                        "add": [
+                            {
+                                "conclusion": "The app also emits line2.",
+                                "locator": "src/app.py",
+                            }
+                        ]
+                    },
+                },
+            )
+            self.assertEqual(advanced["$type"], "UnderstandingRecorded", advanced)
+            rejected = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-race-correct",
+                    "context_id": changed["context"]["value"],
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": expected,
+                    "actions": {
+                        "correct": [
+                            {
+                                "conclusion_id": target_id,
+                                "conclusion": "The app emits race.",
+                                "locator": "src/app.py",
+                            }
+                        ]
+                    },
+                },
+            )
+            return {"rejected": rejected, "expected": expected}
+
+        outcome = await self._session(journey)
+        rejected = outcome["rejected"]
+        self.assertEqual(rejected["$type"], "Rejected")
+        self.assertEqual(rejected["cause_kind"], "version_conflict")
+        self.assertEqual(rejected["current_version"], outcome["expected"] + 1)
+
+    async def test_service_context_binds_the_scope_of_a_support_create(self) -> None:
+        paths = ["src/a.py", "src/b.py", "src/c.py", "src/d.py"]
+        for path in paths:
+            _write(self.repo, path, f"{path} content\n")
+
+        async def journey(session: ClientSession) -> dict:
+            declared = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-ctx-declare",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {
+                        "kind": "SERVICE",
+                        "locator": "pipeline",
+                        "boundary": {"paths": paths, "symbols": []},
+                        "parent": None,
+                    },
+                },
+            )
+            self.assertEqual(declared["$type"], "SurfaceDeclared")
+            gap = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-ctx-ask",
+                    "surface": {"kind": "SERVICE", "locator": "pipeline"},
+                    "question": "How does the pipeline move data?",
+                },
+            )
+            self.assertEqual(gap["$type"], "Gap", gap)
+            self.assertIsNotNone(gap.get("context"))
+            created = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-ctx-support",
+                    "context_id": gap["context"]["value"],
+                    "kind": "understanding",
+                    "surface": {"kind": "SERVICE", "locator": "pipeline"},
+                    "conclusion": "The pipeline flows A through D.",
+                    "support": [
+                        {
+                            "$type": "SourceSupportWire",
+                            "locator": path,
+                            "ranges": [],
+                        }
+                        for path in paths
+                    ],
+                },
+            )
+            self.assertEqual(created["$type"], "UnderstandingRecorded", created)
+            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
+                "value"
+            ]
+            answer = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-ctx-answer",
+                    "surface": {"kind": "SERVICE", "locator": "pipeline"},
+                    "question": "How does the pipeline move data?",
+                },
+            )
+            return {"understanding_id": understanding_id, "answer": answer}
+
+        outcome = await self._session(journey)
+        self.assertEqual(outcome["answer"]["$type"], "Answer")
+        store = LifecycleStore(
+            self.data / f"{REPOSITORY_ID}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        self.addCleanup(store.close)
+        understanding = store.get_understanding(outcome["understanding_id"])
+        self.assertEqual(understanding.scope.paths, tuple(paths))
+
+    async def test_declared_service_owns_a_four_file_conclusion_lifecycle(
+        self,
+    ) -> None:
+        paths = ["src/a.py", "src/b.py", "src/c.py", "src/d.py"]
+        for path in paths:
+            _write(self.repo, path, f"{path} content\n")
+
+        async def journey(session: ClientSession) -> dict:
+            ambiguous = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-ambiguous",
+                    "kind": "understanding",
+                    "question": "How does the pipeline move data?",
+                    "scope_paths": paths,
+                    "conclusion": "The pipeline flows A through D.",
+                    "locator": "src/a.py",
+                },
+            )
+            self.assertEqual(ambiguous["$type"], "Rejected")
+            self.assertEqual(ambiguous["cause_kind"], "surface_ambiguous")
+
+            declared = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-declare",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {
+                        "kind": "SERVICE",
+                        "locator": "pipeline",
+                        "boundary": {"paths": paths, "symbols": []},
+                        "parent": None,
+                    },
+                },
+            )
+            self.assertEqual(declared["$type"], "SurfaceDeclared")
+            created = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-create",
+                    "kind": "understanding",
+                    "surface": {"kind": "SERVICE", "locator": "pipeline"},
+                    "question": "How does the pipeline move data?",
+                    "scope_paths": paths,
+                    "conclusion": "The pipeline flows A through D.",
+                    "support": [
+                        {
+                            "$type": "SourceSupportWire",
+                            "locator": path,
+                            "ranges": [],
+                        }
+                        for path in paths
+                    ],
+                },
+            )
+            self.assertEqual(created["$type"], "UnderstandingRecorded", created)
+            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
+                "value"
+            ]
+            target_id = self._created_conclusion_id(created)
+            before = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-ask-1",
+                    "surface": {"kind": "SERVICE", "locator": "pipeline"},
+                    "question": "How does the pipeline move data?",
+                },
+            )
+            self.assertEqual(before["$type"], "Answer", before)
+
+            _write(self.repo, "src/b.py", "src/b.py changed\n")
+            changed = await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "changed_paths": ["src/b.py"],
+                },
+            )
+            surface = next(
+                item
+                for item in changed["surfaces"]
+                if item["surface"]["locator"] == "pipeline"
+            )
+            self.assertIn("direct", [reason for reason in surface["reasons"]], surface)
+            conclusion = surface["conclusions"][0]
+            self.assertEqual(
+                conclusion["ref"]["understanding_id"]["value"], understanding_id
+            )
+            self.assertEqual(conclusion["support"]["state"], "REASSESSMENT_REQUIRED")
+            updated = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-correct",
+                    "context_id": changed["context"]["value"],
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": conclusion["expected_version"]["value"],
+                    "actions": {
+                        "correct": [
+                            {
+                                "conclusion_id": target_id,
+                                "conclusion": "The pipeline flows A through D.",
+                                "scope_paths": paths,
+                                "support": [
+                                    {
+                                        "$type": "SourceSupportWire",
+                                        "locator": path,
+                                        "ranges": [],
+                                    }
+                                    for path in paths
+                                ],
+                            }
+                        ]
+                    },
+                },
+            )
+            self.assertEqual(updated["$type"], "UnderstandingRecorded", updated)
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "svc-ask-2",
+                    "surface": {"kind": "SERVICE", "locator": "pipeline"},
+                    "question": "How does the pipeline move data?",
+                },
+            )
+
+        after = await self._session(journey)
+        self.assertEqual(after["$type"], "Answer", after)
+        self.assertEqual(
+            after["conclusions"][0]["statement"],
+            "The pipeline flows A through D.",
+        )
+        self.assertEqual(
+            after["conclusions"][0]["support"]["evaluation"]["state"], "CURRENT"
+        )
+
     async def test_challenge_raised_by_reconsider_is_settled_by_record(self) -> None:
         async def journey(session: ClientSession) -> dict:
             created = await self._record_create(session, "sub-challenge")
@@ -628,6 +971,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             understanding_id = created["receipt"]["accepted_understanding_ids"][0][
                 "value"
             ]
+            target_id = self._created_conclusion_id(created)
             challenged = await self._call(
                 session,
                 "reconsider",
@@ -640,7 +984,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                         "target_conclusions": [
                             {
                                 "understanding_id": understanding_id,
-                                "conclusion_id": "c-1",
+                                "conclusion_id": target_id,
                                 "revision": 1,
                             }
                         ],
@@ -664,7 +1008,10 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "expected_version": 1,
                     "actions": {
                         "confirm": [
-                            _conclusion(statement="The app emits line1, reassessed.")
+                            {
+                                "conclusion_id": target_id,
+                                "locator": "src/app.py",
+                            }
                         ]
                     },
                     "challenge_dispositions": [

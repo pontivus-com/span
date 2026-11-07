@@ -296,6 +296,7 @@ class ChangedConclusion:
     """
 
     ref: ConclusionRevisionRef
+    expected_version: UnderstandingVersionNumber
     reasons: tuple[ChangeReason, ...]
     support: SupportEvaluation | SupportUnavailable
 

@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.10.0 — 2026-11-07
+
+**A public-grammar and identity-ownership release.** 0.10.0 makes the compact
+`record` grammar the only recording grammar, derives new conclusion lineage
+identities on the server, makes `reconsider` complete the continuation into
+`record`, and removes the legacy parallel create/challenge/verification wire
+path. The public surface is still exactly `ask`, `record`, and `reconsider`.
+
+### Public record contract
+
+- Understanding create takes one conclusion and exactly one evidence mode:
+  `locator`, `observation_id`, or non-empty `support`. Scope is supplied or
+  derived independently through `scope_paths`, the bound context, or a single
+  carried path. A context-bound support create uses the context's bound scope;
+  a declared surface name is never treated as an evidence path.
+- Update actions are compact semantic deltas. `add` and `correct` carry
+  `conclusion`, `confirm` carries only the existing target, `replace` carries
+  `conclusion` and `reason`, and `withdraw` carries `reason`. `confirm`,
+  `correct`, `replace`, and `withdraw` name the existing `conclusion_id`
+  returned by Span; `add`, create, and the replacement lineage accept no
+  caller-created identity.
+- Span derives new conclusion lineage identities from
+  `(repository_id, request_id, role, ordinal)` through the pure identity owner.
+  `expected_version` remains mandatory and compare-and-set.
+- The public understanding grammar no longer exposes `scope_evidence_refs`;
+  internal evidence references remain. Old full-snapshot update payloads and
+  old nested replacement payloads fail as unknown fields.
+
+### Reconsideration and multi-file ownership
+
+- Each actionable `ChangedConclusion` now carries the understanding's current
+  `expected_version`, so `reconsider → record` needs no intervening `ask`.
+- Historical revisions remain traversable as dependencies but are not emitted
+  as actionable update targets.
+- Declared SERVICE/DOMAIN multi-file ownership is proven end to end; multiple
+  paths without an owning surface still fail closed.
+
+### Architecture and response fitting
+
+- The legacy `ConclusionWire`, `RecordCreateWire`, `RecordChallengeWire`,
+  `RecordVerificationWire`, `create_command`, `challenge_command`,
+  `verification_command`, and the parallel `LifecycleService.create/challenge/
+  verification` entrypoints are removed. `LifecycleService.record()` is the one
+  recording composition path.
+- The evidence-page fitter now measures the real continuation token and the
+  omission list it will carry, closing a reproduced post-edit CSS case where a
+  page exceeded the configured budget.
+
+### Verification
+
+- Targeted gate: 173 passed and 35 subtests passed.
+- Installed MCP lane: 3 passed.
+- Full suite: 666 passed, 1 skipped, and 55 subtests passed.
+- Ruff, Black, and `git diff --check`: passed.
+- Candidate evidence:
+  `.context/evidence/host-contract/2026-11-07-server-derived-identity/`.
+- OpenCode: valid compact create/add/correct/replace lifecycle observed; strict
+  unknown-field preservation is not established because the host removed an
+  old-form field before delivery. Codex: current-candidate smoke create
+  observed; the full compact update journey was not re-observed. Claude Code
+  remains **UNVERIFIED** for authenticated model delivery.
+
 ## 0.9.4 — 2026-11-04
 
 **A host-contract and legacy-boundary release.** 0.9.4 completes the current

@@ -18,7 +18,7 @@ import datetime as _datetime
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
-from span.core.identity import payload_digest
+from span.core.identity import conclusion_identity, payload_digest
 from span.core.model.canonical import to_canonical
 from span.core.model import commands as _c
 from span.core.model import primitives as _p
@@ -28,6 +28,10 @@ from span.core.model import verification as _v
 from span.core.model.investigation import SourceRange as _SourceRange
 from span.core.model.recording import ContentDigest
 from span.core.model.claims import AssertionNature
+from span.core.model.understanding import (
+    ConclusionRevision as _ConclusionRevision,
+    SupportedConclusion as _SupportedConclusion,
+)
 
 
 @_dataclass(frozen=True)
@@ -38,6 +42,7 @@ class RecordWireResolver:
     authority: _typing.Callable[[str], _p.AuthorityBinding]
     source: _typing.Callable[[str, tuple[_SourceRange, ...]], _p.SourceObservationId]
     discovery: _typing.Callable[[_p.EvidenceScope], _p.DiscoveryObservationId]
+    observation_locator: _typing.Callable[[str], str]
 
 
 @_dataclass(frozen=True)
@@ -140,37 +145,151 @@ class GapWire:
     basis: str
 
 
-@_dataclass(frozen=True)
-class ConclusionWire:
-    conclusion_id: str
-    statement: str
-    assertion_nature: AssertionNature
-    scope_paths: tuple[str, ...]
-    scope_evidence_refs: tuple[str, ...]
-    support: tuple[SupportWire, ...]
-    basis_derivation: _p.DerivationKind
-    basis_summary: str
-    basis_input_refs: tuple[str, ...]
+def _evidence_mode_count(
+    locator: str | None,
+    observation_id: str | None,
+    support: tuple[SupportWire, ...],
+) -> int:
+    return (
+        int(locator is not None) + int(observation_id is not None) + int(bool(support))
+    )
+
+
+def _require_action_field(action: str, field: str, value: str) -> None:
+    if not value:
+        raise ValueError(f"record.actions.{action} requires a non-empty {field!r}")
+
+
+def _validate_optional_identifier(action: str, field: str, value: str | None) -> None:
+    if value is not None and not value:
+        raise ValueError(
+            f"record.actions.{action}.{field} must be non-empty when supplied"
+        )
+
+
+def _require_evidence(
+    action: str,
+    locator: str | None,
+    observation_id: str | None,
+    support: tuple[SupportWire, ...],
+    *,
+    required: bool,
+) -> None:
+    modes = _evidence_mode_count(locator, observation_id, support)
+    if modes > 1:
+        raise ValueError(
+            f"record.actions.{action} takes exactly one evidence mode: "
+            "locator, observation_id, or support; it received more than one"
+        )
+    if required and modes == 0:
+        raise ValueError(
+            f"record.actions.{action} requires exactly one evidence mode: "
+            "locator, observation_id, or non-empty support"
+        )
 
 
 @_dataclass(frozen=True)
-class ReplaceWire:
-    old_understanding_id: str
-    old_conclusion_id: str
-    old_revision: int
-    new_conclusion: ConclusionWire
-    replacement_basis_derivation: _p.DerivationKind
-    replacement_basis_summary: str
-    replacement_basis_input_refs: tuple[str, ...]
+class AddConclusionWire:
+    """One compact add action: statement plus the evidence already held."""
 
-
-@_dataclass(frozen=True)
-class WithdrawWire:
-    conclusion_id: str
-    basis_derivation: _p.DerivationKind
-    basis_summary: str
-    basis_input_refs: tuple[str, ...]
+    conclusion: str
+    assertion_nature: AssertionNature = AssertionNature.DESCRIPTIVE
+    scope_paths: tuple[str, ...] = ()
+    locator: str | None = None
+    observation_id: str | None = None
     support: tuple[SupportWire, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_action_field("add", "conclusion", self.conclusion)
+        _validate_optional_identifier("add", "locator", self.locator)
+        _validate_optional_identifier("add", "observation_id", self.observation_id)
+        _require_evidence(
+            "add", self.locator, self.observation_id, self.support, required=True
+        )
+
+
+@_dataclass(frozen=True)
+class ConfirmConclusionWire:
+    """One compact confirm action: Span preserves the current content."""
+
+    conclusion_id: str
+    locator: str | None = None
+    observation_id: str | None = None
+    support: tuple[SupportWire, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_action_field("confirm", "conclusion_id", self.conclusion_id)
+        _validate_optional_identifier("confirm", "locator", self.locator)
+        _validate_optional_identifier("confirm", "observation_id", self.observation_id)
+        _require_evidence(
+            "confirm", self.locator, self.observation_id, self.support, required=True
+        )
+
+
+@_dataclass(frozen=True)
+class CorrectConclusionWire:
+    """One compact correct action; omitted nature and scope are preserved."""
+
+    conclusion_id: str
+    conclusion: str
+    assertion_nature: AssertionNature | None = None
+    scope_paths: tuple[str, ...] = ()
+    locator: str | None = None
+    observation_id: str | None = None
+    support: tuple[SupportWire, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_action_field("correct", "conclusion_id", self.conclusion_id)
+        _require_action_field("correct", "conclusion", self.conclusion)
+        _validate_optional_identifier("correct", "locator", self.locator)
+        _validate_optional_identifier("correct", "observation_id", self.observation_id)
+        _require_evidence(
+            "correct", self.locator, self.observation_id, self.support, required=True
+        )
+
+
+@_dataclass(frozen=True)
+class ReplaceActionWire:
+    """One flat replace action; Span derives the old revision identity."""
+
+    conclusion_id: str
+    conclusion: str
+    reason: str
+    assertion_nature: AssertionNature | None = None
+    scope_paths: tuple[str, ...] = ()
+    locator: str | None = None
+    observation_id: str | None = None
+    support: tuple[SupportWire, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_action_field("replace", "conclusion_id", self.conclusion_id)
+        _require_action_field("replace", "conclusion", self.conclusion)
+        _require_action_field("replace", "reason", self.reason)
+        _validate_optional_identifier("replace", "locator", self.locator)
+        _validate_optional_identifier("replace", "observation_id", self.observation_id)
+        _require_evidence(
+            "replace", self.locator, self.observation_id, self.support, required=True
+        )
+
+
+@_dataclass(frozen=True)
+class WithdrawActionWire:
+    """One compact withdrawal; the reason is the semantic basis."""
+
+    conclusion_id: str
+    reason: str
+    locator: str | None = None
+    observation_id: str | None = None
+    support: tuple[SupportWire, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_action_field("withdraw", "conclusion_id", self.conclusion_id)
+        _require_action_field("withdraw", "reason", self.reason)
+        _validate_optional_identifier("withdraw", "locator", self.locator)
+        _validate_optional_identifier("withdraw", "observation_id", self.observation_id)
+        _require_evidence(
+            "withdraw", self.locator, self.observation_id, self.support, required=False
+        )
 
 
 @_dataclass(frozen=True)
@@ -213,21 +332,6 @@ class IdentityWire:
     #: Optional: a recording that cites locators/ranges is admitted into a
     #: server-issued context inside the operation (L2 §4.2, TD §12).
     context_id: str | None = None
-
-
-@_dataclass(frozen=True)
-class ContextBoundTargetWire:
-    pass
-
-
-@_dataclass(frozen=True)
-class ExplicitTargetWire:
-    question: str
-    scope_paths: tuple[str, ...]
-    scope_evidence_refs: tuple[str, ...]
-
-
-TargetWire = _typing.Union[ContextBoundTargetWire, ExplicitTargetWire]
 
 
 @_dataclass(frozen=True)
@@ -277,89 +381,6 @@ class SurfaceWire:
 
 
 @_dataclass(frozen=True)
-class RecordCreateWire:
-    identity: IdentityWire
-    surface: SurfaceWire
-    target: TargetWire
-    conclusions: tuple[ConclusionWire, ...]
-    gaps: tuple[GapWire, ...] = ()
-    provenance: str = ""
-
-
-@_dataclass(frozen=True)
-class RecordUpdateWire:
-    identity: IdentityWire
-    understanding_id: str
-    expected_version: int
-    add: tuple[ConclusionWire, ...] = ()
-    confirm: tuple[ConclusionWire, ...] = ()
-    correct: tuple[ConclusionWire, ...] = ()
-    replace: tuple[ReplaceWire, ...] = ()
-    withdraw: tuple[WithdrawWire, ...] = ()
-    gaps: tuple[GapWire, ...] | None = None
-    challenge_dispositions: tuple[DispositionWire, ...] = ()
-    provenance: str = ""
-
-
-@_dataclass(frozen=True)
-class RecordAddWire:
-    identity: IdentityWire
-    understanding_id: str
-    expected_version: int
-    conclusion: ConclusionWire
-
-
-@_dataclass(frozen=True)
-class RecordConfirmWire:
-    identity: IdentityWire
-    understanding_id: str
-    expected_version: int
-    conclusion: ConclusionWire
-
-
-@_dataclass(frozen=True)
-class RecordCorrectWire:
-    identity: IdentityWire
-    understanding_id: str
-    expected_version: int
-    conclusion: ConclusionWire
-
-
-@_dataclass(frozen=True)
-class RecordReplaceWire:
-    identity: IdentityWire
-    understanding_id: str
-    expected_version: int
-    replacement: ReplaceWire
-
-
-@_dataclass(frozen=True)
-class RecordWithdrawWire:
-    identity: IdentityWire
-    understanding_id: str
-    expected_version: int
-    withdrawal: WithdrawWire
-
-
-@_dataclass(frozen=True)
-class ChallengeConclusionRefWire:
-    understanding_id: str
-    conclusion_id: str
-    revision: int
-
-
-@_dataclass(frozen=True)
-class RecordChallengeWire:
-    identity: IdentityWire
-    understanding_id: str
-    target_version: int
-    target_conclusions: tuple[ChallengeConclusionRefWire, ...]
-    reason: str
-    evidence_refs: tuple[str, ...] = ()
-    provenance: str = ""
-
-
-@_dataclass(frozen=True)
 class VerificationRunWire:
     repository_id: str
     scope_description: str
@@ -384,23 +405,17 @@ class VerificationRunWire:
 
 
 @_dataclass(frozen=True)
-class RecordVerificationWire:
-    identity: IdentityWire
-    run: VerificationRunWire
-
-
-@_dataclass(frozen=True)
 class RecordActionsWire:
     """The explicit semantic actions one record request states.
 
     Keys are actions, not tool variants. Multiple keys are applied atomically.
     """
 
-    add: tuple[ConclusionWire, ...] = ()
-    confirm: tuple[ConclusionWire, ...] = ()
-    correct: tuple[ConclusionWire, ...] = ()
-    replace: tuple[ReplaceWire, ...] = ()
-    withdraw: tuple[WithdrawWire, ...] = ()
+    add: tuple[AddConclusionWire, ...] = ()
+    confirm: tuple[ConfirmConclusionWire, ...] = ()
+    correct: tuple[CorrectConclusionWire, ...] = ()
+    replace: tuple[ReplaceActionWire, ...] = ()
+    withdraw: tuple[WithdrawActionWire, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -420,15 +435,14 @@ class RecordRequestWire:
     surface: SurfaceWire | None = None
     question: str | None = None
     scope_paths: tuple[str, ...] = ()
-    scope_evidence_refs: tuple[str, ...] = ()
     #: Flat create form. One conclusion per create request; updates use
     #: ``actions``. ``locator`` is the file the conclusion is about;
     #: ``observation_id`` may replace it with an observation from ``ask``.
+    #: Span derives the new conclusion lineage identity (L7).
     conclusion: str | None = None
-    conclusion_id: str = "c-1"
     locator: str | None = None
     observation_id: str | None = None
-    assertion_nature: AssertionNature = AssertionNature.DESCRIPTIVE
+    assertion_nature: AssertionNature | None = None
     support: tuple[SupportWire, ...] = ()
     understanding_id: str | None = None
     expected_version: int | None = None
@@ -465,8 +479,8 @@ class RecordRequestWire:
         if self.run is not None or self.action is not None:
             raise ValueError(
                 "an understanding record takes no run or action; a create is "
-                "flat (conclusion plus locator or observation_id), an update "
-                "uses actions, and action belongs to kind=surface"
+                "flat (conclusion plus locator, observation_id, or support), an "
+                "update uses actions, and action belongs to kind=surface"
             )
         if self.expected_boundary_version is not None:
             raise ValueError("an understanding record does not take a boundary version")
@@ -487,6 +501,12 @@ class RecordRequestWire:
         if self.locator is not None and self.observation_id is not None:
             raise ValueError(
                 "an understanding create takes locator or observation_id, not both"
+            )
+        if self.support and self.observation_id is not None:
+            raise ValueError(
+                "an understanding create takes support or observation_id, not both; "
+                "supply observation_id inside support when citing an admitted "
+                "observation"
             )
         if self.question is None and self.context_id is None:
             raise ValueError(
@@ -509,6 +529,8 @@ class RecordRequestWire:
             raise ValueError("create cannot be combined with update actions")
         if self.understanding_id is not None or self.expected_version is not None:
             raise ValueError("create does not take understanding_id or version")
+        if self.challenge_dispositions:
+            raise ValueError("create does not take challenge dispositions")
 
     def _validate_update(self) -> None:
         actions = self.actions
@@ -523,6 +545,21 @@ class RecordRequestWire:
             raise ValueError("an understanding update does not take a question")
         if self.surface is not None:
             raise ValueError("an understanding update does not take a surface")
+        if self.scope_paths:
+            raise ValueError(
+                "an understanding update does not take root scope_paths; put a "
+                "scope override on the action"
+            )
+        if self.support:
+            raise ValueError(
+                "an understanding update does not take root support; put the "
+                "evidence on the action"
+            )
+        if self.assertion_nature is not None:
+            raise ValueError(
+                "an understanding update does not take root assertion_nature; put "
+                "a nature override on the action"
+            )
         if self.understanding_id is None or self.expected_version is None:
             raise ValueError(
                 "an understanding update requires understanding_id and "
@@ -547,6 +584,7 @@ class RecordRequestWire:
             or self.actions is not None
             or self.action is not None
             or self.question is not None
+            or self.scope_paths
             or self.understanding_id is not None
             or self.expected_version is not None
             or self.expected_boundary_version is not None
@@ -555,8 +593,12 @@ class RecordRequestWire:
             or self.conclusion is not None
             or self.locator is not None
             or self.observation_id is not None
+            or self.support
+            or self.assertion_nature is not None
         ):
-            raise ValueError("a verification record takes only run and provenance")
+            raise ValueError(
+                "a verification record takes only run, context_id, and provenance"
+            )
 
     def _validate_surface(self) -> None:
         if self.surface is None or self.action is None:
@@ -568,9 +610,11 @@ class RecordRequestWire:
         elif not declared:
             raise ValueError("a file or symbol surface rejects a boundary")
         if (
-            self.actions is not None
+            self.context_id is not None
+            or self.actions is not None
             or self.run is not None
             or self.question is not None
+            or self.scope_paths
             or self.understanding_id is not None
             or self.expected_version is not None
             or self.gaps is not None
@@ -578,9 +622,12 @@ class RecordRequestWire:
             or self.conclusion is not None
             or self.locator is not None
             or self.observation_id is not None
+            or self.support
+            or self.assertion_nature is not None
         ):
             raise ValueError(
-                "a surface record takes only surface, action, and provenance"
+                "a surface record takes only surface, action, "
+                "expected_boundary_version, and provenance"
             )
         if self.action is _c.SurfaceAction.UPDATE:
             if self.expected_boundary_version is None:
@@ -615,19 +662,6 @@ def _scope(
     return _p.EvidenceScope(
         paths=paths,
         evidence_refs=tuple(resolver.reference(item) for item in references),
-    )
-
-
-def _basis(
-    derivation: _p.DerivationKind,
-    summary: str,
-    references: tuple[str, ...],
-    resolver: RecordWireResolver,
-) -> _p.SemanticBasis:
-    return _p.SemanticBasis(
-        derivation=derivation,
-        summary=summary,
-        input_refs=tuple(resolver.reference(item) for item in references),
     )
 
 
@@ -679,114 +713,206 @@ def _support(
     raise TypeError(f"unhandled support wire: {type(value).__name__}")
 
 
-def _content(
-    value: ConclusionWire,
-    resolver: RecordWireResolver,
-) -> tuple[
-    str,
-    AssertionNature,
-    _p.EvidenceScope,
-    tuple[_s.SupportDependency, ...],
-    _p.SemanticBasis,
-]:
-    return (
-        value.statement,
-        value.assertion_nature,
-        _scope(value.scope_paths, value.scope_evidence_refs, resolver),
-        tuple(_support(item, resolver) for item in value.support),
-        _basis(
-            value.basis_derivation,
-            value.basis_summary,
-            value.basis_input_refs,
-            resolver,
-        ),
+def _mechanical_basis(summary: str) -> _p.SemanticBasis:
+    """The deterministic basis Span owns for an evidence-backed transition."""
+    return _p.SemanticBasis(
+        derivation=_p.DerivationKind.EXPLICIT_EVIDENCE,
+        summary=summary,
+        input_refs=(),
     )
 
 
-def _proposed(
-    value: ConclusionWire,
+def _action_support(
+    locator: str | None,
+    observation_id: str | None,
+    support: tuple[SupportWire, ...],
     resolver: RecordWireResolver,
+) -> tuple[_s.SupportDependency, ...]:
+    if support:
+        return tuple(_support(item, resolver) for item in support)
+    if observation_id is not None:
+        return (
+            _s.SourceSupport(observation_id=_p.SourceObservationId(observation_id)),
+        )
+    if locator is not None:
+        return (_s.SourceSupport(observation_id=resolver.source(locator, ())),)
+    raise ValueError("an action requires locator, observation_id, or support")
+
+
+def _support_source_paths(
+    support: tuple[SupportWire, ...],
+    resolver: RecordWireResolver,
+) -> tuple[str, ...]:
+    paths: list[str] = []
+    for item in support:
+        if isinstance(item, SourceSupportWire):
+            paths.append(item.locator)
+        elif isinstance(item, AdmittedSourceSupportWire):
+            paths.append(resolver.observation_locator(item.observation_id))
+    return tuple(paths)
+
+
+def _add_scope(
+    value: AddConclusionWire,
+    resolver: RecordWireResolver,
+) -> _p.EvidenceScope:
+    if value.scope_paths:
+        return _scope(value.scope_paths, (), resolver)
+    if value.locator is not None:
+        paths = (value.locator,)
+    elif value.observation_id is not None:
+        paths = (resolver.observation_locator(value.observation_id),)
+    else:
+        paths = _support_source_paths(value.support, resolver)
+    unique = tuple(dict.fromkeys(path for path in paths if path))
+    if len(unique) != 1:
+        raise ValueError(
+            "record.actions.add requires scope_paths: the supplied evidence "
+            "does not identify exactly one source path"
+        )
+    return _scope(unique, (), resolver)
+
+
+def _current_revision(
+    current_revisions: tuple[_ConclusionRevision, ...],
+    conclusion_id: str,
+    action: str,
+) -> _ConclusionRevision:
+    for revision in current_revisions:
+        if revision.conclusion_id.value == conclusion_id:
+            return revision
+    raise ValueError(
+        f"record.actions.{action} targets conclusion {conclusion_id!r}, which "
+        "is not a member of expected_version; name a conclusion in the current "
+        "membership"
+    )
+
+
+def _supported_content(
+    current: _ConclusionRevision,
+    action: str,
+) -> _SupportedConclusion:
+    content = current.content
+    if not isinstance(content, _SupportedConclusion):
+        raise ValueError(
+            f"record.actions.{action} targets conclusion "
+            f"{current.conclusion_id.value!r}, which is withdrawn"
+        )
+    return content
+
+
+def _add_proposed(
+    value: AddConclusionWire,
+    resolver: RecordWireResolver,
+    conclusion_id: _p.ConclusionId,
 ) -> _c.ProposedConclusion:
-    statement, nature, scope, support, basis = _content(value, resolver)
     return _c.ProposedConclusion(
-        conclusion_id=_p.ConclusionId(value.conclusion_id),
-        statement=statement,
-        assertion_nature=nature,
-        scope=scope,
-        support=support,
-        basis=basis,
+        conclusion_id=conclusion_id,
+        statement=value.conclusion,
+        assertion_nature=value.assertion_nature,
+        scope=_add_scope(value, resolver),
+        support=_action_support(
+            value.locator, value.observation_id, value.support, resolver
+        ),
+        basis=_mechanical_basis("added from supplied support"),
     )
 
 
-def _confirm(
-    value: ConclusionWire,
+def _confirm_action(
+    value: ConfirmConclusionWire,
     resolver: RecordWireResolver,
+    current_revisions: tuple[_ConclusionRevision, ...],
 ) -> _c.ConfirmConclusion:
-    statement, nature, scope, support, basis = _content(value, resolver)
+    content = _supported_content(
+        _current_revision(current_revisions, value.conclusion_id, "confirm"),
+        "confirm",
+    )
     return _c.ConfirmConclusion(
         conclusion_id=_p.ConclusionId(value.conclusion_id),
-        statement=statement,
-        assertion_nature=nature,
-        scope=scope,
-        support=support,
-        basis=basis,
+        statement=content.statement,
+        assertion_nature=content.assertion_nature,
+        scope=content.scope,
+        support=_action_support(
+            value.locator, value.observation_id, value.support, resolver
+        ),
+        basis=_mechanical_basis("reassessed from supplied support"),
     )
 
 
-def _correct(
-    value: ConclusionWire,
+def _correct_action(
+    value: CorrectConclusionWire,
     resolver: RecordWireResolver,
+    current_revisions: tuple[_ConclusionRevision, ...],
 ) -> _c.CorrectConclusion:
-    statement, nature, scope, support, basis = _content(value, resolver)
+    content = _supported_content(
+        _current_revision(current_revisions, value.conclusion_id, "correct"),
+        "correct",
+    )
+    scope = (
+        _scope(value.scope_paths, (), resolver) if value.scope_paths else content.scope
+    )
     return _c.CorrectConclusion(
         conclusion_id=_p.ConclusionId(value.conclusion_id),
-        statement=statement,
-        assertion_nature=nature,
+        statement=value.conclusion,
+        assertion_nature=value.assertion_nature or content.assertion_nature,
         scope=scope,
-        support=support,
-        basis=basis,
+        support=_action_support(
+            value.locator, value.observation_id, value.support, resolver
+        ),
+        basis=_mechanical_basis("corrected from supplied support"),
     )
 
 
-def _replace(
-    value: ReplaceWire,
+def _replace_action(
+    value: ReplaceActionWire,
     resolver: RecordWireResolver,
+    current_revisions: tuple[_ConclusionRevision, ...],
+    new_conclusion_id: _p.ConclusionId,
 ) -> _c.ReplaceConclusion:
-    statement, nature, scope, support, basis = _content(value.new_conclusion, resolver)
+    current = _current_revision(current_revisions, value.conclusion_id, "replace")
+    content = _supported_content(current, "replace")
+    scope = (
+        _scope(value.scope_paths, (), resolver) if value.scope_paths else content.scope
+    )
     return _c.ReplaceConclusion(
         old=_p.ConclusionRevisionRef(
-            understanding_id=_p.UnderstandingId(value.old_understanding_id),
-            conclusion_id=_p.ConclusionId(value.old_conclusion_id),
-            revision=_p.ConclusionRevisionNumber(value.old_revision),
+            understanding_id=current.understanding_id,
+            conclusion_id=current.conclusion_id,
+            revision=current.revision,
         ),
-        new_conclusion_id=_p.ConclusionId(value.new_conclusion.conclusion_id),
-        replacement_basis=_basis(
-            value.replacement_basis_derivation,
-            value.replacement_basis_summary,
-            value.replacement_basis_input_refs,
-            resolver,
+        new_conclusion_id=new_conclusion_id,
+        replacement_basis=_p.SemanticBasis(
+            derivation=_p.DerivationKind.SEMANTIC_INTERPRETATION,
+            summary=value.reason,
+            input_refs=(),
         ),
-        statement=statement,
-        assertion_nature=nature,
+        statement=value.conclusion,
+        assertion_nature=value.assertion_nature or content.assertion_nature,
         scope=scope,
-        support=support,
-        basis=basis,
+        support=_action_support(
+            value.locator, value.observation_id, value.support, resolver
+        ),
+        basis=_mechanical_basis("replaced from supplied support"),
     )
 
 
-def _withdraw(
-    value: WithdrawWire,
+def _withdraw_action(
+    value: WithdrawActionWire,
     resolver: RecordWireResolver,
 ) -> _c.WithdrawConclusion:
+    support: tuple[_s.SupportDependency, ...] = ()
+    if value.locator is not None or value.observation_id is not None or value.support:
+        support = _action_support(
+            value.locator, value.observation_id, value.support, resolver
+        )
     return _c.WithdrawConclusion(
         conclusion_id=_p.ConclusionId(value.conclusion_id),
-        basis=_basis(
-            value.basis_derivation,
-            value.basis_summary,
-            value.basis_input_refs,
-            resolver,
+        basis=_p.SemanticBasis(
+            derivation=_p.DerivationKind.SEMANTIC_INTERPRETATION,
+            summary=value.reason,
+            input_refs=(),
         ),
-        support=tuple(_support(item, resolver) for item in value.support),
+        support=support,
     )
 
 
@@ -850,170 +976,6 @@ def _disposition(
             evidence=tuple(resolver.reference(item) for item in value.evidence_refs),
         )
     raise TypeError(f"unhandled disposition wire: {type(value).__name__}")
-
-
-def _single_update(
-    identity: IdentityWire,
-    understanding_id: str,
-    expected_version: int,
-    *,
-    add: tuple[_c.ProposedConclusion, ...] = (),
-    confirm: tuple[_c.ConfirmConclusion, ...] = (),
-    correct: tuple[_c.CorrectConclusion, ...] = (),
-    replace: tuple[_c.ReplaceConclusion, ...] = (),
-    withdraw: tuple[_c.WithdrawConclusion, ...] = (),
-) -> _c.UpdateUnderstandingCommand:
-    return _c.UpdateUnderstandingCommand(
-        identity=_identity(identity),
-        understanding_id=_p.UnderstandingId(understanding_id),
-        expected_version=_p.UnderstandingVersionNumber(expected_version),
-        add=add,
-        confirm=confirm,
-        correct=correct,
-        replace=replace,
-        withdraw=withdraw,
-    )
-
-
-def add_command(
-    value: RecordAddWire,
-    resolver: RecordWireResolver,
-) -> _c.UpdateUnderstandingCommand:
-    return _single_update(
-        value.identity,
-        value.understanding_id,
-        value.expected_version,
-        add=(_proposed(value.conclusion, resolver),),
-    )
-
-
-def confirm_command(
-    value: RecordConfirmWire,
-    resolver: RecordWireResolver,
-) -> _c.UpdateUnderstandingCommand:
-    return _single_update(
-        value.identity,
-        value.understanding_id,
-        value.expected_version,
-        confirm=(_confirm(value.conclusion, resolver),),
-    )
-
-
-def correct_command(
-    value: RecordCorrectWire,
-    resolver: RecordWireResolver,
-) -> _c.UpdateUnderstandingCommand:
-    return _single_update(
-        value.identity,
-        value.understanding_id,
-        value.expected_version,
-        correct=(_correct(value.conclusion, resolver),),
-    )
-
-
-def replace_command(
-    value: RecordReplaceWire,
-    resolver: RecordWireResolver,
-) -> _c.UpdateUnderstandingCommand:
-    return _single_update(
-        value.identity,
-        value.understanding_id,
-        value.expected_version,
-        replace=(_replace(value.replacement, resolver),),
-    )
-
-
-def withdraw_command(
-    value: RecordWithdrawWire,
-    resolver: RecordWireResolver,
-) -> _c.UpdateUnderstandingCommand:
-    return _single_update(
-        value.identity,
-        value.understanding_id,
-        value.expected_version,
-        withdraw=(_withdraw(value.withdrawal, resolver),),
-    )
-
-
-def create_command(
-    value: RecordCreateWire,
-    resolver: RecordWireResolver,
-) -> _c.CreateUnderstandingCommand:
-    identity = _identity(value.identity)
-    target: _c.UnderstandingTarget
-    if isinstance(value.target, ContextBoundTargetWire):
-        target = _c.ContextBoundTarget()
-    else:
-        target = _c.ExplicitTarget(
-            question=value.target.question,
-            scope=_scope(
-                value.target.scope_paths,
-                value.target.scope_evidence_refs,
-                resolver,
-            ),
-        )
-    surface = _surfaces.SurfaceKey(
-        repository_id=identity.repository_id,
-        kind=_surfaces.SurfaceKind(value.surface.kind),
-        locator=value.surface.locator,
-    )
-    return _c.CreateUnderstandingCommand(
-        identity=identity,
-        surface=surface,
-        target=target,
-        conclusions=tuple(_proposed(item, resolver) for item in value.conclusions),
-        gaps=tuple(_gap(item) for item in value.gaps),
-        provenance=value.provenance,
-    )
-
-
-def update_command(
-    value: RecordUpdateWire,
-    resolver: RecordWireResolver,
-) -> _c.UpdateUnderstandingCommand:
-    return _c.UpdateUnderstandingCommand(
-        identity=_identity(value.identity),
-        understanding_id=_p.UnderstandingId(value.understanding_id),
-        expected_version=_p.UnderstandingVersionNumber(value.expected_version),
-        add=tuple(_proposed(item, resolver) for item in value.add),
-        confirm=tuple(_confirm(item, resolver) for item in value.confirm),
-        correct=tuple(_correct(item, resolver) for item in value.correct),
-        replace=tuple(_replace(item, resolver) for item in value.replace),
-        withdraw=tuple(_withdraw(item, resolver) for item in value.withdraw),
-        gaps=None if value.gaps is None else tuple(_gap(item) for item in value.gaps),
-        challenge_dispositions=tuple(
-            _disposition(item, resolver) for item in value.challenge_dispositions
-        ),
-        provenance=value.provenance,
-    )
-
-
-def challenge_command(
-    value: RecordChallengeWire,
-    resolver: RecordWireResolver,
-) -> _c.CreateChallengeCommand:
-    return _c.CreateChallengeCommand(
-        identity=_identity(value.identity),
-        understanding_id=_p.UnderstandingId(value.understanding_id),
-        target_version=_p.UnderstandingVersionNumber(value.target_version),
-        target_conclusions=tuple(
-            _p.ConclusionRevisionRef(
-                understanding_id=_p.UnderstandingId(item.understanding_id),
-                conclusion_id=_p.ConclusionId(item.conclusion_id),
-                revision=_p.ConclusionRevisionNumber(item.revision),
-            )
-            for item in value.target_conclusions
-        ),
-        reason=value.reason,
-        evidence=tuple(resolver.reference(item) for item in value.evidence_refs),
-        provenance=value.provenance,
-    )
-
-
-def verification_command(
-    value: RecordVerificationWire,
-) -> _c.RecordVerificationCommand:
-    return _verification_command(value.identity, value.run)
 
 
 def _verification_command(
@@ -1089,6 +1051,7 @@ def flat_conclusion(
     *,
     locator: str,
     default_support: _s.SupportDependency | None,
+    scope_paths: tuple[str, ...] | None = None,
 ) -> _c.ProposedConclusion:
     """Build one conclusion from the flat create fields."""
     if value.support:
@@ -1097,11 +1060,20 @@ def flat_conclusion(
         support = (default_support,)
     else:
         raise ValueError("a flat create requires support, locator, or observation_id")
+    if scope_paths is None:
+        scope_paths = value.scope_paths or ((locator,) if locator else ())
+    if not scope_paths:
+        raise ValueError(
+            "an understanding create requires scope_paths or a context that "
+            "binds its scope"
+        )
     return _c.ProposedConclusion(
-        conclusion_id=_p.ConclusionId(value.conclusion_id),
+        conclusion_id=conclusion_identity(
+            value.repository_id, value.request_id, "create", 0
+        ),
         statement=_typing.cast(str, value.conclusion),
-        assertion_nature=value.assertion_nature,
-        scope=_p.EvidenceScope(paths=value.scope_paths or (locator,)),
+        assertion_nature=value.assertion_nature or AssertionNature.DESCRIPTIVE,
+        scope=_p.EvidenceScope(paths=scope_paths),
         support=support,
         basis=_p.SemanticBasis(
             derivation=_p.DerivationKind.EXPLICIT_EVIDENCE,
@@ -1120,6 +1092,7 @@ def record_command(
     context_bound: bool = False,
     derived_surface: _surfaces.SurfaceKey | None = None,
     derived_conclusions: tuple[_c.ProposedConclusion, ...] | None = None,
+    current_revisions: tuple[_ConclusionRevision, ...] = (),
 ) -> _c.RecordCommand:
     """Decode one public record request into its canonical command."""
     if value.kind is _c.RecordKind.UNDERSTANDING:
@@ -1144,11 +1117,7 @@ def record_command(
             else:
                 target = _c.ExplicitTarget(
                     question=_typing.cast(str, value.question),
-                    scope=_scope(
-                        value.scope_paths,
-                        value.scope_evidence_refs,
-                        resolver,
-                    ),
+                    scope=_scope(value.scope_paths, (), resolver),
                 )
             return _c.CreateUnderstandingCommand(
                 identity=identity,
@@ -1167,11 +1136,38 @@ def record_command(
             identity=identity,
             understanding_id=_p.UnderstandingId(value.understanding_id),
             expected_version=_p.UnderstandingVersionNumber(value.expected_version),
-            add=tuple(_proposed(item, resolver) for item in actions.add),
-            confirm=tuple(_confirm(item, resolver) for item in actions.confirm),
-            correct=tuple(_correct(item, resolver) for item in actions.correct),
-            replace=tuple(_replace(item, resolver) for item in actions.replace),
-            withdraw=tuple(_withdraw(item, resolver) for item in actions.withdraw),
+            add=tuple(
+                _add_proposed(
+                    item,
+                    resolver,
+                    conclusion_identity(
+                        value.repository_id, value.request_id, "add", position
+                    ),
+                )
+                for position, item in enumerate(actions.add)
+            ),
+            confirm=tuple(
+                _confirm_action(item, resolver, current_revisions)
+                for item in actions.confirm
+            ),
+            correct=tuple(
+                _correct_action(item, resolver, current_revisions)
+                for item in actions.correct
+            ),
+            replace=tuple(
+                _replace_action(
+                    item,
+                    resolver,
+                    current_revisions,
+                    conclusion_identity(
+                        value.repository_id, value.request_id, "replace", position
+                    ),
+                )
+                for position, item in enumerate(actions.replace)
+            ),
+            withdraw=tuple(
+                _withdraw_action(item, resolver) for item in actions.withdraw
+            ),
             gaps=(
                 None if value.gaps is None else tuple(_gap(item) for item in value.gaps)
             ),

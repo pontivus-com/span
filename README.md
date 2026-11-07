@@ -74,7 +74,7 @@ ask: "How does checkout decide whether to charge?"
 
 agent investigates; record admits the source it just read
 
-record(kind="understanding", conclusion, locator)
+record(kind="understanding", conclusion, locator|observation_id|support)
   → committed receipt, understanding version 1, support qualification
 
 fresh session asks the same question about the same surface
@@ -171,28 +171,23 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.9.4**: three lifecycle tools (`ask`, `record`,
+This checkout describes **0.10.0**: three lifecycle tools (`ask`, `record`,
 `reconsider`), schema-11 storage, surface-scoped answers, explicit store
-transition, and live support qualification. 0.9.4 is a bug-fix release over
-0.9.2: it shares the selected OpenCode configuration between MCP registration
-and global plugin wiring, makes verification and uninstall receipt-backed,
-including receipt-bound repositories during bare verification,
-restores Claude Code as a supported managed host, and removes superseded
-MCP, receipt, target-plugin, host-contract, and structural-indexer compatibility
-paths. `--no-hooks` disables lifecycle hook and plugin wiring without disabling
-MCP registration; current receipts fail closed and foreign host state remains
-untouched.
-The 0.9.2 release history is recorded in the changelog; its migration behavior
-is not a current 0.9.4 implementation promise. The current installer preserves
-the selected OpenCode configuration and does not perform obsolete target-plugin
-compatibility migration.
-Host delivery is captured for the three-tool surface on Codex and OpenCode;
-Claude registration/health and installer behavior are covered, while its
-authenticated model-delivery grammar and caller identity remain **UNVERIFIED**.
-The flat-create re-capture passes on OpenCode and is pending on Codex (account
-quota). Comparative fitness remains class-scoped (FD-53, FG-7).
-macOS and Windows installation paths remain unverified. Publication and
-product acceptance are separate from the implementation version.
+transition, and live support qualification. 0.10.0 makes the compact `record`
+grammar the only recording grammar: create takes exactly one evidence mode,
+updates are compact semantic deltas, new conclusion lineage identities are
+derived by Span, and `expected_version` remains compare-and-set. `reconsider`
+returns the expected version and context needed for the next `record`, and the
+legacy parallel create/challenge/verification wire path is removed.
+Host delivery is captured for the valid compact lifecycle on OpenCode; Codex
+has a current-candidate smoke create capture, and its full compact update
+journey is not re-observed. Claude registration/health and installer behavior
+are covered, while its authenticated model-delivery grammar and caller identity
+remain **UNVERIFIED**. OpenCode removes an unknown old-form field before
+delivery, so strict unknown-field rejection is not established through that
+host. Comparative fitness remains class-scoped (FD-53, FG-7). macOS and Windows
+installation paths remain unverified. Publication and product acceptance are
+separate from the implementation version.
 
 - [Install and connect](docs/install.md)
 - [Using Span](docs/usage.md) and [first investigation](docs/onboarding-runbook.md)

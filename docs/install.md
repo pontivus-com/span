@@ -237,7 +237,7 @@ it finds, and leaves the target untouched. Exactly one user-managed copy is
 (`none`).
 
 The MCP server itself never edits a target repository; host integration belongs
-to the installer. The 0.9.4 installer does not perform obsolete target-plugin
+to the installer. The current installer does not perform obsolete target-plugin
 compatibility migration. The plugin waits a bounded three
 seconds at prompt admission for the local MCP connection, so the first model
 request already sees the Span tools, and injects one advisory notice at session
@@ -253,12 +253,12 @@ include MCP tools, so an agent that routes Span through `execute` sees
 
 Reload OpenCode after changing its MCP configuration.
 
-### Upgrading an existing 0.9.4 installation
+### Upgrading an existing installation
 
 The current installer reuses the receipt's absolute OpenCode MCP and plugin
 configuration paths. If an upgrade receipt has no unambiguous plugin scope,
 rerun with `--opencode-plugin-scope global|local|none`; the installer does not
-guess. The 0.9.4 path does not migrate obsolete target-plugin copies. Use
+guess. The current path does not migrate obsolete target-plugin copies. Use
 `span-install --verify-only` to inspect the current registration and scope, then
 restart the host after configuration changes.
 
@@ -316,7 +316,7 @@ data is unused.
 
 ## Upgrade an existing store
 
-Span 0.9.4 uses schema 11. The runtime never migrates at open; an older store
+Span 0.10.0 uses schema 11. The runtime never migrates at open; an older store
 fails closed with a transition action.
 
 Stop every process using the store, then run one phase at a time for each

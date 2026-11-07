@@ -39,16 +39,6 @@ from span.service.ids import server_context_id
 
 __all__ = ["LifecycleService"]
 
-_RecordWire = _typing.Union[
-    _rw.RecordCreateWire,
-    _rw.RecordAddWire,
-    _rw.RecordConfirmWire,
-    _rw.RecordCorrectWire,
-    _rw.RecordReplaceWire,
-    _rw.RecordWithdrawWire,
-    _rw.RecordUpdateWire,
-]
-
 
 def _recording_identity(value: _rw.IdentityWire) -> m.RecordingIdentity:
     if value.context_id is None:
@@ -156,16 +146,23 @@ class LifecycleService:
                 current_boundary_version=exc.current_boundary_version,
             ) from exc
 
-    def _flat_conclusion(self, wire: _rw.RecordRequestWire) -> m.ProposedConclusion:
-        """Build the one conclusion from the flat create fields."""
+    def _flat_conclusion(
+        self,
+        wire: _rw.RecordRequestWire,
+        context: m.InvestigationContext,
+        context_bound: bool,
+    ) -> m.ProposedConclusion:
+        """Build the one conclusion from the flat create fields.
+
+        The conclusion scope is the effective create scope already established
+        by the request or its bound context. A declared surface name is an
+        owner identity, never an evidence path.
+        """
         if wire.conclusion is None:
             raise ValueError("a flat conclusion requires conclusion text")
         resolver = self._resolver(wire.identity)
-        locator = wire.locator or (
-            wire.scope_paths[0]
-            if wire.scope_paths
-            else (wire.surface.locator if wire.surface is not None else "")
-        )
+        scope_paths = self._create_scope_paths(wire, context, context_bound)
+        locator = wire.locator or (scope_paths[0] if scope_paths else "")
         default: m.SourceSupport | None = None
         if not wire.support:
             if wire.observation_id is not None:
@@ -183,7 +180,35 @@ class LifecycleService:
                     observation_id=resolver.source(wire.locator, ())
                 )
         return _rw.flat_conclusion(
-            wire, resolver, locator=locator, default_support=default
+            wire,
+            resolver,
+            locator=locator,
+            default_support=default,
+            scope_paths=scope_paths,
+        )
+
+    def _create_scope_paths(
+        self,
+        wire: _rw.RecordRequestWire,
+        context: m.InvestigationContext,
+        context_bound: bool,
+    ) -> tuple[str, ...]:
+        """Resolve the effective create scope before building the conclusion."""
+        if context_bound and context.scope.paths:
+            return tuple(context.scope.paths)
+        if wire.scope_paths:
+            return tuple(wire.scope_paths)
+        if wire.locator is not None:
+            return (wire.locator,)
+        if (
+            wire.surface is not None
+            and m.SurfaceKind(wire.surface.kind) is m.SurfaceKind.FILE
+        ):
+            return (wire.surface.locator,)
+        raise Rejection(
+            "a create requires scope_paths, a locator, or a context that binds "
+            "its scope; a declared surface name is not an evidence path",
+            cause_kind=RejectionCauseKind.VALIDATION,
         )
 
     def _resolve_create_surface(
@@ -300,13 +325,19 @@ class LifecycleService:
             if create
             else None
         )
-        derived_conclusions = (self._flat_conclusion(wire),) if create else None
+        derived_conclusions = (
+            (self._flat_conclusion(wire, context, context_bound),) if create else None
+        )
+        current_revisions: tuple[m.ConclusionRevision, ...] = ()
+        if not create:
+            current_revisions = self._current_revisions_for_update(wire)
         command = _rw.record_command(
             wire,
             self._resolver(wire.identity),
             context_bound=context_bound,
             derived_surface=derived,
             derived_conclusions=derived_conclusions,
+            current_revisions=current_revisions,
         )
         if isinstance(command, m.CreateUnderstandingCommand):
             if command.surface.kind.is_declared:
@@ -335,6 +366,28 @@ class LifecycleService:
                 self._store.record_understanding(command, content_digest=digest)
             )
         raise RecordingValidationError("record did not produce a command")
+
+    def _current_revisions_for_update(
+        self, wire: _rw.RecordRequestWire
+    ) -> tuple[m.ConclusionRevision, ...]:
+        """Apply the expected-version CAS before deriving compact actions.
+
+        The store still owns the authoritative compare-and-set inside the
+        acceptance transaction. This read exists so the derivation of
+        confirm/correct/replace uses the version the caller named and so a
+        stale version rejects with the observed current version (FD-46).
+        """
+        understanding_id = _typing.cast(str, wire.understanding_id)
+        expected = _typing.cast(int, wire.expected_version)
+        understanding = self._store.get_understanding(understanding_id)
+        if understanding.current_version.value != expected:
+            raise RecordingConflict(
+                "expected understanding version "
+                f"{expected} does not match current "
+                f"{understanding.current_version.value}",
+                current_version=understanding.current_version.value,
+            )
+        return self._store.get_version_conclusions(understanding_id, expected)
 
     def _record_verification_request(
         self, wire: _rw.RecordRequestWire
@@ -390,85 +443,6 @@ class LifecycleService:
         self._support.assert_observations(command.run.observations)
         return self._store.record_verification(command, content_digest=digest)
 
-    def create(self, wire: _rw.RecordCreateWire) -> m.RecordReceipt:
-        digest = _rw.wire_content_digest(wire)
-        replay = self._replay(
-            wire.identity.repository_id, wire.identity.request_id, digest
-        )
-        if replay is not None:
-            return replay
-        wire = self._resolved_wire(wire)  # type: ignore[assignment]
-        command = _rw.create_command(wire, self._resolver(wire.identity))
-        self._require_admitted_support(command)
-        self._support.assert_current(command)
-        return self._store.record_understanding(
-            command,
-            understanding_id=understanding_identity(command.identity),
-            content_digest=digest,
-        )
-
-    def add(self, wire: _rw.RecordAddWire) -> m.RecordReceipt:
-        return self._record_update(
-            wire,
-            lambda value: _rw.add_command(value, self._resolver(value.identity)),  # type: ignore[arg-type]
-        )
-
-    def confirm(self, wire: _rw.RecordConfirmWire) -> m.RecordReceipt:
-        return self._record_update(
-            wire,
-            lambda value: _rw.confirm_command(value, self._resolver(value.identity)),  # type: ignore[arg-type]
-        )
-
-    def correct(self, wire: _rw.RecordCorrectWire) -> m.RecordReceipt:
-        return self._record_update(
-            wire,
-            lambda value: _rw.correct_command(value, self._resolver(value.identity)),  # type: ignore[arg-type]
-        )
-
-    def replace(self, wire: _rw.RecordReplaceWire) -> m.RecordReceipt:
-        return self._record_update(
-            wire,
-            lambda value: _rw.replace_command(value, self._resolver(value.identity)),  # type: ignore[arg-type]
-        )
-
-    def withdraw(self, wire: _rw.RecordWithdrawWire) -> m.RecordReceipt:
-        return self._record_update(
-            wire,
-            lambda value: _rw.withdraw_command(value, self._resolver(value.identity)),  # type: ignore[arg-type]
-        )
-
-    def update(self, wire: _rw.RecordUpdateWire) -> m.RecordReceipt:
-        return self._record_update(
-            wire,
-            lambda value: _rw.update_command(value, self._resolver(value.identity)),  # type: ignore[arg-type]
-        )
-
-    def challenge(self, wire: _rw.RecordChallengeWire) -> m.RecordReceipt:
-        digest = _rw.wire_content_digest(wire)
-        replay = self._replay(
-            wire.identity.repository_id, wire.identity.request_id, digest
-        )
-        if replay is not None:
-            return replay
-        if wire.identity.context_id is None:
-            raise RecordingValidationError(
-                "a challenge cites admitted evidence; supply context_id"
-            )
-        command = _rw.challenge_command(wire, self._resolver(wire.identity))
-        return self._store.record_challenge(command, content_digest=digest)
-
-    def verification(self, wire: _rw.RecordVerificationWire) -> m.RecordReceipt:
-        """Record one verification run through the one canonical write path."""
-        return self._store_verification(
-            _rw.RecordRequestWire(
-                repository_id=wire.identity.repository_id,
-                request_id=wire.identity.request_id,
-                context_id=wire.identity.context_id,
-                kind=m.RecordKind.VERIFICATION,
-                run=wire.run,
-            )
-        )
-
     def receipt(self, identity: m.RecordingIdentity) -> m.RecordReceipt | None:
         """Return the retained receipt for one caller-known request identity."""
         return self._store.get_receipt(recording_key(identity))
@@ -492,33 +466,6 @@ class LifecycleService:
             or "this submission identity already committed different content",
             cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
         )
-
-    def _record_update(
-        self,
-        wire: (
-            _rw.RecordAddWire
-            | _rw.RecordConfirmWire
-            | _rw.RecordCorrectWire
-            | _rw.RecordReplaceWire
-            | _rw.RecordWithdrawWire
-            | _rw.RecordUpdateWire
-        ),
-        builder: _typing.Callable[[_RecordWire], m.UpdateUnderstandingCommand],
-    ) -> m.RecordReceipt:
-        digest = _rw.wire_content_digest(wire)
-        replay = self._replay(
-            wire.identity.repository_id, wire.identity.request_id, digest
-        )
-        if replay is not None:
-            return replay
-        wire = self._resolved_wire(wire)  # type: ignore[assignment]
-        command = builder(wire)
-        self._require_admitted_support(command)
-        self._support.assert_current(command)
-        no_op = self._confirm_noop(command)
-        if no_op is not None:
-            return self._store.record_noop(command.identity, digest, no_op)
-        return self._store.record_understanding(command, content_digest=digest)
 
     def _confirm_noop(
         self, command: m.UpdateUnderstandingCommand
@@ -645,7 +592,26 @@ class LifecycleService:
                     wire.understanding_id, wire.expected_version
                 )
                 paths.extend(version.scope.paths)
-            paths.extend(_record_wire_locators(wire.actions))
+            if wire.actions is not None:
+                for action in (
+                    *wire.actions.add,
+                    *wire.actions.confirm,
+                    *wire.actions.correct,
+                    *wire.actions.replace,
+                    *wire.actions.withdraw,
+                ):
+                    if action.locator is not None:
+                        paths.append(action.locator)
+                    if isinstance(
+                        action,
+                        (
+                            _rw.AddConclusionWire,
+                            _rw.CorrectConclusionWire,
+                            _rw.ReplaceActionWire,
+                        ),
+                    ):
+                        paths.extend(action.scope_paths)
+                paths.extend(_record_wire_locators(wire.actions))
         elif wire.kind is m.RecordKind.VERIFICATION and wire.run is not None:
             paths.extend(wire.run.scope_paths)
             paths.extend(item.locator for item in wire.run.evidence)
@@ -658,72 +624,19 @@ class LifecycleService:
     ) -> tuple[m.EvidenceScope, ...]:
         supports: list[_rw.SupportWire] = list(wire.support)
         if wire.actions is not None:
-            for conclusion in (
+            for action in (
                 *wire.actions.add,
                 *wire.actions.confirm,
                 *wire.actions.correct,
-                *(item.new_conclusion for item in wire.actions.replace),
+                *wire.actions.replace,
+                *wire.actions.withdraw,
             ):
-                supports.extend(conclusion.support)
+                supports.extend(action.support)
         scopes: list[m.EvidenceScope] = []
         for support in supports:
             if isinstance(support, _rw.DiscoveryBoundarySupportWire):
                 scopes.append(m.EvidenceScope(paths=support.scope.paths))
         return tuple(scopes)
-
-    def _resolved_wire(self, wire: _RecordWire) -> _RecordWire:
-        """Bind a recording that cites locators to a server-issued context.
-
-        Recording may cite locators/ranges the agent already holds or a
-        context from a preceding ask; there is no third mode and no separate
-        admission call (L2 §4.2). When no context is supplied, the operation
-        issues one internally and admits the cited sources into it.
-        """
-        if wire.identity.context_id is not None:
-            return wire
-        context = self._issue_record_context(wire)
-        return _dataclasses.replace(
-            wire,
-            identity=_dataclasses.replace(
-                wire.identity, context_id=context.context_id.value
-            ),
-        )
-
-    def _issue_record_context(self, wire: _RecordWire) -> m.InvestigationContext:
-        paths = self._record_scope_paths(wire)
-        return issue_context(
-            self._store,
-            payload=wire,
-            repository_id=wire.identity.repository_id,
-            request_id=m.RequestId(f"{wire.identity.request_id}:record-context"),
-            scope=m.EvidenceScope(paths=paths),
-            question=None,
-            clock=self._clock,
-            new_context_id=self._new_context_id,
-        )
-
-    def _record_scope_paths(self, wire: _RecordWire) -> tuple[str, ...]:
-        paths = list(_cited_locators(wire))
-        if isinstance(wire, _rw.RecordCreateWire):
-            if not isinstance(wire.target, _rw.ExplicitTargetWire):
-                raise RecordingValidationError(
-                    "recording without a context requires an explicit target; "
-                    "supply context_id for a context-bound target",
-                    cause_kind=RejectionCauseKind.CONTEXT_REQUIRED,
-                )
-            paths.extend(wire.target.scope_paths)
-        else:
-            version = self._store.get_version(
-                wire.understanding_id, wire.expected_version
-            )
-            paths.extend(version.scope.paths)
-        if not paths:
-            raise RecordingValidationError(
-                "recording without a context requires a declared scope or "
-                "locator source support",
-                cause_kind=RejectionCauseKind.CONTEXT_REQUIRED,
-            )
-        return tuple(sorted(set(paths)))
 
     def _resolver(self, identity_wire: _rw.IdentityWire) -> _rw.RecordWireResolver:
         identity = _recording_identity(identity_wire)
@@ -754,11 +667,24 @@ class LifecycleService:
         def discovery(scope: m.EvidenceScope) -> m.DiscoveryObservationId:
             return self._admit_discovery(repository_id, context_id, scope)
 
+        def observation_locator(observation_id: str) -> str:
+            observation = self._store.find_source_observation(observation_id)
+            if observation is None:
+                raise RecordingValidationError(
+                    f"unknown source observation: {observation_id!r}"
+                )
+            if observation.repository_id != repository_id:
+                raise RecordingValidationError(
+                    f"observation {observation_id!r} belongs to another repository"
+                )
+            return observation.evidence.locator
+
         return _rw.RecordWireResolver(
             reference=reference,
             authority=authority,
             source=source,
             discovery=discovery,
+            observation_locator=observation_locator,
         )
 
     def _admit_source(

@@ -238,26 +238,43 @@ with the carried scope rejects. *(F9, FD-1, L4)*
 
 A create's one conclusion (`lifecycle-contract` §4.2) carries support from the
 explicit dependency list when supplied, otherwise the admitted observation,
-otherwise a re-read of the cited locator. The conclusion id and assertion nature
-have defaults; the basis records explicit evidence from the cited source.
+otherwise a re-read of the cited locator. Evidence and scope are independent:
+explicit `scope_paths`, the bound context, or a single carried path determines
+scope; a multi-file conclusion names its owning surface and supplies its scope,
+or uses a context that binds that scope.
+The new conclusion lineage identity follows L7; assertion nature defaults to
+`DESCRIPTIVE`; the basis records explicit evidence from the cited source.
 *(F5, F7, L2)*
 
 **FD-31 — confirm.** A re-establishment action: accepted only after present
 support has been checked, and only for a version whose recorded support was not
 current. If the version is already current and unchanged, the operation returns
 the current version rather than creating a new one. Unchanged wording alone is
-never a confirmation. *(F2, A6, F8, L4)*
+never a confirmation. A confirm names the conclusion and the reassessed
+evidence; Span preserves the current statement, assertion nature, and scope and
+derives a non-empty mechanical basis. *(F2, A6, F8, L4)*
 
 **FD-32 — correct.** A conclusion's content changes and a new revision is
 created. Dependents on the previous revision become `REASSESSMENT_REQUIRED`.
-*(F4)*
+The corrected statement and its complete supplied support are explicit; an
+omitted assertion nature or scope is preserved from the current revision, and
+Span derives the content basis. *(F4)*
 
 **FD-33 — replace.** A conclusion is superseded by another. Dependents on the
 superseded revision become `REASSESSMENT_REQUIRED`. Replacement never retargets
-another conclusion's premises silently. *(F4)*
+another conclusion's premises silently. The action identifies the current
+lineage being replaced. The replacement lineage identity follows L7. Span
+derives the exact current old revision, preserves an omitted assertion nature
+or scope for the new conclusion, uses the supplied reason as the replacement
+basis, and derives the new content basis. *(F4)*
 
 **FD-34 — withdraw.** A conclusion is retracted with its basis. Dependents on the
-withdrawn revision become `UNVERIFIABLE`. *(F2, F4)*
+withdrawn revision become `UNVERIFIABLE`. The action supplies the reason;
+Span derives the withdrawal basis from that reason and accepts an optional
+support set. *(F2, F4)*
+
+No transition above bypasses the expected-version compare-and-set (FD-46), and
+none interprets meaning automatically. *(A3, F5, L4)*
 
 **FD-35 — Omission is not deletion.** Each version carries the complete
 membership of conclusion references. A conclusion absent from a new version is

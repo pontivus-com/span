@@ -112,8 +112,9 @@ The public MCP operations are exactly three, one per lifecycle moment:
 `ask`, `record`, `reconsider`.
 
 `record` carries `kind` (`understanding`, `verification`, or `surface`). An
-understanding create is flat — one `conclusion` plus `locator` or
-`observation_id`; `actions` is for updates and `action` for a surface
+understanding create is flat — one `conclusion` plus exactly one evidence mode
+(`locator`, `observation_id`, or non-empty `support`); scope is supplied or
+derived independently. `actions` is for updates and `action` for a surface
 declaration. Those are semantic fields, not separate tools. Setup belongs
 to the installer; structural navigation belongs to the host. Any other
 operation name follows the ordinary unknown-tool path. Span carries no

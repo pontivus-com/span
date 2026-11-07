@@ -40,8 +40,9 @@ question and ask for the surface document view. Never fetch a context id.
 - **After establishing:** `record` one `kind`. Use `kind="understanding"` to
   create or update, `kind="verification"` to record a test/run, and
   `kind="surface"` to declare a service/domain boundary. A create is flat —
-  one `conclusion` plus `locator` or `observation_id`; `actions` is for updates
-  and `action` only for a surface declaration.
+  one `conclusion` plus exactly one evidence mode: `locator`, `observation_id`,
+  or non-empty `support`; scope is supplied or derived independently. `actions`
+  is for updates and `action` only for a surface declaration.
 - **After editing:** `reconsider` the paths you just changed. It returns every
   surface to re-examine, why it was considered, per-conclusion support state,
   and the context for re-establishing what actually changed. A surface with no
