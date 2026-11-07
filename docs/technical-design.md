@@ -8,10 +8,11 @@ the proposed refactoring boundary for layers 0–3. It chooses mechanisms; it
 adds no product requirement. Where it conflicts with a higher layer, the higher
 layer governs.
 
-**Release identity (2026-11-04).** The current public release is **0.9.4**
-(2026-11-04), a bug-fix release over 0.9.2. The prior internal pre-release
-artifacts were withdrawn and were never public. References below to the
-withdrawn internal baseline describe that artifact, not the public release.
+**Release identity (2026-11-07).** The current public release is **0.10.0**
+(2026-11-07), a public-grammar and identity-ownership release over 0.9.4. The
+prior internal pre-release artifacts were withdrawn and were never public.
+References below to the withdrawn internal baseline describe that artifact, not
+the public release.
 
 **Baseline measured at:** withdrawn internal baseline = repository revision `aa580b3`; 0.8.3 = tag
 `v0.8.3`. Counts below are measurements of those trees, not estimates.
@@ -241,6 +242,16 @@ no-flag default is the smaller measured value, so an unconfigured server is safe
 for both supported hosts. This resolves FG-4; the values are observations, not
 invented thresholds.
 
+**Fitting defect reproduced and repaired (2026-11-07).** A post-edit `ask` on a
+2,000-rule CSS surface under the OpenCode-sized 51,133-byte budget delivered a
+continuation `EvidencePage` of 51,203 bytes. The line-split fitter measured a
+candidate page without the omission label it then carried, so the final page
+exceeded the configured budget. The evidence-page fitter now measures the real
+continuation token and the final omission list, with a final backstop, and the
+same scenario delivers 51,107 bytes. The per-host budgets above are unchanged:
+this was a fitting defect, not a new host measurement. The regression is
+`test_continuation_page_fits_the_budget_with_its_omission`.
+
 ### O-4 — Schema-10 transition mappings (resolved 2026-11-01)
 
 Status: **RESOLVED**. §14 records the mapping rule: each schema-10 understanding
@@ -267,16 +278,18 @@ separately by FD-13 and is not reopened.
 
 ### O-6 — Host grammar and invocation identity
 
-Status: **PARTIAL for the flat-create schema (Codex and OpenCode)**. §15 requires
-an identified candidate, supported host/version, invocation-identity owner, and
-raw delivery capture. Codex and OpenCode have three-tool captures
-(`host-contract/2026-11-02-three-tool/RECEIPTS.md`), and OpenCode passes the
-flat-create re-capture including verification and replay. Codex could not run
-the flat-create capture because the account hit its usage limit; that arm is
-blocked, not failed. Claude's managed-host registration and health evidence is
-covered by O-10, but its authenticated model-delivery grammar and caller
-identity remain unverified. The older twenty-tool captures are historical/void
-and do not certify the current `ask`/`record`/`reconsider` surface.
+Status: **PARTIAL for the compact-update/server-derived-identity schema (Codex
+and OpenCode)**. §15 requires an identified candidate, supported host/version,
+invocation-identity owner, and raw delivery capture. Codex and OpenCode have
+three-tool captures, and the 2026-11-07 candidate adds a valid compact journey
+and a host-coercion finding. OpenCode delivered the valid create/add/correct/
+replace lifecycle but did not preserve strict unknown-field rejection for an
+old-form `add`. Codex delivered a current-candidate smoke create with a
+server-derived identity; its full add/correct/replace journey was not
+re-observed. Claude's managed-host registration and health evidence is covered
+by O-10, but its authenticated model-delivery grammar and caller identity remain
+unverified. The older twenty-tool captures are historical/void and do not
+certify the current `ask`/`record`/`reconsider` surface.
 
 **Observed 2026-11-01 (OpenCode).** A candidate-specific capture established
 the declared 20-tool schema exactly, a cold→record→warm journey on the real
@@ -302,6 +315,23 @@ full 62,589-byte truncated answer, so O-3 has a Codex lower bound at that size.
 The earlier capture is in
 `.context/evidence/host-contract/2026-11-02-codex/RECEIPTS.md`.
 
+**Observed 2026-11-07 (compact create/update, server-derived identity).**
+Candidate evidence is in
+`.context/evidence/host-contract/2026-11-07-server-derived-identity/RECEIPTS.md`.
+OpenCode (`2.2.5`, `opencode-go/deepseek-v4.1-flash`) delivered the valid
+compact create/add/correct/replace lifecycle, with `reconsider` supplying the
+context and `expected_version`. Its old-form `add` probe is a host-contract
+limitation: OpenCode removed the unknown `conclusion_id` before delivery, so
+Span accepted the resulting valid request; the same payload over direct MCP
+stdio is rejected by the server. The OpenCode lane therefore proves the valid
+lifecycle, not strict unknown-field preservation. Codex (`codex-cli 0.162.0`,
+`gpt-5.6-luna`) delivered a smoke journey: cold `Gap` → create without
+`conclusion_id` → `UnderstandingRecorded` with a derived identity → `Answer`;
+its full add/correct/replace journey remains unobserved. Claude remains
+**UNVERIFIED** for authenticated model delivery. The FD-49–FD-53 disposition is
+therefore: valid compact lifecycle observed on OpenCode and Codex smoke;
+strict host preservation of unknown fields not established on OpenCode.
+
 ### O-7 — Verification ingestion (resolved 2026-11-01)
 
 Status: **RESOLVED**. §12 records the accepted path: a run cites the
@@ -312,6 +342,11 @@ recording. The wire accepts `run.observations` or `run.evidence`; evidence
 locators are admitted before the same command path. The exact IDs are stored
 with the run, so the run names what it actually exercised. No separate public
 admission step and no inferred run provenance is introduced.
+
+O-7 resolves **source-observation ingestion** only. It does not authenticate an
+external execution, bind a command/argv/cwd, or prove that a host actually ran
+the test. Authenticated execution receipts remain a separate,
+not-yet-designed workstream and introduce no mechanism here.
 
 ### O-8 — Boundary-update encoding and historical references (resolved 2026-11-01)
 
@@ -326,12 +361,15 @@ mapping of existing schema-10 records.
 ### O-9 — Package release version
 
 Status: **RESOLVED — owner direction 2026-11-03: `0.9.1`; 2026-11-04:
-`0.9.2`, `0.9.4`.** The 0.9.1 decision restored D-17: the replacement ships as 0.9.1,
-and the prior internal pre-release artifacts are withdrawn and were never
-public. 0.9.2 (2026-11-04) was a bug-fix release over 0.9.1 and changed no
-public operation. 0.9.4 (2026-11-04) is a bug-fix release over 0.9.2 and also
-changes no public operation. FP-6 freezes release metadata against the current
-value.
+`0.9.2`, `0.9.4`; 2026-11-07: `0.10.0`.** The 0.9.1 decision restored D-17: the
+replacement ships as 0.9.1, and the prior internal pre-release artifacts are
+withdrawn and were never public. 0.9.2 (2026-11-04) was a bug-fix release over
+0.9.1 and changed no public operation. 0.9.4 (2026-11-04) is a bug-fix release
+over 0.9.2 and also changes no public operation. 0.10.0 (2026-11-07) is a
+public-grammar release over 0.9.4: it replaces full-snapshot update payloads
+with compact actions, derives new conclusion lineage identities on the server,
+and removes the legacy parallel recording wire path. It adds no public
+operation. FP-6 freezes release metadata against the current value.
 
 ### O-10 — Supported host set and recovery scope (resolved 2026-11-01)
 
@@ -433,13 +471,14 @@ evidence are persisted, and every page advances by at least one evidence unit
 or exact line range. Historical retrieval is a separate path (FD-38).
 
 `record` is one request selected by `kind` (`understanding`, `verification`, or
-`surface`). For understanding, a create carries one `conclusion` with a
-`locator` or admitted `observation_id`; updates use `actions` with `add`,
+`surface`). For understanding, a create carries one `conclusion` with exactly
+one evidence mode — `locator`, admitted `observation_id`, or non-empty `support`;
+scope is supplied or derived independently. Updates use `actions` with `add`,
 `confirm`, `correct`, `replace`, or `withdraw`, and multiple keys apply
 atomically. The service derives context, observation identity, submission
-identity, current revision, and create identity. A create may cite the context
-returned by `ask`; its bound question and scope are used, and the caller does not
-re-author them. It preserves the full support union, gaps, provenance, and named
+identity, current revision, and new lineage identity. A create may cite the
+context returned by `ask`; its bound question and scope are used, and the caller
+does not re-author them. It preserves the full support union, gaps, provenance, and named
 challenge dispositions. `record(kind="surface")` creates or updates a declared
 service/domain boundary with an optional parent and compare-and-set
 `expected_boundary_version`; cycles, unknown parents, and stale versions are
@@ -570,7 +609,11 @@ service passes its key to `record_command` as `derived_surface`. The three
 surface rejection causes are the FD-30 cases.
 
 **Flat create.** `flat_conclusion` is the one builder. The service resolves the
-observation's locator and passes the default support; `actions` is update-only.
+effective create scope before building: explicit `scope_paths`, the bound
+context scope for a question-context create, a locator, or a FILE surface path.
+A declared surface name is never used as an evidence path. The service passes
+the default support for locator/observation creates; explicit `support` is
+stored as supplied. `actions` is update-only.
 
 **Surface conflicts.** `SurfaceConflict` carries the current boundary version.
 `put_surface` and `update_surface` raise it for a kind conflict, a changed
@@ -611,7 +654,7 @@ The proposed physical changes are:
 | `investigation_contexts` | retain repository/request uniqueness; adapt binding digest inputs | existing context carrier with surface-aware scope; remove budget input from binding |
 | `record_receipts` | replace repository/context/submission key with repository/request key | adapted acceptance identity, digest, effects, and expiry; no cascading dependence on live context |
 | `support_dependencies` | retain reverse index and exact revision keys | project dependencies from canonical revisions in the acceptance transaction |
-| source/discovery observations, challenges, verification runs | retain canonical records and their reference integrity | only required ownership/identity adaptations; run-ingress mapping awaits O-7 |
+| source/discovery observations, challenges, verification runs | retain canonical records and their reference integrity | only required ownership/identity adaptations; run-ingress mapping is the resolved O-7 path recorded in §12 |
 | `meta` | advance expected schema to 11 | existing runtime format check; no migration on ordinary open |
 
 Resolve path containment from canonical boundaries and existing inventory/locator
@@ -678,6 +721,21 @@ transaction. Both service lookup and in-transaction lookup address the adapted
 request key; neither derives a new retry identity from a fresh context. Derive
 understanding IDs through the core identity owner, while the surface/question
 unique index enforces creation arbitration.
+
+**Compact update grammar.** `RecordActionsWire` carries action-specific compact
+deltas (`AddConclusionWire`, `ConfirmConclusionWire`, `CorrectConclusionWire`,
+`ReplaceActionWire`, `WithdrawActionWire`) rather than a full conclusion
+snapshot. The public caller supplies no new conclusion lineage identity on
+create, `add`, or `replace`; `span.core.identity.conclusion_identity` derives it
+from `(repository_id, request_id, role, ordinal)` for roles `create`, `add`,
+and `replace`, projected as `c:<digest>`. The function is pure and replay-stable;
+no database allocator, counter, context, version, or source content participates.
+`LifecycleService.record()` reads the exact understanding version the caller
+names, derives the old revision identity, the unchanged assertion nature or
+scope, the mechanical basis, and the complete supplied support, and builds the
+existing canonical action carriers and `UpdateUnderstandingCommand`. The
+existing atomic store transition and compare-and-set remain the only acceptance
+owner; no second command representation, grammar, or writer is introduced.
 
 Compose internal context issuance and `EvidenceService` admission inside the
 operation service, after receipt lookup. There is no required public admission
@@ -906,10 +964,10 @@ second declaration of those requirements.
 | FD-38–FD-41 | §9, §12 | `test_record_wire.py`, `test_lifecycle_surface.py`, `tests/integration/test_lifecycle_mcp.py`; closed unions, rejection identity/action/version, post-commit failure | closed `RecordResult`/`ReconsiderResult` wired; rejections carry identity, action, current version |
 | FD-42–FD-45 | §13–§14 | `test_lifecycle_store.py`, `test_store_transition.py`; expiry boundaries, restart recovery, and preserved references | O-2 settled at a 7-day replay promise / 1-day context; expiry and replay tested |
 | FD-46–FD-48 | §10, §12 | `test_lifecycle_store.py`; concurrent first write, duplicate create, CAS and replay | request-key tests added |
-| FD-49–FD-53 | §15 | `test_host_contract.py`, `test_installed_mcp.py`, raw live-host capture | the three-tool surface is implemented and locally gated; three-tool captures exist on Codex and OpenCode, and OpenCode passes the flat-create re-capture including verification and replay. Codex is blocked by quota on the flat-create schema, so that arm stays open |
+| FD-49–FD-53 | §15 | `test_host_contract.py`, `test_installed_mcp.py`, raw live-host capture | the three-tool surface is implemented and locally gated. 2026-11-07: OpenCode delivered the valid compact create/add/correct/replace lifecycle but removed an unknown old-form field before delivery; Codex delivered a current-candidate smoke create with a derived identity; Claude remains unverified. Strict unknown-field preservation through OpenCode is not established |
 | FD-54–FD-57 | §13, §15 | `test_answer_service.py`; result fitting, explicit omission, minimum-result refusal | O-3 measured per host and applied as the delivered-wire budget |
 | FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; notice only with understanding, plugin deploy/remove, skill vocabulary | 84 input tokens per session; OpenCode first `ask` before first source read 5/5; Codex pending |
-| F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 UNRESOLVED |
+| F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
 | F8, G5 | §15 | frozen comparative task captures and scorecards | core value accepted on Codex and OpenCode (retained, current, reusable understanding; exact change isolation). Two reuse classes are positive with capture counted (break-even 2 and 11); the single-use cross-file class is negative (1.74× billed). No universal cost claim |
 
 Part B is complete only after its executable contracts, reviewed migration

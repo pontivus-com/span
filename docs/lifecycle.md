@@ -41,9 +41,13 @@ does not resend source bodies. The result is the committed receipt plus a
 post-commit support qualification — or `SurfaceDeclared` for a boundary
 declaration.
 
-- `kind="understanding"` with `conclusion` and `locator` (or `observation_id`) creates version 1.
+- `kind="understanding"` with `conclusion` and exactly one evidence mode —
+  `locator`, `observation_id`, or non-empty `support` — creates version 1; scope
+  is supplied or derived independently.
 - `actions.add`, `confirm`, `correct`, `replace`, and `withdraw` update an exact
-  expected version; multiple actions apply atomically.
+  expected version; multiple actions apply atomically. Actions are compact
+  deltas: name the conclusion and one evidence mode; Span derives the old
+  revision, unchanged content metadata, and the mechanical basis.
 - `challenge_dispositions` settles a challenge raised by `reconsider`.
 - `kind="verification"` records an independent run against the observations or
   evidence actually tested.

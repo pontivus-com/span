@@ -13,6 +13,7 @@ from span.core.model.commands import RecordCommand
 from span.core.model.investigation import SourceRange
 from span.core.model.primitives import (
     ChallengeId,
+    ConclusionId,
     DiscoveryObservationId,
     EvidenceScope,
     RequestId,
@@ -82,6 +83,38 @@ def understanding_identity(identity: RecordingIdentity) -> UnderstandingId:
 def challenge_identity(identity: RecordingIdentity) -> ChallengeId:
     """Derive the stable challenge identity of one create submission."""
     return ChallengeId(f"ch:{identity.request_id.value}")
+
+
+def conclusion_identity(
+    repository_id: str,
+    request_id: RequestId | str,
+    role: str,
+    ordinal: int,
+) -> ConclusionId:
+    """Derive the stable identity of a new conclusion lineage (L7).
+
+    The caller supplies the intentional request identity and semantic content;
+    Span derives the new lineage identity from the request, its role, and its
+    position in the action tuple. The derivation is pure, so a replay of the
+    same intentional request addresses the same lineage without a database
+    allocator, counter, or context/version state.
+    """
+    if role not in {"create", "add", "replace"}:
+        raise ValueError(f"unknown conclusion identity role: {role!r}")
+    if ordinal < 0:
+        raise ValueError("a conclusion identity ordinal cannot be negative")
+    request_value = (
+        request_id.value if isinstance(request_id, RequestId) else request_id
+    )
+    digest = payload_digest(
+        {
+            "repository_id": repository_id,
+            "request_id": request_value,
+            "role": role,
+            "ordinal": ordinal,
+        }
+    )
+    return ConclusionId("c:" + digest.value.split(":", 1)[1])
 
 
 def source_observation_identity(

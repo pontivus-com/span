@@ -166,6 +166,8 @@ class SkillLifecycleConsistencyTest(unittest.TestCase):
             "challenge_dispositions",
             "expected_boundary_version",
             "expected_version",
+            "conclusion_id",
+            "scope_paths",
         }
         for path in SKILLS:
             text = _text(path)

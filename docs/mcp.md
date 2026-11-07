@@ -26,8 +26,9 @@ navigation covers structural lookup, and the installer covers setup. An optional
 part of the default surface.
 
 `record` carries `kind` (`understanding`, `verification`, or `surface`). An
-understanding create is flat — one `conclusion` plus `locator` or
-`observation_id`; `actions` is for updates and `action` for a surface
+understanding create is flat — one `conclusion` plus exactly one evidence mode
+(`locator`, `observation_id`, or non-empty `support`); scope is supplied or
+derived independently. `actions` is for updates and `action` for a surface
 declaration. Those are semantic fields, not separate tools. Only the current
 three names are registered. Any other operation name follows the ordinary typed
 `unknown_tool` error path and performs no work.
@@ -112,16 +113,44 @@ returned as an empty page.
 }
 ```
 
-A create carries one conclusion. `locator` is the file the conclusion is
-about; `observation_id` from an `ask` gap may replace it. `surface` is optional
-and derived from the carried scope. `assertion_nature` defaults to
-`DESCRIPTIVE`; `conclusion_id` defaults to `c-1`. An understanding create
-takes no `action` and no `actions`: `action` belongs to `kind="surface"` and
-`actions` to updates. Sending either is an ingress error.
+A create carries one conclusion and exactly one evidence mode. `locator` is the
+file the conclusion is about; `observation_id` from an `ask` gap may replace it;
+non-empty `support` is the complete typed dependency set the agent already
+holds. A locator may accompany explicit support as the carried code scope, but
+an observation id may not. Scope is supplied or derived independently through
+`scope_paths`, the bound context, or a single carried path; a multi-file
+conclusion needs an explicit scope or a declared owning surface. `surface` is
+optional and derived from the carried scope. `assertion_nature` defaults to
+`DESCRIPTIVE`. A create takes no caller-created conclusion identity, no
+`action`, and no `actions`: `action` belongs to `kind="surface"` and `actions`
+to updates. Sending any of them is an ingress error.
 
 Updates use `actions` with `add`, `confirm`, `correct`, `replace`, or `withdraw`,
 plus `understanding_id` and `expected_version`. Multiple keys apply atomically.
-`challenge_dispositions` settles a challenge raised by `reconsider`.
+Actions are compact semantic deltas, not full conclusion snapshots. `add` takes
+no identity; `confirm`, `correct`, `replace`, and `withdraw` name the
+`conclusion_id` returned by Span for an existing lineage. Each action names
+exactly one evidence mode — `locator`, `observation_id`, or non-empty
+`support`:
+
+```json
+{"add":     [{"conclusion": "B performs Y.", "locator": "src/b.py"}]}
+{"confirm": [{"conclusion_id": "<id returned by Span>", "locator": "src/a.py"}]}
+{"correct": [{"conclusion_id": "<id returned by Span>", "conclusion": "A now performs Z.", "locator": "src/a.py"}]}
+{"replace": [{"conclusion_id": "<id returned by Span>", "conclusion": "The replacement behaviour is Z.", "reason": "The prior implementation was superseded.", "locator": "src/a.py"}]}
+{"withdraw":[{"conclusion_id": "<id returned by Span>", "reason": "The implementation no longer has this behaviour."}]}
+```
+
+`add` and `correct` take `conclusion`; `replace` takes `conclusion` and
+`reason`; `confirm` preserves the current statement, assertion nature, and
+scope; `withdraw` may supply one evidence mode or none. Span derives the new
+lineage identity on `create`, `add`, and `replace`, the old revision identity,
+unchanged content metadata, and the mechanical basis. Supply
+`assertion_nature` or `scope_paths` only when overriding the current value on
+`add`, `correct`, or `replace`. Do not send `statement`, `basis_*`, `old_*`,
+`new_conclusion_id`, or a nested `new_conclusion`; those fields are not part of
+the public grammar. `challenge_dispositions` settles a challenge raised by
+`reconsider`.
 
 A create may supply the `context_id` returned by `ask` (including a cold gap).
 The context's bound question and scope are used; do not also send `question` or
@@ -189,7 +218,7 @@ could not be evaluated; that outcome is `SupportUnavailable`.
     "understanding_id": "u:...",
     "target_version": 1,
     "target_conclusions": [
-      {"understanding_id": "u:...", "conclusion_id": "c-1", "revision": 1}
+      {"understanding_id": "u:...", "conclusion_id": "<id returned by Span>", "revision": 1}
     ],
     "reason": "The cited source does not support this statement.",
     "evidence": []
@@ -202,8 +231,10 @@ the target version and cited evidence; the caller does not supply a context id.
 Results: `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 
 `Changed` names every surface to re-examine, the reasons it was considered
-(`containment`, `direct`, `indirect`), per-conclusion support state, and a
-context for re-establishment. `surfaces` is the complete containment set: a
+(`containment`, `direct`, `indirect`), per-conclusion support state, the
+understanding's current `expected_version`, and a context for re-establishment.
+That is everything the subsequent compact `record` needs; no intervening `ask`
+is required. `surfaces` is the complete containment set: a
 surface with no `conclusions` is containment-only, not a finding. Act only on
 conclusions whose support state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`; a
 `CURRENT` conclusion in the set needs no work. Inclusion is not a verdict.

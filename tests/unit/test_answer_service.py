@@ -1156,6 +1156,42 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(page, m.EvidencePage)
         self.assertTrue(page.evidence)
 
+    def test_continuation_page_fits_the_budget_with_its_omission(self) -> None:
+        """A line-split page must budget the omission label it carries."""
+        from span.service.answer import _encoded_size
+
+        (self.root / "styles").mkdir()
+        lines = [
+            f".rule-{index} {{ color: #{index % 0xFFFFFF:06x}; }}"
+            for index in range(2000)
+        ]
+        (self.root / "styles/theme.css").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+        gap = self.service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                request_id="req-css-post-edit",
+                surface=m.SurfaceReference(
+                    kind=m.SurfaceKind.FILE, locator="styles/theme.css"
+                ),
+                question="How is the theme applied?",
+            )
+        )
+        self.assertIsInstance(gap, m.Gap)
+        assert isinstance(gap, m.Gap)
+        self.assertTrue(gap.continuation)
+        page = self.service.ask(
+            m.AskRequest(repository_id="repo-1", continuation=gap.continuation)
+        )
+        self.assertIsInstance(page, m.EvidencePage)
+        assert isinstance(page, m.EvidencePage)
+        self.assertTrue(page.omitted)
+        self.assertLessEqual(
+            _encoded_size(page),
+            DEFAULT_SERVICE_BOUNDS_POLICY.max_response_bytes,
+        )
+
     def test_snapshot_selector_returns_history_not_an_answer(self) -> None:
         result = self.service.ask(
             m.AskRequest(

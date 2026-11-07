@@ -122,6 +122,7 @@ class ReconsiderService:
             ordered = ordered[:limit]
             truncated = True
 
+        current_versions: dict[str, m.UnderstandingVersion] = {}
         return m.Changed(
             surfaces=tuple(
                 m.ChangedSurface(
@@ -130,16 +131,17 @@ class ReconsiderService:
                         sorted(reasons[surface], key=lambda item: item.value)
                     ),
                     conclusions=tuple(
-                        m.ChangedConclusion(
-                            ref=ref,
-                            reasons=tuple(
-                                sorted(reasons[surface], key=lambda item: item.value)
-                            ),
-                            support=self._support_state(ref),
+                        conclusion
+                        for conclusion in (
+                            self._changed_conclusion(
+                                ref, reasons[surface], current_versions
+                            )
+                            for ref in sorted(
+                                affected.get(surface, ()),
+                                key=lambda ref: ref.sort_key,
+                            )
                         )
-                        for ref in sorted(
-                            affected.get(surface, ()), key=lambda ref: ref.sort_key
-                        )
+                        if conclusion is not None
                     ),
                 )
                 for surface in ordered
@@ -148,6 +150,40 @@ class ReconsiderService:
             truncated=truncated,
             context=self._reconsider_context(request, ordered),
         )
+
+    def _changed_conclusion(
+        self,
+        ref: m.ConclusionRevisionRef,
+        reasons: set[m.ChangeReason],
+        current_versions: dict[str, m.UnderstandingVersion],
+    ) -> m.ChangedConclusion | None:
+        """Emit only a current-membership ref as an actionable target.
+
+        Dependency traversal still walks historical revisions so a current
+        downstream dependent is not lost; composition filters them out here.
+        """
+        version = self._current_version(ref, current_versions)
+        if ref not in version.conclusions:
+            return None
+        return m.ChangedConclusion(
+            ref=ref,
+            expected_version=version.version,
+            reasons=tuple(sorted(reasons, key=lambda item: item.value)),
+            support=self._support_state(ref),
+        )
+
+    def _current_version(
+        self,
+        ref: m.ConclusionRevisionRef,
+        current_versions: dict[str, m.UnderstandingVersion],
+    ) -> m.UnderstandingVersion:
+        understanding_id = ref.understanding_id.value
+        if understanding_id not in current_versions:
+            understanding = self._store.get_understanding(understanding_id)
+            current_versions[understanding_id] = self._store.get_version(
+                understanding_id, understanding.current_version.value
+            )
+        return current_versions[understanding_id]
 
     def _reconsider_context(
         self,

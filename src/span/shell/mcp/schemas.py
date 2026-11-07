@@ -75,11 +75,22 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '"kind":"understanding","question":"<exact question>",'
         '"scope_paths":["<path>"],"conclusion":"<statement>",'
         '"locator":"<path>"} '
-        "Use observation_id instead of locator when the ask Gap gave you one. "
-        "Omit surface; Span derives it from one scope_path, or from the context. "
-        "With a context, omit question and scope_paths. "
-        "UPDATE TEMPLATE: the same request with understanding_id and "
-        "expected_version, kind understanding, actions.add, and no surface. "
+        "Create evidence is exactly one of locator, observation_id, or "
+        "non-empty support; scope is supplied or derived independently. Use "
+        "observation_id instead of locator when the ask Gap gave you one. Use "
+        "support when you already hold the complete dependency set; then do "
+        "not also send observation_id. Omit surface; Span derives it from one "
+        "scope_path, or from the context. With a context, omit question and "
+        "scope_paths. "
+        "UPDATE TEMPLATE: use understanding_id, expected_version, and one or "
+        "more compact actions; Span derives new lineage identities, old "
+        "revisions, unchanged content, and the mechanical basis. Each action "
+        "names exactly one evidence mode: locator, observation_id, or support. "
+        "add takes conclusion; confirm, correct, replace, and withdraw name the "
+        "existing conclusion_id returned by Span; replace takes conclusion and "
+        "reason; withdraw takes reason and optional evidence; confirm preserves "
+        "the current content. Do not send conclusion_id on add or "
+        "new_conclusion_id on replace. "
         "SURFACE TEMPLATE (only when the answer spans several files): "
         '{"repository_id":"<id>","request_id":"<new id>","kind":"surface",'
         '"action":"create","surface":{"kind":"SERVICE","locator":"<name>",'
@@ -130,23 +141,6 @@ TOOL_OUTPUT_SCHEMAS: dict[str, dict] = {
     spec.name: schema_for_result(spec.result) for spec in TOOL_SPECS
 }
 
-_CONCLUSION_EXAMPLE = {
-    "conclusion_id": "c1",
-    "statement": "The value is loaded from config/settings.yaml.",
-    "assertion_nature": "DESCRIPTIVE",
-    "scope_paths": ["src/a.py"],
-    "scope_evidence_refs": [],
-    "support": [
-        {
-            "$type": "AdmittedSourceSupportWire",
-            "observation_id": "obs:...",
-        }
-    ],
-    "basis_derivation": "EXPLICIT_EVIDENCE",
-    "basis_summary": "read src/a.py",
-    "basis_input_refs": [],
-}
-
 #: Exact minimal call shapes. A host that copies one of these succeeds; the
 #: prose description alone is not enough on a real task.
 TOOL_EXAMPLES: dict[str, list[dict]] = {
@@ -175,11 +169,83 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
         },
         {
             "repository_id": "repo-1",
-            "request_id": "rec-2",
+            "request_id": "rec-add",
             "kind": "understanding",
             "understanding_id": "u:rec-1",
             "expected_version": 1,
-            "actions": {"add": [dict(_CONCLUSION_EXAMPLE)]},
+            "actions": {
+                "add": [
+                    {
+                        "conclusion": "B performs Y.",
+                        "locator": "src/b.py",
+                    }
+                ]
+            },
+        },
+        {
+            "repository_id": "repo-1",
+            "request_id": "rec-confirm",
+            "context_id": "ctx-from-reconsider",
+            "kind": "understanding",
+            "understanding_id": "u:rec-1",
+            "expected_version": 2,
+            "actions": {
+                "confirm": [
+                    {
+                        "conclusion_id": "<id returned by Span>",
+                        "locator": "src/a.py",
+                    }
+                ]
+            },
+        },
+        {
+            "repository_id": "repo-1",
+            "request_id": "rec-correct",
+            "context_id": "ctx-from-reconsider",
+            "kind": "understanding",
+            "understanding_id": "u:rec-1",
+            "expected_version": 2,
+            "actions": {
+                "correct": [
+                    {
+                        "conclusion_id": "<id returned by Span>",
+                        "conclusion": "A now performs Z.",
+                        "locator": "src/a.py",
+                    }
+                ]
+            },
+        },
+        {
+            "repository_id": "repo-1",
+            "request_id": "rec-replace",
+            "kind": "understanding",
+            "understanding_id": "u:rec-1",
+            "expected_version": 2,
+            "actions": {
+                "replace": [
+                    {
+                        "conclusion_id": "<id returned by Span>",
+                        "conclusion": "The replacement behaviour is Z.",
+                        "reason": "The prior implementation was superseded.",
+                        "locator": "src/a.py",
+                    }
+                ]
+            },
+        },
+        {
+            "repository_id": "repo-1",
+            "request_id": "rec-withdraw",
+            "kind": "understanding",
+            "understanding_id": "u:rec-1",
+            "expected_version": 2,
+            "actions": {
+                "withdraw": [
+                    {
+                        "conclusion_id": "<id returned by Span>",
+                        "reason": "The implementation no longer has this behaviour.",
+                    }
+                ]
+            },
         },
         {
             "repository_id": "repo-1",

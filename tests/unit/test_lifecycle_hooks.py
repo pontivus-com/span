@@ -67,33 +67,18 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
             requests=(m.EvidenceRequest("src/app.py"),),
         )
     )
-    wire = rw.RecordCreateWire(
-        identity=rw.IdentityWire(
-            repository_id=REPO,
-            context_id=admitted.context.context_id.value,
-            request_id="hook-create",
-        ),
+    wire = rw.RecordRequestWire(
+        repository_id=REPO,
+        request_id="hook-create",
+        context_id=admitted.context.context_id.value,
+        kind=m.RecordKind.UNDERSTANDING,
         surface=rw.SurfaceWire(kind="FILE", locator="src/app.py"),
-        target=rw.ExplicitTargetWire(
-            question="What does the app do?",
-            scope_paths=("src/app.py",),
-            scope_evidence_refs=(),
-        ),
-        conclusions=(
-            rw.ConclusionWire(
-                conclusion_id="c-1",
-                statement="The app emits line1.",
-                assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                scope_paths=("src/app.py",),
-                scope_evidence_refs=(),
-                support=(rw.SourceSupportWire(locator="src/app.py"),),
-                basis_derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
-                basis_summary="read the source",
-                basis_input_refs=(),
-            ),
-        ),
+        question="What does the app do?",
+        scope_paths=("src/app.py",),
+        conclusion="The app emits line1.",
+        support=(rw.SourceSupportWire(locator="src/app.py"),),
     )
-    lifecycle.create(wire)
+    lifecycle.record(wire)
     store.close()
     return root, data
 

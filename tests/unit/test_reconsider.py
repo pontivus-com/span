@@ -185,6 +185,68 @@ class ReconsiderServiceTest(unittest.TestCase):
             by_surface["src/b.py"].conclusions[0].ref.understanding_id.value,
             "u-b",
         )
+        self.assertEqual(
+            by_surface["src/b.py"].conclusions[0].expected_version.value, 1
+        )
+
+    def test_historical_revision_is_not_an_actionable_change_target(self) -> None:
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-u-a-correct"),
+                    context_id=CONTEXT_ID,
+                ),
+                understanding_id=m.UnderstandingId("u-a"),
+                expected_version=m.UnderstandingVersionNumber(1),
+                correct=(
+                    m.CorrectConclusion(
+                        conclusion_id=m.ConclusionId("c-1"),
+                        statement="It does something else.",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-a")
+                            ),
+                        ),
+                        basis=m.SemanticBasis(
+                            derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
+                            summary="corrected",
+                            input_refs=(),
+                        ),
+                    ),
+                ),
+            ),
+            content_digest=m.ContentDigest("sha256:correct"),
+        )
+
+        result = self.service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        by_surface = {item.surface.locator: item for item in result.surfaces}
+
+        # The historical premise revision is still walked: u-b depends on
+        # u-a c-1@1 and remains a current, actionable dependent.
+        self.assertIn("src/b.py", by_surface)
+        dependent = by_surface["src/b.py"].conclusions[0]
+        self.assertEqual(dependent.ref.understanding_id.value, "u-b")
+        self.assertEqual(dependent.expected_version.value, 1)
+
+        # u-a's current membership is c-1@2; the historical c-1@1 is not
+        # emitted as an actionable target even though traversal saw it.
+        a_conclusions = by_surface["src/a.py"].conclusions
+        self.assertEqual(
+            [
+                (item.ref.conclusion_id.value, item.ref.revision.value)
+                for item in a_conclusions
+            ],
+            [("c-1", 2)],
+        )
+        self.assertEqual(a_conclusions[0].expected_version.value, 2)
 
     def test_unowned_path_reports_only_its_path_surface(self) -> None:
         result = self.service.reconsider(
