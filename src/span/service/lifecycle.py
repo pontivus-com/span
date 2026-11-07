@@ -593,13 +593,14 @@ class LifecycleService:
                 )
                 paths.extend(version.scope.paths)
             if wire.actions is not None:
-                for action in (
+                actions: tuple[_rw.RecordActionWire, ...] = (
                     *wire.actions.add,
                     *wire.actions.confirm,
                     *wire.actions.correct,
                     *wire.actions.replace,
                     *wire.actions.withdraw,
-                ):
+                )
+                for action in actions:
                     if action.locator is not None:
                         paths.append(action.locator)
                     if isinstance(
@@ -624,13 +625,14 @@ class LifecycleService:
     ) -> tuple[m.EvidenceScope, ...]:
         supports: list[_rw.SupportWire] = list(wire.support)
         if wire.actions is not None:
-            for action in (
+            actions: tuple[_rw.RecordActionWire, ...] = (
                 *wire.actions.add,
                 *wire.actions.confirm,
                 *wire.actions.correct,
                 *wire.actions.replace,
                 *wire.actions.withdraw,
-            ):
+            )
+            for action in actions:
                 supports.extend(action.support)
         scopes: list[m.EvidenceScope] = []
         for support in supports:

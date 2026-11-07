@@ -324,6 +324,14 @@ DispositionWire = _typing.Union[
     ResolvedDispositionWire,
 ]
 
+RecordActionWire = _typing.Union[
+    AddConclusionWire,
+    ConfirmConclusionWire,
+    CorrectConclusionWire,
+    ReplaceActionWire,
+    WithdrawActionWire,
+]
+
 
 @_dataclass(frozen=True)
 class IdentityWire:
@@ -758,6 +766,7 @@ def _add_scope(
 ) -> _p.EvidenceScope:
     if value.scope_paths:
         return _scope(value.scope_paths, (), resolver)
+    paths: tuple[str, ...]
     if value.locator is not None:
         paths = (value.locator,)
     elif value.observation_id is not None:
