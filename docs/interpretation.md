@@ -20,18 +20,29 @@ unresolved questions. Shape acceptance does not prove the prose is correct.
 
 ## Create and update
 
-`record(kind="understanding", conclusion, locator)` creates an understanding and
-its first immutable version. A question-bound context supplies its question/scope;
-an evidence-only context requires an explicit target within the admitted scope.
+`record(kind="understanding", conclusion, locator|observation_id|support)` creates
+an understanding and its first immutable version. `support` is the complete typed
+dependency set when the agent already holds one. Scope is supplied or derived
+independently through `scope_paths`, the context, or a declared surface. A
+question-bound context supplies its question/scope; an evidence-only context
+requires an explicit target within the admitted scope.
 
 | Action | Effect |
 | --- | --- |
 | `actions.add` | Add a conclusion lineage while retaining other membership. |
-| `actions.confirm` | Record that the explanation still holds, with current support and a reassessment basis. |
+| `actions.confirm` | Record that the current explanation still holds, after reassessing its supplied support. |
 | `actions.correct` | Revise the explanation in its existing lineage. |
-| `actions.replace` | Replace an exact old conclusion revision with a new lineage. |
+| `actions.replace` | Supersede the current conclusion with a new lineage and a stated reason. |
 | `actions.withdraw` | Record an explicit withdrawal and its reason. |
 | `actions` object | Apply multiple conclusion actions and named challenge dispositions atomically. |
+
+Update actions are compact deltas: the caller supplies the conclusion text and
+the evidence already held; Span derives new lineage identities, the old
+revision, unchanged assertion nature or scope, and the mechanical basis. `add`
+takes no identity; `confirm`, `correct`, `replace`, and `withdraw` name an
+existing `conclusion_id` returned by Span. Each action names one evidence mode
+(`locator`, `observation_id`, or non-empty `support`); a withdrawal may name
+none.
 
 Updates compare the expected understanding version. Each accepted version
 records its full membership of exact conclusion revisions; earlier versions

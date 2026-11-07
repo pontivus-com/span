@@ -175,6 +175,40 @@ class SurfaceConformanceTest(unittest.TestCase):
         tabulated = set(re.findall(r"^\| `([a-z_]+)` \|", table.group(1), re.M))
         self.assertEqual(tabulated, wire)
 
+    def test_public_record_grammar_derives_new_identities(self):
+        """F7/L7: the caller selects existing objects, never creates new IDs."""
+        schema = TOOL_SCHEMAS["record"]
+        properties = schema["properties"]
+        defs = schema["$defs"]
+        self.assertNotIn("conclusion_id", properties)
+        self.assertNotIn("scope_evidence_refs", properties)
+        self.assertIn("expected_version", properties)
+        add = defs["AddConclusionWire"]["properties"]
+        self.assertNotIn("conclusion_id", add)
+        self.assertNotIn("scope_evidence_refs", add)
+        replace = defs["ReplaceActionWire"]["properties"]
+        self.assertNotIn("new_conclusion_id", replace)
+        self.assertNotIn("scope_evidence_refs", replace)
+        for name in (
+            "ConfirmConclusionWire",
+            "CorrectConclusionWire",
+            "ReplaceActionWire",
+            "WithdrawActionWire",
+        ):
+            self.assertIn("conclusion_id", defs[name]["properties"])
+        with self.assertRaisesRegex(ValueError, "expected_version"):
+            decode_request(
+                "record",
+                {
+                    "repository_id": "r",
+                    "request_id": "u",
+                    "kind": "understanding",
+                    "understanding_id": "u-1",
+                    "actions": {"add": [{"conclusion": "X.", "locator": "a.py"}]},
+                },
+            )
+        self.assertEqual(set(TOOL_NAMES), CORE)
+
     def test_record_description_carries_every_call_template(self):
         text = TOOL_SCHEMAS["record"]["description"]
         for marker in (

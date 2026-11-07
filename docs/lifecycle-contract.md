@@ -205,7 +205,7 @@ it is current, and names what is not.
 ### 4.2 `record` — retain
 
 ```text
-record(kind="understanding", conclusion, locator|observation_id, surface?, question?|context)
+record(kind="understanding", conclusion, locator|observation_id|support, surface?, question?|context)
 record(kind="understanding", understanding_id, expected_version, actions)
 record(kind="verification", run)
 record(kind="surface", action="create"|"update", surface)
@@ -236,11 +236,19 @@ existing version is a `Rejected` conflict; an `update` with a stale
 `expected_boundary_version` is a `Rejected` naming the current boundary version,
 not `Unavailable`. *(A2, A8, L4)*
 
-**Understanding request** carries one conclusion, the locator or admitted
-observation that supports it, the question or the context that binds the target,
-the surface or the scope that derives it, and any gaps. An update carries the
-expected version and the action set instead. A create is one conclusion; a
-second conclusion is a second request.
+**Understanding request** carries one conclusion, the evidence that supports it,
+the question or the context that binds the target, the surface or the scope
+that derives it, and any gaps. A create names exactly one evidence mode —
+`locator`, `observation_id`, or non-empty `support` — where `support` is the
+complete declared dependency set the agent already holds. A locator may
+accompany explicit support as the carried code scope, but an observation id may
+not: it would be ignored by the dependency set. A create's scope is supplied or
+derived independently of its evidence mode, from explicit `scope_paths`, the
+bound context, or a single carried path; a multi-file conclusion names its
+owning surface and supplies its scope, or uses a context that binds that scope.
+An update carries the expected
+version and the action set instead. A create is one conclusion; a second
+conclusion is a second request. *(F5, F7, L7)*
 
 A create may supply the `context` from a preceding `ask` instead of re-sending
 the question and scope. When that context is a question context, the context
@@ -269,8 +277,23 @@ intentional act.
 | `replace` | one conclusion is superseded by another |
 | `withdraw` | a conclusion is retracted, with its basis |
 
+Update actions are compact semantic deltas, not full conclusion snapshots.
+The caller supplies semantic intent and evidence it already holds; Span derives
+new conclusion lineage identities and all mechanical bookkeeping. `add` carries
+`conclusion`; `confirm`, `correct`, `replace`, and `withdraw` carry the existing
+`conclusion_id` returned by Span. `correct` also carries `conclusion`;
+`replace` carries `conclusion` and `reason`; `withdraw` carries `reason`. No
+action accepts a caller-created new lineage identity, and `replace` has no
+`new_conclusion_id`. Every action that supplies evidence names exactly one
+evidence mode: `locator`, `observation_id`, or non-empty `support`; `withdraw`
+may supply one or none. Span derives the old revision identity, any unchanged
+assertion nature or scope, the mechanical basis, and the submission digest.
+`expected_version` stays mandatory and compare-and-set. *(F5, F7, L4, L7)*
+
 A first version is not an action. It is the flat create
-(`conclusion`, `locator` or `observation_id`, and the target) stated above.
+(`conclusion`, one of `locator`, `observation_id`, or `support`, and the target)
+stated above. The caller does not supply a conclusion identity; Span derives the
+first lineage identity. *(F7, L7)*
 
 Omission is not deletion. Withdrawal is explicit, and history is preserved.
 
@@ -291,8 +314,8 @@ a broader question; a single-file run does not apply to a broader service.
 Record the run against the surface it actually verifies. A run requires
 observations or evidence; either is accepted. *(A8, F4)*
 
-There is no third evidence mode and no separate evidence-admission call. This is
-F7's test: recording requires nothing the agent does not already hold.
+There is no separate evidence-admission call. This is F7's test: recording
+requires nothing the agent does not already hold.
 
 **The agent receives** exactly one of `UnderstandingRecorded`,
 `VerificationRecorded`, or `SurfaceDeclared` for the requested `kind`, or
@@ -357,8 +380,12 @@ fingerprint never settles one.
 Results are a closed union: `Changed`, `Challenged`, `Rejected`, `Unavailable`.
 `Changed` is keyed by surface; each entry carries its reasons (`containment`,
 `direct`, `indirect`) and its affected conclusions with per-conclusion support
-state. `Challenged` carries the challenge and its derived context; challenges
-are settled through `record` with named dispositions.
+state. Each affected conclusion also carries the understanding's current
+`expected_version`, so a continuation into `record` needs no intervening `ask`;
+only a conclusion in current membership is returned as actionable, while
+historical revisions remain traversable as dependencies. `Challenged` carries
+the challenge and its derived context; challenges are settled through `record`
+with named dispositions.
 
 **How it helps.** It answers the question no per-question API can: *what did my
 change invalidate, and at which granularity?* Without it, re-establishment is

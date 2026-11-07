@@ -510,11 +510,46 @@ class AnswerService:
                 failure="the continuation position is outside its context",
                 recovery="ask again for the surface",
             )
+        return self._fit_evidence_page(records, cursor)
+
+    def _fit_evidence_page(
+        self,
+        records: tuple[m.SourceObservation, ...],
+        cursor: ContinuationCursor,
+    ) -> m.AskResult:
+        """Fit one evidence page with its real token and omission list."""
         pages: list[m.EvidenceUnit] = []
         next_index = cursor.unit_index
         next_line = cursor.line_offset
         omitted: list[str] = []
+        committed: list[tuple[list[m.EvidenceUnit], list[str], int, int]] = []
         limit = self._policy.max_response_bytes
+
+        def build(
+            units: list[m.EvidenceUnit],
+            labels: list[str],
+            unit_index: int,
+            line_offset: int,
+        ) -> m.EvidencePage:
+            continuation = None
+            if unit_index < len(records):
+                continuation = encode_continuation(
+                    ContinuationCursor(
+                        repository_id=cursor.repository_id,
+                        context_id=cursor.context_id,
+                        request_id=cursor.request_id,
+                        request_digest=cursor.request_digest,
+                        unit_index=unit_index,
+                        line_offset=line_offset,
+                    )
+                )
+            return m.EvidencePage(
+                evidence=tuple(units),
+                continuation=continuation,
+                omitted=tuple(labels),
+                truncated=continuation is not None,
+            )
+
         while next_index < len(records):
             record = records[next_index]
             lines = record.excerpt.splitlines(keepends=True)
@@ -524,23 +559,32 @@ class AnswerService:
                 continue
             remaining = lines[next_line:]
             candidate_unit = _slice_unit(record, next_line, len(remaining))
-            candidate_page = m.EvidencePage(
-                evidence=tuple([*pages, candidate_unit]),
-                continuation="span1_" + "x" * 256,
-                truncated=True,
-            )
-            if _encoded_size(candidate_page) <= limit:
+            candidate = build([*pages, candidate_unit], omitted, next_index + 1, 0)
+            if _encoded_size(candidate) <= limit:
+                committed.append((list(pages), list(omitted), next_index, next_line))
                 pages.append(candidate_unit)
                 next_index += 1
                 next_line = 0
                 continue
-            # The whole unit does not fit. Return the largest exact line prefix.
+            # The whole unit does not fit. Return the largest exact line prefix,
+            # measured with the omission it will actually carry and the real
+            # continuation token for the position it will actually name.
             fit = 0
             for count in range(1, len(remaining) + 1):
-                trial = m.EvidencePage(
-                    evidence=tuple([*pages, _slice_unit(record, next_line, count)]),
-                    continuation="span1_" + "x" * 256,
-                    truncated=True,
+                end = next_line + count
+                trial_index = next_index
+                trial_line = end
+                trial_omitted = list(omitted)
+                if end >= len(lines):
+                    trial_index += 1
+                    trial_line = 0
+                else:
+                    trial_omitted.append(f"observation:{record.observation_id.value}")
+                trial = build(
+                    [*pages, _slice_unit(record, next_line, count)],
+                    trial_omitted,
+                    trial_index,
+                    trial_line,
                 )
                 if _encoded_size(trial) <= limit:
                     fit = count
@@ -558,6 +602,7 @@ class AnswerService:
                     ),
                     recovery="ask again with a narrower surface",
                 )
+            committed.append((list(pages), list(omitted), next_index, next_line))
             pages.append(_slice_unit(record, next_line, fit))
             next_line += fit
             if next_line >= len(lines):
@@ -572,24 +617,25 @@ class AnswerService:
                 failure="the continuation has no remaining evidence",
                 recovery="ask again for the surface",
             )
-        continuation = None
-        if next_index < len(records):
-            continuation = encode_continuation(
-                ContinuationCursor(
-                    repository_id=cursor.repository_id,
-                    context_id=cursor.context_id,
-                    request_id=cursor.request_id,
-                    request_digest=cursor.request_digest,
-                    unit_index=next_index,
-                    line_offset=next_line,
-                )
+        final = build(pages, omitted, next_index, next_line)
+        # The candidate measurements include the real token and omission list;
+        # this backstop keeps the final page inside the budget if an unexpected
+        # envelope change grows it. Dropping a unit changes the continuation to
+        # that unit's start, so the omitted evidence remains recoverable.
+        while _encoded_size(final) > limit and committed:
+            pages, omitted, next_index, next_line = committed.pop()
+            omitted.append(f"observation:{records[next_index].observation_id.value}")
+            final = build(pages, omitted, next_index, next_line)
+        if not pages:
+            return m.Unavailable(
+                operation="ask",
+                failure=(
+                    "the response budget cannot carry the minimum evidence page "
+                    f"within {limit} bytes"
+                ),
+                recovery="ask again with a narrower surface",
             )
-        return m.EvidencePage(
-            evidence=tuple(pages),
-            continuation=continuation,
-            omitted=tuple(omitted),
-            truncated=continuation is not None,
-        )
+        return final
 
     def _status(
         self,

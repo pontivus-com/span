@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import itertools
 import pathlib
@@ -101,47 +102,54 @@ class _Authority:
             ) from None
 
 
-def _identity(submission: str = "sub-1") -> w.IdentityWire:
-    return w.IdentityWire(
-        repository_id="repo-1", context_id="ctx-1", request_id=submission
-    )
+@dataclasses.dataclass(frozen=True)
+class _ConclusionSpec:
+    statement: str = "A does X"
+    assertion_nature: m.AssertionNature = m.AssertionNature.DESCRIPTIVE
+    scope_paths: tuple[str, ...] = ("src/a.py",)
+    support: tuple[w.SupportWire, ...] = (w.SourceSupportWire(locator="src/a.py"),)
 
 
 def _conclusion(
-    conclusion_id: str = "c-1",
     statement: str = "A does X",
     *,
-    scope_evidence_refs: tuple[str, ...] = (),
-    basis_input_refs: tuple[str, ...] = (),
+    assertion_nature: m.AssertionNature = m.AssertionNature.DESCRIPTIVE,
+    scope_paths: tuple[str, ...] = ("src/a.py",),
     support: tuple[w.SupportWire, ...] | None = None,
-) -> w.ConclusionWire:
-    return w.ConclusionWire(
-        conclusion_id=conclusion_id,
+) -> _ConclusionSpec:
+    return _ConclusionSpec(
         statement=statement,
-        assertion_nature=m.AssertionNature.DESCRIPTIVE,
-        scope_paths=("src/a.py",),
-        scope_evidence_refs=scope_evidence_refs,
+        assertion_nature=assertion_nature,
+        scope_paths=scope_paths,
         support=(
             support
             if support is not None
             else (w.SourceSupportWire(locator="src/a.py"),)
         ),
-        basis_derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
-        basis_summary="read source",
-        basis_input_refs=basis_input_refs,
     )
+
+
+def _receipt(result: m.RecordResult) -> m.RecordReceipt:
+    assert isinstance(result, m.UnderstandingRecorded)
+    return result.receipt
 
 
 def _create_wire(
     submission: str = "sub-create",
     *,
-    conclusion: w.ConclusionWire | None = None,
-) -> w.RecordCreateWire:
-    return w.RecordCreateWire(
-        identity=_identity(submission),
+    conclusion: _ConclusionSpec | None = None,
+) -> w.RecordRequestWire:
+    spec = conclusion or _conclusion()
+    return w.RecordRequestWire(
+        repository_id="repo-1",
+        request_id=submission,
+        context_id="ctx-1",
+        kind=m.RecordKind.UNDERSTANDING,
         surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
-        target=w.ContextBoundTargetWire(),
-        conclusions=(conclusion or _conclusion(),),
+        conclusion=spec.statement,
+        locator=spec.scope_paths[0] if spec.scope_paths else "src/a.py",
+        assertion_nature=spec.assertion_nature,
+        support=spec.support,
     )
 
 
@@ -189,78 +197,118 @@ class LifecycleServiceTest(unittest.TestCase):
         self.store.put_source_observation(_observation())
         self.store.add_context_evidence("ctx-1", "obs-1")
 
-    def _record_add(
-        self, conclusion_id: str, expected: int, submission: str
-    ) -> m.RecordReceipt:
-        return self.service.add(
-            w.RecordAddWire(
-                identity=_identity(submission),
-                understanding_id="u:sub-create",
+    def _update(
+        self,
+        submission: str,
+        actions: w.RecordActionsWire,
+        expected: int,
+        *,
+        understanding_id: str = "u:sub-create",
+        context_id: str | None = "ctx-1",
+    ) -> m.UnderstandingRecorded:
+        result = self.service.record(
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id=submission,
+                context_id=context_id,
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id=understanding_id,
                 expected_version=expected,
-                conclusion=_conclusion(conclusion_id, "Another conclusion"),
+                actions=actions,
             )
+        )
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        return result
+
+    def _record_add(self, expected: int, submission: str) -> m.RecordReceipt:
+        return self._update(
+            submission,
+            w.RecordActionsWire(
+                add=(
+                    w.AddConclusionWire(
+                        conclusion="Another conclusion",
+                        locator="src/a.py",
+                    ),
+                )
+            ),
+            expected,
+        ).receipt
+
+    def _version_conclusion_id(
+        self, understanding_id: str, version: int, index: int = 0
+    ) -> str:
+        return (
+            self.store.get_version(understanding_id, version)
+            .conclusions[index]
+            .conclusion_id.value
         )
 
     def _record_confirm(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self.service.confirm(
-            w.RecordConfirmWire(
-                identity=_identity(submission),
-                understanding_id="u:sub-create",
-                expected_version=expected,
-                conclusion=_conclusion(conclusion_id, "A does X"),
-            )
-        )
+        return self._update(
+            submission,
+            w.RecordActionsWire(
+                confirm=(
+                    w.ConfirmConclusionWire(
+                        conclusion_id=conclusion_id,
+                        locator="src/a.py",
+                    ),
+                )
+            ),
+            expected,
+        ).receipt
 
     def _record_correct(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self.service.correct(
-            w.RecordCorrectWire(
-                identity=_identity(submission),
-                understanding_id="u:sub-create",
-                expected_version=expected,
-                conclusion=_conclusion(conclusion_id, "A does Y"),
-            )
-        )
+        return self._update(
+            submission,
+            w.RecordActionsWire(
+                correct=(
+                    w.CorrectConclusionWire(
+                        conclusion_id=conclusion_id,
+                        conclusion="A does Y",
+                        locator="src/a.py",
+                    ),
+                )
+            ),
+            expected,
+        ).receipt
 
     def _record_replace(
-        self, old_revision: int, expected: int, submission: str
+        self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self.service.replace(
-            w.RecordReplaceWire(
-                identity=_identity(submission),
-                understanding_id="u:sub-create",
-                expected_version=expected,
-                replacement=w.ReplaceWire(
-                    old_understanding_id="u:sub-create",
-                    old_conclusion_id="c-1",
-                    old_revision=old_revision,
-                    new_conclusion=_conclusion("c-3", "A is now described by Z"),
-                    replacement_basis_derivation=(m.DerivationKind.EXPLICIT_EVIDENCE),
-                    replacement_basis_summary="replacement evidence",
-                    replacement_basis_input_refs=(),
-                ),
-            )
-        )
+        return self._update(
+            submission,
+            w.RecordActionsWire(
+                replace=(
+                    w.ReplaceActionWire(
+                        conclusion_id=conclusion_id,
+                        conclusion="A is now described by Z",
+                        reason="A's behaviour changed.",
+                        locator="src/a.py",
+                    ),
+                )
+            ),
+            expected,
+        ).receipt
 
     def _record_withdraw(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self.service.withdraw(
-            w.RecordWithdrawWire(
-                identity=_identity(submission),
-                understanding_id="u:sub-create",
-                expected_version=expected,
-                withdrawal=w.WithdrawWire(
-                    conclusion_id=conclusion_id,
-                    basis_derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
-                    basis_summary="withdrawn after re-check",
-                    basis_input_refs=(),
-                ),
-            )
-        )
+        return self._update(
+            submission,
+            w.RecordActionsWire(
+                withdraw=(
+                    w.WithdrawActionWire(
+                        conclusion_id=conclusion_id,
+                        reason="withdrawn after re-check",
+                    ),
+                )
+            ),
+            expected,
+        ).receipt
 
     # -- contexts ----------------------------------------------------------
 
@@ -368,7 +416,7 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_create_records_and_replays(self) -> None:
         wire = _create_wire()
-        receipt = self.service.create(wire)
+        receipt = _receipt(self.service.record(wire))
         self.assertEqual(
             receipt.accepted_understanding_ids,
             (
@@ -383,10 +431,10 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
         self.assertEqual(receipt.replay_expires_at, NOW + RETENTION.replay_retention)
-        replay = self.service.create(wire)
+        replay = _receipt(self.service.record(wire))
         self.assertEqual(replay.committed_at, receipt.committed_at)
         with self.assertRaises(RecordingConflict):
-            self.service.create(
+            self.service.record(
                 _create_wire(conclusion=_conclusion(statement="Different"))
             )
 
@@ -398,45 +446,31 @@ class LifecycleServiceTest(unittest.TestCase):
             ),
         )
         with self.assertRaises(RecordingValidationError):
-            self.service.create(unadmitted)
+            self.service.record(unadmitted)
         # Membership cannot be forged for an observation that does not exist.
         with self.assertRaises(Exception):
             self.store.add_context_evidence("ctx-1", "obs-missing")
-
-    def test_evidence_reference_requires_admission(self) -> None:
-        unadmitted = _create_wire(
-            submission="sub-evidence",
-            conclusion=_conclusion(
-                scope_evidence_refs=("ev-2",), basis_input_refs=("ev-2",)
-            ),
-        )
-        with self.assertRaises(RecordingValidationError):
-            self.service.create(unadmitted)
-        receipt = self.service.create(
-            _create_wire(
-                submission="sub-evidence-2",
-                conclusion=_conclusion(
-                    scope_evidence_refs=("ev-1",), basis_input_refs=("ev-1",)
-                ),
-            )
-        )
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
-        self.assertEqual(self.authority.requests, [])
 
     def test_authority_reference_uses_declared_resolver(self) -> None:
         conclusion = _conclusion(
             support=(w.AuthoritySupportWire(authority_ref="auth-1"),)
         )
-        receipt = self.service.create(
-            _create_wire(submission="sub-authority", conclusion=conclusion)
+        receipt = _receipt(
+            self.service.record(
+                _create_wire(submission="sub-authority", conclusion=conclusion)
+            )
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
         self.assertEqual(
             self.authority.requests,
-            [("repo-1", "auth-1"), ("repo-1", "auth-1")],
+            [
+                ("repo-1", "auth-1"),
+                ("repo-1", "auth-1"),
+                ("repo-1", "auth-1"),
+            ],
         )
         with self.assertRaises(RecordingValidationError):
-            self.service.create(
+            self.service.record(
                 _create_wire(
                     submission="sub-authority-2",
                     conclusion=_conclusion(
@@ -468,12 +502,14 @@ class LifecycleServiceTest(unittest.TestCase):
             clock=lambda: self.clock[0],
             new_context_id=lambda: "ctx-2",
         )
-        receipt = service.create(
-            _create_wire(
-                submission="sub-store-auth",
-                conclusion=_conclusion(
-                    support=(w.AuthoritySupportWire(authority_ref="auth-ev-1"),)
-                ),
+        receipt = _receipt(
+            service.record(
+                _create_wire(
+                    submission="sub-store-auth",
+                    conclusion=_conclusion(
+                        support=(w.AuthoritySupportWire(authority_ref="auth-ev-1"),)
+                    ),
+                )
             )
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
@@ -496,65 +532,74 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self.store.add_context_evidence(context.context_id.value, "obs-1")
-        wire = w.RecordCreateWire(
-            identity=w.IdentityWire(
-                repository_id="repo-1",
-                context_id=context.context_id.value,
-                request_id="sub-scope",
-            ),
+        wire = w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id="sub-scope",
+            context_id=context.context_id.value,
+            kind=m.RecordKind.UNDERSTANDING,
             surface=w.SurfaceWire(kind="FILE", locator="docs/other.md"),
-            target=w.ExplicitTargetWire(
-                question="What is outside?",
-                scope_paths=("docs/other.md",),
-                scope_evidence_refs=(),
-            ),
-            conclusions=(_conclusion("c-1", "Outside scope"),),
+            question="What is outside?",
+            scope_paths=("docs/other.md",),
+            conclusion="Outside scope",
+            locator="docs/other.md",
+            support=(w.AdmittedSourceSupportWire(observation_id="obs-1"),),
         )
         with self.assertRaises(RecordingValidationError):
-            service.create(wire)
+            service.record(wire)
 
     def test_replay_survives_later_source_change(self) -> None:
         wire = _create_wire()
-        receipt = self.service.create(wire)
+        receipt = _receipt(self.service.record(wire))
         # The receipt is immutable acceptance, not cached currentness.
         self.store._connection.execute(
             "UPDATE source_observations SET content_digest='sha256:changed'"
         )
         self.store._connection.commit()
-        replay = self.service.create(wire)
+        replay = _receipt(self.service.record(wire))
         self.assertEqual(replay.committed_at, receipt.committed_at)
         self.assertEqual(replay, receipt)
 
     # -- update chain ------------------------------------------------------
 
     def test_full_update_chain_preserves_history(self) -> None:
-        self.service.create(_create_wire())
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
         self.assertEqual(
-            self._record_add("c-2", 1, "sub-add")
+            self._record_add(1, "sub-add").accepted_understanding_versions[0].value,
+            2,
+        )
+        version_two = self.store.get_version("u:sub-create", 2)
+        added_id = next(
+            ref.conclusion_id.value
+            for ref in version_two.conclusions
+            if ref.conclusion_id.value != target_id
+        )
+        self.assertEqual(
+            self._record_confirm(target_id, 2, "sub-confirm")
             .accepted_understanding_versions[0]
             .value,
             2,
         )
         self.assertEqual(
-            self._record_confirm("c-1", 2, "sub-confirm")
-            .accepted_understanding_versions[0]
-            .value,
-            2,
-        )
-        self.assertEqual(
-            self._record_correct("c-1", 2, "sub-correct")
+            self._record_correct(target_id, 2, "sub-correct")
             .accepted_understanding_versions[0]
             .value,
             3,
         )
         self.assertEqual(
-            self._record_replace(2, 3, "sub-replace")
+            self._record_replace(target_id, 3, "sub-replace")
             .accepted_understanding_versions[0]
             .value,
             4,
         )
+        version_four = self.store.get_version("u:sub-create", 4)
+        replacement_id = next(
+            ref.conclusion_id.value
+            for ref in version_four.conclusions
+            if ref.conclusion_id.value not in {target_id, added_id}
+        )
         self.assertEqual(
-            self._record_withdraw("c-3", 4, "sub-withdraw")
+            self._record_withdraw(replacement_id, 4, "sub-withdraw")
             .accepted_understanding_versions[0]
             .value,
             5,
@@ -563,7 +608,7 @@ class LifecycleServiceTest(unittest.TestCase):
         membership = {
             (ref.conclusion_id.value, ref.revision.value) for ref in version.conclusions
         }
-        self.assertEqual(membership, {("c-2", 1), ("c-3", 2)})
+        self.assertEqual(membership, {(added_id, 1), (replacement_id, 2)})
         revisions = {
             (item.conclusion_id.value, item.revision.value)
             for item in self.store.get_conclusions("u:sub-create")
@@ -571,35 +616,29 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertEqual(
             revisions,
             {
-                ("c-1", 1),
-                ("c-1", 2),
-                ("c-2", 1),
-                ("c-3", 1),
-                ("c-3", 2),
+                (target_id, 1),
+                (target_id, 2),
+                (added_id, 1),
+                (replacement_id, 1),
+                (replacement_id, 2),
             },
         )
 
-    def test_confirm_of_current_conclusion_with_changed_content_rejects(self) -> None:
-        self.service.create(_create_wire())
-        with self.assertRaises(RecordingValidationError):
-            self.service.confirm(
-                w.RecordConfirmWire(
-                    identity=_identity("sub-confirm"),
-                    understanding_id="u:sub-create",
-                    expected_version=1,
-                    conclusion=_conclusion("c-1", "A does something else"),
-                )
-            )
+    def test_confirm_of_current_conclusion_is_a_noop(self) -> None:
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
+        receipt = self._record_confirm(target_id, 1, "sub-confirm")
+        self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
         self.assertEqual(
             self.store.get_understanding("u:sub-create").current_version.value,
             1,
         )
 
     def test_stale_expected_version_rejects_without_effect(self) -> None:
-        self.service.create(_create_wire())
-        self._record_add("c-2", 1, "sub-add")
+        self.service.record(_create_wire())
+        self._record_add(1, "sub-add")
         with self.assertRaises(RecordingConflict):
-            self._record_add("c-3", 1, "sub-stale")
+            self._record_add(1, "sub-stale")
         self.assertEqual(
             self.store.get_understanding("u:sub-create").current_version.value,
             2,
@@ -622,17 +661,20 @@ class LifecycleServiceTest(unittest.TestCase):
             support=(w.AdmittedDiscoverySupportWire(observation_id="disc-1"),)
         )
         with self.assertRaises(RecordingValidationError):
-            self.service.create(
+            self.service.record(
                 _create_wire(submission="sub-disc", conclusion=conclusion)
             )
         self.store.add_context_discovery_evidence("ctx-1", "disc-1")
-        receipt = self.service.create(
-            _create_wire(submission="sub-disc", conclusion=conclusion)
+        receipt = _receipt(
+            self.service.record(
+                _create_wire(submission="sub-disc", conclusion=conclusion)
+            )
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
 
     def test_challenge_disposition_advances_revision(self) -> None:
-        self.service.create(_create_wire())
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
         self.store.create_challenge(
             create_challenge(
                 challenge_id=m.ChallengeId("ch-1"),
@@ -641,7 +683,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 target_conclusions=(
                     m.ConclusionRevisionRef(
                         understanding_id=m.UnderstandingId("u:sub-create"),
-                        conclusion_id=m.ConclusionId("c-1"),
+                        conclusion_id=m.ConclusionId(target_id),
                         revision=m.ConclusionRevisionNumber(1),
                     ),
                 ),
@@ -651,12 +693,22 @@ class LifecycleServiceTest(unittest.TestCase):
                 now=NOW,
             )
         )
-        receipt = self.service.update(
-            w.RecordUpdateWire(
-                identity=_identity("sub-ch"),
+        result = self.service.record(
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id="sub-ch",
+                context_id="ctx-1",
+                kind=m.RecordKind.UNDERSTANDING,
                 understanding_id="u:sub-create",
                 expected_version=1,
-                confirm=(_conclusion("c-1", "A does X, reassessed"),),
+                actions=w.RecordActionsWire(
+                    confirm=(
+                        w.ConfirmConclusionWire(
+                            conclusion_id=target_id,
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
                 challenge_dispositions=(
                     w.UnresolvedDispositionWire(
                         challenge_id="ch-1",
@@ -667,15 +719,20 @@ class LifecycleServiceTest(unittest.TestCase):
                 ),
             )
         )
+        assert isinstance(result, m.UnderstandingRecorded)
+        receipt = result.receipt
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
         updated = self.store.get_challenge("ch-1")
         self.assertEqual(updated.challenge_revision.value, 2)
         self.assertEqual(updated.state, m.ChallengeState.UNRESOLVED)
 
     def test_verification_requires_admitted_observation(self) -> None:
-        def wire(submission: str, observation: str) -> w.RecordVerificationWire:
-            return w.RecordVerificationWire(
-                identity=_identity(submission),
+        def wire(submission: str, observation: str) -> w.RecordRequestWire:
+            return w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id=submission,
+                context_id="ctx-1",
+                kind=m.RecordKind.VERIFICATION,
                 run=w.VerificationRunWire(
                     repository_id="repo-1",
                     scope_description="fixture",
@@ -690,21 +747,25 @@ class LifecycleServiceTest(unittest.TestCase):
             )
 
         with self.assertRaises(RecordingValidationError) as raised:
-            self.service.verification(wire("sub-v-bad", "obs-unknown"))
+            self.service.record(wire("sub-v-bad", "obs-unknown"))
         self.assertEqual(
             raised.exception.cause_kind,
             m.RejectionCauseKind.OBSERVATION_NOT_ADMITTED,
         )
         self.assertIn("locator", raised.exception.required_action)
-        receipt = self.service.verification(wire("sub-v", "obs-1"))
+        result = self.service.record(wire("sub-v", "obs-1"))
+        assert isinstance(result, m.VerificationRecorded)
         run = self.store.get_verification_run(
-            receipt.accepted_verification_run_ids[0].value
+            result.receipt.accepted_verification_run_ids[0].value
         )
         self.assertEqual(run.outcome, m.VerificationOutcome.PASS)
 
     def test_verification_accepts_evidence_only(self) -> None:
-        wire = w.RecordVerificationWire(
-            identity=_identity("sub-v-evidence"),
+        wire = w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id="sub-v-evidence",
+            context_id="ctx-1",
+            kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
                 repository_id="repo-1",
                 scope_description="fixture",
@@ -717,9 +778,10 @@ class LifecycleServiceTest(unittest.TestCase):
                 evidence=(w.SourceSupportWire(locator="src/a.py"),),
             ),
         )
-        receipt = self.service.verification(wire)
+        result = self.service.record(wire)
+        assert isinstance(result, m.VerificationRecorded)
         run = self.store.get_verification_run(
-            receipt.accepted_verification_run_ids[0].value
+            result.receipt.accepted_verification_run_ids[0].value
         )
         self.assertTrue(run.observations)
 
@@ -747,7 +809,7 @@ class LifecycleServiceTest(unittest.TestCase):
     # -- retention ---------------------------------------------------------
 
     def test_receipt_readable_after_context_expiry(self) -> None:
-        receipt = self.service.create(_create_wire())
+        receipt = _receipt(self.service.record(_create_wire()))
         self.clock[0] = NOW + RETENTION.context_lifetime + datetime.timedelta(minutes=1)
         identity = m.RecordingIdentity(
             repository_id="repo-1",
@@ -756,20 +818,20 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertEqual(self.service.receipt(identity), receipt)
         with self.assertRaises(Exception):
-            self.service.create(
+            self.service.record(
                 _create_wire(
                     submission="sub-after-expiry",
-                    conclusion=_conclusion("c-9", "Later"),
+                    conclusion=_conclusion("Later"),
                 )
             )
 
     def test_replay_survives_context_reaping(self) -> None:
-        receipt = self.service.create(_create_wire())
+        receipt = _receipt(self.service.record(_create_wire()))
         self.clock[0] = NOW + RETENTION.context_lifetime + datetime.timedelta(minutes=1)
         self.store.reap_expired()
         self.assertIsNone(self.store.find_context_by_id("ctx-1"))
         self.assertEqual(self.store.get_receipt(receipt.identity), receipt)
-        replay = self.service.create(_create_wire())
+        replay = _receipt(self.service.record(_create_wire()))
         self.assertEqual(replay, receipt)
 
     # -- context-free recording (L2 §4.2) --------------------------------
@@ -784,21 +846,21 @@ class LifecycleServiceTest(unittest.TestCase):
             new_context_id=lambda: context_id,
         )
 
-    def _context_free_create(self, submission: str = "sub-nc") -> w.RecordCreateWire:
-        return w.RecordCreateWire(
-            identity=w.IdentityWire(repository_id="repo-1", request_id=submission),
+    def _context_free_create(self, submission: str = "sub-nc") -> w.RecordRequestWire:
+        return w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id=submission,
+            kind=m.RecordKind.UNDERSTANDING,
             surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
-            target=w.ExplicitTargetWire(
-                question="What does A do?",
-                scope_paths=("src/a.py",),
-                scope_evidence_refs=(),
-            ),
-            conclusions=(_conclusion(),),
+            question="What does A do?",
+            scope_paths=("src/a.py",),
+            conclusion="A does X",
+            locator="src/a.py",
         )
 
     def test_create_without_context_issues_one_internally(self) -> None:
         wire = self._context_free_create()
-        receipt = self._service("ctx-issued").create(wire)
+        receipt = _receipt(self._service("ctx-issued").record(wire))
         self.assertEqual(receipt.identity.context_id.value, "ctx-issued")
         self.assertEqual(receipt.accepted_understanding_ids[0].value, "u:sub-nc")
         context = self.store.find_context_by_id("ctx-issued")
@@ -806,28 +868,90 @@ class LifecycleServiceTest(unittest.TestCase):
         assert context is not None
         self.assertEqual(context.origin, m.ContextOrigin.EVIDENCE_ONLY)
         self.assertIn("src/a.py", context.scope.paths)
-        self.assertEqual(self._service("ctx-unused").create(wire), receipt)
+        self.assertEqual(_receipt(self._service("ctx-unused").record(wire)), receipt)
 
-    def test_create_without_context_rejects_a_context_bound_target(self) -> None:
-        wire = w.RecordCreateWire(
-            identity=w.IdentityWire(repository_id="repo-1", request_id="sub-bound"),
-            surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
-            target=w.ContextBoundTargetWire(),
-            conclusions=(_conclusion(),),
+    def test_create_with_support_only_derives_scope_from_context(self) -> None:
+        result = self.service.record(
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id="sub-support-only",
+                context_id="ctx-1",
+                kind=m.RecordKind.UNDERSTANDING,
+                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                conclusion="A is supported by the source.",
+                support=(w.SourceSupportWire(locator="src/a.py"),),
+            )
         )
-        with self.assertRaisesRegex(RecordingValidationError, "explicit target"):
-            self._service("ctx-issued").create(wire)
+        assert isinstance(result, m.UnderstandingRecorded)
+        understanding_id = result.receipt.accepted_understanding_ids[0].value
+        target_id = self._version_conclusion_id(understanding_id, 1)
+        revision = next(
+            item
+            for item in self.store.get_conclusions(understanding_id)
+            if item.conclusion_id.value == target_id
+        )
+        assert isinstance(revision.content, m.SupportedConclusion)
+        self.assertEqual(revision.content.scope.paths, ("src/a.py",))
+        self.assertTrue(revision.content.support)
+
+    def test_create_with_support_and_no_surface_derives_scope_from_context(
+        self,
+    ) -> None:
+        result = self.service.record(
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id="sub-support-only-no-surface",
+                context_id="ctx-1",
+                kind=m.RecordKind.UNDERSTANDING,
+                conclusion="A is supported by the source.",
+                support=(w.SourceSupportWire(locator="src/a.py"),),
+            )
+        )
+        assert isinstance(result, m.UnderstandingRecorded)
+        understanding_id = result.receipt.accepted_understanding_ids[0].value
+        understanding = self.store.get_understanding(understanding_id)
+        self.assertEqual(understanding.scope.paths, ("src/a.py",))
+        target_id = self._version_conclusion_id(understanding_id, 1)
+        revision = next(
+            item
+            for item in self.store.get_conclusions(understanding_id)
+            if item.conclusion_id.value == target_id
+        )
+        assert isinstance(revision.content, m.SupportedConclusion)
+        self.assertEqual(revision.content.scope.paths, ("src/a.py",))
+
+    def test_create_without_context_or_question_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "requires a question"):
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id="sub-bound",
+                kind=m.RecordKind.UNDERSTANDING,
+                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                conclusion="A does X",
+                locator="src/a.py",
+            )
 
     def test_update_without_context_reuses_the_understanding_scope(self) -> None:
-        self.service.create(_create_wire())
-        wire = w.RecordAddWire(
-            identity=w.IdentityWire(repository_id="repo-1", request_id="sub-add-nc"),
-            understanding_id="u:sub-create",
-            expected_version=1,
-            conclusion=_conclusion("c-2", "Another conclusion"),
+        self.service.record(_create_wire())
+        result = self._service("ctx-update").record(
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id="sub-add-nc",
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id="u:sub-create",
+                expected_version=1,
+                actions=w.RecordActionsWire(
+                    add=(
+                        w.AddConclusionWire(
+                            conclusion="Another conclusion",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+            )
         )
-        receipt = self._service("ctx-update").add(wire)
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        assert isinstance(result, m.UnderstandingRecorded)
+        self.assertEqual(result.receipt.accepted_understanding_versions[0].value, 2)
         context = self.store.find_context_by_id("ctx-update")
         self.assertIsNotNone(context)
         assert context is not None
@@ -836,7 +960,8 @@ class LifecycleServiceTest(unittest.TestCase):
     # -- FD-37 premise effects --------------------------------------------
 
     def test_correct_names_the_affected_dependent(self) -> None:
-        self.service.create(_create_wire())
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
         dependent_context = m.InvestigationContext(
             context_id=m.InvestigationContextId("ctx-dep"),
             repository_id="repo-1",
@@ -851,7 +976,7 @@ class LifecycleServiceTest(unittest.TestCase):
         self.store.put_context(dependent_context)
         base = m.ConclusionRevisionRef(
             understanding_id=m.UnderstandingId("u:sub-create"),
-            conclusion_id=m.ConclusionId("c-1"),
+            conclusion_id=m.ConclusionId(target_id),
             revision=m.ConclusionRevisionNumber(1),
         )
         self.store.record_understanding(
@@ -887,7 +1012,7 @@ class LifecycleServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u:dependent"),
         )
-        receipt = self._record_correct("c-1", 1, "sub-correct-deps")
+        receipt = self._record_correct(target_id, 1, "sub-correct-deps")
         self.assertEqual(
             receipt.dependent_effects,
             (
@@ -900,7 +1025,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
 
         # A confirming or additive transition invalidates no premise.
-        add = self._record_add("c-9", 2, "sub-add-after-correct")
+        add = self._record_add(2, "sub-add-after-correct")
         self.assertEqual(add.dependent_effects, ())
 
     # -- retention policy --------------------------------------------------
@@ -935,28 +1060,35 @@ class LifecycleServiceTest(unittest.TestCase):
         run: w.VerificationRunWire | None = None,
         challenge_dispositions: tuple[w.DispositionWire, ...] = (),
         scope_paths: tuple[str, ...] = ("src/a.py",),
-        conclusion: w.ConclusionWire | None = None,
+        conclusion: _ConclusionSpec | None = None,
     ) -> w.RecordRequestWire:
+        # This helper builds valid requests for each kind; the wire-level
+        # fail-closed cases live in test_record_wire.py.
+        if kind is not m.RecordKind.UNDERSTANDING or actions is not None:
+            question = None
+            scope_paths = ()
         flat: dict[str, object] = {}
         if conclusion is not None:
-            observation = next(
-                (
-                    item.observation_id
-                    for item in conclusion.support
-                    if isinstance(item, w.AdmittedSourceSupportWire)
-                ),
-                None,
+            admitted = [
+                item
+                for item in conclusion.support
+                if isinstance(item, w.AdmittedSourceSupportWire)
+            ]
+            observation = (
+                admitted[0].observation_id
+                if len(admitted) == 1 and len(conclusion.support) == 1
+                else None
             )
+            support = () if observation is not None else conclusion.support
             locator = conclusion.scope_paths[0] if conclusion.scope_paths else None
             if context_id is not None:
                 scope_paths = ()
             flat = {
                 "conclusion": conclusion.statement,
-                "conclusion_id": conclusion.conclusion_id,
                 "assertion_nature": conclusion.assertion_nature,
                 "locator": locator if observation is None else None,
                 "observation_id": observation,
-                "support": conclusion.support,
+                "support": support,
             }
         return w.RecordRequestWire(
             repository_id="repo-1",
@@ -1158,15 +1290,17 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(created, m.UnderstandingRecorded)
         understanding_id = created.receipt.accepted_understanding_ids[0].value
+        target_id = self._version_conclusion_id(understanding_id, 1)
 
         updated = self.service.record(
             self._record_request(
                 "sub-one-update",
                 actions=w.RecordActionsWire(
                     correct=(
-                        _conclusion(
-                            statement="A still does X, corrected.",
-                            support=(w.SourceSupportWire(locator="src/a.py"),),
+                        w.CorrectConclusionWire(
+                            conclusion_id=target_id,
+                            conclusion="A still does X, corrected.",
+                            locator="src/a.py",
                         ),
                     )
                 ),
@@ -1213,6 +1347,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(created, m.UnderstandingRecorded)
         understanding_id = created.receipt.accepted_understanding_ids[0].value
+        target_id = self._version_conclusion_id(understanding_id, 1)
         updated = self.service.record(
             self._record_request(
                 "sub-atomic-update",
@@ -1221,15 +1356,16 @@ class LifecycleServiceTest(unittest.TestCase):
                 question=None,
                 actions=w.RecordActionsWire(
                     add=(
-                        _conclusion(
-                            conclusion_id="c-2",
-                            statement="A also emits line2.",
+                        w.AddConclusionWire(
+                            conclusion="A also emits line2.",
+                            locator="src/a.py",
                         ),
                     ),
                     correct=(
-                        _conclusion(
-                            conclusion_id="c-1",
-                            statement="A emits line1 first.",
+                        w.CorrectConclusionWire(
+                            conclusion_id=target_id,
+                            conclusion="A emits line1 first.",
+                            locator="src/a.py",
                         ),
                     ),
                 ),
@@ -1237,17 +1373,47 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(updated, m.UnderstandingRecorded)
         version = self.store.get_version(understanding_id, 2)
+        added_id = next(
+            ref.conclusion_id.value
+            for ref in version.conclusions
+            if ref.conclusion_id.value != target_id
+        )
         self.assertEqual(
             {ref.conclusion_id.value for ref in version.conclusions},
-            {"c-1", "c-2"},
+            {target_id, added_id},
         )
         revisions = {
             (item.conclusion_id.value, item.revision.value): item
             for item in self.store.get_conclusions(understanding_id)
         }
         self.assertEqual(
-            revisions[("c-1", 2)].content.statement, "A emits line1 first."
+            revisions[(target_id, 2)].content.statement, "A emits line1 first."
         )
+
+    def test_replay_and_new_request_derive_add_identity_consistently(self) -> None:
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
+        first = self._record_add(1, "sub-add-derived")
+        version_two = self.store.get_version("u:sub-create", 2)
+        first_id = next(
+            ref.conclusion_id.value
+            for ref in version_two.conclusions
+            if ref.conclusion_id.value != target_id
+        )
+        replay = self._record_add(1, "sub-add-derived")
+        self.assertEqual(replay, first)
+        self.assertEqual(
+            self.store.get_understanding("u:sub-create").current_version.value, 2
+        )
+        self._record_add(2, "sub-add-derived-2")
+        version_three = self.store.get_version("u:sub-create", 3)
+        new_ids = {
+            ref.conclusion_id.value
+            for ref in version_three.conclusions
+            if ref.conclusion_id.value != target_id
+        }
+        self.assertEqual(len(new_ids), 2)
+        self.assertIn(first_id, new_ids)
 
     def test_record_actions_replace_and_withdraw(self) -> None:
         created = self.service.record(
@@ -1259,6 +1425,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(created, m.UnderstandingRecorded)
         understanding_id = created.receipt.accepted_understanding_ids[0].value
+        target_id = self._version_conclusion_id(understanding_id, 1)
 
         replaced = self.service.record(
             self._record_request(
@@ -1268,18 +1435,11 @@ class LifecycleServiceTest(unittest.TestCase):
                 question=None,
                 actions=w.RecordActionsWire(
                     replace=(
-                        w.ReplaceWire(
-                            old_understanding_id=understanding_id,
-                            old_conclusion_id="c-1",
-                            old_revision=1,
-                            new_conclusion=_conclusion(
-                                "c-2", "A is now described by Z"
-                            ),
-                            replacement_basis_derivation=(
-                                m.DerivationKind.EXPLICIT_EVIDENCE
-                            ),
-                            replacement_basis_summary="replacement evidence",
-                            replacement_basis_input_refs=(),
+                        w.ReplaceActionWire(
+                            conclusion_id=target_id,
+                            conclusion="A is now described by Z",
+                            reason="A's behaviour changed.",
+                            locator="src/a.py",
                         ),
                     )
                 ),
@@ -1287,12 +1447,11 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(replaced, m.UnderstandingRecorded)
         self.assertEqual(replaced.receipt.accepted_understanding_versions[0].value, 2)
+        replaced_version = self.store.get_version(understanding_id, 2)
+        new_id = next(ref.conclusion_id.value for ref in replaced_version.conclusions)
         self.assertEqual(
-            {
-                ref.conclusion_id.value
-                for ref in self.store.get_version(understanding_id, 2).conclusions
-            },
-            {"c-2"},
+            {ref.conclusion_id.value for ref in replaced_version.conclusions},
+            {new_id},
         )
 
         withdrawn = self.service.record(
@@ -1303,11 +1462,9 @@ class LifecycleServiceTest(unittest.TestCase):
                 question=None,
                 actions=w.RecordActionsWire(
                     withdraw=(
-                        w.WithdrawWire(
-                            conclusion_id="c-2",
-                            basis_derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
-                            basis_summary="withdrawn after re-check",
-                            basis_input_refs=(),
+                        w.WithdrawActionWire(
+                            conclusion_id=new_id,
+                            reason="withdrawn after re-check",
                         ),
                     )
                 ),
@@ -1321,12 +1478,12 @@ class LifecycleServiceTest(unittest.TestCase):
                 (ref.conclusion_id.value, ref.revision.value)
                 for ref in version.conclusions
             },
-            {("c-2", 2)},
+            {(new_id, 2)},
         )
         withdrawn_revision = next(
             item
             for item in self.store.get_conclusions(understanding_id)
-            if item.conclusion_id.value == "c-2" and item.revision.value == 2
+            if item.conclusion_id.value == new_id and item.revision.value == 2
         )
         self.assertIsInstance(withdrawn_revision.content, m.WithdrawnConclusion)
 
@@ -1340,6 +1497,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(created, m.UnderstandingRecorded)
         understanding_id = created.receipt.accepted_understanding_ids[0].value
+        target_id = self._version_conclusion_id(understanding_id, 1)
         self.store.create_challenge(
             create_challenge(
                 challenge_id=m.ChallengeId("ch-1"),
@@ -1348,7 +1506,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 target_conclusions=(
                     m.ConclusionRevisionRef(
                         understanding_id=m.UnderstandingId(understanding_id),
-                        conclusion_id=m.ConclusionId("c-1"),
+                        conclusion_id=m.ConclusionId(target_id),
                         revision=m.ConclusionRevisionNumber(1),
                     ),
                 ),
@@ -1366,7 +1524,12 @@ class LifecycleServiceTest(unittest.TestCase):
                 expected_version=1,
                 question=None,
                 actions=w.RecordActionsWire(
-                    confirm=(_conclusion("c-1", "A does X, reassessed"),)
+                    confirm=(
+                        w.ConfirmConclusionWire(
+                            conclusion_id=target_id,
+                            locator="src/a.py",
+                        ),
+                    )
                 ),
                 challenge_dispositions=(
                     w.UnresolvedDispositionWire(
@@ -1405,6 +1568,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(base, m.UnderstandingRecorded)
         base_id = base.receipt.accepted_understanding_ids[0].value
+        base_target_id = self._version_conclusion_id(base_id, 1)
 
         observation = m.DiscoveryObservation(
             observation_id=m.DiscoveryObservationId("disc-1"),
@@ -1424,7 +1588,7 @@ class LifecycleServiceTest(unittest.TestCase):
             w.AuthoritySupportWire(authority_ref="auth-1"),
             w.PremiseSupportWire(
                 understanding_id=base_id,
-                conclusion_id="c-1",
+                conclusion_id=base_target_id,
                 revision=1,
             ),
             w.DiscoveryBoundarySupportWire(scope=w.DiscoveryScopeWire(paths=("src",))),
@@ -1437,7 +1601,6 @@ class LifecycleServiceTest(unittest.TestCase):
                 surface=w.SurfaceWire(kind="SYMBOL", locator="src/a.py::A"),
                 question="What supports A?",
                 conclusion=_conclusion(
-                    "c-1",
                     "A is supported by every form.",
                     support=support,
                 ),
@@ -1445,10 +1608,11 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         assert isinstance(result, m.UnderstandingRecorded)
         understanding_id = result.receipt.accepted_understanding_ids[0].value
+        new_target_id = self._version_conclusion_id(understanding_id, 1)
         revision = next(
             item
             for item in self.store.get_conclusions(understanding_id)
-            if item.conclusion_id.value == "c-1" and item.revision.value == 1
+            if item.conclusion_id.value == new_target_id and item.revision.value == 1
         )
         assert isinstance(revision.content, m.SupportedConclusion)
         kinds = [type(item) for item in revision.content.support]
