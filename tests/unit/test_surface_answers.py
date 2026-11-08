@@ -86,6 +86,21 @@ class SurfaceCarrierTest(unittest.TestCase):
         status = m.SurfaceStatus(surface=KEY, stale=1, stale_refs=(ref,))
         self.assertEqual(status.stale_refs, (ref,))
 
+    def test_status_unavailability_has_reason_and_roundtrips(self):
+        from span.core.schema import schema_for_request
+
+        unavailable = m.SurfaceStatusUnavailable("inventory unavailable", FILE_KEY)
+        encoded = m.to_canonical(unavailable)
+        self.assertEqual(
+            m.from_canonical(m.SurfaceStatusUnavailable, encoded), unavailable
+        )
+        self.assertIn(
+            "reason", schema_for_request(m.SurfaceStatusUnavailable)["properties"]
+        )
+        self.assertIsNone(m.SurfaceStatusUnavailable("owner read failed").surface)
+        with self.assertRaises(ValueError):
+            m.SurfaceStatusUnavailable("")
+
     def test_status_counts_are_non_negative(self) -> None:
         m.SurfaceStatus(surface=KEY)
         with self.assertRaises(ValueError):

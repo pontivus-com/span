@@ -338,7 +338,7 @@ Status: **RESOLVED**. §12 records the accepted path: a run cites the
 `SourceObservationId`s actually exercised, which are the observations admitted
 for the operation's context — the context returned by a preceding
 `ask`/`reconsider`, or the locators/ranges the operation admits internally before
-recording. The wire accepts `run.observations` or `run.evidence`; evidence
+recording. The wire accepts `run.observations` and/or `run.evidence`; evidence
 locators are admitted before the same command path. The exact IDs are stored
 with the run, so the run names what it actually exercised. No separate public
 admission step and no inferred run provenance is introduced.
@@ -608,12 +608,33 @@ infer it.
 service passes its key to `record_command` as `derived_surface`. The three
 surface rejection causes are the FD-30 cases.
 
-**Flat create.** `flat_conclusion` is the one builder. The service resolves the
-effective create scope before building: explicit `scope_paths`, the bound
-context scope for a question-context create, a locator, or a FILE surface path.
-A declared surface name is never used as an evidence path. The service passes
-the default support for locator/observation creates; explicit `support` is
-stored as supplied. `actions` is update-only.
+**Flat create.** The service derives one complete semantic `EvidenceScope` from
+the question context or explicit paths/locator/FILE surface and passes it to
+`flat_conclusion`, owner resolution, and `record_command(derived_scope=...)`.
+The canonical `ExplicitTarget` uses that carrier, never raw wire scope again.
+Owner agreement projects the complete semantic scope through
+`containment.scope_surfaces` and validates every member with
+`containment.surface_contains`, including path-surface self-membership (FD-5).
+Support dependencies never participate in owner agreement.
+
+**Reconsider scope preservation (FD-17, FD-59).** Discovery impact checks use
+`evidence_scope_contains` over the complete observation scope. Challenge contexts
+union the complete version scope with actual owner/evidence requirements through
+`evidence_scope_union`; exact references are never flattened into paths.
+
+**Scope algebra and context derivation (FD-59).** Canonical pure
+`evidence_scope_contains` and `evidence_scope_union` live alongside
+`evidence_scope_allows` in `core/model/primitives.py`. Empty scope is
+repository-wide; it absorbs union and cannot fit inside a restricted outer
+scope. Union deterministically preserves paths and exact references. Only
+actual requirements participate; absent optional data is not an empty operand.
+`_resolve_record_request` remains the sole context builder. It unions complete
+semantic/version scopes, direct evidence, action scopes, and complete discovery
+boundaries. Context-free discovery with context-admitted reference strings
+rejects before context issuance; references are never globally resolved.
+Source admission checks locator membership for restricted contexts. Discovery
+checks full containment before inventory. EvidenceService keeps its admission
+backstop. Neither path widens a supplied context.
 
 **Surface conflicts.** `SurfaceConflict` carries the current boundary version.
 `put_surface` and `update_surface` raise it for a kind conflict, a changed
@@ -737,6 +758,11 @@ existing canonical action carriers and `UpdateUnderstandingCommand`. The
 existing atomic store transition and compare-and-set remain the only acceptance
 owner; no second command representation, grammar, or writer is introduced.
 
+Compute the original wire digest and call `_replay` before any context or
+evidence work, for both understanding and verification. Reuse `receipt_decision`.
+`CONTEXT_BINDING_CONFLICT` and `CONTEXT_SCOPE_CONFLICT` have canonical actions;
+context binding is not a version conflict.
+
 Compose internal context issuance and `EvidenceService` admission inside the
 operation service, after receipt lookup. There is no required public admission
 or context-fetch step. Candidate-specific host identity preservation remains
@@ -748,7 +774,7 @@ independent run actually exercised. Those are the observations admitted for the
 operation's context: the context returned by a preceding `ask`/`reconsider`, or
 the locators/ranges the operation admits internally before recording. The service
 stores those exact IDs with the run, so the run names what it actually exercised.
-The wire accepts `run.observations` or `run.evidence`; evidence locators are
+The wire accepts `run.observations` and/or `run.evidence`; evidence locators are
 admitted before the same command path. No separate public admission step and no
 inferred run provenance is introduced.
 
@@ -758,6 +784,21 @@ the appropriate effect. The store can persist a receipt for a no-op result witho
 writing an unnecessary revision/version. Test that path with both identical retry
 identity and a new intentional identity. Preserve challenge dispositions through
 the existing atomic transition owner.
+
+**Live owner status (FD-60).** One functional `service/surface_status.py`
+composer owns the existing AnswerService algorithm. Both ask and understanding
+record qualification use it. `UnderstandingRecorded.status` is `SurfaceStatus`
+or transient `SurfaceStatusUnavailable(reason, surface?)`; neither is persisted.
+Expected operational read failures preserve accepted receipts; programming and
+contract defects are not normal unavailability. `LifecycleStorePort.operational_errors`
+is the store-owned classification of operational exception types; SQLite declares
+`LifecycleStoreError` and `sqlite3.OperationalError`. Post-commit qualification
+catches those types and provider `OSError` independently for support and status,
+without importing the SQLite shell into the service or catching every `ValueError`.
+Status coverage retains complete conclusion scopes and checks members through
+canonical scope containment: exact refs do not imply repository-wide coverage.
+A repository-wide semantic scope cannot agree with a FILE owner. Surface declaration receipt
+semantics are outside this remediation.
 
 Use the reverse dependency index to compose FD-37 effects against the accepted
 transition. Store immutable acceptance facts in the receipt, and expose the

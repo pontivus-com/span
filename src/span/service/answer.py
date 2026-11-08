@@ -30,6 +30,7 @@ from span.service.continuation import (
 from span.service.evidence import EvidenceService
 from span.service.ids import server_context_id
 from span.service.support import SupportService
+from span.service.surface_status import compose_surface_status, covers_path
 
 __all__ = ["AnswerService", "gap_recovery"]
 
@@ -105,7 +106,9 @@ class AnswerService:
         understandings = tuple(
             item for item in all_understandings if item.surface == surface
         )
-        status = self._status(surface, understandings, all_understandings)
+        status = compose_surface_status(
+            surface, store=self._store, support=self._support, evidence=self._evidence
+        )
         if request.question is None:
             return self._fit(
                 request, self._document(request, surface, understandings, status)
@@ -394,7 +397,7 @@ class AnswerService:
         if not atoms:
             return False
         covered = set(atoms)
-        return all(self._covers(member, covered) for member in members)
+        return all(covers_path(member, covered) for member in members)
 
     def _verification(self, surface: m.SurfaceKey) -> tuple[m.VerificationView, ...]:
         members = self._verification_members(surface)
@@ -636,150 +639,6 @@ class AnswerService:
                 recovery="ask again with a narrower surface",
             )
         return final
-
-    def _status(
-        self,
-        surface: m.SurfaceKey,
-        understandings: tuple[m.Understanding, ...],
-        all_understandings: tuple[m.Understanding, ...],
-        seen: set[m.SurfaceKey] | None = None,
-        examined: tuple[set[str], bool] | None = None,
-        children: dict[m.SurfaceKey, list[m.SurfaceKey]] | None = None,
-    ) -> m.SurfaceStatus:
-        visited = set() if seen is None else seen
-        visited.add(surface)
-        if examined is None:
-            examined = self._examined_paths(all_understandings)
-        examined_paths, covers_all = examined
-        if children is None:
-            children = {}
-            for item in self._store.list_surfaces(surface.repository_id):
-                if item.parent is not None:
-                    children.setdefault(item.parent, []).append(item.key)
-        current = 0
-        stale = 0
-        stale_refs: list[m.StaleConclusionRef] = []
-        unassessed = 0
-        for understanding in understandings:
-            support = self._support.evaluate_version(
-                understanding.understanding_id.value
-            )
-            if not support.conclusions:
-                unassessed += 1
-            for conclusion in support.conclusions:
-                if conclusion.evaluation.state is m.SupportState.CURRENT:
-                    current += 1
-                else:
-                    stale += 1
-                    stale_refs.append(
-                        m.StaleConclusionRef(
-                            ref=conclusion.ref,
-                            understanding_version=understanding.current_version,
-                            state=conclusion.evaluation.state,
-                        )
-                    )
-        unexamined, limited = self._unexamined(
-            surface, understandings, examined_paths, covers_all
-        )
-        descendants = tuple(
-            self._status(
-                child,
-                tuple(item for item in all_understandings if item.surface == child),
-                all_understandings,
-                visited,
-                examined,
-                children,
-            )
-            for child in children.get(surface, ())
-            if child not in visited
-        )
-        return m.SurfaceStatus(
-            surface=surface,
-            current=current,
-            stale=stale,
-            stale_refs=tuple(stale_refs),
-            unassessed=unassessed,
-            unexamined=unexamined,
-            unexamined_limited=limited,
-            descendants=descendants,
-        )
-
-    def _examined_paths(
-        self, understandings: tuple[m.Understanding, ...]
-    ) -> tuple[set[str], bool]:
-        """Conclusion scopes that cover boundary members, and whether one is global.
-
-        An empty scope paths tuple means the whole repository (FD-8, TD §9).
-        """
-        covered: set[str] = set()
-        covers_all = False
-        for understanding in understandings:
-            version = self._store.get_version(
-                understanding.understanding_id.value,
-                understanding.current_version.value,
-            )
-            revisions = {
-                (item.conclusion_id.value, item.revision.value): item
-                for item in self._store.get_conclusions(
-                    understanding.understanding_id.value
-                )
-            }
-            for ref in version.conclusions:
-                revision = revisions.get((ref.conclusion_id.value, ref.revision.value))
-                content = None if revision is None else revision.content
-                if isinstance(content, m.SupportedConclusion):
-                    scope = content.scope
-                    if not scope.paths:
-                        covers_all = True
-                    covered.update(scope.paths)
-        return covered, covers_all
-
-    def _unexamined(
-        self,
-        surface: m.SurfaceKey,
-        understandings: tuple[m.Understanding, ...],
-        examined_paths: set[str],
-        covers_all: bool,
-    ) -> tuple[int, bool]:
-        """Boundary members with no understanding, and whether the count is bounded.
-
-        A path or symbol surface is exactly one enumerable member. A declared
-        surface can only enumerate the path and symbol surfaces the store has
-        seen, so it reports the limit rather than claiming completeness
-        (FD-8, scope.md "never as completeness").
-        """
-        if surface.kind in (m.SurfaceKind.FILE, m.SurfaceKind.SYMBOL):
-            if covers_all or self._covers(surface.locator, examined_paths):
-                return 0, False
-            return (0 if understandings else 1), False
-        declared = self._store.find_surface(surface)
-        if declared is None:
-            return 0, True
-        if not (declared.boundary.paths or declared.boundary.symbols):
-            return 0, True
-        unexamined = 0
-        if declared.boundary.paths:
-            for path in self._evidence.inventory_paths(
-                surface.repository_id,
-                m.EvidenceScope(paths=declared.boundary.paths),
-            ):
-                if not (covers_all or self._covers(path, examined_paths)):
-                    unexamined += 1
-        for symbol in declared.boundary.symbols:
-            if not any(
-                item.surface.kind is m.SurfaceKind.SYMBOL
-                and item.surface.locator == symbol
-                for item in self._store.list_understandings(surface.repository_id)
-            ):
-                unexamined += 1
-        return unexamined, True
-
-    def _covers(self, locator: str, examined_paths: set[str]) -> bool:
-        for path in examined_paths:
-            stem = path.rstrip("/")
-            if locator == stem or locator.startswith(stem + "/"):
-                return True
-        return False
 
     def _document(
         self,

@@ -1040,7 +1040,9 @@ class InstallerCommandTest(unittest.TestCase):
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 
             store = LifecycleStore(
-                data / "demo.db", retention=DEFAULT_LIFECYCLE_RETENTION
+                data / "demo.db",
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
             )
             try:
                 understanding = store.get_understanding("u-1")

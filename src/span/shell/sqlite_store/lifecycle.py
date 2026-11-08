@@ -295,6 +295,11 @@ def _timestamp(value: _datetime.datetime) -> str:
 class LifecycleStore:
     """One candidate SQLite store with atomic lifecycle acceptance."""
 
+    operational_errors: tuple[type[Exception], ...] = (
+        LifecycleStoreError,
+        _sqlite3.OperationalError,
+    )
+
     def __init__(
         self,
         path: str | _pathlib.Path,
@@ -986,7 +991,8 @@ class LifecycleStore:
                 if row["request_digest"] != request_digest.value:
                     raise RecordingConflict(
                         "this request identity is already bound to "
-                        "different context content"
+                        "different context content",
+                        cause_kind=RejectionCauseKind.CONTEXT_BINDING_CONFLICT,
                     )
                 existing = _context_from_json(row["canonical_json"])
                 if existing.state is not m.ContextState.LIVE:

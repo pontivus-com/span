@@ -6,9 +6,11 @@ import dataclasses
 import datetime
 import itertools
 import pathlib
+import sqlite3
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from span.core import model as m
 from span.core.identity import understanding_identity
@@ -24,6 +26,7 @@ from span.service.lifecycle import LifecycleService
 from span.service.support import SupportService
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
+    LifecycleStoreError,
     SourceObservationRecord,
 )
 
@@ -461,14 +464,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
-        self.assertEqual(
-            self.authority.requests,
-            [
-                ("repo-1", "auth-1"),
-                ("repo-1", "auth-1"),
-                ("repo-1", "auth-1"),
-            ],
-        )
+        self.assertEqual(self.authority.requests, [("repo-1", "auth-1")] * 4)
         with self.assertRaises(RecordingValidationError):
             self.service.record(
                 _create_wire(
@@ -1602,6 +1598,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 question="What supports A?",
                 conclusion=_conclusion(
                     "A is supported by every form.",
+                    scope_paths=("src/a.py::A",),
                     support=support,
                 ),
             )
@@ -1784,6 +1781,626 @@ class LifecycleServiceTest(unittest.TestCase):
             m.RejectionCauseKind.SURFACE_CONFLICT,
         )
         self.assertEqual(raised.exception.current_boundary_version, 1)
+
+    def _scope_create(self, request="scope-create", **kwargs):
+        return w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id=request,
+            kind=m.RecordKind.UNDERSTANDING,
+            question="What is established?",
+            conclusion="The scoped statement holds.",
+            **kwargs,
+        )
+
+    def _assert_scopes(self, result, scope, locator):
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        uid = result.receipt.accepted_understanding_ids[0].value
+        understanding = self.store.get_understanding(uid)
+        version = self.store.get_version(uid, 1)
+        conclusion = self.store.get_version_conclusions(uid, 1)[0]
+        self.assertEqual(understanding.scope, scope)
+        self.assertEqual(version.scope, scope)
+        self.assertEqual(conclusion.content.scope, scope)
+        self.assertEqual(understanding.surface.locator, locator)
+        self.assertIsInstance(result.status, m.SurfaceStatus)
+        self.assertEqual(result.status.surface, understanding.surface)
+        return uid
+
+    def test_scope_create_forms_preserve_target_version_and_conclusion(self):
+        forms = (
+            {
+                "scope_paths": ("src/a.py",),
+                "support": (w.SourceSupportWire(locator="src/a.py"),),
+            },
+            {"locator": "src/a.py"},
+            {
+                "surface": w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                "support": (w.SourceSupportWire(locator="src/a.py"),),
+            },
+        )
+        for index, form in enumerate(forms):
+            with self.subTest(form=form):
+                wire = self._scope_create(f"form-{index}", **form)
+                wire = dataclasses.replace(wire, question=f"question {index}")
+                result = self.service.record(wire)
+                self._assert_scopes(
+                    result, m.EvidenceScope(paths=("src/a.py",)), "src/a.py"
+                )
+
+    def test_multi_source_support_keeps_plan_semantic_scope(self):
+        wire = self._scope_create(
+            scope_paths=("docs/plan.md",),
+            support=(
+                w.SourceSupportWire(locator="src/a.py"),
+                w.DiscoveryBoundarySupportWire(
+                    scope=w.DiscoveryScopeWire(paths=("src",))
+                ),
+            ),
+        )
+        result = self.service.record(wire)
+        self._assert_scopes(
+            result, m.EvidenceScope(paths=("docs/plan.md",)), "docs/plan.md"
+        )
+
+    def test_repository_discovery_broadens_context_but_not_semantic_scope(self):
+        wire = self._scope_create(
+            scope_paths=("docs/plan.md",),
+            support=(w.DiscoveryBoundarySupportWire(scope=w.DiscoveryScopeWire()),),
+        )
+        result = self.service.record(wire)
+        self._assert_scopes(
+            result, m.EvidenceScope(paths=("docs/plan.md",)), "docs/plan.md"
+        )
+        observation = self.store.list_discovery_observations("repo-1")[0]
+        self.assertEqual(observation.scope, m.EvidenceScope())
+        identity_context = self.store.get_context(
+            result.receipt.identity.context_id.value
+        )
+        self.assertEqual(identity_context.scope, m.EvidenceScope())
+
+    def test_context_free_discovery_refs_reject_before_context_creation(self):
+        wire = self._scope_create(
+            scope_paths=("docs/plan.md",),
+            support=(
+                w.DiscoveryBoundarySupportWire(
+                    scope=w.DiscoveryScopeWire(evidence_refs=("ev-1",))
+                ),
+            ),
+        )
+        with mock.patch.object(
+            self.store, "resolve_context", wraps=self.store.resolve_context
+        ) as issue:
+            with self.assertRaises(RecordingValidationError) as raised:
+                self.service.record(wire)
+            self.assertEqual(
+                raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_REQUIRED
+            )
+            self.assertIn("context that admitted", raised.exception.required_action)
+            issue.assert_not_called()
+
+    def test_discovery_scope_guard_runs_before_inventory(self):
+        cases = (
+            (("src",), ("src/service",), True),
+            (("src/service",), ("src",), False),
+            (("docs",), ("ui",), False),
+            (("src",), (), False),
+            ((), (), True),
+            ((), ("src",), True),
+        )
+        for index, (outer, inner, accepted) in enumerate(cases):
+            with self.subTest(outer=outer, inner=inner):
+                context = self.service.start_context(
+                    m.StartContextRequest(
+                        repository_id="repo-1",
+                        request_id=m.RequestId(f"discovery-{index}"),
+                        scope=m.EvidenceScope(paths=outer),
+                    )
+                )
+                with mock.patch.object(
+                    self.evidence_service, "inventory_entries", return_value=()
+                ) as inventory:
+                    if accepted:
+                        self.service._admit_discovery(
+                            "repo-1",
+                            context.context_id.value,
+                            m.EvidenceScope(paths=inner),
+                        )
+                        inventory.assert_called_once()
+                    else:
+                        with self.assertRaises(RecordingValidationError) as raised:
+                            self.service._admit_discovery(
+                                "repo-1",
+                                context.context_id.value,
+                                m.EvidenceScope(paths=inner),
+                            )
+                        self.assertEqual(
+                            raised.exception.cause_kind,
+                            m.RejectionCauseKind.CONTEXT_SCOPE_CONFLICT,
+                        )
+                        inventory.assert_not_called()
+                self.assertEqual(
+                    self.store.get_context(context.context_id.value).scope,
+                    context.scope,
+                )
+
+    def test_source_scope_guard_allows_new_members_and_unrestricted_context(self):
+        for index, paths in enumerate((("src",), (), ("docs",))):
+            with self.subTest(paths=paths):
+                context = self.service.start_context(
+                    m.StartContextRequest(
+                        repository_id="repo-1",
+                        request_id=m.RequestId(f"source-{index}"),
+                        scope=m.EvidenceScope(paths=paths),
+                    )
+                )
+                if paths == ("docs",):
+                    with mock.patch.object(self.evidence_service, "admit") as admit:
+                        with self.assertRaises(RecordingValidationError) as raised:
+                            self.service._admit_source(
+                                "repo-1", context.context_id.value, "src/a.py", ()
+                            )
+                        self.assertEqual(
+                            raised.exception.cause_kind,
+                            m.RejectionCauseKind.CONTEXT_SCOPE_CONFLICT,
+                        )
+                        admit.assert_not_called()
+                else:
+                    obs = self.service._admit_source(
+                        "repo-1", context.context_id.value, "src/a.py", ()
+                    )
+                    self.assertTrue(
+                        self.store.has_admitted_observation(
+                            context.context_id.value, obs.value
+                        )
+                    )
+
+    def test_context_binding_conflict_has_identity_recovery(self):
+        with self.assertRaises(RecordingConflict) as raised:
+            self.service.start_context(
+                m.StartContextRequest(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-1"),
+                    scope=m.EvidenceScope(paths=("different",)),
+                    question="Different?",
+                )
+            )
+        self.assertEqual(
+            raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_BINDING_CONFLICT
+        )
+        self.assertIn("original content", raised.exception.required_action)
+        self.assertNotIn("version", raised.exception.required_action)
+
+    def test_context_free_exact_replay_skips_context_and_admission_after_reap(self):
+        wire = self._scope_create(locator="src/a.py")
+        original = self.service.record(wire)
+        self.clock[0] += datetime.timedelta(hours=2)
+        self.store.reap_expired()
+        with (
+            mock.patch.object(
+                self.service,
+                "_resolve_record_request",
+                side_effect=AssertionError("context derivation"),
+            ),
+            mock.patch.object(
+                self.service, "_admit_source", side_effect=AssertionError("admission")
+            ),
+        ):
+            replay = self.service.record(wire)
+            self.assertEqual(replay.receipt, original.receipt)
+            with self.assertRaises(RecordingConflict) as raised:
+                self.service.record(dataclasses.replace(wire, conclusion="Changed"))
+            self.assertEqual(
+                raised.exception.cause_kind, m.RejectionCauseKind.REPLAY_CONFLICT
+            )
+
+    def test_precommit_changed_request_is_binding_conflict(self):
+        wire = self._scope_create(locator="missing.py")
+        with self.assertRaises(RecordingValidationError):
+            self.service.record(wire)
+        with self.assertRaises(RecordingConflict) as raised:
+            self.service.record(dataclasses.replace(wire, locator="src/a.py"))
+        self.assertEqual(
+            raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_BINDING_CONFLICT
+        )
+        self.service.record(
+            dataclasses.replace(wire, request_id="corrected", locator="src/a.py")
+        )
+
+    def test_status_failure_preserves_committed_receipt_and_owner(self):
+        wire = self._scope_create(locator="src/a.py")
+        with mock.patch(
+            "span.service.lifecycle.compose_surface_status",
+            side_effect=OSError("inventory unavailable"),
+        ):
+            result = self.service.record(wire)
+        self.assertIsInstance(result.status, m.SurfaceStatusUnavailable)
+        self.assertEqual(result.status.surface.locator, "src/a.py")
+        self.assertEqual(self.service.record(wire).receipt, result.receipt)
+        with mock.patch(
+            "span.service.lifecycle.compose_surface_status",
+            side_effect=ValueError("programming defect"),
+        ):
+            with self.assertRaisesRegex(ValueError, "programming defect"):
+                self.service.record(wire)
+
+    def test_owner_read_failure_reports_unavailable_without_rejecting_acceptance(self):
+        result = self.service.record(self._scope_create(locator="src/a.py"))
+        with mock.patch.object(
+            self.store, "get_understanding", side_effect=OSError("store unavailable")
+        ):
+            qualified = self.service.qualify_understanding(result.receipt)
+        self.assertEqual(qualified.receipt, result.receipt)
+        self.assertIsInstance(qualified.qualification, m.SupportUnavailable)
+        self.assertIsInstance(qualified.status, m.SurfaceStatusUnavailable)
+        self.assertIsNone(qualified.status.surface)
+
+    def test_complete_question_context_scope_refs_are_preserved(self):
+        scope = m.EvidenceScope(evidence_refs=(_evidence(),))
+        context = self.service.start_context(
+            m.StartContextRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("ref-context"),
+                scope=scope,
+                question="Question with exact refs?",
+            )
+        )
+        result = self.service.record(
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id="ref-create",
+                context_id=context.context_id.value,
+                kind=m.RecordKind.UNDERSTANDING,
+                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                conclusion="A does X",
+                locator="src/a.py",
+            )
+        )
+        self._assert_scopes(result, scope, "src/a.py")
+
+    def test_declared_owner_checks_semantic_members_not_support(self):
+        for kind in (m.SurfaceKind.SERVICE, m.SurfaceKind.DOMAIN):
+            key = m.SurfaceKey("repo-1", kind, kind.value.lower())
+            self.store.put_surface(
+                m.Surface(key=key, boundary=m.SurfaceBoundary(paths=("docs",)))
+            )
+            wire = self._scope_create(
+                f"owner-{kind.value}",
+                scope_paths=("docs/plan.md",),
+                surface=w.SurfaceWire(kind=kind.value, locator=key.locator),
+                support=(w.SourceSupportWire(locator="src/a.py"),),
+            )
+            result = self.service.record(wire)
+            self._assert_scopes(
+                result, m.EvidenceScope(paths=("docs/plan.md",)), key.locator
+            )
+            with self.assertRaises(Rejection) as raised:
+                self.service.record(
+                    dataclasses.replace(
+                        wire,
+                        request_id=f"outside-{kind.value}",
+                        scope_paths=("docs/plan.md", "other.py"),
+                    )
+                )
+            self.assertEqual(
+                raised.exception.cause_kind, m.RejectionCauseKind.SURFACE_MISMATCH
+            )
+            self.assertIn("other.py", str(raised.exception))
+
+    def test_verification_replay_does_not_admit_evidence_and_combines_observations(
+        self,
+    ):
+        run = w.VerificationRunWire(
+            repository_id="repo-1",
+            scope_description="fixture",
+            scope_paths=("src",),
+            command="test",
+            scenario=None,
+            outcome=m.VerificationOutcome.PASS,
+            observed_at=NOW,
+            observer="test",
+            observations=("obs-1",),
+            evidence=(w.SourceSupportWire(locator="src/a.py"),),
+        )
+        wire = w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id="verify-replay",
+            context_id="ctx-1",
+            kind=m.RecordKind.VERIFICATION,
+            run=run,
+        )
+        result = self.service.record(wire)
+        self.assertIsInstance(result, m.VerificationRecorded)
+        with (
+            mock.patch.object(
+                self.service,
+                "_resolve_record_request",
+                side_effect=AssertionError("resolve"),
+            ),
+            mock.patch.object(
+                self.service, "_admit_source", side_effect=AssertionError("admit")
+            ),
+        ):
+            self.assertEqual(self.service.record(wire).receipt, result.receipt)
+
+    def test_postcommit_store_failures_preserve_acceptance_through_mcp(self):
+        from span.ports.structural import StructuralSource
+        from span.shell.context import compose_context
+        from span.shell.mcp.adapter import McpAdapter
+
+        context = compose_context(
+            repository_id="repo-1",
+            root="/repo/one",
+            structural=mock.Mock(spec=StructuralSource),
+            evidence=_CurrentEvidence(),
+            store=self.store,
+        )
+        adapter = McpAdapter(contexts={"repo-1": context})
+        for index, error in enumerate(
+            (
+                LifecycleStoreError("store read unavailable"),
+                sqlite3.OperationalError("disk I/O error"),
+            )
+        ):
+            with self.subTest(error=type(error).__name__):
+                payload = {
+                    "repository_id": "repo-1",
+                    "request_id": f"postcommit-store-{index}",
+                    "kind": "understanding",
+                    "question": f"Operational failure {index}?",
+                    "conclusion": "A does X",
+                    "locator": "src/a.py",
+                }
+                with mock.patch.object(
+                    self.store, "list_understandings", side_effect=error
+                ):
+                    result = adapter.dispatch("record", payload)
+                self.assertFalse(result.is_error)
+                response = result.structured_content
+                self.assertEqual(response["$type"], "UnderstandingRecorded")
+                self.assertEqual(
+                    response["status"]["$type"], "SurfaceStatusUnavailable"
+                )
+                self.assertEqual(response["status"]["surface"]["locator"], "src/a.py")
+                self.assertEqual(
+                    response["qualification"]["$type"], "UnderstandingSupport"
+                )
+                retry = adapter.dispatch("record", payload).structured_content
+                self.assertEqual(retry["receipt"], response["receipt"])
+                self.assertEqual(retry["status"]["$type"], "SurfaceStatus")
+
+    def test_verification_store_failure_preserves_accepted_receipt(self):
+        wire = w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id="verify-store-failure",
+            context_id="ctx-1",
+            kind=m.RecordKind.VERIFICATION,
+            run=w.VerificationRunWire(
+                repository_id="repo-1",
+                scope_description="source test",
+                scope_paths=("src",),
+                command="test",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="test",
+                observations=("obs-1",),
+            ),
+        )
+        result = self.service.record(wire)
+        for error in (
+            LifecycleStoreError("read unavailable"),
+            sqlite3.OperationalError("disk I/O error"),
+        ):
+            with (
+                self.subTest(error=type(error).__name__),
+                mock.patch.object(
+                    self.support,
+                    "evaluate_verification",
+                    side_effect=error,
+                ),
+            ):
+                replay = self.service.record(wire)
+                self.assertEqual(replay.receipt, result.receipt)
+                self.assertIsInstance(replay.qualification, m.SupportUnavailable)
+        with mock.patch.object(
+            self.support,
+            "evaluate_verification",
+            side_effect=ValueError("contract defect"),
+        ):
+            with self.assertRaisesRegex(ValueError, "contract defect"):
+                self.service.record(wire)
+
+    def test_postcommit_owner_read_failure_preserves_receipt_without_owner(self):
+        result = self.service.record(self._scope_create(locator="src/a.py"))
+        for error in (
+            LifecycleStoreError("read unavailable"),
+            sqlite3.OperationalError("disk I/O error"),
+        ):
+            with (
+                self.subTest(error=type(error).__name__),
+                mock.patch.object(
+                    self.store,
+                    "get_understanding",
+                    side_effect=error,
+                ),
+            ):
+                qualified = self.service.qualify_understanding(result.receipt)
+                self.assertEqual(qualified.receipt, result.receipt)
+                self.assertIsInstance(qualified.qualification, m.SupportUnavailable)
+                self.assertIsInstance(qualified.status, m.SurfaceStatusUnavailable)
+                self.assertIsNone(qualified.status.surface)
+
+    def test_postcommit_programming_failures_are_not_operational_unavailability(self):
+        result = self.service.record(self._scope_create(locator="src/a.py"))
+        for error in (
+            ValueError("bad contract"),
+            sqlite3.ProgrammingError("bad query"),
+            sqlite3.IntegrityError("bad invariant"),
+        ):
+            with (
+                self.subTest(error=type(error).__name__),
+                mock.patch.object(
+                    self.store,
+                    "list_understandings",
+                    side_effect=error,
+                ),
+            ):
+                with self.assertRaises(type(error)):
+                    self.service.qualify_understanding(result.receipt)
+
+    def test_refs_only_semantic_scope_does_not_examine_unrelated_files(self):
+        from span.service.surface_status import compose_surface_status
+        from span.service.answer import AnswerService
+
+        context = self.service.start_context(
+            m.StartContextRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("coverage-ref-context"),
+                question="What is established about A?",
+                scope=m.EvidenceScope(evidence_refs=(_evidence(),)),
+            )
+        )
+        self.service.record(
+            w.RecordRequestWire(
+                repository_id="repo-1",
+                request_id="coverage-ref-create",
+                context_id=context.context_id.value,
+                kind=m.RecordKind.UNDERSTANDING,
+                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                conclusion="A does X",
+                locator="src/a.py",
+            )
+        )
+        service_key = m.SurfaceKey("repo-1", m.SurfaceKind.SERVICE, "coverage-service")
+        self.store.put_surface(
+            m.Surface(key=service_key, boundary=m.SurfaceBoundary(paths=("src",)))
+        )
+        answer = AnswerService(
+            store=self.store, support=self.support, evidence=self.evidence_service
+        )
+        with mock.patch.object(
+            self.evidence_service,
+            "inventory_paths",
+            return_value=("src/a.py", "src/unexamined.py"),
+        ):
+            status = compose_surface_status(
+                service_key,
+                store=self.store,
+                support=self.support,
+                evidence=self.evidence_service,
+            )
+            self.assertEqual(status.unexamined, 1)
+            answer_result = answer.ask(
+                m.AskRequest(
+                    repository_id="repo-1",
+                    request_id="coverage-asked",
+                    surface=m.SurfaceReference(
+                        kind=m.SurfaceKind.FILE, locator="src/a.py"
+                    ),
+                )
+            )
+            self.assertIsInstance(answer_result, m.Answer)
+            self.assertEqual(answer_result.status.unexamined, 0)
+        unrelated = compose_surface_status(
+            m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/unexamined.py"),
+            store=self.store,
+            support=self.support,
+            evidence=self.evidence_service,
+        )
+        self.assertEqual(unrelated.unexamined, 1)
+        covered = compose_surface_status(
+            m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/a.py"),
+            store=self.store,
+            support=self.support,
+            evidence=self.evidence_service,
+        )
+        self.assertEqual(covered.unexamined, 0)
+
+    def test_repository_wide_semantic_scope_rejects_bounded_owner_before_admission(
+        self,
+    ):
+        context = self.service.start_context(
+            m.StartContextRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("whole-question"),
+                scope=m.EvidenceScope(),
+                question="How does the repository operate?",
+            )
+        )
+        for index, (kind, owner) in enumerate(
+            (
+                ("FILE", "src/a.py"),
+                ("FILE", "docs/unrelated.md"),
+                ("SYMBOL", "src/a.py:example"),
+            )
+        ):
+            with (
+                self.subTest(owner=owner),
+                mock.patch.object(self.service, "_admit_source") as admit,
+            ):
+                with self.assertRaises(Rejection) as raised:
+                    self.service.record(
+                        w.RecordRequestWire(
+                            repository_id="repo-1",
+                            request_id=f"whole-file-{index}",
+                            context_id=context.context_id.value,
+                            kind=m.RecordKind.UNDERSTANDING,
+                            surface=w.SurfaceWire(kind=kind, locator=owner),
+                            conclusion="The repository operates as described.",
+                            locator="src/a.py",
+                        )
+                    )
+                self.assertEqual(
+                    raised.exception.cause_kind, m.RejectionCauseKind.SURFACE_MISMATCH
+                )
+                self.assertIn("repository-wide", str(raised.exception))
+                self.assertIn(owner, str(raised.exception))
+                admit.assert_not_called()
+        self.assertEqual(self.store.list_understandings("repo-1"), ())
+
+    def test_explicit_path_owner_rejects_every_outside_semantic_member(self):
+        cases = (
+            ("FILE", "src/a.py", ("src/a.py", "src/b.py")),
+            ("SYMBOL", "src/a.py::f", ("src/b.py",)),
+            ("SYMBOL", "src/a.py::f", ("src/a.py::g",)),
+            ("SYMBOL", "src/a.py::f", ("src/a.py::f", "src/b.py::f")),
+        )
+        for index, (kind, owner, paths) in enumerate(cases):
+            with (
+                self.subTest(kind=kind, owner=owner, paths=paths),
+                mock.patch.object(
+                    self.service, "_admit_source", wraps=self.service._admit_source
+                ) as admit,
+            ):
+                with self.assertRaises(Rejection) as raised:
+                    self.service.record(
+                        self._scope_create(
+                            f"extra-member-{index}",
+                            surface=w.SurfaceWire(kind=kind, locator=owner),
+                            scope_paths=paths,
+                            support=(w.SourceSupportWire(locator="src/a.py"),),
+                        )
+                    )
+                self.assertEqual(
+                    raised.exception.cause_kind, m.RejectionCauseKind.SURFACE_MISMATCH
+                )
+                self.assertIn(owner, str(raised.exception))
+                self.assertIn(paths[-1], str(raised.exception))
+                admit.assert_not_called()
+        self.assertEqual(self.store.list_understandings("repo-1"), ())
+
+    def test_explicit_symbol_owner_accepts_exact_scope_with_separate_file_support(self):
+        symbol = "src/a.py::f"
+        result = self.service.record(
+            self._scope_create(
+                "exact-symbol",
+                surface=w.SurfaceWire(kind="SYMBOL", locator=symbol),
+                scope_paths=(symbol,),
+                support=(w.SourceSupportWire(locator="src/a.py"),),
+            )
+        )
+        self._assert_scopes(result, m.EvidenceScope(paths=(symbol,)), symbol)
+        self.assertEqual(result.status.surface.kind, m.SurfaceKind.SYMBOL)
 
 
 if __name__ == "__main__":

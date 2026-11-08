@@ -88,6 +88,54 @@ class ContainmentTest(unittest.TestCase):
             (member, key(m.SurfaceKind.SERVICE, "auth")),
         )
 
+    def test_complete_scope_members_preserve_path_kind_and_reference_repository(self):
+        reference = m.EvidenceRef(
+            evidence_id=m.EvidenceId("exact-ref"),
+            repository_id="repo-2",
+            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+            locator="src/a.py::f",
+        )
+        scope = m.EvidenceScope(
+            paths=("src/a.py", "src/a.py::f"), evidence_refs=(reference,)
+        )
+        members = containment.scope_surfaces("repo-1", scope)
+        self.assertEqual(
+            set(members),
+            {
+                key(m.SurfaceKind.FILE, "src/a.py"),
+                key(m.SurfaceKind.SYMBOL, "src/a.py::f"),
+                m.SurfaceKey("repo-2", m.SurfaceKind.SYMBOL, "src/a.py::f"),
+            },
+        )
+        self.assertFalse(
+            containment.surface_contains(
+                m.Surface(key=key(m.SurfaceKind.SYMBOL, "src/a.py::f")),
+                next(member for member in members if member.repository_id == "repo-2"),
+            )
+        )
+
+    def test_path_owner_agreement_requires_every_scope_member(self):
+        file = m.Surface(key=key(m.SurfaceKind.FILE, "src/a.py"))
+        symbol = m.Surface(key=key(m.SurfaceKind.SYMBOL, "src/a.py::f"))
+        for owner, paths, expected in (
+            (file, ("src/a.py",), True),
+            (file, ("src/a.py", "src/b.py"), False),
+            (symbol, ("src/a.py::f",), True),
+            (symbol, ("src/a.py",), False),
+            (symbol, ("src/a.py::g",), False),
+        ):
+            with self.subTest(owner=owner.key, paths=paths):
+                members = containment.scope_surfaces(
+                    "repo-1", m.EvidenceScope(paths=paths)
+                )
+                self.assertEqual(
+                    all(
+                        containment.surface_contains(owner, member)
+                        for member in members
+                    ),
+                    expected,
+                )
+
     def test_order_is_deterministic_and_deduplicated(self) -> None:
         keys = [
             key(m.SurfaceKind.DOMAIN, "platform"),

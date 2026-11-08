@@ -617,6 +617,48 @@ def evidence_scope_allows(locator: str, scope: EvidenceScope) -> bool:
     return False
 
 
+def evidence_scope_contains(outer: EvidenceScope, inner: EvidenceScope) -> bool:
+    """Complete containment; an empty scope denotes the whole repository."""
+    if not outer.paths and not outer.evidence_refs:
+        return True
+    if not inner.paths and not inner.evidence_refs:
+        return False
+    return all(evidence_scope_allows(path, outer) for path in inner.paths) and all(
+        evidence_scope_allows(ref.locator, outer) for ref in inner.evidence_refs
+    )
+
+
+def evidence_scope_union(scopes: _typing.Iterable[EvidenceScope]) -> EvidenceScope:
+    """Compose actual requirements, preserving repository-wide absorption."""
+    paths: set[str] = set()
+    refs: set[EvidenceRef] = set()
+    supplied = False
+    for scope in scopes:
+        supplied = True
+        if not scope.paths and not scope.evidence_refs:
+            return EvidenceScope()
+        paths.update(scope.paths)
+        refs.update(scope.evidence_refs)
+    if not supplied:
+        raise ValueError("scope union requires at least one actual requirement")
+    return EvidenceScope(
+        paths=tuple(sorted(paths)),
+        evidence_refs=tuple(
+            sorted(
+                refs,
+                key=lambda ref: (
+                    ref.repository_id,
+                    ref.evidence_id.value,
+                    ref.source_kind.value,
+                    ref.locator,
+                    ref.revision_or_fingerprint or "",
+                    ref.section_or_span or "",
+                ),
+            )
+        ),
+    )
+
+
 def evidence_scope_fingerprint(scope: EvidenceScope) -> str:
     """Deterministic, order-normalized fingerprint of one scope (J-10).
 

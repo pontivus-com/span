@@ -18,6 +18,7 @@ from span.core.model.support import (
     VerificationSupport,
 )
 from span.core.model.understanding import Challenge
+from span.core.model.surfaces import SurfaceStatus, SurfaceStatusUnavailable
 
 
 @_dataclass(frozen=True)
@@ -26,6 +27,7 @@ class UnderstandingRecorded:
 
     receipt: RecordReceipt
     qualification: UnderstandingSupport | SupportUnavailable
+    status: SurfaceStatus | SurfaceStatusUnavailable
 
 
 @_dataclass(frozen=True)

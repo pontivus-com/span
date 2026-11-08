@@ -21,7 +21,7 @@ belongs, and why a restatement is a defect. All of these are binding on design,
 contracts, code, tests, prompts, documentation, and releases, and a lower layer
 may not contradict a higher one. Where any plan, ADR, changelog, guide, skill, or
 instruction conflicts with them, they govern; amend them explicitly before
-working around them. Cite the IDs (G1–G6, A1–A9, F1–F10, L1–L11, FD-1–FD-58) in
+working around them. Cite the IDs (G1–G6, A1–A9, F1–F10, L1–L11, FD-1–FD-60) in
 changes and reviews.
 
 ## Layout

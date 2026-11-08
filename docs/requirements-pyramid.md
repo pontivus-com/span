@@ -87,7 +87,7 @@ it.
 - Test: if a line can be deleted and the rule still holds by derivation from the
   layer above, delete it.
 - Citations are how layers connect. Use the IDs (`G1–G6`, `A1–A9`, `F1–F10`,
-  `L1–L11`, `FD-1–FD-58`) instead of repeating the statement they name.
+  `L1–L11`, `FD-1–FD-60`) instead of repeating the statement they name.
 
 This rule applies within a layer as well as between layers. Two sections that say
 the same thing are one too many, even in the same document.

@@ -23,12 +23,12 @@ Use `kind="understanding"` for a supported conclusion.
 }
 ```
 
-A create is one conclusion with exactly one evidence mode. `locator` is the
-file it is about; the `observation_id` from an `ask` gap may replace it; non-empty
+A create is one conclusion with exactly one evidence mode. `locator` cites
+source evidence and may also supply semantic scope; the `observation_id` from an `ask` gap may replace it; non-empty
 `support` is the complete typed dependency set you already hold. A locator may
 accompany support as the carried scope, but an observation id may not. `surface`
-is optional and derived from the carried scope. A multi-file answer needs an
-explicit `scope_paths` or a declared service/domain surface first.
+is optional and derived from the carried scope. Semantic scope is independent
+of the files cited in support.
 
 Update an existing understanding with `understanding_id`, `expected_version`,
 and one or more of `add`, `confirm`, `correct`, `replace`, `withdraw`. Multiple
@@ -105,15 +105,64 @@ A create may supply the `context_id` from `ask` instead of the question and
 scope; do not send both — the conflict is rejected. Without a context, a create
 issues its own evidence-only context from the scope and cited locators.
 
+Semantic scope describes what the conclusion is about; support identifies what
+established it. Multiple support files do not create multiple owning surfaces.
+Declare SERVICE/DOMAIN only when the conclusion describes that declared boundary.
+Its semantic scope must fit that boundary. Support locators do not create
+independent retained conclusions; author per-file conclusions when needed.
+
+A supplied context has fixed scope. New source or discovery evidence can be
+admitted during record inside that scope; it need not already be admitted.
+Empty evidence scope means repository-wide. Discovery must fit completely:
+a broader ancestor or repository-wide discovery cannot fit a restricted context.
+
+When investigation expands, omit `context_id` and supply explicit semantic/run
+scope and direct evidence. Span derives a new operational context. Repository-wide
+discovery makes that context repository-wide while the semantic scope stays
+narrow. Admitted evidence references and observation IDs remain context-bound; supply that context or use direct evidence.
+
+```json
+{
+  "repository_id": "repo-1",
+  "request_id": "plan-status-1",
+  "kind": "understanding",
+  "question": "Is this plan implemented?",
+  "scope_paths": ["docs/implementation-plan.md"],
+  "conclusion": "The implementation described by the plan is complete.",
+  "support": [
+    {"$type": "SourceSupportWire", "locator": "src/a.py", "ranges": []},
+    {"$type": "SourceSupportWire", "locator": "tests/a.py", "ranges": []}
+  ]
+}
+```
+
 ## Verification
 
 Use `kind="verification"` with a `run` carrying the command, scope, outcome,
-observed time, and the evidence it actually tested. A run requires
-`observations` or `evidence`; either is accepted. `run.observations` takes the
-`obs:` ids that `ask` returned for the request context; to cite a source
-instead, put its locator in `run.evidence` with the same `context_id`. The run
-applies to the surfaces within its declared scope; a single-file run is not
-widened to a broader service. Record it against the surface it verifies.
+observed time, and the evidence it actually tested. A run requires at least one observation or evidence item; both may coexist.
+Use context + run.observations only for observations admitted to that context.
+Use context + run.evidence for new direct evidence inside its fixed scope.
+For evidence beyond it, omit context_id and supply run.scope_paths/run.evidence.
+Do not substitute scenario text for structural evidence.
+
+```json
+{
+  "repository_id": "repo-1",
+  "request_id": "verify-ui-1",
+  "kind": "verification",
+  "run": {
+    "repository_id": "repo-1",
+    "scope_description": "UI form suite",
+    "scope_paths": ["ui/"],
+    "evidence": [{"locator": "ui/tests/form.test.ts", "ranges": []}],
+    "command": "pnpm exec vitest run tests/form.test.ts --pool=forks --maxWorkers=1 --no-file-parallelism",
+    "scenario": "UI form suite",
+    "outcome": "PASS",
+    "observed_at": "2026-11-07T00:00:00Z",
+    "observer": "agent"
+  }
+}
+```
 
 ## Surface
 

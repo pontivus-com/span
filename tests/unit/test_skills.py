@@ -176,6 +176,29 @@ class SkillLifecycleConsistencyTest(unittest.TestCase):
                     continue
                 self.assertIn(name, allowed, f"{path}: {name}")
 
+    def test_record_guidance_distinguishes_scope_support_and_context(self):
+        from span.shell.mcp.schemas import TOOL_SPECS
+
+        documents = (
+            _text(RECORD),
+            _text(REPO_ROOT / "docs" / "mcp.md"),
+            next(spec.description for spec in TOOL_SPECS if spec.name == "record"),
+        )
+        for text in documents:
+            with self.subTest(document=text[:60]):
+                lowered = text.lower()
+                for term in (
+                    "semantic scope",
+                    "support",
+                    "fixed",
+                    "repository-wide",
+                    "context-bound",
+                ):
+                    self.assertIn(term, lowered)
+                self.assertIn("both may coexist", lowered)
+                self.assertNotIn("either observations or evidence, not both", lowered)
+                self.assertNotIn("only when the answer spans several files", lowered)
+
     def test_skills_are_self_contained(self):
         for path in SKILLS:
             text = _text(path)

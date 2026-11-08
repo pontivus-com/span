@@ -492,12 +492,13 @@ class RecordRequestWire:
             )
         if self.expected_boundary_version is not None:
             raise ValueError("an understanding record does not take a boundary version")
+        if self.actions is not None:
+            self._validate_update()
+            return
         if self.conclusion is not None:
             self._validate_create()
             return
-        if self.actions is None:
-            raise ValueError("an understanding record requires actions")
-        self._validate_update()
+        raise ValueError("an understanding record requires actions")
 
     def _validate_create(self) -> None:
         if not self.conclusion:
@@ -543,12 +544,17 @@ class RecordRequestWire:
     def _validate_update(self) -> None:
         actions = self.actions
         assert actions is not None
-        if (
-            self.conclusion is not None
-            or self.locator is not None
-            or self.observation_id is not None
-        ):
-            raise ValueError("an understanding update does not take a flat conclusion")
+        forbidden = [
+            name
+            for name in ("conclusion", "locator", "observation_id")
+            if getattr(self, name) is not None
+        ]
+        if forbidden:
+            raise ValueError(
+                "an understanding update cannot contain top-level fields: "
+                + ", ".join(forbidden)
+                + "; put update content/evidence inside actions"
+            )
         if self.question is not None:
             raise ValueError("an understanding update does not take a question")
         if self.surface is not None:
@@ -1060,7 +1066,7 @@ def flat_conclusion(
     *,
     locator: str,
     default_support: _s.SupportDependency | None,
-    scope_paths: tuple[str, ...] | None = None,
+    scope: _p.EvidenceScope,
 ) -> _c.ProposedConclusion:
     """Build one conclusion from the flat create fields."""
     if value.support:
@@ -1069,20 +1075,13 @@ def flat_conclusion(
         support = (default_support,)
     else:
         raise ValueError("a flat create requires support, locator, or observation_id")
-    if scope_paths is None:
-        scope_paths = value.scope_paths or ((locator,) if locator else ())
-    if not scope_paths:
-        raise ValueError(
-            "an understanding create requires scope_paths or a context that "
-            "binds its scope"
-        )
     return _c.ProposedConclusion(
         conclusion_id=conclusion_identity(
             value.repository_id, value.request_id, "create", 0
         ),
         statement=_typing.cast(str, value.conclusion),
         assertion_nature=value.assertion_nature or AssertionNature.DESCRIPTIVE,
-        scope=_p.EvidenceScope(paths=scope_paths),
+        scope=scope,
         support=support,
         basis=_p.SemanticBasis(
             derivation=_p.DerivationKind.EXPLICIT_EVIDENCE,
@@ -1100,6 +1099,7 @@ def record_command(
     *,
     context_bound: bool = False,
     derived_surface: _surfaces.SurfaceKey | None = None,
+    derived_scope: _p.EvidenceScope | None = None,
     derived_conclusions: tuple[_c.ProposedConclusion, ...] | None = None,
     current_revisions: tuple[_ConclusionRevision, ...] = (),
 ) -> _c.RecordCommand:
@@ -1107,7 +1107,7 @@ def record_command(
     if value.kind is _c.RecordKind.UNDERSTANDING:
         identity = _identity(value.identity)
         if value.conclusion is not None:
-            if derived_conclusions is None:
+            if derived_conclusions is None or derived_scope is None:
                 raise ValueError(
                     "a flat create requires the service to resolve its support"
                 )
@@ -1126,7 +1126,7 @@ def record_command(
             else:
                 target = _c.ExplicitTarget(
                     question=_typing.cast(str, value.question),
-                    scope=_scope(value.scope_paths, (), resolver),
+                    scope=derived_scope,
                 )
             return _c.CreateUnderstandingCommand(
                 identity=identity,

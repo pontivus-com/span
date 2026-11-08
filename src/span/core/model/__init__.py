@@ -56,6 +56,8 @@ from span.core.model.primitives import (  # noqa: F401
     SubjectSelector,
     TrustState,
     evidence_scope_allows,
+    evidence_scope_contains,
+    evidence_scope_union,
     evidence_scope_fingerprint,
 )
 from span.core.model.canonical import (  # noqa: F401
@@ -229,6 +231,7 @@ from span.core.model.surfaces import (  # noqa: F401
     SurfaceKind,
     SurfaceReference,
     SurfaceStatus,
+    SurfaceStatusUnavailable,
 )
 from span.core.model.answers import (  # noqa: F401
     AmbiguousSurface,
@@ -366,6 +369,8 @@ __all__ = [
     "BoundInfo",
     "EvidenceScope",
     "evidence_scope_allows",
+    "evidence_scope_contains",
+    "evidence_scope_union",
     "evidence_scope_fingerprint",
     "CONTINUATION_LIFESPAN",
     "CURSOR_LIFESPAN",
@@ -500,6 +505,7 @@ __all__ = [
     "SurfaceKind",
     "SurfaceReference",
     "SurfaceStatus",
+    "SurfaceStatusUnavailable",
     "StaleConclusionRef",
     "AmbiguousSurface",
     "Answer",

@@ -154,3 +154,14 @@ class SurfaceStatus:
             raise ValueError(
                 "SurfaceStatus.stale_refs must name every and only stale conclusion"
             )
+
+
+@_dataclass(frozen=True)
+class SurfaceStatusUnavailable:
+    """Transient operational inability to compose live owner status."""
+
+    reason: str
+    surface: SurfaceKey | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("SurfaceStatusUnavailable.reason", self.reason)
