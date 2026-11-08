@@ -37,14 +37,25 @@ and `reconsider`.
 - Name forbidden update root fields in one ingress error. Align MCP and skill
   guidance on semantic scope versus support, expanded verification evidence,
   and the supported combination of observations and direct evidence.
+- Keep the schema-10 migration receipt test on its fixture clock when reopening
+  the store, so receipt retention does not make it fail as calendar time passes.
+
+### Measured budget growth
+
+- Record the release's measured ratchet growth: concrete carriers 174 → 175
+  for explicit status unavailability; longest module 1,876 → 1,881 lines for
+  the store's declared operational errors and binding-conflict classification;
+  test lines 19,600 → 20,516 for recording/scope/replay regressions and the
+  migration fixture clock. The budget comparison and all assertions remain
+  unchanged. These measurements record the cost of the release fixes.
 
 ### Verification
 
 - Focused recording, containment, reconsideration, and MCP regression suite:
   109 passed, with 37 subtests passed.
-- Full suite: 699 passed, 2 failed, 101 subtests passed, no skips. Outstanding
-  failures are the code-budget ratchet and the fixed-date receipt-expiry
-  transition fixture; this is not an all-green suite result.
+- Full suite: 701 passed, 101 subtests passed, no skips. The measured budget
+  baseline is recorded above, and the receipt migration fixture uses its own
+  clock. Both previously reported failures are resolved.
 - Type checking: zero errors. Ruff, Black, Node delivery tests, installed-MCP
   checks, and independent live MCP journeys passed.
 
