@@ -30,11 +30,15 @@ different kind. *(F9, L1)*
 **FD-2 — Request identity binds a context.**
 A context is bound to `(repository, request identity, question, scope)`. Repeating
 a request with the same identity and the same binding returns the same context;
-the same identity with a different binding is a conflict. *(F7, L7)*
+the same identity with a different binding is `CONTEXT_BINDING_CONFLICT`,
+unless a retained recording receipt has already resolved the request (FD-3).
+Recovery is original content or a new request identity, never a version change.
+*(F7, L7)*
 
 **FD-3 — Submission identity is derived from request identity and content.**
 For a write, Span looks up the retained receipt for `(repository, request
-identity)` before any new-write check.
+identity)` before context issuance/recovery, evidence admission, or any other
+new-write check.
 
 - receipt found, content digest equal → replay the receipt;
 - receipt found, content digest different → conflict, no new write;
@@ -231,17 +235,18 @@ resolution follows `lifecycle-contract` §4.2. Supplying an explicit question or
 non-empty scope with that context is a rejection, not a silent override.
 *(F7, L7)*
 
-The surface is resolved once, in this order: the supplied surface; else the
-question context's bound scope; else the single `scope_paths` entry. More than
-one carried path rejects with the candidates. A supplied surface that disagrees
-with the carried scope rejects. *(F9, FD-1, L4)*
+A create derives one complete effective semantic `EvidenceScope`: the question
+context's complete scope, otherwise explicit `scope_paths`, a direct locator,
+or an explicit FILE surface path. The same carrier drives owner resolution,
+owner agreement, canonical target and conclusion construction, and persisted
+understanding/version scopes. Support dependencies establish the conclusion but
+do not redefine that scope. A supplied owner must contain every canonical
+semantic member under FD-5; this applies to FILE/SYMBOL and declared owners. Omitted
+ownership resolves only one unambiguous path surface; it never infers a declared
+surface. *(F9, FD-1, L4)*
 
-A create's one conclusion (`lifecycle-contract` §4.2) carries support from the
-explicit dependency list when supplied, otherwise the admitted observation,
-otherwise a re-read of the cited locator. Evidence and scope are independent:
-explicit `scope_paths`, the bound context, or a single carried path determines
-scope; a multi-file conclusion names its owning surface and supplies its scope,
-or uses a context that binds that scope.
+A create carries its complete explicit support when supplied, otherwise the
+admitted observation or a re-read of the cited locator. *(F5, F7, L2)*
 The new conclusion lineage identity follows L7; assertion nature defaults to
 `DESCRIPTIVE`; the basis records explicit evidence from the cited source.
 *(F5, F7, L2)*
@@ -309,7 +314,10 @@ the separation above: a failure that prevents evaluation is `Unavailable`
 no revision, no challenge disposition, and no consumed context. *(A2, L4)*
 
 **FD-41 — Every rejection is actionable.** The rejection names the exact identity
-that failed validation and what must change. What it carries is fixed in
+that failed validation and what must change. Recovery must correct the actual
+invariant: original content/new identity for binding conflicts, in-scope evidence
+or context-free direct recording for scope conflicts, and the admitting context
+or direct evidence for context-bound references. What it carries is fixed in
 `lifecycle-contract` §4.2. *(A8)*
 
 ## 9. Retention and recovery
@@ -407,6 +415,22 @@ omits the fact that truncation occurred. *(F2, A7)*
 If the budget cannot carry the result kind, the surface identity, and the fact of
 truncation, the operation returns an explicit budget refusal rather than a
 misleading fragment. *(A7, A8)*
+
+**FD-59 — Recording context scope is fixed; derived operational scope is complete.**
+Source evidence admission requires membership in the supplied context's scope;
+discovery admission requires complete-scope containment. Repository-wide outer
+scope contains any inner scope; restricted outer scope cannot contain a
+repository-wide inner scope. Context-free recording composes the complete union
+of actual semantic/verification and admissible evidence requirements after
+receipt resolution. Repository-wide requirements absorb narrower ones. This
+operational scope never changes understanding's semantic scope. Context-admitted
+references remain context-bound and are never dropped or made portable.
+*(A5, A8, F7, F9, L5, L7)*
+
+**FD-60 — Accepted understanding reports ownership through live status.**
+After commitment, compose current status for the understanding's canonical owner.
+Operational status failure preserves acceptance and reports explicit status
+unavailability. Status is never persisted in the receipt. *(F9, L4)*
 
 ## 13. Why these choices follow
 

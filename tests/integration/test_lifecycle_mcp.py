@@ -398,6 +398,25 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_stale_sibling_is_referenced_in_status(self) -> None:
         async def journey(session: ClientSession) -> dict:
+            declared = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "status-service-declare",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {
+                        "kind": "SERVICE",
+                        "locator": "app-and-style",
+                        "boundary": {
+                            "paths": ["src/app.py", "styles/site.css"],
+                            "symbols": [],
+                        },
+                    },
+                },
+            )
+            self.assertEqual(declared["$type"], "SurfaceDeclared")
             created = await self._call(
                 session,
                 "record",
@@ -405,7 +424,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "repository_id": REPOSITORY_ID,
                     "request_id": "sub-status",
                     "kind": "understanding",
-                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "surface": {"kind": "SERVICE", "locator": "app-and-style"},
                     "question": "What happens in the app?",
                     "scope_paths": ["src/app.py", "styles/site.css"],
                     "conclusion": "The app emits line1.",
@@ -445,7 +464,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 {
                     "repository_id": REPOSITORY_ID,
                     "request_id": "req-status",
-                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "surface": {"kind": "SERVICE", "locator": "app-and-style"},
                     "question": "What happens in the app?",
                 },
             )

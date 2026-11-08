@@ -28,6 +28,8 @@ class RejectionCauseKind(_enum.Enum):
     SURFACE_AMBIGUOUS = "surface_ambiguous"
     SURFACE_MISMATCH = "surface_mismatch"
     CONTEXT_TARGET_CONFLICT = "context_target_conflict"
+    CONTEXT_BINDING_CONFLICT = "context_binding_conflict"
+    CONTEXT_SCOPE_CONFLICT = "context_scope_conflict"
     CONTEXT_REQUIRED = "context_required"
     OBSERVATION_NOT_ADMITTED = "observation_not_admitted"
     REPLAY_CONFLICT = "replay_conflict"
@@ -49,19 +51,25 @@ def required_action_for(kind: RejectionCauseKind) -> str:
         )
     if kind is RejectionCauseKind.SURFACE_AMBIGUOUS:
         return (
-            "record one conclusion per surface, or supply the exact surface, or "
-            "declare a service/domain surface first"
+            "keep the intended semantic scope and cite evidence files in support; "
+            "record separate conclusions for separate semantic surfaces; "
+            "select an explicitly declared service/domain only when it owns the conclusion"
         )
     if kind is RejectionCauseKind.SURFACE_MISMATCH:
         return "make surface agree with the carried scope, or omit it and let Span derive it"
     if kind is RejectionCauseKind.CONTEXT_TARGET_CONFLICT:
         return "omit the explicit target when recording against a question context"
+    if kind is RejectionCauseKind.CONTEXT_BINDING_CONFLICT:
+        return "reuse the original content for this request identity, or use a new request identity"
+    if kind is RejectionCauseKind.CONTEXT_SCOPE_CONFLICT:
+        return "use evidence inside this context's scope, or omit context_id and supply direct scope/evidence so Span derives a recording context"
     if kind is RejectionCauseKind.CONTEXT_REQUIRED:
-        return "supply context_id or a declared scope with locator support"
+        return "supply the context that admitted these references, or provide explicit scope with direct source/discovery evidence"
     if kind is RejectionCauseKind.OBSERVATION_NOT_ADMITTED:
         return (
-            "use an observation id returned by ask for this context, or cite "
-            "the source by locator so Span admits it"
+            "use an observation admitted to this context, or cite a direct locator "
+            "inside its scope; otherwise omit context_id and supply explicit "
+            "scope/direct evidence"
         )
     if kind is RejectionCauseKind.REPLAY_CONFLICT:
         return (

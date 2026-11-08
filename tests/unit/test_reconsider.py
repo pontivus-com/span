@@ -131,7 +131,13 @@ class ReconsiderServiceTest(unittest.TestCase):
         surface_locator: str,
         scope_path: str,
         support: m.SupportDependency,
+        *,
+        scope: m.EvidenceScope | None = None,
+        surface_kind: m.SurfaceKind = m.SurfaceKind.FILE,
     ) -> None:
+        semantic_scope = (
+            m.EvidenceScope(paths=(scope_path,)) if scope is None else scope
+        )
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
                 identity=m.RecordingIdentity(
@@ -141,19 +147,19 @@ class ReconsiderServiceTest(unittest.TestCase):
                 ),
                 surface=m.SurfaceKey(
                     repository_id="repo-1",
-                    kind=m.SurfaceKind.FILE,
+                    kind=surface_kind,
                     locator=surface_locator,
                 ),
                 target=m.ExplicitTarget(
                     question="What does this do?",
-                    scope=m.EvidenceScope(paths=(scope_path,)),
+                    scope=semantic_scope,
                 ),
                 conclusions=(
                     m.ProposedConclusion(
                         conclusion_id=m.ConclusionId("c-1"),
                         statement="It does something.",
                         assertion_nature=m.AssertionNature.DESCRIPTIVE,
-                        scope=m.EvidenceScope(paths=(scope_path,)),
+                        scope=semantic_scope,
                         support=(support,),
                         basis=_basis(),
                     ),
@@ -456,3 +462,94 @@ class ReconsiderServiceTest(unittest.TestCase):
             if item.ref.understanding_id.value == "u-discovery"
         )
         self.assertIn(m.ChangeReason.DIRECT, changed.reasons)
+
+    def test_refs_only_discovery_tracks_only_the_referenced_changed_path(self):
+        reference = self.store.get_source_observation("obs-a").evidence
+        scope = m.EvidenceScope(evidence_refs=(reference,))
+        source = FilesystemEvidenceSource("repo-1", self.root)
+        pairs, _ = source.list_inventory_entries("repo-1", scope)
+        observation = m.DiscoveryObservation(
+            observation_id=m.DiscoveryObservationId("disc-refs"),
+            repository_id="repo-1",
+            scope=scope,
+            membership_fingerprint=support_rules.discovery_membership_fingerprint(
+                pairs
+            ),
+            captured_at=NOW,
+        )
+        self.store.put_discovery_observation(observation)
+        self._create(
+            "u-discovery-refs",
+            "src/discovery.py",
+            "src/discovery.py",
+            m.DiscoverySupport(observation_id=observation.observation_id),
+        )
+        for path, expected in (("src/b.py", False), ("src/a.py", True)):
+            with self.subTest(path=path):
+                result = self.service.reconsider(
+                    m.ReconsiderRequest(repository_id="repo-1", changed_paths=(path,))
+                )
+                direct = {
+                    item.ref.understanding_id.value
+                    for surface in result.surfaces
+                    for item in surface.conclusions
+                    if m.ChangeReason.DIRECT in item.reasons
+                }
+                self.assertEqual("u-discovery-refs" in direct, expected)
+
+    def test_refs_only_challenge_context_retains_scope_for_symbol_and_declared_owner(
+        self,
+    ):
+        import dataclasses
+
+        reference = dataclasses.replace(
+            self.store.get_source_observation("obs-a").evidence, locator="src/a.py::f"
+        )
+        scope = m.EvidenceScope(evidence_refs=(reference,))
+        self.store.put_surface(
+            m.Surface(
+                key=m.SurfaceKey("repo-1", m.SurfaceKind.SERVICE, "symbols-only"),
+                boundary=m.SurfaceBoundary(symbols=(reference.locator,)),
+            )
+        )
+        for index, (kind, locator) in enumerate(
+            (
+                (m.SurfaceKind.SYMBOL, reference.locator),
+                (m.SurfaceKind.SERVICE, "symbols-only"),
+            )
+        ):
+            with self.subTest(kind=kind):
+                uid = f"u-ref-challenge-{index}"
+                self._create(
+                    uid,
+                    locator,
+                    reference.locator,
+                    m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+                    scope=scope,
+                    surface_kind=kind,
+                )
+                challenged = self.service.reconsider(
+                    m.ReconsiderRequest(
+                        repository_id="repo-1",
+                        challenge=m.ChallengeRaise(
+                            request_id=f"challenge-refs-{index}",
+                            understanding_id=uid,
+                            target_version=1,
+                            target_conclusions=(
+                                m.ChallengeConclusionRef(
+                                    understanding_id=uid,
+                                    conclusion_id="c-1",
+                                    revision=1,
+                                ),
+                            ),
+                            reason="Recheck the exact symbol scope.",
+                        ),
+                    )
+                )
+                context = self.store.get_context(challenged.context.value)
+                self.assertEqual(context.scope, scope)
+                self.assertFalse(
+                    m.evidence_scope_contains(
+                        context.scope, m.EvidenceScope(paths=("src/b.py",))
+                    )
+                )

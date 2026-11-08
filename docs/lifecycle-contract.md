@@ -258,13 +258,34 @@ the question and scope and issues its own evidence-only context. *(F7, L7)*
 
 A create may also omit `surface`. Span derives it from the scope the request
 already carries: the question context's bound scope when a context is supplied,
-otherwise a single `scope_paths` entry. If the carried scope names more than one
+otherwise the effective scope derived from `scope_paths`, a direct locator, or
+an explicit FILE surface. If the carried scope names more than one
 path, the create is `Rejected` with the candidate surfaces. When the agent does
-supply a surface, it must agree with the carried scope; a mismatch is `Rejected`.
+supply a surface, every semantic member must agree with that owner; a mismatch
+is `Rejected`. FILE/SYMBOL agreement follows path-surface membership (FD-5),
+not the presence of just one matching member.
 *(F7, L7)*
 
+Semantic scope describes what the conclusion is about; support identifies what
+established it. Multiple support files do not create additional owning surfaces.
+The effective semantic scope is a complete `EvidenceScope`: paths, exact evidence
+references, or an empty scope denoting the whole repository. A supplied
+SERVICE/DOMAIN must already exist and contain the complete semantic scope.
+
+**Recording contexts.** A supplied context retains its complete issued scope.
+New source evidence may be admitted inside it; a newly cited discovery boundary
+must be wholly contained by it. Evidence membership may grow, but scope never
+widens. When investigation expands, omit `context_id` and provide direct
+scope/evidence. Span derives an evidence-only operational context sufficient for
+all required evidence, including repository-wide discovery when cited. This
+operational scope never replaces the semantic scope of an understanding.
+Admitted evidence references and observation IDs remain context-bound; supply
+the admitting context or express dependencies through direct evidence.
+
 **Request identity.** Every request carries the caller's request identity.
-Recording derives the submission identity from that identity and the content:
+Retained receipt resolution precedes context issuance, evidence admission, and
+command construction. Recording derives the submission identity from that
+identity and the content:
 the same identity with the same content is a replay; the same identity with
 different content is a conflict; a new identity with identical content is a new
 intentional act.
@@ -312,7 +333,9 @@ declared scope: a run scope path covers a surface path when it is equal or an
 ancestor. It is returned in an answer for those surfaces and is not widened by
 a broader question; a single-file run does not apply to a broader service.
 Record the run against the surface it actually verifies. A run requires
-observations or evidence; either is accepted. *(A8, F4)*
+at least one observation or evidence item; both may coexist. Observations require
+their admitting context. Direct evidence may be newly admitted inside a supplied
+context, or recorded without one against explicit run scope/evidence. *(A8, F4)*
 
 There is no separate evidence-admission call. This is F7's test: recording
 requires nothing the agent does not already hold.
@@ -323,7 +346,12 @@ requires nothing the agent does not already hold.
 receipt with replay identity, the live support qualification, and the updated
 surface status — or a rejection naming the exact offending identity, the exact
 cause, the structured current version or current boundary version when one
-exists, and the required action. The cause is the server's exact validation
+exists, and the required action. For `UnderstandingRecorded`, live qualification
+and owning `SurfaceStatus` are
+composed after acceptance. Expected operational failure is represented by
+`SupportUnavailable` or `SurfaceStatusUnavailable` while preserving the accepted
+receipt. Status is never persisted in that receipt. The cause is the server's
+exact validation
 message; the adapter does not replace it with a generic action.
 
 **How it helps.** It converts an investigation the agent already performed into

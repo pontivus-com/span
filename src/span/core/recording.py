@@ -41,7 +41,7 @@ from span.core.model.primitives import (
     UnderstandingId,
     UnderstandingVersionNumber,
     VerificationRunId,
-    evidence_scope_allows,
+    evidence_scope_contains,
 )
 from span.core.model.recording import (
     ContentDigest,
@@ -176,26 +176,8 @@ def build_receipt(
     )
 
 
-def _scope_contains(outer: EvidenceScope, inner: EvidenceScope) -> bool:
-    """Whether one declared scope is wholly inside another.
-
-    An empty scope means the whole repository. Paths are prefixes; evidence
-    references are exact locators. This is a deterministic boundary check,
-    not an inferred semantic relationship.
-    """
-    if not outer.paths and not outer.evidence_refs:
-        return True
-    for path in inner.paths:
-        if not evidence_scope_allows(path, outer):
-            return False
-    for ref in inner.evidence_refs:
-        if not evidence_scope_allows(ref.locator, outer):
-            return False
-    return True
-
-
 def _scopes_compatible(left: EvidenceScope, right: EvidenceScope) -> bool:
-    return _scope_contains(left, right) or _scope_contains(right, left)
+    return evidence_scope_contains(left, right) or evidence_scope_contains(right, left)
 
 
 def _require_live_context(context: InvestigationContext, repository_id: str) -> None:
@@ -272,7 +254,7 @@ def create_understanding(
         if proposed.conclusion_id in lineages:
             raise RecordingValidationError("duplicate conclusion ID in create")
         lineages.add(proposed.conclusion_id)
-        if not _scope_contains(target.scope, proposed.scope):
+        if not evidence_scope_contains(target.scope, proposed.scope):
             raise RecordingValidationError(
                 "a conclusion scope lies outside the understanding scope"
             )
@@ -433,7 +415,7 @@ def _apply_action(
             raise RecordingValidationError(
                 f"conclusion lineage already exists: {conclusion_id.value}"
             )
-        if not _scope_contains(understanding_scope, action.scope):
+        if not evidence_scope_contains(understanding_scope, action.scope):
             raise RecordingValidationError(
                 "a conclusion scope lies outside the understanding scope"
             )
@@ -457,7 +439,7 @@ def _apply_action(
         return
     if isinstance(action, (ConfirmConclusion, CorrectConclusion)):
         old_ref = _require_current(by_lineage, action.conclusion_id)
-        if not _scope_contains(understanding_scope, action.scope):
+        if not evidence_scope_contains(understanding_scope, action.scope):
             raise RecordingValidationError(
                 "a conclusion scope lies outside the understanding scope"
             )
@@ -491,7 +473,7 @@ def _apply_action(
             raise RecordingValidationError(
                 "replacement introduces an existing conclusion lineage"
             )
-        if not _scope_contains(understanding_scope, action.scope):
+        if not evidence_scope_contains(understanding_scope, action.scope):
             raise RecordingValidationError(
                 "a conclusion scope lies outside the understanding scope"
             )

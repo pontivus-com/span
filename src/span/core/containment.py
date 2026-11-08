@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import typing as _typing
 
+from span.core.model.primitives import EvidenceScope
 from span.core.model.surfaces import (
     Surface,
     SurfaceBoundary,
@@ -84,6 +85,20 @@ def surface_contains(surface: Surface, member: SurfaceKey) -> bool:
     if member.kind is SurfaceKind.FILE:
         return boundary_contains_path(surface.boundary, member.locator)
     return False
+
+
+def scope_surfaces(repository_id: str, scope: EvidenceScope) -> tuple[SurfaceKey, ...]:
+    """Project complete semantic scope into canonical path identities (FD-5/30)."""
+    locators = [(repository_id, path) for path in scope.paths]
+    locators.extend((ref.repository_id, ref.locator) for ref in scope.evidence_refs)
+    return order_surfaces(
+        (
+            symbol_surface(repository, locator)
+            if surface_file_locator(locator) is not None
+            else path_surface(repository, locator)
+        )
+        for repository, locator in locators
+    )
 
 
 def surface_sort_key(key: SurfaceKey) -> tuple[int, str, str]:

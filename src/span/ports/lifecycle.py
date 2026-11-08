@@ -28,6 +28,8 @@ class LifecycleStorePort(_typing.Protocol):
     """
 
     retention: m.LifecycleRetention
+    # Store-owned operational failures; programming/contract errors are excluded.
+    operational_errors: tuple[type[Exception], ...]
 
     def schema_version(self) -> int:
         """Return the active lifecycle schema version."""

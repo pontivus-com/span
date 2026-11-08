@@ -113,13 +113,12 @@ returned as an empty page.
 }
 ```
 
-A create carries one conclusion and exactly one evidence mode. `locator` is the
-file the conclusion is about; `observation_id` from an `ask` gap may replace it;
+A create carries one conclusion and exactly one evidence mode. `locator` cites
+source evidence and may also supply semantic scope; `observation_id` from an `ask` gap may replace it;
 non-empty `support` is the complete typed dependency set the agent already
 holds. A locator may accompany explicit support as the carried code scope, but
 an observation id may not. Scope is supplied or derived independently through
-`scope_paths`, the bound context, or a single carried path; a multi-file
-conclusion needs an explicit scope or a declared owning surface. `surface` is
+`scope_paths`, the bound context, or a single carried path. `surface` is
 optional and derived from the carried scope. `assertion_nature` defaults to
 `DESCRIPTIVE`. A create takes no caller-created conclusion identity, no
 `action`, and no `actions`: `action` belongs to `kind="surface"` and `actions`
@@ -157,6 +156,37 @@ The context's bound question and scope are used; do not also send `question` or
 `scope_paths` — that conflict is rejected. Without a context, a create requires
 `question` and issues its own evidence-only context.
 
+Semantic scope describes what the conclusion is about; support identifies what
+established it. Multiple support files do not create multiple owning surfaces.
+Declare SERVICE/DOMAIN only when the conclusion describes that declared boundary.
+Its semantic scope must fit that boundary. Support locators do not create
+independent retained conclusions; author per-file conclusions when needed.
+
+A supplied context has fixed scope. New source or discovery evidence can be
+admitted during record inside that scope; it need not already be admitted.
+Empty evidence scope means repository-wide. Discovery must fit completely:
+a broader ancestor or repository-wide discovery cannot fit a restricted context.
+
+When investigation expands, omit `context_id` and supply explicit semantic/run
+scope and direct evidence. Span derives a new operational context. Repository-wide
+discovery makes that context repository-wide while the semantic scope stays
+narrow. Admitted evidence references and observation IDs remain context-bound; supply that context or use direct evidence.
+
+```json
+{
+  "repository_id": "repo-1",
+  "request_id": "plan-status-1",
+  "kind": "understanding",
+  "question": "Is this plan implemented?",
+  "scope_paths": ["docs/implementation-plan.md"],
+  "conclusion": "The implementation described by the plan is complete.",
+  "support": [
+    {"$type": "SourceSupportWire", "locator": "src/a.py", "ranges": []},
+    {"$type": "SourceSupportWire", "locator": "tests/a.py", "ranges": []}
+  ]
+}
+```
+
 Surface declaration:
 
 ```json
@@ -185,12 +215,30 @@ Verification uses `kind="verification"` with a `run` carrying the command,
 scope, outcome, observed time, observer, and the evidence it actually tested. A
 run applies to the surfaces **within** its declared scope (a run scope path
 covers a surface path when it is equal or an ancestor) and is not widened by a
-broader question. A run requires `observations` or `evidence`: `run.observations`
-takes the `obs:` ids that `ask` returned for the request context; to cite a
-source instead, put it in `run.evidence` with the same `context_id` and Span
-admits it. Sending neither is rejected; sending either is accepted. An id that
-was never admitted is `Rejected` with `cause_kind=observation_not_admitted`, not
-a transport error.
+broader question. A run requires at least one observation or evidence item; both may coexist.
+Use context + run.observations only for observations admitted to that context.
+Use context + run.evidence for new direct evidence inside its fixed scope.
+For evidence beyond it, omit context_id and supply run.scope_paths/run.evidence.
+Do not substitute scenario text for structural evidence.
+
+```json
+{
+  "repository_id": "repo-1",
+  "request_id": "verify-ui-1",
+  "kind": "verification",
+  "run": {
+    "repository_id": "repo-1",
+    "scope_description": "UI form suite",
+    "scope_paths": ["ui/"],
+    "evidence": [{"locator": "ui/tests/form.test.ts", "ranges": []}],
+    "command": "pnpm exec vitest run tests/form.test.ts --pool=forks --maxWorkers=1 --no-file-parallelism",
+    "scenario": "UI form suite",
+    "outcome": "PASS",
+    "observed_at": "2026-11-07T00:00:00Z",
+    "observer": "agent"
+  }
+}
+```
 
 Support wires preserve source, admitted-source, authority, premise,
 discovery-boundary, and admitted-discovery support. A discovery boundary is the
@@ -202,7 +250,9 @@ Results: `UnderstandingRecorded`, `VerificationRecorded`, `SurfaceDeclared`,
 exact server cause, the required action, and the structured current version or
 current boundary version when one exists; it is a result, not a transport error.
 An accepted write is never reported as a rejection because present support
-could not be evaluated; that outcome is `SupportUnavailable`.
+could not be evaluated; that outcome is `SupportUnavailable`. Accepted
+understanding also carries live `status.surface` or `SurfaceStatusUnavailable`
+while preserving its receipt.
 
 ## `reconsider`
 

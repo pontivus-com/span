@@ -82,6 +82,14 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "not also send observation_id. Omit surface; Span derives it from one "
         "scope_path, or from the context. With a context, omit question and "
         "scope_paths. "
+        "Semantic scope describes the conclusion's subject; support names what "
+        "established it. Multiple support files do not create owners. A supplied "
+        "context has fixed complete scope: new in-scope evidence may be admitted "
+        "during record. Empty scope means repository-wide. Discovery boundaries "
+        "must fit completely. When investigation expands, omit context_id and "
+        "supply direct scope/evidence; Span derives a new operational context. "
+        "Repository-wide discovery makes it repository-wide without widening "
+        "semantic scope. Admitted references remain context-bound. "
         "UPDATE TEMPLATE: use understanding_id, expected_version, and one or "
         "more compact actions; Span derives new lineage identities, old "
         "revisions, unchanged content, and the mechanical basis. Each action "
@@ -91,7 +99,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "reason; withdraw takes reason and optional evidence; confirm preserves "
         "the current content. Do not send conclusion_id on add or "
         "new_conclusion_id on replace. "
-        "SURFACE TEMPLATE (only when the answer spans several files): "
+        "SURFACE TEMPLATE (only when the conclusion describes that declared boundary): "
         '{"repository_id":"<id>","request_id":"<new id>","kind":"surface",'
         '"action":"create","surface":{"kind":"SERVICE","locator":"<name>",'
         '"boundary":{"paths":["<path>"],"symbols":[]},"parent":null}} '
@@ -104,10 +112,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '"scope_paths":["<path>"],"observations":["<obs id from ask>"],'
         '"command":"<command>","scenario":"<scenario>","outcome":"PASS",'
         '"observed_at":"<ISO 8601>","observer":"<agent>"}} '
-        "A run requires either observations or evidence, not both: "
-        "run.observations takes the obs: ids ask returned for that context, or "
-        'add "evidence":[{"locator":"<path>"}] to run and keep the same '
-        "context_id. A run applies to the surfaces within its declared scope "
+        "A run requires at least one observation or evidence item; both may coexist. "
+        "run.observations requires the context that admitted those IDs. "
+        "run.evidence may admit new locators inside that context's fixed scope. "
+        "For evidence beyond it, omit context_id and supply run.scope_paths and "
+        "run.evidence. A run applies to surfaces within its declared scope "
         "and is not widened by a broader question, so record it against the "
         "surface it verifies. "
         "Do not choose a record variant; kind is a field.",

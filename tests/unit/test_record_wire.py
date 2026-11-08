@@ -176,6 +176,7 @@ class RecordActionWireTest(unittest.TestCase):
             _resolver(),
             locator="src/a.py",
             default_support=None,
+            scope=m.EvidenceScope(paths=("src/a.py",)),
         )
         self.assertEqual(
             proposed.conclusion_id,
@@ -195,6 +196,7 @@ class RecordActionWireTest(unittest.TestCase):
             _resolver(),
             locator="src/a.py",
             default_support=None,
+            scope=m.EvidenceScope(paths=("src/a.py",)),
         )
         self.assertEqual(proposed.assertion_nature, m.AssertionNature.DESCRIPTIVE)
 
@@ -872,6 +874,30 @@ class RecordWireCodecTest(unittest.TestCase):
         )
         self.assertEqual(run.observations, ())
         self.assertEqual(run.evidence[0].locator, "src/a.py")
+
+
+class RecordIngressDiagnosticsTest(unittest.TestCase):
+    def test_update_names_all_forbidden_root_fields(self):
+        from span.shell.mcp.wire import decode_request
+
+        with self.assertRaises(ValueError) as raised:
+            decode_request(
+                "record",
+                {
+                    "repository_id": "repo-1",
+                    "request_id": "bad-update",
+                    "kind": "understanding",
+                    "understanding_id": "u-1",
+                    "expected_version": 1,
+                    "actions": {
+                        "add": [{"conclusion": "A does X", "locator": "src/a.py"}]
+                    },
+                    "conclusion": "Wrong root",
+                    "locator": "src/a.py",
+                },
+            )
+        self.assertIn("conclusion, locator", str(raised.exception))
+        self.assertIn("inside actions", str(raised.exception))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.10.1 — 2026-11-08
+
+**A recording and scope-correctness bug-fix release.** This release removes
+recording friction while keeping the public operations exactly `ask`, `record`,
+and `reconsider`.
+
+### Fixed
+
+- Separate a conclusion's semantic scope from its support evidence. Multiple
+  source files can establish one FILE conclusion without becoming additional
+  owners. One complete semantic scope now drives owner validation, target
+  construction, and the stored understanding, version, and conclusion.
+- Resolve retained receipts before context creation, evidence admission, or
+  discovery work. Exact retries remain replayable after context reaping and
+  source changes; changed accepted retries remain `REPLAY_CONFLICT`.
+- Report uncommitted request/context binding conflicts as
+  `CONTEXT_BINDING_CONFLICT`, with original-content or new-request recovery,
+  instead of misleading version-conflict instructions.
+- Keep supplied contexts fixed in scope while allowing new in-scope source and
+  discovery evidence. Out-of-scope evidence reports `CONTEXT_SCOPE_CONFLICT`.
+  Context-free recording derives a complete operational scope; repository-wide
+  discovery broadens that context without widening the conclusion's scope.
+- Preserve exact evidence references throughout scope composition and
+  reconsideration. Refs-only discovery no longer matches unrelated changes,
+  and challenge contexts no longer widen to repository scope after dropping
+  refs. Context-admitted references remain context-bound.
+- Validate every semantic member against its owner, including FILE/SYMBOL
+  self-membership and declared SERVICE/DOMAIN boundaries. A matching member
+  does not permit additional out-of-owner scope.
+- Return canonical live owner status in `UnderstandingRecorded.status`, using
+  the same status composer as `ask`. Operational post-commit support or status
+  failures preserve the accepted receipt and report explicit unavailability;
+  programming errors still propagate. Exact-reference scopes no longer mark
+  unrelated files as examined.
+- Name forbidden update root fields in one ingress error. Align MCP and skill
+  guidance on semantic scope versus support, expanded verification evidence,
+  and the supported combination of observations and direct evidence.
+
+### Verification
+
+- Focused recording, containment, reconsideration, and MCP regression suite:
+  109 passed, with 37 subtests passed.
+- Full suite: 699 passed, 2 failed, 101 subtests passed, no skips. Outstanding
+  failures are the code-budget ratchet and the fixed-date receipt-expiry
+  transition fixture; this is not an all-green suite result.
+- Type checking: zero errors. Ruff, Black, Node delivery tests, installed-MCP
+  checks, and independent live MCP journeys passed.
+
 ## 0.10.0 — 2026-11-07
 
 **A public-grammar and identity-ownership release.** 0.10.0 makes the compact

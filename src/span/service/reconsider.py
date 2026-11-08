@@ -80,7 +80,9 @@ class ReconsiderService:
             for discovery in self._store.list_discovery_observations(
                 request.repository_id
             ):
-                if _scope_contains(discovery.scope, path):
+                if m.evidence_scope_contains(
+                    discovery.scope, m.EvidenceScope(paths=(path,))
+                ):
                     direct.extend(
                         self._store.support_dependents(
                             "DISCOVERY", discovery.observation_id.value
@@ -281,20 +283,21 @@ class ReconsiderService:
         version = self._store.get_version(
             challenge.understanding_id, challenge.target_version
         )
-        paths = list(version.scope.paths)
+        scopes = [version.scope]
         if understanding.surface.kind is m.SurfaceKind.FILE:
-            paths.append(understanding.surface.locator)
+            scopes.append(m.EvidenceScope(paths=(understanding.surface.locator,)))
         else:
             declared = self._store.find_surface(understanding.surface)
-            if declared is not None:
-                paths.extend(declared.boundary.paths)
-        paths.extend(reference.locator for reference in challenge.evidence)
+            if declared is not None and declared.boundary.paths:
+                scopes.append(m.EvidenceScope(paths=declared.boundary.paths))
+        if challenge.evidence:
+            scopes.append(m.EvidenceScope(evidence_refs=challenge.evidence))
         context = issue_context(
             self._store,
             payload=challenge,
             repository_id=repository_id,
             request_id=m.RequestId(challenge.request_id),
-            scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
+            scope=m.evidence_scope_union(scopes),
             question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
@@ -349,13 +352,3 @@ class ReconsiderService:
                 found.append(dependent)
                 frontier.append((dependent, depth + 1))
         return found, truncated
-
-
-def _scope_contains(scope: m.EvidenceScope, path: str) -> bool:
-    if not scope.paths:
-        return True
-    for prefix in scope.paths:
-        stem = prefix.rstrip("/")
-        if path == stem or path.startswith(stem + "/"):
-            return True
-    return False

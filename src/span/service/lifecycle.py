@@ -16,6 +16,7 @@ import dataclasses as _dataclasses
 import datetime as _datetime
 import typing as _typing
 
+from span.core import containment
 from span.core import model as m
 from span.core import support_rules
 from span.core.identity import (
@@ -36,6 +37,7 @@ from span.service.contexts import issue_context
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 from span.service.ids import server_context_id
+from span.service.surface_status import compose_surface_status
 
 __all__ = ["LifecycleService"]
 
@@ -149,8 +151,7 @@ class LifecycleService:
     def _flat_conclusion(
         self,
         wire: _rw.RecordRequestWire,
-        context: m.InvestigationContext,
-        context_bound: bool,
+        scope: m.EvidenceScope,
     ) -> m.ProposedConclusion:
         """Build the one conclusion from the flat create fields.
 
@@ -161,8 +162,7 @@ class LifecycleService:
         if wire.conclusion is None:
             raise ValueError("a flat conclusion requires conclusion text")
         resolver = self._resolver(wire.identity)
-        scope_paths = self._create_scope_paths(wire, context, context_bound)
-        locator = wire.locator or (scope_paths[0] if scope_paths else "")
+        locator = wire.locator or (scope.paths[0] if scope.paths else "")
         default: m.SourceSupport | None = None
         if not wire.support:
             if wire.observation_id is not None:
@@ -184,99 +184,87 @@ class LifecycleService:
             resolver,
             locator=locator,
             default_support=default,
-            scope_paths=scope_paths,
+            scope=scope,
         )
 
-    def _create_scope_paths(
+    def _create_scope(
         self,
         wire: _rw.RecordRequestWire,
-        context: m.InvestigationContext,
-        context_bound: bool,
-    ) -> tuple[str, ...]:
-        """Resolve the effective create scope before building the conclusion."""
-        if context_bound and context.scope.paths:
-            return tuple(context.scope.paths)
+        context: m.InvestigationContext | None,
+    ) -> m.EvidenceScope:
+        """Resolve the complete semantic scope, independently of support."""
+        if context is not None and context.origin is m.ContextOrigin.QUESTION:
+            if wire.question or wire.scope_paths:
+                raise Rejection(
+                    "a question context binds the create target; omit question and scope_paths",
+                    cause_kind=RejectionCauseKind.CONTEXT_TARGET_CONFLICT,
+                )
+            return context.scope
         if wire.scope_paths:
-            return tuple(wire.scope_paths)
+            return m.EvidenceScope(paths=wire.scope_paths)
         if wire.locator is not None:
-            return (wire.locator,)
+            return m.EvidenceScope(paths=(wire.locator,))
         if (
             wire.surface is not None
             and m.SurfaceKind(wire.surface.kind) is m.SurfaceKind.FILE
         ):
-            return (wire.surface.locator,)
+            return m.EvidenceScope(paths=(wire.surface.locator,))
         raise Rejection(
-            "a create requires scope_paths, a locator, or a context that binds "
-            "its scope; a declared surface name is not an evidence path",
+            "a create requires scope_paths, a locator, a FILE surface, or a question context",
             cause_kind=RejectionCauseKind.VALIDATION,
         )
 
     def _resolve_create_surface(
         self,
         wire: _rw.RecordRequestWire,
-        context: m.InvestigationContext,
-        context_bound: bool,
+        scope: m.EvidenceScope,
     ) -> m.SurfaceKey:
-        """Resolve the create surface once: supplied, context, or scope.
-
-        This is the single resolver for a create. It never guesses from a
-        free-text name and never widens to a declared surface.
-        """
-        repository_id = wire.identity.repository_id
+        """Resolve one owner and validate its agreement with semantic scope."""
+        repository_id = wire.repository_id
         if wire.surface is not None:
             surface = m.SurfaceKey(
-                repository_id=repository_id,
-                kind=m.SurfaceKind(wire.surface.kind),
-                locator=wire.surface.locator,
+                repository_id, m.SurfaceKind(wire.surface.kind), wire.surface.locator
             )
-            self._require_surface_in_scope(surface, wire, context, context_bound)
+            self._require_surface_in_scope(surface, scope)
             return surface
-        paths = (
-            context.scope.paths
-            if context_bound and context.scope.paths
-            else wire.scope_paths
-        )
-        surfaces = {
-            m.SurfaceKey(
-                repository_id=repository_id,
-                kind=m.SurfaceKind.FILE,
-                locator=path,
-            )
-            for path in paths
-        }
-        if len(surfaces) == 1:
-            return next(iter(surfaces))
-        if not surfaces:
+        paths = set(scope.paths) | {ref.locator for ref in scope.evidence_refs}
+        if len(paths) == 1:
+            return containment.path_surface(repository_id, next(iter(paths)))
+        if not paths:
             raise Rejection(
-                "a create without a surface needs one scope_paths entry or a "
-                "question context",
+                "semantic scope does not identify one owner",
                 cause_kind=RejectionCauseKind.SURFACE_REQUIRED,
             )
-        ordered = sorted(item.locator for item in surfaces)
-        shown = ", ".join(ordered[:4])
-        more = f" (+{len(ordered) - 4} more)" if len(ordered) > 4 else ""
         raise Rejection(
-            f"the carried scope names {len(ordered)} surfaces, but a create "
-            f"records one conclusion per surface; declare a service/domain "
-            f"surface, or pass one scope path. Named: {shown}{more}",
+            "semantic scope names multiple candidate surfaces: "
+            + ", ".join(sorted(paths)),
             cause_kind=RejectionCauseKind.SURFACE_AMBIGUOUS,
         )
 
     def _require_surface_in_scope(
-        self,
-        surface: m.SurfaceKey,
-        wire: _rw.RecordRequestWire,
-        context: m.InvestigationContext,
-        context_bound: bool,
+        self, surface: m.SurfaceKey, scope: m.EvidenceScope
     ) -> None:
-        if surface.kind is not m.SurfaceKind.FILE:
-            return
-        carried = set(context.scope.paths) if context_bound else set(wire.scope_paths)
-        if carried and surface.locator not in carried:
+        if not scope.paths and not scope.evidence_refs:
             raise Rejection(
-                f"surface {surface.locator!r} is not in the carried scope",
+                f"{surface.kind.value} surface {surface.locator!r} cannot own repository-wide semantic scope",
                 cause_kind=RejectionCauseKind.SURFACE_MISMATCH,
             )
+        owner = (
+            self._store.find_surface(surface)
+            if surface.kind.is_declared
+            else m.Surface(key=surface)
+        )
+        if owner is None:
+            raise RecordingValidationError(
+                "an understanding create against a declared surface requires that surface to exist"
+            )
+        members = containment.scope_surfaces(surface.repository_id, scope)
+        for member in members:
+            if not containment.surface_contains(owner, member):
+                raise Rejection(
+                    f"semantic member {member.locator!r} lies outside {surface.kind.value} surface {surface.locator!r}",
+                    cause_kind=RejectionCauseKind.SURFACE_MISMATCH,
+                )
 
     def _require_valid_parent(self, surface: m.Surface) -> None:
         """Reject an unknown, undeclared, or cyclic parent for create and update."""
@@ -302,7 +290,6 @@ class LifecycleService:
     def _record_understanding_request(
         self, wire: _rw.RecordRequestWire
     ) -> m.RecordResult:
-        wire = self._resolve_record_request(wire)
         digest = _rw.wire_content_digest(wire)
         replay = self._replay(
             wire.identity.repository_id, wire.identity.request_id, digest
@@ -311,22 +298,21 @@ class LifecycleService:
             if replay.accepted_verification_run_ids:
                 return self.qualify_verification(replay)
             return self.qualify_understanding(replay)
-        context = self._store.get_context(_typing.cast(str, wire.identity.context_id))
-        context_bound = context.origin is m.ContextOrigin.QUESTION
-        create = wire.kind is m.RecordKind.UNDERSTANDING and wire.conclusion is not None
-        if create and context_bound and (wire.question or wire.scope_paths):
-            raise Rejection(
-                "a question context binds the create target; omit question and "
-                "scope_paths",
-                cause_kind=RejectionCauseKind.CONTEXT_TARGET_CONFLICT,
-            )
-        derived = (
-            self._resolve_create_surface(wire, context, context_bound)
-            if create
+        create = wire.conclusion is not None
+        supplied_context = (
+            self._store.get_context(wire.context_id)
+            if wire.context_id is not None
             else None
         )
+        scope = self._create_scope(wire, supplied_context) if create else None
+        wire = self._resolve_record_request(wire, semantic_scope=scope)
+        context = self._store.get_context(_typing.cast(str, wire.context_id))
+        context_bound = context.origin is m.ContextOrigin.QUESTION
+        derived = (
+            self._resolve_create_surface(wire, scope) if scope is not None else None
+        )
         derived_conclusions = (
-            (self._flat_conclusion(wire, context, context_bound),) if create else None
+            (self._flat_conclusion(wire, scope),) if scope is not None else None
         )
         current_revisions: tuple[m.ConclusionRevision, ...] = ()
         if not create:
@@ -336,16 +322,11 @@ class LifecycleService:
             self._resolver(wire.identity),
             context_bound=context_bound,
             derived_surface=derived,
+            derived_scope=scope,
             derived_conclusions=derived_conclusions,
             current_revisions=current_revisions,
         )
         if isinstance(command, m.CreateUnderstandingCommand):
-            if command.surface.kind.is_declared:
-                if self._store.find_surface(command.surface) is None:
-                    raise RecordingValidationError(
-                        "an understanding create against a declared surface "
-                        "requires that surface to exist"
-                    )
             self._require_admitted_support(command)
             self._support.assert_current(command)
             receipt = self._store.record_understanding(
@@ -402,7 +383,10 @@ class LifecycleService:
         through the same command and admission checks. The two submissions
         never take a divergent route.
         """
-        original = wire
+        digest = _rw.wire_content_digest(wire)
+        replay = self._replay(wire.repository_id, wire.request_id, digest)
+        if replay is not None:
+            return replay
         wire = self._resolve_record_request(wire)
         run = wire.run
         if run is None:
@@ -426,16 +410,12 @@ class LifecycleService:
             run = _dataclasses.replace(
                 run,
                 observations=tuple(
-                    [*run.observations, *(item.value for item in admitted)]
+                    dict.fromkeys(
+                        [*run.observations, *(item.value for item in admitted)]
+                    )
                 ),
             )
             wire = _dataclasses.replace(wire, run=run)
-        digest = _rw.wire_content_digest(original)
-        replay = self._replay(
-            wire.identity.repository_id, wire.identity.request_id, digest
-        )
-        if replay is not None:
-            return replay
         command = _rw.record_command(wire, self._resolver(wire.identity))
         if not isinstance(command, m.RecordVerificationCommand):
             raise RecordingValidationError("verification record produced no run")
@@ -522,24 +502,47 @@ class LifecycleService:
             )
         understanding_id = receipt.accepted_understanding_ids[0].value
         version = receipt.accepted_understanding_versions[0].value
+        operational_errors: tuple[type[Exception], ...] = (
+            OSError,
+        ) + self._store.operational_errors
         try:
             qualification: m.UnderstandingSupport | m.SupportUnavailable = (
                 self._support.evaluate_version(understanding_id, version)
             )
-        except (OSError, ValueError) as exc:
-            qualification = m.SupportUnavailable(str(exc))
-        return m.UnderstandingRecorded(receipt=receipt, qualification=qualification)
+        except operational_errors as exc:
+            qualification = m.SupportUnavailable(f"{type(exc).__name__}: {exc}")
+        owner: m.SurfaceKey | None = None
+        try:
+            owner = self._store.get_understanding(understanding_id).surface
+            status: m.SurfaceStatus | m.SurfaceStatusUnavailable = (
+                compose_surface_status(
+                    owner,
+                    store=self._store,
+                    support=self._support,
+                    evidence=self._evidence,
+                )
+            )
+        except operational_errors as exc:
+            status = m.SurfaceStatusUnavailable(
+                reason=f"{type(exc).__name__}: {exc}", surface=owner
+            )
+        return m.UnderstandingRecorded(
+            receipt=receipt, qualification=qualification, status=status
+        )
 
     def qualify_verification(self, receipt: m.RecordReceipt) -> m.VerificationRecorded:
         if not receipt.accepted_verification_run_ids:
             raise RecordingValidationError("a verification receipt has no accepted run")
         run_id = receipt.accepted_verification_run_ids[0].value
+        operational_errors: tuple[type[Exception], ...] = (
+            OSError,
+        ) + self._store.operational_errors
         try:
             qualification: m.VerificationSupport | m.SupportUnavailable = (
                 self._support.evaluate_verification(run_id)
             )
-        except (OSError, ValueError) as exc:
-            qualification = m.SupportUnavailable(str(exc))
+        except operational_errors as exc:
+            qualification = m.SupportUnavailable(f"{type(exc).__name__}: {exc}")
         return m.VerificationRecorded(receipt=receipt, qualification=qualification)
 
     def qualify_challenge(self, receipt: m.RecordReceipt) -> m.ChallengeRecorded:
@@ -553,78 +556,51 @@ class LifecycleService:
     # -- reference resolution and admission --------------------------------
 
     def _resolve_record_request(
-        self, wire: _rw.RecordRequestWire
+        self,
+        wire: _rw.RecordRequestWire,
+        *,
+        semantic_scope: m.EvidenceScope | None = None,
     ) -> _rw.RecordRequestWire:
-        if wire.identity.context_id is not None:
+        if wire.context_id is not None:
             return wire
-        paths = self._record_request_paths(wire)
-        discovery_scopes = self._record_request_discovery_scopes(wire)
-        if not paths and not discovery_scopes:
+        requirements = self._record_request_scopes(wire, semantic_scope)
+        if not requirements:
             raise RecordingValidationError(
-                "recording without a context requires a declared scope, a "
-                "cited locator, or a discovery boundary",
+                "context-free recording requires explicit scope or direct evidence",
                 cause_kind=RejectionCauseKind.CONTEXT_REQUIRED,
             )
         context = issue_context(
             self._store,
             payload=wire,
-            repository_id=wire.identity.repository_id,
-            request_id=m.RequestId(f"{wire.identity.request_id}:record-context"),
-            scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
+            repository_id=wire.repository_id,
+            request_id=m.RequestId(f"{wire.request_id}:record-context"),
+            scope=m.evidence_scope_union(requirements),
             question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
         return _dataclasses.replace(wire, context_id=context.context_id.value)
 
-    def _record_request_paths(self, wire: _rw.RecordRequestWire) -> list[str]:
-        paths: list[str] = []
-        if wire.kind is m.RecordKind.UNDERSTANDING:
-            if wire.conclusion is not None:
-                paths.extend(wire.scope_paths)
-                if wire.locator is not None:
-                    paths.append(wire.locator)
-                paths.extend(_cited_locators(wire.support))
-            elif (
-                wire.understanding_id is not None and wire.expected_version is not None
-            ):
-                version = self._store.get_version(
-                    wire.understanding_id, wire.expected_version
-                )
-                paths.extend(version.scope.paths)
-            if wire.actions is not None:
-                actions: tuple[_rw.RecordActionWire, ...] = (
-                    *wire.actions.add,
-                    *wire.actions.confirm,
-                    *wire.actions.correct,
-                    *wire.actions.replace,
-                    *wire.actions.withdraw,
-                )
-                for action in actions:
-                    if action.locator is not None:
-                        paths.append(action.locator)
-                    if isinstance(
-                        action,
-                        (
-                            _rw.AddConclusionWire,
-                            _rw.CorrectConclusionWire,
-                            _rw.ReplaceActionWire,
-                        ),
-                    ):
-                        paths.extend(action.scope_paths)
-                paths.extend(_record_wire_locators(wire.actions))
-        elif wire.kind is m.RecordKind.VERIFICATION and wire.run is not None:
-            paths.extend(wire.run.scope_paths)
-            paths.extend(item.locator for item in wire.run.evidence)
-        for scope in self._record_request_discovery_scopes(wire):
-            paths.extend(scope.paths)
-        return [path for path in paths if path]
-
-    def _record_request_discovery_scopes(
-        self, wire: _rw.RecordRequestWire
+    def _record_request_scopes(
+        self,
+        wire: _rw.RecordRequestWire,
+        semantic_scope: m.EvidenceScope | None,
     ) -> tuple[m.EvidenceScope, ...]:
+        """Actual complete scope requirements; absent fields are not operands."""
+        scopes: list[m.EvidenceScope] = []
+        if semantic_scope is not None:
+            scopes.append(semantic_scope)
         supports: list[_rw.SupportWire] = list(wire.support)
+        locators = list(_cited_locators(wire.support))
+        if wire.locator is not None:
+            locators.append(wire.locator)
         if wire.actions is not None:
+            if wire.understanding_id is not None and wire.expected_version is not None:
+                scopes.append(
+                    self._store.get_version(
+                        wire.understanding_id, wire.expected_version
+                    ).scope
+                )
             actions: tuple[_rw.RecordActionWire, ...] = (
                 *wire.actions.add,
                 *wire.actions.confirm,
@@ -634,9 +610,32 @@ class LifecycleService:
             )
             for action in actions:
                 supports.extend(action.support)
-        scopes: list[m.EvidenceScope] = []
+                if action.locator is not None:
+                    locators.append(action.locator)
+                if (
+                    isinstance(
+                        action,
+                        (
+                            _rw.AddConclusionWire,
+                            _rw.CorrectConclusionWire,
+                            _rw.ReplaceActionWire,
+                        ),
+                    )
+                    and action.scope_paths
+                ):
+                    scopes.append(m.EvidenceScope(paths=action.scope_paths))
+            locators.extend(_record_wire_locators(wire.actions))
+        if wire.run is not None:
+            scopes.append(m.EvidenceScope(paths=wire.run.scope_paths))
+            locators.extend(item.locator for item in wire.run.evidence)
+        scopes.extend(m.EvidenceScope(paths=(locator,)) for locator in locators)
         for support in supports:
             if isinstance(support, _rw.DiscoveryBoundarySupportWire):
+                if support.scope.evidence_refs:
+                    raise RecordingValidationError(
+                        "discovery evidence references require their admitting context or direct evidence/discovery scope",
+                        cause_kind=RejectionCauseKind.CONTEXT_REQUIRED,
+                    )
                 scopes.append(m.EvidenceScope(paths=support.scope.paths))
         return tuple(scopes)
 
@@ -703,6 +702,13 @@ class LifecycleService:
                 f"context belongs to repository {context.repository_id!r}, not "
                 f"{repository_id!r}"
             )
+        if (
+            context.scope.paths or context.scope.evidence_refs
+        ) and not m.evidence_scope_allows(locator, context.scope):
+            raise RecordingValidationError(
+                f"source {locator!r} lies outside context {context_id!r} scope {context.scope!r}",
+                cause_kind=RejectionCauseKind.CONTEXT_SCOPE_CONFLICT,
+            )
         result = self._evidence.admit(
             context,
             (m.EvidenceRequest(locator, ranges),),
@@ -727,6 +733,11 @@ class LifecycleService:
             raise RecordingValidationError(
                 f"context belongs to repository {context.repository_id!r}, not "
                 f"{repository_id!r}"
+            )
+        if not m.evidence_scope_contains(context.scope, scope):
+            raise RecordingValidationError(
+                f"discovery scope {scope!r} lies outside context {context_id!r} scope {context.scope!r}",
+                cause_kind=RejectionCauseKind.CONTEXT_SCOPE_CONFLICT,
             )
         pairs = self._evidence.inventory_entries(repository_id, scope)
         fingerprint = support_rules.discovery_membership_fingerprint(pairs)
