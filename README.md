@@ -1,4 +1,6 @@
 <h1 align="center">
+
+Agent work follows [the required Span lifecycle](docs/lifecycle-contract.md#required-agent-completion).
   <img src="https://raw.githubusercontent.com/pontivus-com/span/master/assets/span-logo-plate-dark.png" alt="Span" width="360">
 </h1>
 
