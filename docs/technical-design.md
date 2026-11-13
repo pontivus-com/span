@@ -375,7 +375,7 @@ operation. FP-6 freezes release metadata against the current value.
 
 Status: **RESOLVED — corrected 2026-11-04.** The supported managed hosts are
 **Codex, OpenCode, and Claude Code** (see `docs/install.md` §Supported hosts).
-Claude has supported registration, inspection, skills, and optional lifecycle
+Claude has supported registration, inspection, skills, and lifecycle
 hook integration. Its registration/health evidence is available, but its
 authenticated model-delivered grammar and caller identity remain
 **UNVERIFIED** because no usable authenticated capture exists. That state is
@@ -390,7 +390,7 @@ replay window is measured per host at FP-4a (O-2) rather than assumed.
 - Do not port the 0.8.3 campaign, interpretation, or exchange stack.
 - Do not rewrite the support evaluator, evidence source, or store; the withdrawn baseline's are
   closer to layers 1–3 than 0.8.3's.
-- Do not keep 19 tools while adding the five-family contract.
+- Replace the retired tool inventory with the three lifecycle operations.
 - Do not port 0.8.3's schema 9 or its broad exception handling.
 
 ## 8. Evidence limits
@@ -589,7 +589,7 @@ union. There is no second declaration.
 
 **Surface-first reuse.** Use the existing no-question `ask` form; add no new
 operation. The `ask` description names the document view as the normal reuse
-path, and the managed snippet keeps the same five lines with the `no_match`
+path, and the managed snippet projects the required lifecycle with the `no_match`
 recovery folded into the continuation line. The document view remains assembled
 on read by the one composer.
 
@@ -921,10 +921,11 @@ until a Span `_ask` tool appears in the tool list, then proceeds whether or not
 it did. Without that wait the agent cannot ask before reading even when it
 intends to. The notice itself is delivered through `session.hook("context")`:
 the plugin calls `span-hooks adoption-primer --repo-root <root>`, which prints
-the notice only when that repository has at least one recorded understanding.
+the lifecycle notice for every registered operational repository, including
+a cold repository.
 The plugin pushes the text into `event.system` once per session and stays silent
-on any failure. The text names the direct tools, asserts existence rather than
-currency, and names no surface. The installer deploys the plugin under Span's
+on any failure. The text names the required lifecycle actions and direct tools, and makes no
+claim that retained understanding exists or is current. The installer deploys the plugin under Span's
 own data root and registers it once in the host's global `opencode.json`; it
 never writes the plugin into a target. Codex continues to use the managed
 `AGENTS.md` block. The notice's bytes are counted in the F8 class measurement.
@@ -933,6 +934,16 @@ notice is computed on a tool edit, held once per session, and delivered by the
 next `context` hook; it names the changed paths and the exact
 `reconsider(changed_paths=[...])` call. It asserts support state only and is
 silent on failure.
+
+**0.10.2 pending notice lifecycle.** Extend the existing pending notice with the
+paths of its producing edit event; do not create a session edit ledger. Native
+lifecycle events use `data.sessionID`. Idle refresh forwards unconsumed paths as
+`[{"file_path": path}]` to the stop runner's JSON stdin. Successful context
+injection consumes the notice; failed injection/reporting retains it. Deletion
+and plugin disposal clear notice state. The existing bounded notice cache reaps
+abandoned entries with an explicit diagnostic at capacity. A missing session ID
+is diagnosed; no shared cross-session fallback is used. Previously delivered
+notices are not replayed at idle. Answer support remains checked by operations.
 
 **OpenCode plugin scope (0.9.4).** The lifecycle plugin is managed under an
 explicit `--opencode-plugin-scope global|local|none`; the installer never infers
@@ -1007,7 +1018,7 @@ second declaration of those requirements.
 | FD-46–FD-48 | §10, §12 | `test_lifecycle_store.py`; concurrent first write, duplicate create, CAS and replay | request-key tests added |
 | FD-49–FD-53 | §15 | `test_host_contract.py`, `test_installed_mcp.py`, raw live-host capture | the three-tool surface is implemented and locally gated. 2026-11-07: OpenCode delivered the valid compact create/add/correct/replace lifecycle but removed an unknown old-form field before delivery; Codex delivered a current-candidate smoke create with a derived identity; Claude remains unverified. Strict unknown-field preservation through OpenCode is not established |
 | FD-54–FD-57 | §13, §15 | `test_answer_service.py`; result fitting, explicit omission, minimum-result refusal | O-3 measured per host and applied as the delivered-wire budget |
-| FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; notice only with understanding, plugin deploy/remove, skill vocabulary | 84 input tokens per session; OpenCode first `ask` before first source read 5/5; Codex pending |
+| FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | 84 input tokens per session; OpenCode first `ask` before first source read 5/5; Codex pending |
 | F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
 | F8, G5 | §15 | frozen comparative task captures and scorecards | core value accepted on Codex and OpenCode (retained, current, reusable understanding; exact change isolation). Two reuse classes are positive with capture counted (break-even 2 and 11); the single-use cross-file class is negative (1.74× billed). No universal cost claim |
 

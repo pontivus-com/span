@@ -192,9 +192,11 @@ class EvidenceSourceBase(ABC):
     ) -> m.EvidenceUnit | m.EvidenceSourceFailure:
         """Read one exact locator without structural subjects.
 
-        Missing, non-text/unservable, and oversized sources are distinct
-        failures; a provider read error is raised, not disguised as a source
-        outcome.
+        The enclosing content binds ranges and source identity; the declared
+        excerpt determines admitted bytes. An unbindable range is budgeted as
+        a whole file so support evaluation can apply FD-18 safely.
+        Missing and unservable evidence are explicit outcomes; provider errors
+        propagate.
         """
         self._check_repository(repository_id)
         if not self._exists(request.locator):
@@ -210,7 +212,20 @@ class EvidenceSourceBase(ABC):
                 "not servable text evidence",
             )
         data = self._read_bytes(request.locator)
-        if len(data) > bounds.max_evidence_bytes:
+        content = data.decode("utf-8", errors="replace")
+        admitted_bytes = len(data)
+        if request.ranges:
+            lines = content.splitlines(keepends=True)
+            if all(item.end_line <= len(lines) for item in request.ranges):
+                admitted_bytes = sum(
+                    len(
+                        "".join(lines[item.start_line - 1 : item.end_line]).encode(
+                            "utf-8"
+                        )
+                    )
+                    for item in request.ranges
+                )
+        if admitted_bytes > bounds.max_evidence_bytes:
             return m.EvidenceSourceFailure(
                 request,
                 m.EvidenceSourceFailureKind.UNREADABLE,
@@ -219,7 +234,7 @@ class EvidenceSourceBase(ABC):
         fingerprint = _hashlib.sha256(data).hexdigest()
         return m.EvidenceUnit(
             evidence_ref=self._ref_for(request.locator, fingerprint),
-            content=data.decode("utf-8", errors="replace"),
+            content=content,
             content_fingerprint=fingerprint,
         )
 

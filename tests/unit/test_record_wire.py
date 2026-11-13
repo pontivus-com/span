@@ -68,6 +68,25 @@ def _revision(
 
 
 class RecordWireSchemaTest(unittest.TestCase):
+    def test_update_field_guidance_is_projected_from_canonical_wire(self):
+        import dataclasses
+
+        schema = schema_for_request(w.RecordRequestWire)
+        fields = {
+            field.name: field for field in dataclasses.fields(w.RecordRequestWire)
+        }
+        for name in ("action", "actions"):
+            self.assertEqual(
+                schema["properties"][name]["description"],
+                fields[name].metadata["description"],
+            )
+        self.assertIn(
+            "object of action lists", schema["properties"]["actions"]["description"]
+        )
+        self.assertIn(
+            "Only for kind=surface", schema["properties"]["action"]["description"]
+        )
+
     def test_component_schemas_are_object_roots(self):
         for root in (
             w.VerificationRunWire,

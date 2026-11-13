@@ -26,8 +26,10 @@ each item, preserves successful observations, and distinguishes failures
 from omissions. Exact source can be admitted without structural symbols.
 
 A source observation retains its content identity and delivered excerpt
-boundary. Source support checks the observed content; a small excerpt does
-not imply that only those lines participate in the fingerprint. Selection
+boundary. Source support checks the declared range when it reliably binds, otherwise the
+whole file (FD-18). A delivery slice alone does not narrow a declared dependency.
+Admission budgets the declared excerpt, including all requested ranges; binding
+may inspect the enclosing source without admitting it as whole-file evidence. Selection
 finds relevant evidence and grants no authority.
 
 ## Structural source

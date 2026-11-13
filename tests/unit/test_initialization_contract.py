@@ -27,7 +27,7 @@ class InitializationContractTest(unittest.TestCase):
         self.assertTrue(CONTRACT.is_file(), "INITIALIZATION_CONTRACT.md missing")
         text = CONTRACT.read_text(encoding="utf-8")
         self.assertIn("installer", text)
-        self.assertIn("optional `setup` tool", text)
+        self.assertIn("performed by the installer (`span-install`)", text)
         self.assertIn("UNINITIALIZED", text)
         self.assertIn("must never start initialization implicitly", text)
 

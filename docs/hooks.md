@@ -1,6 +1,8 @@
 # Lifecycle hooks
 
-Hooks provide optional, bounded notices about readiness or recorded support
+Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
+
+Hooks provide bounded lifecycle notices about readiness or recorded support
 that may need attention. Ordinary retrieval and recording perform support
 checks themselves, so a missed or disabled hook cannot establish currentness.
 
@@ -11,7 +13,7 @@ checks themselves, so a missed or disabled hook cannot establish currentness.
 | Command | Scope and effect |
 | --- | --- |
 | `session-start` | Probe store readiness for the registered repository containing the working directory. |
-| `adoption-primer` | Print the FD-58 notice only when the repository has at least one recorded understanding; silent otherwise. |
+| `adoption-primer` | Print the FD-58 required-lifecycle notice for a registered operational repository, including a cold store. |
 | `source-changed` | Look up recorded dependents for bounded changed paths and evaluate exact conclusion revisions. |
 | `session-stop` | Report bounded affected support for supplied session paths. |
 
@@ -64,10 +66,18 @@ The plugin waits a bounded three seconds at prompt admission for the local MCP
 connection, then injects the FD-58 adoption notice once per session through the
 `context` hook. An edit-time notice is stored when a tool edit runs and is
 delivered once on the next `context` hook, naming the changed paths and the exact
-`reconsider(changed_paths=[...])` call. The notices are advisory: a missed or
-failed injection changes only efficiency, never currency. A five-run OpenCode
+`reconsider(changed_paths=[...])` call. Lifecycle actions remain required when a notice is missed; support checks remain
+server-owned. A five-run OpenCode
 capture recorded the first `ask` before the first source read in 5/5 runs; see
 `.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
+
+Pending edit notices retain their event paths until delivery. If an idle event
+arrives first, the plugin passes those paths through JSON stdin to `session-stop`
+and refreshes that notice. It does not accumulate a session-wide edit history.
+Delivery consumes the notice; session deletion and plugin disposal clear it.
+Capacity expiry reports an undelivered notice explicitly. Missing session IDs
+are diagnosed rather than delivering a notice to another session. Failed stop
+reporting preserves the pending edit notice for the next context call.
 
 Implemented wiring, configured entries, actual invocation, affected scope,
 and delivered notice are separate facts. Codex beta conformance was run with

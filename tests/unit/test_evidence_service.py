@@ -144,6 +144,102 @@ class EvidenceServiceTest(unittest.TestCase):
         self.assertEqual(units[0].content_range.end_line, 3)
         self.assertEqual(units[0].content_range.total_lines, 4)
 
+    def test_large_file_small_range_admits_and_checks_live_support(self) -> None:
+        from span.service.support import SupportService
+
+        content = "line1\n" + "outside\n" * BOUNDS.max_evidence_bytes
+        _write(self.root, "src/app.py", content)
+        result = self._start(
+            (m.EvidenceRequest("src/app.py", (m.SourceRange(1, 1),)),),
+            policy_bounds=BOUNDS,
+        )
+        admitted = result.outcomes[0]
+        self.assertIsInstance(admitted, m.AdmittedEvidence)
+        assert isinstance(admitted, m.AdmittedEvidence)
+        support = SupportService(
+            store=self.store,
+            evidence=self.evidence,
+            authority=self.store,
+            clock=lambda: NOW,
+        )
+        support.assert_observations((admitted.observation_id,))
+        _write(
+            self.root, "src/app.py", "line1\n" + "changed\n" * BOUNDS.max_evidence_bytes
+        )
+        support.assert_observations((admitted.observation_id,))
+        _write(
+            self.root,
+            "src/app.py",
+            "changed\n" + "outside\n" * BOUNDS.max_evidence_bytes,
+        )
+        from span.core.recording import RecordingValidationError
+
+        with self.assertRaises(RecordingValidationError):
+            support.assert_observations((admitted.observation_id,))
+
+    def test_unbindable_stored_range_cannot_bypass_whole_file_budget(self) -> None:
+        from span.core.recording import RecordingValidationError
+        from span.service.support import SupportService
+
+        result = self._start((m.EvidenceRequest("src/app.py", (m.SourceRange(2, 3),)),))
+        admitted = result.outcomes[0]
+        assert isinstance(admitted, m.AdmittedEvidence)
+        _write(self.root, "src/app.py", "x" * (BOUNDS.max_evidence_bytes + 1))
+        failure = self.evidence.read_exact(
+            "repo-1", m.EvidenceRequest("src/app.py", (m.SourceRange(2, 3),)), BOUNDS
+        )
+        self.assertIsInstance(failure, m.EvidenceSourceFailure)
+        assert isinstance(failure, m.EvidenceSourceFailure)
+        self.assertIn("max_evidence_bytes", failure.reason)
+        policy = m.ServiceBoundsPolicy(
+            default_query_bounds=BOUNDS,
+            maximum_query_bounds=BOUNDS,
+            hook_fast_bounds=BOUNDS,
+        )
+        support = SupportService(
+            store=self.store,
+            evidence=self.evidence,
+            authority=self.store,
+            clock=lambda: NOW,
+            policy=policy,
+        )
+        with self.assertRaises(RecordingValidationError):
+            support.assert_observations((admitted.observation_id,))
+
+    def test_large_file_whole_and_oversized_range_fail_explicitly(self) -> None:
+        _write(self.root, "src/app.py", "x" * (BOUNDS.max_evidence_bytes + 1) + "\n")
+        result = self._start(
+            (
+                m.EvidenceRequest("src/app.py"),
+                m.EvidenceRequest("src/app.py", (m.SourceRange(1, 1),)),
+            ),
+            policy_bounds=BOUNDS,
+        )
+        for outcome in result.outcomes:
+            self.assertIsInstance(outcome, m.EvidenceSourceFailure)
+        self.assertEqual(self.service.admitted("ctx-ev-1"), ())
+
+    def test_range_batch_budgets_excerpts_and_invalid_range_does_not_consume_budget(
+        self,
+    ) -> None:
+        import dataclasses
+
+        bounds = dataclasses.replace(BOUNDS, max_evidence_bytes=12)
+        _write(self.root, "src/app.py", "line1\n" + "outside\n" * 20)
+        result = self._start(
+            (
+                m.EvidenceRequest("styles/site.css", (m.SourceRange(9, 10),)),
+                m.EvidenceRequest("src/app.py", (m.SourceRange(1, 1),)),
+                m.EvidenceRequest("src/app.py", (m.SourceRange(1, 1),)),
+                m.EvidenceRequest("src/app.py", (m.SourceRange(1, 1),)),
+            ),
+            policy_bounds=bounds,
+        )
+        self.assertIsInstance(result.outcomes[0], m.EvidenceSourceFailure)
+        self.assertIsInstance(result.outcomes[1], m.AdmittedEvidence)
+        self.assertIsInstance(result.outcomes[2], m.AlreadyAdmittedEvidence)
+        self.assertIsInstance(result.outcomes[3], m.OmittedEvidence)
+
     def test_out_of_range_request_is_omitted(self) -> None:
         result = self._start(
             (

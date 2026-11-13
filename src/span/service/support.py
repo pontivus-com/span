@@ -240,7 +240,7 @@ class SupportService:
             else:
                 unit = self._evidence.read_exact(
                     record.repository_id,
-                    m.EvidenceRequest(locator),
+                    m.EvidenceRequest(locator, record.delivered_ranges),
                     self._policy.default_query_bounds,
                 )
                 if isinstance(unit, m.EvidenceSourceFailure):

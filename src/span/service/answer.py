@@ -153,7 +153,7 @@ class AnswerService:
                 if item.evaluation.state is m.SupportState.CURRENT:
                     current.append(self._view(item, revisions))
                 else:
-                    historical.append(
+                    historical.extend(
                         self._historical(item, revisions, understanding.current_version)
                     )
         if current:
@@ -238,22 +238,28 @@ class AnswerService:
         support: m.ConclusionSupport,
         revisions: dict[tuple[str, int], m.ConclusionRevision],
         understanding_version: m.UnderstandingVersionNumber,
-    ) -> m.HistoricalConclusion:
-        """Project one non-current revision as historical content (L2, F3)."""
+    ) -> tuple[m.HistoricalConclusion, ...]:
+        """Project statement content; withdrawals remain explicit status refs."""
         revision = revisions.get(
             (support.ref.conclusion_id.value, support.ref.revision.value)
         )
-        if revision is None or not isinstance(revision.content, m.SupportedConclusion):
+        if revision is None:
+            raise RecordingValidationError("a historical revision is missing")
+        if isinstance(revision.content, m.WithdrawnConclusion):
+            return ()
+        if not isinstance(revision.content, m.SupportedConclusion):
             raise RecordingValidationError(
                 "a historical conclusion has no supported revision content"
             )
         content = revision.content
-        return m.HistoricalConclusion(
-            ref=support.ref,
-            understanding_version=understanding_version,
-            statement=content.statement,
-            state=support.evaluation.state,
-            evidence=self._evidence_refs(content.support),
+        return (
+            m.HistoricalConclusion(
+                ref=support.ref,
+                understanding_version=understanding_version,
+                statement=content.statement,
+                state=support.evaluation.state,
+                evidence=self._evidence_refs(content.support),
+            ),
         )
 
     def _evidence_refs(
@@ -671,9 +677,12 @@ class AnswerService:
                 if item.evaluation.state is m.SupportState.CURRENT
             ]
             historical.extend(
-                self._historical(item, revisions, understanding.current_version)
+                content
                 for item in support.conclusions
                 if item.evaluation.state is not m.SupportState.CURRENT
+                for content in self._historical(
+                    item, revisions, understanding.current_version
+                )
             )
             if current:
                 grouped.setdefault(understanding.question, []).extend(current)

@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.10.2 — 2026-11-13
+
+**Governed understanding as ordinary agent work.** The corrected functional
+pyramid requires consultation, retention of established conclusions and
+reconsideration after edits. Skills, managed instructions, tool descriptions,
+host notices and public guides project that lifecycle consistently.
+
+### Changed
+
+- Remove discretionary-retention exemptions and irrelevant campaign disclaimers.
+  Distinguish valid direct-record ingress from required consultation before
+  deriving understanding, and hook-independent support safety from agent conduct.
+- Align the public contract and current guides on exactly `ask`, `record`, and
+  `reconsider`. Setup belongs to the installer; navigation belongs to the host.
+  Replace obsolete term-overlap discovery advice with surface-first reuse and
+  exact recorded-question lookup.
+- Preserve useful safeguards for evidence, authority, uncertainty, replay,
+  explicit setup, owned host configuration and truthful delivery claims.
+
+### Fixed
+
+- Deliver the lifecycle primer to registered operational cold repositories too.
+- Forward unconsumed edit-notice paths to the OpenCode stop handler through
+  JSON stdin and read native event session IDs. Consume notices only when
+  delivered; clear session notices on deletion and plugin disposal. Stop-time
+  reporting covers pending notice paths, not a new session-wide edit ledger.
+- Budget declared ranged evidence after extraction rather than rejecting its
+  enclosing file. Re-evaluate that range on subsequent reads/reconsideration;
+  whole-file and admitted-excerpt limits remain enforced.
+- Preserve retrieval after withdrawal: withdrawn revisions remain explicit
+  snapshot/status content rather than being misprojected as supported statements.
+- Supply a complete update template in the tool description: `actions` is an
+  object of lists, `action` belongs to surface declarations, and edits update
+  the returned understanding/version after reconsideration.
+
+### Upgrade
+
+Rerun `span-install` for the target and restart/reconnect the host so it receives
+current skills, the managed agent block, plugin and MCP descriptions. A package
+upgrade alone does not refresh every running host. Storage remains schema 11;
+there are no new public operations or runtime dependencies.
+
+### Verification
+
+- Full standalone suite with pinned Graft 0.25.0: 709 passed, 101 subtests
+  passed, no skips. Node plugin tests: 4 passed. Ruff, Black and type checking
+  pass with zero type errors.
+- Built-wheel installation and source/asset checks passed. Natural Codex and
+  OpenCode journeys exercised consultation, retention and edit/reconsider/update;
+  fresh-session Codex reused understanding without rereading source.
+- The measured test-line ratchet grows from 20,516 to 20,765 for range,
+  withdrawal, field-guidance and cold-start regressions; operational limits and
+  existing assertions remain intact.
+- Live-agent limitations: Codex still sent one invalid action before recovering;
+  OpenCode reread source during a warm lookup.
+- Acceptance artifacts are untracked and ignored. Release documentation retains
+  sanitized verification summaries; raw captures and receipts stay local.
+
+Live captures establish only their named host/task journeys, not universal
+agent compliance or a hard final-answer veto.
+
 ## 0.10.1 — 2026-11-08
 
 **A recording and scope-correctness bug-fix release.** This release removes

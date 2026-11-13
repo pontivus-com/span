@@ -68,7 +68,12 @@ class EvidenceSource(_typing.Protocol):
         request: EvidenceRequest,
         bounds: QueryBounds,
     ) -> EvidenceUnit | EvidenceSourceFailure:
-        """Read one exact locator, distinguishing missing/unreadable/failed."""
+        """Read source for exact binding, budgeting the declared excerpt.
+
+        Content retains the enclosing text for range identity and total lines.
+        Reliable request ranges bound the evidence budget; an unbindable range
+        is budgeted as a whole file for support-evaluation fallback.
+        """
         ...
 
     def list_inventory_entries(

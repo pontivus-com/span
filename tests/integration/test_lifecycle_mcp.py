@@ -100,6 +100,123 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_large_ranged_support_survives_restart_and_reconsiders(self) -> None:
+        _write(self.repo, "src/app.py", "line1\n" + "outside\n" * 20_000)
+
+        async def create(session):
+            recorded = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "large-range-create",
+                    "kind": "understanding",
+                    "question": "What is the first line?",
+                    "scope_paths": ["src/app.py"],
+                    "conclusion": "The first line is line1.",
+                    "support": [
+                        {
+                            "$type": "SourceSupportWire",
+                            "locator": "src/app.py",
+                            "ranges": [{"start_line": 1, "end_line": 1}],
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(recorded["$type"], "UnderstandingRecorded")
+            self.assertEqual(recorded["qualification"]["state"], "CURRENT")
+
+        async def reuse(session):
+            answer = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "large-range-reuse",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                },
+            )
+            self.assertEqual(answer["$type"], "Answer")
+            self.assertEqual(answer["status"]["current"], 1)
+
+        async def changed(session):
+            result = await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "changed_paths": ["src/app.py"],
+                },
+            )
+            states = [
+                c["support"]["state"]
+                for surface in result["surfaces"]
+                for c in surface["conclusions"]
+            ]
+            self.assertIn("REASSESSMENT_REQUIRED", states)
+
+        await self._session(create)
+        _write(self.repo, "src/app.py", "line1\n" + "changed\n" * 20_000)
+        await self._session(reuse)
+        _write(self.repo, "src/app.py", "changed\n" + "outside\n" * 20_000)
+        await self._session(changed)
+
+    async def test_withdrawn_revision_remains_retrievable_without_statement_projection(
+        self,
+    ) -> None:
+        async def journey(session):
+            created = await self._record_create(session, "withdraw-create")
+            uid = created["receipt"]["accepted_understanding_ids"][0]["value"]
+            result = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "withdraw-update",
+                    "kind": "understanding",
+                    "understanding_id": uid,
+                    "expected_version": 1,
+                    "actions": {
+                        "withdraw": [
+                            {
+                                "conclusion_id": self._created_conclusion_id(created),
+                                "reason": "The explanation is retracted.",
+                            }
+                        ]
+                    },
+                },
+            )
+            self.assertEqual(result["$type"], "UnderstandingRecorded")
+            for index, question in enumerate([None, "What happens in the app?"]):
+                arguments = {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": f"withdraw-ask-{index}",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                }
+                if question is not None:
+                    arguments["question"] = question
+                answer = await self._call(session, "ask", arguments)
+                self.assertEqual(answer["$type"], "Gap")
+                self.assertEqual(answer["historical"], [])
+                self.assertEqual(answer["surface"]["locator"], "src/app.py")
+            snapshot = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "selector": {
+                        "$type": "UnderstandingSnapshotSelector",
+                        "repository_id": REPOSITORY_ID,
+                        "understanding_id": uid,
+                        "version": 2,
+                    },
+                },
+            )
+            self.assertEqual(snapshot["$type"], "RetrievedUnderstanding")
+            self.assertIn("The explanation is retracted.", str(snapshot))
+
+        await self._session(journey)
+
     async def test_three_tool_journey_and_restart(self) -> None:
         async def first(session: ClientSession) -> dict:
             tools = await session.list_tools()

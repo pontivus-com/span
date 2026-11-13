@@ -1,10 +1,11 @@
 # First investigation and fresh-session reuse
 
+Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
+
 This runbook establishes useful understanding for a chosen engineering task.
 Choose the repository, exact scope, and question before investigating. The
 scope may span implementation, tests, configuration, and governing documents.
-A source inventory is evidence to examine; it is not a campaign to document one
-semantic unit per file.
+A source inventory identifies evidence for that investigation.
 
 ## Prepare
 
@@ -32,7 +33,7 @@ Read material implementation, consumers, tests, and governing sources using the
 agent's normal tools. CSS and configuration remain addressable as exact source
 even when a parser supplies no symbols.
 
-## Save a useful result
+## Retain established understanding
 
 Record coherent conclusions with the evidence you hold and a short account of
 how it led to them. Use `record(kind="understanding")` with `conclusion` and
@@ -63,6 +64,5 @@ explicit challenge dispositions in `record`. Record verification independently
 after external execution, using the evidence actually tested.
 
 Close the task with what was recorded and retrieved, what remains uncertain,
-what was tested externally, and any omitted scope. There is no repository
-coverage score or campaign-completion claim in this procedure. See
+what was tested externally, and any omitted scope. Follow the completion boundary in the lifecycle contract. See
 [lifecycle](lifecycle.md) and [scope](scope.md).

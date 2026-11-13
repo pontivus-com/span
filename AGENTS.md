@@ -87,6 +87,8 @@ not authority; it is debt, and it never decides what work may proceed.
 - One canonical typed carrier per boundary. Do not add ad-hoc DTOs,
   compatibility bridges, fallback parsing, or parallel semantic writers.
 - Do not edit generated artifacts or `BUILD_IDENTITY`.
+- Keep raw acceptance captures, transcripts, receipts and manifests out of Git
+  and distributions. Report sanitized verification summaries in release notes.
 
 ## Testing
 
@@ -105,6 +107,13 @@ The installed-MCP lane also needs `uv`, Node, and npm. It builds a
 non-editable install in a temporary virtual environment and drives the
 installed `span-mcp` over stdio.
 
+## Required agent lifecycle
+
+Follow [lifecycle contract §7](docs/lifecycle-contract.md#required-agent-completion)
+before deriving understanding, when establishing conclusions and after changes.
+Retain supported conclusions and complete affected dispositions as part of the
+work. Hooks remind; the agent performs these actions.
+
 ## Public surface
 
 The public MCP operations are exactly three, one per lifecycle moment:
@@ -120,7 +129,7 @@ to the installer; structural navigation belongs to the host. Any other
 operation name follows the ordinary unknown-tool path. Span carries no
 retired-name map, aliases, compatibility grammar, or replacement routing for
 removed public operations. There are no `semantic_*` names or dual grammar.
-Span never selects a model, calls a
+Span never selects a model, calls a model
 provider, edits a target repository, or runs tests on the user's behalf.
 
 ## Contributions

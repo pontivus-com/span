@@ -3,7 +3,7 @@
 ## What does an agent actually do with Span?
 
 Ask a scoped engineering question, inspect current answers or source evidence,
-investigate material gaps, and record useful conclusions. A later session can
+investigate material gaps, and record supported conclusions when established. A later session can
 ask its own question, find applicable understanding, and check its support.
 After changes, the agent reconsiders affected explanations and updates actual loss.
 See [usage](usage.md).
@@ -17,15 +17,14 @@ successful call does not prove repository completeness.
 ## Must every file be documented first?
 
 No. An understanding is a coherent explanation and can span several files.
-The agent chooses the scope for the real task. There is no mandatory campaign,
-internal question classification, or one-file-at-a-time semantic submission.
+The agent chooses the scope for the real task. Retain the supported conclusions established in that scope.
 
 ## Can I record work that began without Span?
 
 Yes. `record` issues its own context from the supplied scope and cited
 evidence, then creates understanding with an explicit question and scope, or
-records an independent verification run. A prior question/answer exchange is
-optional.
+records an independent verification run. This direct-create capability preserves imported work; agents consult Span
+before deriving understanding under [the required lifecycle](lifecycle-contract.md#required-agent-completion).
 
 ## Does CURRENT mean the explanation is true?
 
@@ -55,7 +54,7 @@ provider credentials and does not autonomously reinterpret source.
 
 ## Do I need hooks?
 
-Hooks are optional notices. Retrieval and recording check support without
+Hooks deliver lifecycle reminders. Retrieval and recording check support without
 them. A configured hook, a quiet event, and an observed delivery are different
 facts. See [hooks](hooks.md).
 

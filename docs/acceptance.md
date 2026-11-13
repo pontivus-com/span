@@ -128,9 +128,8 @@ excluded is a failure, not an exclusion. Claims outside the frozen set may be
 reported as not claimed; they cannot satisfy the gate. An entirely excluded set
 fails G6.
 
-## Historical evidence
+## Reporting results
 
-[acceptance-evidence/](acceptance-evidence/) contains older transcripts and
-fixtures. They retain their original protocol/results and do not prove the
-new API, delivered grammar, or product-fitness acceptance. Current execution
-receipts identify their candidate revision and tested boundary explicitly.
+Release notes report sanitized verification outcomes and their limits. Raw
+acceptance captures, transcripts, receipts and manifests remain private local
+working material, excluded from Git and distributions.

@@ -14,7 +14,7 @@ src/span/service/   investigation, admission, discovery, recording, qualificatio
 src/span/shell/     filesystem, git, SQLite, provider, installation, MCP transport
 tests/              carrier, service, persistence, transport, installed-process tests
 docs/               public contracts and guides
-skills/             optional agent-side lifecycle guidance
+skills/             agent-side required lifecycle guidance
 integrations/       host-side adapters and reference integrations
 scripts/            packaging, asset synchronization, quality checks
 ```
@@ -37,11 +37,10 @@ reuse path. An exact question is a targeted query; a paraphrase returns
 an independent verification run. `reconsider` maps a changed scope to every
 surface that must be re-examined, with per-conclusion support state. Exact
 snapshots and receipts are retrieved through `ask`'s selector form; they are
-historical and never current-answer content. Host navigation or an optional
-`structure` tool covers structural lookup.
+historical and never current-answer content. The host supplies structural navigation.
 
-A question is not a suspended task. An agent can record an investigation that
-began outside Span. The store holds recoverable contexts and immutable
+Agents follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
+Direct-create ingress accepts pre-existing understanding. The store holds recoverable contexts and immutable
 receipts; no process-local interpretation continuation is needed.
 
 ## Where changes belong

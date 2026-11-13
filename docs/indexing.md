@@ -2,7 +2,7 @@
 
 Structural indexing and semantic investigation have separate owners. The
 managed structural provider supplies symbols and edges. The coding agent
-investigates meaning and explicitly records useful conclusions.
+investigates meaning and records supported conclusions when established.
 
 ## Structural setup
 
@@ -21,8 +21,8 @@ the current public API.
 A scoped question first examines a bounded page of saved understanding. It
 returns current answers or inspectable evidence and an explicit gap.
 The agent can search more source, use its own navigation, and admit a
-cross-file evidence batch. No mandatory subject taxonomy or whole-repository
-semantic crawl is required.
+cross-file evidence batch. Follow [the required lifecycle](lifecycle-contract.md#required-agent-completion)
+within the task's investigation scope.
 
 Exact source admission remains possible when structural parsing is unsupported.
 A current structural graph proves observed structure, not ownership, product

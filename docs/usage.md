@@ -54,7 +54,8 @@ strength of its wording.
 A question-bound context supplies the create target. Do not also send the
 question or scope with that context; the conflict is rejected. If the work began
 outside Span, `record` can issue its own context from the supplied scope and
-cited locators. A preliminary question is optional.
+cited locators. This direct-create capability does not waive consultation before deriving
+understanding; follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
 
 Payloads come from the installed `tools/list` schemas. The [MCP reference](mcp.md)
 owns the wire grammar; this guide describes the procedure.
@@ -116,6 +117,6 @@ resend the exact identity and content. After receipt retention expires, inspect
 stored history before deciding what new work to record. Do not assume that a
 missing receipt means the original write never happened.
 
-Hooks are optional notices. Retrieval and recording check support even when
+Hooks deliver lifecycle reminders. Retrieval and recording check support even when
 hooks are disabled. See [lifecycle](lifecycle.md), [freshness](freshness.md), and
 [onboarding](onboarding-runbook.md) for the responsibilities and limits.

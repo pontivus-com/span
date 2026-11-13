@@ -7,7 +7,7 @@ The current subject owners below describe the current lifecycle.
 
 | Historical note | Subject now owned by |
 | --- | --- |
-| A — subject resolution | [Queries](queries.md), [ports](ports.md): structural identity and qualified saved candidates. |
+| A — subject resolution | [Queries](queries.md), [ports](ports.md): structural identity and exact surface/question retrieval. |
 | B — question coverage | [Freshness](freshness.md), [recording](interpretation.md): explicit gaps and declared support. |
 | C — completion | [Recording](interpretation.md): explicit accepted commands, not implied completeness. |
 | D/E — establishment and installation | [Onboarding](onboarding-runbook.md), [install](install.md), [scope](scope.md). |

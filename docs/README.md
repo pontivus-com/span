@@ -15,7 +15,7 @@ and qualifies later reuse.
 - [Foundations](foundations.md) — layer 1: binding axioms and principles that
   govern every Span design, contract, implementation, test, and release.
 - [Lifecycle contract](lifecycle-contract.md) — layer 2: surfaces and status,
-  the five operation families, the payloads the agent sends and receives, the
+  the three public lifecycle operations, the payloads the agent sends and receives, the
   contract laws, and the boundary between the agent's work and Span's internals.
 - [Functional design](functional-design.md) — layer 3: identity, containment,
   support evaluation, propagation, response composition, state transitions,
@@ -27,8 +27,8 @@ and qualifies later reuse.
 
 ## Implementation
 
-- [Implementation plan — 2026-11-01](../.context/plans/2026-11-01-implementation-plan.md)
-  — ordered stages, gate evidence, and open inputs. Not a pyramid layer.
+- [0.10.2 implementation plan](implementation-plans/0.10.2.md) — current remediation
+  tasks and verification. Older plans in `.context/plans/` are historical.
 
 ## Start with the lifecycle
 
@@ -59,6 +59,5 @@ and qualifies later reuse.
 - [Hooks](hooks.md) and [per-host delivery status](../integrations/hosts/triggers.md).
 - [Contributing](contributing.md) and [changelog](../CHANGELOG.md).
 
-[Older acceptance transcripts](acceptance-evidence/) remain historical.
 Guides describe the shipped contracts; code and observed execution establish
 behavior. A local pass is not host-delivery or comparative-value acceptance.

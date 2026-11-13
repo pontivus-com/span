@@ -18,9 +18,8 @@ Suitability record (plan Phase 2.1, license MIT verified Phase 0.4):
   provider-owned build into Span's data directory
   (``<data-dir>/structural/<repository-id>/`` via ``graft --dir``,
   no ``--deep``, no credentials, no target writes), then reload.
-  Allowed only from installer provisioning and
-  explicit `refresh`. Forbidden from `status`, `explain`, `locate`,
-  `neighbors`, hooks, background workers, and ordinary reads.
+  Installer provisioning owns structural currency. The public lifecycle
+  operations and hooks do not rebuild structure.
   Queries never build; missing indexes fail closed on reads.
 """
 
@@ -1500,7 +1499,7 @@ class GraftStructuralSource:
         Reloads and validates after a successful build. Build failures
         and malformed/missing output return UNVERIFIABLE with a reason;
         never raise. Invoked only from installer provisioning
-        provisioning and explicit `refresh`, never from ordinary reads.
+        provisioning; ordinary lifecycle operations do not build structure.
         """
         check_repository(repository_id, self._repository_id)
         current = self.describe_current(repository_id)
