@@ -70,8 +70,8 @@ membership and cannot remove it. Overlapping declared boundaries are permitted.
 **FD-8 — Unexamined is computed from the boundary.**
 `unexamined` counts boundary members with no understanding at all — no conclusion
 at any granularity covering that member. It is computed from the declared
-boundary, reported, and never required. A boundary that cannot be enumerated
-reports the limit rather than claiming completeness. *(F9, A9)*
+boundary and reported. A boundary that cannot be enumerated
+reports the limit rather than claiming completeness. *(F9)*
 
 ## 4. Support evaluation
 
@@ -276,7 +276,10 @@ basis, and derives the new content basis. *(F4)*
 **FD-34 — withdraw.** A conclusion is retracted with its basis. Dependents on the
 withdrawn revision become `UNVERIFIABLE`. The action supplies the reason;
 Span derives the withdrawal basis from that reason and accepts an optional
-support set. *(F2, F4)*
+support set. A withdrawal revision remains an explicit non-current reference
+in surface status and is retrievable in its immutable snapshot with its reason.
+It is not projected as supported statement content in `Gap.historical`; prior
+supported revisions remain retrievable by their own exact version. *(F2, F3, F4)*
 
 No transition above bypasses the expected-version compare-and-set (FD-46), and
 none interprets meaning automatically. *(A3, F5, L4)*
@@ -297,7 +300,7 @@ that invalidates a premise must name the affected dependents in the same result.
 
 **FD-38 — Closed unions.**
 `ask`, `record`, and `reconsider` each return exactly the results declared in
-`lifecycle-contract` §4.1–§4.5. There are no optional public operations in the
+`lifecycle-contract` §4.1–§4.3. There are no optional public operations in the
 current build. No result is invented at runtime and no result crosses
 operations. *(L3)*
 
@@ -374,27 +377,22 @@ cannot preserve it, replay safety is not claimed for that host. *(A2, D-3)*
 A host that truncates must say so. A truncated result is not a smaller correct
 result. *(A8)*
 
-**FD-52 — Hooks are notices only.**
-No correctness property may depend on a hook firing, on its content, or on its
-order. *(A4)*
+**FD-52 — Answer safety is independent of host notices.**
+Support checks occur within the operations returning understanding, regardless
+of notice delivery. The agent lifecycle remains required by layer 2 §7. *(A4)*
 
 **FD-53 — Live delivery is unverified until captured.**
 A host contract is established only by a recorded capture observed or failed.
 *(A8)*
 
-**FD-58 — Adoption notices are advisory and non-semantic.**
-A host-surface adoption notice may state that a repository has recorded
-understanding and name the lifecycle operation and the direct host tool, so the
-agent reaches `ask` before reading source. *(F10, G2)*
-
-It is a notice under FD-52: no correctness property depends on it firing, on its
-content, or on its order. It must not assert that any conclusion is current,
-accepted, or authoritative *(F2, A7)*; it must not select, infer, or rank a
-surface the agent did not name *(F5, F9)*; it must not author a question or a
-conclusion *(F5)*; and it must not score or threshold by confidence *(A6)*. It
-never blocks a tool call and never becomes a required step *(L5)*. When it
-cannot state a true fact about the repository, it stays silent *(A8)*. Its cost
-is counted in the F8 measurement for the class it serves.
+**FD-58 — Lifecycle notices reach the agent at the moment of use.**
+For a registered operational repository, the adoption notice names the direct
+lifecycle tools and their required use, including when no understanding has yet
+been recorded. A source-change notice names the next required `reconsider`
+action. Notices report operational availability and observed support through
+the canonical computations; they do not author semantic conclusions or certify
+meaning. Measure delivered notice cost under F8 and delivery under FD-53.
+*(F5, F10, G2)*
 
 ## 12. Bounds and truncation
 
@@ -439,8 +437,7 @@ The four choices that resemble judgement calls are derivations, not preferences.
 ### The Answer/Gap threshold (FD-23, FD-25)
 
 F2 forbids presenting unsupported content as an answer. L2 and L3 require
-unsupported content to appear as history or references instead. A9 makes partial
-answers first-class, and F8 penalises discarding usable understanding.
+unsupported content to appear as history or references instead. F2 preserves the current part, and F8 penalises discarding usable understanding.
 
 Therefore: if at least one matched conclusion is current, the result is an
 `Answer` containing only current conclusions, with the rest reported as status

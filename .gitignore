@@ -18,6 +18,9 @@ dist/
 # Test artifacts (installed-MCP acceptance record; never public input).
 tests/.artifacts/
 
+# Private local acceptance material; never version or publish captures/receipts.
+**/acceptance-evidence/
+
 # Generated packaging identity; release builds create it before building.
 src/span/BUILD_IDENTITY
 

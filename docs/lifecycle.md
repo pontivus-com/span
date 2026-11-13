@@ -1,8 +1,8 @@
 # Agent lifecycle
 
-The agent investigates, records useful explanations, reuses applicable saved
-understanding, and re-aligns affected support. Span does not require a
-documentation campaign before ordinary work. See [usage](usage.md) for the
+The agent follows [the required lifecycle](lifecycle-contract.md#required-agent-completion):
+consult retained understanding, investigate, record supported conclusions and
+re-align affected understanding after edits. See [usage](usage.md) for the
 procedure and [MCP reference](mcp.md) for the three-tool grammar.
 
 ```
@@ -93,7 +93,7 @@ and open disputes remain relevant to the agent's judgment.
 
 ## Hooks
 
-Hooks are optional event-local notices. They never record, re-check, interpret,
+Hooks deliver event-local lifecycle reminders. They never record, re-check, interpret,
 or rebuild. A missed or disabled hook cannot make stale understanding current;
 correctness is evaluated by the lifecycle operations.
 

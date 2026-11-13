@@ -41,11 +41,11 @@ __all__ = [
 #: FD-58 adoption notice. It states existence, not currency; it names the
 #: operation and the direct tool; it names no surface and asks no question.
 ADOPTION_PRIMER = (
-    "Span: this repository has recorded understanding. In your normal tool "
-    "list, the Span tools end in `_ask`, `_record`, and `_reconsider`; they are "
-    "not in the MCP resource list. Before your first Read/Grep/Glob/shell "
-    "inspection, call the `_ask` tool with surface "
-    '{"kind":"FILE","locator":"<the file you are about to inspect>"}.'
+    "Span governs semantic understanding for this repository. Use the direct "
+    "tools ending in `_ask`, `_record`, and `_reconsider`. Before deriving "
+    "understanding, ask for the relevant surface (omit question for reuse). "
+    "Record supported conclusions when established; reconsider changed paths "
+    "after editing and record the resulting dispositions before completing work."
 )
 
 
@@ -158,13 +158,13 @@ def _render_affected(repository_id, affected, *, close_prefix=False):
     more = "" if len(needing) <= HOOK_DIAGNOSTIC_LIMIT else "; more omitted"
     return (
         f"span: {repository_id} {label}: {len(needing)} recorded "
-        f"understanding(s) affected ({detail}{more}); call ask or "
-        "reconsider after editing."
+        f"understanding(s) affected ({detail}{more}); call "
+        "reconsider after editing, then investigate and record dispositions."
     )
 
 
 def cmd_adoption_primer(data_dir, repo_root=None):
-    """Print the FD-58 notice only when the active repository has understanding."""
+    """Print the FD-58 lifecycle notice for an operational registered repository."""
     mapping = repo_map(data_dir)
     if not mapping:
         return
@@ -178,14 +178,8 @@ def cmd_adoption_primer(data_dir, repo_root=None):
         repository_id, context = open_repository_context(data_dir, root)
     except Exception:  # noqa: BLE001 - a hook never breaks the session
         return
-    try:
-        recorded = context.store.list_understandings(repository_id)
-    except Exception:  # noqa: BLE001
-        return
-    finally:
-        context.store.close()
-    if recorded:
-        print(ADOPTION_PRIMER)
+    context.store.close()
+    print(ADOPTION_PRIMER)
 
 
 def cmd_session_start(data_dir, repo_root=None):

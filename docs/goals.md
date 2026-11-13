@@ -67,7 +67,7 @@ validated practice — and the limits of that claim — is recorded in the
 | ID | Goal | Meaning | Enforced by |
 | --- | --- | --- | --- |
 | **G1** | **Never present stale as current** | A reader who asks must learn what is current and what is not. No answer, summary, or status may blur the two. | F2, F9, L2, L9 |
-| **G2** | **Never re-derive what is retained** | Established understanding is found and reused without the conversation that produced it. | F3, F7 |
+| **G2** | **Retain established understanding for reuse** | Understanding established during work is retained through Span and reused without the conversation that produced it. | F3, F7 |
 | **G3** | **Never outlive the code silently** | When the code a conclusion rests on changes, the conclusion stops being usable and the change is named. | F2, F4, L2 |
 | **G4** | **Audit any surface at its own granularity** | A file, a service, and a domain each report their own status, and a larger surface may honestly contain both current and stale understanding. | F9, L9, L10 |
 | **G5** | **Cost less than the alternative** | Using Span must beat re-reading the code or maintaining documentation by hand, or it has no claim over the task. | F8 |
@@ -84,13 +84,12 @@ them true, and nothing may be added that does not.
 - It does not answer from first principles. A surface that has never been
   investigated returns a gap, not a generated answer.
 - It does not judge semantic truth. It judges support against code.
-- It does not mandate coverage or per-surface documentation (A9). Status is
-  reported; compliance is not the product.
 - It is not a search engine, model runtime, editor, or test runner.
 
 ## 5. What success looks like
 
-A fresh agent, in a session with no memory, asks about a familiar surface and
+Understanding established during work is retained before that work completes.
+A fresh agent, in a session with no memory, asks about that surface and
 receives a current answer with its status in one call. After a change, it learns
 exactly which conclusions became stale, at every enclosing granularity, without
 re-reading the code. Nothing stale is ever presented as current. The

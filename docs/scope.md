@@ -2,14 +2,14 @@
 
 Span carries an agent's useful investigation into later work: the explanation,
 the evidence it cites, the premises it relies on, and the reasons it needs
-another look. The agent chooses what to investigate and what is worth saving.
+another look. The task determines investigation scope; established semantic understanding
+is retained through the required lifecycle.
 
 ## The unit is an explanation
 
 An understanding answers a question over a declared scope. Its immutable
 versions contain exact conclusion revisions and explicit gaps. An understanding
-may span source, tests, configuration, and contracts. A file or symbol is an
-evidence anchor; it does not create a documentation obligation by itself.
+may span source, tests, configuration, and contracts. A file or symbol is an evidence anchor.
 
 An agent can select an exact `FILE`, `SYMBOL`, `SERVICE`, or `DOMAIN` surface.
 A service or domain surface is declared through `record(kind="surface")` with a
@@ -19,12 +19,12 @@ never auto-declares a surface from an understanding.
 
 Ordinary coding work can start with saved answers, a cold investigation,
 or evidence gathered outside Span. Recording is an explicit action, with an
-inspectable receipt. There is no required whole-repository campaign, internal
-question taxonomy, or suspended interpretation exchange in the current release.
+inspectable receipt. Follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
 
 ## Reuse has qualifications
 
-Candidates are found through scope association and term overlap. The agent
+The surface document view groups current conclusions by recorded question;
+a targeted query matches the exact recorded question. The agent
 judges applicability and meaning. A `CURRENT` qualification establishes only
 that declared support still passes its checks. It does not prove semantic
 correctness, full coverage, or the absence of an unresolved dispute.
@@ -60,8 +60,7 @@ membership observation must actually cover its stated boundary. See
 
 Investigation scope is explicit. Broader work requires the agent to choose
 and examine the broader scope; Span does not turn a local question into an
-automatic semantic crawl. There is no repository coverage score or promise
-that installation establishes repository understanding.
+automatic semantic crawl. Installation establishes readiness; investigation establishes understanding.
 
 Verification has its own declared scope. A run applies to the surfaces within
 that scope: a single-file run is not widened to a broader service, and a
@@ -92,10 +91,9 @@ exported as history, not promoted as current understanding. See the
 Codex and OpenCode are the supported live delivery targets, with
 candidate-specific captures of the declared grammar, request identity, and
 recovery behavior. Claude Code is also a supported managed host for
-registration, health inspection, installer behavior, skills, and optional
-lifecycle hooks; its authenticated model-delivery grammar and caller identity
+registration, health inspection, installer behavior, skills, and lifecycle hooks; its authenticated model-delivery grammar and caller identity
 remain **UNVERIFIED**. Implemented registration, configured hooks, and observed
-model behavior remain separate facts. Hooks are optional notices; ordinary
+model behavior remain separate facts. Hooks deliver lifecycle reminders; ordinary
 retrieval and recording still check support when hooks are disabled.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).

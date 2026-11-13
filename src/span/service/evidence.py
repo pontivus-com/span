@@ -222,17 +222,6 @@ class EvidenceService:
             if isinstance(unit, m.EvidenceSourceFailure):
                 outcomes.append(unit)
                 continue
-            size = len(unit.content.encode("utf-8"))
-            if total_bytes + size > bounds.max_evidence_bytes:
-                outcomes.append(
-                    m.OmittedEvidence(
-                        request,
-                        "max_evidence_bytes reached; resubmit the remaining " "items",
-                    )
-                )
-                stop = True
-                continue
-            total_bytes += size
             lines = unit.content.splitlines(keepends=True)
             total_lines = len(lines)
             if request.ranges:
@@ -273,6 +262,17 @@ class EvidenceService:
                 digest = m.ContentDigest(f"sha256:{ranged}")
             else:
                 digest = m.ContentDigest(f"sha256:{unit.content_fingerprint}")
+            size = len(excerpt.encode("utf-8"))
+            if total_bytes + size > bounds.max_evidence_bytes:
+                outcomes.append(
+                    m.OmittedEvidence(
+                        request,
+                        "max_evidence_bytes reached; resubmit the remaining " "items",
+                    )
+                )
+                stop = True
+                continue
+            total_bytes += size
             observation_id = source_observation_identity(
                 context.repository_id,
                 request.locator,

@@ -5,6 +5,10 @@ description: Orient before reading source, retain a conclusion after investigati
 
 # Span — route by moment
 
+Complete the applicable lifecycle before task completion; report named operational
+blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
+
+
 Span answers from recorded understanding and exact source evidence. It owns
 validation, identity, freshness, and persistence. You own interpretation and
 every edit. Span never edits the target, runs application tests, selects a
@@ -17,7 +21,7 @@ model, or decides a semantic claim.
 | `Read` a file to understand it | `ask` |
 | `Grep` for a concept | `ask` |
 | Hit an ambiguous path or want a specific granularity | `ask` with the exact `surface` |
-| Edit a covered surface | `ask` first; `reconsider` after the edit |
+| Edit a surface | `ask` first; `reconsider` after the edit |
 | Finish an investigation | `record` |
 | Declare or change a service/domain boundary | `record(kind="surface")` |
 | Dispute a recorded conclusion | `reconsider` with a challenge |
@@ -46,17 +50,18 @@ question and ask for the surface document view. Never fetch a context id.
 - **After editing:** `reconsider` the paths you just changed. It returns every
   surface to re-examine, why it was considered, per-conclusion support state,
   and the context for re-establishing what actually changed. A surface with no
-  `conclusions` is containment-only; act only on conclusions whose state is
+  `conclusions` is containment-only; re-establish returned conclusions whose state is
   `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`, and keep the returned order.
 
 ## Boundaries
 
 - Use outside tools to edit and test.
-- Hooks are optional notices. They never record, re-check, or make stale
+- Hooks deliver reminders; the agent performs the required lifecycle even
+  when a reminder is absent. Hooks never record conclusions or make stale
   understanding current.
 - Keep `CURRENT`, `REASSESSMENT_REQUIRED`, `UNVERIFIABLE`, the `Gap` reasons,
   and the challenge states `OPEN`/`UNRESOLVED`/`RESOLVED` verbatim.
 - A `CURRENT` conclusion in a reconsideration result was considered; it is not
   automatically stale.
 
-Detail: [MCP reference](../../docs/mcp.md), [lifecycle](../../docs/lifecycle.md).
+Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md), [lifecycle](https://github.com/pontivus-com/span/blob/master/docs/lifecycle.md).

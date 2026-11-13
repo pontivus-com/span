@@ -20,9 +20,7 @@ Exactly three core tools ship, one per lifecycle moment:
 | `record` | retain | Create, update, verify, or declare a surface |
 | `reconsider` | re-align | Changed scope or challenge |
 
-`structure` and `setup` are not registered in this build. The host's own file
-navigation covers structural lookup, and the installer covers setup. An optional
-`structure` tool may be delivered later for hosts without navigation; it is not
+The host supplies structural navigation and the installer owns setup. Neither is
 part of the default surface.
 
 `record` carries `kind` (`understanding`, `verification`, or `surface`). An
@@ -333,6 +331,6 @@ ID fails closed with the registered names.
 ## Readiness
 
 There is no status tool. Readiness is reported by the installer verification,
-per-response availability, typed errors, and optional bounded hook notices.
+per-response availability, typed errors, and bounded lifecycle notices.
 `READY` means the store and provider are operationally available. It never means
 the repository is semantically understood or complete.

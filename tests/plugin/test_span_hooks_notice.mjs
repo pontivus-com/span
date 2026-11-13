@@ -45,7 +45,7 @@ function makeFixture(root) {
 }
 
 async function loadPlugin() {
-  return import(pathToFileURL(PLUGIN).href);
+  return import(pathToFileURL(PLUGIN).href + "?fixture=" + encodeURIComponent(process.env.SPAN_HOOKS_BIN));
 }
 
 function fakeContext(root) {
@@ -135,5 +135,92 @@ test("a missing hook binary leaves the session silent and running", async () => 
     if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
     else process.env.SPAN_HOOKS_BIN = previous;
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test("idle forwards unconsumed edit paths through stdin with native session identity", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-idle-"));
+  const bin = path.join(root, "fake-span-hooks");
+  const received = path.join(root, "received.json");
+  fs.writeFileSync(bin, `#!/bin/sh
+case "$*" in
+  *source-changed*) echo "changed" ;;
+  *session-stop*) cat > "${received}"; echo "close: reconsider changed paths" ;;
+esac
+`, { mode: 0o755 });
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  let release;
+  const ready = new Promise((resolve) => { release = resolve; });
+  let delivered;
+  const done = new Promise((resolve) => { delivered = resolve; });
+  const { ctx, registered } = fakeContext(root);
+  ctx.event.subscribe = async function* () {
+    await ready;
+    yield { type: "session.idle", data: { sessionID: "session-1" } };
+    delivered();
+  };
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", filePath:path.join(root,"src/a.js")});
+    release();
+    await done;
+    assert.deepEqual(JSON.parse(fs.readFileSync(received,"utf8")), [{file_path:path.join(root,"src/a.js")}]);
+    const other = {sessionID:"session-2",system:[]};
+    registered["session:context"](other);
+    assert.equal(other.system.length,0);
+    const first = {sessionID:"session-1",system:[]};
+    registered["session:context"](first);
+    assert.match(first.system[0].text,/close: reconsider/);
+    const resumed = {sessionID:"session-1",system:[]};
+    registered["session:context"](resumed);
+    assert.equal(resumed.system.length,0);
+  } finally {
+    dispose();
+    if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN=previous;
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
+test("undelivered notices survive malformed context and are reaped on session deletion", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-reap-"));
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = makeFixture(root);
+  let release;
+  const ready = new Promise((resolve) => { release = resolve; });
+  let delivered;
+  const done = new Promise((resolve) => { delivered = resolve; });
+  const { ctx, registered } = fakeContext(root);
+  ctx.event.subscribe = async function* () {
+    await ready;
+    yield { type: "session.deleted", data: { sessionID: "session-1" } };
+    delivered();
+  };
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    const edit = () => registered["tool:execute.after"]({sessionID:"session-1",tool:"edit",filePath:path.join(root,"src/a.js")});
+    edit();
+    registered["session:context"]({sessionID:"session-1"});
+    const valid = {sessionID:"session-1",system:[]};
+    registered["session:context"](valid);
+    assert.equal(valid.system.length,1);
+    edit();
+    release();
+    await done;
+    const afterDelete = {sessionID:"session-1",system:[]};
+    registered["session:context"](afterDelete);
+    assert.equal(afterDelete.system.length,0);
+    edit();
+    dispose();
+    const afterDispose = {sessionID:"session-1",system:[]};
+    registered["session:context"](afterDispose);
+    assert.equal(afterDispose.system.length,0);
+  } finally {
+    dispose();
+    if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN=previous;
+    fs.rmSync(root,{recursive:true,force:true});
   }
 });

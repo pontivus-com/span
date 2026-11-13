@@ -37,7 +37,7 @@ class ToolSpec:
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "ask",
-        "Call this before reading or grepping source to understand a covered "
+        "Call this before reading or grepping source to understand a "
         "surface. To reuse what is retained without knowing the exact recorded "
         "question, omit the question: this returns the surface document view "
         "in `groups` — one group per recorded question with its current "
@@ -61,8 +61,10 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "record",
-        "Call this after you have established a conclusion from source or "
-        "tests. Creates, updates, or verifies understanding, or declares a "
+        "Required when you establish a supported semantic conclusion from source or "
+        "tests. After edits, call reconsider before revising affected conclusions; "
+        "use its returned identities/version for the update. Creates, updates, or "
+        "verifies understanding, or declares a "
         "service/domain surface and its boundary. `kind` selects what is "
         "recorded: understanding, verification, or surface. An understanding "
         "create is flat: no action and no actions; action belongs to "
@@ -90,8 +92,14 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "supply direct scope/evidence; Span derives a new operational context. "
         "Repository-wide discovery makes it repository-wide without widening "
         "semantic scope. Admitted references remain context-bound. "
-        "UPDATE TEMPLATE: use understanding_id, expected_version, and one or "
-        "more compact actions; Span derives new lineage identities, old "
+        "When revising an existing conclusion, update its returned understanding/version; "
+        "do not create it again. UPDATE TEMPLATE (copy and fill): "
+        '{"repository_id":"<id>","request_id":"<new id>",'
+        '"kind":"understanding","understanding_id":"<returned id>",'
+        '"expected_version":1,"actions":{"correct":[{"conclusion_id":"<returned id>",'
+        '"conclusion":"<updated statement>","locator":"<path>"}]}} '
+        "actions is an object whose values are lists. Omit top-level action, "
+        "question, scope_paths and conclusion on updates. Span derives new lineage identities, old "
         "revisions, unchanged content, and the mechanical basis. Each action "
         "names exactly one evidence mode: locator, observation_id, or support. "
         "add takes conclusion; confirm, correct, replace, and withdraw name the "
@@ -125,7 +133,9 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "reconsider",
-        "Call this after editing files or when disputing a conclusion. "
+        "Required after editing files or when disputing a conclusion. Investigate "
+        "affected non-current conclusions and record supported dispositions before "
+        "completing the work. "
         "Returns every surface that must be re-examined, why, what to "
         "re-establish, and the context for doing so. `surfaces` is the complete "
         "containment set: a surface with no `conclusions` is containment-only, "

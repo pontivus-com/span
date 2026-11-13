@@ -108,6 +108,10 @@ stage without republishing.
 
 ## Publication and provenance
 
+Raw acceptance captures, transcripts, receipts and manifests are private local
+working material. They must remain ignored and untracked; include only sanitized
+verification summaries in PRs and release notes.
+
 No proprietary material belongs in the build, test fixtures, schemas, docs,
 or runtime dependencies. Each public source and fixture must be
 project-authored or have verified redistributable provenance.

@@ -24,13 +24,12 @@ exist, and surfaces may contain one another. The same question asked at file
 scope and at service scope is a different question with a different answer,
 because the scope of the code being described is different.
 
-Span is a local MCP server. It never selects a model, calls a provider, edits a
+Span is a local MCP server. It never selects a model, calls a model provider, edits a
 target repository, or runs tests on the user's behalf. It owns evidence
 identity, support, validity, retention, retrieval, and re-alignment. The agent
 owns meaning.
 
-The purpose is not documentation production. It is to make surface-bound
-understanding of code reusable and checked.
+Surface-bound understanding of code is retained, reusable and checked.
 
 ## 2. Axioms about the agent
 
@@ -55,7 +54,8 @@ conclusion is silently overwritten.
 **A4 — The agent does not remember to do bookkeeping.** A rule that depends on
 the agent calling the right tool at the right time will be violated.
 *Therefore* the server owns every invariant that keeps returned understanding
-safe. Alignment must never depend on the agent remembering to ask for it.
+safe. Returned support is checked automatically. Required capture and re-alignment
+are integrated into the agent's ordinary work (F3, F7, F10).
 
 **A5 — The agent's account of its own work is unreliable.** It misremembers
 what it read and paraphrases inaccurately; the file does not.
@@ -78,12 +78,10 @@ around.
 *Therefore* Span must beat re-derivation on effort, and every refusal must
 carry the evidence, the cause, and the context needed to proceed.
 
-**A9 — The agent acts on partial knowledge and is judged on outcomes.** It must
-move before it knows everything, and nobody is scoring it on documentation
-coverage.
-*Therefore* gaps and partial answers are first-class and immediately usable.
-Nothing is required to be documented, and absence of understanding is reported,
-never enforced.
+**A9 — The agent follows the instructions it receives.** Ambiguous exemptions
+and competing procedures lead to omitted or incorrect lifecycle actions.
+*Therefore* delivered guidance must state the required action at its moment of
+use and derive it from the same governing contract.
 
 ## 3. Principles of the system
 
@@ -120,12 +118,14 @@ is the agent's responsibility; Span verifies only what was declared.
 uncited file does not; the contract states that limit instead of implying a
 completeness it cannot check.
 
-### F3 — Understanding is retained and addressable
+### F3 — Established understanding is retained and addressable
 
-Answers survive the session, are versioned, and are reachable by surface,
+Supported semantic understanding established during work is retained through
+Span as part of that work. Answers survive the session, are versioned, and are reachable by surface,
 question, or reference. Reuse never requires the conversation that produced
 them.
-*Demonstration:* a fresh session with no memory finds and uses a prior answer.
+*Demonstration:* an agent retains a conclusion during its investigation; a fresh
+session with no memory finds and uses it.
 
 ### F4 — Change is an obligation, not a notification
 
@@ -154,23 +154,26 @@ assembles it with live evidence and states exactly what is missing.
 
 ### F6 — The lifecycle is the API
 
-The public API is **obtain, retain, re-align, bind, navigate**. Storage
+The public API is **obtain, retain, re-align**. Repository binding belongs to
+installation; structural navigation belongs to the host. Storage
 transitions are private. Validity is an attribute of every returned answer,
 never a separate call the agent must remember to make.
 *Demonstration:* every advertised operation maps to a lifecycle verb, and every
 answer carries its support state.
 
-### F7 — Capture is a by-product, never a task
+### F7 — Capture is part of ordinary work
 
 Span must attach to artifacts the agent already produces — reads, edits, test
 runs, conclusions, retries — and must derive everything else itself. Recording
 one conclusion may require no information the agent does not already hold at the
 moment it concluded.
 
-The agent supplies what it already has; Span derives what it can.
+The agent records its conclusion when established, using the evidence it
+already holds; Span derives identity, context and qualification. Capture is
+required within the investigation that produces the understanding.
 
-*Demonstration:* recording a conclusion requires no id to be fetched, no verb to
-be selected from a family, and no evidence body to be re-submitted.
+*Demonstration:* recording a conclusion needs no internal identity lookup,
+source-body re-submission or separate evidence-admission step.
 
 ### F8 — Reuse must beat re-derivation
 
@@ -219,24 +222,11 @@ delivered, reaches for the lifecycle operation before reading source and the
 operation succeeds. F10 is demonstrated on the delivered product; a bare server
 registration is not the product.
 
-## 4. What Span must do, and when
+## 4. Lifecycle responsibilities
 
-The agentic lifecycle is the contract's spine. Span's moments coincide with
-artifacts the agent already produces; it never creates a parallel workflow.
-
-| Moment | Span must | Agent must |
-| --- | --- | --- |
-| **Orient** — a task starts on an area | return current retained understanding for the surface with its currency, or an explicit gap | decide applicability |
-| **Investigate** — gap or new area | bind exact evidence to identity and keep it addressable | read, judge, conclude |
-| **Record** — understanding reached | validate declared support before acceptance; make acceptance durable and replay-safe | state the answer and its evidence |
-| **Reuse** — later session or another agent | return current understanding with its currency, or an explicit gap | act on it |
-| **Change** — code moves | produce the affected set with its cause and current evidence | decide what to re-establish |
-| **Re-establish** — after change | accept a superseding understanding without losing prior acceptance | re-investigate the changed scope |
-| **Dispute** — a challenge is raised | preserve the dispute and never settle it implicitly | resolve it with reasoning |
-
-An unsupported answer returns as: the prior answer marked historical, the exact
-changed evidence, the cause, and a context to re-establish. Never a bare
-"stale", never stale-as-current, never a dead end.
+The agent's required actions and task-completion boundary are owned by
+[lifecycle contract §7](lifecycle-contract.md#required-agent-completion), derived
+from F3, F7 and F10. The contract owns the procedure; these principles govern it.
 
 ## 5. Non-goals
 

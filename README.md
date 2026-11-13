@@ -1,4 +1,6 @@
 <h1 align="center">
+
+Agent work follows [the required Span lifecycle](docs/lifecycle-contract.md#required-agent-completion).
   <img src="https://raw.githubusercontent.com/pontivus-com/span/master/assets/span-logo-plate-dark.png" alt="Span" width="360">
 </h1>
 
@@ -49,19 +51,17 @@ current understanding, retain a supported conclusion, and re-align after change.
 1. **Investigate a real question.** Ask about the surface you are looking at.
    Span returns current answers with surface status, or a gap with inspectable
    source evidence.
-2. **Record the useful result.** Save one conclusion at a time with the file
+2. **Retain established understanding.** Save one conclusion at a time with the file
    it rests on, or declare a service/domain surface for a cross-file
    explanation. Work that started outside Span can be recorded directly; the
    flat create derives support from the locator you already read.
-3. **Reuse in a fresh session.** Ask the same question about the same surface,
-   and retrieve the result with live support and challenges.
+3. **Reuse in a fresh session.** Ask for the surface document view without a
+   question, then select the applicable current conclusion.
 4. **Reassess after change.** Check affected dependencies, investigate what
    changed, then confirm, correct, replace, or withdraw the explanation.
    Earlier versions remain inspectable.
 
-One explanation can span code, tests, CSS, configuration, and contracts. The
-agent decides what is worth recording; a file inventory does not become a
-mandatory documentation campaign.
+One explanation can span code, tests, CSS, configuration, and contracts. The agent retains supported conclusions as part of the investigation.
 
 ## See the lifecycle
 
@@ -152,7 +152,7 @@ see [using Span](docs/usage.md).
 | Other MCP hosts | Manual stdio connection is available; model-delivery behavior needs host-specific verification. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
-Optional hooks provide notices; retrieval and recording still check support
+Hooks provide lifecycle reminders; retrieval and recording still check support
 when hooks are absent. See [host integration](integrations/hosts/triggers.md).
 
 ## Fits around your agent
@@ -171,23 +171,11 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.10.0**: three lifecycle tools (`ask`, `record`,
-`reconsider`), schema-11 storage, surface-scoped answers, explicit store
-transition, and live support qualification. 0.10.0 makes the compact `record`
-grammar the only recording grammar: create takes exactly one evidence mode,
-updates are compact semantic deltas, new conclusion lineage identities are
-derived by Span, and `expected_version` remains compare-and-set. `reconsider`
-returns the expected version and context needed for the next `record`, and the
-legacy parallel create/challenge/verification wire path is removed.
-Host delivery is captured for the valid compact lifecycle on OpenCode; Codex
-has a current-candidate smoke create capture, and its full compact update
-journey is not re-observed. Claude registration/health and installer behavior
-are covered, while its authenticated model-delivery grammar and caller identity
-remain **UNVERIFIED**. OpenCode removes an unknown old-form field before
-delivery, so strict unknown-field rejection is not established through that
-host. Comparative fitness remains class-scoped (FD-53, FG-7). macOS and Windows
-installation paths remain unverified. Publication and product acceptance are
-separate from the implementation version.
+This checkout describes **0.10.2**: required agent lifecycle guidance across the
+functional pyramid and delivered instructions, cold-repository lifecycle notices,
+and ranged evidence admission with continued live support checking. The public
+operations remain `ask`, `record`, and `reconsider`; storage remains schema 11.
+See [the changelog](CHANGELOG.md) for verification and upgrade instructions.
 
 - [Install and connect](docs/install.md)
 - [Using Span](docs/usage.md) and [first investigation](docs/onboarding-runbook.md)
@@ -197,9 +185,6 @@ separate from the implementation version.
 - [Scope and boundaries](docs/scope.md) and [FAQ](docs/faq.md)
 - [Architecture](docs/architecture.md), [repository overview](docs/overview.md), and [all docs](docs/README.md)
 - [Changelog](CHANGELOG.md)
-
-Older [acceptance evidence](docs/acceptance-evidence/) retains its historical
-protocol and does not certify the rebuilt API or comparative value.
 
 ## Contributing
 

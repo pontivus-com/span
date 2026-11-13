@@ -41,11 +41,11 @@ direction of derivation are defined in the [requirements pyramid model](requirem
 An understanding may be unsupported. An **answer never is** — that asymmetry is
 the point of the whole system.
 
-## 3. Why exactly five operation families
+## 3. The three public lifecycle operations
 
 | Decision | Source |
 | --- | --- |
-| The surface is obtain, retain, re-align, bind, navigate — and no more | F6 |
+| The surface is obtain, retain, re-align — and no more | F6 |
 | Correctness cannot depend on the agent remembering a step | A4 |
 | The agent supplies only what it already holds | F7 |
 | A refusal must carry the way forward | A8 |
@@ -58,17 +58,16 @@ the point of the whole system.
 
 *What does this do*, *what governs it*, *what depends on it*, *what breaks if I
 change it*, and *is this still true* are **questions**, not operations. Span does
-not classify them; the question ranks discovery, the surface fixes the scope,
-and the agent judges applicability. Five intents never become five tools.
+not classify them; the exact question selects retained membership, the surface fixes the scope,
+and the agent judges applicability.
 
 Audit needs no sixth operation. Every answer carries the surface status, because
 a reader who cannot tell current from stale has not been answered (F9).
 
-These five are **operation families**. The number of registered tools is a
-layer-3 delivery decision constrained by host capability (see L8). It may exceed
-five only by splitting one family's variants, and it may never add a family.
+Exactly three public tools realize these moments: `ask`, `record`, `reconsider`.
+The installer binds repositories; the host supplies structural navigation.
 
-## 4. The five operation families
+## 4. Public lifecycle operations
 
 ### 4.0 Answer boundary
 
@@ -182,7 +181,7 @@ omitted and the snapshot retrieval path (FD-54–FD-57). *(L2, L3)*
 | `current` | conclusions in this surface that are supported by present code |
 | `stale` | conclusions whose support no longer holds, directly or through a premise; counted and returned as `stale_refs`, never as answer content |
 | `unassessed` | recorded gaps or declared questions with no supported conclusion |
-| `unexamined` | boundary members with no understanding at all; computed from the boundary, reported, never required (A9) |
+| `unexamined` | boundary members with no understanding at all; computed from the boundary and reported with explicit enumeration limits (F9) |
 | `descendants` | status of contained surfaces, summarised separately |
 
 A parent surface's own conclusions are its own; descendant status is reported
@@ -355,7 +354,7 @@ exact validation
 message; the adapter does not replace it with a generic action.
 
 **How it helps.** It converts an investigation the agent already performed into
-retained understanding, in one call, with no documentation task.
+retained understanding, in one call, through its retained conclusions.
 
 ### 4.3 `reconsider` — re-align
 
@@ -419,33 +418,9 @@ with named dispositions.
 change invalidate, and at which granularity?* Without it, re-establishment is
 discovered by accident.
 
-**It is not what makes the guarantee hold.** F2 makes every `ask` safe on its
-own. `reconsider` makes re-establishment efficient. This is how the contract
-satisfies A4: the guarantee is server-owned; only efficiency is
-agent-initiated.
-
-### 4.4 `structure` — navigate (optional)
-
-```text
-structure(reference)                    # exact location and definition
-structure(reference, direction, depth)  # bounded structural adjacency
-```
-
-Returns structural evidence only — never authority, never a conclusion. It is
-exposed only when the host lacks navigation; otherwise the host's own navigation
-serves this moment. **How it helps.** It lets an agent find the surface before
-it has a question.
-
-### 4.5 `setup` — bind (optional)
-
-```text
-setup(repository_locator, authority_seeds?)
-```
-
-Binds one repository and returns readiness. It creates no understanding, and it
-is never a required preflight for `ask`. The installer binds repositories;
-`setup` is exposed only when the host has no installer path. **How it helps.**
-One-time setup.
+**Safety and participation.** F2 makes every `ask` check declared support.
+The agent calls `reconsider` after changes and completes the applicable
+re-establishment work under §7.
 
 ## 5. The internal boundary
 
@@ -461,9 +436,9 @@ column is the law that forces it inward.
 | Support evaluation | an attribute of every returned answer (F2, F6) |
 | Surface status computation | an attribute of every returned answer (F9) |
 | Retrieval by reference | no separate operation; exact snapshots and receipts fold into `ask`, and context inspection remains internal/admin (F6) |
-| Discovery scan and ranking | inside `ask` (F6) |
+| Exact question membership and surface document view | inside `ask` (F6) |
 | Challenge persistence | `reconsider` raises; `record` settles (F5, F6) |
-| Status, digest, notices | host-surface notices built from the same computation; never load-bearing (A4, F6) |
+| Status, digest, notices | host-surface notices use the same computation; answer safety remains server-owned (A4, F6) |
 | Structural provider build | setup/maintenance, never per-request (F7) |
 | Store migration | explicit offline administration (A2) |
 
@@ -479,10 +454,10 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | **L2** | Unsupported content is never in `conclusions`; it appears as historical content in a `Gap`, or as references and counts in the surface status. | F2, A7 |
 | **L3** | Every `Gap` carries cause, changed evidence, missing items, and — when the gap is bound to a question — a context. | F4, A8 |
 | **L4** | Every write is atomic, receipted, retry-safe, and compare-and-set on update. | A2, A3 |
-| **L5** | No operation requires a preflight or orientation step. | F7, A8 |
+| **L5** | An operation accepts its declared inputs without an unrelated API preflight; this does not waive the agent lifecycle in §7. | F7, A8 |
 | **L6** | Evidence identity is computed by Span from source, never accepted from a description. | A5 |
 | **L7** | The agent supplies intent; Span derives identity, context, and qualification. | F7 |
-| **L8** | The operation families are closed at five. Registered tool count is a layer-3 decision constrained by host capability; it may split a family's variants but never add a family. | F6 |
+| **L8** | The public operations are exactly `ask`, `record`, and `reconsider`. | F6 |
 | **L9** | A surface's status is always reported as a distribution, never a single stamp. | F9 |
 | **L10** | `reconsider` returns every containing surface for a changed path and reports direct and premise-dependent support loss separately, as F4 requires. | F4, F9 |
 | **L11** | A surface's current conclusions are readable as that surface's documentation; there is no separate document artifact to maintain. | G6, F3 |
@@ -498,7 +473,27 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | Edit | `reconsider(changed_scope)` | every surface to re-examine or repair, with its reason, differences, current evidence |
 | Re-establish | `record` against the returned version | supersession, history preserved |
 | Dispute | `reconsider(challenge)` then `record` | explicit, never auto-settled |
-| Start, resume, compact | nothing | currency is checked on read; nothing here is load-bearing |
+| Start, resume, compact | `ask` when semantic work begins or resumes | current retained understanding or an actionable gap |
+| Complete | applicable records and re-establishment are accepted | retained conclusions and explicit disposition, or a named operational blocker |
+
+### Required agent completion
+
+Before deriving semantic understanding, consult Span for the relevant surface.
+For reuse, read its no-question document view; use an exact recorded question
+for targeted retrieval. Investigate the returned gaps and evidence, then record
+supported conclusions when established. After editing, call `reconsider` with
+the changed paths, follow explicit omissions/recovery, and investigate returned
+`REASSESSMENT_REQUIRED` or `UNVERIFIABLE` conclusions. Record the supported
+confirmation, correction, replacement or withdrawal against the returned version.
+New supported conclusions established during that investigation are also retained.
+
+Complete the applicable lifecycle before claiming the work complete. Reusing a
+current applicable conclusion requires no duplicate record. Preserve genuine
+uncertainty and disputes; report a named operational blocker when the lifecycle
+cannot complete. A rejected call is not retained understanding. Acceptance with
+unavailable qualification preserves its receipt and requires explicit recovery.
+Direct `record` ingress remains supported; its API capability does not waive
+consultation before deriving understanding.
 
 ## 8. One round trip
 
@@ -530,14 +525,14 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 ```
 
 Steps 1–3 are the agent's existing work plus the record calls. Steps 4–5 are its
-existing edit plus two calls. No step is a documentation task, and no step
+existing edit plus two calls. Each step serves the current investigation, and none
 requires a memory from a previous session.
 
 ## 9. Decisions recorded
 
 | ID | Decision | Rationale | Revisit |
 | --- | --- | --- | --- |
-| D-1 | `ask` accepts a question or a reference in one operation | keeps the families at five (L8) | amend this layer |
+| D-1 | `ask` accepts a question or a reference in one operation | preserves the three lifecycle operations (L8) | amend this layer |
 | D-2 | `structure` is one operation with two modes | navigation is one verb (F6) | amend this layer |
 | D-3 | The caller supplies a request identity for every write and every `ask`, not a retry token | same identity + same content is a replay; same identity + different content is a conflict; a new identity with identical content is a new act. This distinguishes a retry from an intentional repetition without exposing Span internals (A2, A4, F7). A pure change-scope `reconsider` is a read and carries none | amend this layer |
 | D-4 | `ask` has no `change` parameter | a proposed change is expressed in the question; Span does not analyse changes (F5) | amend this layer |
@@ -562,9 +557,8 @@ must provide the mechanisms.
 - retained receipts keyed by the caller's request identity, replayable across
   restart within their window;
 - compare-and-set on every update;
-- exactly the five operation families, with no aliases and no per-intent tools;
-- a registered tool count justified by observed host delivery, never by
-  assuming a shape is deliverable;
+- exactly `ask`, `record`, and `reconsider`, with no per-intent tools;
+- host delivery verified against the three declared schemas;
 - host notices that never carry currency or acceptance.
 
 Layer 4 may choose tables, schemas, transports, and host adapters freely. It may

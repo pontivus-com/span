@@ -168,6 +168,18 @@ def _project_field(
                 "an absolute path fails closed."
             ),
         }
+    if "description" in field.metadata:
+        field_schema = {
+            **field_schema,
+            "description": " ".join(
+                part
+                for part in (
+                    field.metadata["description"],
+                    field_schema.get("description", ""),
+                )
+                if part
+            ),
+        }
     has_default = (
         field.default is not _dataclasses.MISSING
         or field.default_factory is not _dataclasses.MISSING  # type: ignore[misc]

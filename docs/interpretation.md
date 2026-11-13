@@ -1,9 +1,8 @@
 # Interpretation and recording
 
 The coding agent investigates and judges meaning. Span accepts explicit,
-supported recording commands and keeps their history. A question can return a
-`Gap`, but recording is also available after an investigation that
-started outside Span. No suspended model task or continuation is required.
+supported recording commands and keeps their history. Follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
+Direct-create ingress also accepts pre-existing evidence and conclusions.
 
 ## Evidence before conclusions
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import datetime as _datetime
 import typing as _typing
-from dataclasses import dataclass as _dataclass
+from dataclasses import dataclass as _dataclass, field as _field
 
 from span.core.identity import conclusion_identity, payload_digest
 from span.core.model.canonical import to_canonical
@@ -454,9 +454,22 @@ class RecordRequestWire:
     support: tuple[SupportWire, ...] = ()
     understanding_id: str | None = None
     expected_version: int | None = None
-    actions: RecordActionsWire | None = None
+    actions: RecordActionsWire | None = _field(
+        default=None,
+        metadata={
+            "description": "Understanding update: an object of action lists, e.g. "
+            '{"correct":[{"conclusion_id":"<returned id>","conclusion":"<statement>","locator":"<path>"}]}. '
+            "Use understanding_id and expected_version; omit top-level action."
+        },
+    )
     run: VerificationRunWire | None = None
-    action: _c.SurfaceAction | None = None
+    action: _c.SurfaceAction | None = _field(
+        default=None,
+        metadata={
+            "description": "Only for kind=surface declarations. Omit action for "
+            "every kind=understanding create or update; updates use actions."
+        },
+    )
     expected_boundary_version: int | None = None
     gaps: tuple[GapWire, ...] | None = None
     challenge_dispositions: tuple[DispositionWire, ...] = ()

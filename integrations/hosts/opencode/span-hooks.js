@@ -1,10 +1,8 @@
 // Span lifecycle notices (read-only).
 //
-// Report-only hooks for the Span lifecycle: surfaces only event-local
-// action (an absent/old store, or recorded conclusions whose cited
-// source changed) and stays silent otherwise. Never writes, records,
-// reassesses, interprets, rebuilds, or initializes. Silent no-op when
-// Span is not installed.
+// Deliver the required lifecycle primer and event-local readiness/support
+// reminders. The agent authors and records semantic understanding; the plugin
+// retains bounded transient notices for delivery through the context hook.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -44,12 +42,13 @@ function resolveBin() {
   return null;
 }
 
-function run(bin, args) {
+function run(bin, args, input) {
   try {
     const out = execFileSync(bin, args, {
       encoding: "utf8",
       timeout: 8000,
-      stdio: ["ignore", "pipe", "ignore"],
+      input,
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
     });
     return (out || "").trim();
   } catch {
@@ -60,13 +59,15 @@ function run(bin, args) {
 //: One bounded pending notice per session. The edit-time notice is computed
 //: in `tool.execute.after`, but only the session `context` hook is proven to
 //: reach the model, so the notice waits for the next context call and is
-//: consumed once. A session that never calls context loses the notice; no
-//: correctness property depends on it (FD-52, FD-53).
+//: consumed once. Operations check answer support independently of notice
+//: delivery (FD-52); agent lifecycle actions remain required. FD-53 qualifies
+//: claims about actual host delivery.
 const PENDING_LIMIT = 8;
 const NOTICE_LIMIT = 2000;
 
 function sessionKey(event) {
   const value =
+    (event && event.data && event.data.sessionID) ||
     (event && (event.sessionID || event.session_id)) ||
     (event && event.session && event.session.id) ||
     "";
@@ -98,13 +99,14 @@ function relativePaths(paths, root) {
   return [...new Set(found)];
 }
 
-function rememberNotice(pending, sessionID, notice) {
+function rememberNotice(pending, sessionID, notice, paths = []) {
   if (!notice) return;
   if (pending.size >= PENDING_LIMIT && !pending.has(sessionID)) {
     const oldest = pending.keys().next().value;
+    console.warn("span: an undelivered lifecycle notice expired at the session bound; consult Span before completing work.");
     pending.delete(oldest);
   }
-  pending.set(sessionID, notice.slice(0, NOTICE_LIMIT));
+  pending.set(sessionID, { text: notice.slice(0, NOTICE_LIMIT), paths });
 }
 
 function filePathsFromArgs(args) {
@@ -142,6 +144,31 @@ function filePathsFromArgs(args) {
   return [...new Set(found)];
 }
 
+function handleSessionEvent(event, pending, checked, locationRoot) {
+  if (!event || typeof event.type !== "string") return;
+  if (event.type === "session.created") {
+    const notice = run(resolveBin(), [
+      "--repo-root",
+      locationRoot,
+      "session-start",
+    ]);
+    rememberNotice(pending, sessionKey(event), notice);
+  } else if (event.type === "session.idle") {
+    const key = sessionKey(event);
+    const waiting = pending.get(key);
+    if (!waiting || waiting.paths.length === 0) return;
+    const notice = run(resolveBin(), [
+      "--repo-root",
+      locationRoot,
+      "session-stop",
+    ], JSON.stringify(waiting.paths.map((file_path) => ({ file_path }))));
+    if (notice) rememberNotice(pending, key, notice, waiting.paths);
+  } else if (event.type === "session.deleted") {
+    pending.delete(sessionKey(event));
+    checked.delete(sessionKey(event));
+  }
+}
+
 // OpenCode v2 server plugin definition.
 // See https://opencode.ai/v2/docs/build/plugins and
 // https://opencode.ai/v2/docs/build/plugins/migrate-v1.
@@ -152,10 +179,10 @@ function filePathsFromArgs(args) {
 // via ctx.tool.hook("execute.after", ...), which receives one mutable
 // event (not v1 input/output pairs).
 //
-// Report-only safety is preserved: the plugin only shells out to the
-// installed span-hooks binary, stays silent when Span is absent or the
-// store is clean, and every failure path is a silent no-op that never
-// breaks the session. Repo root comes from ctx.location.directory.
+// The installed span-hooks runner supplies lifecycle and support notices.
+// Operational registered repositories receive the primer even when cold.
+// Helper failure does not abort the session; missing session identity and
+// undelivered capacity expiry are diagnosed. Repo root is ctx.location.directory.
 export default {
   id: "span-hooks",
   async setup(ctx) {
@@ -163,6 +190,7 @@ export default {
     const locationRoot =
       (ctx && ctx.location && ctx.location.directory) || process.cwd();
     const pending = new Map();
+    const checked = new Set();
 
     if (
       ctx &&
@@ -174,22 +202,7 @@ export default {
           for await (const event of ctx.event.subscribe({
             signal: controller.signal,
           })) {
-            if (!event || typeof event.type !== "string") continue;
-            if (event.type === "session.created") {
-              const notice = run(resolveBin(), [
-                "--repo-root",
-                locationRoot,
-                "session-start",
-              ]);
-              rememberNotice(pending, sessionKey(event), notice);
-            } else if (event.type === "session.idle") {
-              const notice = run(resolveBin(), [
-                "--repo-root",
-                locationRoot,
-                "session-stop",
-              ]);
-              rememberNotice(pending, sessionKey(event), notice);
-            }
+            handleSessionEvent(event, pending, checked, locationRoot);
           }
         } catch {
           // Subscription ended (abort or server shutdown); silent.
@@ -215,6 +228,10 @@ export default {
             "";
           if (!["edit", "write"].includes(toolName)) return;
           const changed = event || {};
+          if (sessionKey(changed) === "*") {
+            console.warn("span: edit notice has no session identity; reconsider changed paths before completing work.");
+            return;
+          }
           const paths = filePathsFromArgs(changed);
           if (paths.length === 0) return;
           const notice = run(resolveBin(), ["source-changed", ...paths]);
@@ -223,12 +240,13 @@ export default {
           const reminder = relative.length
             ? " call reconsider(changed_paths=" +
               JSON.stringify(relative) +
-              ") before reusing recorded understanding."
+              ") after editing; investigate and record supported dispositions before completing work."
             : "";
           rememberNotice(
             pending,
             sessionKey(changed),
             notice + reminder,
+            paths,
           );
         } catch {
           // Never break the session on hook failure.
@@ -239,8 +257,8 @@ export default {
     // OpenCode dispatches the first request before a local MCP server has
     // finished connecting. Wait (bounded) at prompt admission so the first
     // tool list already contains the Span tools; otherwise the agent cannot
-    // ask before reading even when it intends to. FD-58: advisory and silent
-    // on failure — the session proceeds without Span rather than blocking.
+    // consult Span before investigation. The lifecycle obligation also appears
+    // in the managed instructions when this readiness notice cannot arrive.
     let mcpReady = false;
     if (ctx && ctx.session && typeof ctx.session.hook === "function") {
       await ctx.session.hook("prompt", async () => {
@@ -261,24 +279,19 @@ export default {
       });
     }
 
-    // FD-58 adoption notice: one system notice per session, only when the
-    // repository has recorded understanding. Advisory and silent on failure.
+    // FD-58 required lifecycle notice for cold and warm repositories.
     let contextRegistration = null;
     if (ctx && ctx.session && typeof ctx.session.hook === "function") {
-      const checked = new Set();
       contextRegistration = await ctx.session.hook("context", (event) => {
         try {
           const sessionID = sessionKey(event || {});
           // The edit-time notice is delivered once, on the next context call.
-          // A host that omitted the session id on the producing event used the
-          // shared fallback slot; consume it here rather than losing it.
-          const pendingNotice =
-            pending.get(sessionID) ?? pending.get("*");
+          // Session identity is required; notices never cross session boundaries.
+          const pendingNotice = pending.get(sessionID);
           if (pendingNotice !== undefined) {
-            pending.delete(sessionID);
-            pending.delete("*");
             if (event && Array.isArray(event.system)) {
-              event.system.push({ type: "text", text: pendingNotice });
+              event.system.push({ type: "text", text: pendingNotice.text });
+              pending.delete(sessionID);
             }
           }
           if (sessionID === "*" || checked.has(sessionID)) return;
@@ -299,6 +312,8 @@ export default {
 
     return () => {
       controller.abort();
+      pending.clear();
+      checked.clear();
       if (
         contextRegistration &&
         typeof contextRegistration.dispose === "function"

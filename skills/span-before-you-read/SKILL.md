@@ -5,7 +5,12 @@ description: Ask Span before reading or grepping source when the question is abo
 
 # Before you read: ask
 
-Call `ask` with a question and one surface:
+Complete the applicable lifecycle before task completion; report named operational
+blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
+
+
+For reuse, call `ask` with the surface and no question. For a new investigation,
+use its actual question; for a targeted lookup use the exact recorded question:
 
 ```json
 {
@@ -29,8 +34,8 @@ question and returns `no_match`, whose recovery points back to the document view
 
 - `Answer` — current conclusions with statement, nature, scope, support, and
   evidence, plus surface status. `status.stale_refs` names each stale
-  conclusion by exact revision, understanding version, and present state. Use
-  it instead of re-deriving the same understanding.
+  conclusion by exact revision, understanding version, and present state. Reuse current conclusions; investigate stale references
+  through their historical content and current evidence.
 - `Gap` — no current conclusion. It carries the reason, the prior non-current
   conclusions as historical content (statement, exact revision, understanding
   version, evidence references, present state), admitted evidence,
@@ -51,4 +56,4 @@ that continuation. Never fetch or construct a context id.
 Finish the investigation with `record`. Do not record source text as a
 conclusion; record the supported statement the agent established.
 
-Detail: [MCP reference](../../docs/mcp.md), [queries](../../docs/queries.md).
+Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md), [queries](https://github.com/pontivus-com/span/blob/master/docs/queries.md).

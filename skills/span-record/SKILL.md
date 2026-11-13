@@ -1,9 +1,13 @@
 ---
 name: span-record
-description: Record a supported conclusion, an independent verification run, or a service/domain surface after investigating. Use when an investigation produced a statement worth retaining, a test result worth citing, or a boundary the agent chose.
+description: Record a supported conclusion, an independent verification run, or a service/domain surface after investigating. Use when an investigation produced a supported semantic conclusion, an independent test result, or a boundary the agent chose.
 ---
 
 # Record what you established
+
+Complete the applicable lifecycle before task completion; report named operational
+blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
+
 
 Call `record` with one `kind`. A create is one conclusion; updates use actions.
 
@@ -177,4 +181,4 @@ the new conclusion lineage identity. You supply the request identity,
 compare-and-set version, semantic content, and the evidence you hold. `action` is used only for a
 surface declaration; an understanding create has no action.
 
-Detail: [MCP reference](../../docs/mcp.md), [interpretation](../../docs/interpretation.md).
+Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md), [interpretation](https://github.com/pontivus-com/span/blob/master/docs/interpretation.md).

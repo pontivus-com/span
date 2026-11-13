@@ -102,7 +102,7 @@ requirement itself lives in the layer named.
 | "The agent forgets between sessions." | 1 (A1) | a fact about the user, not a product choice |
 | "Understanding is found without the originating conversation." | 0 (G2), enforced at 1 (F3) | an outcome, not a mechanism |
 | "A changed path marks every containing surface." | 2 (L10) | it constrains what the agent receives after an edit |
-| "The store keeps immutable versions in SQLite." | 3 | an implementation choice; not derivable as a requirement |
+| "The store keeps immutable versions in SQLite." | 4 | an implementation mechanism chosen to realize versioned retention |
 | "The same change yields different status at file and service granularity." | nowhere new | it follows from F9 and L10; stating it again would be a restatement |
 
 The last row is the point of the model. A true statement is not automatically a

@@ -1,4 +1,4 @@
-"""Host hooks: optional, event-local, and never a semantic writer."""
+"""Host hooks: lifecycle notices without semantic authorship."""
 
 from __future__ import annotations
 
@@ -101,11 +101,28 @@ class LifecycleHooksTest(unittest.TestCase):
             root, data = _recorded(tmp)
             output = _capture(hooks.cmd_adoption_primer, data, str(root))
             self.assertEqual(output, hooks.ADOPTION_PRIMER)
-            self.assertIn("recorded understanding", output)
+            self.assertIn("governs semantic understanding", output)
             self.assertIn("_ask", output)
-            self.assertIn("normal tool list", output)
+            self.assertIn("direct tools", output)
             self.assertNotIn("current", output)
             self.assertNotIn("stale", output)
+
+    def test_adoption_primer_reaches_a_cold_registered_repository(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / REPO
+            root.mkdir()
+            data = base / "data"
+            data.mkdir()
+            _write_receipt(data, root)
+            store = LifecycleStore(
+                data / f"{REPO}.db", retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            store.register_repository(REPO, str(root.resolve()))
+            store.close()
+            output = _capture(hooks.cmd_adoption_primer, data, str(root))
+            self.assertEqual(output, hooks.ADOPTION_PRIMER)
+            self.assertIn("Record supported conclusions", output)
 
     def test_adoption_primer_is_silent_without_a_store(self):
         with tempfile.TemporaryDirectory() as tmp:

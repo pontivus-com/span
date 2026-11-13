@@ -5,6 +5,10 @@ description: Re-align Span after editing files. Use when a covered surface chang
 
 # After you edit: reconsider
 
+Complete the applicable lifecycle before task completion; report named operational
+blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
+
+
 Call `reconsider` with the paths you just changed:
 
 ```json
@@ -22,13 +26,13 @@ The result is `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 Each conclusion carries its own support state. `CURRENT` means the surface was
 considered but the conclusion still holds. `REASSESSMENT_REQUIRED` or
 `UNVERIFIABLE` means actual loss: investigate and re-establish it. A surface
-with no `conclusions` is containment-only. Keep the returned order; act only on
+with no `conclusions` is containment-only. Keep the returned order; re-establish returned
 conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
 
 ## Then
 
 Use the returned context with `record` or a challenge. Settle a
-challenge through `record` with named `challenge_dispositions`. Do not record a
-conclusion just because the surface appeared in the walk.
+challenge through `record` with named `challenge_dispositions`. Record new supported conclusions established during the investigation too.
+Containment alone does not require changing a conclusion.
 
-Detail: [MCP reference](../../docs/mcp.md), [lifecycle](../../docs/lifecycle.md).
+Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md), [lifecycle](https://github.com/pontivus-com/span/blob/master/docs/lifecycle.md).

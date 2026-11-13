@@ -248,7 +248,7 @@ class SurfaceConformanceTest(unittest.TestCase):
         self.assertNotIn("`ask` →", section)
         self.assertNotIn("`record` →", section)
         self.assertIn("§4.1", section)
-        self.assertIn("§4.5", section)
+        self.assertIn("§4.3", section)
         self.assertTrue(reconsider)
 
 

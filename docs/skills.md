@@ -1,5 +1,7 @@
 # Agent Skills integration
 
+Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
+
 The packaged skills guide the agent through the three public lifecycle moments.
 They do not run inside the semantic core, originate authority, or decide
 correctness. The installed tool schemas and [MCP reference](mcp.md) own request
@@ -11,7 +13,7 @@ grammar; [lifecycle](lifecycle.md) owns the procedure.
 | `skills/span-before-you-read/SKILL.md` | `ask`, exact surface selection, ambiguity, continuation, surface-first reuse, and `no_match` recovery. |
 | `skills/span-after-change/SKILL.md` | `reconsider` after editing, then re-establish actual loss. |
 | `skills/span-record/SKILL.md` | Record/update/verify and declare a service/domain boundary. |
-| `docs/agents-snippet.md` | The five-line managed block copied into a target's `AGENTS.md`. |
+| `docs/agents-snippet.md` | The managed lifecycle block copied into a target's `AGENTS.md`. |
 
 Skills use exactly `ask`, `record`, and `reconsider`. They do not choose a
 record variant, fetch a context id, or treat a gap as a failure. They must keep
@@ -34,5 +36,5 @@ repository's source/package updates do not claim that every existing host-local
 copy has been replaced.
 
 `tests/unit/test_skills.py`, `test_agents_snippet.py`, and the asset cases in
-`test_install.py` exercise the source/asset boundaries. Skills remain optional;
-ordinary retrieval and recording check support without them or hooks.
+`test_install.py` exercise the source/asset boundaries. The runtime does not read skill text to evaluate support.
+Agent-facing guidance projects the required lifecycle in the contract; absent reminders do not waive it.

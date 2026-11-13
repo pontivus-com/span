@@ -7,8 +7,7 @@ re-check, or rebuild.
 ## Contract
 
 1. Repository initialization is the explicit administrative operation
-   performed by the installer (`span-install`), or by the optional `setup` tool
-   where a host lacks an installer path. This build registers no `setup` tool.
+   performed by the installer (`span-install`).
    It runs in a dedicated setup session, never inside ordinary question,
    record, or hook work.
 2. A repository with no schema-11 store is uninitialized. Initialization binds
@@ -23,7 +22,7 @@ re-check, or rebuild.
 5. `span-install --verify-only` is observational. It reports build, store
    schema, root binding, provider availability, and registration state; it
    never initializes, migrates, or invokes a semantic operation.
-6. Automatic hooks are optional, event-local notices. They never establish
+6. Automatic hooks deliver event-local lifecycle reminders. They never establish
    freshness, and a missed hook cannot make stale understanding current.
 7. `READY` means the store and provider are operationally available. It is
    not semantic coverage, correctness, or completeness.

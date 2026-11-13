@@ -57,8 +57,7 @@ that could fail after context expiry or source changes. Compare-and-set
 versions and challenge revisions reject conflicting concurrent updates.
 SQLite transactions serialize the actual commits.
 
-There is no process-local interpretation continuation, campaign runtime, or
-second semantic writer. Earlier stores use a separately invoked offline
+The store owns recoverable operational context and semantic history. Earlier stores use a separately invoked offline
 archive/export/stage/activate protocol; startup never migrates them.
 
 ## Currency and limits
@@ -69,6 +68,6 @@ requires agent reassessment; deterministic rules do not rewrite the meaning.
 Challenges and gaps remain separate from support currency. A current snapshot
 may be incomplete or disputed.
 
-Hooks are optional notices and do not establish currentness. Skills guide the
+Hooks deliver reminders; lifecycle operations evaluate currentness. Skills guide the
 agent and have no runtime semantic authority. See [lifecycle](lifecycle.md),
 [ports](ports.md), and [MCP reference](mcp.md).

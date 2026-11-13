@@ -72,7 +72,7 @@ synthesis is:
   report both current and stale understanding in the same answer;
 - invalidation is followed by **enumerated re-establishment**, so the change
   itself drives the repair;
-- all of it is delivered to agents as an MCP contract of **five operation families**.
+- all of it is delivered to agents as an MCP contract of **three lifecycle operations**.
 
 That combination is the contribution. The soundness of its mechanisms is
 borrowed from established practice, which is exactly what makes the contribution

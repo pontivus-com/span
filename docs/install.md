@@ -90,7 +90,7 @@ It does **not** mean Span already understands your repository.
 
 ## Supported hosts
 
-Managed registration, skills, and optional hooks are implemented for Codex,
+Managed registration, skills, and lifecycle hooks are implemented for Codex,
 OpenCode, and Claude Code. These are the supported managed hosts. Claude's
 registration and health are inspectable, while authenticated model-delivery
 grammar and caller identity remain `UNVERIFIED`; registration does not prove
@@ -136,7 +136,7 @@ claude mcp add --scope user --transport stdio span -- \
 
 `span-install` selects Claude automatically when its CLI or host footprint is
 present. Use `--with-claude` or `--no-claude` to make that choice explicit.
-Optional report-only hooks are written only to an existing
+Report-only lifecycle hooks are written only to an existing
 `~/.claude/settings.json`; foreign settings and hooks are preserved, and every
 hook command carries the installed `--data-dir`. Existing `~/.claude` roots
 can receive the canonical Span skills. `--uninstall` removes only Span's
@@ -240,11 +240,10 @@ The MCP server itself never edits a target repository; host integration belongs
 to the installer. The current installer does not perform obsolete target-plugin
 compatibility migration. The plugin waits a bounded three
 seconds at prompt admission for the local MCP connection, so the first model
-request already sees the Span tools, and injects one advisory notice at session
-start when the repository has recorded understanding. An edit-time notice names
+request already sees the Span tools, and injects the lifecycle notice at session
+start for registered operational repositories, including cold stores. An edit-time notice names
 the changed paths and the exact `reconsider(changed_paths=[...])` call on the
-next context turn. The notices are advisory: if one does not fire, the session
-still runs, just without the reminder.
+next context turn. The required agent lifecycle applies even if a notice is not delivered.
 
 OpenCode exposes the server's tools to the agent directly (`ask`, `record`,
 `reconsider`, prefixed by the server name). Its code-mode sandbox does not

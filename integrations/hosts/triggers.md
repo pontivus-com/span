@@ -1,9 +1,9 @@
 # Host trigger and delivery status
 
 The active lifecycle is documented in [lifecycle](../../docs/lifecycle.md).
-Hooks are optional notices; the agent still owns investigation, recording,
-reassessment, edits, and tests. No host trigger is required to make ordinary
-retrieval or new recording check declared support.
+Hooks deliver lifecycle reminders. The agent follows [the required lifecycle](../../docs/lifecycle-contract.md#required-agent-completion)
+for investigation, retention and reassessment. Lifecycle operations check
+declared support independently of hook delivery.
 
 ## Managed integration
 
@@ -11,7 +11,7 @@ retrieval or new recording check declared support.
 | --- | --- | --- |
 | Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json`. | 0.9.1: three-tool delivery captured (`gpt-5.6-luna`), including closed-union rejection, flat create, verification, replay, and restart. The flat-create re-capture is pending (account quota). Hook arrival is not established. |
 | OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait plus the FD-58 adoption notice. | 0.9.1: three tools; flat-create delivery captured including verification and replay; with the plugin the first `ask` precedes the first source read in 5/5 measured runs. |
-| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and optional lifecycle hooks in `~/.claude/settings.json`. | Registration/health observed and installer behavior tested; authenticated model-delivered grammar and caller identity are **UNVERIFIED**. |
+| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health observed and installer behavior tested; authenticated model-delivered grammar and caller identity are **UNVERIFIED**. |
 
 The supported managed hosts are Codex, OpenCode, and Claude Code. Delivery is
 claimed only where a host has a recorded capture; Claude's authenticated
@@ -51,7 +51,7 @@ A fresh install defaults to `global`; an upgrade uses the receipt scope and
 stops if it is absent or ambiguous. The authoritative full matrix is in
 [install](../../docs/install.md#opencode).
 
-The notices are advisory and the edit-time notice fires only when a
+The edit-time support notice fires when a
 changed path affects recorded understanding. Session notices select the
 registered root containing the working directory. Changed paths route to their
 longest matching registered root. Missing hook settings files or absent CLIs
@@ -67,7 +67,7 @@ hook proves neither complete coverage nor global currency.
 ## Agent procedure without hooks
 
 Call `ask` for current understanding or inspectable evidence, then `record`
-useful findings with the evidence you hold. Before a material edit, ask for
+supported conclusions when established, with the evidence you hold. Before editing, ask for
 current support; after it, call `reconsider`, use external tests, and record
 explicit updates. Keep unsupported scope and open disputes visible.
 See the [router skill](../../skills/span-router/SKILL.md) and

@@ -1,4 +1,4 @@
-"""Host-neutral hook contract (bounded, optional, never authoritative)."""
+"""Host-neutral hook contract (bounded lifecycle notices without semantic authority)."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """Agent Skill non-authority and contract tests.
 
-Skills are optional lifecycle guidance only. They may orchestrate the shipped
+Skills project the required lifecycle contract. They may orchestrate the shipped
 operations but cannot establish or reinterpret semantic claims, ownership,
 authority, precedence, trust, or freshness.
 """
@@ -110,9 +110,9 @@ class RouterSkillTest(unittest.TestCase):
         ):
             self.assertIn(required, text, required)
 
-    def test_router_states_hooks_are_optional(self):
+    def test_router_preserves_lifecycle_without_hook_delivery(self):
         text = _text(ROUTER).lower()
-        self.assertIn("hooks are optional", text)
+        self.assertIn("required lifecycle even", text)
         self.assertIn("never record", text)
 
     def test_router_marks_reconsider_as_after_edit(self):
