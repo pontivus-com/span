@@ -75,25 +75,32 @@ def _condition_matches(value: object, condition: StructuralCondition) -> bool:
 
 
 def validate_structural_rules(value: object) -> None:
-    """Apply the value's canonical structural declarations before stateful work."""
+    """Apply all canonical structural declarations before stateful work."""
 
     declared = vars(type(value)).get("__structural_rules__", ())
     rules = _typing.cast(tuple[PresenceRule, ...], declared)
+    faults: list[str] = []
     for rule in rules:
         if rule.when and not all(
             _condition_matches(value, condition) for condition in rule.when
         ):
             continue
-        count = sum(_present(value, field) for field in rule.fields)
+        active = tuple(field.name for field in rule.fields if _present(value, field))
+        count = len(active)
         if count < rule.minimum:
-            raise ValueError(
-                f"{rule.label} requires at least {rule.minimum} active field(s)"
+            expected = ", ".join(field.name for field in rule.fields)
+            faults.append(
+                f"{rule.label} requires at least {rule.minimum} active field(s) "
+                f"from: {expected}"
             )
-        if count > rule.maximum:
-            raise ValueError(
+        elif count > rule.maximum:
+            names = ", ".join(active)
+            faults.append(
                 f"{rule.label} permits at most {rule.maximum} active field(s); "
-                "received more than one"
+                f"active: {names}"
             )
+    if faults:
+        raise ValueError("; ".join(faults))
 
 
 def _active_schema(field: PresenceField) -> dict[str, object]:

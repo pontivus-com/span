@@ -397,7 +397,7 @@ class VerificationRunWire:
             ),
             minimum=1,
             maximum=2,
-            label="verification observations/evidence",
+            label="verification observations or evidence",
         ),
     )
 
@@ -487,7 +487,7 @@ class RecordRequestWire:
                     _constraints.PresenceField("conclusion"), True
                 ),
             ),
-            label="understanding create target",
+            label="understanding create target (question or context)",
         ),
         _constraints.PresenceRule(
             fields=(

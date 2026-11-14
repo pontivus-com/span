@@ -6,7 +6,7 @@ import dataclasses as _dataclasses
 import types as _types
 import typing as _typing
 
-_PUBLIC_TYPE_TAGS: dict[str, str] = {
+_PUBLIC_TYPE_TAGS: _typing.Mapping[str, str] = _types.MappingProxyType({
     "span.core.model.administration.InitializeRepositoryRequest": "InitializeRepositoryRequest",
     "span.core.model.administration.InitializeRepositoryResult": "InitializeRepositoryResult",
     "span.core.model.answers.AmbiguousSurface": "AmbiguousSurface",
@@ -218,9 +218,9 @@ _PUBLIC_TYPE_TAGS: dict[str, str] = {
     "span.shell.mcp.models.ServiceContext": "ServiceContext",
     "span.shell.mcp.models.ToolError": "ToolError",
     "span.shell.mcp.models.ToolResult": "ToolResult",
-}
+})
 
-_PUBLIC_SCHEMA_NAMES: dict[str, str] = {
+_PUBLIC_SCHEMA_NAMES: _typing.Mapping[str, str] = _types.MappingProxyType({
     "span.core.model.administration.InitializeRepositoryRequest": "InitializeRepositoryRequest",
     "span.core.model.administration.InitializeRepositoryResult": "InitializeRepositoryResult",
     "span.core.model.answers.AmbiguousSurface": "AmbiguousSurface",
@@ -432,7 +432,7 @@ _PUBLIC_SCHEMA_NAMES: dict[str, str] = {
     "span.shell.mcp.models.ServiceContext": "ServiceContext",
     "span.shell.mcp.models.ToolError": "ToolError",
     "span.shell.mcp.models.ToolResult": "ToolResult",
-}
+})
 
 
 def _type_key(cls: type) -> str:
@@ -491,6 +491,8 @@ def _inject(hint: object, value: object, path: str) -> object:
             return _inject_dataclass(member, value, path, keep_tag=True)
         if len(dms) == 1 and len(non_none) == 1:
             return _inject_dataclass(dms[0], value, path, keep_tag=False)
+        if len(non_none) == 1:
+            return _inject(non_none[0], value, path)
         return value
     if isinstance(hint, type) and _dataclasses.is_dataclass(hint):
         return _inject_dataclass(hint, value, path, keep_tag=False)
@@ -576,6 +578,9 @@ def to_wire(value: object, hint: object) -> object:
             return _compact_dataclass(member, value, keep_tag=True)
         if len(dms) == 1:
             return _compact_dataclass(dms[0], value, keep_tag=False)
+        non_none = [a for a in args if a is not type(None)]
+        if len(non_none) == 1:
+            return to_wire(value, non_none[0])
         return value
     if isinstance(hint, type) and _dataclasses.is_dataclass(hint):
         return _compact_dataclass(hint, value, keep_tag=False)
