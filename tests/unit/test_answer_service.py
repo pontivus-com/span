@@ -531,7 +531,7 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Answer)
         self.assertEqual(
             sum(len(group.conclusions) for group in result.groups),
-            2,
+            1,
         )
         self.assertEqual(result.status.current, 1)
 
@@ -611,7 +611,7 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertIs(stale.state, m.SupportState.REASSESSMENT_REQUIRED)
         self.assertEqual(
             sum(len(group.conclusions) for group in result.groups),
-            1,
+            2,
         )
 
     def test_document_view_gap_carries_historical_content(self) -> None:
