@@ -11,6 +11,7 @@ import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
+from span.core.schema import constraints as _constraints
 from span.core.model.claims import AssertionNature
 from span.core.model.investigation import (
     DiscoveryObservation,
@@ -258,51 +259,92 @@ class RetrievedUnderstanding:
 class RecordedQuestionSelector:
     """Select current membership by exact recorded question on one exact surface."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="recorded-question repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("question", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="recorded-question text",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("surface.repository_id"),
+            ),
+            minimum=0,
+            maximum=0,
+            label="recorded-question surface repository",
+        ),
+    )
+
     repository_id: str
     surface: SurfaceReference
     question: str
 
     def __post_init__(self) -> None:
-        _require_non_empty("RecordedQuestionSelector.repository_id", self.repository_id)
-        _require_non_empty("RecordedQuestionSelector.question", self.question)
-        if self.surface.repository_id is not None:
-            raise ValueError(
-                "RecordedQuestionSelector.surface.repository_id must be omitted"
-            )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
 class CurrentUnderstandingSelector:
     """Select one understanding's current membership."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="current-understanding repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("understanding_id", non_empty=True),
+            ),
+            minimum=1,
+            maximum=1,
+            label="current-understanding identity",
+        ),
+    )
+
     repository_id: str
     understanding_id: str
 
     def __post_init__(self) -> None:
-        _require_non_empty(
-            "CurrentUnderstandingSelector.repository_id", self.repository_id
-        )
-        _require_non_empty(
-            "CurrentUnderstandingSelector.understanding_id", self.understanding_id
-        )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
 class UnderstandingSnapshotSelector:
     """Select one exact understanding version; omitted version means current."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="understanding-snapshot repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("understanding_id", non_empty=True),
+            ),
+            minimum=1,
+            maximum=1,
+            label="understanding-snapshot identity",
+        ),
+    )
+
     repository_id: str
     understanding_id: str
     version: int | None = None
 
     def __post_init__(self) -> None:
-        _require_non_empty(
-            "UnderstandingSnapshotSelector.repository_id", self.repository_id
-        )
-        _require_non_empty(
-            "UnderstandingSnapshotSelector.understanding_id",
-            self.understanding_id,
-        )
+        _constraints.validate_structural_rules(self)
         if self.version is not None and self.version < 1:
             raise ValueError("UnderstandingSnapshotSelector.version is positive")
 
@@ -323,12 +365,26 @@ class ContextRetrievalSelector:
 class ReceiptRetrievalSelector:
     """Select one retained recording receipt by its request identity."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="receipt repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("request_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="receipt request identity",
+        ),
+    )
+
     repository_id: str
     request_id: str
 
     def __post_init__(self) -> None:
-        _require_non_empty("ReceiptRetrievalSelector.repository_id", self.repository_id)
-        _require_non_empty("ReceiptRetrievalSelector.request_id", self.request_id)
+        _constraints.validate_structural_rules(self)
 
 
 RetrieveRequest = _typing.Union[
