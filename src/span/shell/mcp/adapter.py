@@ -173,10 +173,11 @@ def _request_identity(request: object) -> str:
     """The exact caller identity a rejection names."""
     if isinstance(request, m.ReconsiderRequest):
         challenge = request.challenge
+        repository_id = request.repository_id or "unknown"
         if challenge is None:
-            return request.repository_id
+            return repository_id
         return (
-            f"{request.repository_id}/{challenge.request_id}/"
+            f"{repository_id}/{challenge.request_id}/"
             f"{challenge.understanding_id}"
         )
     if isinstance(request, m.AskRequest):

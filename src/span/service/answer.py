@@ -321,15 +321,18 @@ class AnswerService:
         surface: m.SurfaceKey,
         result: m.Answer | m.Gap,
     ) -> m.AskResult:
-        if request.evidence is None:
+        evidence = request.evidence
+        if evidence is None:
             return self._fit(request, result)
-        assert request.repository_id is not None
-        assert request.request_id is not None
+        repository_id = request.repository_id
+        request_id = request.request_id
+        assert repository_id is not None
+        assert request_id is not None
         context = issue_context(
             self._store,
             payload=request,
-            repository_id=request.repository_id,
-            request_id=m.RequestId(request.request_id),
+            repository_id=repository_id,
+            request_id=m.RequestId(request_id),
             scope=m.EvidenceScope(paths=self._surface_paths(surface)),
             question=None,
             clock=self._clock,
@@ -337,7 +340,7 @@ class AnswerService:
         )
         admitted = self._evidence.admit(
             context,
-            request.evidence,
+            evidence,
             self._policy.default_query_bounds,
         )
         records = {
