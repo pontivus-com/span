@@ -161,7 +161,9 @@ class EvidenceServiceTest(unittest.TestCase):
         assert isinstance(admitted, m.AdmittedEvidence)
         record = self.service.context_observations("ctx-ev-1")[0]
         deliveries = self.service.context_deliveries(record)
-        self.assertEqual([item.observation_id for item in deliveries], [admitted.observation_id] * 2)
+        self.assertEqual(
+            [item.observation_id for item in deliveries], [admitted.observation_id] * 2
+        )
         self.assertEqual(
             [item.unit.content for item in deliveries],
             ["line1\n", "line3\nline4\n"],
