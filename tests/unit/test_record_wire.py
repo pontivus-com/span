@@ -118,12 +118,12 @@ class RecordWireSchemaTest(unittest.TestCase):
         defs = schema["$defs"]
         self.assertNotIn("conclusion_id", schema["properties"])
         self.assertNotIn("scope_evidence_refs", schema["properties"])
-        add = defs["AddConclusionWire"]
+        add = defs["AddConclusion"]
         self.assertNotIn("conclusion_id", add["properties"])
         self.assertNotIn("scope_evidence_refs", add["properties"])
         self.assertNotIn("statement", add["properties"])
         self.assertNotIn("basis_derivation", add["properties"])
-        replace = defs["ReplaceActionWire"]
+        replace = defs["ReplaceConclusion"]
         self.assertNotIn("new_conclusion_id", replace["properties"])
         self.assertNotIn("new_conclusion", replace["properties"])
         self.assertNotIn("old_understanding_id", replace["properties"])
@@ -131,6 +131,13 @@ class RecordWireSchemaTest(unittest.TestCase):
         self.assertIn("conclusion_id", replace["properties"])
         self.assertNotIn("ReplaceWire", defs)
         self.assertNotIn("WithdrawWire", defs)
+
+
+def _context_ref(context_id: str = "ctx-1") -> m.InvestigationContextRef:
+    return m.InvestigationContextRef(
+        repository_id="repo-1",
+        context_id=m.InvestigationContextId(context_id),
+    )
 
 
 def _update_request(
@@ -185,9 +192,8 @@ class RecordActionWireTest(unittest.TestCase):
     def test_create_derives_a_conclusion_id(self):
         proposed = w.flat_conclusion(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="sub-create",
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
                 conclusion="A does X",
                 support=(w.SourceSupportWire(locator="src/a.py"),),
@@ -205,9 +211,8 @@ class RecordActionWireTest(unittest.TestCase):
     def test_create_defaults_assertion_nature(self):
         proposed = w.flat_conclusion(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="sub-create",
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
                 conclusion="A does X",
                 support=(w.SourceSupportWire(locator="src/a.py"),),
