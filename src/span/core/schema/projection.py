@@ -116,7 +116,7 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
         return {"anyOf": [_project_hint(a, defs, seen) for a in args]}
     if isinstance(hint, type) and hasattr(hint, "__dataclass_fields__"):
         _ensure_def(hint, defs, seen)
-        return {"$ref": f"#/$defs/{hint.__name__}"}
+        return {"$ref": f"#/$defs/{public_schema_name(hint)}"}
     # No opaque-object fallback: every canonical carrier hint has an
     # explicit projection above. An unprojectable hint is a programming
     # defect and must fail deterministically, never advertise a shape
