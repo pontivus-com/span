@@ -1181,9 +1181,7 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertIsInstance(gap, m.Gap)
         assert isinstance(gap, m.Gap)
         self.assertTrue(gap.admission.continuation)
-        page = self.service.ask(
-            m.AskRequest(continuation=gap.admission.continuation)
-        )
+        page = self.service.ask(m.AskRequest(continuation=gap.admission.continuation))
         self.assertIsInstance(page, m.EvidencePage)
         assert isinstance(page, m.EvidencePage)
         self.assertTrue(page.omitted)
@@ -1298,12 +1296,8 @@ class AnswerServiceTest(unittest.TestCase):
     def test_continuation_replay_is_stable(self) -> None:
         service = self._page_service()
         first = self._cold_page(service)
-        page = service.ask(
-            m.AskRequest(continuation=first.admission.continuation)
-        )
-        again = service.ask(
-            m.AskRequest(continuation=first.admission.continuation)
-        )
+        page = service.ask(m.AskRequest(continuation=first.admission.continuation))
+        again = service.ask(m.AskRequest(continuation=first.admission.continuation))
         self.assertIsInstance(page, m.EvidencePage)
         self.assertEqual(page, again)
 
@@ -1312,9 +1306,7 @@ class AnswerServiceTest(unittest.TestCase):
         first = self._cold_page(service)
         assert first.admission.context is not None
         self.store.abandon_context(first.admission.context.context_id.value)
-        page = service.ask(
-            m.AskRequest(continuation=first.admission.continuation)
-        )
+        page = service.ask(m.AskRequest(continuation=first.admission.continuation))
         self.assertIsInstance(page, m.Unavailable)
         assert isinstance(page, m.Unavailable)
         self.assertNotIn("reaped", page.failure.lower())
@@ -1325,9 +1317,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = self._page_service(clock=lambda: now[0])
         first = self._cold_page(service)
         now[0] = NOW + datetime.timedelta(hours=2)
-        page = service.ask(
-            m.AskRequest(continuation=first.admission.continuation)
-        )
+        page = service.ask(m.AskRequest(continuation=first.admission.continuation))
         self.assertIsInstance(page, m.Unavailable)
 
     def test_continuation_rejects_a_repository_override(self) -> None:
@@ -1369,7 +1359,5 @@ class AnswerServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(first, m.Gap)
-        page = service.ask(
-            m.AskRequest(continuation=first.admission.continuation)
-        )
+        page = service.ask(m.AskRequest(continuation=first.admission.continuation))
         self.assertIsInstance(page, m.Unavailable)

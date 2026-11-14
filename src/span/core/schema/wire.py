@@ -6,7 +6,8 @@ import dataclasses as _dataclasses
 import types as _types
 import typing as _typing
 
-_PUBLIC_TYPE_TAGS: _typing.Mapping[str, str] = _types.MappingProxyType({
+_PUBLIC_TYPE_TAGS: _typing.Mapping[str, str] = _types.MappingProxyType(
+    {
     "span.core.model.administration.InitializeRepositoryRequest": "InitializeRepositoryRequest",
     "span.core.model.administration.InitializeRepositoryResult": "InitializeRepositoryResult",
     "span.core.model.answers.AmbiguousSurface": "AmbiguousSurface",
@@ -218,9 +219,11 @@ _PUBLIC_TYPE_TAGS: _typing.Mapping[str, str] = _types.MappingProxyType({
     "span.shell.mcp.models.ServiceContext": "ServiceContext",
     "span.shell.mcp.models.ToolError": "ToolError",
     "span.shell.mcp.models.ToolResult": "ToolResult",
-})
+    }
+)
 
-_PUBLIC_SCHEMA_NAMES: _typing.Mapping[str, str] = _types.MappingProxyType({
+_PUBLIC_SCHEMA_NAMES: _typing.Mapping[str, str] = _types.MappingProxyType(
+    {
     "span.core.model.administration.InitializeRepositoryRequest": "InitializeRepositoryRequest",
     "span.core.model.administration.InitializeRepositoryResult": "InitializeRepositoryResult",
     "span.core.model.answers.AmbiguousSurface": "AmbiguousSurface",
@@ -432,7 +435,8 @@ _PUBLIC_SCHEMA_NAMES: _typing.Mapping[str, str] = _types.MappingProxyType({
     "span.shell.mcp.models.ServiceContext": "ServiceContext",
     "span.shell.mcp.models.ToolError": "ToolError",
     "span.shell.mcp.models.ToolResult": "ToolResult",
-})
+    }
+)
 
 
 def _type_key(cls: type) -> str:
