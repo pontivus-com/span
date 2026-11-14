@@ -7,6 +7,7 @@ Part of the canonical domain carrier package. Import through
 from __future__ import annotations
 
 import enum as _enum
+import typing as _typing
 from dataclasses import dataclass as _dataclass
 from dataclasses import field as _field
 
