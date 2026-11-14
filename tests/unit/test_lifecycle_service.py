@@ -132,9 +132,29 @@ def _conclusion(
     )
 
 
-def _receipt(result: m.RecordResult) -> m.RecordReceipt:
-    assert isinstance(result, m.UnderstandingRecorded)
-    return result.receipt
+def _context_ref(
+    context_id: str | m.InvestigationContextId = "ctx-1",
+) -> m.InvestigationContextRef:
+    value = (
+        context_id
+        if isinstance(context_id, m.InvestigationContextId)
+        else m.InvestigationContextId(context_id)
+    )
+    return m.InvestigationContextRef(repository_id="repo-1", context_id=value)
+
+
+def _receipt(
+    store: LifecycleStore, result: m.UnderstandingRecorded | m.VerificationRecorded
+) -> m.RecordReceipt:
+    selector = _receipt(self.store, result)_selector
+    receipt = store.get_receipt(
+        m.RecordingKey(
+            repository_id=selector.repository_id,
+            request_id=m.RequestId(selector.request_id),
+        )
+    )
+    assert receipt is not None
+    return receipt
 
 
 def _create_wire(
@@ -144,13 +164,11 @@ def _create_wire(
 ) -> w.RecordRequestWire:
     spec = conclusion or _conclusion()
     return w.RecordRequestWire(
-        repository_id="repo-1",
         request_id=submission,
-        context_id="ctx-1",
+        context=_context_ref(),
         kind=m.RecordKind.UNDERSTANDING,
         surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
         conclusion=spec.statement,
-        locator=spec.scope_paths[0] if spec.scope_paths else "src/a.py",
         assertion_nature=spec.assertion_nature,
         support=spec.support,
     )
@@ -209,22 +227,26 @@ class LifecycleServiceTest(unittest.TestCase):
         understanding_id: str = "u:sub-create",
         context_id: str | None = "ctx-1",
     ) -> m.UnderstandingRecorded:
+        binding: dict[str, object] = (
+            {"repository_id": "repo-1"}
+            if context_id is None
+            else {"context": _context_ref(context_id)}
+        )
         result = self.service.record(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id=submission,
-                context_id=context_id,
                 kind=m.RecordKind.UNDERSTANDING,
                 understanding_id=understanding_id,
                 expected_version=expected,
                 actions=actions,
+                **binding,
             )
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
         return result
 
     def _record_add(self, expected: int, submission: str) -> m.RecordReceipt:
-        return self._update(
+        return _receipt(self.store, self._update(
             submission,
             w.RecordActionsWire(
                 add=(
@@ -235,7 +257,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 )
             ),
             expected,
-        ).receipt
+        ))
 
     def _version_conclusion_id(
         self, understanding_id: str, version: int, index: int = 0
@@ -249,7 +271,7 @@ class LifecycleServiceTest(unittest.TestCase):
     def _record_confirm(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self._update(
+        return _receipt(self.store, self._update(
             submission,
             w.RecordActionsWire(
                 confirm=(
@@ -260,12 +282,12 @@ class LifecycleServiceTest(unittest.TestCase):
                 )
             ),
             expected,
-        ).receipt
+        ))
 
     def _record_correct(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self._update(
+        return _receipt(self.store, self._update(
             submission,
             w.RecordActionsWire(
                 correct=(
@@ -277,12 +299,12 @@ class LifecycleServiceTest(unittest.TestCase):
                 )
             ),
             expected,
-        ).receipt
+        ))
 
     def _record_replace(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self._update(
+        return _receipt(self.store, self._update(
             submission,
             w.RecordActionsWire(
                 replace=(
@@ -295,12 +317,12 @@ class LifecycleServiceTest(unittest.TestCase):
                 )
             ),
             expected,
-        ).receipt
+        ))
 
     def _record_withdraw(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return self._update(
+        return _receipt(self.store, self._update(
             submission,
             w.RecordActionsWire(
                 withdraw=(
@@ -311,7 +333,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 )
             ),
             expected,
-        ).receipt
+        ))
 
     # -- contexts ----------------------------------------------------------
 
@@ -419,7 +441,7 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_create_records_and_replays(self) -> None:
         wire = _create_wire()
-        receipt = _receipt(self.service.record(wire))
+        receipt = _receipt(self.store, self.service.record(wire))
         self.assertEqual(
             receipt.accepted_understanding_ids,
             (
@@ -434,7 +456,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
         self.assertEqual(receipt.replay_expires_at, NOW + RETENTION.replay_retention)
-        replay = _receipt(self.service.record(wire))
+        replay = _receipt(self.store, self.service.record(wire))
         self.assertEqual(replay.committed_at, receipt.committed_at)
         with self.assertRaises(RecordingConflict):
             self.service.record(
@@ -545,13 +567,13 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_replay_survives_later_source_change(self) -> None:
         wire = _create_wire()
-        receipt = _receipt(self.service.record(wire))
+        receipt = _receipt(self.store, self.service.record(wire))
         # The receipt is immutable acceptance, not cached currentness.
         self.store._connection.execute(
             "UPDATE source_observations SET content_digest='sha256:changed'"
         )
         self.store._connection.commit()
-        replay = _receipt(self.service.record(wire))
+        replay = _receipt(self.store, self.service.record(wire))
         self.assertEqual(replay.committed_at, receipt.committed_at)
         self.assertEqual(replay, receipt)
 
@@ -716,7 +738,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(result, m.UnderstandingRecorded)
-        receipt = result.receipt
+        receipt = _receipt(self.store, result)
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
         updated = self.store.get_challenge("ch-1")
         self.assertEqual(updated.challenge_revision.value, 2)
@@ -752,7 +774,7 @@ class LifecycleServiceTest(unittest.TestCase):
         result = self.service.record(wire("sub-v", "obs-1"))
         assert isinstance(result, m.VerificationRecorded)
         run = self.store.get_verification_run(
-            result.receipt.accepted_verification_run_ids[0].value
+            result.run_id.value
         )
         self.assertEqual(run.outcome, m.VerificationOutcome.PASS)
 
@@ -777,7 +799,7 @@ class LifecycleServiceTest(unittest.TestCase):
         result = self.service.record(wire)
         assert isinstance(result, m.VerificationRecorded)
         run = self.store.get_verification_run(
-            result.receipt.accepted_verification_run_ids[0].value
+            result.run_id.value
         )
         self.assertTrue(run.observations)
 
@@ -805,7 +827,7 @@ class LifecycleServiceTest(unittest.TestCase):
     # -- retention ---------------------------------------------------------
 
     def test_receipt_readable_after_context_expiry(self) -> None:
-        receipt = _receipt(self.service.record(_create_wire()))
+        receipt = _receipt(self.store, self.service.record(_create_wire()))
         self.clock[0] = NOW + RETENTION.context_lifetime + datetime.timedelta(minutes=1)
         identity = m.RecordingIdentity(
             repository_id="repo-1",
@@ -822,12 +844,12 @@ class LifecycleServiceTest(unittest.TestCase):
             )
 
     def test_replay_survives_context_reaping(self) -> None:
-        receipt = _receipt(self.service.record(_create_wire()))
+        receipt = _receipt(self.store, self.service.record(_create_wire()))
         self.clock[0] = NOW + RETENTION.context_lifetime + datetime.timedelta(minutes=1)
         self.store.reap_expired()
         self.assertIsNone(self.store.find_context_by_id("ctx-1"))
         self.assertEqual(self.store.get_receipt(receipt.identity), receipt)
-        replay = _receipt(self.service.record(_create_wire()))
+        replay = _receipt(self.store, self.service.record(_create_wire()))
         self.assertEqual(replay, receipt)
 
     # -- context-free recording (L2 §4.2) --------------------------------
@@ -856,7 +878,7 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_create_without_context_issues_one_internally(self) -> None:
         wire = self._context_free_create()
-        receipt = _receipt(self._service("ctx-issued").record(wire))
+        receipt = _receipt(self.store, self._service("ctx-issued").record(wire))
         self.assertEqual(receipt.identity.context_id.value, "ctx-issued")
         self.assertEqual(receipt.accepted_understanding_ids[0].value, "u:sub-nc")
         context = self.store.find_context_by_id("ctx-issued")
@@ -864,7 +886,7 @@ class LifecycleServiceTest(unittest.TestCase):
         assert context is not None
         self.assertEqual(context.origin, m.ContextOrigin.EVIDENCE_ONLY)
         self.assertIn("src/a.py", context.scope.paths)
-        self.assertEqual(_receipt(self._service("ctx-unused").record(wire)), receipt)
+        self.assertEqual(_receipt(self.store, self._service("ctx-unused").record(wire)), receipt)
 
     def test_create_with_support_only_derives_scope_from_context(self) -> None:
         result = self.service.record(
@@ -879,7 +901,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(result, m.UnderstandingRecorded)
-        understanding_id = result.receipt.accepted_understanding_ids[0].value
+        understanding_id = result.understanding_id.value
         target_id = self._version_conclusion_id(understanding_id, 1)
         revision = next(
             item
@@ -904,7 +926,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(result, m.UnderstandingRecorded)
-        understanding_id = result.receipt.accepted_understanding_ids[0].value
+        understanding_id = result.understanding_id.value
         understanding = self.store.get_understanding(understanding_id)
         self.assertEqual(understanding.scope.paths, ("src/a.py",))
         target_id = self._version_conclusion_id(understanding_id, 1)
@@ -947,7 +969,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(result, m.UnderstandingRecorded)
-        self.assertEqual(result.receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(result.version.value, 2)
         context = self.store.find_context_by_id("ctx-update")
         self.assertIsNotNone(context)
         assert context is not None
@@ -1076,20 +1098,27 @@ class LifecycleServiceTest(unittest.TestCase):
                 else None
             )
             support = () if observation is not None else conclusion.support
-            locator = conclusion.scope_paths[0] if conclusion.scope_paths else None
+            locator = (
+                conclusion.scope_paths[0]
+                if observation is None and not support and conclusion.scope_paths
+                else None
+            )
             if context_id is not None:
                 scope_paths = ()
             flat = {
                 "conclusion": conclusion.statement,
                 "assertion_nature": conclusion.assertion_nature,
-                "locator": locator if observation is None else None,
+                "locator": locator,
                 "observation_id": observation,
                 "support": support,
             }
+        binding: dict[str, object] = (
+            {"repository_id": "repo-1"}
+            if context_id is None
+            else {"context": _context_ref(context_id)}
+        )
         return w.RecordRequestWire(
-            repository_id="repo-1",
             request_id=submission,
-            context_id=context_id,
             kind=kind,
             surface=surface,
             question=question,
@@ -1101,6 +1130,7 @@ class LifecycleServiceTest(unittest.TestCase):
             expected_boundary_version=expected_boundary_version,
             run=run,
             challenge_dispositions=challenge_dispositions,
+            **binding,
             **flat,
         )
 
@@ -1285,7 +1315,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(created, m.UnderstandingRecorded)
-        understanding_id = created.receipt.accepted_understanding_ids[0].value
+        understanding_id = created.understanding_id.value
         target_id = self._version_conclusion_id(understanding_id, 1)
 
         updated = self.service.record(
@@ -1307,7 +1337,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(updated, m.UnderstandingRecorded)
         assert isinstance(updated, m.UnderstandingRecorded)
-        self.assertEqual(updated.receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(updated.version.value, 2)
 
     def test_record_verification_through_kind(self) -> None:
         result = self.service.record(
@@ -1342,7 +1372,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(created, m.UnderstandingRecorded)
-        understanding_id = created.receipt.accepted_understanding_ids[0].value
+        understanding_id = created.understanding_id.value
         target_id = self._version_conclusion_id(understanding_id, 1)
         updated = self.service.record(
             self._record_request(
@@ -1420,7 +1450,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(created, m.UnderstandingRecorded)
-        understanding_id = created.receipt.accepted_understanding_ids[0].value
+        understanding_id = created.understanding_id.value
         target_id = self._version_conclusion_id(understanding_id, 1)
 
         replaced = self.service.record(
@@ -1442,7 +1472,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(replaced, m.UnderstandingRecorded)
-        self.assertEqual(replaced.receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(replaced.version.value, 2)
         replaced_version = self.store.get_version(understanding_id, 2)
         new_id = next(ref.conclusion_id.value for ref in replaced_version.conclusions)
         self.assertEqual(
@@ -1467,7 +1497,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(withdrawn, m.UnderstandingRecorded)
-        self.assertEqual(withdrawn.receipt.accepted_understanding_versions[0].value, 3)
+        self.assertEqual(withdrawn.version.value, 3)
         version = self.store.get_version(understanding_id, 3)
         self.assertEqual(
             {
@@ -1492,7 +1522,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(created, m.UnderstandingRecorded)
-        understanding_id = created.receipt.accepted_understanding_ids[0].value
+        understanding_id = created.understanding_id.value
         target_id = self._version_conclusion_id(understanding_id, 1)
         self.store.create_challenge(
             create_challenge(
@@ -1538,7 +1568,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(settled, m.UnderstandingRecorded)
-        self.assertEqual(settled.receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(settled.version.value, 2)
         updated = self.store.get_challenge("ch-1")
         self.assertEqual(updated.challenge_revision.value, 2)
         self.assertEqual(updated.state, m.ChallengeState.UNRESOLVED)
@@ -1563,7 +1593,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(base, m.UnderstandingRecorded)
-        base_id = base.receipt.accepted_understanding_ids[0].value
+        base_id = base.understanding_id.value
         base_target_id = self._version_conclusion_id(base_id, 1)
 
         observation = m.DiscoveryObservation(
@@ -1604,7 +1634,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(result, m.UnderstandingRecorded)
-        understanding_id = result.receipt.accepted_understanding_ids[0].value
+        understanding_id = result.understanding_id.value
         new_target_id = self._version_conclusion_id(understanding_id, 1)
         revision = next(
             item
@@ -1794,7 +1824,7 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def _assert_scopes(self, result, scope, locator):
         self.assertIsInstance(result, m.UnderstandingRecorded)
-        uid = result.receipt.accepted_understanding_ids[0].value
+        uid = result.understanding_id.value
         understanding = self.store.get_understanding(uid)
         version = self.store.get_version(uid, 1)
         conclusion = self.store.get_version_conclusions(uid, 1)[0]
@@ -1854,7 +1884,7 @@ class LifecycleServiceTest(unittest.TestCase):
         observation = self.store.list_discovery_observations("repo-1")[0]
         self.assertEqual(observation.scope, m.EvidenceScope())
         identity_context = self.store.get_context(
-            result.receipt.identity.context_id.value
+            _receipt(self.store, result).identity.context_id.value
         )
         self.assertEqual(identity_context.scope, m.EvidenceScope())
 
@@ -1986,7 +2016,7 @@ class LifecycleServiceTest(unittest.TestCase):
             ),
         ):
             replay = self.service.record(wire)
-            self.assertEqual(replay.receipt, original.receipt)
+            self.assertEqual(_receipt(self.store, replay), _receipt(self.store, original))
             with self.assertRaises(RecordingConflict) as raised:
                 self.service.record(dataclasses.replace(wire, conclusion="Changed"))
             self.assertEqual(
@@ -2015,7 +2045,7 @@ class LifecycleServiceTest(unittest.TestCase):
             result = self.service.record(wire)
         self.assertIsInstance(result.status, m.SurfaceStatusUnavailable)
         self.assertEqual(result.status.surface.locator, "src/a.py")
-        self.assertEqual(self.service.record(wire).receipt, result.receipt)
+        self.assertEqual(self.service.record(wire), _receipt(self.store, result))
         with mock.patch(
             "span.service.lifecycle.compose_surface_status",
             side_effect=ValueError("programming defect"),
@@ -2028,8 +2058,8 @@ class LifecycleServiceTest(unittest.TestCase):
         with mock.patch.object(
             self.store, "get_understanding", side_effect=OSError("store unavailable")
         ):
-            qualified = self.service.qualify_understanding(result.receipt)
-        self.assertEqual(qualified.receipt, result.receipt)
+            qualified = self.service.qualify_understanding(_receipt(self.store, result))
+        self.assertEqual(_receipt(self.store, qualified), _receipt(self.store, result))
         self.assertIsInstance(qualified.qualification, m.SupportUnavailable)
         self.assertIsInstance(qualified.status, m.SurfaceStatusUnavailable)
         self.assertIsNone(qualified.status.surface)
@@ -2120,7 +2150,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 self.service, "_admit_source", side_effect=AssertionError("admit")
             ),
         ):
-            self.assertEqual(self.service.record(wire).receipt, result.receipt)
+            self.assertEqual(self.service.record(wire), _receipt(self.store, result))
 
     def test_postcommit_store_failures_preserve_acceptance_through_mcp(self):
         from span.ports.structural import StructuralSource
@@ -2162,10 +2192,10 @@ class LifecycleServiceTest(unittest.TestCase):
                 )
                 self.assertEqual(response["status"]["surface"]["locator"], "src/a.py")
                 self.assertEqual(
-                    response["qualification"]["$type"], "UnderstandingSupport"
+                    response["qualification"]["$type"], "UnderstandingQualification"
                 )
                 retry = adapter.dispatch("record", payload).structured_content
-                self.assertEqual(retry["receipt"], response["receipt"])
+                self.assertEqual(retry["receipt_selector"], response["receipt_selector"])
                 self.assertEqual(retry["status"]["$type"], "SurfaceStatus")
 
     def test_verification_store_failure_preserves_accepted_receipt(self):
@@ -2200,7 +2230,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 ),
             ):
                 replay = self.service.record(wire)
-                self.assertEqual(replay.receipt, result.receipt)
+                self.assertEqual(_receipt(self.store, replay), _receipt(self.store, result))
                 self.assertIsInstance(replay.qualification, m.SupportUnavailable)
         with mock.patch.object(
             self.support,
@@ -2224,8 +2254,8 @@ class LifecycleServiceTest(unittest.TestCase):
                     side_effect=error,
                 ),
             ):
-                qualified = self.service.qualify_understanding(result.receipt)
-                self.assertEqual(qualified.receipt, result.receipt)
+                qualified = self.service.qualify_understanding(_receipt(self.store, result))
+                self.assertEqual(_receipt(self.store, qualified), _receipt(self.store, result))
                 self.assertIsInstance(qualified.qualification, m.SupportUnavailable)
                 self.assertIsInstance(qualified.status, m.SurfaceStatusUnavailable)
                 self.assertIsNone(qualified.status.surface)
@@ -2246,7 +2276,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 ),
             ):
                 with self.assertRaises(type(error)):
-                    self.service.qualify_understanding(result.receipt)
+                    self.service.qualify_understanding(_receipt(self.store, result))
 
     def test_refs_only_semantic_scope_does_not_examine_unrelated_files(self):
         from span.service.surface_status import compose_surface_status
