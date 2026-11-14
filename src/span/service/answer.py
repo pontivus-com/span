@@ -798,9 +798,7 @@ class AnswerService:
                 dropped = group.conclusions[-1]
                 remaining = group.conclusions[:-1]
                 if remaining:
-                    groups[-1] = _dataclasses.replace(
-                        group, conclusions=remaining
-                    )
+                    groups[-1] = _dataclasses.replace(group, conclusions=remaining)
                 else:
                     groups.pop()
                 omitted.append(_group_label(dropped))
