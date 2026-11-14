@@ -5,29 +5,32 @@ next session find it with its support attached. The coding agent owns the
 reasoning, edits, and test execution. Span owns evidence admission, recording,
 version history, and checks on the dependencies the agent declared.
 
-## Ask an ordinary question
+## Ask a surface
 
-After [setup](install.md), use the registered `repository_id` — the basename
-of the repository root recorded by the installer. `span-install --verify-only`
-prints it; it is never a filesystem path. Call `ask` with that ID, a caller-chosen `request_id`, a
-natural-language question, and either a surface reference (a declared name or a
-path you are looking at) or an exact `surface={kind, locator}`. For example:
-“How does this request reach persistence?” with the relevant service surface.
+After [setup](install.md), use the registered `repository_id` — never a
+filesystem path. The normal reuse call is surface-first and carries no question
+or request identity:
 
-Span returns an `Answer` with current conclusions, their support and evidence,
-and surface status; a `Gap` with inspectable evidence, the prior statement as
-historical content, and a context; an `AmbiguousSurface` when more than one
-granularity matches; or `Unavailable` with its recovery. The surface status
-carries `stale_refs`: each names the exact stale conclusion revision, the
-understanding version, and its present non-current state. Omitting the question
-returns the surface document view. That view
-is the normal reuse path: a fresh agent that does not know the exact recorded
-question reads it and selects the conclusion it needs. An exact question is a
-targeted query; a paraphrase returns `no_match` with a recovery that points back
-to the document view. Span never semantic-matches questions. If the gap omitted
-evidence to fit the response, follow its continuation. Currentness is checked
-against present support; a saved conclusion is never served as current on the
-strength of its wording.
+```json
+{"repository_id": "repo-1", "surface": {"kind": "FILE", "locator": "src/service.py"}}
+```
+
+Use `reference` only when the path or declared name resolves unambiguously. A
+pure obtain returns the current surface document view grouped by recorded
+question, or an honest `Gap` with status, historical content where applicable,
+and concrete source pointers. It creates no investigation context and delivers no
+source body automatically.
+
+When the exact recorded question is already known, use
+`RecordedQuestionSelector`. It matches exact text on the exact surface and is
+not semantic search; a non-match is `Gap/unassessed`. When source bytes are
+needed, make an explicit evidence-admission `ask` with the same surface or
+reference, a new `request_id`, and non-empty `evidence`. That call returns the
+same Answer/Gap classification plus admission outcomes, exact deliveries, a
+bound context reference, and a continuation when selected evidence is deferred.
+
+Currentness is checked against present support. A saved conclusion is never
+served as current on the strength of its wording.
 
 ## Investigate and record
 
@@ -37,7 +40,7 @@ strength of its wording.
    conclusions actually lost support.
 2. Record a coherent result with `record(kind="understanding")`. A create is
    one conclusion with exactly one evidence mode: `locator`, the
-   `observation_id` from the ask gap, or non-empty `support`. Scope is supplied
+   `observation_id` returned by explicit evidence admission, or non-empty `support`. Scope is supplied
    or derived independently through `scope_paths`, the context, or a surface.
    Cite what you already hold.
    Distinguish observed behavior from governing intent, and include unresolved
@@ -51,8 +54,9 @@ strength of its wording.
    Check its conclusions, support, and challenges before reporting what was
    saved.
 
-A question-bound context supplies the create target. Do not also send the
-question or scope with that context; the conflict is rejected. If the work began
+A bound context from explicit evidence admission or `reconsider` supplies its
+recording namespace/scope. Do not send an independent repository override or a
+conflicting explicit target with that context; the conflict is rejected. If the work began
 outside Span, `record` can issue its own context from the supplied scope and
 cited locators. This direct-create capability does not waive consultation before deriving
 understanding; follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
@@ -62,11 +66,12 @@ owns the wire grammar; this guide describes the procedure.
 
 ## Reuse in another session
 
-Read the surface document view first: call `ask` with the surface and no question.
-Select the current conclusion that answers the task; no prior conversation or
-saved understanding ID is required. If you already know the exact recorded
-question, ask it as a targeted query. A paraphrase is a different question and
-returns `no_match`; use its recovery to read the document view.
+Read the surface document view first: call `ask` with the surface and no
+request identity. Select the current conclusion that answers the task; no prior
+conversation or saved understanding ID is required. If you already know the
+exact recorded question, use `RecordedQuestionSelector`. A different or
+paraphrased question does not similarity-match; unmatched exact selection is
+`Gap/unassessed`.
 
 `CURRENT` means the recorded dependencies still check out. It does not certify
 that the original interpretation was correct or complete. Open challenges and
@@ -106,8 +111,8 @@ equal or an ancestor); record it against the surface it verifies. `ask` returns
 the applicable verification runs and their present qualification; it does not
 rerun the test or turn a recorded failure into a pass.
 
-A gap whose evidence was omitted carries a continuation. Call `ask` with only
-the repository and that continuation until the evidence is complete. Never
+An explicit evidence admission may carry a continuation. Call `ask` with only
+that continuation until the selected evidence is complete. Never
 fetch or construct a context id. A `stale_refs` entry is a reference, not
 content: read the prior statement with
 `ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`, then
