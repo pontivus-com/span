@@ -14,7 +14,7 @@ The agent owns its meaning and the evidence-to-statement reasoning.
 saved version. It is not a supported conclusion.
 
 **Gap** — The `ask` result when no matched conclusion is current. It carries
-exactly one reason: `invalidated`, `unverifiable`, `unassessed`, or `no_match`,
+exactly one reason: `invalidated`, `unverifiable`, or `unassessed`,
 the prior non-current conclusions as historical content, and a recovery that
 names the next action.
 
@@ -22,14 +22,15 @@ names the next action.
 `Gap`: exact revision, understanding version, statement, evidence references,
 and present non-current state. It never becomes current answer content.
 
-**Surface document view** — The `ask` result when the question is omitted:
-current conclusions grouped by the question they answer, plus status, gaps, and
+**Surface document view** — The pure surface/reference `ask` result: current
+conclusions grouped by the recorded question they answer, plus status, gaps, and
 verification. It is assembled on read and cannot drift.
 
 **Surface-first reuse** — Reading the surface document view and selecting the
-current conclusion that answers the task. An exact question is a targeted query;
-a paraphrase is a different question and returns `no_match`. Span does not
-semantically match questions.
+current conclusion that answers the task. Targeted reuse uses
+`RecordedQuestionSelector` only when the exact recorded question is known; a
+different or paraphrased value does not similarity-match and is
+`Gap/unassessed`.
 
 **Rejection cause** — The exact server message and typed cause kind carried by a
 `Rejected` result, with the required action and the structured current version
@@ -50,8 +51,9 @@ its own compare-and-set version.
 **Historical snapshot** — A `RetrievedUnderstanding` selected by exact
 understanding/version. It is never merged into a current `Answer`.
 
-**Continuation** — An opaque, stateless token that resumes evidence omitted from
-a gap. It is valid while its context is `LIVE` and always advances.
+**Continuation** — An opaque, stateless token that resumes selected evidence
+from explicit evidence admission. It is valid only for its bound live context
+and always advances; an unusable continuation is a typed rejection.
 
 **Possible impact** — A conclusion was included in a `reconsider` result because
 its surface or dependency was considered. It may still be `CURRENT`.
