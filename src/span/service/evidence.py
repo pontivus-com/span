@@ -71,7 +71,9 @@ class EvidenceService:
         """Project one single-fragment observation into an evidence unit."""
         deliveries = self.context_deliveries(record)
         if len(deliveries) != 1:
-            raise ValueError("an observation with disjoint ranges has multiple deliveries")
+            raise ValueError(
+                "an observation with disjoint ranges has multiple deliveries"
+            )
         return deliveries[0].unit
 
     def context_deliveries(
