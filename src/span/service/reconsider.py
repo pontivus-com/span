@@ -14,7 +14,7 @@ import uuid as _uuid
 
 from span.core import containment
 from span.core import model as m
-from span.core.identity import payload_digest, record_content_digest
+from span.core.identity import record_content_digest
 from span.core.recording import RecordingValidationError
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
@@ -200,16 +200,16 @@ class ReconsiderService:
                 declared = self._store.find_surface(surface)
                 if declared is not None:
                     paths.extend(declared.boundary.paths)
-        digest = payload_digest(request)
+        context_id = self._new_context_id()
         context = issue_context(
             self._store,
             payload=request,
             repository_id=repository_id,
-            request_id=m.RequestId("reconsider:" + digest.value.split(":", 1)[1][:32]),
+            request_id=m.RequestId(f"reconsider:{context_id}"),
             scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
             question=None,
             clock=self._clock,
-            new_context_id=self._new_context_id,
+            new_context_id=lambda: context_id,
         )
         return m.InvestigationContextRef(
             repository_id=repository_id,
