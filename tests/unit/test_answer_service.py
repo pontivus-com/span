@@ -1262,9 +1262,7 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertTrue(first.admission.continuation)
         return first
 
-    def _state_continuation(
-        self, *, expires_at: datetime.datetime
-    ) -> tuple[str, str]:
+    def _state_continuation(self, *, expires_at: datetime.datetime) -> tuple[str, str]:
         context_id = "ctx-continuation-state"
         request_id = m.RequestId("req-continuation-state")
         digest = m.ContentDigest("sha256:continuation-state")
