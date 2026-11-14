@@ -10,6 +10,7 @@ import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
+from span.core.schema import constraints as _constraints
 from span.core.model.claims import AssertionNature
 from span.core.model.primitives import (
     ChallengeId,
@@ -214,6 +215,140 @@ class StartContextRequest:
 class AskRequest:
     """One pure obtain, explicit admission, exact selector, or continuation."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("surface"),
+                _constraints.PresenceField("reference"),
+                _constraints.PresenceField("continuation"),
+                _constraints.PresenceField("selector"),
+            ),
+            minimum=1,
+            maximum=1,
+            label="ask branch",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("surface"), True
+                ),
+            ),
+            label="surface ask repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("reference"), True
+                ),
+            ),
+            label="reference ask repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("reference", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("reference"), True
+                ),
+            ),
+            label="reference ask locator",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("continuation", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("continuation"), True
+                ),
+            ),
+            label="ask continuation",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("repository_id"),
+                _constraints.PresenceField("request_id"),
+                _constraints.PresenceField("evidence"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("continuation"), True
+                ),
+            ),
+            label="continuation ask namespace",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("repository_id"),
+                _constraints.PresenceField("request_id"),
+                _constraints.PresenceField("evidence"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("selector"), True
+                ),
+            ),
+            label="selector ask namespace",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("surface.repository_id"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("surface"), True
+                ),
+            ),
+            label="surface ask embedded repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("evidence", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("evidence"), True
+                ),
+            ),
+            label="explicit evidence admission",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("request_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("evidence"), True
+                ),
+            ),
+            label="explicit evidence admission request identity",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("request_id"),),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("evidence"), False
+                ),
+            ),
+            label="pure ask request identity",
+        ),
+    )
+
     repository_id: str | None = None
     request_id: str | None = None
     surface: SurfaceReference | None = None
@@ -229,44 +364,7 @@ class AskRequest:
     evidence: tuple[EvidenceRequest, ...] | None = None
 
     def __post_init__(self) -> None:
-        forms = (
-            self.surface is not None,
-            self.reference is not None,
-            self.continuation is not None,
-            self.selector is not None,
-        )
-        if sum(forms) != 1:
-            raise ValueError(
-                "ask takes exactly one of surface, reference, selector, or continuation"
-            )
-        if self.surface is not None or self.reference is not None:
-            if self.repository_id is None:
-                raise ValueError("surface/reference ask requires repository_id")
-            _require_non_empty("AskRequest.repository_id", self.repository_id)
-            if self.surface is not None and self.surface.repository_id is not None:
-                raise ValueError("AskRequest.surface.repository_id must be omitted")
-            if self.reference is not None:
-                _require_non_empty("AskRequest.reference", self.reference)
-            if self.evidence is None:
-                if self.request_id is not None:
-                    raise ValueError("pure surface/reference ask takes no request_id")
-            else:
-                if not self.evidence:
-                    raise ValueError("explicit evidence admission requires evidence")
-                if self.request_id is None:
-                    raise ValueError("explicit evidence admission requires request_id")
-                _require_non_empty("AskRequest.request_id", self.request_id)
-            return
-        if self.repository_id is not None:
-            raise ValueError("selector/continuation ask carries no repository override")
-        if self.request_id is not None:
-            raise ValueError("selector/continuation ask carries no request_id")
-        if self.evidence is not None:
-            raise ValueError("selector/continuation ask carries no evidence selection")
-        if self.continuation is not None:
-            _require_non_empty("AskRequest.continuation", self.continuation)
-            return
-        assert self.selector is not None
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -290,6 +388,35 @@ class ChallengeConclusionRef:
 class ChallengeRaise:
     """One explicit dispute raised through reconsider (L2 §4.3)."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("request_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="challenge request identity",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("understanding_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="challenge understanding identity",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("reason", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="challenge reason",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("target_conclusions", non_empty=True),
+            ),
+            minimum=1,
+            maximum=1,
+            label="challenge target conclusions",
+        ),
+    )
+
     request_id: str
     understanding_id: str
     target_version: int
@@ -299,18 +426,95 @@ class ChallengeRaise:
     context: InvestigationContextRef | None = None
 
     def __post_init__(self) -> None:
-        _require_non_empty("ChallengeRaise.request_id", self.request_id)
-        _require_non_empty("ChallengeRaise.understanding_id", self.understanding_id)
-        _require_non_empty("ChallengeRaise.reason", self.reason)
+        _constraints.validate_structural_rules(self)
         if self.target_version < 1:
             raise ValueError("ChallengeRaise.target_version must be positive")
-        if not self.target_conclusions:
-            raise ValueError("a challenge requires at least one target conclusion")
 
 
 @_dataclass(frozen=True)
 class ReconsiderRequest:
     """A changed scope to re-align, or one explicit challenge."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("changed_paths", non_empty=True),
+                _constraints.PresenceField("changed_surfaces", non_empty=True),
+            ),
+            minimum=1,
+            maximum=2,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("challenge"), False
+                ),
+            ),
+            label="changed-scope reconsider",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("changed_paths", non_empty=True),
+                _constraints.PresenceField("changed_surfaces", non_empty=True),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("challenge"), True
+                ),
+            ),
+            label="challenge reconsider scope",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("changed_paths", non_empty=True), True
+                ),
+            ),
+            label="changed-path repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("changed_surfaces", non_empty=True), True
+                ),
+            ),
+            label="changed-surface repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id"),),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("challenge"), True
+                ),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("challenge.context"), True
+                ),
+            ),
+            label="context-bound challenge repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("challenge"), True
+                ),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("challenge.context"), False
+                ),
+            ),
+            label="direct challenge repository",
+        ),
+    )
 
     repository_id: str | None = None
     changed_paths: tuple[str, ...] = ()
@@ -318,26 +522,7 @@ class ReconsiderRequest:
     challenge: ChallengeRaise | None = None
 
     def __post_init__(self) -> None:
-        has_scope = bool(self.changed_paths or self.changed_surfaces)
-        if self.challenge is not None and has_scope:
-            raise ValueError(
-                "reconsideration takes a changed scope or a challenge, not both"
-            )
-        if not has_scope and self.challenge is None:
-            raise ValueError("reconsideration requires a changed scope or a challenge")
-        if has_scope:
-            if self.repository_id is None:
-                raise ValueError("changed-scope reconsider requires repository_id")
-            _require_non_empty("ReconsiderRequest.repository_id", self.repository_id)
-        elif self.challenge is not None and self.challenge.context is not None:
-            if self.repository_id is not None:
-                raise ValueError(
-                    "context-bound challenge carries no repository override"
-                )
-        else:
-            if self.repository_id is None:
-                raise ValueError("direct challenge requires repository_id")
-            _require_non_empty("ReconsiderRequest.repository_id", self.repository_id)
+        _constraints.validate_structural_rules(self)
         for path in self.changed_paths:
             _require_non_empty("ReconsiderRequest.changed_paths", path)
         if self.repository_id is not None:
