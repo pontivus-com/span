@@ -265,6 +265,201 @@ class SurfaceConformanceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_request("record", payload)
 
+    def test_t03_schema_and_decoder_equivalence_matrix(self):
+        challenge = {
+            "request_id": "challenge-1",
+            "understanding_id": "u-1",
+            "target_version": 1,
+            "target_conclusions": [
+                {
+                    "understanding_id": "u-1",
+                    "conclusion_id": "c-1",
+                    "revision": 1,
+                }
+            ],
+            "reason": "Source changed.",
+        }
+        bound_challenge = {
+            **challenge,
+            "context": {
+                "repository_id": "r",
+                "context_id": {"value": "ctx-1"},
+            },
+        }
+        valid_create = {
+            "repository_id": "r",
+            "request_id": "w",
+            "kind": "understanding",
+            "question": "Why?",
+            "scope_paths": ["a.py"],
+            "conclusion": "Because.",
+            "locator": "a.py",
+        }
+        cases = (
+            ("ask-empty", "ask", {}, False),
+            (
+                "ask-admission-needs-request-id",
+                "ask",
+                {
+                    "repository_id": "r",
+                    "surface": {"kind": "FILE", "locator": "a.py"},
+                    "evidence": [{"locator": "a.py"}],
+                },
+                False,
+            ),
+            (
+                "ask-empty-admission",
+                "ask",
+                {
+                    "repository_id": "r",
+                    "request_id": "q",
+                    "surface": {"kind": "FILE", "locator": "a.py"},
+                    "evidence": [],
+                },
+                False,
+            ),
+            (
+                "ask-selector-rejects-repository-override",
+                "ask",
+                {
+                    "repository_id": "r",
+                    "selector": {
+                        "$type": "RecordedQuestionSelector",
+                        "repository_id": "r",
+                        "surface": {"kind": "FILE", "locator": "a.py"},
+                        "question": "Why?",
+                    },
+                },
+                False,
+            ),
+            (
+                "ask-surface-rejects-embedded-repository",
+                "ask",
+                {
+                    "repository_id": "r",
+                    "surface": {
+                        "repository_id": "r",
+                        "kind": "FILE",
+                        "locator": "a.py",
+                    },
+                },
+                False,
+            ),
+            ("reconsider-empty", "reconsider", {}, False),
+            (
+                "reconsider-changed-scope-needs-repository",
+                "reconsider",
+                {"changed_paths": ["a.py"]},
+                False,
+            ),
+            (
+                "reconsider-context-challenge-rejects-repository-override",
+                "reconsider",
+                {"repository_id": "r", "challenge": bound_challenge},
+                False,
+            ),
+            (
+                "reconsider-direct-challenge-needs-repository",
+                "reconsider",
+                {"challenge": challenge},
+                False,
+            ),
+            (
+                "record-update-needs-effect",
+                "record",
+                {
+                    "repository_id": "r",
+                    "request_id": "w",
+                    "kind": "understanding",
+                    "understanding_id": "u-1",
+                    "expected_version": 1,
+                    "actions": {},
+                },
+                False,
+            ),
+            (
+                "record-path-surface-is-not-declarable",
+                "record",
+                {
+                    "repository_id": "r",
+                    "request_id": "w",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {"kind": "FILE", "locator": "a.py"},
+                },
+                False,
+            ),
+            (
+                "record-declared-surface-needs-boundary",
+                "record",
+                {
+                    "repository_id": "r",
+                    "request_id": "w",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {"kind": "SERVICE", "locator": "svc"},
+                },
+                False,
+            ),
+            (
+                "record-empty-request-id",
+                "record",
+                {**valid_create, "request_id": ""},
+                False,
+            ),
+            (
+                "record-empty-conclusion",
+                "record",
+                {**valid_create, "conclusion": ""},
+                False,
+            ),
+            (
+                "ask-explicit-admission",
+                "ask",
+                {
+                    "repository_id": "r",
+                    "request_id": "q",
+                    "surface": {"kind": "FILE", "locator": "a.py"},
+                    "evidence": [{"locator": "a.py"}],
+                },
+                True,
+            ),
+            (
+                "reconsider-changed-scope",
+                "reconsider",
+                {"repository_id": "r", "changed_paths": ["a.py"]},
+                True,
+            ),
+            (
+                "record-declared-surface",
+                "record",
+                {
+                    "repository_id": "r",
+                    "request_id": "w",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {
+                        "kind": "SERVICE",
+                        "locator": "svc",
+                        "boundary": {"paths": ["src"], "symbols": []},
+                    },
+                },
+                True,
+            ),
+        )
+        for label, tool, payload, accepted in cases:
+            with self.subTest(label=label):
+                errors = list(
+                    Draft202012Validator(TOOL_SCHEMAS[tool]).iter_errors(payload)
+                )
+                if accepted:
+                    self.assertEqual(errors, [])
+                    decode_request(tool, payload)
+                else:
+                    self.assertTrue(errors, "schema unexpectedly accepted payload")
+                    with self.assertRaises(ValueError):
+                        decode_request(tool, payload)
+
     def test_public_discriminator_values_do_not_expose_wire_class_names(self):
         def tag_values(node):
             if isinstance(node, dict):
