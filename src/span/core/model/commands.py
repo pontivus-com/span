@@ -302,9 +302,7 @@ class AskRequest:
             label="selector ask namespace",
         ),
         _constraints.PresenceRule(
-            fields=(
-                _constraints.PresenceField("surface.repository_id"),
-            ),
+            fields=(_constraints.PresenceField("surface.repository_id"),),
             minimum=0,
             maximum=0,
             when=(
@@ -422,9 +420,7 @@ class ChallengeRaise:
             label="challenge reason",
         ),
         _constraints.PresenceRule(
-            fields=(
-                _constraints.PresenceField("target_conclusions", non_empty=True),
-            ),
+            fields=(_constraints.PresenceField("target_conclusions", non_empty=True),),
             minimum=1,
             maximum=1,
             label="challenge target conclusions",
