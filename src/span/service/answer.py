@@ -42,7 +42,7 @@ def gap_recovery(reason: m.GapReason) -> str:
     The text is server-owned. It names the next action and never ranks or
     describes other questions.
     """
-     if reason is m.GapReason.UNASSESSED:
+    if reason is m.GapReason.UNASSESSED:
         return "read the cited evidence, then record the conclusion"
     return "re-read the cited evidence, then record against the current revision"
 
@@ -548,7 +548,7 @@ class AnswerService:
                 failure=str(exc),
                 recovery="ask again for the surface; the continuation is invalid",
             )
-         context = self._store.find_context_by_id(cursor.context_id)
+        context = self._store.find_context_by_id(cursor.context_id)
         if context is None:
             return m.Unavailable(
                 operation="ask",
