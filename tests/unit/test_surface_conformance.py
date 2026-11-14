@@ -244,9 +244,7 @@ class SurfaceConformanceTest(unittest.TestCase):
             "repository_id": "r",
             "surface": {"kind": "FILE", "locator": "a.py"},
         }
-        errors = list(
-            Draft202012Validator(TOOL_SCHEMAS["ask"]).iter_errors(payload)
-        )
+        errors = list(Draft202012Validator(TOOL_SCHEMAS["ask"]).iter_errors(payload))
         self.assertEqual(errors, [])
         request = decode_request("ask", payload)
         self.assertIsInstance(request, m.AskRequest)
@@ -262,9 +260,7 @@ class SurfaceConformanceTest(unittest.TestCase):
             "locator": "a.py",
             "observation_id": "obs-1",
         }
-        errors = list(
-            Draft202012Validator(TOOL_SCHEMAS["record"]).iter_errors(payload)
-        )
+        errors = list(Draft202012Validator(TOOL_SCHEMAS["record"]).iter_errors(payload))
         self.assertTrue(errors, "schema must reject mutually exclusive evidence modes")
         with self.assertRaises(ValueError):
             decode_request("record", payload)
