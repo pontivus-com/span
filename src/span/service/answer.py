@@ -348,33 +348,58 @@ class AnswerService:
             record.observation_id: record
             for record in self._evidence.context_observations(context.context_id.value)
         }
-        deliveries = tuple(
-            m.EvidenceDelivery(
-                observation_id=outcome.observation_id,
-                unit=self._evidence.context_unit(records[outcome.observation_id]),
+        deliveries: list[m.EvidenceDelivery] = []
+        seen: set[m.SourceObservationId] = set()
+        for outcome in admitted.outcomes:
+            if not isinstance(outcome, (m.AdmittedEvidence, m.AlreadyAdmittedEvidence)):
+                continue
+            if outcome.observation_id in seen or outcome.observation_id not in records:
+                continue
+            seen.add(outcome.observation_id)
+            deliveries.extend(
+                self._evidence.context_deliveries(records[outcome.observation_id])
             )
+        omitted = tuple(
+            outcome.request.locator
             for outcome in admitted.outcomes
-            if isinstance(outcome, (m.AdmittedEvidence, m.AlreadyAdmittedEvidence))
-            and outcome.observation_id in records
+            if isinstance(outcome, m.OmittedEvidence)
         )
-        view = m.EvidenceAdmissionView(
-            context=m.InvestigationContextRef(
-                repository_id=context.repository_id,
-                context_id=context.context_id,
-            ),
+        context_ref = m.InvestigationContextRef(
+            repository_id=context.repository_id,
+            context_id=context.context_id,
+        )
+        full_view = m.EvidenceAdmissionView(
+            context=context_ref,
             outcomes=admitted.outcomes,
-            deliveries=deliveries,
+            deliveries=tuple(deliveries),
             continuation=None,
-            omitted=tuple(
-                outcome.request.locator
-                for outcome in admitted.outcomes
-                if isinstance(outcome, m.OmittedEvidence)
-            ),
+            omitted=omitted,
             truncated=False,
         )
-        if isinstance(result, m.Answer):
-            return self._fit(request, _dataclasses.replace(result, admission=view))
-        return self._fit(request, _dataclasses.replace(result, admission=view))
+        full_result = _dataclasses.replace(result, admission=full_view)
+        if _encoded_size(full_result) <= self._policy.max_response_bytes:
+            return full_result
+        continuation = (
+            encode_continuation(
+                ContinuationCursor(
+                    repository_id=context.repository_id,
+                    context_id=context.context_id.value,
+                    request_id=context.request_id,
+                    request_digest=context.request_digest,
+                )
+            )
+            if deliveries
+            else None
+        )
+        deferred_view = m.EvidenceAdmissionView(
+            context=context_ref,
+            outcomes=admitted.outcomes,
+            deliveries=(),
+            continuation=continuation,
+            omitted=omitted + tuple(_delivery_label(item) for item in deliveries),
+            truncated=continuation is not None,
+        )
+        return self._fit(request, _dataclasses.replace(result, admission=deferred_view))
 
     def _surface_paths(self, surface: m.SurfaceKey) -> tuple[str, ...]:
         if surface.kind is m.SurfaceKind.FILE:
@@ -536,36 +561,40 @@ class AnswerService:
                 failure="the continuation context has expired",
                 recovery="ask again for the surface; the context expired",
             )
-        records = self._evidence.context_observations(context.context_id.value)
-        if cursor.unit_index > len(records):
+        deliveries = tuple(
+            delivery
+            for record in self._evidence.context_observations(context.context_id.value)
+            for delivery in self._evidence.context_deliveries(record)
+        )
+        if cursor.unit_index > len(deliveries):
             return m.Unavailable(
                 operation="ask",
                 failure="the continuation position is outside its context",
                 recovery="ask again for the surface",
             )
-        return self._fit_evidence_page(records, cursor)
+        return self._fit_evidence_page(deliveries, cursor)
 
     def _fit_evidence_page(
         self,
-        records: tuple[m.SourceObservation, ...],
+        deliveries: tuple[m.EvidenceDelivery, ...],
         cursor: ContinuationCursor,
     ) -> m.AskResult:
-        """Fit one evidence page with its real token and omission list."""
-        pages: list[m.EvidenceUnit] = []
+        """Fit one evidence page while preserving exact original positions."""
+        pages: list[m.EvidenceDelivery] = []
         next_index = cursor.unit_index
         next_line = cursor.line_offset
         omitted: list[str] = []
-        committed: list[tuple[list[m.EvidenceUnit], list[str], int, int]] = []
+        committed: list[tuple[list[m.EvidenceDelivery], list[str], int, int]] = []
         limit = self._policy.max_response_bytes
 
         def build(
-            units: list[m.EvidenceUnit],
+            values: list[m.EvidenceDelivery],
             labels: list[str],
             unit_index: int,
             line_offset: int,
         ) -> m.EvidencePage:
             continuation = None
-            if unit_index < len(records):
+            if unit_index < len(deliveries):
                 continuation = encode_continuation(
                     ContinuationCursor(
                         repository_id=cursor.repository_id,
@@ -577,38 +606,30 @@ class AnswerService:
                     )
                 )
             return m.EvidencePage(
-                deliveries=tuple(
-                    m.EvidenceDelivery(
-                        observation_id=records[index].observation_id,
-                        unit=unit,
-                    )
-                    for index, unit in enumerate(units, start=cursor.unit_index)
-                    if index < len(records)
-                ),
+                deliveries=tuple(values),
                 continuation=continuation,
                 omitted=tuple(labels),
                 truncated=continuation is not None,
             )
 
-        while next_index < len(records):
-            record = records[next_index]
-            lines = record.excerpt.splitlines(keepends=True)
+        while next_index < len(deliveries):
+            delivery = deliveries[next_index]
+            lines = delivery.unit.content.splitlines(keepends=True)
             if next_line >= len(lines):
                 next_index += 1
                 next_line = 0
                 continue
             remaining = lines[next_line:]
-            candidate_unit = _slice_unit(record, next_line, len(remaining))
-            candidate = build([*pages, candidate_unit], omitted, next_index + 1, 0)
+            candidate_delivery = _slice_delivery(delivery, next_line, len(remaining))
+            candidate = build(
+                [*pages, candidate_delivery], omitted, next_index + 1, 0
+            )
             if _encoded_size(candidate) <= limit:
                 committed.append((list(pages), list(omitted), next_index, next_line))
-                pages.append(candidate_unit)
+                pages.append(candidate_delivery)
                 next_index += 1
                 next_line = 0
                 continue
-            # The whole unit does not fit. Return the largest exact line prefix,
-            # measured with the omission it will actually carry and the real
-            # continuation token for the position it will actually name.
             fit = 0
             for count in range(1, len(remaining) + 1):
                 end = next_line + count
@@ -619,9 +640,9 @@ class AnswerService:
                     trial_index += 1
                     trial_line = 0
                 else:
-                    trial_omitted.append(f"observation:{record.observation_id.value}")
+                    trial_omitted.append(_delivery_label(delivery))
                 trial = build(
-                    [*pages, _slice_unit(record, next_line, count)],
+                    [*pages, _slice_delivery(delivery, next_line, count)],
                     trial_omitted,
                     trial_index,
                     trial_line,
@@ -632,7 +653,7 @@ class AnswerService:
                     break
             if fit == 0:
                 if pages:
-                    omitted.append(f"observation:{record.observation_id.value}")
+                    omitted.append(_delivery_label(delivery))
                     break
                 return m.Unavailable(
                     operation="ask",
@@ -643,13 +664,13 @@ class AnswerService:
                     recovery="ask again with a narrower surface",
                 )
             committed.append((list(pages), list(omitted), next_index, next_line))
-            pages.append(_slice_unit(record, next_line, fit))
+            pages.append(_slice_delivery(delivery, next_line, fit))
             next_line += fit
             if next_line >= len(lines):
                 next_index += 1
                 next_line = 0
             else:
-                omitted.append(f"observation:{record.observation_id.value}")
+                omitted.append(_delivery_label(delivery))
             break
         if not pages:
             return m.Unavailable(
@@ -658,13 +679,9 @@ class AnswerService:
                 recovery="ask again for the surface",
             )
         final = build(pages, omitted, next_index, next_line)
-        # The candidate measurements include the real token and omission list;
-        # this backstop keeps the final page inside the budget if an unexpected
-        # envelope change grows it. Dropping a unit changes the continuation to
-        # that unit's start, so the omitted evidence remains recoverable.
         while _encoded_size(final) > limit and committed:
             pages, omitted, next_index, next_line = committed.pop()
-            omitted.append(f"observation:{records[next_index].observation_id.value}")
+            omitted.append(_delivery_label(deliveries[next_index]))
             final = build(pages, omitted, next_index, next_line)
         if not pages:
             return m.Unavailable(
@@ -844,26 +861,40 @@ def _group_label(view: m.ConclusionView) -> str:
     return view.ref.label
 
 
-def _slice_unit(
-    record: m.SourceObservation,
+def _delivery_label(delivery: m.EvidenceDelivery) -> str:
+    content_range = delivery.unit.content_range
+    if content_range is None:
+        return f"observation:{delivery.observation_id.value}"
+    return (
+        f"observation:{delivery.observation_id.value}:"
+        f"lines:{content_range.start_line}-{content_range.end_line}"
+    )
+
+
+def _slice_delivery(
+    delivery: m.EvidenceDelivery,
     line_offset: int,
     line_count: int,
-) -> m.EvidenceUnit:
-    lines = record.excerpt.splitlines(keepends=True)
+) -> m.EvidenceDelivery:
+    unit = delivery.unit
+    lines = unit.content.splitlines(keepends=True)
     selected = "".join(lines[line_offset : line_offset + line_count])
-    start_line = (
-        record.delivered_ranges[0].start_line
-        if len(record.delivered_ranges) == 1
-        else 1
+    base_line = unit.content_range.start_line if unit.content_range is not None else 1
+    total_lines = (
+        unit.content_range.total_lines
+        if unit.content_range is not None
+        else len(lines)
     )
-    end_line = start_line + line_offset + line_count - 1
-    return m.EvidenceUnit(
-        evidence_ref=record.evidence,
-        content=selected,
-        content_fingerprint=record.content_digest.value.split(":", 1)[1],
-        content_range=m.EvidenceLineRange(
-            start_line=start_line + line_offset,
-            end_line=end_line,
-            total_lines=record.total_lines,
+    return m.EvidenceDelivery(
+        observation_id=delivery.observation_id,
+        unit=m.EvidenceUnit(
+            evidence_ref=unit.evidence_ref,
+            content=selected,
+            content_fingerprint=unit.content_fingerprint,
+            content_range=m.EvidenceLineRange(
+                start_line=base_line + line_offset,
+                end_line=base_line + line_offset + line_count - 1,
+                total_lines=total_lines,
+            ),
         ),
     )
