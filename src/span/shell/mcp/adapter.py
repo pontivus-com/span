@@ -176,10 +176,7 @@ def _request_identity(request: object) -> str:
         repository_id = request.repository_id or "unknown"
         if challenge is None:
             return repository_id
-        return (
-            f"{repository_id}/{challenge.request_id}/"
-            f"{challenge.understanding_id}"
-        )
+        return f"{repository_id}/{challenge.request_id}/{challenge.understanding_id}"
     if isinstance(request, m.AskRequest):
         try:
             repository_id = repository_route("ask", request, None)
