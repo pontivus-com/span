@@ -163,8 +163,17 @@ def _condition_schema(condition: StructuralCondition) -> dict[str, object]:
 
 
 def _presence_schema(rule: PresenceRule) -> dict[str, object]:
-    options: list[dict[str, object]] = []
     field_count = len(rule.fields)
+    if rule.minimum == 0 and rule.maximum == field_count:
+        return {}
+    if rule.minimum == 1 and rule.maximum == field_count:
+        return {"anyOf": [_active_schema(field) for field in rule.fields]}
+    if rule.minimum == 0 and rule.maximum == 0:
+        return {"allOf": [{"not": _active_schema(field)} for field in rule.fields]}
+    if rule.minimum == field_count and rule.maximum == field_count:
+        return {"allOf": [_active_schema(field) for field in rule.fields]}
+
+    options: list[dict[str, object]] = []
     for mask in range(1 << field_count):
         active_count = mask.bit_count()
         if not rule.minimum <= active_count <= rule.maximum:
