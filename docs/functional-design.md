@@ -8,6 +8,9 @@ must satisfy it.
 Where this layer and a higher layer disagree, the higher layer governs. A
 requirement here that cannot be traced to a higher-layer statement is a defect.
 
+**0.10.3 target behavior, amended 2026-11-14.** Implementation and host
+verification remain pending; current code is not certified by this amendment.
+
 ## 1. Scope
 
 This layer answers **how the system must behave to keep the contract**, not
@@ -28,7 +31,9 @@ identity is `(repository, canonical locator)`. An identity is never reused for a
 different kind. *(F9, L1)*
 
 **FD-2 — Request identity binds a context.**
-A context is bound to `(repository, request identity, question, scope)`. Repeating
+Only explicit admission or writes issue contexts. Pure obtain and change-scope
+reconsider issue none. An issued context is bound to `(repository, request
+identity, question when applicable, scope, source selection)`. Repeating
 a request with the same identity and the same binding returns the same context;
 the same identity with a different binding is `CONTEXT_BINDING_CONFLICT`,
 unless a retained recording receipt has already resolved the request (FD-3).
@@ -189,21 +194,13 @@ reports stale and unassessed items, and while recorded gaps are returned. The
 agent can act on the current part and see exactly what is missing. *(A9, L3)*
 
 **FD-25 — Gap reasons are exhaustive.**
-A `Gap` names exactly one reason, following the combined state of the matched set
-(FD-15):
-
-- `invalidated` — matches exist and the combined state is `REASSESSMENT_REQUIRED`;
-- `unverifiable` — matches exist and the combined state is `UNVERIFIABLE`;
-- `unassessed` — the surface has no understanding;
-- `no_match` — understanding exists, but not for this surface and question.
-
-Each carries exactly what `lifecycle-contract` §4.1 fixes for a `Gap`.
-*(F4, A8, L3)*
-
-`no_match` requires the matched set for this surface to hold understanding for
-other questions only. The reason is a function of that set; no similarity
-threshold and no ranking produces it. What the agent does next is fixed in
-`lifecycle-contract` §4.1. *(F5, A6, A8)*
+For surface/current-identity membership selected under lifecycle §4.1, no current
+conclusion yields one reason from combined support: REASSESSMENT_REQUIRED becomes
+`invalidated`, UNVERIFIABLE becomes `unverifiable`, and no retained usable
+understanding becomes `unassessed`. String-question matching and its `no_match`
+production path are retired. Stored question metadata/history is not rewritten.
+An unknown exact identity is a lookup rejection, not a newly invented Gap.
+Context binding/admission failures never become semantic absence. *(F4, A8, L3)*
 
 **FD-26 — Ambiguity is a separate result.**
 When a surface reference resolves to more than one granularity, the result is
@@ -215,11 +212,19 @@ A failure that prevents evaluation — unavailable store, provider error, schema
 version — returns `Unavailable` with the recovery. An unreadable source is not
 `Unavailable`; it is `UNVERIFIABLE` support. *(A8, L3)*
 
+Context-issuance conflicts propagate as typed rejection; expected store/provider
+access failures propagate as Unavailable. A catch-all conversion to Gap is
+forbidden. Missing/invalid references identify the bound repository/context and
+public corrective action; absence alone does not establish expiry or reaping.
+Stateful validation stays with its canonical owner. *(FD-39, FD-41, L3, L5)*
+
 **FD-28 — The document view is assembled, never stored.**
 The view is composed on read from current conclusions; no stored copy exists. Its
 contents are fixed in `lifecycle-contract` §4.1. *(G6, L11)*
 
-The view groups by recorded question identity, never by similarity. Its role as
+Pure surface obtain groups all current membership by recorded question metadata;
+current identity selectors restrict membership before the same composition.
+No pure read issues a context or requires request identity. Its role as
 the reuse path is stated in `lifecycle-contract` §4.1. *(G2, F3, A4, L11)*
 
 **FD-29 — Result ordering is stable.**
@@ -230,9 +235,12 @@ verification; then references. The same request produces the same order. *(A2)*
 
 **FD-30 — create.** The first version for `(surface, question)`. *(L4)*
 
-A create may use the question context from a preceding `ask`; the target
-resolution follows `lifecycle-contract` §4.2. Supplying an explicit question or
-non-empty scope with that context is a rejection, not a silent override.
+A create may reuse a persisted question-origin context through its bound
+reference; new explicit ask admission is evidence-only. Evidence-only contexts
+never supply a semantic question. Target resolution follows lifecycle §4.2.
+An explicit question/non-empty scope conflicts only with a question-origin
+context that already binds that target; evidence-only contexts require the
+independent semantic inputs. Neither origin is guessed from reference presence.
 *(F7, L7)*
 
 A create derives one complete effective semantic `EvidenceScope`: the question
@@ -342,7 +350,12 @@ a current one. *(F2, F3)*
 
 **FD-45 — Restart recovery is by identity.**
 After a restart, a request identity recovers its context if retained and its
-receipt if retained. No conversation replay is required. *(A1, A2)*
+receipt if retained. No conversation replay is required. The canonical context reference binds
+repository and context identity at issuance. Context-bound routing derives from
+that reference with no separate override; lookup still validates actual liveness
+and membership. No cross-store search or context replacement is implicit. Pure
+change-scope reconsider is not assigned a content-derived expiring identity.
+*(A1, A2, L7)*
 
 ## 10. Concurrency
 
@@ -442,8 +455,8 @@ unsupported content to appear as history or references instead. F2 preserves the
 Therefore: if at least one matched conclusion is current, the result is an
 `Answer` containing only current conclusions, with the rest reported as status
 references. If none is current, the result is a `Gap`. The Gap reason follows the
-combined state: `REASSESSMENT_REQUIRED` → `invalidated`, `UNVERIFIABLE` →
-`unverifiable`, no understanding → `unassessed` or `no_match`.
+combined state under FD-25; membership is selected by surface/current identity,
+not by a supplied question string.
 
 Withholding a supported conclusion because a sibling is stale would satisfy no
 principle and violate two.

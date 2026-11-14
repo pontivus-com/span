@@ -27,6 +27,9 @@ and qualifies later reuse.
 
 ## Implementation
 
+- [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
+  low-friction lifecycle solution design, ordered tasks, decision gates and
+  verification criteria; implementation not started.
 - [0.10.2 implementation plan](implementation-plans/0.10.2.md) — current remediation
   tasks and verification. Older plans in `.context/plans/` are historical.
 

@@ -11,6 +11,10 @@ agent sends and receives, and what is deliberately not the agent's job. The
 Authority and derivation between layers are defined in the
 [requirements pyramid model](requirements-pyramid.md).
 
+**0.10.3 target contract, amended 2026-11-14.** Runtime implementation and
+host delivery are pending. These requirements describe the target behavior;
+they do not certify that the installed server already conforms.
+
 ## 1. Position in the pyramid
 
 This document is layer 2. Layer 0 is [goals](goals.md), layer 1 is
@@ -58,7 +62,7 @@ the point of the whole system.
 
 *What does this do*, *what governs it*, *what depends on it*, *what breaks if I
 change it*, and *is this still true* are **questions**, not operations. Span does
-not classify them; the exact question selects retained membership, the surface fixes the scope,
+not classify them; the surface or exact understanding identity selects membership,
 and the agent judges applicability.
 
 Audit needs no sixth operation. Every answer carries the surface status, because
@@ -85,86 +89,72 @@ State this before the operations, because everything else depends on it.
 
 ### 4.1 `ask` — obtain
 
-```text
-ask(surface={kind, locator}, question?)
-ask(reference, question?)       # convenience form
-ask(selector)                   # exact snapshot or receipt
-ask(continuation)               # omitted gap evidence
-```
+Exactly one form is supplied:
 
-Exactly one form is supplied. `question` is optional for `surface` and
-`reference`; every other form rejects it.
-
-- `surface` is an exact `{kind, locator}` identity and resolves by identity,
-  never containment. `kind` is `FILE`, `SYMBOL`, `SERVICE`, or `DOMAIN`.
-- `reference` is the convenience form. A path or declared name that resolves to
-  exactly one surface is accepted. If more than one granularity matches, the
-  result is `AmbiguousSurface`; its `candidates` are exact identities. The agent
-  copies one candidate into `surface`; it does not re-resolve the original path.
-- `selector` is an exact `UnderstandingSnapshotSelector` or
-  `ReceiptRetrievalSelector`. The result is historical: `RetrievedUnderstanding`
-  or `RetrievedReceipt`, never merged into `Answer` and never counted current.
-- `continuation` returns an `EvidencePage` for evidence omitted from a gap.
-
-`surface` and `reference` are mutually exclusive. A `question` without either
-is rejected. A `surface` or `reference` without a question is the surface
-document view.
-
-Response size is bounded by the server for the surface. Layer 4 owns that budget,
-and the agent does not manage it (F7). Every surface/reference request carries a
-request identity (see §4.2); a retry reuses it and recovers the same context.
-Continuation and exact-reference forms carry their own binding.
-
-**Continuation lifecycle.** A continuation is stateless. It binds the
-repository, the investigation context, the original request identity and
-content digest, and the next evidence position (unit index plus line offset).
-It introduces no new table, TTL, or reaper: it is valid exactly while its
-context is `LIVE`. The same token against the same live context returns the
-same page. Restart works because the context and admitted evidence are
-persisted. A token from another repository, a mismatched request binding, an
-unknown context, or a context that is `EXPIRED` or `ABANDONED` returns typed
-`Unavailable` with a recovery. `reap_expired` removes the context and evidence
-together.
-
-Every page advances by at least one evidence unit or one exact line range. If
-one evidence unit exceeds the budget, the page carries the largest exact line
-range that fits, with its content range and a continuation for the next line.
-If one line plus the response envelope cannot fit, the result is `Unavailable`
-with a recovery. A page never returns no evidence with the same continuation.
-
-**Surface document view.** When `question` is omitted, `ask` returns the
-surface's documentation: every `CURRENT` conclusion for that surface, grouped by
-the question it answers, with the surface status, gaps, verification, and
-context. This is the surface's documentation. The view cannot drift from its
-conclusions.
-
-**Surface-first reuse.** The document view is the normal reuse path. A fresh
-agent that does not know the exact recorded question asks for the surface
-without a question and selects the current conclusion that answers its intent.
-An exact `question` is a targeted query and matches the recorded question by
-exact identity; a paraphrase is a different question. When a targeted question
-finds understanding for other questions on the surface, the `Gap` is `no_match`
-and carries a recovery that names the document view. *(F5, A6)*
-
-**The agent sends** a surface with an optional exact question, an exact selector,
-or a continuation. Omitting the question reads the surface document view. It
-never sends a context, an observation id, or an evidence body.
-
-A context is returned in an answer and may be supplied to `record` or
-`reconsider`; it is never an input to `ask`. Context inspection is an
-internal/admin retrieval, not an agent operation.
-
-**The agent receives** exactly one of:
-
-| Result | Contains | Guarantee |
+| Form | Inputs | Effect |
 | --- | --- | --- |
-| `Answer` | `ConclusionView`s (ref, statement, nature, scope, support, evidence), **surface status**, recorded gaps, applicable `VerificationView`s (run plus qualification), context | every listed conclusion is `CURRENT`; stale content is referenced, never served as the answer |
-| `Gap` | reason (`invalidated` / `unverifiable` / `unassessed` / `no_match`), changed evidence, historical conclusions with their statement, evidence references, and present non-current state, missing items, admitted evidence, a context when the gap is question-bound, recovery, optional continuation | never a dead end; the recovery names the next action; omitted evidence is recoverable |
-| `AmbiguousSurface` | exact candidate identities and the missing decision | no arbitrary scope chosen |
-| `RetrievedUnderstanding` | one exact snapshot, its conclusions, live support, challenges | historical, never current-answer content |
-| `RetrievedReceipt` | one retained receipt and its context when present | historical, never current-answer content |
-| `EvidencePage` | omitted evidence units and an optional further continuation | always advances |
-| `Unavailable` | the failure and its recovery | never an empty success |
+| Surface obtain | `repository_id` and exactly one of `surface` / `reference` | Read current grouped understanding and status; no request ID or context |
+| Explicit source admission | Surface obtain inputs, non-empty `evidence` selection and `request_id` | Admit selected sources/ranges into a recoverable evidence-only context |
+| Exact current obtain | `selector=CurrentUnderstandingSelector{repository_id, understanding_id}` | Read that understanding's current membership with live support/status |
+| Historical/audit obtain | `selector=UnderstandingSnapshotSelector{repository_id, understanding_id, version?}` or `ReceiptRetrievalSelector{repository_id, request_id}` | Retrieve the exact snapshot or receipt; never current-answer content |
+| Evidence continuation | `continuation` | Read the next selected-evidence page using its bound repository/request/context |
+
+A surface is an exact `{kind, locator}` identity, never containment. A reference
+must resolve to exactly one surface; otherwise return `AmbiguousSurface` with
+exact candidates. No ordinary form accepts `question`. Recorded questions are
+metadata grouped in the document view. They are not natural-language query keys.
+An exact selector and continuation carry their own repository binding; a separate
+repository override is forbidden. Unknown exact identities have an explicit
+lookup rejection and public recovery, not an invented surface or generated answer.
+
+**Pure obtain.** Surface/reference obtain returns all CURRENT conclusions on
+that surface, grouped by recorded question, with status, gaps, verification,
+limitations and explicit omissions. A current selector restricts membership to
+its returned understanding identity and uses the same support/status owners.
+Neither form creates an investigation context or requires caller request identity.
+A genuinely unassessed surface remains a Gap. Recovery identifies the missing
+investigation and available source pointers without pretending they are admitted
+observations or fingerprinted proof. No source bodies are delivered unsolicited.
+
+**Explicit evidence.** `evidence` is a non-empty selection of exact source
+locators and ranges. Admission is restricted to the resolved surface and issued
+scope. Whole-file requests are explicit. A valid selection returns the same
+Answer/Gap classification plus the selected excerpts, source identity, exact
+original ranges, observation membership and a bound context reference. Each
+source outcome is tied to its request; missing/unreadable/omitted sources remain
+explicit. Source or store failure is not semantic absence. The request identity
+binds the complete selection; identical retries recover the same context.
+Admission does not imply the agent read all selected bytes or established meaning.
+The host owns structural navigation; Span never guesses relevant symbols/ranges.
+
+**Context reference.** A returned `context` is one canonical
+`InvestigationContextRef{repository_id, context_id}`, emitted by its owning
+persisted context. It is not an unqualified ID. Context-bound operations derive
+routing from that reference and reject independent repository overrides. The
+reference grants no authority; liveness, scope and membership are checked at the
+owner. Pure obtains have no context. Context inspection remains internal/admin.
+
+**Continuation.** A continuation binds repository, investigation context,
+original request identity/digest and next evidence position. It introduces no
+separate storage or retention lifecycle. Each page advances by at least one
+unit or exact line range; an oversized unit splits at line boundaries. Omission
+is explicit and recoverable. One line that cannot fit is refused explicitly.
+Wrong binding, malformed or absent references return a typed rejection with
+public recovery. Genuine operational access failure is Unavailable. A missing
+row is not labeled expired or reaped without evidence. Identical continuation
+replay against the same live context returns the same page across restart.
+
+The closed result union is `Answer`, `Gap`, `AmbiguousSurface`,
+`RetrievedUnderstanding`, `RetrievedReceipt`, `EvidencePage`, `Rejected`,
+`Unavailable`. Answer carries only CURRENT statements, nature, scope,
+per-conclusion support, evidence references, surface status and applicable
+verification. Gap carries status, cause (invalidated/unverifiable/unassessed),
+changed evidence, historical content, missing items and actionable recovery.
+Context/admitted evidence/continuation occur only when explicit admission ran.
+All bounded results preserve omission and recovery. Historical retrieval includes
+live support qualification of the exact revisions but is never served as Answer.
+Compact qualification and audit retrieval follow §4.2; no evidence is invented
+merely to populate a cheap result. *(L1–L3, L7, L9, L11)*
 
 A `Gap`'s `historical` list is historical **content**, not a pointer: each entry
 carries the exact conclusion revision, the understanding version that holds it,
@@ -249,11 +239,13 @@ An update carries the expected
 version and the action set instead. A create is one conclusion; a second
 conclusion is a second request. *(F5, F7, L7)*
 
-A create may supply the `context` from a preceding `ask` instead of re-sending
-the question and scope. When that context is a question context, the context
-binds the target; supplying `question` or a non-empty `scope_paths` as well is a
-`Rejected` conflict, not a silent override. Without a context, a create requires
-the question and scope and issues its own evidence-only context. *(F7, L7)*
+A create may supply the admitting `context` reference. A persisted question-origin
+context binds the target; supplying `question` or non-empty `scope_paths` as well
+is a Rejected conflict, not an override. New explicit ask admission is evidence-only:
+its context does not supply the semantic question or independently determine an
+owner. Such creates supply question and semantic scope through the declared
+direct inputs. Without a supplied context, Span derives its operational context
+from those inputs and complete support requirements. *(F7, L7)*
 
 A create may also omit `surface`. Span derives it from the scope the request
 already carries: the question context's bound scope when a context is supplied,
@@ -274,7 +266,11 @@ SERVICE/DOMAIN must already exist and contain the complete semantic scope.
 **Recording contexts.** A supplied context retains its complete issued scope.
 New source evidence may be admitted inside it; a newly cited discovery boundary
 must be wholly contained by it. Evidence membership may grow, but scope never
-widens. When investigation expands, omit `context_id` and provide direct
+widens. A supplied `context` is the bound reference defined in §4.1; the
+context-bound branch forbids a separate repository override. Direct-evidence
+branches carry their repository explicitly. The same alternatives apply to
+verification, update and challenge inputs that use admitted observations.
+When investigation expands, omit `context` and provide direct
 scope/evidence. Span derives an evidence-only operational context sufficient for
 all required evidence, including repository-wide discovery when cited. This
 operational scope never replaces the semantic scope of an understanding.
@@ -288,6 +284,11 @@ identity and the content:
 the same identity with the same content is a replay; the same identity with
 different content is a conflict; a new identity with identical content is a new
 intentional act.
+Across a grammar upgrade, retained accepted receipts remain retrievable by their
+original repository/request identity for their promised retention period. A new
+grammar does not authorize translating a historical write into another write or
+blindly repeating it. Recover the accepted outcome first; old input acceptance
+and immutable history retrieval are different promises.
 
 | Action | Meaning |
 | --- | --- |
@@ -315,12 +316,22 @@ A first version is not an action. It is the flat create
 stated above. The caller does not supply a conclusion identity; Span derives the
 first lineage identity. *(F7, L7)*
 
+**Structural grammar.** Kind/action selection, field presence, evidence-mode
+exclusion and syntactic target/scope inputs have one canonical typed declaration
+used by decoding and advertised schema projection. Null, omitted, empty and
+unknown fields have the same meaning at both boundaries. Stateful context origin,
+liveness/membership, surface containment and version checks remain with their
+canonical runtime owners. Conflicting structural inputs are rejected before
+admission, with all independently determinable conflicts and corrective fields;
+validation never continues source work merely to collect more errors.
+
 Omission is not deletion. Withdrawal is explicit, and history is preserved.
 
 Evidence arrives in whichever form the agent already has it:
 
 - locators and ranges it just read — Span re-reads and fingerprints them, or
-- the `context` from a preceding `ask`/`reconsider` — Span reuses what it admitted.
+- the bound `context` from explicit ask admission or a challenge — Span reuses
+  its admitted evidence. Pure obtain/change analysis never implies admission.
 
 Discovery support follows the same rule: the agent declares the boundary it
 inspected and Span derives the observation, or it supplies a discovery
@@ -352,6 +363,22 @@ composed after acceptance. Expected operational failure is represented by
 receipt. Status is never persisted in that receipt. The cause is the server's
 exact validation
 message; the adapter does not replace it with a generic action.
+
+**Compact public acceptance and exact detail.** Return each identity and fact
+once: repository/request, commit time, exact receipt selector, accepted
+understanding/version, affected revision coordinates, dependent effects, live
+qualification and owning status. Qualification includes exact revision, state,
+evaluation time, material limitations, non-current dependency findings/causes
+and detail coordinates. An all-current dependency list may be retrieved rather
+than repeated; failed findings are never suppressed as a size optimization.
+Applicable verification carries identity, command/outcome and qualification once.
+Unavailable post-commit qualification/status preserves the accepted effect.
+
+The receipt selector retrieves the full immutable acceptance, digest and replay
+details. The snapshot selector with the exact accepted understanding/version
+retrieves revisions/dependencies and their live qualification, with evaluation
+time. Neither historical retrieval becomes Answer content. Omission remains
+explicit and recoverable; compact output is not permission to drop audit state.
 
 **How it helps.** It converts an investigation the agent already performed into
 retained understanding, in one call, through its retained conclusions.
@@ -385,7 +412,7 @@ For each included surface:
 - the dependency effects, including descendant effects,
 - the current evidence,
 - the reason or reasons it appears,
-- and a context for re-establishment.
+- and exact update coordinates/source references for re-establishment.
 
 A surface can appear for more than one reason, and the reasons are never
 collapsed into one "stale" set. Reasons mean **considered**, not stale: a
@@ -398,11 +425,19 @@ boundary.
 
 When `since` is absent, the comparison is present source against each recorded
 observation's identity. That is the default and needs no caller input.
+Change-scope reconsider is a pure read: it issues no context, requires no request
+identity and must not bind repeated changed paths to a content-derived expiring
+request. Re-establishment uses direct evidence with the returned update version;
+explicit admitted observations use their original bound context reference.
 
 **`challenge`** raises an explicit dispute and returns the prior answer, the
 evidence, and a context. Challenges are raised here and settled through `record`
 with named dispositions. They never settle implicitly, and a matching
 fingerprint never settles one.
+The context is the canonical bound reference from §4.1. Challenge is a write
+with stable request identity; a supplied context determines routing, without an
+independent repository override. Direct challenge evidence derives its context
+internally. This write branch is distinct from pure change-scope reconsider.
 
 Results are a closed union: `Changed`, `Challenged`, `Rejected`, `Unavailable`.
 `Changed` is keyed by surface; each entry carries its reasons (`containment`,
@@ -436,7 +471,7 @@ column is the law that forces it inward.
 | Support evaluation | an attribute of every returned answer (F2, F6) |
 | Surface status computation | an attribute of every returned answer (F9) |
 | Retrieval by reference | no separate operation; exact snapshots and receipts fold into `ask`, and context inspection remains internal/admin (F6) |
-| Exact question membership and surface document view | inside `ask` (F6) |
+| Exact understanding membership and surface document view | inside `ask` (F6) |
 | Challenge persistence | `reconsider` raises; `record` settles (F5, F6) |
 | Status, digest, notices | host-surface notices use the same computation; answer safety remains server-owned (A4, F6) |
 | Structural provider build | setup/maintenance, never per-request (F7) |
@@ -452,7 +487,7 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | --- | --- | --- |
 | **L1** | Every `Answer` carries per-conclusion support, evidence, and the surface status. | F1, F2, F9 |
 | **L2** | Unsupported content is never in `conclusions`; it appears as historical content in a `Gap`, or as references and counts in the surface status. | F2, A7 |
-| **L3** | Every `Gap` carries cause, changed evidence, missing items, and — when the gap is bound to a question — a context. | F4, A8 |
+| **L3** | Every `Gap` carries cause, status, changed evidence, missing items and public recovery; explicit evidence admission also carries its bound context and source outcomes. | F4, A8 |
 | **L4** | Every write is atomic, receipted, retry-safe, and compare-and-set on update. | A2, A3 |
 | **L5** | An operation accepts its declared inputs without an unrelated API preflight; this does not waive the agent lifecycle in §7. | F7, A8 |
 | **L6** | Evidence identity is computed by Span from source, never accepted from a description. | A5 |
@@ -498,9 +533,8 @@ consultation before deriving understanding.
 ## 8. One round trip
 
 ```text
-1. ask(surface={kind:"FILE", locator:"opencode.json"},
-       question="what governs it?")
-   ← Gap(unassessed; admitted evidence; context)
+1. ask(repository_id="repo", surface={kind:"FILE", locator:"opencode.json"})
+   ← Gap(unassessed; status; source pointers; recovery)
 
 2. record(kind="surface", action="create",
           surface={kind:"SERVICE", locator:"mcp-registration",
@@ -517,7 +551,7 @@ consultation before deriving understanding.
 4. reconsider(changed_paths=["opencode.json"])
    ← Changed(affected=[path surface opencode.json,
                         mcp-registration service surface],
-             per-conclusion state, current evidence, context)
+             per-conclusion state, source references, update coordinates)
 
 5. record(kind="understanding", understanding_id="u:…",
           expected_version=1, actions={correct:[…]})
@@ -532,10 +566,9 @@ requires a memory from a previous session.
 
 | ID | Decision | Rationale | Revisit |
 | --- | --- | --- | --- |
-| D-1 | `ask` accepts a question or a reference in one operation | preserves the three lifecycle operations (L8) | amend this layer |
-| D-2 | `structure` is one operation with two modes | navigation is one verb (F6) | amend this layer |
-| D-3 | The caller supplies a request identity for every write and every `ask`, not a retry token | same identity + same content is a replay; same identity + different content is a conflict; a new identity with identical content is a new act. This distinguishes a retry from an intentional repetition without exposing Span internals (A2, A4, F7). A pure change-scope `reconsider` is a read and carries none | amend this layer |
-| D-4 | `ask` has no `change` parameter | a proposed change is expressed in the question; Span does not analyse changes (F5) | amend this layer |
+| D-1 | Obtain forms are owned by §4.1 | preserves the three lifecycle operations (L8) | amend this layer |
+| D-3 | The caller supplies a request identity for every write and explicit source admission, not pure obtain or a retry token | same identity + same content is a replay; same identity + different content is a conflict; a new identity with identical content is a new act. This distinguishes a retry from an intentional repetition without exposing Span internals (A2, A4, F7). A pure change-scope `reconsider` is a read and carries none | amend this layer |
+| D-4 | `ask` has no `change` parameter | before-change understanding uses surface obtain; Span does not author proposed-change analysis (F5) | amend this layer |
 | D-5 | A parent's own conclusions are separate from descendant status | merging would blur granularity and double-count (F9) | amend this layer |
 
 ## 10. Constraints on the functional design and implementation

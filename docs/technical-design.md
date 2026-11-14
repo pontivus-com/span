@@ -8,7 +8,7 @@ the proposed refactoring boundary for layers 0–3. It chooses mechanisms; it
 adds no product requirement. Where it conflicts with a higher layer, the higher
 layer governs.
 
-**Release identity (2026-11-07).** The current public release is **0.10.0**
+**Historical release identity (2026-11-07).** That capture identified **0.10.0**
 (2026-11-07), a public-grammar and identity-ownership release over 0.9.4. The
 prior internal pre-release artifacts were withdrawn and were never public.
 References below to the withdrawn internal baseline describe that artifact, not
@@ -29,6 +29,11 @@ precedence. Product and behavioural rules remain in layers 0–3; this document
 cites their IDs instead of defining replacements. Execution ordering and gate
 ownership live in the
 [implementation plan dated 2026-11-01](../.context/plans/2026-11-01-implementation-plan.md).
+
+**0.10.3 target amendment (2026-11-14).** Active mechanism choices below follow
+the amended lifecycle/functional contracts. Runtime implementation, installed
+host delivery and comparative acceptance are pending. Dated delivered captures
+remain historical evidence of their identified candidate, not target conformance.
 
 ## 1. Baseline decision
 
@@ -449,7 +454,12 @@ variant. O-5 blocks its named support-state case, not unrelated carrier work.
 command/result grammar. Host-specific duplicate semantic DTOs are excluded.
 The deliverable is an executable schema/example set, not this prose table.
 
-### 9.1 Delivered public surface (2026-11-02)
+### 9.1 Delivered public surface (2026-11-02; historical)
+
+This dated subsection records that delivered candidate. The current target
+operation contract is lifecycle §4.1–§4.3 and its implementation choices are §9.2.
+Do not use the old shapes below to generate new schemas or guidance.
+
 
 The three-tool surface is implemented in the working tree. `ask`, `record`, and
 `reconsider` are the only registered operations. Any other operation name is
@@ -504,7 +514,7 @@ name the lifecycle verb and agent moment it serves. The G-S2b scenarios live in
 
 The friction-remediation mechanisms that refine this surface are in §9.2.
 
-### 9.2 Contract remediation decisions (2026-11-02)
+### 9.2 Contract implementation decisions (amended 2026-11-14)
 
 This section selects the mechanisms for the layer-2/3 statements in
 `lifecycle-contract` §4.1–§4.2 and `functional-design` FD-25/28/30/39/41/46.
@@ -515,7 +525,7 @@ and that statement remains in its owning layer.
 
 | Concern | Owner | Decision |
 | --- | --- | --- |
-| Exact question identity and `no_match` classification | `core` | Pure; exact identity only; no embeddings, reranking, or keyword tables |
+| Obtain membership | `core` + `service` | Surface/current understanding identity; retained questions are metadata; no similarity matching |
 | Rejection cause kind | `core` | Typed enum; no text classification |
 | Current version / boundary version | `shell/sqlite_store` + `service` | Structured values carried through the result; no regex extraction |
 | `Gap.recovery` composition | `service` | One builder keyed by gap reason; reuse the `Unavailable.recovery` shape |
@@ -574,24 +584,24 @@ parse the cause, call `re.search`, or choose an action from words such as
 `gap_recovery(reason)` helper. Each reason has a fixed next action, so no reason
 has a lawful empty recovery:
 
-- `no_match` → ask the same surface without a question to read its current
-  document view;
 - `invalidated` / `unverifiable` → re-read the cited evidence and record against
   the current revision;
-- `unassessed` → read the cited evidence and record the conclusion.
+- `unassessed` → use source pointers/host navigation, establish meaning and record
+  direct evidence; no unsolicited whole-file admission.
 
-The text is fixed and server-owned. `Gap.available_questions` is deferred until
-the recovery path is measured.
+The text is server-owned. Typed reference failures use Rejected; actual
+operational failures use Unavailable. No catch-all ValueError becomes a Gap and
+no absent context is described as reaped without evidence.
 
 **Closed result unions.** `TOOL_OUTPUT_SCHEMAS` projects FD-38;
 `test_result_union_declarations_agree` asserts the reference and the runtime
 union. There is no second declaration.
 
-**Surface-first reuse.** Use the existing no-question `ask` form; add no new
-operation. The `ask` description names the document view as the normal reuse
-path, and the managed snippet projects the required lifecycle with the `no_match`
-recovery folded into the continuation line. The document view remains assembled
-on read by the one composer.
+**Surface-first reuse.** Replace the optional-question branch with pure surface
+obtain. Add CurrentUnderstandingSelector to the existing selector union; do not
+add a public operation. Both use the one current support/status composer. Retire
+string-question lookup rather than retaining a legacy parser. Pure obtain and
+change-scope reconsider issue no contexts and need no request IDs.
 
 **Delivered surface (F10).** The product surface tested for F10 is the MCP
 server plus the installer-managed pre-read notice in `docs/agents-snippet.md`.
@@ -599,6 +609,37 @@ The bare server is a component, not the product: the evidence records zero of
 five first-move use with bare registration and five of five with the installed
 notice. F10 states the condition; this section owns the configuration that
 demonstrates it.
+
+**Canonical branch constraints.** Put one typed set of conditional branch rules
+in core/schema beside the wire owner. Decode/construction validation and schema
+projection consume it; services do not restate structural field combinations.
+Keep null/default/empty/unknown-field behavior equivalent. Context origin,
+membership, owner containment and CAS still consult their canonical state owners.
+Do not use a root tagged union merely to evade hosts that cannot deliver the
+approved grammar; test the real packaged schema through each claimed host.
+
+**Bound context reference.** Use one canonical InvestigationContextRef containing
+repository_id and context_id at public context positions. Emit it from the
+persisted context; the typed bound-operation branch derives its route from it
+and forbids a parallel repository input. Direct branches carry repository_id and
+derive context internally. Adapt verification, challenge, explicit ask admission,
+record updates and their results together. Internal context storage/identity and
+retention remain unchanged. No UUID search, shape-guessing adapter, new registry
+or data migration is selected. Typed lookup errors distinguish invalid references
+from unavailable stores; the adapter faithfully projects them.
+
+**Change-scope reconsider.** Remove _reconsider_context from the pure read path.
+Its present content-derived request ID reuses an expired binding for identical
+changed paths; source audit reproduced the failure after 25 hours with shipped
+retention. Return current update coordinates and source references instead.
+Challenge remains a write with caller-owned identity and bound context when used.
+
+**Compact projection.** Keep durable RecordReceipt and exact snapshot owners.
+Implement lifecycle §4.2's compact public result carriers once in core/model;
+service composition uses the same support/status owners and the wire generator
+projects those carriers. The adapter never deletes JSON fields after encoding.
+Exact snapshot/receipt selectors supply audit detail without a new store. Keep
+all non-current findings and qualification timestamps observable.
 
 **Context-bound create.** The service chooses `ContextBoundTarget` or
 `ExplicitTarget` once from the context origin (FD-30). The adapter does not
@@ -659,6 +700,37 @@ cases live in `tests/unit/test_lifecycle_service.py` and
 `tests/unit/test_surface_conformance.py`, `tests/unit/test_agents_snippet.py`,
 and `tests/unit/test_skills.py`.
 
+### 9.3 Release and consumer compatibility disposition — 0.10.3
+
+The release identifier remains the user's selected **0.10.3**. This is a bugfix
+release with intentionally breaking request grammar; it is not described as a
+backward-compatible protocol patch. Repository release mechanics are owned by
+contributing.md §Releases. No unrecorded version-number compatibility guarantee
+is inferred, and no version metadata is changed by this documentation amendment.
+
+| Consumer | Required delivery before release |
+| --- | --- |
+| MCP tool clients (Codex/OpenCode/Claude where support is claimed) | Refresh tools/list against the same candidate; replace retired input grammar; capture actual branch delivery and results |
+| Managed skills, snippet and lifecycle notices | Ship the same surface-only obtain, direct-capture and bound-context grammar through existing packaging/install owners |
+| Existing configured/running MCP processes | Resolve pending accepted outcomes before upgrade; restart/reconnect and refresh cached schemas; do not silently run old and new grammar as peers |
+| Direct/custom clients | Explicit protocol upgrade required; reject retired fields through the canonical decoder with actionable new-schema guidance, not aliases |
+| Retained receipts, revisions and contexts | Preserve store identity/history and promised retention; use existing exact audit selectors for old acceptance, bound references for still-live contexts; no re-execution or store migration inferred |
+
+The supported delivery boundary is one identified package candidate plus its
+managed projections and a refreshed host session. Source declarations or prior
+host captures alone do not certify it. T08 owns coherent packaging/upgrade and
+T09 owns captures for every claimed host. Unverified host versions are reported
+as unverified; no new compatibility parser, pinned old semantic writer or shape
+adapter may compensate. Failure to deliver this boundary blocks publication,
+not the structural contract correction.
+
+Preserve replay meaning through original repository/request keys and full
+immutable receipts. Before a grammar switch, resolve accepted old operations
+through their retained receipt selectors. Do not re-encode a historical write
+as a new one or assume a new wire digest equals the old request. New direct
+writes still use stable caller-owned identities. Registration refresh and
+publication require separate authorization; this disposition performs neither.
+
 ## 10. Schema-11 layout and indexes
 
 **Authority:** FD-1–FD-8, FD-30, FD-35–FD-36, FD-42–FD-48.
@@ -701,13 +773,13 @@ transition solution. Exact DDL is verified with those fixtures before activation
 
 **Authority:** FD-5–FD-29, FD-54–FD-57.
 
-Resolve the canonical surface in the answer composition. The recorded question
-is the membership key: FD-25 makes `no_match` the result when understanding
-exists for the surface but not for that question, so lexical candidate ranking
-is retired with the candidate result. Build the operation result from exact
-membership plus shared support evaluations; the 0.9 snapshot projection is not
-the new answer composer. The no-question view uses the same composition path,
-grouped by recorded question, rather than another writer or stored rendering.
+Resolve surface membership or the exact current understanding identity under
+lifecycle §4.1. Recorded questions group the view; they never select membership
+from a caller's string. Compose current output through the shared evaluator.
+Pure obtains perform no admission. Explicit evidence requests use the existing
+EvidenceRequest/SourceRange and admission outcomes; map each delivered excerpt to
+its observation and original ranges. Source pointers without byte identity remain
+pointers. Do not add structural navigation or duplicate the support evaluator.
 
 The read composer returns historical `Gap` content through
 `HistoricalConclusion` and stale surface references through
@@ -771,7 +843,8 @@ rejection data rather than requiring the caller to parse an exception sentence.
 
 **Verification ingestion (O-7).** A run cites the `SourceObservationId`s the
 independent run actually exercised. Those are the observations admitted for the
-operation's context: the context returned by a preceding `ask`/`reconsider`, or
+operation's context: the bound reference returned by explicit ask admission or
+a challenge, or
 the locators/ranges the operation admits internally before recording. The service
 stores those exact IDs with the run, so the run names what it actually exercised.
 The wire accepts `run.observations` and/or `run.evidence`; evidence locators are
