@@ -55,8 +55,24 @@ def _wire_value(value: object) -> object:
     return value.value if isinstance(value, _enum.Enum) else value
 
 
+def _path_value(value: object, name: str) -> object:
+    """Resolve one canonical dotted field path without inventing a second shape."""
+    current: object = value
+    for part in name.split("."):
+        if current is None:
+            return None
+        if isinstance(current, dict):
+            current = current.get(part)
+            continue
+        try:
+            current = vars(current).get(part)
+        except TypeError:
+            return None
+    return current
+
+
 def _field_value(value: object, field: PresenceField) -> object:
-    return vars(value).get(field.name)
+    return _path_value(value, field.name)
 
 
 def _present(value: object, field: PresenceField) -> bool:
@@ -68,7 +84,7 @@ def _present(value: object, field: PresenceField) -> bool:
 
 def _condition_matches(value: object, condition: StructuralCondition) -> bool:
     if isinstance(condition, EqualsCondition):
-        return _wire_value(vars(value).get(condition.name)) == _wire_value(
+        return _wire_value(_path_value(value, condition.name)) == _wire_value(
             condition.value
         )
     return _present(value, condition.field) is condition.present
@@ -103,24 +119,45 @@ def validate_structural_rules(value: object) -> None:
         raise ValueError("; ".join(faults))
 
 
+def _nested_field_schema(
+    name: str,
+    leaf_schema: dict[str, object],
+) -> dict[str, object]:
+    """Project one dotted canonical field path into object constraints."""
+    parts = name.split(".")
+    leaf = parts[-1]
+    schema: dict[str, object] = {
+        "type": "object",
+        "required": [leaf],
+        "properties": {leaf: leaf_schema},
+    }
+    for part in reversed(parts[:-1]):
+        schema = {
+            "type": "object",
+            "required": [part],
+            "properties": {part: schema},
+        }
+    return schema
+
+
 def _active_schema(field: PresenceField) -> dict[str, object]:
     value_schema: dict[str, object]
     if field.non_empty:
-        value_schema = {"minItems": 1}
+        # The runtime rule is truthiness for public string/array/object fields.
+        # Reject the JSON empty forms from the same declaration rather than
+        # guessing a container kind here.
+        value_schema = {"not": {"enum": [None, "", [], {}]}}
     else:
         value_schema = {"not": {"type": "null"}}
-    return {
-        "required": [field.name],
-        "properties": {field.name: value_schema},
-    }
+    return _nested_field_schema(field.name, value_schema)
 
 
 def _condition_schema(condition: StructuralCondition) -> dict[str, object]:
     if isinstance(condition, EqualsCondition):
-        return {
-            "required": [condition.name],
-            "properties": {condition.name: {"const": _wire_value(condition.value)}},
-        }
+        return _nested_field_schema(
+            condition.name,
+            {"const": _wire_value(condition.value)},
+        )
     active = _active_schema(condition.field)
     return active if condition.present else {"not": active}
 
