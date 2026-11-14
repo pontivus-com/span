@@ -125,7 +125,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "conclusion": "The first line is line1.",
                     "support": [
                         {
-                            "$type": "SourceSupportWire",
+                            "$type": "source",
                             "locator": "src/app.py",
                             "ranges": [{"start_line": 1, "end_line": 1}],
                         }
@@ -141,7 +141,6 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "large-range-reuse",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
                 },
             )
@@ -175,7 +174,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         async def journey(session):
             created = await self._record_create(session, "withdraw-create")
-            uid = created["receipt"]["accepted_understanding_ids"][0]["value"]
+            uid = created["understanding_id"]["value"]
             result = await self._call(
                 session,
                 "record",
@@ -196,23 +195,21 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(result["$type"], "UnderstandingRecorded")
-            for index, question in enumerate([None, "What happens in the app?"]):
-                arguments = {
-                    "repository_id": REPOSITORY_ID,
-                    "request_id": f"withdraw-ask-{index}",
-                    "surface": {"kind": "FILE", "locator": "src/app.py"},
-                }
-                if question is not None:
-                    arguments["question"] = question
-                answer = await self._call(session, "ask", arguments)
-                self.assertEqual(answer["$type"], "Gap")
-                self.assertEqual(answer["historical"], [])
-                self.assertEqual(answer["surface"]["locator"], "src/app.py")
-            snapshot = await self._call(
+            answer = await self._call(
                 session,
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                },
+            )
+            self.assertEqual(answer["$type"], "Gap")
+            self.assertEqual(answer["historical"], [])
+            self.assertEqual(answer["surface"]["locator"], "src/app.py")
+            snapshot = await self._call(
+                session,
+                "ask",
+                {
                     "selector": {
                         "$type": "UnderstandingSnapshotSelector",
                         "repository_id": REPOSITORY_ID,
@@ -237,14 +234,13 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-1",
                     "reference": "src/app.py",
-                    "question": "What happens in the app?",
                 },
             )
             self.assertEqual(cold["$type"], "Gap")
             self.assertEqual(cold["reason"], "unassessed")
-            self.assertIn("line1", cold["evidence"][0]["content"])
+            self.assertEqual(cold["source_pointers"][0]["locator"], "src/app.py")
+            self.assertIsNone(cold["admission"])
 
             created = await self._record_create(session, "sub-create-1")
             self.assertEqual(created["$type"], "UnderstandingRecorded")
@@ -254,9 +250,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-2",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
-                    "question": "What happens in the app?",
                 },
             )
             self.assertEqual(warm["$type"], "Answer")
@@ -272,9 +266,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-3",
                     "reference": "src/app.py",
-                    "question": "What happens in the app?",
                 },
             )
 
@@ -292,24 +284,25 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "req-context-bound",
                     "reference": "src/app.py",
-                    "question": "What happens in the app?",
+                    "evidence": [{"locator": "src/app.py"}],
                 },
             )
             self.assertEqual(gap["$type"], "Gap")
-            context_id = gap["context"]["value"]
-            observation_id = gap["observations"][0]["value"]
+            admission = gap["admission"]
+            context = admission["context"]
+            observation_id = admission["outcomes"][0]["observation_id"]["value"]
             recorded = await self._call(
                 session,
                 "record",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "sub-context-bound",
+                    "context": context,
                     "kind": "understanding",
-                    "context_id": context_id,
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens in the app?",
+                    "scope_paths": ["src/app.py"],
                     "conclusion": "The app emits line1.",
                     "observation_id": observation_id,
                 },
@@ -319,43 +312,41 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
         recorded = await self._session(journey)
         self.assertEqual(
-            recorded["receipt"]["accepted_understanding_ids"][0]["value"],
+            recorded["understanding_id"]["value"],
             "u:sub-context-bound",
         )
 
-    async def test_question_context_rejects_an_explicit_target(self) -> None:
+    async def test_evidence_context_accepts_an_explicit_target(self) -> None:
         async def journey(session: ClientSession) -> dict:
             gap = await self._call(
                 session,
                 "ask",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "req-context-conflict",
                     "reference": "src/app.py",
-                    "question": "What happens in the app?",
+                    "evidence": [{"locator": "src/app.py"}],
                 },
             )
-            context_id = gap["context"]["value"]
-            rejected = await self._call(
+            context = gap["admission"]["context"]
+            recorded = await self._call(
                 session,
                 "record",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "sub-context-conflict",
+                    "context": context,
                     "kind": "understanding",
-                    "context_id": context_id,
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
                     "question": "What happens in the app?",
+                    "scope_paths": ["src/app.py"],
                     "conclusion": "The app emits line1.",
                     "locator": "src/app.py",
                 },
             )
-            self.assertEqual(rejected["$type"], "Rejected")
-            return rejected
+            self.assertEqual(recorded["$type"], "UnderstandingRecorded")
+            return recorded
 
-        rejected = await self._session(journey)
-        self.assertEqual(rejected["cause_kind"], "context_target_conflict")
-        self.assertFalse(rejected["required_action"] == "")
+        recorded = await self._session(journey)
+        self.assertEqual(recorded["version"]["value"], 1)
 
     async def test_exact_surface_resolves_ambiguity(self) -> None:
         async def journey(session: ClientSession) -> dict:
@@ -383,9 +374,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-ambiguous",
                     "reference": "src/app.py",
-                    "question": "What happens in the app?",
                 },
             )
             self.assertEqual(ambiguous["$type"], "AmbiguousSurface")
@@ -397,12 +386,10 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-exact",
                     "surface": {
                         "kind": candidate["kind"],
                         "locator": candidate["locator"],
                     },
-                    "question": "What happens in the app?",
                 },
             )
 
@@ -467,7 +454,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                         "observations": [],
                         "evidence": [
                             {
-                                "$type": "SourceSupportWire",
+                                "$type": "source",
                                 "locator": "src/app.py",
                                 "ranges": [],
                             }
@@ -486,9 +473,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-verify",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
-                    "question": "What happens in the app?",
                 },
             )
 
@@ -507,9 +492,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-historical",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
-                    "question": "What happens in the app?",
                 },
             )
 
@@ -557,9 +540,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "locator": "src/app.py",
                 },
             )
-            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
-                "value"
-            ]
+            understanding_id = created["understanding_id"]["value"]
             existing_ids = self._qualification_ids(created)
             added = await self._call(
                 session,
@@ -589,9 +570,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-status",
                     "surface": {"kind": "SERVICE", "locator": "app-and-style"},
-                    "question": "What happens in the app?",
                 },
             )
             return {"answer": answer, "added_id": added_id}
@@ -638,7 +617,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                         "observations": [],
                         "evidence": [
                             {
-                                "$type": "SourceSupportWire",
+                                "$type": "source",
                                 "locator": "src/app.py",
                                 "ranges": [],
                             }
@@ -657,9 +636,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-multi-app",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
-                    "question": "What happens in the app?",
                 },
             )
             other_answer = await self._call(
@@ -667,9 +644,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-multi-other",
                     "surface": {"kind": "FILE", "locator": "src/other.py"},
-                    "question": "What happens in the other module?",
                 },
             )
             return {"app": app, "other": other_answer}
@@ -689,23 +664,22 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "repository_id": REPOSITORY_ID,
                     "request_id": "req-big",
                     "surface": {"kind": "FILE", "locator": "src/big.py"},
-                    "question": "What is here?",
+                    "evidence": [{"locator": "src/big.py"}],
                 },
             )
             self.assertEqual(first["$type"], "Gap")
-            self.assertTrue(first.get("continuation"))
+            self.assertTrue(first["admission"].get("continuation"))
             return await self._call(
                 session,
                 "ask",
                 {
-                    "repository_id": REPOSITORY_ID,
-                    "continuation": first["continuation"],
+                    "continuation": first["admission"]["continuation"],
                 },
             )
 
         page = await self._session(journey, budget=1500)
         self.assertEqual(page["$type"], "EvidencePage")
-        self.assertTrue(page["evidence"])
+        self.assertTrue(page["deliveries"])
 
     async def test_continuation_survives_a_fresh_process(self) -> None:
         _write(self.repo, "src/big.py", "line\n" * 500)
@@ -718,12 +692,12 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "repository_id": REPOSITORY_ID,
                     "request_id": "req-big",
                     "surface": {"kind": "FILE", "locator": "src/big.py"},
-                    "question": "What is here?",
+                    "evidence": [{"locator": "src/big.py"}],
                 },
             )
             self.assertEqual(gap["$type"], "Gap")
-            self.assertTrue(gap.get("continuation"))
-            return gap["continuation"]
+            self.assertTrue(gap["admission"].get("continuation"))
+            return gap["admission"]["continuation"]
 
         token = await self._session(first, budget=1500)
 
@@ -732,21 +706,18 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "continuation": token,
                 },
             )
 
         page = await self._session(second, budget=1500)
         self.assertEqual(page["$type"], "EvidencePage")
-        self.assertTrue(page["evidence"])
+        self.assertTrue(page["deliveries"])
 
     async def test_reconsider_record_succeeds_without_an_intervening_ask(self) -> None:
         async def journey(session: ClientSession) -> dict:
             created = await self._record_create(session, "sub-create-reconsider")
-            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
-                "value"
-            ]
+            understanding_id = created["understanding_id"]["value"]
             target_id = self._created_conclusion_id(created)
             _write(self.repo, "src/app.py", "changed\n")
             changed = await self._call(
@@ -772,9 +743,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "record",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "sub-correct-reconsider",
-                    "context_id": changed["context"]["value"],
+                    "context": changed["context"],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],
@@ -795,9 +765,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "req-after-reconsider",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
-                    "question": "What happens in the app?",
                 },
             )
 
@@ -810,9 +778,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
     async def test_reconsider_race_rejects_on_stale_expected_version(self) -> None:
         async def journey(session: ClientSession) -> dict:
             created = await self._record_create(session, "sub-race")
-            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
-                "value"
-            ]
+            understanding_id = created["understanding_id"]["value"]
             target_id = self._created_conclusion_id(created)
             _write(self.repo, "src/app.py", "changed\n")
             changed = await self._call(
@@ -853,9 +819,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "record",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "sub-race-correct",
-                    "context_id": changed["context"]["value"],
+                    "context": changed["context"],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": expected,
@@ -905,27 +870,27 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "svc-ctx-ask",
                     "surface": {"kind": "SERVICE", "locator": "pipeline"},
-                    "question": "How does the pipeline move data?",
+                    "evidence": [{"locator": path}],
                 },
             )
             self.assertEqual(gap["$type"], "Gap", gap)
-            self.assertIsNotNone(gap.get("context"))
+            self.assertIsNotNone(gap.get("admission"))
             created = await self._call(
                 session,
                 "record",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "svc-ctx-support",
-                    "context_id": gap["context"]["value"],
+                    "context": gap["admission"]["context"],
                     "kind": "understanding",
                     "surface": {"kind": "SERVICE", "locator": "pipeline"},
+                    "question": "How does the pipeline move data?",
+                    "scope_paths": paths,
                     "conclusion": "The pipeline flows A through D.",
                     "support": [
                         {
-                            "$type": "SourceSupportWire",
+                            "$type": "source",
                             "locator": path,
                             "ranges": [],
                         }
@@ -934,17 +899,13 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(created["$type"], "UnderstandingRecorded", created)
-            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
-                "value"
-            ]
+            understanding_id = created["understanding_id"]["value"]
             answer = await self._call(
                 session,
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "svc-ctx-answer",
                     "surface": {"kind": "SERVICE", "locator": "pipeline"},
-                    "question": "How does the pipeline move data?",
                 },
             )
             return {"understanding_id": understanding_id, "answer": answer}
@@ -1013,7 +974,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "conclusion": "The pipeline flows A through D.",
                     "support": [
                         {
-                            "$type": "SourceSupportWire",
+                            "$type": "source",
                             "locator": path,
                             "ranges": [],
                         }
@@ -1022,18 +983,14 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(created["$type"], "UnderstandingRecorded", created)
-            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
-                "value"
-            ]
+            understanding_id = created["understanding_id"]["value"]
             target_id = self._created_conclusion_id(created)
             before = await self._call(
                 session,
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "svc-ask-1",
                     "surface": {"kind": "SERVICE", "locator": "pipeline"},
-                    "question": "How does the pipeline move data?",
                 },
             )
             self.assertEqual(before["$type"], "Answer", before)
@@ -1062,9 +1019,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "record",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "svc-correct",
-                    "context_id": changed["context"]["value"],
+                    "context": changed["context"],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],
@@ -1076,7 +1032,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                                 "scope_paths": paths,
                                 "support": [
                                     {
-                                        "$type": "SourceSupportWire",
+                                        "$type": "source",
                                         "locator": path,
                                         "ranges": [],
                                     }
@@ -1093,9 +1049,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "ask",
                 {
                     "repository_id": REPOSITORY_ID,
-                    "request_id": "svc-ask-2",
                     "surface": {"kind": "SERVICE", "locator": "pipeline"},
-                    "question": "How does the pipeline move data?",
                 },
             )
 
@@ -1113,9 +1067,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         async def journey(session: ClientSession) -> dict:
             created = await self._record_create(session, "sub-challenge")
             self.assertEqual(created["$type"], "UnderstandingRecorded")
-            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
-                "value"
-            ]
+            understanding_id = created["understanding_id"]["value"]
             target_id = self._created_conclusion_id(created)
             challenged = await self._call(
                 session,
@@ -1161,7 +1113,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     },
                     "challenge_dispositions": [
                         {
-                            "$type": "UnresolvedDispositionWire",
+                            "$type": "unresolved",
                             "challenge_id": challenge_id,
                             "expected_challenge_revision": challenge_revision,
                             "remaining_question": ("What evidence settles this?"),
@@ -1180,7 +1132,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         settled = outcome["settled"]
         self.assertEqual(settled["$type"], "UnderstandingRecorded")
         self.assertEqual(
-            settled["receipt"]["accepted_understanding_versions"][0]["value"], 2
+            settled["version"]["value"], 2
         )
         store = LifecycleStore(
             self.data / f"{REPOSITORY_ID}.db",
@@ -1211,22 +1163,22 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
-                    "repository_id": REPOSITORY_ID,
                     "request_id": "wrong-route-ask",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
-                    "question": "What happens here?",
+                    "evidence": [{"locator": "src/app.py"}],
                 },
             )
             self.assertEqual(gap["$type"], "Gap")
-            context_id = gap["context"]["value"]
+            context = gap["admission"]["context"]
             result = await self._call(
                 session,
                 "record",
                 {
-                    "repository_id": other_id,
                     "request_id": "wrong-route-record",
+                    "context": context,
                     "kind": "understanding",
-                    "context_id": context_id,
+                    "question": "What happens here?",
+                    "scope_paths": ["src/app.py"],
                     "conclusion": "The app has content.",
                     "locator": "src/app.py",
                 },
