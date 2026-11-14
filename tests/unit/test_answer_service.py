@@ -973,7 +973,8 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Answer)
         self.assertTrue(result.truncated)
         self.assertTrue(result.omitted)
-        self.assertTrue(result.conclusions)
+        self.assertTrue(result.groups)
+        self.assertTrue(result.groups[0].conclusions)
         self.assertIn("u-wide", result.references)
 
     def test_enriched_status_and_gap_fit_the_default_budget(self) -> None:
