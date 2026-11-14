@@ -726,7 +726,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(page["$type"], "EvidencePage")
         self.assertTrue(page["deliveries"])
 
-    async def test_malformed_continuation_is_rejected_without_internal_state(self) -> None:
+    async def test_malformed_continuation_is_rejected_without_internal_state(
+        self,
+    ) -> None:
         async def journey(session: ClientSession) -> dict:
             return await self._call(
                 session,
