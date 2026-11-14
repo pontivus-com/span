@@ -594,9 +594,7 @@ class RecordRequestWire:
                 _constraints.PresenceField("actions.replace", non_empty=True),
                 _constraints.PresenceField("actions.withdraw", non_empty=True),
                 _constraints.PresenceField("gaps"),
-                _constraints.PresenceField(
-                    "challenge_dispositions", non_empty=True
-                ),
+                _constraints.PresenceField("challenge_dispositions", non_empty=True),
             ),
             minimum=1,
             maximum=7,
@@ -825,6 +823,7 @@ class RecordRequestWire:
 
     def __post_init__(self) -> None:
         _constraints.validate_structural_rules(self)
+
 
 def wire_content_digest(value: object) -> ContentDigest:
     """Hash one submitted wire payload, excluding its recording identity.
