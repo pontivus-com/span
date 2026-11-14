@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import sys
@@ -54,7 +55,13 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result.structured_content)
         return result.structured_content or {}
 
-    async def _session(self, callback, *, budget: int | None = None):
+    async def _session(
+        self,
+        callback,
+        *,
+        budget: int | None = None,
+        extra_repos: tuple[pathlib.Path, ...] = (),
+    ):
         args = [
             "-m",
             "span.shell.mcp_server",
@@ -63,6 +70,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             "--repo",
             str(self.repo),
         ]
+        for repository in extra_repos:
+            args.extend(["--repo", str(repository)])
         if budget is not None:
             args.extend(["--response-budget-bytes", str(budget)])
         params = StdioServerParameters(
@@ -1184,6 +1193,49 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             outcome["challenge_revision"] + 1,
         )
         self.assertEqual(challenge.state, m.ChallengeState.UNRESOLVED)
+
+    async def test_live_context_cannot_be_misrouted_to_another_repository(self) -> None:
+        other_id = "repo-other"
+        other = self.repo.parent / other_id
+        other.mkdir()
+        _write(other, "src/app.py", "line1\nline2\n")
+        store = LifecycleStore(
+            self.data / f"{other_id}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        store.register_repository(other_id, str(other.resolve()))
+        store.close()
+
+        async def journey(session: ClientSession) -> dict:
+            gap = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "wrong-route-ask",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What happens here?",
+                },
+            )
+            self.assertEqual(gap["$type"], "Gap")
+            context_id = gap["context"]["value"]
+            result = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": other_id,
+                    "request_id": "wrong-route-record",
+                    "kind": "understanding",
+                    "context_id": context_id,
+                    "conclusion": "The app has content.",
+                    "locator": "src/app.py",
+                },
+            )
+            return result
+
+        result = await self._session(journey, extra_repos=(other,))
+        self.assertNotEqual(result["$type"], "Unavailable")
+        self.assertNotIn("unknown context", json.dumps(result).lower())
 
 
 if __name__ == "__main__":

@@ -1254,6 +1254,49 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertTrue(first.continuation)
         return first
 
+    def test_binding_conflict_is_not_converted_to_a_semantic_gap(self) -> None:
+        from unittest import mock
+
+        from span.core.recording import RecordingConflict
+
+        with mock.patch(
+            "span.service.answer.issue_context",
+            side_effect=RecordingConflict("sentinel binding conflict"),
+        ):
+            with self.assertRaises(RecordingConflict):
+                self.service.ask(
+                    m.AskRequest(
+                        repository_id="repo-1",
+                        request_id="req-conflict",
+                        surface=m.SurfaceReference(
+                            kind=m.SurfaceKind.FILE, locator="src/a.py"
+                        ),
+                        question="A different question",
+                    )
+                )
+
+    def test_store_failure_is_not_converted_to_a_semantic_gap(self) -> None:
+        from unittest import mock
+
+        from span.shell.sqlite_store.lifecycle import LifecycleStoreError
+
+        with mock.patch.object(
+            self.service._evidence,
+            "admit",
+            side_effect=LifecycleStoreError("sentinel store failure"),
+        ):
+            with self.assertRaises(LifecycleStoreError):
+                self.service.ask(
+                    m.AskRequest(
+                        repository_id="repo-1",
+                        request_id="req-store-failure",
+                        surface=m.SurfaceReference(
+                            kind=m.SurfaceKind.FILE, locator="src/a.py"
+                        ),
+                        question="A different question",
+                    )
+                )
+
     def test_continuation_replay_is_stable(self) -> None:
         service = self._page_service()
         first = self._cold_page(service)
@@ -1275,6 +1318,9 @@ class AnswerServiceTest(unittest.TestCase):
             m.AskRequest(repository_id="repo-1", continuation=first.continuation)
         )
         self.assertIsInstance(page, m.Unavailable)
+        assert isinstance(page, m.Unavailable)
+        self.assertNotIn("reaped", page.failure.lower())
+        self.assertNotIn("reaped", page.recovery.lower())
 
     def test_expired_context_rejects_the_continuation(self) -> None:
         now = [NOW]

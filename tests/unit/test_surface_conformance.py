@@ -13,6 +13,8 @@ import re
 import typing
 import unittest
 
+from jsonschema import Draft202012Validator
+
 from span.core import model as m
 from span.core.schema import record_wire as rw
 from span.shell.mcp import (
@@ -236,6 +238,58 @@ class SurfaceConformanceTest(unittest.TestCase):
             text = (REPO_ROOT / name).read_text(encoding="utf-8")
             self.assertNotIn("0.9 candidate", text, name)
             self.assertNotIn("0.10 candidate", text, name)
+
+    def test_schema_and_decoder_agree_on_pure_surface_obtain(self):
+        payload = {
+            "repository_id": "r",
+            "surface": {"kind": "FILE", "locator": "a.py"},
+        }
+        errors = list(Draft202012Validator(TOOL_SCHEMAS["ask"]).iter_errors(payload))
+        self.assertEqual(errors, [])
+        request = decode_request("ask", payload)
+        self.assertIsInstance(request, m.AskRequest)
+
+    def test_schema_and_decoder_agree_on_conflicting_evidence_modes(self):
+        payload = {
+            "repository_id": "r",
+            "request_id": "w",
+            "kind": "understanding",
+            "question": "Why?",
+            "scope_paths": ["a.py"],
+            "conclusion": "Because.",
+            "locator": "a.py",
+            "observation_id": "obs-1",
+        }
+        errors = list(
+            Draft202012Validator(TOOL_SCHEMAS["record"]).iter_errors(payload)
+        )
+        self.assertTrue(errors, "schema must reject mutually exclusive evidence modes")
+        with self.assertRaises(ValueError):
+            decode_request("record", payload)
+
+    def test_public_discriminator_values_do_not_expose_wire_class_names(self):
+        def tag_values(node):
+            if isinstance(node, dict):
+                if "$type" in node and isinstance(node["$type"], dict):
+                    value = node["$type"].get("const")
+                    if isinstance(value, str):
+                        yield value
+                for value in node.values():
+                    yield from tag_values(value)
+            elif isinstance(node, list):
+                for value in node:
+                    yield from tag_values(value)
+
+        values = {
+            value
+            for schema in (*TOOL_SCHEMAS.values(), *TOOL_OUTPUT_SCHEMAS.values())
+            for value in tag_values(schema)
+        }
+        self.assertTrue(values)
+        self.assertFalse(
+            [value for value in values if value.endswith("Wire")],
+            "public discriminator vocabulary must not expose runtime wire class names",
+        )
 
     def test_result_union_declarations_agree(self):
         ask = _runtime_union(m.AskResult)

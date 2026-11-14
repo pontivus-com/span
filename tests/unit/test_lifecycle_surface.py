@@ -307,6 +307,41 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["$type"], "Unavailable")
         self.assertFalse(result.is_error)
 
+    def test_unavailable_does_not_leak_internal_exception_text(self):
+        from span.shell.sqlite_store.lifecycle import SchemaVersionError
+
+        sentinel = "/private/span/SECRET.db table=investigation_contexts"
+        result = self._dispatch(
+            _context(),
+            SchemaVersionError(f"schema mismatch at {sentinel}"),
+        )
+        payload = json.loads(result.content)
+        self.assertEqual(payload["$type"], "Unavailable")
+        self.assertNotIn(sentinel, json.dumps(payload))
+
+    def test_rejected_does_not_leak_internal_exception_text(self):
+        from span.core.recording import RecordingConflict
+        from span.core.rejection import RejectionCauseKind
+
+        sentinel = "/private/span/SECRET.db request_digest=deadbeef"
+        result = self._dispatch(
+            _context(),
+            RecordingConflict(
+                f"internal conflict at {sentinel}",
+                cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+            ),
+        )
+        payload = json.loads(result.content)
+        self.assertEqual(payload["$type"], "Rejected")
+        self.assertNotIn(sentinel, json.dumps(payload))
+
+    def test_unexpected_exception_is_contained_without_internal_text(self):
+        sentinel = "/private/span/SECRET.db traceback=internal"
+        result = self._dispatch(_context(), RuntimeError(sentinel))
+        payload = json.loads(result.content)
+        self.assertTrue(result.is_error)
+        self.assertNotIn(sentinel, json.dumps(payload))
+
     def test_replay_conflict_carries_its_own_cause(self):
         from span.core.recording import RecordingConflict
         from span.core.rejection import RejectionCauseKind
