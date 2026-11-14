@@ -244,7 +244,9 @@ class SurfaceConformanceTest(unittest.TestCase):
             "repository_id": "r",
             "surface": {"kind": "FILE", "locator": "a.py"},
         }
-        errors = list(Draft202012Validator(TOOL_SCHEMAS["ask"]).iter_errors(payload))
+        errors = list(
+            Draft202012Validator(TOOL_SCHEMAS["ask"]).iter_errors(payload)
+        )
         self.assertEqual(errors, [])
         request = decode_request("ask", payload)
         self.assertIsInstance(request, m.AskRequest)
