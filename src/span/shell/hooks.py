@@ -43,7 +43,8 @@ __all__ = [
 ADOPTION_PRIMER = (
     "Span governs semantic understanding for this repository. Use the direct "
     "tools ending in `_ask`, `_record`, and `_reconsider`. Before deriving "
-    "understanding, ask for the relevant surface (omit question for reuse). "
+    "understanding, ask the relevant surface with no question or request identity; "
+    "use exact recorded-question selection only when that metadata is known. "
     "Record supported conclusions when established; reconsider changed paths "
     "after editing and record the resulting dispositions before completing work."
 )
