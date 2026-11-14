@@ -3,7 +3,7 @@
   "name": "io.github.pontivus-com/span",
   "title": "Span",
   "description": "Codebase understanding with exact evidence, qualified on every read and re-aligned on change.",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "repository": {
     "url": "https://github.com/pontivus-com/span",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "span-mcp",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "transport": {
         "type": "stdio"
       }

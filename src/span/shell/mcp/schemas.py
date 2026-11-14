@@ -37,25 +37,19 @@ class ToolSpec:
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "ask",
-        "Call this before reading or grepping source to understand a "
-        "surface. To reuse what is retained without knowing the exact recorded "
-        "question, omit the question: this returns the surface document view "
-        "in `groups` — one group per recorded question with its current "
-        "conclusions — and the top-level `conclusions` stays empty. Read the "
-        "group that answers your intent; for one targeted conclusion, ask "
-        "again with that exact recorded question. "
-        "To query one known question, supply it exactly; a paraphrase is a "
-        "different question and returns a no_match gap. If the result is "
-        "AmbiguousSurface, copy one candidate into an exact surface. Returns "
-        "current conclusions with text, support, evidence, and status, plus "
-        "applicable verification runs. A gap carries its evidence and a "
-        "recovery: follow a continuation if evidence was omitted, and on "
-        "no_match ask the same surface without a question. This replaces "
-        "Read/Grep when the question is about understanding, not syntax. Start "
-        "from `examples` in the input schema; `repository_id` is the registered "
-        "id, not a path. ASK TEMPLATE: "
-        '{"repository_id":"<id>","request_id":"<new id>",'
-        '"surface":{"kind":"FILE","locator":"<path>"},"question":"<question>"}',
+        "Call this before reading or grepping source to reuse retained understanding. "
+        "Ordinary obtain is surface-first: supply repository_id plus surface or "
+        "reference, with no question, request_id, or context. It returns the current "
+        "surface document view grouped by recorded question, plus status and "
+        "applicable verification. For one exact recorded question, use "
+        "RecordedQuestionSelector; matching is exact and surface-scoped, never "
+        "semantic or paraphrase matching. For a known understanding, use "
+        "CurrentUnderstandingSelector. A genuinely unassessed surface returns a "
+        "small Gap with source_pointers; to fetch source bytes, repeat the "
+        "surface/reference form with non-empty evidence and a request_id. "
+        "Continuation and exact selectors carry their own namespace and therefore "
+        "take no repository override. ASK TEMPLATE: "
+        '{"repository_id":"<id>","surface":{"kind":"FILE","locator":"<path>"}}',
         m.AskRequest,
         m.AskResult,
     ),
@@ -70,8 +64,8 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "create is flat: no action and no actions; action belongs to "
         "kind=surface. State the evidence you already hold; Span "
         "derives context, ids, and revisions. "
-        "A create may use the context_id from ask instead of question and "
-        "scope_paths; do not send both. "
+        "A create may use the context reference returned by explicit evidence admission "
+        "or reconsider instead of question and scope_paths; do not send both. "
         "CREATE TEMPLATE (copy and fill): "
         '{"repository_id":"<id>","request_id":"<new id>",'
         '"kind":"understanding","question":"<exact question>",'
@@ -79,7 +73,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '"locator":"<path>"} '
         "Create evidence is exactly one of locator, observation_id, or "
         "non-empty support; scope is supplied or derived independently. Use "
-        "observation_id instead of locator when the ask Gap gave you one. Use "
+        "observation_id instead of locator when explicit evidence admission returned one. Use "
         "support when you already hold the complete dependency set; then do "
         "not also send observation_id. Omit surface; Span derives it from one "
         "scope_path, or from the context. With a context, omit question and "
@@ -88,7 +82,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "established it. Multiple support files do not create owners. A supplied "
         "context has fixed complete scope: new in-scope evidence may be admitted "
         "during record. Empty scope means repository-wide. Discovery boundaries "
-        "must fit completely. When investigation expands, omit context_id and "
+        "must fit completely. When investigation expands, omit context and "
         "supply direct scope/evidence; Span derives a new operational context. "
         "Repository-wide discovery makes it repository-wide without widening "
         "semantic scope. Admitted references remain context-bound. "
@@ -114,16 +108,16 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         'Then record against it with surface {"kind":"SERVICE",'
         '"locator":"<name>"}. '
         "VERIFICATION TEMPLATE (copy and fill): "
-        '{"repository_id":"<id>","request_id":"<new id>",'
-        '"context_id":"<context from ask>","kind":"verification",'
+        '{"request_id":"<new id>","context":{"repository_id":"<id>",'
+        '"context_id":{"value":"<context id>"}},"kind":"verification",'
         '"run":{"repository_id":"<id>","scope_description":"<what was tested>",'
-        '"scope_paths":["<path>"],"observations":["<obs id from ask>"],'
+        '"scope_paths":["<path>"],"observations":["<obs id from explicit admission>"],'
         '"command":"<command>","scenario":"<scenario>","outcome":"PASS",'
         '"observed_at":"<ISO 8601>","observer":"<agent>"}} '
         "A run requires at least one observation or evidence item; both may coexist. "
         "run.observations requires the context that admitted those IDs. "
         "run.evidence may admit new locators inside that context's fixed scope. "
-        "For evidence beyond it, omit context_id and supply run.scope_paths and "
+        "For evidence beyond it, omit context and supply run.scope_paths and "
         "run.evidence. A run applies to surfaces within its declared scope "
         "and is not widened by a broader question, so record it against the "
         "surface it verifies. "
@@ -166,14 +160,19 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
     "ask": [
         {
             "repository_id": "repo-1",
-            "request_id": "ask-1",
             "surface": {"kind": "FILE", "locator": "src/a.py"},
-            "question": "What does A do?",
         },
         {
             "repository_id": "repo-1",
-            "request_id": "ask-2",
             "reference": "src/a.py",
+        },
+        {
+            "selector": {
+                "$type": "RecordedQuestionSelector",
+                "repository_id": "repo-1",
+                "surface": {"kind": "FILE", "locator": "src/a.py"},
+                "question": "What does A do?",
+            }
         },
     ],
     "record": [
@@ -202,9 +201,11 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
             },
         },
         {
-            "repository_id": "repo-1",
             "request_id": "rec-confirm",
-            "context_id": "ctx-from-reconsider",
+            "context": {
+                "repository_id": "repo-1",
+                "context_id": {"value": "ctx-from-reconsider"},
+            },
             "kind": "understanding",
             "understanding_id": "u:rec-1",
             "expected_version": 2,
@@ -218,9 +219,11 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
             },
         },
         {
-            "repository_id": "repo-1",
             "request_id": "rec-correct",
-            "context_id": "ctx-from-reconsider",
+            "context": {
+                "repository_id": "repo-1",
+                "context_id": {"value": "ctx-from-reconsider"},
+            },
             "kind": "understanding",
             "understanding_id": "u:rec-1",
             "expected_version": 2,
@@ -279,9 +282,11 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
             },
         },
         {
-            "repository_id": "repo-1",
             "request_id": "ver-1",
-            "context_id": "ctx-1",
+            "context": {
+                "repository_id": "repo-1",
+                "context_id": {"value": "ctx-1"},
+            },
             "kind": "verification",
             "run": {
                 "repository_id": "repo-1",

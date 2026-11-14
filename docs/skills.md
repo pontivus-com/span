@@ -10,7 +10,7 @@ grammar; [lifecycle](lifecycle.md) owns the procedure.
 | Canonical source | Responsibility |
 | --- | --- |
 | `skills/span-router/SKILL.md` | Moment → tool; the default-reflex table. Start here. |
-| `skills/span-before-you-read/SKILL.md` | `ask`, exact surface selection, ambiguity, continuation, surface-first reuse, and `no_match` recovery. |
+| `skills/span-before-you-read/SKILL.md` | `ask`, exact surface selection, ambiguity, continuation, surface-first reuse, explicit evidence admission, and exact recorded-question lookup. |
 | `skills/span-after-change/SKILL.md` | `reconsider` after editing, then re-establish actual loss. |
 | `skills/span-record/SKILL.md` | Record/update/verify and declare a service/domain boundary. |
 | `docs/agents-snippet.md` | The managed lifecycle block copied into a target's `AGENTS.md`. |

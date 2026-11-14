@@ -70,7 +70,7 @@ jobs:
       - name: Lint and format
         run: |
           ruff check .
-          black --check .
+          black --check --diff .
 
       - name: Typing ratchet
         run: |

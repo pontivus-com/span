@@ -8,6 +8,9 @@ import enum as _enum
 import types as _types
 import typing as _typing
 
+from span.core.schema.constraints import structural_schema_constraints
+from span.core.schema.wire import public_schema_name, public_type_tag
+
 
 def _json_default(value: object) -> object:
     """Project one dataclass default into JSON-compatible data.
@@ -105,7 +108,7 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
                     member, "__dataclass_fields__"
                 ):
                     _ensure_def(member, defs, seen)
-                    refs.append({"$ref": (f"#/$defs/{member.__name__}__tag")})
+                    refs.append({"$ref": f"#/$defs/{public_schema_name(member)}__tag"})
                 else:
                     refs.append(_project_hint(member, defs, seen))
             if len(refs) == 1:
@@ -114,7 +117,7 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
         return {"anyOf": [_project_hint(a, defs, seen) for a in args]}
     if isinstance(hint, type) and hasattr(hint, "__dataclass_fields__"):
         _ensure_def(hint, defs, seen)
-        return {"$ref": f"#/$defs/{hint.__name__}"}
+        return {"$ref": f"#/$defs/{public_schema_name(hint)}"}
     # No opaque-object fallback: every canonical carrier hint has an
     # explicit projection above. An unprojectable hint is a programming
     # defect and must fail deterministically, never advertise a shape
@@ -196,7 +199,7 @@ def _project_field(
 
 
 def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
-    name = cls.__name__
+    name = public_schema_name(cls)
     if name in defs or name in seen:
         return
     seen.add(name)
@@ -222,15 +225,25 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
         "required": sorted(required),
         "additionalProperties": False,
     }
+    constraints = structural_schema_constraints(cls)
+    if constraints:
+        definition["allOf"] = constraints
     defs[name] = definition
     tagged_properties = dict(properties)
-    tagged_properties["$type"] = {"const": name}
-    defs[f"{name}__tag"] = {
+    try:
+        tag = public_type_tag(cls)
+    except TypeError:
+        return
+    tagged_properties["$type"] = {"const": tag}
+    tagged_definition: dict[str, object] = {
         "type": "object",
         "properties": tagged_properties,
         "required": sorted([*required, "$type"]),
         "additionalProperties": False,
     }
+    if constraints:
+        tagged_definition["allOf"] = constraints
+    defs[f"{name}__tag"] = tagged_definition
 
 
 def definition_closure(root: type) -> dict[str, dict]:
@@ -309,12 +322,15 @@ def schema_for_request(
         "required": sorted(required),
         "additionalProperties": False,
     }
+    constraints = structural_schema_constraints(root_type)
+    if constraints:
+        schema["allOf"] = constraints
     full_defs = _prune_defs(schema, full_defs)
     if full_defs:
         schema["$defs"] = full_defs
     if not omit_type_tag:
         tagged = dict(properties)
-        tagged["$type"] = {"const": root_type.__name__}
+        tagged["$type"] = {"const": public_type_tag(root_type)}
         schema["properties"] = tagged
     return schema
 
@@ -329,7 +345,7 @@ def _project_result_hint(hint: object, defs: dict[str, dict]) -> dict:
         result: dict[str, object] = {"anyOf": branches}
     elif isinstance(inner, type) and hasattr(inner, "__dataclass_fields__"):
         _ensure_def(inner, defs, set())
-        result = {"$ref": f"#/$defs/{inner.__name__}__tag"}
+        result = {"$ref": f"#/$defs/{public_schema_name(inner)}__tag"}
     else:
         result = _project_hint(inner, defs, set())
     if nullable:

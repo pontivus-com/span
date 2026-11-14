@@ -1,46 +1,58 @@
-"""Recording outcomes: the atomic receipt plus present support qualification.
-
-Recording returns the accepted effect and one live qualification of that
-effect. The qualification is observed after commit, so a provider failure can
-never turn an accepted write into a reported rejection; it is represented as
-``SupportUnavailable`` instead.
-"""
+"""Recording outcomes: compact public acceptance plus exact audit coordinates."""
 
 from __future__ import annotations
 
+import datetime as _datetime
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
+from span.core.model.primitives import (
+    ConclusionRevisionRef,
+    UnderstandingId,
+    UnderstandingVersionNumber,
+    VerificationRunId,
+)
 from span.core.model.recording import RecordReceipt
 from span.core.model.support import (
     SupportUnavailable,
-    UnderstandingSupport,
-    VerificationSupport,
+    UnderstandingQualification,
+    VerificationQualification,
 )
-from span.core.model.understanding import Challenge
 from span.core.model.surfaces import SurfaceStatus, SurfaceStatusUnavailable
+from span.core.model.understanding import Challenge, ReceiptRetrievalSelector
+from span.core.model.verification import VerificationOutcome
 
 
 @_dataclass(frozen=True)
 class UnderstandingRecorded:
-    """One accepted understanding effect with its present support state."""
+    """One accepted understanding effect with compact live qualification."""
 
-    receipt: RecordReceipt
-    qualification: UnderstandingSupport | SupportUnavailable
+    receipt_selector: ReceiptRetrievalSelector
+    committed_at: _datetime.datetime
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+    affected_revisions: tuple[ConclusionRevisionRef, ...]
+    dependent_effects: tuple[ConclusionRevisionRef, ...]
+    qualification: UnderstandingQualification | SupportUnavailable
     status: SurfaceStatus | SurfaceStatusUnavailable
 
 
 @_dataclass(frozen=True)
 class VerificationRecorded:
-    """One accepted verification run with its present support state."""
+    """One accepted verification run with compact live qualification."""
 
-    receipt: RecordReceipt
-    qualification: VerificationSupport | SupportUnavailable
+    receipt_selector: ReceiptRetrievalSelector
+    committed_at: _datetime.datetime
+    run_id: VerificationRunId
+    command: str | None
+    scenario: str | None
+    outcome: VerificationOutcome
+    qualification: VerificationQualification | SupportUnavailable
 
 
 @_dataclass(frozen=True)
 class ChallengeRecorded:
-    """One accepted challenge, including its complete disposition history."""
+    """Internal accepted challenge composition; public reconsider returns Challenged."""
 
     receipt: RecordReceipt
     challenge: Challenge

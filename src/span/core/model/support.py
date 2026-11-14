@@ -170,3 +170,101 @@ class VerificationSupportRequest:
             "VerificationSupportRequest.repository_id", self.repository_id
         )
         _require_non_empty("VerificationSupportRequest.run_id", self.run_id)
+
+
+@_dataclass(frozen=True)
+class SupportQualification:
+    """Compact public support evaluation for one already-identified subject."""
+
+    state: SupportState
+    observed_at: _datetime.datetime
+    reason: str
+    limitations: tuple[str, ...]
+    findings: tuple[DependencyFinding, ...]
+
+    def __post_init__(self) -> None:
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("SupportQualification.observed_at must be aware")
+
+
+@_dataclass(frozen=True)
+class ConclusionQualification:
+    ref: ConclusionRevisionRef
+    evaluation: SupportQualification
+
+
+@_dataclass(frozen=True)
+class ObservationQualification:
+    observation_id: SourceObservationId
+    evaluation: SupportQualification
+
+
+@_dataclass(frozen=True)
+class UnderstandingQualification:
+    state: SupportState
+    observed_at: _datetime.datetime
+    limitations: tuple[str, ...]
+    conclusions: tuple[ConclusionQualification, ...]
+
+    def __post_init__(self) -> None:
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("UnderstandingQualification.observed_at must be aware")
+
+
+@_dataclass(frozen=True)
+class VerificationQualification:
+    state: SupportState
+    observed_at: _datetime.datetime
+    limitations: tuple[str, ...]
+    observations: tuple[ObservationQualification, ...]
+
+    def __post_init__(self) -> None:
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("VerificationQualification.observed_at must be aware")
+
+
+def compact_support(value: SupportEvaluation) -> SupportQualification:
+    """Project detailed support once without copying its full dependency array."""
+    if value.observed_at is None:
+        raise ValueError("public support qualification requires evaluation time")
+    return SupportQualification(
+        state=value.state,
+        observed_at=value.observed_at,
+        reason=value.reason,
+        limitations=value.limitations,
+        findings=tuple(
+            finding
+            for finding in value.findings
+            if finding.state is not SupportState.CURRENT
+        ),
+    )
+
+
+def compact_understanding(value: UnderstandingSupport) -> UnderstandingQualification:
+    return UnderstandingQualification(
+        state=value.state,
+        observed_at=value.observed_at,
+        limitations=value.limitations,
+        conclusions=tuple(
+            ConclusionQualification(
+                ref=item.ref,
+                evaluation=compact_support(item.evaluation),
+            )
+            for item in value.conclusions
+        ),
+    )
+
+
+def compact_verification(value: VerificationSupport) -> VerificationQualification:
+    return VerificationQualification(
+        state=value.state,
+        observed_at=value.observed_at,
+        limitations=value.limitations,
+        observations=tuple(
+            ObservationQualification(
+                observation_id=item.observation_id,
+                evaluation=compact_support(item.evaluation),
+            )
+            for item in value.observations
+        ),
+    )

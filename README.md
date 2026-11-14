@@ -35,8 +35,8 @@ able to find that explanation and see whether its support still holds.
 
 Span makes that investigation reusable. It is a local MCP server where agents
 record coherent explanations with exact source support, explicit gaps, and
-version history. Later agents can discover the explanation through an ordinary
-engineering question, then inspect what is current, disputed, or changed.
+version history. Later agents can discover the explanation from the current
+surface view, then inspect what is current, disputed, or changed.
 
 The coding agent does the thinking. Span keeps the record and checks its
 support.
@@ -47,9 +47,10 @@ current understanding, retain a supported conclusion, and re-align after change.
 
 ## How it works
 
-1. **Investigate a real question.** Ask about the surface you are looking at.
-   Span returns current answers with surface status, or a gap with inspectable
-   source evidence.
+1. **Start from the surface.** Ask for the current surface view with no question
+   or request identity. Span returns current grouped understanding with status,
+   or a gap with concrete source pointers. Select source bytes explicitly only
+   when the investigation needs them.
 2. **Retain established understanding.** Save one conclusion at a time with the file
    it rests on, or declare a service/domain surface for a cross-file
    explanation. Work that started outside Span can be recorded directly; the
@@ -68,31 +69,39 @@ Illustrative tool sequence, not literal request JSON. The installed schemas
 and [MCP reference](docs/mcp.md) own the wire grammar.
 
 ```text
-ask: "How does checkout decide whether to charge?"
-  → Gap: exact evidence, a context, and an explicit question
+ask(surface)
+  → current grouped Answer, or Gap with source pointers
 
-agent investigates; record admits the source it just read
+agent selects needed source bytes explicitly when required
+ask(surface, request_id, evidence)
+  → same Answer/Gap classification plus evidence admission/context
+
+agent investigates and records what it established
 
 record(kind="understanding", conclusion, locator|observation_id|support)
-  → committed receipt, understanding version 1, support qualification
+  → compact acceptance with receipt selector, version, and live qualification
 
-fresh session asks the same question about the same surface
-  → Answer with current conclusions, evidence, and surface status
+fresh session asks the surface
+  → current document view grouped by recorded question
+ask(selector=RecordedQuestionSelector)
+  → exact known recorded-question membership
 ask(selector=UnderstandingSnapshotSelector)
-  → recorded explanation, live support, gaps, and challenges
+  → exact recorded explanation, live support, gaps, and challenges
 
 supporting source changes
 reconsider(changed_paths)
   → every affected surface, with containment, direct, and indirect reasons,
-    and per-conclusion support state
+    per-conclusion support state, and a re-establishment context
 
 agent investigates and records a correction against the expected version
   → version 2; version 1 remains history
 ```
 
-A query names the surface; saved understanding is matched by that surface and
-the recorded question. Wording is not treated as semantic equivalence, and a
-returned conclusion is a starting point for judgment.
+Pure reuse names the surface and returns all current membership grouped by
+recorded question. Exact targeted reuse uses `RecordedQuestionSelector` only
+when that recorded question is already known. Wording is never treated as
+semantic equivalence, and a returned conclusion remains a starting point for
+judgment.
 
 ## Know what can be reused
 
@@ -107,10 +116,11 @@ bytes do not settle a dispute, and test existence does not establish a pass.
 Independent verification records the observations or evidence actually tested and preserves
 failures as failures.
 
-Recording is atomic and returns a receipt. The caller preserves identity
-before sending; retrying the same identity and content recovers the retained
-receipt after a lost response or process restart. A committed receipt and a
-present support qualification answer different questions.
+Recording is atomic. Ordinary acceptance returns a receipt selector plus the
+accepted coordinates and live qualification; the immutable receipt remains in
+storage and is retrieved explicitly when exact replay/audit detail is needed.
+The caller preserves identity before sending, so retrying the same identity and
+content recovers the retained acceptance after a lost response or restart.
 
 ## Quick start
 
@@ -138,17 +148,22 @@ instructions. Verify operational setup with:
 span-install --verify-only
 ```
 
-Setup creates no understanding. Begin with a question from your actual task;
+Setup creates no understanding. Begin with the relevant surface from your actual task;
 see [using Span](docs/usage.md).
 
 ## Beta host status
 
-| Host | Current scope |
+The 0.10.3 repository/installable contract is verified through the built package
+and installed stdio MCP lane. Candidate-specific live model-host conversion was
+not rerun from this execution environment; earlier captures are historical and
+are not reused as 0.10.3 acceptance evidence.
+
+| Host | 0.10.3 candidate status |
 | --- | --- |
-| Codex | Supported; three-tool delivery captured with hooks disabled. The flat-create re-capture is pending (account quota). |
-| OpenCode | Supported; three-tool and flat-create delivery captured. The installer plugin puts the first `ask` before the first source read in 5/5 measured runs. |
-| Claude Code | Supported managed host; registration/health and installer behavior are covered. Authenticated model-delivery grammar and caller identity remain **UNVERIFIED**. |
-| Other MCP hosts | Manual stdio connection is available; model-delivery behavior needs host-specific verification. |
+| Codex | Integration target retained; candidate-specific live model-delivery **UNVERIFIED**. |
+| OpenCode | Integration target and packaged notice delivery retained; candidate-specific live model-delivery **UNVERIFIED**. |
+| Claude Code | Managed registration/health support retained; authenticated model-delivery remains **UNVERIFIED**. |
+| Other MCP hosts | Manual stdio connection remains available; host-specific model-delivery is **UNVERIFIED**. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
 Hooks provide lifecycle reminders; retrieval and recording still check support

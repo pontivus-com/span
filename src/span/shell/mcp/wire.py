@@ -13,6 +13,7 @@ from span.core import model as m
 from span.core import schema as _schema
 from span.shell.mcp.models import ToolError, ToolResult
 from span.shell.mcp.schemas import TOOL_REQUEST_TYPES
+from span.service.continuation import decode_continuation
 
 __all__ = [
     "RoutingError",
@@ -57,11 +58,14 @@ def decode_request(tool_name: str, arguments: dict[str, object]) -> object:
     if members:
         tag = payload.pop("$type", None)
         if not isinstance(tag, str):
-            accepted = ", ".join(member.__name__ for member in members)
+            accepted = ", ".join(_schema.public_type_tag(member) for member in members)
             raise ValueError(
                 f"missing $type discriminator at root (accepted: {accepted})"
             )
-        member = next((item for item in members if item.__name__ == tag), None)
+        member = next(
+            (item for item in members if _schema.public_type_tag(item) == tag),
+            None,
+        )
         if member is None:
             raise ValueError(f"unknown $type {tag!r} at root")
         root = member
@@ -113,6 +117,14 @@ def repository_route(tool_name: str, request: object, route: str | None) -> str:
 
 
 def _embedded_repository(request: object) -> str | None:
+    bound = getattr(request, "bound_repository_id", None)
+    if isinstance(bound, str) and bound:
+        return bound
+    if isinstance(request, m.AskRequest):
+        if request.selector is not None:
+            return request.selector.repository_id
+        if request.continuation is not None:
+            return decode_continuation(request.continuation).repository_id
     direct = getattr(request, "repository_id", None)
     if isinstance(direct, str) and direct:
         return direct

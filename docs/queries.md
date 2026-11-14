@@ -1,41 +1,46 @@
 # Questions, retrieval, and bounds
 
-Ask a scoped engineering question with `ask`, naming either an exact
-`surface={kind, locator}` or a reference the agent is looking at. The answer
-comes from retained understanding, never from first principles. A first-contact
-question on an unassessed surface returns a gap with inspectable evidence; the
-agent investigates and then records the result.
+Obtain retained understanding by exact surface. A pure `ask` names either an
+exact `surface={kind, locator}` or an unambiguous `reference`, with no
+question, request identity, context, or evidence. It returns the current surface
+document view grouped by recorded question. A genuinely unassessed surface
+returns a Gap with source pointers; the agent investigates and records what it
+establishes.
+
+When the exact recorded question is already known, use
+`RecordedQuestionSelector`. It is exact surface-scoped equality, not semantic
+search. When source bytes are needed, use explicit evidence admission:
+surface/reference plus non-empty `evidence` and a caller-owned `request_id`.
 
 ## Result paths
 
-- `Answer`: every matched conclusion is current. It carries `ConclusionView`s
-  with statement, nature, scope, support, and evidence; the surface status
-  distribution (including `stale_refs`); recorded gaps; applicable
-  `VerificationView`s; and an explicit truncation state when the server budget
-  omitted content.
-- `Gap`: exactly one reason — `invalidated`, `unverifiable`, `unassessed`, or
-  `no_match` — with the prior non-current conclusions as historical content
-  (statement, exact revision, understanding version, evidence references, and
-  present state), admitted evidence, the context, the missing items, and a
-  recovery. It carries a continuation when evidence was omitted. A `no_match`
-  gap points back to the surface document view. A truncated gap's recovery
-  names the snapshot selector.
-- `AmbiguousSurface`: more than one granularity matches the reference; the
-  candidates are exact identities. Copy one into `surface`; Span never guesses.
-- `RetrievedUnderstanding` / `RetrievedReceipt`: exact-reference history. They
-  are never merged into `Answer` and never satisfy the current-answer guarantee.
-- `EvidencePage`: omitted gap evidence with an optional further continuation.
-- `Unavailable`: an operational failure, an invalid continuation, or a response
-  budget too small to carry the minimum result, always with a recovery action.
+- `Answer`: current supported content, grouped by recorded question for the
+  document view, with statement, nature, scope, support/evidence references,
+  surface status (including `stale_refs`), recorded gaps, applicable
+  verification, and explicit truncation state. `admission` is present only
+  when explicit evidence admission ran.
+- `Gap`: exactly one reason — `invalidated`, `unverifiable`, or
+  `unassessed` — with historical non-current content where applicable,
+  missing items, concrete `source_pointers`, status and recovery. It does not
+  imply evidence possession. Explicit evidence admission may add the same
+  `admission` projection and continuation. A non-matching
+  `RecordedQuestionSelector` is `unassessed`; a truncated historical gap's
+  recovery names the snapshot selector.
+- `AmbiguousSurface`: more than one granularity matches a reference; candidates
+  are exact identities. Copy one into `surface`; Span never guesses.
+- `RetrievedUnderstanding` / `RetrievedReceipt`: exact-reference history.
+  They are never merged into `Answer` and never satisfy current-answer reuse.
+- `EvidencePage`: the next exact selected-evidence deliveries, with an optional
+  further continuation.
+- `Rejected`: caller-correctable invalid selector/reference/binding state,
+  including an unusable continuation.
+- `Unavailable`: genuine operational failure or a response budget too small to
+  carry the minimum result.
 
-With no question, `ask` returns the surface document view: current conclusions
-grouped by the question they answer, plus status, gaps, and verification. The
-view is assembled on read and cannot drift.
-
-That view is the normal reuse path. Read it and select the current conclusion
-that answers the task; an exact question is a targeted query. A paraphrase is a
-different question and returns `no_match`; its recovery tells the agent to read
-the document view. Span does not rank, embed, or semantically match questions.
+Surface-first document view is the normal reuse path. Read it and select the
+current conclusion that answers the task. Use exact recorded-question selection
+only when that metadata is already known; Span does not rank, embed, paraphrase,
+or similarity-match questions.
 
 ## Retrieve exact detail
 
@@ -63,10 +68,12 @@ fragment.
 ## Continuations
 
 A continuation is an opaque, stateless token bound to a repository, live
-context, original request identity and digest, and the next evidence position.
-Pass it to `ask` with the same repository. The same token against the same live
-context returns the same page. Expired, abandoned, reaped, unknown, or
-mismatched tokens return `Unavailable`.
+context, original request identity/digest, and the next evidence position.
+Pass only the continuation to `ask`; it carries its own namespace. The same
+token against the same live context returns the same page. Malformed,
+wrong-binding, missing/non-live/expired, exhausted, or out-of-position
+continuations are typed `Rejected`; genuine operational failure is
+`Unavailable`.
 
 Every page advances by at least one evidence unit or exact line range. An
 oversized unit is split at line boundaries; a unit that cannot fit even one line

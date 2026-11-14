@@ -55,9 +55,7 @@ async def _run(exe, repo, data_dir, repository_id):
                 "ask",
                 {
                     "repository_id": repository_id,
-                    "request_id": "probe-ask-cold",
                     "reference": "src/alpha.py",
-                    "question": "What does alpha declare?",
                 },
             )
             created, created_error = await _call(
@@ -75,24 +73,19 @@ async def _run(exe, repo, data_dir, repository_id):
                     "provenance": "installed probe",
                 },
             )
-            understanding_id = created["receipt"]["accepted_understanding_ids"][0][
-                "value"
-            ]
+            understanding_id = created["understanding_id"]["value"]
             warm, warm_error = await _call(
                 session,
                 "ask",
                 {
                     "repository_id": repository_id,
-                    "request_id": "probe-ask-warm",
                     "reference": "src/alpha.py",
-                    "question": "What does alpha declare?",
                 },
             )
             retrieved, retrieved_error = await _call(
                 session,
                 "ask",
                 {
-                    "repository_id": repository_id,
                     "selector": {
                         "$type": "UnderstandingSnapshotSelector",
                         "repository_id": repository_id,
@@ -112,7 +105,7 @@ async def _run(exe, repo, data_dir, repository_id):
                 "retrieved_error": retrieved_error,
                 "understanding_id": understanding_id,
                 "found_kind": warm.get("$type"),
-                "statement": warm["conclusions"][0]["statement"],
+                "statement": warm["groups"][0]["conclusions"][0]["statement"],
                 "version": retrieved["version"]["version"]["value"],
             }
 

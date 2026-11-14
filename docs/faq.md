@@ -2,9 +2,11 @@
 
 ## What does an agent actually do with Span?
 
-Ask a scoped engineering question, inspect current answers or source evidence,
-investigate material gaps, and record supported conclusions when established. A later session can
-ask its own question, find applicable understanding, and check its support.
+Ask for the relevant surface view, inspect current retained understanding and
+status, select exact source evidence only when needed, investigate material gaps,
+and record supported conclusions when established. A later session can ask the
+same surface without knowing a saved ID or question, then select applicable
+current understanding. Exact recorded-question lookup is optional and exact.
 After changes, the agent reconsiders affected explanations and updates actual loss.
 See [usage](usage.md).
 

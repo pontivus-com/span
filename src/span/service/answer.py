@@ -12,6 +12,7 @@ the operation, so the caller never performs a separate admission step.
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
 import datetime as _datetime
 import typing as _typing
 
@@ -41,11 +42,6 @@ def gap_recovery(reason: m.GapReason) -> str:
     The text is server-owned. It names the next action and never ranks or
     describes other questions.
     """
-    if reason is m.GapReason.NO_MATCH:
-        return (
-            "ask the same surface without a question to read its current "
-            "document view"
-        )
     if reason is m.GapReason.UNASSESSED:
         return "read the cited evidence, then record the conclusion"
     return "re-read the cited evidence, then record against the current revision"
@@ -82,53 +78,77 @@ class AnswerService:
         self._new_context_id = new_context_id or server_context_id
 
     def ask(self, request: m.AskRequest) -> m.AskResult:
-        self._store.require_repository(request.repository_id)
         if request.continuation is not None:
             return self._evidence_page(request)
-        if request.selector is not None:
+        selected_question: str | None = None
+        selected_understanding: m.Understanding | None = None
+        if isinstance(
+            request.selector,
+            (m.UnderstandingSnapshotSelector, m.ReceiptRetrievalSelector),
+        ):
             return self._exact_reference(request.selector)
-        if request.surface is not None:
+        if isinstance(request.selector, m.RecordedQuestionSelector):
+            repository_id = request.selector.repository_id
+            selected_question = request.selector.question
             surface = m.SurfaceKey(
-                repository_id=request.repository_id,
-                kind=request.surface.kind,
-                locator=request.surface.locator,
+                repository_id=repository_id,
+                kind=request.selector.surface.kind,
+                locator=request.selector.surface.locator,
             )
+        elif isinstance(request.selector, m.CurrentUnderstandingSelector):
+            repository_id = request.selector.repository_id
+            selected_understanding = self._store.get_understanding(
+                request.selector.understanding_id
+            )
+            if selected_understanding.repository_id != repository_id:
+                raise RecordingValidationError(
+                    "selected understanding belongs to another repository"
+                )
+            surface = selected_understanding.surface
+            selected_question = selected_understanding.question
         else:
-            if request.reference is None:
-                raise RecordingValidationError("ask requires a surface or reference")
-            resolved = self._resolve(request.repository_id, request.reference)
-            if isinstance(resolved, m.AmbiguousSurface):
-                return self._fit(request, resolved)
-            surface = resolved
-        all_understandings = tuple(
-            self._store.list_understandings(request.repository_id)
-        )
-        understandings = tuple(
-            item for item in all_understandings if item.surface == surface
-        )
+            assert request.repository_id is not None
+            repository_id = request.repository_id
+            if request.surface is not None:
+                surface = m.SurfaceKey(
+                    repository_id=repository_id,
+                    kind=request.surface.kind,
+                    locator=request.surface.locator,
+                )
+            else:
+                if request.reference is None:
+                    raise RecordingValidationError(
+                        "ask requires a surface or reference"
+                    )
+                resolved = self._resolve(repository_id, request.reference)
+                if isinstance(resolved, m.AmbiguousSurface):
+                    return self._fit(request, resolved)
+                surface = resolved
+        self._store.require_repository(repository_id)
+        all_understandings = tuple(self._store.list_understandings(repository_id))
+        if selected_understanding is not None:
+            understandings: tuple[m.Understanding, ...] = (selected_understanding,)
+        else:
+            understandings = tuple(
+                item for item in all_understandings if item.surface == surface
+            )
         status = compose_surface_status(
             surface, store=self._store, support=self._support, evidence=self._evidence
         )
-        if request.question is None:
-            return self._fit(
-                request, self._document(request, surface, understandings, status)
-            )
+        if selected_question is None:
+            result = self._document(request, surface, understandings, status)
+            return self._with_admission(request, surface, result)
         matched = tuple(
-            item for item in understandings if item.question == request.question
+            item for item in understandings if item.question == selected_question
         )
         if not matched:
-            return self._fit(
-                request,
-                self._cold_gap(
-                    request,
-                    surface,
-                    (
-                        m.GapReason.NO_MATCH
-                        if understandings
-                        else m.GapReason.UNASSESSED
-                    ),
-                ),
+            result = self._cold_gap(
+                surface,
+                status,
+                m.GapReason.UNASSESSED,
+                missing=(selected_question,),
             )
+            return self._with_admission(request, surface, result)
         current: list[m.ConclusionView] = []
         historical: list[m.HistoricalConclusion] = []
         gaps: list[m.RecordedQuestionGap] = []
@@ -162,11 +182,9 @@ class AnswerService:
                 m.Answer(
                     surface=surface,
                     status=status,
-                    question=request.question,
                     conclusions=tuple(current),
                     gaps=tuple(gaps),
                     verification=self._verification(surface),
-                    context=self._context(request, surface),
                 ),
             )
         combined = support_rules.combine_states(tuple(states))
@@ -175,22 +193,23 @@ class AnswerService:
             if combined is m.SupportState.REASSESSMENT_REQUIRED
             else m.GapReason.UNVERIFIABLE
         )
-        context_id, evidence, observations = self._investigate(request, surface)
-        return self._fit(
-            request,
-            m.Gap(
-                surface=surface,
-                reason=reason,
-                recovery=gap_recovery(reason),
-                question=request.question,
-                changed_evidence=tuple(unit.evidence_ref for unit in evidence),
-                historical=tuple(historical),
-                missing=(request.question,),
-                evidence=evidence,
-                observations=observations,
-                context=context_id,
+        result = m.Gap(
+            surface=surface,
+            status=status,
+            reason=reason,
+            recovery=gap_recovery(reason),
+            changed_evidence=tuple(
+                {
+                    ref.evidence_id.value: ref
+                    for item in historical
+                    for ref in item.evidence
+                }.values()
             ),
+            historical=tuple(historical),
+            missing=(selected_question,),
+            source_pointers=self._source_pointers(surface),
         )
+        return self._with_admission(request, surface, result)
 
     def _resolve(
         self, repository_id: str, reference: str
@@ -229,7 +248,7 @@ class AnswerService:
             statement=content.statement,
             assertion_nature=content.assertion_nature,
             scope=content.scope,
-            support=support,
+            support=m.compact_support(support.evaluation),
             evidence=self._evidence_refs(content.support),
         )
 
@@ -279,86 +298,114 @@ class AnswerService:
 
     def _cold_gap(
         self,
-        request: m.AskRequest,
         surface: m.SurfaceKey,
+        status: m.SurfaceStatus,
         reason: m.GapReason,
+        *,
+        missing: tuple[str, ...] = ("no current conclusion on this surface",),
     ) -> m.Gap:
-        """Return a gap with the surface's inspectable evidence admitted."""
-        context, evidence, observations = self._investigate(request, surface)
         return m.Gap(
             surface=surface,
+            status=status,
             reason=reason,
             recovery=gap_recovery(reason),
-            question=request.question or "",
-            evidence=evidence,
-            observations=observations,
-            context=context,
-            missing=(
-                (
-                    request.question
-                    if request.question
-                    else "no current conclusion on this surface"
-                ),
-            ),
+            missing=missing,
+            source_pointers=self._source_pointers(surface),
         )
 
-    def _investigate(self, request: m.AskRequest, surface: m.SurfaceKey) -> tuple[
-        m.InvestigationContextId | None,
-        tuple[m.EvidenceUnit, ...],
-        tuple[m.SourceObservationId, ...],
-    ]:
-        paths = self._surface_paths(surface)
-        if not paths:
-            return None, (), ()
-        scope = m.EvidenceScope(paths=paths)
-        try:
-            context = issue_context(
-                self._store,
-                payload=request,
-                repository_id=request.repository_id,
-                request_id=m.RequestId(str(request.request_id)),
-                scope=scope,
-                question=request.question,
-                clock=self._clock,
-                new_context_id=self._new_context_id,
-            )
-            bounds = self._policy.default_query_bounds
-            self._evidence.admit(
-                context,
-                tuple(m.EvidenceRequest(path) for path in paths),
-                bounds,
-            )
-            records = self._evidence.context_observations(context.context_id.value)
-            evidence = tuple(self._evidence.context_unit(record) for record in records)
-            observation_ids = tuple(record.observation_id.value for record in records)
-        except ValueError:
-            return None, (), ()
-        return (
-            context.context_id,
-            evidence,
-            tuple(m.SourceObservationId(value) for value in observation_ids),
+    def _source_pointers(self, surface: m.SurfaceKey) -> tuple[m.EvidenceRequest, ...]:
+        return tuple(m.EvidenceRequest(path) for path in self._surface_paths(surface))
+
+    def _with_admission(
+        self,
+        request: m.AskRequest,
+        surface: m.SurfaceKey,
+        result: m.Answer | m.Gap,
+    ) -> m.AskResult:
+        evidence = request.evidence
+        if evidence is None:
+            return self._fit(request, result)
+        repository_id = request.repository_id
+        request_id = request.request_id
+        assert repository_id is not None
+        assert request_id is not None
+        context = issue_context(
+            self._store,
+            payload=request,
+            repository_id=repository_id,
+            request_id=m.RequestId(request_id),
+            scope=m.EvidenceScope(paths=self._surface_paths(surface)),
+            question=None,
+            clock=self._clock,
+            new_context_id=self._new_context_id,
         )
+        admitted = self._evidence.admit(
+            context,
+            evidence,
+            self._policy.default_query_bounds,
+        )
+        records = {
+            record.observation_id: record
+            for record in self._evidence.context_observations(context.context_id.value)
+        }
+        deliveries: list[m.EvidenceDelivery] = []
+        seen: set[m.SourceObservationId] = set()
+        for outcome in admitted.outcomes:
+            if not isinstance(outcome, (m.AdmittedEvidence, m.AlreadyAdmittedEvidence)):
+                continue
+            if outcome.observation_id in seen or outcome.observation_id not in records:
+                continue
+            seen.add(outcome.observation_id)
+            deliveries.extend(
+                self._evidence.context_deliveries(records[outcome.observation_id])
+            )
+        omitted = tuple(
+            outcome.request.locator
+            for outcome in admitted.outcomes
+            if isinstance(outcome, m.OmittedEvidence)
+        )
+        context_ref = m.InvestigationContextRef(
+            repository_id=context.repository_id,
+            context_id=context.context_id,
+        )
+        full_view = m.EvidenceAdmissionView(
+            context=context_ref,
+            outcomes=admitted.outcomes,
+            deliveries=tuple(deliveries),
+            continuation=None,
+            omitted=omitted,
+            truncated=False,
+        )
+        full_result = _dataclasses.replace(result, admission=full_view)
+        if _encoded_size(full_result) <= self._policy.max_response_bytes:
+            return full_result
+        continuation = (
+            encode_continuation(
+                ContinuationCursor(
+                    repository_id=context.repository_id,
+                    context_id=context.context_id.value,
+                    request_id=context.request_id,
+                    request_digest=context.request_digest,
+                )
+            )
+            if deliveries
+            else None
+        )
+        deferred_view = m.EvidenceAdmissionView(
+            context=context_ref,
+            outcomes=admitted.outcomes,
+            deliveries=(),
+            continuation=continuation,
+            omitted=omitted + tuple(_delivery_label(item) for item in deliveries),
+            truncated=continuation is not None,
+        )
+        return self._fit(request, _dataclasses.replace(result, admission=deferred_view))
 
     def _surface_paths(self, surface: m.SurfaceKey) -> tuple[str, ...]:
         if surface.kind is m.SurfaceKind.FILE:
             return (surface.locator,)
         declared = self._store.find_surface(surface)
         return () if declared is None else declared.boundary.paths
-
-    def _context(
-        self, request: m.AskRequest, surface: m.SurfaceKey
-    ) -> m.InvestigationContextId:
-        context = issue_context(
-            self._store,
-            payload=request,
-            repository_id=request.repository_id,
-            request_id=m.RequestId(str(request.request_id)),
-            scope=m.EvidenceScope(paths=self._surface_paths(surface)),
-            question=request.question,
-            clock=self._clock,
-            new_context_id=self._new_context_id,
-        )
-        return context.context_id
 
     def _verification_members(self, surface: m.SurfaceKey) -> tuple[str, ...] | None:
         """The file members the asked surface denotes, or None when unresolvable.
@@ -416,11 +463,14 @@ class AnswerService:
             ):
                 continue
             try:
-                qualification: m.VerificationSupport | m.SupportUnavailable = (
-                    self._support.evaluate_verification(run.run_id.value)
+                detailed = self._support.evaluate_verification(run.run_id.value)
+                qualification: m.VerificationQualification | m.SupportUnavailable = (
+                    m.compact_verification(detailed)
                 )
-            except (OSError, ValueError) as exc:
-                qualification = m.SupportUnavailable(str(exc))
+            except (OSError, ValueError):
+                qualification = m.SupportUnavailable(
+                    "verification support evaluation is unavailable"
+                )
             selected.append(m.VerificationView(run=run, qualification=qualification))
         return tuple(selected)
 
@@ -443,8 +493,10 @@ class AnswerService:
                         selector.understanding_id, version_number
                     )
                 )
-            except (OSError, ValueError) as exc:
-                support = m.SupportUnavailable(str(exc))
+            except (OSError, ValueError):
+                support = m.SupportUnavailable(
+                    "understanding support evaluation is unavailable"
+                )
             return m.RetrievedUnderstanding(
                 understanding=understanding,
                 version=version,
@@ -463,85 +515,74 @@ class AnswerService:
             raise RecordingValidationError(
                 f"no receipt for request {selector.request_id!r}"
             )
-        context = self._store.find_context_by_request(
-            selector.repository_id, m.RequestId(selector.request_id)
+        return m.RetrievedReceipt(
+            receipt=receipt,
+            verification_runs=tuple(
+                self._store.get_verification_run(run_id.value)
+                for run_id in receipt.accepted_verification_run_ids
+            ),
         )
-        return m.RetrievedReceipt(receipt=receipt, context=context)
 
     def _evidence_page(self, request: m.AskRequest) -> m.AskResult:
         try:
             cursor = decode_continuation(request.continuation or "")
-        except ValueError as exc:
-            return m.Unavailable(
-                operation="ask",
-                failure=str(exc),
-                recovery="ask again for the surface; the continuation is invalid",
-            )
-        if cursor.repository_id != request.repository_id:
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation belongs to another repository",
-                recovery="ask again for this repository",
-            )
+        except ValueError:
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation is malformed"
+            ) from None
         context = self._store.find_context_by_id(cursor.context_id)
         if context is None:
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation context no longer exists",
-                recovery="ask again for the surface; the context was reaped",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation context is unavailable"
             )
         if (
             context.repository_id != cursor.repository_id
             or context.request_id != cursor.request_id
             or context.request_digest != cursor.request_digest
         ):
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation does not match its context",
-                recovery="ask again for the surface",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation does not match its context"
             )
         if context.state is not m.ContextState.LIVE:
-            return m.Unavailable(
-                operation="ask",
-                failure=f"the continuation context is {context.state.value.lower()}",
-                recovery="ask again for the surface; the context is no longer live",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation context is not live"
             )
         if context.expires_at is not None and context.expires_at < self._clock():
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation context has expired",
-                recovery="ask again for the surface; the context expired",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation context is expired"
             )
-        records = self._evidence.context_observations(context.context_id.value)
-        if cursor.unit_index > len(records):
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation position is outside its context",
-                recovery="ask again for the surface",
+        deliveries = tuple(
+            delivery
+            for record in self._evidence.context_observations(context.context_id.value)
+            for delivery in self._evidence.context_deliveries(record)
+        )
+        if cursor.unit_index > len(deliveries):
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation position is outside its context"
             )
-        return self._fit_evidence_page(records, cursor)
+        return self._fit_evidence_page(deliveries, cursor)
 
     def _fit_evidence_page(
         self,
-        records: tuple[m.SourceObservation, ...],
+        deliveries: tuple[m.EvidenceDelivery, ...],
         cursor: ContinuationCursor,
     ) -> m.AskResult:
-        """Fit one evidence page with its real token and omission list."""
-        pages: list[m.EvidenceUnit] = []
+        """Fit one evidence page while preserving exact original positions."""
+        pages: list[m.EvidenceDelivery] = []
         next_index = cursor.unit_index
         next_line = cursor.line_offset
         omitted: list[str] = []
-        committed: list[tuple[list[m.EvidenceUnit], list[str], int, int]] = []
+        committed: list[tuple[list[m.EvidenceDelivery], list[str], int, int]] = []
         limit = self._policy.max_response_bytes
 
         def build(
-            units: list[m.EvidenceUnit],
+            values: list[m.EvidenceDelivery],
             labels: list[str],
             unit_index: int,
             line_offset: int,
         ) -> m.EvidencePage:
             continuation = None
-            if unit_index < len(records):
+            if unit_index < len(deliveries):
                 continuation = encode_continuation(
                     ContinuationCursor(
                         repository_id=cursor.repository_id,
@@ -553,31 +594,28 @@ class AnswerService:
                     )
                 )
             return m.EvidencePage(
-                evidence=tuple(units),
+                deliveries=tuple(values),
                 continuation=continuation,
                 omitted=tuple(labels),
                 truncated=continuation is not None,
             )
 
-        while next_index < len(records):
-            record = records[next_index]
-            lines = record.excerpt.splitlines(keepends=True)
+        while next_index < len(deliveries):
+            delivery = deliveries[next_index]
+            lines = delivery.unit.content.splitlines(keepends=True)
             if next_line >= len(lines):
                 next_index += 1
                 next_line = 0
                 continue
             remaining = lines[next_line:]
-            candidate_unit = _slice_unit(record, next_line, len(remaining))
-            candidate = build([*pages, candidate_unit], omitted, next_index + 1, 0)
+            candidate_delivery = _slice_delivery(delivery, next_line, len(remaining))
+            candidate = build([*pages, candidate_delivery], omitted, next_index + 1, 0)
             if _encoded_size(candidate) <= limit:
                 committed.append((list(pages), list(omitted), next_index, next_line))
-                pages.append(candidate_unit)
+                pages.append(candidate_delivery)
                 next_index += 1
                 next_line = 0
                 continue
-            # The whole unit does not fit. Return the largest exact line prefix,
-            # measured with the omission it will actually carry and the real
-            # continuation token for the position it will actually name.
             fit = 0
             for count in range(1, len(remaining) + 1):
                 end = next_line + count
@@ -588,9 +626,9 @@ class AnswerService:
                     trial_index += 1
                     trial_line = 0
                 else:
-                    trial_omitted.append(f"observation:{record.observation_id.value}")
+                    trial_omitted.append(_delivery_label(delivery))
                 trial = build(
-                    [*pages, _slice_unit(record, next_line, count)],
+                    [*pages, _slice_delivery(delivery, next_line, count)],
                     trial_omitted,
                     trial_index,
                     trial_line,
@@ -601,7 +639,7 @@ class AnswerService:
                     break
             if fit == 0:
                 if pages:
-                    omitted.append(f"observation:{record.observation_id.value}")
+                    omitted.append(_delivery_label(delivery))
                     break
                 return m.Unavailable(
                     operation="ask",
@@ -612,28 +650,22 @@ class AnswerService:
                     recovery="ask again with a narrower surface",
                 )
             committed.append((list(pages), list(omitted), next_index, next_line))
-            pages.append(_slice_unit(record, next_line, fit))
+            pages.append(_slice_delivery(delivery, next_line, fit))
             next_line += fit
             if next_line >= len(lines):
                 next_index += 1
                 next_line = 0
             else:
-                omitted.append(f"observation:{record.observation_id.value}")
+                omitted.append(_delivery_label(delivery))
             break
         if not pages:
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation has no remaining evidence",
-                recovery="ask again for the surface",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation has no remaining evidence"
             )
         final = build(pages, omitted, next_index, next_line)
-        # The candidate measurements include the real token and omission list;
-        # this backstop keeps the final page inside the budget if an unexpected
-        # envelope change grows it. Dropping a unit changes the continuation to
-        # that unit's start, so the omitted evidence remains recoverable.
         while _encoded_size(final) > limit and committed:
             pages, omitted, next_index, next_line = committed.pop()
-            omitted.append(f"observation:{records[next_index].observation_id.value}")
+            omitted.append(_delivery_label(deliveries[next_index]))
             final = build(pages, omitted, next_index, next_line)
         if not pages:
             return m.Unavailable(
@@ -652,7 +684,7 @@ class AnswerService:
         surface: m.SurfaceKey,
         understandings: tuple[m.Understanding, ...],
         status: m.SurfaceStatus,
-    ) -> m.AskResult:
+    ) -> m.Answer | m.Gap:
         grouped: dict[str, list[m.ConclusionView]] = {}
         gaps: list[m.RecordedQuestionGap] = []
         historical: list[m.HistoricalConclusion] = []
@@ -699,9 +731,11 @@ class AnswerService:
             return m.Gap(
                 surface=surface,
                 reason=reason,
+                status=status,
                 recovery=gap_recovery(reason),
                 historical=tuple(historical),
                 missing=("no current conclusion on this surface",),
+                source_pointers=self._source_pointers(surface),
             )
         return m.Answer(
             surface=surface,
@@ -712,7 +746,6 @@ class AnswerService:
             ),
             gaps=tuple(gaps),
             verification=self._verification(surface),
-            context=self._context(request, surface),
         )
 
     # -- bounded response (FD-54–FD-57) -----------------------------------
@@ -747,69 +780,43 @@ class AnswerService:
             if _encoded_size(candidate) <= limit:
                 return candidate
             if groups:
-                group = groups.pop()
-                omitted.extend(_group_label(view) for view in group.conclusions)
-                references.extend(
-                    view.ref.understanding_id.value for view in group.conclusions
-                )
+                group = groups[-1]
+                dropped = group.conclusions[-1]
+                remaining = group.conclusions[:-1]
+                if remaining:
+                    groups[-1] = _dataclasses.replace(group, conclusions=remaining)
+                else:
+                    groups.pop()
+                omitted.append(_group_label(dropped))
+                references.append(dropped.ref.understanding_id.value)
                 continue
             dropped = conclusions.pop()
             omitted.append(dropped.ref.label)
             references.append(dropped.ref.understanding_id.value)
 
     def _fit_gap(self, gap: m.Gap, limit: int) -> m.AskResult:
-        evidence = list(gap.evidence)
-        observations = list(gap.observations)
         historical = list(gap.historical)
+        omitted = list(gap.omitted)
+        candidate = gap
         recovery = gap.recovery
-        if gap.historical:
-            recovery = (
-                f"{gap.recovery} For the prior statement, call "
-                "ask(selector=UnderstandingSnapshotSelector"
-                "{understanding_id, version})."
-            )
-        omitted: list[str] = []
-        while True:
-            continuation = None
-            if len(evidence) < len(gap.evidence):
-                if gap.context is None:
-                    return self._refuse(gap, limit)
-                context = self._store.find_context_by_id(gap.context.value)
-                if context is None:
-                    return self._refuse(gap, limit)
-                continuation = encode_continuation(
-                    ContinuationCursor(
-                        repository_id=gap.surface.repository_id,
-                        context_id=gap.context.value,
-                        request_id=context.request_id,
-                        request_digest=context.request_digest,
-                        unit_index=len(evidence),
-                    )
+        while _encoded_size(candidate) > limit and historical:
+            omitted.append(historical.pop().ref.label)
+            if "UnderstandingSnapshotSelector" not in recovery:
+                recovery += (
+                    "; retrieve omitted historical content with "
+                    "UnderstandingSnapshotSelector{repository_id, "
+                    "understanding_id, version}"
                 )
-            candidate = _replace_gap(
+            candidate = _dataclasses.replace(
                 gap,
-                evidence=tuple(evidence),
-                observations=tuple(observations),
                 historical=tuple(historical),
-                recovery=recovery,
                 omitted=tuple(omitted),
-                continuation=continuation,
+                recovery=recovery,
                 truncated=True,
             )
-            if _encoded_size(candidate) <= limit:
-                return candidate
-            if evidence:
-                evidence.pop()
-                omitted.append(
-                    f"observation:{observations.pop().value}"
-                    if observations
-                    else "admitted evidence"
-                )
-                continue
-            if historical:
-                omitted.append(historical.pop().ref.label)
-                continue
-            return self._refuse(gap, limit)
+        if _encoded_size(candidate) <= limit:
+            return candidate
+        return self._refuse(gap, limit)
 
     def _refuse(self, result: m.AskResult, limit: int) -> m.AskResult:
         """FD-57: refuse rather than return a misleading fragment."""
@@ -835,41 +842,12 @@ def _replace_answer(
     return m.Answer(
         surface=answer.surface,
         status=answer.status,
-        question=answer.question,
         conclusions=conclusions,
         groups=groups,
         gaps=answer.gaps,
         verification=answer.verification,
         references=references,
-        context=answer.context,
-        omitted=omitted,
-        truncated=truncated,
-    )
-
-
-def _replace_gap(
-    gap: m.Gap,
-    *,
-    evidence: tuple[m.EvidenceUnit, ...],
-    observations: tuple[m.SourceObservationId, ...],
-    historical: tuple[m.HistoricalConclusion, ...],
-    recovery: str,
-    omitted: tuple[str, ...],
-    continuation: str | None,
-    truncated: bool,
-) -> m.Gap:
-    return m.Gap(
-        surface=gap.surface,
-        reason=gap.reason,
-        recovery=recovery,
-        question=gap.question,
-        changed_evidence=gap.changed_evidence,
-        historical=historical,
-        missing=gap.missing,
-        evidence=evidence,
-        observations=observations,
-        context=gap.context,
-        continuation=continuation,
+        admission=answer.admission,
         omitted=omitted,
         truncated=truncated,
     )
@@ -879,26 +857,38 @@ def _group_label(view: m.ConclusionView) -> str:
     return view.ref.label
 
 
-def _slice_unit(
-    record: m.SourceObservation,
+def _delivery_label(delivery: m.EvidenceDelivery) -> str:
+    content_range = delivery.unit.content_range
+    if content_range is None:
+        return f"observation:{delivery.observation_id.value}"
+    return (
+        f"observation:{delivery.observation_id.value}:"
+        f"lines:{content_range.start_line}-{content_range.end_line}"
+    )
+
+
+def _slice_delivery(
+    delivery: m.EvidenceDelivery,
     line_offset: int,
     line_count: int,
-) -> m.EvidenceUnit:
-    lines = record.excerpt.splitlines(keepends=True)
+) -> m.EvidenceDelivery:
+    unit = delivery.unit
+    lines = unit.content.splitlines(keepends=True)
     selected = "".join(lines[line_offset : line_offset + line_count])
-    start_line = (
-        record.delivered_ranges[0].start_line
-        if len(record.delivered_ranges) == 1
-        else 1
+    base_line = unit.content_range.start_line if unit.content_range is not None else 1
+    total_lines = (
+        unit.content_range.total_lines if unit.content_range is not None else len(lines)
     )
-    end_line = start_line + line_offset + line_count - 1
-    return m.EvidenceUnit(
-        evidence_ref=record.evidence,
-        content=selected,
-        content_fingerprint=record.content_digest.value.split(":", 1)[1],
-        content_range=m.EvidenceLineRange(
-            start_line=start_line + line_offset,
-            end_line=end_line,
-            total_lines=record.total_lines,
+    return m.EvidenceDelivery(
+        observation_id=delivery.observation_id,
+        unit=m.EvidenceUnit(
+            evidence_ref=unit.evidence_ref,
+            content=selected,
+            content_fingerprint=unit.content_fingerprint,
+            content_range=m.EvidenceLineRange(
+                start_line=base_line + line_offset,
+                end_line=base_line + line_offset + line_count - 1,
+                total_lines=total_lines,
+            ),
         ),
     )

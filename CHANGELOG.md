@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.10.3 — Unreleased
+
+### Low-friction lifecycle
+
+- Make pure `ask` surface-first: ordinary reuse takes an exact surface or
+  unambiguous reference with no free question string, request identity, context,
+  or automatic evidence delivery. The surface document view groups current
+  conclusions by their recorded question.
+- Add exact `RecordedQuestionSelector`, current-understanding, snapshot and
+  receipt selectors without semantic question matching or historical/current
+  conflation.
+- Make source delivery explicit. Evidence admission selects exact locators/ranges,
+  returns one bound `InvestigationContextRef`, preserves original positions and
+  uses stable continuation over canonical `EvidenceDelivery` fragments.
+- Keep direct first-attempt recording cheap: locator, ranged support, admitted
+  observation and multi-support creates flow through the canonical lifecycle
+  path; replay, stale versions, scope/owner/binding conflicts and challenge
+  settlement remain atomic and typed.
+- Keep default results compact without losing truth. Oversized grouped answers
+  trim individual conclusions while preserving omission/reference recovery;
+  historical gaps name exact snapshot retrieval and ordinary acceptance returns
+  compact receipt selectors while durable receipts remain retrievable.
+- Repair context/failure ownership end to end. Changed-scope reconsider issues a
+  fresh Span-owned bounded context; concealed binding/store failures no longer
+  become semantic gaps; post-commit qualification failures do not leak internal
+  diagnostics; unusable continuations use typed `CONTINUATION_INVALID`.
+- Generate advertised structural grammar and typed decoding from the same
+  canonical declarations. Public schema names/discriminators are explicit
+  protocol vocabulary and do not expose runtime `*Wire` class names.
+- Align README, MCP/usage/lifecycle/query/onboarding/FAQ/glossary/acceptance
+  guidance, packaged skills, managed AGENTS snippet, MCP examples and lifecycle
+  reminders to the same surface-first procedure.
+
+### Verification
+
+- Final repository/installable candidate before metadata preparation:
+  `b04eb533ad6eb87fc6499a25a378b9d80e2c0196`.
+- GitHub Actions run `43587605351` passed build/distribution, Ruff/Black,
+  zero-error typing, full pytest (**723 passed, 1 skipped, 125 subtests passed**),
+  packaged plugin-notice delivery and coverage upload.
+- The retained regression matrix covers schema/decoder equivalence, pure
+  context-free obtain, precise evidence/continuation behavior, replay/restart,
+  concurrent/binding conflicts, fresh changed-scope contexts, stale updates,
+  public-discriminator stability and internal-diagnostic containment.
+- Hard architecture/code-budget invariants remain intact: zero core-layer
+  violations, zero duplicate helper/source groups, zero mutable module tables and
+  one evidence-selection implementation.
+
+### Compatibility and verification limits
+
+The public grammar is intentionally breaking. Consumers must reconnect/refresh
+the 0.10.3 tool schemas and managed guidance coherently; no legacy alias/parser,
+TTL increase, retry shim, DTO compatibility layer or second semantic writer is
+provided. Retained understanding, version history and durable receipt recovery
+remain compatible; this change introduces no store migration.
+
+Candidate-specific live Codex, OpenCode and Claude model-delivery captures were
+not executable from the available GitHub-only implementation environment and no
+repository workflow performs those runs. They are therefore **UNVERIFIED for
+0.10.3**; earlier host captures are not reused as this release's evidence.
+Likewise, no fresh comparative full-task cost run was executed, so 0.10.3 makes
+no universal time/token, break-even or product-usability acceptance claim.
+
+Package and MCP registry metadata are prepared at **0.10.3**. Tagging,
+publication, registry push and user-host upgrades have not been performed.
+
 ## 0.10.2 — 2026-11-13
 
 **Governed understanding as ordinary agent work.** The corrected functional

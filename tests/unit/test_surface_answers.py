@@ -113,21 +113,18 @@ class AnswerCarrierTest(unittest.TestCase):
     def test_answer_requires_current_content_and_matching_status(self) -> None:
         m.Answer(
             surface=KEY,
-            question="What does billing do?",
             conclusions=(REF,),
             status=status(),
         )
         with self.assertRaises(ValueError):
             m.Answer(
                 surface=KEY,
-                question="What does billing do?",
                 conclusions=(),
                 status=status(),
             )
         with self.assertRaises(ValueError):
             m.Answer(
                 surface=KEY,
-                question="What does billing do?",
                 conclusions=(REF,),
                 status=status(FILE_KEY),
             )
@@ -135,21 +132,21 @@ class AnswerCarrierTest(unittest.TestCase):
     def test_gap_reasons_are_exhaustive(self) -> None:
         self.assertEqual(
             {reason.value for reason in m.GapReason},
-            {"invalidated", "unverifiable", "unassessed", "no_match"},
+            {"invalidated", "unverifiable", "unassessed"},
         )
         m.Gap(
             surface=KEY,
-            question="What?",
-            reason=m.GapReason.NO_MATCH,
-            recovery="ask the same surface without a question",
-        )
-        m.Gap(
-            surface=KEY,
+            status=status(),
             reason=m.GapReason.UNASSESSED,
-            recovery="read the cited evidence, then record the conclusion",
+            recovery="record supported understanding for this surface",
         )
         with self.assertRaises(ValueError):
-            m.Gap(surface=KEY, reason=m.GapReason.UNASSESSED, recovery="")
+            m.Gap(
+                surface=KEY,
+                status=status(),
+                reason=m.GapReason.UNASSESSED,
+                recovery="",
+            )
 
     def test_ambiguity_requires_distinct_candidates(self) -> None:
         m.AmbiguousSurface(
@@ -226,9 +223,16 @@ class ChangeCarrierTest(unittest.TestCase):
             )
 
     def test_truncated_walk_cannot_claim_unaffected(self) -> None:
-        m.Changed(surfaces=(m.ChangedSurface(KEY, (m.ChangeReason.DIRECT,)),))
+        context = m.InvestigationContextRef(
+            repository_id="repo-1",
+            context_id=m.InvestigationContextId("ctx-1"),
+        )
+        m.Changed(
+            context=context,
+            surfaces=(m.ChangedSurface(KEY, (m.ChangeReason.DIRECT,)),),
+        )
         with self.assertRaises(ValueError):
-            m.Changed(truncated=True, unaffected=(FILE_KEY,))
+            m.Changed(context=context, truncated=True, unaffected=(FILE_KEY,))
 
     def test_result_unions_are_closed(self) -> None:
         ask = set(typing.get_args(m.AskResult))
@@ -243,6 +247,7 @@ class ChangeCarrierTest(unittest.TestCase):
                 m.RetrievedUnderstanding,
                 m.RetrievedReceipt,
                 m.EvidencePage,
+                m.Rejected,
                 m.Unavailable,
             },
         )

@@ -145,6 +145,7 @@ class SkillLifecycleConsistencyTest(unittest.TestCase):
     def test_every_operation_is_known(self):
         allowed = CANONICAL_OPS | {
             "repository_id",
+            "context",
             "context_id",
             "request_id",
             "version",
@@ -153,7 +154,6 @@ class SkillLifecycleConsistencyTest(unittest.TestCase):
             "invalidated",
             "unverifiable",
             "unassessed",
-            "no_match",
             "kind",
             "surface",
             "actions",

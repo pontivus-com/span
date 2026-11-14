@@ -68,21 +68,53 @@ class EvidenceService:
         )
 
     def context_unit(self, record: m.SourceObservation) -> m.EvidenceUnit:
-        """Project one admitted observation into an evidence unit without bounds."""
-        content_range = None
-        if len(record.delivered_ranges) == 1:
-            only = record.delivered_ranges[0]
-            content_range = m.EvidenceLineRange(
-                start_line=only.start_line,
-                end_line=only.end_line,
-                total_lines=record.total_lines,
+        """Project one single-fragment observation into an evidence unit."""
+        deliveries = self.context_deliveries(record)
+        if len(deliveries) != 1:
+            raise ValueError(
+                "an observation with disjoint ranges has multiple deliveries"
             )
-        return m.EvidenceUnit(
-            evidence_ref=record.evidence,
-            content=record.excerpt,
-            content_fingerprint=record.content_digest.value.split(":", 1)[1],
-            content_range=content_range,
-        )
+        return deliveries[0].unit
+
+    def context_deliveries(
+        self, record: m.SourceObservation
+    ) -> tuple[m.EvidenceDelivery, ...]:
+        """Project immutable observation content into exact positioned deliveries."""
+        fingerprint = record.content_digest.value.split(":", 1)[1]
+        if record.whole_file:
+            return (
+                m.EvidenceDelivery(
+                    observation_id=record.observation_id,
+                    unit=m.EvidenceUnit(
+                        evidence_ref=record.evidence,
+                        content=record.excerpt,
+                        content_fingerprint=fingerprint,
+                    ),
+                ),
+            )
+        lines = record.excerpt.splitlines(keepends=True)
+        offset = 0
+        deliveries: list[m.EvidenceDelivery] = []
+        for source_range in record.delivered_ranges:
+            count = source_range.end_line - source_range.start_line + 1
+            content = "".join(lines[offset : offset + count])
+            offset += count
+            deliveries.append(
+                m.EvidenceDelivery(
+                    observation_id=record.observation_id,
+                    unit=m.EvidenceUnit(
+                        evidence_ref=record.evidence,
+                        content=content,
+                        content_fingerprint=fingerprint,
+                        content_range=m.EvidenceLineRange(
+                            start_line=source_range.start_line,
+                            end_line=source_range.end_line,
+                            total_lines=record.total_lines,
+                        ),
+                    ),
+                )
+            )
+        return tuple(deliveries)
 
     def start(self, request: m.EvidenceStartRequest) -> m.EvidenceAdmissionResult:
         """Create or recover the evidence-only context and admit the batch."""
@@ -162,28 +194,14 @@ class EvidenceService:
         units: list[m.EvidenceUnit] = []
         total_bytes = 0
         for record in selected:
-            content = record.excerpt
-            total_bytes += len(content.encode("utf-8"))
-            if total_bytes > bounds.max_evidence_bytes:
-                raise ValueError("evidence exceeds max_evidence_bytes")
-            content_range = None
-            if len(record.delivered_ranges) == 1:
-                only = record.delivered_ranges[0]
-                content_range = m.EvidenceLineRange(
-                    start_line=only.start_line,
-                    end_line=only.end_line,
-                    total_lines=record.total_lines,
-                )
-            units.append(
-                m.EvidenceUnit(
-                    evidence_ref=record.evidence,
-                    content=content,
-                    content_fingerprint=record.content_digest.value.split(":", 1)[1],
-                    content_range=content_range,
-                )
-            )
-        if len(units) > bounds.max_evidence_units:
-            raise ValueError("evidence exceeds max_evidence_units")
+            for delivery in self.context_deliveries(record):
+                content = delivery.unit.content
+                total_bytes += len(content.encode("utf-8"))
+                if total_bytes > bounds.max_evidence_bytes:
+                    raise ValueError("evidence exceeds max_evidence_bytes")
+                units.append(delivery.unit)
+                if len(units) > bounds.max_evidence_units:
+                    raise ValueError("evidence exceeds max_evidence_units")
         return tuple(units)
 
     # -- admission ---------------------------------------------------------

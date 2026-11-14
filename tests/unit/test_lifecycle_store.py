@@ -592,8 +592,11 @@ class LifecycleStoreTest(unittest.TestCase):
             _create_command(), understanding_id=m.UnderstandingId("u-1")
         )
         self.store.reap_expired(NOW + datetime.timedelta(hours=2))
-        with self.assertRaises(LifecycleStoreError):
+        with self.assertRaises(RecordingValidationError) as raised:
             self.store.get_context("ctx-1")
+        self.assertIs(
+            raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_REQUIRED
+        )
         self.assertEqual(self.store.get_receipt(_identity()), receipt)
 
     def test_reaping_preserves_accepted_history(self) -> None:
@@ -607,7 +610,7 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.reap_expired(
             NOW + RETENTION.context_lifetime + datetime.timedelta(minutes=1)
         )
-        with self.assertRaises(LifecycleStoreError):
+        with self.assertRaises(RecordingValidationError):
             self.store.get_context("ctx-1")
         self.assertEqual(self.store.get_understanding("u-1").current_version.value, 1)
         self.assertEqual(len(self.store.get_challenges("u-1")), 1)
@@ -667,7 +670,7 @@ class LifecycleStoreTest(unittest.TestCase):
             _create_command(), understanding_id=m.UnderstandingId("u-1")
         )
         self.assertTrue(self.store.abandon_context("ctx-1"))
-        with self.assertRaises(LifecycleStoreError):
+        with self.assertRaises(RecordingValidationError):
             self.store.get_context("ctx-1")
         remaining = self.store._connection.execute(
             "SELECT COUNT(*) FROM context_evidence"

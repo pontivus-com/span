@@ -27,20 +27,20 @@ model, or decides a semantic claim.
 | Dispute a recorded conclusion | `reconsider` with a challenge |
 
 Before editing, use `ask` for current understanding. A gap is not a failure.
-Read its evidence, then record the conclusion you established. If the gap omitted
-evidence to fit the response, follow its continuation. On `no_match`, omit the
-question and ask for the surface document view. Never fetch a context id.
+It names status, what is missing, recovery, and source pointers without
+automatically dumping source bytes. Select the evidence you actually need, then
+record the conclusion you establish. Treat returned context references as opaque
+handles and never inspect internal context state.
 
 ## The three moments
 
-- **Before reading:** `ask` one exact question about an exact surface for a
-  targeted query. For reuse, omit the question and read the surface document
-  view; select the current conclusion you need. Use `surface={kind, locator}`
-  when a path matches more than one granularity. A paraphrased question returns
-  `no_match`; its recovery points to the document view. `Answer` carries
-  current conclusions, support, evidence, and applicable verification runs.
-  `Gap` carries the prior statement as historical content and the evidence you
-  need to record.
+- **Before reading:** `ask` the exact surface with no question or request
+  identity and read its current document view. Use `surface={kind, locator}`
+  when a path matches more than one granularity. Use the exact recorded-question
+  selector only when you already know that recorded question; it is exact,
+  surface-scoped lookup rather than semantic matching. `Answer` carries current
+  conclusions, support, evidence references, status, and applicable verification
+  runs. `Gap` carries explicit absence/staleness information and source pointers.
 - **After establishing:** `record` one `kind`. Use `kind="understanding"` to
   create or update, `kind="verification"` to record a test/run, and
   `kind="surface"` to declare a service/domain boundary. A create is flat —

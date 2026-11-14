@@ -14,7 +14,7 @@ import uuid as _uuid
 
 from span.core import containment
 from span.core import model as m
-from span.core.identity import payload_digest, record_content_digest
+from span.core.identity import record_content_digest
 from span.core.recording import RecordingValidationError
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
@@ -46,10 +46,11 @@ class ReconsiderService:
         self._new_context_id = new_context_id or (lambda: "ctx-" + _uuid.uuid4().hex)
 
     def reconsider(self, request: m.ReconsiderRequest) -> m.Changed | m.Challenged:
-        self._store.require_repository(request.repository_id)
+        repository_id = request.bound_repository_id
+        self._store.require_repository(repository_id)
         if request.challenge is not None:
-            return self._raise_challenge(request.repository_id, request.challenge)
-        surfaces = self._store.list_surfaces(request.repository_id)
+            return self._raise_challenge(repository_id, request.challenge)
+        surfaces = self._store.list_surfaces(repository_id)
         reasons: dict[m.SurfaceKey, set[m.ChangeReason]] = {}
         affected: dict[m.SurfaceKey, set[m.ConclusionRevisionRef]] = {}
         omitted: list[str] = []
@@ -67,19 +68,17 @@ class ReconsiderService:
                 affected.setdefault(surface, set()).add(ref)
 
         for path in request.changed_paths:
-            member = containment.path_surface(request.repository_id, path)
+            member = containment.path_surface(repository_id, path)
             for surface in containment.containing_surfaces(surfaces, member):
                 record(surface, m.ChangeReason.CONTAINMENT)
             direct = [
                 ref
                 for observation in self._store.source_observation_ids_for_locator(
-                    request.repository_id, path
+                    repository_id, path
                 )
                 for ref in self._store.support_dependents("SOURCE", observation)
             ]
-            for discovery in self._store.list_discovery_observations(
-                request.repository_id
-            ):
+            for discovery in self._store.list_discovery_observations(repository_id):
                 if m.evidence_scope_contains(
                     discovery.scope, m.EvidenceScope(paths=(path,))
                 ):
@@ -150,7 +149,7 @@ class ReconsiderService:
             ),
             omitted=tuple(omitted),
             truncated=truncated,
-            context=self._reconsider_context(request, ordered),
+            context=self._reconsider_context(repository_id, request, ordered),
         )
 
     def _changed_conclusion(
@@ -189,9 +188,10 @@ class ReconsiderService:
 
     def _reconsider_context(
         self,
+        repository_id: str,
         request: m.ReconsiderRequest,
         surfaces: tuple[m.SurfaceKey, ...],
-    ) -> m.InvestigationContextId:
+    ) -> m.InvestigationContextRef:
         paths = list(request.changed_paths)
         for surface in surfaces:
             if surface.kind is m.SurfaceKind.FILE:
@@ -200,18 +200,21 @@ class ReconsiderService:
                 declared = self._store.find_surface(surface)
                 if declared is not None:
                     paths.extend(declared.boundary.paths)
-        digest = payload_digest(request)
+        context_id = self._new_context_id()
         context = issue_context(
             self._store,
             payload=request,
-            repository_id=request.repository_id,
-            request_id=m.RequestId("reconsider:" + digest.value.split(":", 1)[1][:32]),
+            repository_id=repository_id,
+            request_id=m.RequestId(f"reconsider:{context_id}"),
             scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
             question=None,
             clock=self._clock,
-            new_context_id=self._new_context_id,
+            new_context_id=lambda: context_id,
         )
-        return context.context_id
+        return m.InvestigationContextRef(
+            repository_id=repository_id,
+            context_id=context.context_id,
+        )
 
     def _support_state(
         self, ref: m.ConclusionRevisionRef
@@ -222,16 +225,16 @@ class ReconsiderService:
             )
         try:
             return self._support.evaluate_revision(ref)
-        except (OSError, ValueError) as exc:
-            return m.SupportUnavailable(str(exc))
+        except (OSError, ValueError):
+            return m.SupportUnavailable("conclusion support evaluation is unavailable")
 
     def _raise_challenge(
         self, repository_id: str, challenge: m.ChallengeRaise
     ) -> m.Challenged:
         """Raise one explicit dispute through reconsider (L2 §4.3)."""
         context_id = (
-            m.InvestigationContextId(challenge.context_id)
-            if challenge.context_id is not None
+            challenge.context.context_id
+            if challenge.context is not None
             else self._challenge_context(repository_id, challenge)
         )
         for reference in challenge.evidence:
@@ -273,7 +276,10 @@ class ReconsiderService:
             challenge=self._store.get_challenge(
                 receipt.accepted_challenge_ids[0].value
             ),
-            context=context_id,
+            context=m.InvestigationContextRef(
+                repository_id=repository_id,
+                context_id=context_id,
+            ),
         )
 
     def _challenge_context(

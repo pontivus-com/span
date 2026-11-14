@@ -118,12 +118,12 @@ class RecordWireSchemaTest(unittest.TestCase):
         defs = schema["$defs"]
         self.assertNotIn("conclusion_id", schema["properties"])
         self.assertNotIn("scope_evidence_refs", schema["properties"])
-        add = defs["AddConclusionWire"]
+        add = defs["AddConclusion"]
         self.assertNotIn("conclusion_id", add["properties"])
         self.assertNotIn("scope_evidence_refs", add["properties"])
         self.assertNotIn("statement", add["properties"])
         self.assertNotIn("basis_derivation", add["properties"])
-        replace = defs["ReplaceActionWire"]
+        replace = defs["ReplaceConclusion"]
         self.assertNotIn("new_conclusion_id", replace["properties"])
         self.assertNotIn("new_conclusion", replace["properties"])
         self.assertNotIn("old_understanding_id", replace["properties"])
@@ -131,6 +131,13 @@ class RecordWireSchemaTest(unittest.TestCase):
         self.assertIn("conclusion_id", replace["properties"])
         self.assertNotIn("ReplaceWire", defs)
         self.assertNotIn("WithdrawWire", defs)
+
+
+def _context_ref(context_id: str = "ctx-1") -> m.InvestigationContextRef:
+    return m.InvestigationContextRef(
+        repository_id="repo-1",
+        context_id=m.InvestigationContextId(context_id),
+    )
 
 
 def _update_request(
@@ -141,9 +148,8 @@ def _update_request(
     expected_version: int = 1,
 ) -> w.RecordRequestWire:
     return w.RecordRequestWire(
-        repository_id="repo-1",
         request_id=request_id,
-        context_id="ctx-1",
+        context=_context_ref(),
         kind=m.RecordKind.UNDERSTANDING,
         understanding_id=understanding_id,
         expected_version=expected_version,
@@ -185,9 +191,8 @@ class RecordActionWireTest(unittest.TestCase):
     def test_create_derives_a_conclusion_id(self):
         proposed = w.flat_conclusion(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="sub-create",
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
                 conclusion="A does X",
                 support=(w.SourceSupportWire(locator="src/a.py"),),
@@ -205,9 +210,8 @@ class RecordActionWireTest(unittest.TestCase):
     def test_create_defaults_assertion_nature(self):
         proposed = w.flat_conclusion(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="sub-create",
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
                 conclusion="A does X",
                 support=(w.SourceSupportWire(locator="src/a.py"),),
@@ -609,7 +613,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             )
 
     def test_multiple_evidence_modes_reject(self):
-        with self.assertRaisesRegex(ValueError, "more than one"):
+        with self.assertRaisesRegex(ValueError, "active: locator, observation_id"):
             from_wire(
                 w.RecordRequestWire,
                 self._update(
@@ -715,7 +719,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             ("scope_paths", ["src/a.py"]),
             ("locator", "src/a.py"),
             ("observation_id", "obs-1"),
-            ("support", [{"$type": "SourceSupportWire", "locator": "src/a.py"}]),
+            ("support", [{"$type": "source", "locator": "src/a.py"}]),
             ("assertion_nature", "DESCRIPTIVE"),
             ("conclusion", "X."),
         ):
@@ -736,7 +740,7 @@ class RecordWireMalformedTest(unittest.TestCase):
                 "challenge_dispositions",
                 [
                     {
-                        "$type": "UnresolvedDispositionWire",
+                        "$type": "unresolved",
                         "challenge_id": "ch-1",
                         "expected_challenge_revision": 1,
                         "remaining_question": "What?",
@@ -747,7 +751,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             ("conclusion", "X."),
             ("locator", "src/a.py"),
             ("observation_id", "obs-1"),
-            ("support", [{"$type": "SourceSupportWire", "locator": "src/a.py"}]),
+            ("support", [{"$type": "source", "locator": "src/a.py"}]),
             ("assertion_nature", "DESCRIPTIVE"),
         ):
             with self.subTest(field=field):
@@ -781,7 +785,7 @@ class RecordWireMalformedTest(unittest.TestCase):
                 "challenge_dispositions",
                 [
                     {
-                        "$type": "UnresolvedDispositionWire",
+                        "$type": "unresolved",
                         "challenge_id": "ch-1",
                         "expected_challenge_revision": 1,
                         "remaining_question": "What?",
@@ -792,21 +796,19 @@ class RecordWireMalformedTest(unittest.TestCase):
             ("conclusion", "X."),
             ("locator", "src/a.py"),
             ("observation_id", "obs-1"),
-            ("support", [{"$type": "SourceSupportWire", "locator": "src/a.py"}]),
+            ("support", [{"$type": "source", "locator": "src/a.py"}]),
             ("assertion_nature", "DESCRIPTIVE"),
         ):
             with self.subTest(field=field):
                 with self.assertRaises(ValueError):
                     from_wire(w.RecordRequestWire, self._surface(**{field: value}))
 
-    def test_create_accepts_support_and_locator(self):
-        request = from_wire(
-            w.RecordRequestWire,
-            self._create(
-                support=[{"$type": "SourceSupportWire", "locator": "src/b.py"}]
-            ),
-        )
-        self.assertIsInstance(request, w.RecordRequestWire)
+    def test_create_rejects_support_and_locator(self):
+        with self.assertRaisesRegex(ValueError, "evidence mode"):
+            from_wire(
+                w.RecordRequestWire,
+                self._create(support=[{"$type": "source", "locator": "src/b.py"}]),
+            )
 
     def test_create_accepts_support_only_with_explicit_scope(self):
         request = from_wire(
@@ -815,28 +817,28 @@ class RecordWireMalformedTest(unittest.TestCase):
                 locator=None,
                 scope_paths=["src/a.py", "src/b.py"],
                 support=[
-                    {"$type": "SourceSupportWire", "locator": "src/a.py"},
-                    {"$type": "SourceSupportWire", "locator": "src/b.py"},
+                    {"$type": "source", "locator": "src/a.py"},
+                    {"$type": "source", "locator": "src/b.py"},
                 ],
             ),
         )
         self.assertIsInstance(request, w.RecordRequestWire)
 
     def test_create_rejects_locator_and_observation(self):
-        with self.assertRaisesRegex(ValueError, "not both"):
+        with self.assertRaisesRegex(ValueError, "evidence mode"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(observation_id="obs-1"),
             )
 
     def test_create_rejects_support_and_observation(self):
-        with self.assertRaisesRegex(ValueError, "support or observation_id"):
+        with self.assertRaisesRegex(ValueError, "evidence mode"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(
                     locator=None,
                     observation_id="obs-1",
-                    support=[{"$type": "SourceSupportWire", "locator": "src/a.py"}],
+                    support=[{"$type": "source", "locator": "src/a.py"}],
                 ),
             )
 
@@ -876,8 +878,8 @@ class RecordWireCodecTest(unittest.TestCase):
                 observer="test",
             )
         self.assertIn("observations or evidence", str(raised.exception))
-        self.assertIn("obs:", str(raised.exception))
-        self.assertIn("locator", str(raised.exception))
+        self.assertIn("observations", str(raised.exception))
+        self.assertIn("evidence", str(raised.exception))
 
     def test_verification_accepts_evidence_only(self):
         run = w.VerificationRunWire(
@@ -916,7 +918,7 @@ class RecordIngressDiagnosticsTest(unittest.TestCase):
                 },
             )
         self.assertIn("conclusion, locator", str(raised.exception))
-        self.assertIn("inside actions", str(raised.exception))
+        self.assertIn("understanding update root-only fields", str(raised.exception))
 
 
 if __name__ == "__main__":

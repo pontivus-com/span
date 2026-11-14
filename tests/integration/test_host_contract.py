@@ -203,10 +203,7 @@ class WireContractTest(unittest.TestCase):
         command = _probe_update()
         wire = to_wire(m.to_canonical(command), m.UpdateUnderstandingCommand)
         self.assertEqual(wire["add"][0]["conclusion_id"]["value"], "c-probe-2")
-        self.assertEqual(
-            wire["challenge_dispositions"][0]["$type"],
-            "UnresolvedChallengeDisposition",
-        )
+        self.assertEqual(wire["challenge_dispositions"][0]["$type"], "unresolved")
         self.assertEqual(
             from_wire(m.UpdateUnderstandingCommand, wire),
             command,

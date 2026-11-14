@@ -144,6 +144,43 @@ class EvidenceServiceTest(unittest.TestCase):
         self.assertEqual(units[0].content_range.end_line, 3)
         self.assertEqual(units[0].content_range.total_lines, 4)
 
+    def test_disjoint_ranges_project_as_separate_positioned_deliveries(self) -> None:
+        result = self._start(
+            (
+                m.EvidenceRequest(
+                    "src/app.py",
+                    (
+                        m.SourceRange(start_line=1, end_line=1),
+                        m.SourceRange(start_line=3, end_line=4),
+                    ),
+                ),
+            )
+        )
+        admitted = result.outcomes[0]
+        self.assertIsInstance(admitted, m.AdmittedEvidence)
+        assert isinstance(admitted, m.AdmittedEvidence)
+        record = self.service.context_observations("ctx-ev-1")[0]
+        deliveries = self.service.context_deliveries(record)
+        self.assertEqual(
+            [item.observation_id for item in deliveries], [admitted.observation_id] * 2
+        )
+        self.assertEqual(
+            [item.unit.content for item in deliveries],
+            ["line1\n", "line3\nline4\n"],
+        )
+        self.assertEqual(
+            [
+                (
+                    item.unit.content_range.start_line,
+                    item.unit.content_range.end_line,
+                    item.unit.content_range.total_lines,
+                )
+                for item in deliveries
+                if item.unit.content_range is not None
+            ],
+            [(1, 1, 4), (3, 4, 4)],
+        )
+
     def test_large_file_small_range_admits_and_checks_live_support(self) -> None:
         from span.service.support import SupportService
 

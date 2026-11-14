@@ -7,9 +7,11 @@ Part of the canonical domain carrier package. Import through
 from __future__ import annotations
 
 import enum as _enum
+import typing as _typing
 from dataclasses import dataclass as _dataclass
 from dataclasses import field as _field
 
+from span.core.schema import constraints as _constraints
 from span.core.model.primitives import (
     ConclusionRevisionRef,
     UnderstandingVersionNumber,
@@ -42,12 +44,27 @@ def _require_repository_relative(name: str, value: str) -> str:
 class SurfaceKey:
     """The derived identity of one surface (FD-1)."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="surface repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("locator", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="surface locator",
+        ),
+    )
+
     repository_id: str
     kind: SurfaceKind
     locator: str
 
     def __post_init__(self) -> None:
-        _require_non_empty("SurfaceKey.repository_id", self.repository_id)
+        _constraints.validate_structural_rules(self)
         _require_repository_relative("SurfaceKey.locator", self.locator)
 
 
@@ -59,14 +76,33 @@ class SurfaceReference:
     repository. An ``AmbiguousSurface`` candidate can be copied back verbatim.
     """
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("locator", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="surface reference locator",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("repository_id"), True
+                ),
+            ),
+            label="surface reference repository",
+        ),
+    )
+
     kind: SurfaceKind
     locator: str
     repository_id: str | None = None
 
     def __post_init__(self) -> None:
+        _constraints.validate_structural_rules(self)
         _require_repository_relative("SurfaceReference.locator", self.locator)
-        if self.repository_id is not None:
-            _require_non_empty("SurfaceReference.repository_id", self.repository_id)
 
 
 @_dataclass(frozen=True)

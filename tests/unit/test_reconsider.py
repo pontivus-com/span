@@ -363,10 +363,12 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         result = self.service.reconsider(
             m.ReconsiderRequest(
-                repository_id="repo-1",
                 challenge=m.ChallengeRaise(
                     request_id="req-challenge",
-                    context_id=CONTEXT_ID.value,
+                    context=m.InvestigationContextRef(
+                        repository_id="repo-1",
+                        context_id=CONTEXT_ID,
+                    ),
                     understanding_id="u-a",
                     target_version=1,
                     target_conclusions=(
@@ -390,10 +392,12 @@ class ReconsiderServiceTest(unittest.TestCase):
         with self.assertRaisesRegex(RecordingValidationError, "not admitted"):
             self.service.reconsider(
                 m.ReconsiderRequest(
-                    repository_id="repo-1",
                     challenge=m.ChallengeRaise(
                         request_id="req-challenge-2",
-                        context_id=CONTEXT_ID.value,
+                        context=m.InvestigationContextRef(
+                            repository_id="repo-1",
+                            context_id=CONTEXT_ID,
+                        ),
                         understanding_id="u-a",
                         target_version=1,
                         target_conclusions=(
@@ -497,6 +501,31 @@ class ReconsiderServiceTest(unittest.TestCase):
                 }
                 self.assertEqual("u-discovery-refs" in direct, expected)
 
+    def test_repeated_changed_scope_gets_a_fresh_context_after_expiry(self) -> None:
+        now = [NOW]
+        issued = iter(("ctx-reconsider-1", "ctx-reconsider-2"))
+        service = ReconsiderService(
+            store=self.store,
+            clock=lambda: now[0],
+            new_context_id=lambda: next(issued),
+        )
+        first = service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        now[0] = NOW + datetime.timedelta(hours=2)
+        second = service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        self.assertNotEqual(second.context, first.context)
+        context = self.store.get_context(second.context.context_id.value)
+        self.assertEqual(context.state, m.ContextState.LIVE)
+
     def test_refs_only_challenge_context_retains_scope_for_symbol_and_declared_owner(
         self,
     ):
@@ -546,7 +575,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                         ),
                     )
                 )
-                context = self.store.get_context(challenged.context.value)
+                context = self.store.get_context(challenged.context.context_id.value)
                 self.assertEqual(context.scope, scope)
                 self.assertFalse(
                     m.evidence_scope_contains(

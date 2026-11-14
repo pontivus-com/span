@@ -11,6 +11,7 @@ import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
+from span.core.schema import constraints as _constraints
 from span.core.model.primitives import (
     DiscoveryObservationId,
     EvidenceRef,
@@ -22,6 +23,7 @@ from span.core.model.primitives import (
     _require_positive_int,
 )
 from span.core.model.recording import ContentDigest
+from span.core.model.repository import EvidenceUnit
 
 
 class ContextOrigin(_enum.Enum):
@@ -35,6 +37,32 @@ class ContextState(_enum.Enum):
     LIVE = "LIVE"
     EXPIRED = "EXPIRED"
     ABANDONED = "ABANDONED"
+
+
+@_dataclass(frozen=True)
+class InvestigationContextRef:
+    """Opaque public reference to one repository-bound investigation context."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="context repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("context_id.value", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="context identity",
+        ),
+    )
+
+    repository_id: str
+    context_id: InvestigationContextId
+
+    def __post_init__(self) -> None:
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -143,11 +171,20 @@ class SourceRange:
 class EvidenceRequest:
     """One exact source/range request in an admission batch."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("locator", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="evidence locator",
+        ),
+    )
+
     locator: str
     ranges: tuple[SourceRange, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_non_empty("EvidenceRequest.locator", self.locator)
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -204,6 +241,26 @@ EvidenceAdmissionOutcome = _typing.Union[
     EvidenceSourceFailure,
     OmittedEvidence,
 ]
+
+
+@_dataclass(frozen=True)
+class EvidenceDelivery:
+    """One delivered evidence fragment associated with its admitted observation."""
+
+    observation_id: SourceObservationId
+    unit: EvidenceUnit
+
+
+@_dataclass(frozen=True)
+class EvidenceAdmissionView:
+    """The one public projection of explicit evidence admission."""
+
+    context: InvestigationContextRef
+    outcomes: tuple[EvidenceAdmissionOutcome, ...]
+    deliveries: tuple[EvidenceDelivery, ...]
+    continuation: str | None
+    omitted: tuple[str, ...]
+    truncated: bool
 
 
 @_dataclass(frozen=True)

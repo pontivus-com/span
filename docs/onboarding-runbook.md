@@ -20,14 +20,17 @@ transition, not ordinary setup. Operational readiness creates no understanding.
 
 ## Investigate the chosen scope
 
-Ask with a new caller request identity, the engineering question, and either an
-exact `surface={kind, locator}` or a reference. An `Answer` is usable current
-content; a `Gap` is permission to investigate within the task, not proof that
-the whole repository lacks understanding.
+Start with a pure surface/reference `ask`: no question, request identity, or
+context. An `Answer` is the current surface document view grouped by recorded
+question; a `Gap` names what is missing plus concrete source pointers and does
+not prove the whole repository lacks understanding.
 
-Truncation leaves unexamined work explicit; a partial answer does not establish
-complete membership or absence. If a gap carries a continuation, follow it
-until its evidence is complete.
+When source bytes are needed, make a separate explicit evidence-admission
+`ask` with a new caller request identity and the exact locators/ranges needed.
+Only that admission returns a context and may return a continuation. Follow its
+continuation until the selected evidence is complete. Use
+`RecordedQuestionSelector` only when the exact recorded question is already
+known.
 
 Read material implementation, consumers, tests, and governing sources using the
 agent's normal tools. CSS and configuration remain addressable as exact source
@@ -43,17 +46,18 @@ is supplied or derived independently. Keep unresolved questions and their basis
 as gaps.
 
 Use the live tool schemas and the [recording guide](interpretation.md). Preserve
-`repository_id`, `request_id`, and the exact content before dispatch. Inspect the
-receipt and post-commit qualification, then ask for the saved version.
-Acceptance proves storage and validation, not semantic truth.
+`repository_id`, `request_id`, and exact content before dispatch. Inspect the
+compact acceptance and its post-commit qualification; use its receipt selector
+or snapshot selector only when exact audit detail is needed. Acceptance proves
+storage and validation, not semantic truth.
 
 ## Check a fresh session
 
-Start another agent session and ask the same recorded question about the same
-surface, without supplying the saved ID. Inspect the answer and retrieve an
-exact snapshot if needed; distinguish supported reuse from new source
-investigation. If no current conclusion is returned, report the gap and continue
-explicit investigation; do not invent semantic equivalence.
+Start another agent session and ask the surface document view, without a saved
+understanding ID or recorded question. Select the applicable current conclusion
+from the grouped view and retrieve an exact snapshot only when needed. If no
+current conclusion is returned, report the gap and continue explicit
+investigation; do not invent semantic equivalence.
 
 ## Maintain it
 
