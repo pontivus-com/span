@@ -153,12 +153,17 @@ see [using Span](docs/usage.md).
 
 ## Beta host status
 
-| Host | Current scope |
+The 0.10.3 repository/installable contract is verified through the built package
+and installed stdio MCP lane. Candidate-specific live model-host conversion was
+not rerun from this execution environment; earlier captures are historical and
+are not reused as 0.10.3 acceptance evidence.
+
+| Host | 0.10.3 candidate status |
 | --- | --- |
-| Codex | Supported; three-tool delivery captured with hooks disabled. The flat-create re-capture is pending (account quota). |
-| OpenCode | Supported; three-tool and flat-create delivery captured. The installer plugin puts the first `ask` before the first source read in 5/5 measured runs. |
-| Claude Code | Supported managed host; registration/health and installer behavior are covered. Authenticated model-delivery grammar and caller identity remain **UNVERIFIED**. |
-| Other MCP hosts | Manual stdio connection is available; model-delivery behavior needs host-specific verification. |
+| Codex | Integration target retained; candidate-specific live model-delivery **UNVERIFIED**. |
+| OpenCode | Integration target and packaged notice delivery retained; candidate-specific live model-delivery **UNVERIFIED**. |
+| Claude Code | Managed registration/health support retained; authenticated model-delivery remains **UNVERIFIED**. |
+| Other MCP hosts | Manual stdio connection remains available; host-specific model-delivery is **UNVERIFIED**. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
 Hooks provide lifecycle reminders; retrieval and recording still check support
