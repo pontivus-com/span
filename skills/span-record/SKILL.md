@@ -28,11 +28,10 @@ Use `kind="understanding"` for a supported conclusion.
 ```
 
 A create is one conclusion with exactly one evidence mode. `locator` cites
-source evidence and may also supply semantic scope; the `observation_id` from an `ask` gap may replace it; non-empty
-`support` is the complete typed dependency set you already hold. A locator may
-accompany support as the carried scope, but an observation id may not. `surface`
-is optional and derived from the carried scope. Semantic scope is independent
-of the files cited in support.
+source evidence; `observation_id` may replace it when you hold an admitted
+observation; non-empty `support` is the complete typed dependency set you
+already hold. These evidence modes are mutually exclusive. `surface` is
+optional and semantic scope is supplied or derived independently from support.
 
 Update an existing understanding with `understanding_id`, `expected_version`,
 and one or more of `add`, `confirm`, `correct`, `replace`, `withdraw`. Multiple
@@ -55,9 +54,11 @@ may supply one or none:
 
 ```json
 {
-  "repository_id": "repo-1",
   "request_id": "rec-confirm",
-  "context_id": "ctx-from-reconsider",
+  "context": {
+    "repository_id": "repo-1",
+    "context_id": {"value": "ctx-from-reconsider"}
+  },
   "kind": "understanding",
   "understanding_id": "u:rec-1",
   "expected_version": 2,
@@ -67,9 +68,11 @@ may supply one or none:
 
 ```json
 {
-  "repository_id": "repo-1",
   "request_id": "rec-correct",
-  "context_id": "ctx-from-reconsider",
+  "context": {
+    "repository_id": "repo-1",
+    "context_id": {"value": "ctx-from-reconsider"}
+  },
   "kind": "understanding",
   "understanding_id": "u:rec-1",
   "expected_version": 2,
@@ -105,7 +108,7 @@ new lineage identity on `add` and `replace`, the old revision, and the
 mechanical basis. `reconsider` already returns the `expected_version` and
 context, so the update follows without another `ask`.
 
-A create may supply the `context_id` from `ask` instead of the question and
+A create may supply the the `context` reference returned by `ask` or `reconsider` instead of the question and
 scope; do not send both — the conflict is rejected. Without a context, a create
 issues its own evidence-only context from the scope and cited locators.
 
@@ -120,7 +123,7 @@ admitted during record inside that scope; it need not already be admitted.
 Empty evidence scope means repository-wide. Discovery must fit completely:
 a broader ancestor or repository-wide discovery cannot fit a restricted context.
 
-When investigation expands, omit `context_id` and supply explicit semantic/run
+When investigation expands, omit `context` and supply explicit semantic/run
 scope and direct evidence. Span derives a new operational context. Repository-wide
 discovery makes that context repository-wide while the semantic scope stays
 narrow. Admitted evidence references and observation IDs remain context-bound; supply that context or use direct evidence.
@@ -134,8 +137,8 @@ narrow. Admitted evidence references and observation IDs remain context-bound; s
   "scope_paths": ["docs/implementation-plan.md"],
   "conclusion": "The implementation described by the plan is complete.",
   "support": [
-    {"$type": "SourceSupportWire", "locator": "src/a.py", "ranges": []},
-    {"$type": "SourceSupportWire", "locator": "tests/a.py", "ranges": []}
+    {"$type": "source", "locator": "src/a.py", "ranges": []},
+    {"$type": "source", "locator": "tests/a.py", "ranges": []}
   ]
 }
 ```
@@ -146,7 +149,7 @@ Use `kind="verification"` with a `run` carrying the command, scope, outcome,
 observed time, and the evidence it actually tested. A run requires at least one observation or evidence item; both may coexist.
 Use context + run.observations only for observations admitted to that context.
 Use context + run.evidence for new direct evidence inside its fixed scope.
-For evidence beyond it, omit context_id and supply run.scope_paths/run.evidence.
+For evidence beyond it, omit context and supply run.scope_paths/run.evidence.
 Do not substitute scenario text for structural evidence.
 
 ```json
