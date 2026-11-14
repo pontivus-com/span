@@ -39,63 +39,77 @@ never accepted as IDs.
 Forms (exactly one):
 
 ```json
-{"repository_id": "repo-1", "request_id": "ask-1", "surface": {"kind": "FILE", "locator": "src/a.py"}, "question": "What does it do?"}
-{"repository_id": "repo-1", "request_id": "ask-2", "reference": "src/a.py", "question": "What does it do?"}
-{"repository_id": "repo-1", "request_id": "ask-3", "reference": "src/a.py"}
-{"repository_id": "repo-1", "selector": {"$type": "UnderstandingSnapshotSelector", "repository_id": "repo-1", "understanding_id": "u:...", "version": 1}}
-{"repository_id": "repo-1", "selector": {"$type": "ReceiptRetrievalSelector", "repository_id": "repo-1", "request_id": "write-1"}}
-{"repository_id": "repo-1", "continuation": "span1_..."}
+{"repository_id": "repo-1", "surface": {"kind": "FILE", "locator": "src/a.py"}}
+{"repository_id": "repo-1", "reference": "src/a.py"}
+{"selector": {"$type": "RecordedQuestionSelector", "repository_id": "repo-1", "surface": {"kind": "FILE", "locator": "src/a.py"}, "question": "What does it do?"}}
+{"repository_id": "repo-1", "request_id": "evidence-1", "surface": {"kind": "FILE", "locator": "src/a.py"}, "evidence": [{"locator": "src/a.py", "ranges": []}]}
+{"selector": {"$type": "CurrentUnderstandingSelector", "repository_id": "repo-1", "understanding_id": "u:..."}}
+{"selector": {"$type": "UnderstandingSnapshotSelector", "repository_id": "repo-1", "understanding_id": "u:...", "version": 1}}
+{"selector": {"$type": "ReceiptRetrievalSelector", "repository_id": "repo-1", "request_id": "write-1"}}
+{"continuation": "span1_..."}
 ```
 
+- Pure `surface`/`reference` obtain is the normal reuse path. It takes no
+  `question`, `request_id`, evidence, or context and returns the current surface
+  document view grouped by recorded question.
 - `surface` is an exact `{kind, locator}` identity. It resolves by identity,
   never containment. `kind` is `FILE`, `SYMBOL`, `SERVICE`, or `DOMAIN`.
-- `reference` is the convenience form. It must resolve to exactly one surface;
-  otherwise the result is `AmbiguousSurface` with exact candidate identities.
-- `surface`/`reference` without a question returns the surface document view.
-  This is the normal reuse path: a fresh agent that does not know the exact
-  recorded question reads the view and selects the conclusion it needs. An exact
-  `question` is a targeted query and matches by exact identity; a paraphrase is a
-  different question.
-- `selector` returns a historical `RetrievedUnderstanding` or
-  `RetrievedReceipt`. These are never merged into `Answer` and never counted
-  current.
-- `continuation` returns an `EvidencePage` for evidence omitted from a gap.
+- `reference` must resolve to exactly one surface; otherwise the result is
+  `AmbiguousSurface` with exact candidate identities.
+- `RecordedQuestionSelector` is targeted reuse only when the exact recorded
+  question is already known. Matching is exact within the supplied surface;
+  Span performs no paraphrase, similarity, or semantic question matching. A
+  non-match is `Gap/unassessed`.
+- Explicit evidence admission reuses the surface/reference form with non-empty
+  `evidence` and a caller-owned `request_id`. It returns the same Answer/Gap
+  classification plus one `EvidenceAdmissionView` with a bound
+  `InvestigationContextRef`, admission outcomes, exact deliveries, omissions,
+  and a continuation when selected bytes do not fit.
+- `CurrentUnderstandingSelector` reads one understanding's current membership.
+  Snapshot and receipt selectors are historical/audit retrieval and are never
+  merged into current Answer content.
+- Selectors and `continuation` carry their own repository namespace. Do not add
+  a top-level `repository_id` override to those forms.
+- `continuation` returns the next `EvidencePage` for bytes selected by explicit
+  evidence admission.
 
-`context_id` is never an `ask` input. A context is returned in the answer and
-may be supplied to `record` or `reconsider`.
+Pure obtain creates no context. A context reference is returned only by explicit
+evidence admission or by `reconsider`; treat it as an opaque
+`InvestigationContextRef` and copy it only into a declared `context` field.
 
 Results: `Answer`, `Gap`, `AmbiguousSurface`, `RetrievedUnderstanding`,
-`RetrievedReceipt`, `EvidencePage`, or `Unavailable`.
+`RetrievedReceipt`, `EvidencePage`, `Rejected`, or `Unavailable`.
 
-- `Answer` carries `ConclusionView`s (ref, statement, nature, scope, support,
-  evidence), surface status, gaps, applicable `VerificationView`s (run plus
-  qualification), context, and explicit truncation state. The surface status
-  carries `stale_refs`: each names the exact conclusion revision, the
-  understanding version that holds it, and its present non-current support
-  state. Descendant statuses keep their own refs.
-- `Gap` carries one reason (`invalidated`, `unverifiable`, `unassessed`,
-  `no_match`), historical conclusions with their statement, evidence
-  references, and present non-current state, admitted evidence, observations,
-  context, a recovery, and a `continuation` when evidence was omitted. A
-  `no_match` gap tells the agent to ask the same surface without a question.
-  Historical content is never mixed into `conclusions`. To read a referenced
-  stale statement directly, use
-  `ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`.
-- `AmbiguousSurface` carries exact `SurfaceKey` candidates. Copy one into
-  `surface`; do not re-resolve the path.
-- `EvidencePage` carries evidence units and an optional further continuation.
-  It is evidence, not current conclusion content.
+- `Answer` carries current `ConclusionView` content, surface status, recorded
+  gaps, applicable `VerificationView` values and explicit truncation state.
+  Surface document view content is grouped by recorded question. `admission`
+  is absent unless explicit evidence admission ran.
+- `Gap` carries one reason (`invalidated`, `unverifiable`, or `unassessed`),
+  historical non-current content where applicable, missing items, recovery, and
+  concrete `source_pointers`. It does not imply source bytes were admitted.
+  When explicit evidence admission ran, the same optional `admission` field is
+  present. A non-matching exact recorded-question selector is `unassessed`.
+- `AmbiguousSurface` carries exact candidates. Copy one into `surface`; do not
+  re-resolve the path.
+- `EvidencePage` carries exact `EvidenceDelivery` fragments and an optional
+  further continuation. It is evidence, not current conclusion content.
+- `Rejected` is caller-correctable invalid selection/binding/reference state.
+  `Unavailable` is genuine operational inability or a response budget that
+  cannot carry the minimum result.
 
 ### Continuation
 
-A continuation is opaque and stateless. It binds the repository, investigation
-context, original request identity and digest, and the next evidence position.
-It is valid while the context is `LIVE`; expired, abandoned, reaped, unknown, or
-wrong-repository tokens return `Unavailable` with a recovery. The same token
-against the same live context returns the same page. A page always advances by
-at least one evidence unit or exact line range; an oversized unit is split at
-line boundaries, and a unit that cannot fit even one line is refused rather than
-returned as an empty page.
+A continuation is opaque and stateless. It binds repository, investigation
+context, original request identity/digest, and the next evidence position. The
+same token against the same live context returns the same page across restart.
+A page advances by at least one exact delivery or line fragment; oversized
+content splits only at line boundaries and preserves original source positions.
+
+Malformed, wrong-binding, missing, non-live, expired, exhausted, or
+out-of-position continuation references return typed `Rejected` with recovery
+that starts a new explicit evidence admission. Genuine store/provider failure is
+`Unavailable`. A line or minimum response envelope that cannot fit the response
+budget is also `Unavailable`; that is not a continuation-reference rejection.
 
 ## `record`
 
@@ -112,7 +126,7 @@ returned as an empty page.
 ```
 
 A create carries one conclusion and exactly one evidence mode. `locator` cites
-source evidence and may also supply semantic scope; `observation_id` from an `ask` gap may replace it;
+source evidence and may also supply semantic scope; `observation_id` returned by explicit evidence admission may replace it;
 non-empty `support` is the complete typed dependency set the agent already
 holds. A locator may accompany explicit support as the carried code scope, but
 an observation id may not. Scope is supplied or derived independently through
@@ -149,9 +163,8 @@ unchanged content metadata, and the mechanical basis. Supply
 the public grammar. `challenge_dispositions` settles a challenge raised by
 `reconsider`.
 
-A create may supply the `context_id` returned by `ask` (including a cold gap).
-The context's bound question and scope are used; do not also send `question` or
-`scope_paths` — that conflict is rejected. Without a context, a create requires
+A create may supply the canonical `context` reference returned by explicit evidence admission or `reconsider`.
+The context's bound target/scope are used where applicable; do not also send a conflicting explicit target — that conflict is rejected. Without a context, a create requires
 `question` and issues its own evidence-only context.
 
 Semantic scope describes what the conclusion is about; support identifies what
@@ -165,7 +178,7 @@ admitted during record inside that scope; it need not already be admitted.
 Empty evidence scope means repository-wide. Discovery must fit completely:
 a broader ancestor or repository-wide discovery cannot fit a restricted context.
 
-When investigation expands, omit `context_id` and supply explicit semantic/run
+When investigation expands, omit `context` and supply explicit semantic/run
 scope and direct evidence. Span derives a new operational context. Repository-wide
 discovery makes that context repository-wide while the semantic scope stays
 narrow. Admitted evidence references and observation IDs remain context-bound; supply that context or use direct evidence.
@@ -216,7 +229,7 @@ covers a surface path when it is equal or an ancestor) and is not widened by a
 broader question. A run requires at least one observation or evidence item; both may coexist.
 Use context + run.observations only for observations admitted to that context.
 Use context + run.evidence for new direct evidence inside its fixed scope.
-For evidence beyond it, omit context_id and supply run.scope_paths/run.evidence.
+For evidence beyond it, omit context and supply run.scope_paths/run.evidence.
 Do not substitute scenario text for structural evidence.
 
 ```json
@@ -245,12 +258,13 @@ membership internally.
 
 Results: `UnderstandingRecorded`, `VerificationRecorded`, `SurfaceDeclared`,
 `Rejected`, or `Unavailable`. A rejection names the offending identity, the
-exact server cause, the required action, and the structured current version or
+stable server-owned public cause text, the required action, and the structured current version or
 current boundary version when one exists; it is a result, not a transport error.
 An accepted write is never reported as a rejection because present support
-could not be evaluated; that outcome is `SupportUnavailable`. Accepted
-understanding also carries live `status.surface` or `SurfaceStatusUnavailable`
-while preserving its receipt.
+could not be evaluated; that outcome is `SupportUnavailable`. Ordinary acceptance
+carries a receipt selector rather than nesting the full receipt. Accepted
+understanding also carries live status or `SurfaceStatusUnavailable`; exact receipt
+detail remains retrievable with `ReceiptRetrievalSelector`.
 
 ## `reconsider`
 
