@@ -19,13 +19,23 @@ _PUBLIC_TYPE_TAGS: dict[str, str] = {
     "span.core.model.answers.SurfaceDeclared": "SurfaceDeclared",
     "span.core.model.outcomes.UnderstandingRecorded": "UnderstandingRecorded",
     "span.core.model.outcomes.VerificationRecorded": "VerificationRecorded",
-    "span.core.model.understanding.RecordedQuestionSelector": "RecordedQuestionSelector",
-    "span.core.model.understanding.CurrentUnderstandingSelector": "CurrentUnderstandingSelector",
-    "span.core.model.understanding.UnderstandingSnapshotSelector": "UnderstandingSnapshotSelector",
-    "span.core.model.understanding.ReceiptRetrievalSelector": "ReceiptRetrievalSelector",
+    "span.core.model.understanding.RecordedQuestionSelector": (
+        "RecordedQuestionSelector"
+    ),
+    "span.core.model.understanding.CurrentUnderstandingSelector": (
+        "CurrentUnderstandingSelector"
+    ),
+    "span.core.model.understanding.UnderstandingSnapshotSelector": (
+        "UnderstandingSnapshotSelector"
+    ),
+    "span.core.model.understanding.ReceiptRetrievalSelector": (
+        "ReceiptRetrievalSelector"
+    ),
     "span.core.model.understanding.SupportedConclusion": "SupportedConclusion",
     "span.core.model.understanding.WithdrawnConclusion": "WithdrawnConclusion",
-    "span.core.model.understanding.UnresolvedChallengeRecord": "UnresolvedChallengeRecord",
+    "span.core.model.understanding.UnresolvedChallengeRecord": (
+        "UnresolvedChallengeRecord"
+    ),
     "span.core.model.understanding.ResolvedChallengeRecord": "ResolvedChallengeRecord",
     "span.core.model.support.SourceSupport": "SourceSupport",
     "span.core.model.support.AuthoritySupportDependency": "AuthoritySupport",
@@ -55,8 +65,12 @@ _PUBLIC_SCHEMA_NAMES: dict[str, str] = {
     "span.core.schema.record_wire.AuthoritySupportWire": "AuthoritySupport",
     "span.core.schema.record_wire.PremiseSupportWire": "PremiseSupport",
     "span.core.schema.record_wire.DiscoveryScopeWire": "DiscoveryScope",
-    "span.core.schema.record_wire.DiscoveryBoundarySupportWire": "DiscoveryBoundarySupport",
-    "span.core.schema.record_wire.AdmittedDiscoverySupportWire": "AdmittedDiscoverySupport",
+    "span.core.schema.record_wire.DiscoveryBoundarySupportWire": (
+        "DiscoveryBoundarySupport"
+    ),
+    "span.core.schema.record_wire.AdmittedDiscoverySupportWire": (
+        "AdmittedDiscoverySupport"
+    ),
     "span.core.schema.record_wire.GapWire": "GapInput",
     "span.core.schema.record_wire.AddConclusionWire": "AddConclusion",
     "span.core.schema.record_wire.ConfirmConclusionWire": "ConfirmConclusion",
