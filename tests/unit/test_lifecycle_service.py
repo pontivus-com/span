@@ -1878,6 +1878,29 @@ class LifecycleServiceTest(unittest.TestCase):
                     result, m.EvidenceScope(paths=("src/a.py",)), "src/a.py"
                 )
 
+    def test_first_attempt_ranged_source_support_admits_exact_range(self):
+        wire = self._scope_create(
+            "ranged-create",
+            scope_paths=("src/a.py",),
+            support=(
+                w.SourceSupportWire(
+                    locator="src/a.py",
+                    ranges=(w.RangeWire(start_line=1, end_line=1),),
+                ),
+            ),
+        )
+        result = self.service.record(wire)
+        self._assert_scopes(
+            result, m.EvidenceScope(paths=("src/a.py",)), "src/a.py"
+        )
+        receipt = _receipt(self.store, result)
+        observations = self.store.list_context_evidence(
+            receipt.identity.context_id.value
+        )
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0].delivered_ranges, (m.SourceRange(1, 1),))
+        self.assertFalse(observations[0].whole_file)
+
     def test_multi_source_support_keeps_plan_semantic_scope(self):
         wire = self._scope_create(
             scope_paths=("docs/plan.md",),
