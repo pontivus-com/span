@@ -108,7 +108,7 @@ new lineage identity on `add` and `replace`, the old revision, and the
 mechanical basis. `reconsider` already returns the `expected_version` and
 context, so the update follows without another `ask`.
 
-A create may supply the the `context` reference returned by `ask` or `reconsider` instead of the question and
+A create may supply the `context` reference returned by explicit evidence admission or `reconsider` instead of the question and
 scope; do not send both — the conflict is rejected. Without a context, a create
 issues its own evidence-only context from the scope and cited locators.
 
