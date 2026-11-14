@@ -256,10 +256,7 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["$type"], "Rejected")
         self.assertFalse(result.is_error)
         self.assertEqual(payload["cause_kind"], "source_drift")
-        self.assertEqual(
-            payload["cause"],
-            "support is not current: REASSESSMENT_REQUIRED: changed",
-        )
+        self.assertEqual(payload["cause"], "recorded support is not current")
 
     def test_version_conflict_names_the_current_version(self):
         from span.core.recording import RecordingConflict
