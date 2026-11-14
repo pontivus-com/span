@@ -11,7 +11,7 @@ The functional scenario set covers:
 | ID | Behavior | Representative current tests |
 | --- | --- | --- |
 | F-01 | A cold surface obtain returns an honest unassessed gap with source pointers; selected evidence is admitted explicitly. | `test_unknown_surface_is_unassessed`, evidence-admission and continuation tests |
-| F-02 | Record a real supported investigation and inspect its receipt. | `test_create_records_and_replays`, installed MCP lane |
+| F-02 | Record a real supported investigation, retain the compact receipt selector, and retrieve the immutable receipt when exact audit/replay detail is needed. | `test_create_records_and_replays`, receipt-selector retrieval, installed MCP lane |
 | F-03 | Fresh-session reuse of a recorded answer without a supplied saved ID. | installed MCP fresh-process lane, host capture |
 | F-04 | Relevant support change requires reassessment. | `test_source_support_current_changed_missing` |
 | F-05 | Unrelated change preserves independent support. | `test_unrelated_source_change_keeps_current` |
@@ -26,7 +26,7 @@ The functional scenario set covers:
 | F-14 | Operational retention preserves accepted semantic history. | lifecycle-store reaping and replay-retention tests |
 | F-15 | An ambiguous reference is resolved by copying an exact surface candidate. | `test_ambiguity_requires_distinct_candidates`, lifecycle MCP lane |
 | F-16 | A service/domain surface is declared, used, and boundary-updated with compare-and-set. | `test_surface_declaration_create_and_update` |
-| F-17 | Omitted gap evidence is recovered through a public continuation with bounded progress, replay, restart, expiry, abandonment, and oversized-unit refusal. | `test_gap_continuation_returns_an_evidence_page`, `test_continuation_survives_a_fresh_process`, continuation lifecycle tests |
+| F-17 | Evidence selected by explicit admission is recovered through public continuation with bounded progress, replay, restart, typed unusable-reference rejection, and oversized-unit refusal. | `test_gap_continuation_returns_an_evidence_page`, `test_continuation_survives_a_fresh_process`, continuation lifecycle tests |
 | F-18 | A discovery membership change is included directly by `reconsider`, not only by a premise walk. | `test_discovery_membership_change_is_direct`, lifecycle MCP tests |
 | F-19 | Historical snapshot and receipt retrieval never become current answer content. | `test_snapshot_selector_returns_history_not_an_answer`, `test_receipt_selector_returns_history_not_an_answer` |
 
@@ -117,13 +117,14 @@ The named scenario is:
    with exact claim text and source location;
 3. record the surface's current understanding;
 4. remove or reduce the duplicate documentation;
-5. in a fresh session, ask each frozen claim from Span and compare the answer
-   with the removed page;
+5. in a fresh session, obtain the surface document view and map each frozen
+   claim to a supported current conclusion; use `RecordedQuestionSelector` only
+   when the exact recorded question is part of the frozen evidence;
 6. record documentation bytes/lines removed, frozen claims answered, unsupported
    claims caught, and exclusions.
 
-Pass only when every frozen claim is answered by a supported current conclusion,
-and no stale content is served as current. A frozen claim that is unavailable or
+Pass only when every frozen claim maps to a supported current conclusion and no
+stale content is served as current. A frozen claim that is unavailable or
 excluded is a failure, not an exclusion. Claims outside the frozen set may be
 reported as not claimed; they cannot satisfy the gate. An entirely excluded set
 fails G6.
