@@ -17,10 +17,15 @@
   F4's bounded re-establishment context through Span-owned issuance; preserve
   stable caller-owned identity for writes and explicit evidence admission.
 
-### Planned implementation and upgrade
+### Implementation status and upgrade
 
-Runtime fixes, packaged guidance and host verification are not implemented by
-this documentation change. Package and registry versions remain 0.10.2.
+Runtime implementation is in progress on this branch. The T03 structural/public
+boundary work has partially landed and remains open; T07, T04, T05, T06, T08,
+T09 and T10 remain pending in the implementation plan's dependency order.
+Packaged guidance, installed-host verification, comparative product acceptance,
+version bump and publication are not complete. Package and registry versions
+remain 0.10.2.
+
 The target grammar is intentionally breaking: server, managed projections and
 refreshed consumer schemas must be delivered coherently. Retained acceptance
 history and receipt recovery remain required; no legacy input aliases, new
