@@ -146,7 +146,7 @@ def _context_ref(
 def _receipt(
     store: LifecycleStore, result: m.UnderstandingRecorded | m.VerificationRecorded
 ) -> m.RecordReceipt:
-    selector = _receipt(self.store, result)_selector
+    selector = result.receipt_selector
     receipt = store.get_receipt(
         m.RecordingKey(
             repository_id=selector.repository_id,
@@ -713,9 +713,8 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         result = self.service.record(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="sub-ch",
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
                 understanding_id="u:sub-create",
                 expected_version=1,
@@ -891,9 +890,8 @@ class LifecycleServiceTest(unittest.TestCase):
     def test_create_with_support_only_derives_scope_from_context(self) -> None:
         result = self.service.record(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="sub-support-only",
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
                 surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
                 conclusion="A is supported by the source.",
@@ -917,9 +915,8 @@ class LifecycleServiceTest(unittest.TestCase):
     ) -> None:
         result = self.service.record(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="sub-support-only-no-surface",
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
                 conclusion="A is supported by the source.",
                 support=(w.SourceSupportWire(locator="src/a.py"),),
@@ -2076,9 +2073,8 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         result = self.service.record(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="ref-create",
-                context_id=context.context_id.value,
+                context=_context_ref(context.context_id.value),
                 kind=m.RecordKind.UNDERSTANDING,
                 surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
                 conclusion="A does X",
@@ -2292,9 +2288,8 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.service.record(
             w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id="coverage-ref-create",
-                context_id=context.context_id.value,
+                context=_context_ref(context.context_id.value),
                 kind=m.RecordKind.UNDERSTANDING,
                 surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
                 conclusion="A does X",
@@ -2371,9 +2366,8 @@ class LifecycleServiceTest(unittest.TestCase):
                 with self.assertRaises(Rejection) as raised:
                     self.service.record(
                         w.RecordRequestWire(
-                            repository_id="repo-1",
                             request_id=f"whole-file-{index}",
-                            context_id=context.context_id.value,
+                            context=_context_ref(context.context_id.value),
                             kind=m.RecordKind.UNDERSTANDING,
                             surface=w.SurfaceWire(kind=kind, locator=owner),
                             conclusion="The repository operates as described.",
