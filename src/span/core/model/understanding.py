@@ -31,12 +31,13 @@ from span.core.model.primitives import (
     _require_non_empty,
 )
 from span.core.model.recording import RecordReceipt
-from span.core.model.surfaces import SurfaceKey
+from span.core.model.surfaces import SurfaceKey, SurfaceReference
 from span.core.model.support import (
     SupportDependency,
     SupportUnavailable,
     UnderstandingSupport,
 )
+from span.core.model.verification import VerificationRun
 
 
 def _require_aware(name: str, value: _datetime.datetime) -> None:
@@ -254,6 +255,37 @@ class RetrievedUnderstanding:
 
 
 @_dataclass(frozen=True)
+class RecordedQuestionSelector:
+    """Select current membership by exact recorded question on one exact surface."""
+
+    repository_id: str
+    surface: SurfaceReference
+    question: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("RecordedQuestionSelector.repository_id", self.repository_id)
+        _require_non_empty("RecordedQuestionSelector.question", self.question)
+        if self.surface.repository_id is not None:
+            raise ValueError(
+                "RecordedQuestionSelector.surface.repository_id must be omitted"
+            )
+
+
+@_dataclass(frozen=True)
+class CurrentUnderstandingSelector:
+    """Select one understanding's current membership."""
+
+    repository_id: str
+    understanding_id: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("CurrentUnderstandingSelector.repository_id", self.repository_id)
+        _require_non_empty(
+            "CurrentUnderstandingSelector.understanding_id", self.understanding_id
+        )
+
+
+@_dataclass(frozen=True)
 class UnderstandingSnapshotSelector:
     """Select one exact understanding version; omitted version means current."""
 
@@ -315,10 +347,10 @@ class RetrievedContext:
 
 @_dataclass(frozen=True)
 class RetrievedReceipt:
-    """One retained receipt; the context may already have been reaped."""
+    """One retained receipt plus exact accepted verification-run detail."""
 
     receipt: RecordReceipt
-    context: InvestigationContext | None = None
+    verification_runs: tuple[VerificationRun, ...] = ()
 
 
 RetrieveResult = _typing.Union[

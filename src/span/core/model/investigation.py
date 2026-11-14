@@ -22,6 +22,7 @@ from span.core.model.primitives import (
     _require_positive_int,
 )
 from span.core.model.recording import ContentDigest
+from span.core.model.repository import EvidenceUnit
 
 
 class ContextOrigin(_enum.Enum):
@@ -35,6 +36,17 @@ class ContextState(_enum.Enum):
     LIVE = "LIVE"
     EXPIRED = "EXPIRED"
     ABANDONED = "ABANDONED"
+
+
+@_dataclass(frozen=True)
+class InvestigationContextRef:
+    """Opaque public reference to one repository-bound investigation context."""
+
+    repository_id: str
+    context_id: InvestigationContextId
+
+    def __post_init__(self) -> None:
+        _require_non_empty("InvestigationContextRef.repository_id", self.repository_id)
 
 
 @_dataclass(frozen=True)
@@ -204,6 +216,26 @@ EvidenceAdmissionOutcome = _typing.Union[
     EvidenceSourceFailure,
     OmittedEvidence,
 ]
+
+
+@_dataclass(frozen=True)
+class EvidenceDelivery:
+    """One delivered evidence fragment associated with its admitted observation."""
+
+    observation_id: SourceObservationId
+    unit: EvidenceUnit
+
+
+@_dataclass(frozen=True)
+class EvidenceAdmissionView:
+    """The one public projection of explicit evidence admission."""
+
+    context: InvestigationContextRef
+    outcomes: tuple[EvidenceAdmissionOutcome, ...]
+    deliveries: tuple[EvidenceDelivery, ...]
+    continuation: str | None
+    omitted: tuple[str, ...]
+    truncated: bool
 
 
 @_dataclass(frozen=True)
