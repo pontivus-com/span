@@ -1073,7 +1073,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             "The pipeline flows A through D.",
         )
         self.assertEqual(
-            self._answer_conclusions(after)[0]["support"]["evaluation"]["state"],
+            self._answer_conclusions(after)[0]["support"]["state"],
             "CURRENT",
         )
 

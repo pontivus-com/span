@@ -609,7 +609,10 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(stale.ref.understanding_id.value, "u-sibling")
         self.assertEqual(stale.understanding_version.value, 1)
         self.assertIs(stale.state, m.SupportState.REASSESSMENT_REQUIRED)
-        self.assertEqual(len(result.conclusions), 1)
+        self.assertEqual(
+            sum(len(group.conclusions) for group in result.groups),
+            1,
+        )
 
     def test_document_view_gap_carries_historical_content(self) -> None:
         (self.root / "src/a.py").write_text("changed\n", encoding="utf-8")
