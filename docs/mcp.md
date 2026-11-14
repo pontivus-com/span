@@ -192,8 +192,8 @@ narrow. Admitted evidence references and observation IDs remain context-bound; s
   "scope_paths": ["docs/implementation-plan.md"],
   "conclusion": "The implementation described by the plan is complete.",
   "support": [
-    {"$type": "SourceSupportWire", "locator": "src/a.py", "ranges": []},
-    {"$type": "SourceSupportWire", "locator": "tests/a.py", "ranges": []}
+    {"$type": "source", "locator": "src/a.py", "ranges": []},
+    {"$type": "source", "locator": "tests/a.py", "ranges": []}
   ]
 }
 ```
