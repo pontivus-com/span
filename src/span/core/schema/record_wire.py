@@ -345,16 +345,20 @@ class IdentityWire:
 class SurfaceKeyWire:
     """Exact surface identity used as a declaration parent."""
 
-    kind: str
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("locator", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="surface parent locator",
+        ),
+    )
+
+    kind: _surfaces.SurfaceKind
     locator: str
 
     def __post_init__(self) -> None:
-        try:
-            _surfaces.SurfaceKind(self.kind)
-        except ValueError:
-            raise ValueError(f"unknown surface kind: {self.kind!r}") from None
-        if not self.locator:
-            raise ValueError("SurfaceKeyWire.locator must be a non-empty string")
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -373,18 +377,22 @@ class SurfaceWire:
     declarations may also carry a boundary and parent.
     """
 
-    kind: str
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("locator", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="surface locator",
+        ),
+    )
+
+    kind: _surfaces.SurfaceKind
     locator: str
     boundary: SurfaceBoundaryWire | None = None
     parent: SurfaceKeyWire | None = None
 
     def __post_init__(self) -> None:
-        try:
-            _surfaces.SurfaceKind(self.kind)
-        except ValueError:
-            raise ValueError(f"unknown surface kind: {self.kind!r}") from None
-        if not self.locator:
-            raise ValueError("SurfaceWire.locator must be a non-empty string")
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -1190,7 +1198,7 @@ def _verification_command(
 def _surface_key(value: SurfaceWire, identity: IdentityWire) -> _surfaces.SurfaceKey:
     return _surfaces.SurfaceKey(
         repository_id=identity.repository_id,
-        kind=_surfaces.SurfaceKind(value.kind),
+        kind=value.kind,
         locator=value.locator,
     )
 
@@ -1211,7 +1219,7 @@ def surface_declaration(value: RecordRequestWire) -> _surfaces.Surface:
         if value.surface.parent is None
         else _surfaces.SurfaceKey(
             repository_id=value.identity.repository_id,
-            kind=_surfaces.SurfaceKind(value.surface.parent.kind),
+            kind=value.surface.parent.kind,
             locator=value.surface.parent.locator,
         )
     )
