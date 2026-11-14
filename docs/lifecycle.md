@@ -12,8 +12,8 @@ SETUP (installer)
 
 ORDINARY SESSION
   ask
-    → current answers with content and evidence,
-      a gap with inspectable evidence, or the surface document view
+    → current surface document view or an honest gap with source pointers;
+      explicit evidence admission is separate
   record
     → atomic create/update/verify, or a declared service/domain surface
   reconsider
@@ -22,24 +22,27 @@ ORDINARY SESSION
 
 ## Contexts
 
-`ask` issues or recovers one server-owned context bound to its request identity.
-The context is returned in the answer; it may be supplied to `record` or
-`reconsider`, but it is never an input to `ask`. A cold gap already carries the
-context needed to investigate and record in the same binding. Changing the
-question, surface, or other bound request fields under the same `request_id` is
-a conflict.
+Pure surface/reference obtain creates no context and requires no caller request
+identity. Explicit evidence admission issues or recovers one persisted
+evidence-only context bound to its caller-owned request identity and complete
+selection. Changed-scope `reconsider` issues a fresh Span-owned bounded context
+for re-establishment. Both expose the same opaque `InvestigationContextRef`;
+copy it only into operations that declare a `context` field.
 
-Contexts expire. Expiry removes operational membership only. Accepted
-understanding, challenges, verification runs, and retained receipts survive.
-A gap's continuation lives exactly as long as its context; after expiry,
-abandonment, or reaping it returns a typed `Unavailable`.
+Contexts expire without deleting accepted understanding, challenges,
+verification runs, or retained receipts. A continuation is valid only for its
+bound live context. Malformed, wrong-binding, missing/non-live/expired,
+exhausted, or out-of-position continuation references are typed `Rejected`;
+genuine store/provider inability is `Unavailable`. A missing row alone is not
+described as expired or reaped.
 
 ## Recording
 
-`record` is atomic. It cites admitted observation or authority references; it
-does not resend source bodies. The result is the committed receipt plus a
-post-commit support qualification — or `SurfaceDeclared` for a boundary
-declaration.
+`record` is atomic. It cites direct or admitted evidence without resending
+source bodies. Ordinary understanding/verification acceptance carries a receipt
+selector, accepted coordinates and post-commit qualification; the immutable
+receipt remains in storage for exact retrieval. Surface declaration returns
+`SurfaceDeclared`.
 
 - `kind="understanding"` with `conclusion` and exactly one evidence mode —
   `locator`, `observation_id`, or non-empty `support` — creates version 1; scope
@@ -61,11 +64,12 @@ is accepted.
 
 A validation, identity, conflict, or source-drift rejection commits no semantic
 transition and names the offending identity. A post-commit `SupportUnavailable`
-preserves the receipt and reports qualification failure separately from
-acceptance.
+preserves the accepted effect and receipt selector while reporting qualification
+failure separately from acceptance.
 
-A matching replay returns the retained receipt before new-write dependency
-checks. The same identity with different content is a conflict.
+A matching replay resolves from the retained receipt before new-write dependency
+checks and returns the same compact acceptance. The same identity with different
+content is a conflict.
 
 ## Currentness
 
