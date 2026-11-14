@@ -105,10 +105,15 @@ must resolve to exactly one surface; otherwise return `AmbiguousSurface` with
 exact candidates. Ordinary surface/reference obtain accepts no free `question`
 field. Recorded questions remain metadata grouped in the document view, and F3's
 targeted question reachability is the explicit
-`RecordedQuestionSelector{repository_id, surface, question}`. That selector
+`RecordedQuestionSelector{repository_id, surface, question}`. The `surface` input in both ordinary obtain and this selector uses
+`SurfaceReference`. In each form `repository_id: str` is the sole namespace; the surface
+carries `kind` and `locator`; its optional nested `repository_id` must be absent
+(including no explicit null). A nested repository input is a structural rejection,
+not an override or a second matching rule. `question: str` is non-empty. The selector
 matches the stored question exactly within the supplied surface; it performs no
 normalisation, paraphrase matching, similarity search, or cross-surface lookup.
-No exact recorded membership yields `Gap/unassessed`, not a separate
+If no membership matches the exact recorded question, return `Gap/unassessed`,
+not a separate
 `no_match` reason. Exact selectors and continuation carry their own repository
 binding; a separate repository override is forbidden. Unknown exact identities
 have an explicit lookup rejection and public recovery, not an invented surface
@@ -123,8 +128,12 @@ same support/status owners as the grouped view. These pure forms create no
 investigation context and require no caller request identity. A genuinely
 unassessed surface or selected recorded question remains a Gap. Recovery
 identifies the missing investigation and available source pointers as
-`EvidenceRequest` selections without pretending they are admitted observations
-or fingerprinted proof. No source bodies are delivered unsolicited.
+`Gap.source_pointers: tuple[EvidenceRequest, ...]` without pretending they are
+admitted observations or fingerprinted proof. The field is always present, empty
+when no concrete source locator can be identified; it is not an admission result.
+Each pointer has the existing EvidenceRequest locator/ranges shape. Omitted
+pointers are named in Gap.omitted and its recovery; no directory is misrepresented
+as an observed file. No source bodies are delivered unsolicited.
 
 **Explicit evidence.** `evidence` is a non-empty selection of exact source
 locators and ranges. Admission is restricted to the resolved surface and issued
@@ -132,14 +141,25 @@ scope. Whole-file requests are explicit. A valid selection returns the same
 Answer/Gap classification plus one canonical `EvidenceAdmissionView` shared by
 both result kinds. Its fields are `context: InvestigationContextRef`,
 `outcomes: tuple[EvidenceAdmissionOutcome, ...]`,
-`observations: tuple[SourceObservation, ...]`, `continuation`,
-`omitted`, and `truncated`. It reuses the existing evidence request/outcome,
-source-observation and range carriers; it does not define parallel excerpt or
-range shapes. Before admission, `EvidenceRequest` is the exact source-pointer
+`deliveries: tuple[EvidenceDelivery, ...]`, `continuation: str | None`,
+`omitted: tuple[str, ...]`, and `truncated: bool`. It reuses the existing evidence request/outcome,
+source-observation and range owners; it does not define parallel excerpt or
+range shapes. `EvidenceDelivery` has exactly `observation_id: SourceObservationId`
+and `unit: EvidenceUnit`. The unit carries the existing EvidenceRef, content,
+content_fingerprint and content_range; the ID associates each whole/partial
+delivery with its admitted observation. Immutable SourceObservation remains
+stored once; a continuation does not mutate its excerpt/digest to represent a
+page. For disjoint ranges, deliver separately positioned EvidenceUnit fragments
+rather than labeling concatenated text as contiguous. Before admission, `EvidenceRequest` is the exact source-pointer
 and selection carrier; after observation, `EvidenceRef` remains the canonical
 observed/cited source identity inside `SourceObservation`. Each admission
 outcome is tied to its request, and admitted/already-admitted outcomes name the
-observation that carries exact excerpt/range delivery. Missing, unreadable and
+observation addressed by each delivery. Initial admission outcomes cover every
+requested item in request order. Continuation pages use the same EvidenceDelivery
+carrier in `EvidencePage.deliveries: tuple[EvidenceDelivery, ...]`; the other
+EvidencePage fields are `continuation: str | None`, `omitted: tuple[str, ...]`
+and `truncated: bool`. They do not repeat the full admission batch.
+Source identities/ranges remain exact on every page. Missing, unreadable and
 omitted sources remain explicit. Source or store failure is not semantic absence.
 The request identity binds the complete selection; identical retries recover the
 same context. Admission does not imply the agent read all selected bytes or
@@ -383,38 +403,81 @@ requires nothing the agent does not already hold.
 
 **The agent receives** exactly one of `UnderstandingRecorded`,
 `VerificationRecorded`, or `SurfaceDeclared` for the requested `kind`, or
-`Rejected`, or `Unavailable`. An acceptance carries an immutable version, a
-receipt with replay identity, the live support qualification, and the updated
-surface status — or a rejection naming the exact offending identity, the exact
+`Rejected`, or `Unavailable`. An ordinary acceptance carries its exact receipt selector, accepted
+subject coordinates, live qualification and the status required by its result
+kind — or a rejection naming the exact offending identity, the exact
 cause, the structured current version or current boundary version when one
 exists, and the required action. For `UnderstandingRecorded`, live qualification
 and owning `SurfaceStatus` are
 composed after acceptance. Expected operational failure is represented by
 `SupportUnavailable` or `SurfaceStatusUnavailable` while preserving the accepted
-receipt. Status is never persisted in that receipt. The cause is the server's
+effect and its receipt selector. The full immutable receipt stays in storage;
+status is never persisted in it. The cause is the server's
 exact validation
 message; the adapter does not replace it with a generic action.
 
 **Compact public acceptance and exact detail.** The ordinary acceptance carriers
 are fixed before implementation:
 
-| Result | Public fields |
-| --- | --- |
-| `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at`, `understanding_id`, `version`, `affected_revisions`, `dependent_effects`, `qualification: UnderstandingSupport | SupportUnavailable`, `status: SurfaceStatus | SurfaceStatusUnavailable` |
-| `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at`, `run_id`, `command`, `scenario`, `outcome`, `qualification: VerificationSupport | SupportUnavailable` |
+The following are complete field sets for ordinary understanding/verification
+acceptance. Existing identity, enum and reference types retain their canonical
+validation; every timestamp is timezone-aware. No unlisted field is inferred.
 
-Neither ordinary acceptance nests the full immutable `RecordReceipt`. The
-receipt selector is the one repository/request coordinate for audit retrieval.
-Understanding qualification includes exact revision, state, evaluation time,
-material limitations and non-current dependency findings/causes; an all-current
-dependency list may be retrieved rather than repeated, but failed findings are
-never suppressed as a size optimization. Verification identity, command/scenario,
-outcome and qualification appear once in the acceptance projection; T03 must
-remove any nested public repetition when it constructs the canonical carrier.
+| Result | Exact public fields |
+| --- | --- |
+| `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `affected_revisions: tuple[ConclusionRevisionRef, ...]`, `dependent_effects: tuple[ConclusionRevisionRef, ...]`, `qualification: UnderstandingQualification \| SupportUnavailable`, `status: SurfaceStatus \| SurfaceStatusUnavailable` |
+| `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
+
+The receipt selector is the only enclosing repository/request coordinate.
+Neither result nests RecordReceipt. Affected revisions identify this acceptance's
+conclusion effects; dependent_effects reference other affected lineages. They
+are explicit even when empty. Verification command/scenario retain the run's
+existing at-least-one-present rule; the immutable recorded outcome is distinct
+from the present support state in qualification.
+
+**Public qualification projections.** These are the sole compact projections
+for the named public positions; they do not replace internal/detailed support
+carriers or introduce another evaluator. Required tuple fields may be empty;
+non-current findings and material limitations must never be silently omitted.
+
+| Carrier | Exact fields |
+| --- | --- |
+| `SupportQualification` | `state: SupportState`, `observed_at: datetime`, `reason: str`, `limitations: tuple[str, ...]`, `findings: tuple[DependencyFinding, ...]` |
+| `ConclusionQualification` | `ref: ConclusionRevisionRef`, `evaluation: SupportQualification` |
+| `ObservationQualification` | `observation_id: SourceObservationId`, `evaluation: SupportQualification` |
+| `UnderstandingQualification` | `state: SupportState`, `observed_at: datetime`, `limitations: tuple[str, ...]`, `conclusions: tuple[ConclusionQualification, ...]` |
+| `VerificationQualification` | `state: SupportState`, `observed_at: datetime`, `limitations: tuple[str, ...]`, `observations: tuple[ObservationQualification, ...]` |
+
+UnderstandingQualification contains no understanding_id/version; those belong
+to UnderstandingRecorded or the containing answer membership. VerificationQualification
+contains no run, run_id, command, scenario or outcome; those belong to its
+containing acceptance/verification view. Exact conclusion/dependency references
+remain where they address a distinct qualified unit or relation; that is not a
+second copy of enclosing subject metadata. SupportQualification contains all
+non-CURRENT dependency findings, not a repeated full dependencies array. Full
+dependency sets remain accessible in exact audit retrieval. The qualified subject must match its containing exact subject/revision; compact
+projection cannot discard a mismatched internal identity to make it appear valid.
+Operational inability to qualify is SupportUnavailable, never a manufactured
+support verdict or time.
+
+For current Answer content, ConclusionView owns one ref and its
+`support: SupportQualification`; it does not nest a second copy of that ref.
+VerificationView owns the existing canonical `run: VerificationRun` once and
+`qualification: VerificationQualification | SupportUnavailable`. Thus both
+current answers and ordinary acceptances use the same compact qualification
+contracts without repeating a run body inside qualification. Detailed snapshot
+retrieval retains its full existing UnderstandingSupport and dependency carriers.
+
 Unavailable post-commit qualification/status preserves the accepted effect.
 
 The receipt selector retrieves the full immutable acceptance, digest, context
-binding and replay details. The snapshot selector with the exact accepted
+binding and replay details. For verification receipts,
+`RetrievedReceipt.verification_runs: tuple[VerificationRun, ...]` returns exactly
+the immutable runs named by receipt.accepted_verification_run_ids; it is empty
+for receipts with no accepted runs. Runs are read from their existing owner, not
+reconstructed from qualification. A missing referenced run is explicit unavailable
+history, never an empty successful detail response. This extends the existing
+receipt retrieval, not a new selector or store. The snapshot selector with the exact accepted
 understanding/version retrieves revisions/dependencies and their live
 qualification, with evaluation time. Neither historical retrieval becomes
 Answer content. Omission remains explicit and recoverable; compact output is not
@@ -467,10 +530,8 @@ When `since` is absent, the comparison is present source against each recorded
 observation's identity. That is the default and needs no caller input.
 Change-scope reconsider requires no caller request identity, but F4 requires its
 result to include a bounded re-establishment context. Span therefore issues a
-fresh live context for each changed-scope evaluation, bounded to the affected
-scope/evidence and returned as the canonical `InvestigationContextRef`. Its
-internal issuance identity is Span-owned, is not exposed as caller retry
-identity, and is not derived deterministically from the changed-scope payload.
+usable live context for each changed-scope evaluation, bounded to the affected
+scope/evidence and returned as the canonical `InvestigationContextRef`.
 Repeating the same changed paths is a new read and must return current change
 analysis with a usable live context even when a prior context has expired; this
 does not renew or lengthen that prior context. Re-establishment may use the
@@ -551,7 +612,7 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | --- | --- | --- |
 | Orient | `ask` | valid answer, surface status, or actionable gap |
 | Investigate | `ask` returns evidence; the agent reads | evidence bound and addressable |
-| Conclude | `record` | atomic version, receipt, live support, updated status |
+| Conclude | `record` | accepted subject, receipt selector, live qualification and applicable status |
 | Reuse | `ask(surface/reference)` or `ask(selector=RecordedQuestionSelector)` | valid, with status, or explicitly not; exact question selection is surface-scoped |
 | Edit | `reconsider(changed_scope)` | every surface to re-examine or repair, with its reason, differences, current evidence and bounded re-establishment context |
 | Re-establish | `record` against the returned version and, when applicable, returned context | supersession, history preserved |
@@ -597,7 +658,7 @@ consultation before deriving understanding.
           question="what governs it?",
           conclusion="opencode.json registers the local span server.",
           locator="opencode.json")
-   ← UnderstandingRecorded(version 1, receipt, support=CURRENT, status)
+   ← UnderstandingRecorded(version 1, receipt_selector, qualification=CURRENT, status)
 
 4. reconsider(changed_paths=["opencode.json"])
    ← Changed(affected=[path surface opencode.json,
@@ -606,7 +667,7 @@ consultation before deriving understanding.
 
 5. record(kind="understanding", understanding_id="u:…",
           expected_version=1, actions={correct:[…]})
-   ← UnderstandingRecorded(version 2, receipt, support=CURRENT, history preserved)
+   ← UnderstandingRecorded(version 2, receipt_selector, qualification=CURRENT, history preserved)
 ```
 
 Steps 1–3 are the agent's existing work plus the record calls. Steps 4–5 are its

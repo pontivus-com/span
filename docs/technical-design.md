@@ -582,31 +582,18 @@ public `Rejected` result and adds the request identity. The adapter must not
 parse the cause, call `re.search`, or choose an action from words such as
 “context”, “drift”, or “current”.
 
-**Gap recovery.** `Gap.recovery: str` is required and is produced by one
-`gap_recovery(reason)` helper. Each reason has a fixed next action, so no reason
-has a lawful empty recovery:
-
-- `invalidated` / `unverifiable` → re-read the cited evidence and record against
-  the current revision;
-- `unassessed` → use source pointers/host navigation, establish meaning and record
-  direct evidence; no unsolicited whole-file admission.
-
-The text is server-owned. Typed reference failures use Rejected; actual
-operational failures use Unavailable. No catch-all ValueError becomes a Gap and
-no absent context is described as reaped without evidence.
+**Gap recovery.** Keep one service-owned gap_recovery builder implementing
+FD-25/FD-41 and lifecycle §4.1. Typed lookup/operational failures reach the
+existing result mapper; exception text is not used as a classifier.
 
 **Closed result unions.** `TOOL_OUTPUT_SCHEMAS` projects FD-38;
 `test_result_union_declarations_agree` asserts the reference and the runtime
 union. There is no second declaration.
 
-**Surface-first reuse.** Replace the ordinary optional-question branch with pure
-surface obtain. Add `RecordedQuestionSelector{repository_id, surface, question}`
-and `CurrentUnderstandingSelector` to the existing selector union; do not add a
-public operation. The recorded-question selector uses exact equality only within
-the supplied surface. All current obtain forms use the one support/status
-composer. Retire the legacy free-text question branch and `no_match` path rather
-than retaining a compatibility parser. Pure obtain forms issue no contexts and
-need no request IDs.
+**Obtain implementation.** Extend the existing core/model selector union and
+schema projection for lifecycle §4.1. Membership selection stays in AnswerService;
+reuse its document/view composition and shared support/status evaluators. No
+additional resolver/index or stored document is introduced.
 
 **Delivered surface (F10).** The product surface tested for F10 is the MCP
 server plus the installer-managed pre-read notice in `docs/agents-snippet.md`.
@@ -623,51 +610,34 @@ membership, owner containment and CAS still consult their canonical state owners
 Do not use a root tagged union merely to evade hosts that cannot deliver the
 approved grammar; test the real packaged schema through each claimed host.
 
-**Bound context reference.** Use one canonical
-`InvestigationContextRef{repository_id, context_id}` at every public context
-position. T03 owns this and every other public carrier shape. Emit it from the
-persisted context; the typed bound-operation branch derives its route from it and
-forbids a parallel repository input. Direct branches carry repository_id and
-derive context internally. Adapt verification, challenge, explicit ask admission,
-`Changed`, record updates and their results to that one carrier. Internal
-context storage/identity and retention remain unchanged. No UUID search,
-shape-guessing adapter, new registry or data migration is selected. Typed lookup
-errors distinguish invalid references from unavailable stores; the adapter
-faithfully projects them.
+**Bound context implementation.** Put the lifecycle §4.1 reference carrier in
+core/model. Parse its canonical wire branch once, then route through the typed
+request's bound namespace in shell/mcp/wire and adapter. Migrate existing public
+context constructor/reader sites together; internal stored InvestigationContext,
+RecordingIdentity and receipt keys are retained. Existing store/port lookup
+errors supply typed failures for the mapper; no secondary context lookup exists.
 
-**Change-scope reconsider.** Keep the F4 re-establishment context but replace the
-present deterministic `_reconsider_context` request key. Source audit reproduced
-that content-derived key reusing an expired binding for identical changed paths
-after 25 hours with shipped retention. Use a Span-owned issuance path that creates
-a fresh normal retained context for each changed-scope evaluation, bounded to the
-affected scope/evidence, and return its `InvestigationContextRef` in `Changed`.
-The internal issuance key is not caller-visible and is not derived from the
-payload. A later identical reconsideration therefore gets a usable live context
-without renewing the old context, changing TTLs, searching stores, or requiring
-caller bookkeeping. Challenge remains a write with caller-owned identity.
+**Reconsider issuance implementation.** ReconsiderService._reconsider_context
+allocates a new internal request key through the existing UUID identity utility
+for each evaluation and delegates creation/recovery to service/contexts.issue_context.
+The changed-scope digest remains binding content, not the issuance key. Other
+caller-identified operations continue using their existing keys through the same
+issuance owner. This implements FD-2/FD-45; lifecycle §4.3 owns the public guarantee.
 
-**Public admission projection.** Add one canonical `EvidenceAdmissionView` in
-`core/model`, shared by `Answer.admission` and `Gap.admission`. Its exact
-fields are `context: InvestigationContextRef`,
-`outcomes: tuple[EvidenceAdmissionOutcome, ...]`,
-`observations: tuple[SourceObservation, ...]`, `continuation: str | None`,
-`omitted: tuple[str, ...]`, and `truncated: bool`. Reuse the existing
-`EvidenceRequest`, `EvidenceAdmissionOutcome`, `SourceObservation`,
-`SourceRange` and their validation. `EvidenceRequest` is the unadmitted
-source-pointer/selection carrier; `EvidenceRef` remains the observed/cited
-source identity. Do not retain parallel top-level Answer/Gap
-context/evidence/observation/continuation fields after this projection lands.
+**Admission implementation.** Implement lifecycle §4.1's single public admission
+projection in core/model and construct it through EvidenceService. Keep stored
+SourceObservation immutable; associate its ID with existing EvidenceUnit page
+fragments produced by the answer fitter/_slice_unit. Schema generation handles
+that canonical delivery carrier on both initial and continuation results. Do
+not introduce a second excerpt/range parser or reconstruct source identity in
+transport code.
 
-**Compact projection.** Keep durable `RecordReceipt` and exact snapshot owners.
-Implement lifecycle §4.2's compact public result carriers once in `core/model`;
-service composition uses the same support/status owners and the wire generator
-projects those carriers. `UnderstandingRecorded` and `VerificationRecorded`
-use exactly the fields fixed in lifecycle §4.2 and do not nest the full
-`RecordReceipt`. Where current qualification carriers would repeat the same
-accepted run/identity body, T03 changes that public projection once at the
-canonical carrier rather than trimming it in the adapter. Exact snapshot/receipt
-selectors supply audit detail without a new store. Keep all non-current findings
-and qualification timestamps observable.
+**Compact implementation.** Implement only lifecycle §4.2's public field sets
+and qualification projections in core/model. Service composition projects the
+existing support evaluator's results once; detailed support and durable receipt
+models are unchanged. Exact audit retrieval reads verification runs through the
+existing accepted-run IDs in the receipt and their store owner. The wire generator
+serializes those canonical results; the adapter does not rewrite JSON.
 
 **Context-bound create.** The service chooses `ContextBoundTarget` or
 `ExplicitTarget` once from the context origin (FD-30). The adapter does not
@@ -746,8 +716,8 @@ is inferred, and no version metadata is changed by this documentation amendment.
 
 The supported delivery boundary is one identified package candidate plus its
 managed projections and a refreshed host session. Source declarations or prior
-host captures alone do not certify it. T08 owns coherent packaging/upgrade and
-T09 owns captures for every claimed host. Unverified host versions are reported
+host captures alone do not certify it. Existing packaging/install owners deliver
+the managed assets; candidate-specific captures verify each claimed host. Unverified host versions are reported
 as unverified; no new compatibility parser, pinned old semantic writer or shape
 adapter may compensate. Failure to deliver this boundary blocks publication,
 not the structural contract correction.
@@ -801,13 +771,12 @@ transition solution. Exact DDL is verified with those fixtures before activation
 
 **Authority:** FD-5–FD-29, FD-54–FD-57.
 
-Resolve surface membership or the exact current understanding identity under
-lifecycle §4.1. Recorded questions group the view; they never select membership
-from a caller's string. Compose current output through the shared evaluator.
-Pure obtains perform no admission. Explicit evidence requests use the existing
-EvidenceRequest/SourceRange and admission outcomes; map each delivered excerpt to
-its observation and original ranges. Source pointers without byte identity remain
-pointers. Do not add structural navigation or duplicate the support evaluator.
+Implement lifecycle §4.1 membership selection in the existing AnswerService
+using canonical store surface/understanding membership and the exact-question
+predicate. Reuse _document/_view and the shared evaluator under FD-25/28.
+EvidenceService constructs the admission projection; the existing page fitter
+produces EvidenceUnit deliveries. Neither transport nor an added resolver
+constructs evidence identity or semantic relevance.
 
 The read composer returns historical `Gap` content through
 `HistoricalConclusion` and stale surface references through

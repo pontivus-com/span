@@ -205,7 +205,7 @@ REASSESSMENT_REQUIRED becomes `invalidated`, UNVERIFIABLE becomes
 `unverifiable`, and no retained usable understanding becomes `unassessed`.
 The ordinary free `question` lookup branch and its `no_match` production path
 are retired. `RecordedQuestionSelector` performs exact equality only within its
-supplied surface. No recorded membership for that exact question is
+supplied surface. An empty matched set for the exact question maps to
 `unassessed`; matched membership with lost support still follows the ordinary
 `invalidated`/`unverifiable` mapping. The selector does not reintroduce
 natural-language or similarity matching. Stored question metadata/history is not
@@ -367,10 +367,8 @@ its receipt if retained. No conversation replay is required. The canonical
 context reference binds repository and context identity at issuance.
 Context-bound routing derives from that reference with no separate override;
 lookup still validates actual liveness and membership. No cross-store search or
-context replacement is implicit. Change-scope reconsider receives a fresh
-Span-owned issuance identity on each evaluation, never a deterministic digest of
-the changed scope; the returned context follows normal retention and a later
-identical reconsideration must not be blocked by its expiry. *(A1, A2, F4, L7, L10)*
+context replacement is implicit. Change-scope issuance follows FD-2 and its contexts use the same retention
+owner. *(A1, A2, F4, L7, L10)*
 
 ## 10. Concurrency
 
