@@ -206,7 +206,7 @@ class LifecycleService:
             return m.EvidenceScope(paths=(wire.locator,))
         if (
             wire.surface is not None
-            and m.SurfaceKind(wire.surface.kind) is m.SurfaceKind.FILE
+            and wire.surface.kind is m.SurfaceKind.FILE
         ):
             return m.EvidenceScope(paths=(wire.surface.locator,))
         raise Rejection(
@@ -223,7 +223,7 @@ class LifecycleService:
         repository_id = wire.bound_repository_id
         if wire.surface is not None:
             surface = m.SurfaceKey(
-                repository_id, m.SurfaceKind(wire.surface.kind), wire.surface.locator
+                repository_id, wire.surface.kind, wire.surface.locator
             )
             self._require_surface_in_scope(surface, scope)
             return surface
