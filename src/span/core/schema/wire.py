@@ -74,6 +74,7 @@ _PUBLIC_SCHEMA_NAMES: dict[str, str] = {
     "span.core.schema.record_wire.RecordRequestWire": "RecordRequest",
 }
 
+
 def _type_key(cls: type) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
