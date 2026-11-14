@@ -117,7 +117,9 @@ class AnswerService:
                 )
             else:
                 if request.reference is None:
-                    raise RecordingValidationError("ask requires a surface or reference")
+                    raise RecordingValidationError(
+                        "ask requires a surface or reference"
+                    )
                 resolved = self._resolve(repository_id, request.reference)
                 if isinstance(resolved, m.AmbiguousSurface):
                     return self._fit(request, resolved)
@@ -182,7 +184,7 @@ class AnswerService:
                     conclusions=tuple(current),
                     gaps=tuple(gaps),
                     verification=self._verification(surface),
-                 ),
+                ),
             )
         combined = support_rules.combine_states(tuple(states))
         reason = (

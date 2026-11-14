@@ -279,7 +279,9 @@ class CurrentUnderstandingSelector:
     understanding_id: str
 
     def __post_init__(self) -> None:
-        _require_non_empty("CurrentUnderstandingSelector.repository_id", self.repository_id)
+        _require_non_empty(
+            "CurrentUnderstandingSelector.repository_id", self.repository_id
+        )
         _require_non_empty(
             "CurrentUnderstandingSelector.understanding_id", self.understanding_id
         )

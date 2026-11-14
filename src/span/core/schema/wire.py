@@ -19,14 +19,32 @@ _PUBLIC_TYPE_TAGS: tuple[tuple[str, str], ...] = (
     ("span.core.model.answers.SurfaceDeclared", "SurfaceDeclared"),
     ("span.core.model.outcomes.UnderstandingRecorded", "UnderstandingRecorded"),
     ("span.core.model.outcomes.VerificationRecorded", "VerificationRecorded"),
-    ("span.core.model.understanding.RecordedQuestionSelector", "RecordedQuestionSelector"),
-    ("span.core.model.understanding.CurrentUnderstandingSelector", "CurrentUnderstandingSelector"),
-    ("span.core.model.understanding.UnderstandingSnapshotSelector", "UnderstandingSnapshotSelector"),
-    ("span.core.model.understanding.ReceiptRetrievalSelector", "ReceiptRetrievalSelector"),
+    (
+        "span.core.model.understanding.RecordedQuestionSelector",
+        "RecordedQuestionSelector",
+    ),
+    (
+        "span.core.model.understanding.CurrentUnderstandingSelector",
+        "CurrentUnderstandingSelector",
+    ),
+    (
+        "span.core.model.understanding.UnderstandingSnapshotSelector",
+        "UnderstandingSnapshotSelector",
+    ),
+    (
+        "span.core.model.understanding.ReceiptRetrievalSelector",
+        "ReceiptRetrievalSelector",
+    ),
     ("span.core.model.understanding.SupportedConclusion", "SupportedConclusion"),
     ("span.core.model.understanding.WithdrawnConclusion", "WithdrawnConclusion"),
-    ("span.core.model.understanding.UnresolvedChallengeRecord", "UnresolvedChallengeRecord"),
-    ("span.core.model.understanding.ResolvedChallengeRecord", "ResolvedChallengeRecord"),
+    (
+        "span.core.model.understanding.UnresolvedChallengeRecord",
+        "UnresolvedChallengeRecord",
+    ),
+    (
+        "span.core.model.understanding.ResolvedChallengeRecord",
+        "ResolvedChallengeRecord",
+    ),
     ("span.core.model.support.SourceSupport", "SourceSupport"),
     ("span.core.model.support.AuthoritySupportDependency", "AuthoritySupport"),
     ("span.core.model.support.PremiseSupport", "PremiseSupport"),
@@ -35,7 +53,10 @@ _PUBLIC_TYPE_TAGS: tuple[tuple[str, str], ...] = (
     ("span.core.model.surfaces.SurfaceStatus", "SurfaceStatus"),
     ("span.core.model.surfaces.SurfaceStatusUnavailable", "SurfaceStatusUnavailable"),
     ("span.core.model.investigation.AdmittedEvidence", "AdmittedEvidence"),
-    ("span.core.model.investigation.AlreadyAdmittedEvidence", "AlreadyAdmittedEvidence"),
+    (
+        "span.core.model.investigation.AlreadyAdmittedEvidence",
+        "AlreadyAdmittedEvidence",
+    ),
     ("span.core.model.investigation.EvidenceSourceFailure", "EvidenceSourceFailure"),
     ("span.core.model.investigation.OmittedEvidence", "OmittedEvidence"),
     ("span.core.schema.record_wire.SourceSupportWire", "source"),
@@ -55,8 +76,14 @@ _PUBLIC_SCHEMA_NAMES: tuple[tuple[str, str], ...] = (
     ("span.core.schema.record_wire.AuthoritySupportWire", "AuthoritySupport"),
     ("span.core.schema.record_wire.PremiseSupportWire", "PremiseSupport"),
     ("span.core.schema.record_wire.DiscoveryScopeWire", "DiscoveryScope"),
-    ("span.core.schema.record_wire.DiscoveryBoundarySupportWire", "DiscoveryBoundarySupport"),
-    ("span.core.schema.record_wire.AdmittedDiscoverySupportWire", "AdmittedDiscoverySupport"),
+    (
+        "span.core.schema.record_wire.DiscoveryBoundarySupportWire",
+        "DiscoveryBoundarySupport",
+    ),
+    (
+        "span.core.schema.record_wire.AdmittedDiscoverySupportWire",
+        "AdmittedDiscoverySupport",
+    ),
     ("span.core.schema.record_wire.GapWire", "GapInput"),
     ("span.core.schema.record_wire.AddConclusionWire", "AddConclusion"),
     ("span.core.schema.record_wire.ConfirmConclusionWire", "ConfirmConclusion"),
@@ -164,8 +191,9 @@ def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) ->
         # A redundant tag that names the only candidate carrier is accepted:
         # it carries no ambiguity. A tag naming anything else is a mistake.
         faults.append(
-            f"unexpected $type at unambiguous position: {path or public_schema_name(cls)}; "
-            f"this position accepts {public_schema_name(cls)} without a $type"
+            "unexpected $type at unambiguous position: "
+            f"{path or public_schema_name(cls)}; this position accepts "
+            f"{public_schema_name(cls)} without a $type"
         )
     # The tagging pass is the first ingress pass, so it also reports the
     # field-shape faults the strict decoder would raise later; otherwise

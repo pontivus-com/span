@@ -172,7 +172,6 @@ class VerificationSupportRequest:
         _require_non_empty("VerificationSupportRequest.run_id", self.run_id)
 
 
-
 @_dataclass(frozen=True)
 class SupportQualification:
     """Compact public support evaluation for one already-identified subject."""

@@ -320,7 +320,9 @@ class ReconsiderRequest:
     def __post_init__(self) -> None:
         has_scope = bool(self.changed_paths or self.changed_surfaces)
         if self.challenge is not None and has_scope:
-            raise ValueError("reconsideration takes a changed scope or a challenge, not both")
+            raise ValueError(
+                "reconsideration takes a changed scope or a challenge, not both"
+            )
         if not has_scope and self.challenge is None:
             raise ValueError("reconsideration requires a changed scope or a challenge")
         if has_scope:

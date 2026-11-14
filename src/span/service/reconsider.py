@@ -207,7 +207,9 @@ class ReconsiderService:
             self._store,
             payload=request,
             repository_id=repository_id,
-            request_id=m.RequestId("reconsider:" + digest.value.split(":", 1)[1][:32]),
+            request_id=m.RequestId(
+                "reconsider:" + digest.value.split(":", 1)[1][:32]
+            ),
             scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
             question=None,
             clock=self._clock,
