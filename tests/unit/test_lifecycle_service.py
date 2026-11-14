@@ -1890,9 +1890,7 @@ class LifecycleServiceTest(unittest.TestCase):
             ),
         )
         result = self.service.record(wire)
-        self._assert_scopes(
-            result, m.EvidenceScope(paths=("src/a.py",)), "src/a.py"
-        )
+        self._assert_scopes(result, m.EvidenceScope(paths=("src/a.py",)), "src/a.py")
         receipt = _receipt(self.store, result)
         observations = self.store.list_context_evidence(
             receipt.identity.context_id.value
