@@ -794,11 +794,17 @@ class AnswerService:
             if _encoded_size(candidate) <= limit:
                 return candidate
             if groups:
-                group = groups.pop()
-                omitted.extend(_group_label(view) for view in group.conclusions)
-                references.extend(
-                    view.ref.understanding_id.value for view in group.conclusions
-                )
+                group = groups[-1]
+                dropped = group.conclusions[-1]
+                remaining = group.conclusions[:-1]
+                if remaining:
+                    groups[-1] = _dataclasses.replace(
+                        group, conclusions=remaining
+                    )
+                else:
+                    groups.pop()
+                omitted.append(_group_label(dropped))
+                references.append(dropped.ref.understanding_id.value)
                 continue
             dropped = conclusions.pop()
             omitted.append(dropped.ref.label)
@@ -808,12 +814,20 @@ class AnswerService:
         historical = list(gap.historical)
         omitted = list(gap.omitted)
         candidate = gap
+        recovery = gap.recovery
         while _encoded_size(candidate) > limit and historical:
             omitted.append(historical.pop().ref.label)
+            if "UnderstandingSnapshotSelector" not in recovery:
+                recovery += (
+                    "; retrieve omitted historical content with "
+                    "UnderstandingSnapshotSelector{repository_id, "
+                    "understanding_id, version}"
+                )
             candidate = _dataclasses.replace(
                 gap,
                 historical=tuple(historical),
                 omitted=tuple(omitted),
+                recovery=recovery,
                 truncated=True,
             )
         if _encoded_size(candidate) <= limit:
