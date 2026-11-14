@@ -444,6 +444,23 @@ class RecordRequestWire:
 
     __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
         _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("request_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="record request identity",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("repository_id"), True
+                ),
+            ),
+            label="record repository identity",
+        ),
+        _constraints.PresenceRule(
             fields=(
                 _constraints.PresenceField("repository_id"),
                 _constraints.PresenceField("context"),
@@ -473,6 +490,44 @@ class RecordRequestWire:
                 ),
             ),
             label="understanding create evidence mode",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("conclusion", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("conclusion"), True
+                ),
+            ),
+            label="understanding create conclusion",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("question", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("question"), True
+                ),
+            ),
+            label="record question",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("surface.boundary"),
+                _constraints.PresenceField("surface.parent"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("conclusion"), True
+                ),
+            ),
+            label="understanding create surface reference",
         ),
         _constraints.PresenceRule(
             fields=(
@@ -522,6 +577,28 @@ class RecordRequestWire:
                 ),
             ),
             label="understanding update coordinates",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("actions.add", non_empty=True),
+                _constraints.PresenceField("actions.confirm", non_empty=True),
+                _constraints.PresenceField("actions.correct", non_empty=True),
+                _constraints.PresenceField("actions.replace", non_empty=True),
+                _constraints.PresenceField("actions.withdraw", non_empty=True),
+                _constraints.PresenceField("gaps"),
+                _constraints.PresenceField(
+                    "challenge_dispositions", non_empty=True
+                ),
+            ),
+            minimum=1,
+            maximum=7,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("actions"), True
+                ),
+            ),
+            label="understanding update effect",
         ),
         _constraints.PresenceRule(
             fields=(
@@ -586,6 +663,54 @@ class RecordRequestWire:
             maximum=2,
             when=(_constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),),
             label="surface declaration fields",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("surface"),),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
+                _constraints.EqualsCondition(
+                    "surface.kind", _surfaces.SurfaceKind.FILE
+                ),
+            ),
+            label="path surfaces are derived, not declared",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("surface"),),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
+                _constraints.EqualsCondition(
+                    "surface.kind", _surfaces.SurfaceKind.SYMBOL
+                ),
+            ),
+            label="path surfaces are derived, not declared",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("surface.boundary"),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
+                _constraints.EqualsCondition(
+                    "surface.kind", _surfaces.SurfaceKind.SERVICE
+                ),
+            ),
+            label="service surface boundary",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("surface.boundary"),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
+                _constraints.EqualsCondition(
+                    "surface.kind", _surfaces.SurfaceKind.DOMAIN
+                ),
+            ),
+            label="domain surface boundary",
         ),
         _constraints.PresenceRule(
             fields=(
@@ -692,169 +817,6 @@ class RecordRequestWire:
 
     def __post_init__(self) -> None:
         _constraints.validate_structural_rules(self)
-        if not self.request_id:
-            raise ValueError("RecordRequestWire.request_id must be non-empty")
-        if self.repository_id is not None and not self.repository_id:
-            raise ValueError("RecordRequestWire.repository_id must be non-empty")
-        if self.kind is _c.RecordKind.UNDERSTANDING:
-            self._validate_understanding()
-        elif self.kind is _c.RecordKind.VERIFICATION:
-            self._validate_verification()
-        elif self.kind is _c.RecordKind.SURFACE:
-            self._validate_surface()
-
-    def _validate_understanding(self) -> None:
-        if self.run is not None or self.action is not None:
-            raise ValueError(
-                "an understanding record takes no run or action; a create is "
-                "flat (conclusion plus locator, observation_id, or support), an "
-                "update uses actions, and action belongs to kind=surface"
-            )
-        if self.expected_boundary_version is not None:
-            raise ValueError("an understanding record does not take a boundary version")
-        if self.actions is not None:
-            self._validate_update()
-            return
-        if self.conclusion is not None:
-            self._validate_create()
-            return
-        raise ValueError("an understanding record requires actions")
-
-    def _validate_create(self) -> None:
-        if not self.conclusion:
-            raise ValueError("an understanding create requires a conclusion")
-        if self.question is None and self.context_id is None:
-            raise ValueError(
-                "an understanding create requires a question, or a context "
-                "that already binds it"
-            )
-        if self.surface is not None and (
-            self.surface.boundary is not None or self.surface.parent is not None
-        ):
-            raise ValueError(
-                "an understanding record does not declare a boundary or parent"
-            )
-        if self.actions is not None and (
-            self.actions.add
-            or self.actions.confirm
-            or self.actions.correct
-            or self.actions.replace
-            or self.actions.withdraw
-        ):
-            raise ValueError("create cannot be combined with update actions")
-        if self.understanding_id is not None or self.expected_version is not None:
-            raise ValueError("create does not take understanding_id or version")
-        if self.challenge_dispositions:
-            raise ValueError("create does not take challenge dispositions")
-
-    def _validate_update(self) -> None:
-        actions = self.actions
-        assert actions is not None
-        forbidden = [
-            name
-            for name in ("conclusion", "locator", "observation_id")
-            if getattr(self, name) is not None
-        ]
-        if forbidden:
-            raise ValueError(
-                "an understanding update cannot contain top-level fields: "
-                + ", ".join(forbidden)
-                + "; put update content/evidence inside actions"
-            )
-        if self.question is not None:
-            raise ValueError("an understanding update does not take a question")
-        if self.surface is not None:
-            raise ValueError("an understanding update does not take a surface")
-        if self.scope_paths:
-            raise ValueError(
-                "an understanding update does not take root scope_paths; put a "
-                "scope override on the action"
-            )
-        if self.support:
-            raise ValueError(
-                "an understanding update does not take root support; put the "
-                "evidence on the action"
-            )
-        if self.assertion_nature is not None:
-            raise ValueError(
-                "an understanding update does not take root assertion_nature; put "
-                "a nature override on the action"
-            )
-        if self.understanding_id is None or self.expected_version is None:
-            raise ValueError(
-                "an understanding update requires understanding_id and "
-                "expected_version"
-            )
-        if not (
-            actions.add
-            or actions.confirm
-            or actions.correct
-            or actions.replace
-            or actions.withdraw
-            or self.challenge_dispositions
-            or self.gaps is not None
-        ):
-            raise ValueError("an understanding update must have an effect")
-
-    def _validate_verification(self) -> None:
-        if self.run is None:
-            raise ValueError("a verification record requires run")
-        if (
-            self.surface is not None
-            or self.actions is not None
-            or self.action is not None
-            or self.question is not None
-            or self.scope_paths
-            or self.understanding_id is not None
-            or self.expected_version is not None
-            or self.expected_boundary_version is not None
-            or self.gaps is not None
-            or self.challenge_dispositions
-            or self.conclusion is not None
-            or self.locator is not None
-            or self.observation_id is not None
-            or self.support
-            or self.assertion_nature is not None
-        ):
-            raise ValueError(
-                "a verification record takes only run, context_id, and provenance"
-            )
-
-    def _validate_surface(self) -> None:
-        if self.surface is None or self.action is None:
-            raise ValueError("a surface record requires surface and action")
-        declared = _surfaces.SurfaceKind(self.surface.kind).is_declared
-        if self.surface.boundary is None:
-            if declared:
-                raise ValueError("a service or domain surface requires a boundary")
-        elif not declared:
-            raise ValueError("a file or symbol surface rejects a boundary")
-        if (
-            self.context is not None
-            or self.actions is not None
-            or self.run is not None
-            or self.question is not None
-            or self.scope_paths
-            or self.understanding_id is not None
-            or self.expected_version is not None
-            or self.gaps is not None
-            or self.challenge_dispositions
-            or self.conclusion is not None
-            or self.locator is not None
-            or self.observation_id is not None
-            or self.support
-            or self.assertion_nature is not None
-        ):
-            raise ValueError(
-                "a surface record takes only surface, action, "
-                "expected_boundary_version, and provenance"
-            )
-        if self.action is _c.SurfaceAction.UPDATE:
-            if self.expected_boundary_version is None:
-                raise ValueError("a surface update requires expected_boundary_version")
-        elif self.expected_boundary_version is not None:
-            raise ValueError("a surface create does not take a boundary version")
-
 
 def wire_content_digest(value: object) -> ContentDigest:
     """Hash one submitted wire payload, excluding its recording identity.
