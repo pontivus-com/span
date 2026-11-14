@@ -126,11 +126,12 @@ class AnswerService:
                 surface = resolved
         self._store.require_repository(repository_id)
         all_understandings = tuple(self._store.list_understandings(repository_id))
-        understandings = (
-            (selected_understanding,)
-            if selected_understanding is not None
-            else tuple(item for item in all_understandings if item.surface == surface)
-        )
+        if selected_understanding is not None:
+            understandings: tuple[m.Understanding, ...] = (selected_understanding,)
+        else:
+            understandings = tuple(
+                item for item in all_understandings if item.surface == surface
+            )
         status = compose_surface_status(
             surface, store=self._store, support=self._support, evidence=self._evidence
         )
