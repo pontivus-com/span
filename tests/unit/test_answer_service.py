@@ -163,12 +163,11 @@ class AnswerServiceTest(unittest.TestCase):
         )
 
     def _ask(self, reference: str, question: str | None, request_id: str = "req-ask"):
+        del question, request_id
         return self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id=request_id,
                 reference=reference,
-                question=question,
             )
         )
 
@@ -623,25 +622,45 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Gap)
         self.assertEqual(result.reason, m.GapReason.UNASSESSED)
 
-    def test_question_without_match_is_no_match(self) -> None:
-        result = self._ask("src/a.py", "What else?")
+    def test_exact_question_without_membership_is_unassessed(self) -> None:
+        result = self.service.ask(
+            m.AskRequest(
+                selector=m.RecordedQuestionSelector(
+                    repository_id="repo-1",
+                    surface=m.SurfaceReference(
+                        kind=m.SurfaceKind.FILE,
+                        locator="src/a.py",
+                    ),
+                    question="What else?",
+                )
+            )
+        )
         self.assertIsInstance(result, m.Gap)
         assert isinstance(result, m.Gap)
-        self.assertEqual(result.reason, m.GapReason.NO_MATCH)
+        self.assertEqual(result.reason, m.GapReason.UNASSESSED)
+        self.assertEqual(result.missing, ("What else?",))
 
-    def test_no_match_gap_names_document_view(self) -> None:
-        result = self._ask("src/a.py", "Why does A exist?")
+    def test_exact_question_selector_does_not_paraphrase_match(self) -> None:
+        result = self.service.ask(
+            m.AskRequest(
+                selector=m.RecordedQuestionSelector(
+                    repository_id="repo-1",
+                    surface=m.SurfaceReference(
+                        kind=m.SurfaceKind.FILE,
+                        locator="src/a.py",
+                    ),
+                    question="Why does A exist?",
+                )
+            )
+        )
         self.assertIsInstance(result, m.Gap)
         assert isinstance(result, m.Gap)
-        self.assertEqual(result.reason, m.GapReason.NO_MATCH)
-        self.assertIn("without a question", result.recovery)
-        self.assertIn("document view", result.recovery)
+        self.assertEqual(result.reason, m.GapReason.UNASSESSED)
 
     def test_surface_document_view_is_reuse_path(self) -> None:
         result = self._ask("src/a.py", None)
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
-        self.assertEqual(result.question, "")
         self.assertEqual(
             [group.question for group in result.groups],
             ["What does A do?"],
@@ -798,9 +817,7 @@ class AnswerServiceTest(unittest.TestCase):
         result = self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-service",
                 surface=m.SurfaceReference(kind=m.SurfaceKind.SERVICE, locator="svc"),
-                question="What does S do?",
             )
         )
         assert isinstance(result, m.Answer)
@@ -818,9 +835,7 @@ class AnswerServiceTest(unittest.TestCase):
         service_result = self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-svc-ask",
                 surface=m.SurfaceReference(kind=m.SurfaceKind.SERVICE, locator="svc"),
-                question="What does S do?",
             )
         )
         assert isinstance(service_result, m.Answer)
@@ -828,9 +843,7 @@ class AnswerServiceTest(unittest.TestCase):
         file_result = self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-file-ask",
                 surface=m.SurfaceReference(kind=m.SurfaceKind.FILE, locator="src/a.py"),
-                question="What does A do?",
             )
         )
         assert isinstance(file_result, m.Answer)
@@ -869,11 +882,9 @@ class AnswerServiceTest(unittest.TestCase):
         result = self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-sym-ask",
                 surface=m.SurfaceReference(
                     kind=m.SurfaceKind.SYMBOL, locator="src/a.py::A"
                 ),
-                question="What is A?",
             )
         )
         assert isinstance(result, m.Answer)
@@ -888,9 +899,7 @@ class AnswerServiceTest(unittest.TestCase):
         result = self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-money-ask",
                 surface=m.SurfaceReference(kind=m.SurfaceKind.SYMBOL, locator="Money"),
-                question="What is Money?",
             )
         )
         assert isinstance(result, m.Answer)
@@ -952,9 +961,7 @@ class AnswerServiceTest(unittest.TestCase):
         result = self._service(3_000).ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-fit",
                 reference="src/b.py",
-                question="What does B do?",
             )
         )
         assert isinstance(result, m.Answer)
@@ -1004,6 +1011,7 @@ class AnswerServiceTest(unittest.TestCase):
         )
         gap = m.Gap(
             surface=status.surface,
+            status=status,
             reason=m.GapReason.INVALIDATED,
             recovery="re-read the cited evidence, then record against the current revision",
             historical=(historical,),
@@ -1036,6 +1044,7 @@ class AnswerServiceTest(unittest.TestCase):
         )
         gap = m.Gap(
             surface=surface,
+            status=m.SurfaceStatus(surface=surface),
             reason=m.GapReason.INVALIDATED,
             recovery="base recovery",
             historical=(historical,),
@@ -1050,9 +1059,7 @@ class AnswerServiceTest(unittest.TestCase):
         result = self._service(10).ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-tiny",
                 reference="src/a.py",
-                question="What does A do?",
             )
         )
         assert isinstance(result, m.Unavailable)
@@ -1063,7 +1070,6 @@ class AnswerServiceTest(unittest.TestCase):
         result = self._ask("src/a.py", None)
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
-        self.assertEqual(result.question, "")
         self.assertEqual(len(result.groups), 1)
         self.assertEqual(result.groups[0].question, "What does A do?")
 
@@ -1071,9 +1077,7 @@ class AnswerServiceTest(unittest.TestCase):
         result = self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-exact",
                 surface=m.SurfaceReference(kind=m.SurfaceKind.FILE, locator="src/a.py"),
-                question="What does A do?",
             )
         )
         self.assertIsInstance(result, m.Answer)
@@ -1102,13 +1106,10 @@ class AnswerServiceTest(unittest.TestCase):
         resolved = self.service.ask(
             m.AskRequest(
                 repository_id="repo-1",
-                request_id="req-copy",
                 surface=m.SurfaceReference(
                     kind=selected.kind,
                     locator=selected.locator,
-                    repository_id=selected.repository_id,
                 ),
-                question="What does A do?",
             )
         )
         self.assertIsInstance(resolved, m.Answer)
@@ -1137,24 +1138,23 @@ class AnswerServiceTest(unittest.TestCase):
             m.AskRequest(
                 repository_id="repo-1",
                 request_id="req-page",
+                evidence=(m.EvidenceRequest("src/big.py"),),
                 surface=m.SurfaceReference(
                     kind=m.SurfaceKind.FILE, locator="src/big.py"
                 ),
-                question="What is here?",
             )
         )
         self.assertIsInstance(first, m.Gap)
         assert isinstance(first, m.Gap)
-        self.assertTrue(first.continuation)
+        self.assertTrue(first.admission.continuation)
         page = service.ask(
             m.AskRequest(
-                repository_id="repo-1",
-                continuation=first.continuation,
+                continuation=first.admission.continuation,
             )
         )
         self.assertIsInstance(page, m.EvidencePage)
         assert isinstance(page, m.EvidencePage)
-        self.assertTrue(page.evidence)
+        self.assertTrue(page.deliveries)
 
     def test_continuation_page_fits_the_budget_with_its_omission(self) -> None:
         """A line-split page must budget the omission label it carries."""
@@ -1172,17 +1172,17 @@ class AnswerServiceTest(unittest.TestCase):
             m.AskRequest(
                 repository_id="repo-1",
                 request_id="req-css-post-edit",
+                evidence=(m.EvidenceRequest("styles/theme.css"),),
                 surface=m.SurfaceReference(
                     kind=m.SurfaceKind.FILE, locator="styles/theme.css"
                 ),
-                question="How is the theme applied?",
             )
         )
         self.assertIsInstance(gap, m.Gap)
         assert isinstance(gap, m.Gap)
-        self.assertTrue(gap.continuation)
+        self.assertTrue(gap.admission.continuation)
         page = self.service.ask(
-            m.AskRequest(repository_id="repo-1", continuation=gap.continuation)
+            m.AskRequest(continuation=gap.admission.continuation)
         )
         self.assertIsInstance(page, m.EvidencePage)
         assert isinstance(page, m.EvidencePage)
@@ -1195,7 +1195,6 @@ class AnswerServiceTest(unittest.TestCase):
     def test_snapshot_selector_returns_history_not_an_answer(self) -> None:
         result = self.service.ask(
             m.AskRequest(
-                repository_id="repo-1",
                 selector=m.UnderstandingSnapshotSelector(
                     repository_id="repo-1", understanding_id="u-a", version=1
                 ),
@@ -1207,7 +1206,6 @@ class AnswerServiceTest(unittest.TestCase):
     def test_receipt_selector_returns_history_not_an_answer(self) -> None:
         result = self.service.ask(
             m.AskRequest(
-                repository_id="repo-1",
                 selector=m.ReceiptRetrievalSelector(
                     repository_id="repo-1", request_id="req-u-a"
                 ),
@@ -1244,14 +1242,14 @@ class AnswerServiceTest(unittest.TestCase):
             m.AskRequest(
                 repository_id="repo-1",
                 request_id="req-page",
+                evidence=(m.EvidenceRequest("src/big.py"),),
                 surface=m.SurfaceReference(
                     kind=m.SurfaceKind.FILE, locator="src/big.py"
                 ),
-                question="What is here?",
             )
         )
         assert isinstance(first, m.Gap)
-        self.assertTrue(first.continuation)
+        self.assertTrue(first.admission.continuation)
         return first
 
     def test_binding_conflict_is_not_converted_to_a_semantic_gap(self) -> None:
@@ -1268,10 +1266,10 @@ class AnswerServiceTest(unittest.TestCase):
                     m.AskRequest(
                         repository_id="repo-1",
                         request_id="req-conflict",
+                        evidence=(m.EvidenceRequest("src/a.py"),),
                         surface=m.SurfaceReference(
                             kind=m.SurfaceKind.FILE, locator="src/a.py"
                         ),
-                        question="A different question",
                     )
                 )
 
@@ -1290,10 +1288,10 @@ class AnswerServiceTest(unittest.TestCase):
                     m.AskRequest(
                         repository_id="repo-1",
                         request_id="req-store-failure",
+                        evidence=(m.EvidenceRequest("src/a.py"),),
                         surface=m.SurfaceReference(
                             kind=m.SurfaceKind.FILE, locator="src/a.py"
                         ),
-                        question="A different question",
                     )
                 )
 
@@ -1301,10 +1299,10 @@ class AnswerServiceTest(unittest.TestCase):
         service = self._page_service()
         first = self._cold_page(service)
         page = service.ask(
-            m.AskRequest(repository_id="repo-1", continuation=first.continuation)
+            m.AskRequest(continuation=first.admission.continuation)
         )
         again = service.ask(
-            m.AskRequest(repository_id="repo-1", continuation=first.continuation)
+            m.AskRequest(continuation=first.admission.continuation)
         )
         self.assertIsInstance(page, m.EvidencePage)
         self.assertEqual(page, again)
@@ -1312,10 +1310,10 @@ class AnswerServiceTest(unittest.TestCase):
     def test_abandoned_context_rejects_the_continuation(self) -> None:
         service = self._page_service()
         first = self._cold_page(service)
-        assert first.context is not None
-        self.store.abandon_context(first.context.value)
+        assert first.admission.context is not None
+        self.store.abandon_context(first.admission.context.context_id.value)
         page = service.ask(
-            m.AskRequest(repository_id="repo-1", continuation=first.continuation)
+            m.AskRequest(continuation=first.admission.continuation)
         )
         self.assertIsInstance(page, m.Unavailable)
         assert isinstance(page, m.Unavailable)
@@ -1328,7 +1326,7 @@ class AnswerServiceTest(unittest.TestCase):
         first = self._cold_page(service)
         now[0] = NOW + datetime.timedelta(hours=2)
         page = service.ask(
-            m.AskRequest(repository_id="repo-1", continuation=first.continuation)
+            m.AskRequest(continuation=first.admission.continuation)
         )
         self.assertIsInstance(page, m.Unavailable)
 
@@ -1337,7 +1335,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = self._page_service()
         first = self._cold_page(service)
         page = service.ask(
-            m.AskRequest(repository_id="repo-2", continuation=first.continuation)
+            m.AskRequest(repository_id="repo-2", continuation=first.admission.continuation)
         )
         self.assertIsInstance(page, m.Unavailable)
 
@@ -1364,14 +1362,14 @@ class AnswerServiceTest(unittest.TestCase):
             m.AskRequest(
                 repository_id="repo-1",
                 request_id="req-huge",
+                evidence=(m.EvidenceRequest("src/huge.py"),),
                 surface=m.SurfaceReference(
                     kind=m.SurfaceKind.FILE, locator="src/huge.py"
                 ),
-                question="What is here?",
             )
         )
         assert isinstance(first, m.Gap)
         page = service.ask(
-            m.AskRequest(repository_id="repo-1", continuation=first.continuation)
+            m.AskRequest(continuation=first.admission.continuation)
         )
         self.assertIsInstance(page, m.Unavailable)
