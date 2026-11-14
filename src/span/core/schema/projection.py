@@ -8,6 +8,8 @@ import enum as _enum
 import types as _types
 import typing as _typing
 
+from span.core.schema.wire import public_schema_name, public_type_tag
+
 
 def _json_default(value: object) -> object:
     """Project one dataclass default into JSON-compatible data.
@@ -105,7 +107,7 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
                     member, "__dataclass_fields__"
                 ):
                     _ensure_def(member, defs, seen)
-                    refs.append({"$ref": (f"#/$defs/{member.__name__}__tag")})
+                    refs.append({"$ref": (f"#/$defs/{public_schema_name(member)}__tag")})
                 else:
                     refs.append(_project_hint(member, defs, seen))
             if len(refs) == 1:
@@ -196,7 +198,7 @@ def _project_field(
 
 
 def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
-    name = cls.__name__
+    name = public_schema_name(cls)
     if name in defs or name in seen:
         return
     seen.add(name)
@@ -224,7 +226,11 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
     }
     defs[name] = definition
     tagged_properties = dict(properties)
-    tagged_properties["$type"] = {"const": name}
+    try:
+        tag = public_type_tag(cls)
+    except TypeError:
+        return
+    tagged_properties["$type"] = {"const": tag}
     defs[f"{name}__tag"] = {
         "type": "object",
         "properties": tagged_properties,
@@ -314,7 +320,7 @@ def schema_for_request(
         schema["$defs"] = full_defs
     if not omit_type_tag:
         tagged = dict(properties)
-        tagged["$type"] = {"const": root_type.__name__}
+        tagged["$type"] = {"const": public_type_tag(root_type)}
         schema["properties"] = tagged
     return schema
 
@@ -329,7 +335,7 @@ def _project_result_hint(hint: object, defs: dict[str, dict]) -> dict:
         result: dict[str, object] = {"anyOf": branches}
     elif isinstance(inner, type) and hasattr(inner, "__dataclass_fields__"):
         _ensure_def(inner, defs, set())
-        result = {"$ref": f"#/$defs/{inner.__name__}__tag"}
+        result = {"$ref": f"#/$defs/{public_schema_name(inner)}__tag"}
     else:
         result = _project_hint(inner, defs, set())
     if nullable:

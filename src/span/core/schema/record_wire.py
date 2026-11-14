@@ -25,7 +25,10 @@ from span.core.model import primitives as _p
 from span.core.model import support as _s
 from span.core.model import surfaces as _surfaces
 from span.core.model import verification as _v
-from span.core.model.investigation import SourceRange as _SourceRange
+from span.core.model.investigation import (
+    InvestigationContextRef as _InvestigationContextRef,
+    SourceRange as _SourceRange,
+)
 from span.core.model.recording import ContentDigest
 from span.core.model.claims import AssertionNature
 from span.core.model.understanding import (
@@ -436,10 +439,10 @@ class RecordRequestWire:
     matching ``ask``; the internal recording identity is derived.
     """
 
-    repository_id: str
     request_id: str
     kind: _c.RecordKind
-    context_id: str | None = None
+    repository_id: str | None = None
+    context: _InvestigationContextRef | None = None
     surface: SurfaceWire | None = None
     question: str | None = None
     scope_paths: tuple[str, ...] = ()
@@ -476,19 +479,35 @@ class RecordRequestWire:
     provenance: str = ""
 
     @property
+    def bound_repository_id(self) -> str:
+        if self.context is not None:
+            return self.context.repository_id
+        if self.repository_id is None:
+            raise ValueError("a direct record request requires repository_id")
+        return self.repository_id
+
+    @property
+    def context_id(self) -> str | None:
+        return None if self.context is None else self.context.context_id.value
+
+    @property
     def identity(self) -> IdentityWire:
-        """The internal recording identity derived from the flat wire."""
         return IdentityWire(
-            repository_id=self.repository_id,
+            repository_id=self.bound_repository_id,
             request_id=self.request_id,
             context_id=self.context_id,
         )
 
     def __post_init__(self) -> None:
-        if not self.repository_id:
-            raise ValueError("RecordRequestWire.repository_id must be non-empty")
         if not self.request_id:
             raise ValueError("RecordRequestWire.request_id must be non-empty")
+        if self.context is not None:
+            if self.repository_id is not None:
+                raise ValueError("context-bound record carries no repository override")
+        elif self.repository_id is None:
+            raise ValueError("direct record requires repository_id")
+        elif not self.repository_id:
+            raise ValueError("RecordRequestWire.repository_id must be non-empty")
         if self.kind is _c.RecordKind.UNDERSTANDING:
             self._validate_understanding()
         elif self.kind is _c.RecordKind.VERIFICATION:
@@ -637,7 +656,7 @@ class RecordRequestWire:
         elif not declared:
             raise ValueError("a file or symbol surface rejects a boundary")
         if (
-            self.context_id is not None
+            self.context is not None
             or self.actions is not None
             or self.run is not None
             or self.question is not None
@@ -676,7 +695,7 @@ def wire_content_digest(value: object) -> ContentDigest:
     content = dict(canonical)
     content.pop("identity", None)
     if isinstance(value, RecordRequestWire):
-        for key in ("repository_id", "request_id", "context_id"):
+        for key in ("repository_id", "request_id", "context"):
             content.pop(key, None)
     return payload_digest(content)
 
@@ -1090,7 +1109,7 @@ def flat_conclusion(
         raise ValueError("a flat create requires support, locator, or observation_id")
     return _c.ProposedConclusion(
         conclusion_id=conclusion_identity(
-            value.repository_id, value.request_id, "create", 0
+            value.bound_repository_id, value.request_id, "create", 0
         ),
         statement=_typing.cast(str, value.conclusion),
         assertion_nature=value.assertion_nature or AssertionNature.DESCRIPTIVE,
@@ -1163,7 +1182,7 @@ def record_command(
                     item,
                     resolver,
                     conclusion_identity(
-                        value.repository_id, value.request_id, "add", position
+                        value.bound_repository_id, value.request_id, "add", position
                     ),
                 )
                 for position, item in enumerate(actions.add)
@@ -1182,7 +1201,7 @@ def record_command(
                     resolver,
                     current_revisions,
                     conclusion_identity(
-                        value.repository_id, value.request_id, "replace", position
+                        value.bound_repository_id, value.request_id, "replace", position
                     ),
                 )
                 for position, item in enumerate(actions.replace)

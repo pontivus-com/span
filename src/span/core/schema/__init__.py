@@ -9,6 +9,8 @@ from span.core.schema.projection import (  # noqa: F401
 )
 from span.core.schema.wire import (  # noqa: F401
     from_wire,
+    public_schema_name,
+    public_type_tag,
     to_wire,
     to_wire_root,
     compact_payload,
@@ -19,6 +21,8 @@ __all__ = [
     "schema_for_result",
     "definition_closure",
     "from_wire",
+    "public_schema_name",
+    "public_type_tag",
     "to_wire",
     "to_wire_root",
     "compact_payload",

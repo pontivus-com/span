@@ -7,6 +7,94 @@ import types as _types
 import typing as _typing
 
 
+_PUBLIC_TYPE_TAGS: tuple[tuple[str, str], ...] = (
+    ("span.core.model.answers.Answer", "Answer"),
+    ("span.core.model.answers.Gap", "Gap"),
+    ("span.core.model.answers.AmbiguousSurface", "AmbiguousSurface"),
+    ("span.core.model.answers.EvidencePage", "EvidencePage"),
+    ("span.core.model.answers.Rejected", "Rejected"),
+    ("span.core.model.answers.Unavailable", "Unavailable"),
+    ("span.core.model.answers.Changed", "Changed"),
+    ("span.core.model.answers.Challenged", "Challenged"),
+    ("span.core.model.answers.SurfaceDeclared", "SurfaceDeclared"),
+    ("span.core.model.outcomes.UnderstandingRecorded", "UnderstandingRecorded"),
+    ("span.core.model.outcomes.VerificationRecorded", "VerificationRecorded"),
+    ("span.core.model.understanding.RecordedQuestionSelector", "RecordedQuestionSelector"),
+    ("span.core.model.understanding.CurrentUnderstandingSelector", "CurrentUnderstandingSelector"),
+    ("span.core.model.understanding.UnderstandingSnapshotSelector", "UnderstandingSnapshotSelector"),
+    ("span.core.model.understanding.ReceiptRetrievalSelector", "ReceiptRetrievalSelector"),
+    ("span.core.model.understanding.SupportedConclusion", "SupportedConclusion"),
+    ("span.core.model.understanding.WithdrawnConclusion", "WithdrawnConclusion"),
+    ("span.core.model.understanding.UnresolvedChallengeRecord", "UnresolvedChallengeRecord"),
+    ("span.core.model.understanding.ResolvedChallengeRecord", "ResolvedChallengeRecord"),
+    ("span.core.model.support.SourceSupport", "SourceSupport"),
+    ("span.core.model.support.AuthoritySupportDependency", "AuthoritySupport"),
+    ("span.core.model.support.PremiseSupport", "PremiseSupport"),
+    ("span.core.model.support.DiscoverySupport", "DiscoverySupport"),
+    ("span.core.model.support.SupportUnavailable", "SupportUnavailable"),
+    ("span.core.model.surfaces.SurfaceStatus", "SurfaceStatus"),
+    ("span.core.model.surfaces.SurfaceStatusUnavailable", "SurfaceStatusUnavailable"),
+    ("span.core.model.investigation.AdmittedEvidence", "AdmittedEvidence"),
+    ("span.core.model.investigation.AlreadyAdmittedEvidence", "AlreadyAdmittedEvidence"),
+    ("span.core.model.investigation.EvidenceSourceFailure", "EvidenceSourceFailure"),
+    ("span.core.model.investigation.OmittedEvidence", "OmittedEvidence"),
+    ("span.core.schema.record_wire.SourceSupportWire", "source"),
+    ("span.core.schema.record_wire.AdmittedSourceSupportWire", "admitted_source"),
+    ("span.core.schema.record_wire.AuthoritySupportWire", "authority"),
+    ("span.core.schema.record_wire.PremiseSupportWire", "premise"),
+    ("span.core.schema.record_wire.DiscoveryBoundarySupportWire", "discovery"),
+    ("span.core.schema.record_wire.AdmittedDiscoverySupportWire", "admitted_discovery"),
+    ("span.core.schema.record_wire.UnresolvedDispositionWire", "unresolved"),
+    ("span.core.schema.record_wire.ResolvedDispositionWire", "resolved"),
+)
+
+_PUBLIC_SCHEMA_NAMES: tuple[tuple[str, str], ...] = (
+    ("span.core.schema.record_wire.RangeWire", "Range"),
+    ("span.core.schema.record_wire.SourceSupportWire", "SourceSupport"),
+    ("span.core.schema.record_wire.AdmittedSourceSupportWire", "AdmittedSourceSupport"),
+    ("span.core.schema.record_wire.AuthoritySupportWire", "AuthoritySupport"),
+    ("span.core.schema.record_wire.PremiseSupportWire", "PremiseSupport"),
+    ("span.core.schema.record_wire.DiscoveryScopeWire", "DiscoveryScope"),
+    ("span.core.schema.record_wire.DiscoveryBoundarySupportWire", "DiscoveryBoundarySupport"),
+    ("span.core.schema.record_wire.AdmittedDiscoverySupportWire", "AdmittedDiscoverySupport"),
+    ("span.core.schema.record_wire.GapWire", "GapInput"),
+    ("span.core.schema.record_wire.AddConclusionWire", "AddConclusion"),
+    ("span.core.schema.record_wire.ConfirmConclusionWire", "ConfirmConclusion"),
+    ("span.core.schema.record_wire.CorrectConclusionWire", "CorrectConclusion"),
+    ("span.core.schema.record_wire.ReplaceActionWire", "ReplaceConclusion"),
+    ("span.core.schema.record_wire.WithdrawActionWire", "WithdrawConclusion"),
+    ("span.core.schema.record_wire.ConclusionRefWire", "ConclusionRef"),
+    ("span.core.schema.record_wire.UnresolvedDispositionWire", "UnresolvedDisposition"),
+    ("span.core.schema.record_wire.ResolvedDispositionWire", "ResolvedDisposition"),
+    ("span.core.schema.record_wire.SurfaceKeyWire", "SurfaceKeyInput"),
+    ("span.core.schema.record_wire.SurfaceBoundaryWire", "SurfaceBoundaryInput"),
+    ("span.core.schema.record_wire.SurfaceWire", "SurfaceInput"),
+    ("span.core.schema.record_wire.VerificationRunWire", "VerificationRunInput"),
+    ("span.core.schema.record_wire.RecordActionsWire", "RecordActions"),
+    ("span.core.schema.record_wire.RecordRequestWire", "RecordRequest"),
+)
+
+
+def _type_key(cls: type) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def public_type_tag(cls: type) -> str:
+    key = _type_key(cls)
+    for candidate, tag in _PUBLIC_TYPE_TAGS:
+        if candidate == key:
+            return tag
+    raise TypeError("public union member has no declared protocol discriminator")
+
+
+def public_schema_name(cls: type) -> str:
+    key = _type_key(cls)
+    for candidate, name in _PUBLIC_SCHEMA_NAMES:
+        if candidate == key:
+            return name
+    return cls.__name__
+
+
 def from_wire(root: object, payload: dict) -> object:
     """Strict ingress for the compact agent-facing grammar (J-8/S6.2)."""
     from span.core import model as _m
@@ -29,13 +117,13 @@ def _inject(hint: object, value: object, path: str) -> object:
         non_none = [a for a in args if a is not type(None)]
         if len(dms) >= 2:
             if not isinstance(value, dict) or not isinstance(value.get("$type"), str):
-                accepted = ", ".join(member.__name__ for member in dms)
+                accepted = ", ".join(public_type_tag(member) for member in dms)
                 raise ValueError(
                     f"missing $type discriminator at {path or 'root'} "
                     f"(accepted: {accepted})"
                 )
             tag = value["$type"]
-            member = next((mm for mm in dms if mm.__name__ == tag), None)
+            member = next((mm for mm in dms if public_type_tag(mm) == tag), None)
             if member is None:
                 raise ValueError(f"unknown $type {tag!r} at {path or 'root'}")
             return _inject_dataclass(member, value, path, keep_tag=True)
@@ -72,12 +160,12 @@ def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) ->
     fields = {field.name: field for field in _dataclasses.fields(cls)}
     at = f"{path}: " if path else ""
     faults: list[str] = []
-    if "$type" in value and not keep_tag and value["$type"] != cls.__name__:
+    if "$type" in value and not keep_tag and value["$type"] != public_type_tag(cls):
         # A redundant tag that names the only candidate carrier is accepted:
         # it carries no ambiguity. A tag naming anything else is a mistake.
         faults.append(
-            f"unexpected $type at unambiguous position: {path or cls.__name__}; "
-            f"this position accepts {cls.__name__} without a $type"
+            f"unexpected $type at unambiguous position: {path or public_schema_name(cls)}; "
+            f"this position accepts {public_schema_name(cls)} without a $type"
         )
     # The tagging pass is the first ingress pass, so it also reports the
     # field-shape faults the strict decoder would raise later; otherwise
@@ -149,7 +237,7 @@ def _compact_dataclass(cls: type, value: object, *, keep_tag: bool) -> object:
     for key, v in value.items():
         if key == "$type":
             if keep_tag:
-                out[key] = v
+                out[key] = public_type_tag(cls)
             continue
         out[key] = to_wire(v, hints.get(key))
     return out
