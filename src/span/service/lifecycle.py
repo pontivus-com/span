@@ -506,8 +506,10 @@ class LifecycleService:
             qualification: m.UnderstandingSupport | m.SupportUnavailable = (
                 self._support.evaluate_version(understanding_id, version)
             )
-        except operational_errors as exc:
-            qualification = m.SupportUnavailable(f"{type(exc).__name__}: {exc}")
+        except operational_errors:
+            qualification = m.SupportUnavailable(
+                "understanding support evaluation is unavailable"
+            )
         owner: m.SurfaceKey | None = None
         try:
             owner = self._store.get_understanding(understanding_id).surface
@@ -519,9 +521,9 @@ class LifecycleService:
                     evidence=self._evidence,
                 )
             )
-        except operational_errors as exc:
+        except operational_errors:
             status = m.SurfaceStatusUnavailable(
-                reason=f"{type(exc).__name__}: {exc}", surface=owner
+                reason="surface status evaluation is unavailable", surface=owner
             )
         snapshot = self._store.get_version(understanding_id, version)
         compact_qualification = (
@@ -554,8 +556,10 @@ class LifecycleService:
             qualification: m.VerificationSupport | m.SupportUnavailable = (
                 self._support.evaluate_verification(run_id)
             )
-        except operational_errors as exc:
-            qualification = m.SupportUnavailable(f"{type(exc).__name__}: {exc}")
+        except operational_errors:
+            qualification = m.SupportUnavailable(
+                "verification support evaluation is unavailable"
+            )
         run = self._store.get_verification_run(run_id)
         compact_qualification = (
             m.compact_verification(qualification)
