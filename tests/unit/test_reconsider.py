@@ -363,7 +363,6 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         result = self.service.reconsider(
             m.ReconsiderRequest(
-                repository_id="repo-1",
                 challenge=m.ChallengeRaise(
                     request_id="req-challenge",
                     context=m.InvestigationContextRef(

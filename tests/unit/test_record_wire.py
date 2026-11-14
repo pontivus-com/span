@@ -148,9 +148,8 @@ def _update_request(
     expected_version: int = 1,
 ) -> w.RecordRequestWire:
     return w.RecordRequestWire(
-        repository_id="repo-1",
         request_id=request_id,
-        context_id="ctx-1",
+        context=_context_ref(),
         kind=m.RecordKind.UNDERSTANDING,
         understanding_id=understanding_id,
         expected_version=expected_version,

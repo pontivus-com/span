@@ -64,9 +64,7 @@ def _ask(adapter: McpAdapter):
         "ask",
         {
             "repository_id": REPO,
-            "request_id": "req-startup",
             "reference": "README.md",
-            "question": "What does the service do?",
         },
     )
 

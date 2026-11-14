@@ -68,9 +68,11 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
         )
     )
     wire = rw.RecordRequestWire(
-        repository_id=REPO,
         request_id="hook-create",
-        context_id=admitted.context.context_id.value,
+        context=m.InvestigationContextRef(
+            repository_id=REPO,
+            context_id=admitted.context.context_id,
+        ),
         kind=m.RecordKind.UNDERSTANDING,
         surface=rw.SurfaceWire(kind="FILE", locator="src/app.py"),
         question="What does the app do?",
