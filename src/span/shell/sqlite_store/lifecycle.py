@@ -1055,10 +1055,7 @@ class LifecycleStore:
             (context_id,),
         ).fetchone()
         if row is None:
-            raise RecordingValidationError(
-                "the investigation context reference is unavailable",
-                cause_kind=RejectionCauseKind.CONTEXT_REQUIRED,
-            )
+            raise RecordingValidationError.context_required("context unavailable")
         return _context_from_json(row["canonical_json"])
 
     def find_context_by_id(self, context_id: str) -> m.InvestigationContext | None:
