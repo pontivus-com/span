@@ -96,6 +96,11 @@ class RecordingValidationError(Rejection):
     ) -> None:
         super().__init__(cause, cause_kind=cause_kind)
 
+    @classmethod
+    def context_required(cls, cause: str) -> RecordingValidationError:
+        """Construct the canonical missing-context validation failure."""
+        return cls(cause, cause_kind=RejectionCauseKind.CONTEXT_REQUIRED)
+
 
 @_dataclass(frozen=True)
 class ChallengeEffect:
