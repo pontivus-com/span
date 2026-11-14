@@ -78,9 +78,7 @@ class ReconsiderService:
                 )
                 for ref in self._store.support_dependents("SOURCE", observation)
             ]
-            for discovery in self._store.list_discovery_observations(
-                repository_id
-            ):
+            for discovery in self._store.list_discovery_observations(repository_id):
                 if m.evidence_scope_contains(
                     discovery.scope, m.EvidenceScope(paths=(path,))
                 ):

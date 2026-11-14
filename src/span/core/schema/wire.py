@@ -64,7 +64,10 @@ _PUBLIC_TYPE_TAGS: tuple[tuple[str, str], ...] = (
     ("span.core.schema.record_wire.AuthoritySupportWire", "authority"),
     ("span.core.schema.record_wire.PremiseSupportWire", "premise"),
     ("span.core.schema.record_wire.DiscoveryBoundarySupportWire", "discovery"),
-    ("span.core.schema.record_wire.AdmittedDiscoverySupportWire", "admitted_discovery"),
+    (
+        "span.core.schema.record_wire.AdmittedDiscoverySupportWire",
+        "admitted_discovery",
+    ),
     ("span.core.schema.record_wire.UnresolvedDispositionWire", "unresolved"),
     ("span.core.schema.record_wire.ResolvedDispositionWire", "resolved"),
 )
@@ -72,7 +75,10 @@ _PUBLIC_TYPE_TAGS: tuple[tuple[str, str], ...] = (
 _PUBLIC_SCHEMA_NAMES: tuple[tuple[str, str], ...] = (
     ("span.core.schema.record_wire.RangeWire", "Range"),
     ("span.core.schema.record_wire.SourceSupportWire", "SourceSupport"),
-    ("span.core.schema.record_wire.AdmittedSourceSupportWire", "AdmittedSourceSupport"),
+    (
+        "span.core.schema.record_wire.AdmittedSourceSupportWire",
+        "AdmittedSourceSupport",
+    ),
     ("span.core.schema.record_wire.AuthoritySupportWire", "AuthoritySupport"),
     ("span.core.schema.record_wire.PremiseSupportWire", "PremiseSupport"),
     ("span.core.schema.record_wire.DiscoveryScopeWire", "DiscoveryScope"),
@@ -91,7 +97,10 @@ _PUBLIC_SCHEMA_NAMES: tuple[tuple[str, str], ...] = (
     ("span.core.schema.record_wire.ReplaceActionWire", "ReplaceConclusion"),
     ("span.core.schema.record_wire.WithdrawActionWire", "WithdrawConclusion"),
     ("span.core.schema.record_wire.ConclusionRefWire", "ConclusionRef"),
-    ("span.core.schema.record_wire.UnresolvedDispositionWire", "UnresolvedDisposition"),
+    (
+        "span.core.schema.record_wire.UnresolvedDispositionWire",
+        "UnresolvedDisposition",
+    ),
     ("span.core.schema.record_wire.ResolvedDispositionWire", "ResolvedDisposition"),
     ("span.core.schema.record_wire.SurfaceKeyWire", "SurfaceKeyInput"),
     ("span.core.schema.record_wire.SurfaceBoundaryWire", "SurfaceBoundaryInput"),
