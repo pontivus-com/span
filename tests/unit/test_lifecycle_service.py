@@ -810,9 +810,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         result = self.service.record(wire)
         assert isinstance(result, m.VerificationRecorded)
-        run = self.store.get_verification_run(
-            result.run_id.value
-        )
+        run = self.store.get_verification_run(result.run_id.value)
         self.assertTrue(run.observations)
 
     def test_record_verification_accepts_evidence_only(self) -> None:
