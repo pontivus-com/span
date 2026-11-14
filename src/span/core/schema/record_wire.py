@@ -19,6 +19,7 @@ import typing as _typing
 from dataclasses import dataclass as _dataclass, field as _field
 
 from span.core.identity import conclusion_identity, payload_digest
+from span.core.schema import constraints as _constraints
 from span.core.model.canonical import to_canonical
 from span.core.model import commands as _c
 from span.core.model import primitives as _p
@@ -148,16 +149,6 @@ class GapWire:
     basis: str
 
 
-def _evidence_mode_count(
-    locator: str | None,
-    observation_id: str | None,
-    support: tuple[SupportWire, ...],
-) -> int:
-    return (
-        int(locator is not None) + int(observation_id is not None) + int(bool(support))
-    )
-
-
 def _require_action_field(action: str, field: str, value: str) -> None:
     if not value:
         raise ValueError(f"record.actions.{action} requires a non-empty {field!r}")
@@ -170,30 +161,29 @@ def _validate_optional_identifier(action: str, field: str, value: str | None) ->
         )
 
 
-def _require_evidence(
-    action: str,
-    locator: str | None,
-    observation_id: str | None,
-    support: tuple[SupportWire, ...],
-    *,
-    required: bool,
-) -> None:
-    modes = _evidence_mode_count(locator, observation_id, support)
-    if modes > 1:
-        raise ValueError(
-            f"record.actions.{action} takes exactly one evidence mode: "
-            "locator, observation_id, or support; it received more than one"
-        )
-    if required and modes == 0:
-        raise ValueError(
-            f"record.actions.{action} requires exactly one evidence mode: "
-            "locator, observation_id, or non-empty support"
-        )
+_EVIDENCE_FIELDS = (
+    _constraints.PresenceField("locator"),
+    _constraints.PresenceField("observation_id"),
+    _constraints.PresenceField("support", non_empty=True),
+)
+
+
+def _evidence_rule(action: str, *, required: bool) -> _constraints.PresenceRule:
+    return _constraints.PresenceRule(
+        fields=_EVIDENCE_FIELDS,
+        minimum=1 if required else 0,
+        maximum=1,
+        label=f"record.actions.{action} evidence mode",
+    )
 
 
 @_dataclass(frozen=True)
 class AddConclusionWire:
     """One compact add action: statement plus the evidence already held."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _evidence_rule("add", required=True),
+    )
 
     conclusion: str
     assertion_nature: AssertionNature = AssertionNature.DESCRIPTIVE
@@ -206,14 +196,16 @@ class AddConclusionWire:
         _require_action_field("add", "conclusion", self.conclusion)
         _validate_optional_identifier("add", "locator", self.locator)
         _validate_optional_identifier("add", "observation_id", self.observation_id)
-        _require_evidence(
-            "add", self.locator, self.observation_id, self.support, required=True
-        )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
 class ConfirmConclusionWire:
     """One compact confirm action: Span preserves the current content."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _evidence_rule("confirm", required=True),
+    )
 
     conclusion_id: str
     locator: str | None = None
@@ -224,14 +216,16 @@ class ConfirmConclusionWire:
         _require_action_field("confirm", "conclusion_id", self.conclusion_id)
         _validate_optional_identifier("confirm", "locator", self.locator)
         _validate_optional_identifier("confirm", "observation_id", self.observation_id)
-        _require_evidence(
-            "confirm", self.locator, self.observation_id, self.support, required=True
-        )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
 class CorrectConclusionWire:
     """One compact correct action; omitted nature and scope are preserved."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _evidence_rule("correct", required=True),
+    )
 
     conclusion_id: str
     conclusion: str
@@ -246,14 +240,16 @@ class CorrectConclusionWire:
         _require_action_field("correct", "conclusion", self.conclusion)
         _validate_optional_identifier("correct", "locator", self.locator)
         _validate_optional_identifier("correct", "observation_id", self.observation_id)
-        _require_evidence(
-            "correct", self.locator, self.observation_id, self.support, required=True
-        )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
 class ReplaceActionWire:
     """One flat replace action; Span derives the old revision identity."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _evidence_rule("replace", required=True),
+    )
 
     conclusion_id: str
     conclusion: str
@@ -270,14 +266,16 @@ class ReplaceActionWire:
         _require_action_field("replace", "reason", self.reason)
         _validate_optional_identifier("replace", "locator", self.locator)
         _validate_optional_identifier("replace", "observation_id", self.observation_id)
-        _require_evidence(
-            "replace", self.locator, self.observation_id, self.support, required=True
-        )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
 class WithdrawActionWire:
     """One compact withdrawal; the reason is the semantic basis."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _evidence_rule("withdraw", required=False),
+    )
 
     conclusion_id: str
     reason: str
@@ -290,9 +288,7 @@ class WithdrawActionWire:
         _require_action_field("withdraw", "reason", self.reason)
         _validate_optional_identifier("withdraw", "locator", self.locator)
         _validate_optional_identifier("withdraw", "observation_id", self.observation_id)
-        _require_evidence(
-            "withdraw", self.locator, self.observation_id, self.support, required=False
-        )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -393,6 +389,18 @@ class SurfaceWire:
 
 @_dataclass(frozen=True)
 class VerificationRunWire:
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("observations", non_empty=True),
+                _constraints.PresenceField("evidence", non_empty=True),
+            ),
+            minimum=1,
+            maximum=2,
+            label="verification observations/evidence",
+        ),
+    )
+
     repository_id: str
     scope_description: str
     scope_paths: tuple[str, ...]
@@ -407,12 +415,7 @@ class VerificationRunWire:
     provenance: str = ""
 
     def __post_init__(self) -> None:
-        if not self.observations and not self.evidence:
-            raise ValueError(
-                "a verification run requires observations or evidence; supply "
-                "the obs: ids ask returned for the context, or run.evidence "
-                "with a locator"
-            )
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -438,6 +441,171 @@ class RecordRequestWire:
     ``__post_init__``. Repository and request identity are flat on the wire,
     matching ``ask``; the internal recording identity is derived.
     """
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("repository_id"),
+                _constraints.PresenceField("context"),
+            ),
+            minimum=1,
+            maximum=1,
+            label="record repository/context binding",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("conclusion"),
+                _constraints.PresenceField("actions"),
+            ),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+            ),
+            label="understanding create/update selection",
+        ),
+        _constraints.PresenceRule(
+            fields=_EVIDENCE_FIELDS,
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("conclusion"), True
+                ),
+            ),
+            label="understanding create evidence mode",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("understanding_id"),
+                _constraints.PresenceField("expected_version"),
+            ),
+            minimum=2,
+            maximum=2,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("actions"), True
+                ),
+            ),
+            label="understanding update coordinates",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("surface"),
+                _constraints.PresenceField("question"),
+                _constraints.PresenceField("scope_paths", non_empty=True),
+                _constraints.PresenceField("conclusion"),
+                _constraints.PresenceField("locator"),
+                _constraints.PresenceField("observation_id"),
+                _constraints.PresenceField("support", non_empty=True),
+                _constraints.PresenceField("assertion_nature"),
+                _constraints.PresenceField("run"),
+                _constraints.PresenceField("action"),
+                _constraints.PresenceField("expected_boundary_version"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("actions"), True
+                ),
+            ),
+            label="understanding update root-only fields",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("run"),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.VERIFICATION),
+            ),
+            label="verification run",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("surface"),
+                _constraints.PresenceField("actions"),
+                _constraints.PresenceField("action"),
+                _constraints.PresenceField("question"),
+                _constraints.PresenceField("scope_paths", non_empty=True),
+                _constraints.PresenceField("understanding_id"),
+                _constraints.PresenceField("expected_version"),
+                _constraints.PresenceField("expected_boundary_version"),
+                _constraints.PresenceField("gaps"),
+                _constraints.PresenceField(
+                    "challenge_dispositions", non_empty=True
+                ),
+                _constraints.PresenceField("conclusion"),
+                _constraints.PresenceField("locator"),
+                _constraints.PresenceField("observation_id"),
+                _constraints.PresenceField("support", non_empty=True),
+                _constraints.PresenceField("assertion_nature"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.VERIFICATION),
+            ),
+            label="verification root-only fields",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("surface"),
+                _constraints.PresenceField("action"),
+            ),
+            minimum=2,
+            maximum=2,
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),),
+            label="surface declaration fields",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("context"),
+                _constraints.PresenceField("actions"),
+                _constraints.PresenceField("run"),
+                _constraints.PresenceField("question"),
+                _constraints.PresenceField("scope_paths", non_empty=True),
+                _constraints.PresenceField("understanding_id"),
+                _constraints.PresenceField("expected_version"),
+                _constraints.PresenceField("gaps"),
+                _constraints.PresenceField(
+                    "challenge_dispositions", non_empty=True
+                ),
+                _constraints.PresenceField("conclusion"),
+                _constraints.PresenceField("locator"),
+                _constraints.PresenceField("observation_id"),
+                _constraints.PresenceField("support", non_empty=True),
+                _constraints.PresenceField("assertion_nature"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),),
+            label="surface declaration unrelated fields",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("expected_boundary_version"),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
+                _constraints.EqualsCondition("action", _c.SurfaceAction.UPDATE),
+            ),
+            label="surface update boundary version",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("expected_boundary_version"),),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
+                _constraints.EqualsCondition("action", _c.SurfaceAction.CREATE),
+            ),
+            label="surface create boundary version",
+        ),
+    )
 
     request_id: str
     kind: _c.RecordKind
@@ -499,14 +667,10 @@ class RecordRequestWire:
         )
 
     def __post_init__(self) -> None:
+        _constraints.validate_structural_rules(self)
         if not self.request_id:
             raise ValueError("RecordRequestWire.request_id must be non-empty")
-        if self.context is not None:
-            if self.repository_id is not None:
-                raise ValueError("context-bound record carries no repository override")
-        elif self.repository_id is None:
-            raise ValueError("direct record requires repository_id")
-        elif not self.repository_id:
+        if self.repository_id is not None and not self.repository_id:
             raise ValueError("RecordRequestWire.repository_id must be non-empty")
         if self.kind is _c.RecordKind.UNDERSTANDING:
             self._validate_understanding()
@@ -535,20 +699,6 @@ class RecordRequestWire:
     def _validate_create(self) -> None:
         if not self.conclusion:
             raise ValueError("an understanding create requires a conclusion")
-        if not self.support and self.locator is None and self.observation_id is None:
-            raise ValueError(
-                "an understanding create requires support, locator, or observation_id"
-            )
-        if self.locator is not None and self.observation_id is not None:
-            raise ValueError(
-                "an understanding create takes locator or observation_id, not both"
-            )
-        if self.support and self.observation_id is not None:
-            raise ValueError(
-                "an understanding create takes support or observation_id, not both; "
-                "supply observation_id inside support when citing an admitted "
-                "observation"
-            )
         if self.question is None and self.context_id is None:
             raise ValueError(
                 "an understanding create requires a question, or a context "

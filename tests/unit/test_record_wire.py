@@ -715,7 +715,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             ("scope_paths", ["src/a.py"]),
             ("locator", "src/a.py"),
             ("observation_id", "obs-1"),
-            ("support", [{"$type": "SourceSupportWire", "locator": "src/a.py"}]),
+            ("support", [{"$type": "source", "locator": "src/a.py"}]),
             ("assertion_nature", "DESCRIPTIVE"),
             ("conclusion", "X."),
         ):
@@ -736,7 +736,7 @@ class RecordWireMalformedTest(unittest.TestCase):
                 "challenge_dispositions",
                 [
                     {
-                        "$type": "UnresolvedDispositionWire",
+                        "$type": "unresolved",
                         "challenge_id": "ch-1",
                         "expected_challenge_revision": 1,
                         "remaining_question": "What?",
@@ -747,7 +747,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             ("conclusion", "X."),
             ("locator", "src/a.py"),
             ("observation_id", "obs-1"),
-            ("support", [{"$type": "SourceSupportWire", "locator": "src/a.py"}]),
+            ("support", [{"$type": "source", "locator": "src/a.py"}]),
             ("assertion_nature", "DESCRIPTIVE"),
         ):
             with self.subTest(field=field):
@@ -781,7 +781,7 @@ class RecordWireMalformedTest(unittest.TestCase):
                 "challenge_dispositions",
                 [
                     {
-                        "$type": "UnresolvedDispositionWire",
+                        "$type": "unresolved",
                         "challenge_id": "ch-1",
                         "expected_challenge_revision": 1,
                         "remaining_question": "What?",
@@ -792,21 +792,21 @@ class RecordWireMalformedTest(unittest.TestCase):
             ("conclusion", "X."),
             ("locator", "src/a.py"),
             ("observation_id", "obs-1"),
-            ("support", [{"$type": "SourceSupportWire", "locator": "src/a.py"}]),
+            ("support", [{"$type": "source", "locator": "src/a.py"}]),
             ("assertion_nature", "DESCRIPTIVE"),
         ):
             with self.subTest(field=field):
                 with self.assertRaises(ValueError):
                     from_wire(w.RecordRequestWire, self._surface(**{field: value}))
 
-    def test_create_accepts_support_and_locator(self):
-        request = from_wire(
-            w.RecordRequestWire,
-            self._create(
-                support=[{"$type": "SourceSupportWire", "locator": "src/b.py"}]
-            ),
-        )
-        self.assertIsInstance(request, w.RecordRequestWire)
+    def test_create_rejects_support_and_locator(self):
+        with self.assertRaisesRegex(ValueError, "evidence mode"):
+            from_wire(
+                w.RecordRequestWire,
+                self._create(
+                    support=[{"$type": "source", "locator": "src/b.py"}]
+                ),
+            )
 
     def test_create_accepts_support_only_with_explicit_scope(self):
         request = from_wire(
@@ -815,28 +815,28 @@ class RecordWireMalformedTest(unittest.TestCase):
                 locator=None,
                 scope_paths=["src/a.py", "src/b.py"],
                 support=[
-                    {"$type": "SourceSupportWire", "locator": "src/a.py"},
-                    {"$type": "SourceSupportWire", "locator": "src/b.py"},
+                    {"$type": "source", "locator": "src/a.py"},
+                    {"$type": "source", "locator": "src/b.py"},
                 ],
             ),
         )
         self.assertIsInstance(request, w.RecordRequestWire)
 
     def test_create_rejects_locator_and_observation(self):
-        with self.assertRaisesRegex(ValueError, "not both"):
+        with self.assertRaisesRegex(ValueError, "evidence mode"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(observation_id="obs-1"),
             )
 
     def test_create_rejects_support_and_observation(self):
-        with self.assertRaisesRegex(ValueError, "support or observation_id"):
+        with self.assertRaisesRegex(ValueError, "evidence mode"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(
                     locator=None,
                     observation_id="obs-1",
-                    support=[{"$type": "SourceSupportWire", "locator": "src/a.py"}],
+                    support=[{"$type": "source", "locator": "src/a.py"}],
                 ),
             )
 

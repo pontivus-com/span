@@ -8,6 +8,7 @@ import enum as _enum
 import types as _types
 import typing as _typing
 
+from span.core.schema.constraints import structural_schema_constraints
 from span.core.schema.wire import public_schema_name, public_type_tag
 
 
@@ -224,6 +225,9 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
         "required": sorted(required),
         "additionalProperties": False,
     }
+    constraints = structural_schema_constraints(cls)
+    if constraints:
+        definition["allOf"] = constraints
     defs[name] = definition
     tagged_properties = dict(properties)
     try:
@@ -315,6 +319,9 @@ def schema_for_request(
         "required": sorted(required),
         "additionalProperties": False,
     }
+    constraints = structural_schema_constraints(root_type)
+    if constraints:
+        schema["allOf"] = constraints
     full_defs = _prune_defs(schema, full_defs)
     if full_defs:
         schema["$defs"] = full_defs
