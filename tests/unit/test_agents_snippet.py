@@ -68,12 +68,14 @@ class AgentsSnippetTest(unittest.TestCase):
     def test_recovery_guidance_present(self):
         text = _text(SNIPPET)
         self.assertIn("continuation", text)
-        self.assertIn("never fetch a context id", text)
+        self.assertIn("opaque handles", text)
+        self.assertIn("explicit evidence-admission", text)
 
-    def test_no_match_recovery_present(self):
+    def test_exact_question_guidance_present(self):
         text = _text(SNIPPET)
-        self.assertIn("no_match", text)
-        self.assertIn("without a question", text)
+        self.assertIn("RecordedQuestionSelector", text)
+        self.assertIn("exact surface-scoped lookup", text)
+        self.assertNotIn("no_match", text)
 
     def test_docs_pointer_present(self):
         text = _text(SNIPPET)
