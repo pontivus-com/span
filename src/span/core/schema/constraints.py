@@ -112,9 +112,7 @@ def _condition_schema(condition: StructuralCondition) -> dict[str, object]:
     if isinstance(condition, EqualsCondition):
         return {
             "required": [condition.name],
-            "properties": {
-                condition.name: {"const": _wire_value(condition.value)}
-            },
+            "properties": {condition.name: {"const": _wire_value(condition.value)}},
         }
     active = _active_schema(condition.field)
     return active if condition.present else {"not": active}

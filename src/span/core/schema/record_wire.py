@@ -459,9 +459,7 @@ class RecordRequestWire:
             ),
             minimum=1,
             maximum=1,
-            when=(
-                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
-            ),
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),),
             label="understanding create/update selection",
         ),
         _constraints.PresenceRule(
@@ -498,9 +496,7 @@ class RecordRequestWire:
                 _constraints.PresenceField("run"),
                 _constraints.PresenceField("action"),
                 _constraints.PresenceField("expected_boundary_version"),
-                _constraints.PresenceField(
-                    "challenge_dispositions", non_empty=True
-                ),
+                _constraints.PresenceField("challenge_dispositions", non_empty=True),
             ),
             minimum=0,
             maximum=0,
@@ -555,9 +551,7 @@ class RecordRequestWire:
             fields=(_constraints.PresenceField("run"),),
             minimum=1,
             maximum=1,
-            when=(
-                _constraints.EqualsCondition("kind", _c.RecordKind.VERIFICATION),
-            ),
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.VERIFICATION),),
             label="verification run",
         ),
         _constraints.PresenceRule(
@@ -571,9 +565,7 @@ class RecordRequestWire:
                 _constraints.PresenceField("expected_version"),
                 _constraints.PresenceField("expected_boundary_version"),
                 _constraints.PresenceField("gaps"),
-                _constraints.PresenceField(
-                    "challenge_dispositions", non_empty=True
-                ),
+                _constraints.PresenceField("challenge_dispositions", non_empty=True),
                 _constraints.PresenceField("conclusion"),
                 _constraints.PresenceField("locator"),
                 _constraints.PresenceField("observation_id"),
@@ -582,9 +574,7 @@ class RecordRequestWire:
             ),
             minimum=0,
             maximum=0,
-            when=(
-                _constraints.EqualsCondition("kind", _c.RecordKind.VERIFICATION),
-            ),
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.VERIFICATION),),
             label="verification root-only fields",
         ),
         _constraints.PresenceRule(
@@ -607,9 +597,7 @@ class RecordRequestWire:
                 _constraints.PresenceField("understanding_id"),
                 _constraints.PresenceField("expected_version"),
                 _constraints.PresenceField("gaps"),
-                _constraints.PresenceField(
-                    "challenge_dispositions", non_empty=True
-                ),
+                _constraints.PresenceField("challenge_dispositions", non_empty=True),
                 _constraints.PresenceField("conclusion"),
                 _constraints.PresenceField("locator"),
                 _constraints.PresenceField("observation_id"),

@@ -803,9 +803,7 @@ class RecordWireMalformedTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "evidence mode"):
             from_wire(
                 w.RecordRequestWire,
-                self._create(
-                    support=[{"$type": "source", "locator": "src/b.py"}]
-                ),
+                self._create(support=[{"$type": "source", "locator": "src/b.py"}]),
             )
 
     def test_create_accepts_support_only_with_explicit_scope(self):
