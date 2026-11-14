@@ -496,9 +496,10 @@ class LifecycleServiceTest(unittest.TestCase):
             support=(w.AuthoritySupportWire(authority_ref="auth-1"),)
         )
         receipt = _receipt(
+            self.store,
             self.service.record(
                 _create_wire(submission="sub-authority", conclusion=conclusion)
-            )
+            ),
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
         self.assertEqual(self.authority.requests, [("repo-1", "auth-1")] * 4)
@@ -536,6 +537,7 @@ class LifecycleServiceTest(unittest.TestCase):
             new_context_id=lambda: "ctx-2",
         )
         receipt = _receipt(
+            self.store,
             service.record(
                 _create_wire(
                     submission="sub-store-auth",
@@ -543,7 +545,7 @@ class LifecycleServiceTest(unittest.TestCase):
                         support=(w.AuthoritySupportWire(authority_ref="auth-ev-1"),)
                     ),
                 )
-            )
+            ),
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
 
@@ -566,15 +568,13 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.store.add_context_evidence(context.context_id.value, "obs-1")
         wire = w.RecordRequestWire(
-            repository_id="repo-1",
             request_id="sub-scope",
-            context_id=context.context_id.value,
+            context=_context_ref(context.context_id.value),
             kind=m.RecordKind.UNDERSTANDING,
             surface=w.SurfaceWire(kind="FILE", locator="docs/other.md"),
             question="What is outside?",
             scope_paths=("docs/other.md",),
             conclusion="Outside scope",
-            locator="docs/other.md",
             support=(w.AdmittedSourceSupportWire(observation_id="obs-1"),),
         )
         with self.assertRaises(RecordingValidationError):
@@ -699,9 +699,10 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         self.store.add_context_discovery_evidence("ctx-1", "disc-1")
         receipt = _receipt(
+            self.store,
             self.service.record(
                 _create_wire(submission="sub-disc", conclusion=conclusion)
-            )
+            ),
         )
         self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
 
@@ -949,7 +950,7 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertEqual(revision.content.scope.paths, ("src/a.py",))
 
     def test_create_without_context_or_question_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "requires a question"):
+        with self.assertRaisesRegex(ValueError, "question or context"):
             w.RecordRequestWire(
                 repository_id="repo-1",
                 request_id="sub-bound",
@@ -1113,7 +1114,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 if observation is None and not support and conclusion.scope_paths
                 else None
             )
-            if context_id is not None:
+            if context_id is not None and question is None:
                 scope_paths = ()
             flat = {
                 "conclusion": conclusion.statement,
@@ -1191,7 +1192,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
 
     def test_record_create_without_question_or_context_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "requires a question"):
+        with self.assertRaisesRegex(ValueError, "question or context"):
             self._record_request(
                 "sub-unbound-create",
                 surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
@@ -1371,7 +1372,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(result, m.VerificationRecorded)
         assert isinstance(result, m.VerificationRecorded)
-        self.assertEqual(result.qualification.run.outcome, m.VerificationOutcome.PASS)
+        self.assertEqual(result.outcome, m.VerificationOutcome.PASS)
 
     def test_record_actions_apply_atomically(self) -> None:
         created = self.service.record(
@@ -2057,7 +2058,10 @@ class LifecycleServiceTest(unittest.TestCase):
             result = self.service.record(wire)
         self.assertIsInstance(result.status, m.SurfaceStatusUnavailable)
         self.assertEqual(result.status.surface.locator, "src/a.py")
-        self.assertEqual(self.service.record(wire), _receipt(self.store, result))
+        self.assertEqual(
+            _receipt(self.store, self.service.record(wire)),
+            _receipt(self.store, result),
+        )
         with mock.patch(
             "span.service.lifecycle.compose_surface_status",
             side_effect=ValueError("programming defect"),
@@ -2161,7 +2165,10 @@ class LifecycleServiceTest(unittest.TestCase):
                 self.service, "_admit_source", side_effect=AssertionError("admit")
             ),
         ):
-            self.assertEqual(self.service.record(wire), _receipt(self.store, result))
+            self.assertEqual(
+                _receipt(self.store, self.service.record(wire)),
+                _receipt(self.store, result),
+            )
 
     def test_postcommit_store_failures_preserve_acceptance_through_mcp(self):
         from span.ports.structural import StructuralSource
@@ -2341,7 +2348,6 @@ class LifecycleServiceTest(unittest.TestCase):
             answer_result = answer.ask(
                 m.AskRequest(
                     repository_id="repo-1",
-                    request_id="coverage-asked",
                     surface=m.SurfaceReference(
                         kind=m.SurfaceKind.FILE, locator="src/a.py"
                     ),
