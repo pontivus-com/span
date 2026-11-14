@@ -12,6 +12,7 @@ the operation, so the caller never performs a separate admission step.
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
 import datetime as _datetime
 import typing as _typing
 
@@ -41,12 +42,7 @@ def gap_recovery(reason: m.GapReason) -> str:
     The text is server-owned. It names the next action and never ranks or
     describes other questions.
     """
-    if reason is m.GapReason.NO_MATCH:
-        return (
-            "ask the same surface without a question to read its current "
-            "document view"
-        )
-    if reason is m.GapReason.UNASSESSED:
+     if reason is m.GapReason.UNASSESSED:
         return "read the cited evidence, then record the conclusion"
     return "re-read the cited evidence, then record against the current revision"
 
@@ -82,53 +78,74 @@ class AnswerService:
         self._new_context_id = new_context_id or server_context_id
 
     def ask(self, request: m.AskRequest) -> m.AskResult:
-        self._store.require_repository(request.repository_id)
         if request.continuation is not None:
             return self._evidence_page(request)
-        if request.selector is not None:
+        selected_question: str | None = None
+        selected_understanding: m.Understanding | None = None
+        if isinstance(
+            request.selector,
+            (m.UnderstandingSnapshotSelector, m.ReceiptRetrievalSelector),
+        ):
             return self._exact_reference(request.selector)
-        if request.surface is not None:
+        if isinstance(request.selector, m.RecordedQuestionSelector):
+            repository_id = request.selector.repository_id
+            selected_question = request.selector.question
             surface = m.SurfaceKey(
-                repository_id=request.repository_id,
-                kind=request.surface.kind,
-                locator=request.surface.locator,
+                repository_id=repository_id,
+                kind=request.selector.surface.kind,
+                locator=request.selector.surface.locator,
             )
+        elif isinstance(request.selector, m.CurrentUnderstandingSelector):
+            repository_id = request.selector.repository_id
+            selected_understanding = self._store.get_understanding(
+                request.selector.understanding_id
+            )
+            if selected_understanding.repository_id != repository_id:
+                raise RecordingValidationError(
+                    "selected understanding belongs to another repository"
+                )
+            surface = selected_understanding.surface
+            selected_question = selected_understanding.question
         else:
-            if request.reference is None:
-                raise RecordingValidationError("ask requires a surface or reference")
-            resolved = self._resolve(request.repository_id, request.reference)
-            if isinstance(resolved, m.AmbiguousSurface):
-                return self._fit(request, resolved)
-            surface = resolved
-        all_understandings = tuple(
-            self._store.list_understandings(request.repository_id)
-        )
-        understandings = tuple(
-            item for item in all_understandings if item.surface == surface
+            assert request.repository_id is not None
+            repository_id = request.repository_id
+            if request.surface is not None:
+                surface = m.SurfaceKey(
+                    repository_id=repository_id,
+                    kind=request.surface.kind,
+                    locator=request.surface.locator,
+                )
+            else:
+                if request.reference is None:
+                    raise RecordingValidationError("ask requires a surface or reference")
+                resolved = self._resolve(repository_id, request.reference)
+                if isinstance(resolved, m.AmbiguousSurface):
+                    return self._fit(request, resolved)
+                surface = resolved
+        self._store.require_repository(repository_id)
+        all_understandings = tuple(self._store.list_understandings(repository_id))
+        understandings = (
+            (selected_understanding,)
+            if selected_understanding is not None
+            else tuple(item for item in all_understandings if item.surface == surface)
         )
         status = compose_surface_status(
             surface, store=self._store, support=self._support, evidence=self._evidence
         )
-        if request.question is None:
-            return self._fit(
-                request, self._document(request, surface, understandings, status)
-            )
+        if selected_question is None:
+            result = self._document(request, surface, understandings, status)
+            return self._with_admission(request, surface, result)
         matched = tuple(
-            item for item in understandings if item.question == request.question
+            item for item in understandings if item.question == selected_question
         )
         if not matched:
-            return self._fit(
-                request,
-                self._cold_gap(
-                    request,
-                    surface,
-                    (
-                        m.GapReason.NO_MATCH
-                        if understandings
-                        else m.GapReason.UNASSESSED
-                    ),
-                ),
+            result = self._cold_gap(
+                surface,
+                status,
+                m.GapReason.UNASSESSED,
+                missing=(selected_question,),
             )
+            return self._with_admission(request, surface, result)
         current: list[m.ConclusionView] = []
         historical: list[m.HistoricalConclusion] = []
         gaps: list[m.RecordedQuestionGap] = []
@@ -162,12 +179,11 @@ class AnswerService:
                 m.Answer(
                     surface=surface,
                     status=status,
-                    question=request.question,
+                    question=selected_question,
                     conclusions=tuple(current),
                     gaps=tuple(gaps),
                     verification=self._verification(surface),
-                    context=self._context(request, surface),
-                ),
+                 ),
             )
         combined = support_rules.combine_states(tuple(states))
         reason = (
@@ -175,22 +191,21 @@ class AnswerService:
             if combined is m.SupportState.REASSESSMENT_REQUIRED
             else m.GapReason.UNVERIFIABLE
         )
-        context_id, evidence, observations = self._investigate(request, surface)
-        return self._fit(
-            request,
-            m.Gap(
-                surface=surface,
-                reason=reason,
-                recovery=gap_recovery(reason),
-                question=request.question,
-                changed_evidence=tuple(unit.evidence_ref for unit in evidence),
-                historical=tuple(historical),
-                missing=(request.question,),
-                evidence=evidence,
-                observations=observations,
-                context=context_id,
+        result = m.Gap(
+            surface=surface,
+            status=status,
+            reason=reason,
+            recovery=gap_recovery(reason),
+            changed_evidence=tuple(
+                item.evidence
+                for item in historical
+                for item in ()
             ),
+            historical=tuple(historical),
+            missing=(selected_question,),
+            source_pointers=self._source_pointers(surface),
         )
+        return self._with_admission(request, surface, result)
 
     def _resolve(
         self, repository_id: str, reference: str
@@ -229,7 +244,7 @@ class AnswerService:
             statement=content.statement,
             assertion_nature=content.assertion_nature,
             scope=content.scope,
-            support=support,
+            support=m.compact_support(support.evaluation),
             evidence=self._evidence_refs(content.support),
         )
 
@@ -279,28 +294,80 @@ class AnswerService:
 
     def _cold_gap(
         self,
-        request: m.AskRequest,
         surface: m.SurfaceKey,
+        status: m.SurfaceStatus,
         reason: m.GapReason,
+        *,
+        missing: tuple[str, ...] = ("no current conclusion on this surface",),
     ) -> m.Gap:
-        """Return a gap with the surface's inspectable evidence admitted."""
-        context, evidence, observations = self._investigate(request, surface)
         return m.Gap(
             surface=surface,
+            status=status,
             reason=reason,
             recovery=gap_recovery(reason),
-            question=request.question or "",
-            evidence=evidence,
-            observations=observations,
-            context=context,
-            missing=(
-                (
-                    request.question
-                    if request.question
-                    else "no current conclusion on this surface"
-                ),
-            ),
+            missing=missing,
+            source_pointers=self._source_pointers(surface),
         )
+
+    def _source_pointers(self, surface: m.SurfaceKey) -> tuple[m.EvidenceRequest, ...]:
+        return tuple(m.EvidenceRequest(path) for path in self._surface_paths(surface))
+
+    def _with_admission(
+        self,
+        request: m.AskRequest,
+        surface: m.SurfaceKey,
+        result: m.Answer | m.Gap,
+    ) -> m.AskResult:
+        if request.evidence is None:
+            return self._fit(request, result)
+        assert request.repository_id is not None
+        assert request.request_id is not None
+        context = issue_context(
+            self._store,
+            payload=request,
+            repository_id=request.repository_id,
+            request_id=m.RequestId(request.request_id),
+            scope=m.EvidenceScope(paths=self._surface_paths(surface)),
+            question=None,
+            clock=self._clock,
+            new_context_id=self._new_context_id,
+        )
+        admitted = self._evidence.admit(
+            context,
+            request.evidence,
+            self._policy.default_query_bounds,
+        )
+        records = {
+            record.observation_id: record
+            for record in self._evidence.context_observations(context.context_id.value)
+        }
+        deliveries = tuple(
+            m.EvidenceDelivery(
+                observation_id=outcome.observation_id,
+                unit=self._evidence.context_unit(records[outcome.observation_id]),
+            )
+            for outcome in admitted.outcomes
+            if isinstance(outcome, (m.AdmittedEvidence, m.AlreadyAdmittedEvidence))
+            and outcome.observation_id in records
+        )
+        view = m.EvidenceAdmissionView(
+            context=m.InvestigationContextRef(
+                repository_id=context.repository_id,
+                context_id=context.context_id,
+            ),
+            outcomes=admitted.outcomes,
+            deliveries=deliveries,
+            continuation=None,
+            omitted=tuple(
+                outcome.request.locator
+                for outcome in admitted.outcomes
+                if isinstance(outcome, m.OmittedEvidence)
+            ),
+            truncated=False,
+        )
+        if isinstance(result, m.Answer):
+            return self._fit(request, _dataclasses.replace(result, admission=view))
+        return self._fit(request, _dataclasses.replace(result, admission=view))
 
     def _investigate(self, request: m.AskRequest, surface: m.SurfaceKey) -> tuple[
         m.InvestigationContextId | None,
@@ -318,7 +385,7 @@ class AnswerService:
                 repository_id=request.repository_id,
                 request_id=m.RequestId(str(request.request_id)),
                 scope=scope,
-                question=request.question,
+                question=selected_question,
                 clock=self._clock,
                 new_context_id=self._new_context_id,
             )
@@ -354,7 +421,7 @@ class AnswerService:
             repository_id=request.repository_id,
             request_id=m.RequestId(str(request.request_id)),
             scope=m.EvidenceScope(paths=self._surface_paths(surface)),
-            question=request.question,
+            question=selected_question,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
@@ -416,8 +483,9 @@ class AnswerService:
             ):
                 continue
             try:
-                qualification: m.VerificationSupport | m.SupportUnavailable = (
-                    self._support.evaluate_verification(run.run_id.value)
+                detailed = self._support.evaluate_verification(run.run_id.value)
+                qualification: m.VerificationQualification | m.SupportUnavailable = (
+                    m.compact_verification(detailed)
                 )
             except (OSError, ValueError) as exc:
                 qualification = m.SupportUnavailable(str(exc))
@@ -463,10 +531,13 @@ class AnswerService:
             raise RecordingValidationError(
                 f"no receipt for request {selector.request_id!r}"
             )
-        context = self._store.find_context_by_request(
-            selector.repository_id, m.RequestId(selector.request_id)
+        return m.RetrievedReceipt(
+            receipt=receipt,
+            verification_runs=tuple(
+                self._store.get_verification_run(run_id.value)
+                for run_id in receipt.accepted_verification_run_ids
+            ),
         )
-        return m.RetrievedReceipt(receipt=receipt, context=context)
 
     def _evidence_page(self, request: m.AskRequest) -> m.AskResult:
         try:
@@ -477,13 +548,7 @@ class AnswerService:
                 failure=str(exc),
                 recovery="ask again for the surface; the continuation is invalid",
             )
-        if cursor.repository_id != request.repository_id:
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation belongs to another repository",
-                recovery="ask again for this repository",
-            )
-        context = self._store.find_context_by_id(cursor.context_id)
+         context = self._store.find_context_by_id(cursor.context_id)
         if context is None:
             return m.Unavailable(
                 operation="ask",
@@ -553,7 +618,14 @@ class AnswerService:
                     )
                 )
             return m.EvidencePage(
-                evidence=tuple(units),
+                deliveries=tuple(
+                    m.EvidenceDelivery(
+                        observation_id=records[index].observation_id,
+                        unit=unit,
+                    )
+                    for index, unit in enumerate(units, start=cursor.unit_index)
+                    if index < len(records)
+                ),
                 continuation=continuation,
                 omitted=tuple(labels),
                 truncated=continuation is not None,
@@ -699,9 +771,11 @@ class AnswerService:
             return m.Gap(
                 surface=surface,
                 reason=reason,
+                status=status,
                 recovery=gap_recovery(reason),
                 historical=tuple(historical),
                 missing=("no current conclusion on this surface",),
+                source_pointers=self._source_pointers(surface),
             )
         return m.Answer(
             surface=surface,
@@ -712,7 +786,6 @@ class AnswerService:
             ),
             gaps=tuple(gaps),
             verification=self._verification(surface),
-            context=self._context(request, surface),
         )
 
     # -- bounded response (FD-54–FD-57) -----------------------------------
@@ -758,58 +831,20 @@ class AnswerService:
             references.append(dropped.ref.understanding_id.value)
 
     def _fit_gap(self, gap: m.Gap, limit: int) -> m.AskResult:
-        evidence = list(gap.evidence)
-        observations = list(gap.observations)
         historical = list(gap.historical)
-        recovery = gap.recovery
-        if gap.historical:
-            recovery = (
-                f"{gap.recovery} For the prior statement, call "
-                "ask(selector=UnderstandingSnapshotSelector"
-                "{understanding_id, version})."
-            )
-        omitted: list[str] = []
-        while True:
-            continuation = None
-            if len(evidence) < len(gap.evidence):
-                if gap.context is None:
-                    return self._refuse(gap, limit)
-                context = self._store.find_context_by_id(gap.context.value)
-                if context is None:
-                    return self._refuse(gap, limit)
-                continuation = encode_continuation(
-                    ContinuationCursor(
-                        repository_id=gap.surface.repository_id,
-                        context_id=gap.context.value,
-                        request_id=context.request_id,
-                        request_digest=context.request_digest,
-                        unit_index=len(evidence),
-                    )
-                )
-            candidate = _replace_gap(
+        omitted = list(gap.omitted)
+        candidate = gap
+        while _encoded_size(candidate) > limit and historical:
+            omitted.append(historical.pop().ref.label)
+            candidate = _dataclasses.replace(
                 gap,
-                evidence=tuple(evidence),
-                observations=tuple(observations),
                 historical=tuple(historical),
-                recovery=recovery,
                 omitted=tuple(omitted),
-                continuation=continuation,
                 truncated=True,
             )
-            if _encoded_size(candidate) <= limit:
-                return candidate
-            if evidence:
-                evidence.pop()
-                omitted.append(
-                    f"observation:{observations.pop().value}"
-                    if observations
-                    else "admitted evidence"
-                )
-                continue
-            if historical:
-                omitted.append(historical.pop().ref.label)
-                continue
-            return self._refuse(gap, limit)
+        if _encoded_size(candidate) <= limit:
+            return candidate
+        return self._refuse(gap, limit)
 
     def _refuse(self, result: m.AskResult, limit: int) -> m.AskResult:
         """FD-57: refuse rather than return a misleading fragment."""
@@ -835,41 +870,12 @@ def _replace_answer(
     return m.Answer(
         surface=answer.surface,
         status=answer.status,
-        question=answer.question,
         conclusions=conclusions,
         groups=groups,
         gaps=answer.gaps,
         verification=answer.verification,
         references=references,
-        context=answer.context,
-        omitted=omitted,
-        truncated=truncated,
-    )
-
-
-def _replace_gap(
-    gap: m.Gap,
-    *,
-    evidence: tuple[m.EvidenceUnit, ...],
-    observations: tuple[m.SourceObservationId, ...],
-    historical: tuple[m.HistoricalConclusion, ...],
-    recovery: str,
-    omitted: tuple[str, ...],
-    continuation: str | None,
-    truncated: bool,
-) -> m.Gap:
-    return m.Gap(
-        surface=gap.surface,
-        reason=gap.reason,
-        recovery=recovery,
-        question=gap.question,
-        changed_evidence=gap.changed_evidence,
-        historical=historical,
-        missing=gap.missing,
-        evidence=evidence,
-        observations=observations,
-        context=gap.context,
-        continuation=continuation,
+        admission=answer.admission,
         omitted=omitted,
         truncated=truncated,
     )

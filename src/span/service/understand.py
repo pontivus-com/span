@@ -47,8 +47,9 @@ class UnderstandService:
                 )
             return m.RetrievedReceipt(
                 receipt=receipt,
-                context=self._store.find_context_by_request(
-                    request.repository_id, m.RequestId(request.request_id)
+                verification_runs=tuple(
+                    self._store.get_verification_run(run_id.value)
+                    for run_id in receipt.accepted_verification_run_ids
                 ),
             )
         raise TypeError(f"unhandled retrieval selector: {type(request).__name__}")

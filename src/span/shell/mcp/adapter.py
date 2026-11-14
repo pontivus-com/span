@@ -43,7 +43,7 @@ except Exception:  # pragma: no cover - import-time fallback
 
 __all__ = ["McpAdapter"]
 
-_RESULT_UNION_TOOLS = frozenset({"record", "reconsider"})
+_RESULT_UNION_TOOLS = frozenset({"ask", "record", "reconsider"})
 
 
 @_dataclass
@@ -180,7 +180,11 @@ def _request_identity(request: object) -> str:
             f"{challenge.understanding_id}"
         )
     if isinstance(request, m.AskRequest):
-        return f"{request.repository_id}/{request.request_id or 'continuation'}"
+        try:
+            repository_id = repository_route("ask", request, None)
+        except (RoutingError, ValueError):
+            repository_id = "unknown"
+        return f"{repository_id}/{request.request_id or 'read'}"
     if isinstance(request, _rw.RecordRequestWire):
         identity = request.identity
         base = f"{identity.repository_id}/{identity.request_id}"

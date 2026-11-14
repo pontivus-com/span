@@ -114,7 +114,7 @@ class LifecycleService:
 
     def record(self, wire: _rw.RecordRequestWire) -> m.RecordResult:
         """One public record entry dispatching on the request kind."""
-        self._store.require_repository(wire.identity.repository_id)
+        self._store.require_repository(wire.bound_repository_id)
         if wire.kind is m.RecordKind.SURFACE:
             return self._declare_surface(wire)
         if wire.kind is m.RecordKind.VERIFICATION:
@@ -220,7 +220,7 @@ class LifecycleService:
         scope: m.EvidenceScope,
     ) -> m.SurfaceKey:
         """Resolve one owner and validate its agreement with semantic scope."""
-        repository_id = wire.repository_id
+        repository_id = wire.bound_repository_id
         if wire.surface is not None:
             surface = m.SurfaceKey(
                 repository_id, m.SurfaceKind(wire.surface.kind), wire.surface.locator
@@ -384,7 +384,7 @@ class LifecycleService:
         never take a divergent route.
         """
         digest = _rw.wire_content_digest(wire)
-        replay = self._replay(wire.repository_id, wire.request_id, digest)
+        replay = self._replay(wire.bound_repository_id, wire.request_id, digest)
         if replay is not None:
             return replay
         wire = self._resolve_record_request(wire)
@@ -394,7 +394,7 @@ class LifecycleService:
         if run.evidence:
             admitted = [
                 self._admit_source(
-                    wire.repository_id,
+                    wire.bound_repository_id,
                     wire.context_id or "",
                     item.locator,
                     tuple(
@@ -526,8 +526,24 @@ class LifecycleService:
             status = m.SurfaceStatusUnavailable(
                 reason=f"{type(exc).__name__}: {exc}", surface=owner
             )
+        snapshot = self._store.get_version(understanding_id, version)
+        compact_qualification = (
+            m.compact_understanding(qualification)
+            if isinstance(qualification, m.UnderstandingSupport)
+            else qualification
+        )
         return m.UnderstandingRecorded(
-            receipt=receipt, qualification=qualification, status=status
+            receipt_selector=m.ReceiptRetrievalSelector(
+                repository_id=receipt.identity.repository_id,
+                request_id=receipt.identity.request_id.value,
+            ),
+            committed_at=receipt.committed_at,
+            understanding_id=m.UnderstandingId(understanding_id),
+            version=m.UnderstandingVersionNumber(version),
+            affected_revisions=snapshot.conclusions,
+            dependent_effects=receipt.dependent_effects,
+            qualification=compact_qualification,
+            status=status,
         )
 
     def qualify_verification(self, receipt: m.RecordReceipt) -> m.VerificationRecorded:
@@ -543,7 +559,24 @@ class LifecycleService:
             )
         except operational_errors as exc:
             qualification = m.SupportUnavailable(f"{type(exc).__name__}: {exc}")
-        return m.VerificationRecorded(receipt=receipt, qualification=qualification)
+        run = self._store.get_verification_run(run_id)
+        compact_qualification = (
+            m.compact_verification(qualification)
+            if isinstance(qualification, m.VerificationSupport)
+            else qualification
+        )
+        return m.VerificationRecorded(
+            receipt_selector=m.ReceiptRetrievalSelector(
+                repository_id=receipt.identity.repository_id,
+                request_id=receipt.identity.request_id.value,
+            ),
+            committed_at=receipt.committed_at,
+            run_id=run.run_id,
+            command=run.command,
+            scenario=run.scenario,
+            outcome=run.outcome,
+            qualification=compact_qualification,
+        )
 
     def qualify_challenge(self, receipt: m.RecordReceipt) -> m.ChallengeRecorded:
         if not receipt.accepted_challenge_ids:
@@ -572,14 +605,21 @@ class LifecycleService:
         context = issue_context(
             self._store,
             payload=wire,
-            repository_id=wire.repository_id,
+            repository_id=wire.bound_repository_id,
             request_id=m.RequestId(f"{wire.request_id}:record-context"),
             scope=m.evidence_scope_union(requirements),
             question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
-        return _dataclasses.replace(wire, context_id=context.context_id.value)
+        return _dataclasses.replace(
+            wire,
+            repository_id=None,
+            context=m.InvestigationContextRef(
+                repository_id=context.repository_id,
+                context_id=context.context_id,
+            ),
+        )
 
     def _record_request_scopes(
         self,
