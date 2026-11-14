@@ -107,9 +107,7 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
                     member, "__dataclass_fields__"
                 ):
                     _ensure_def(member, defs, seen)
-                    refs.append(
-                        {"$ref": f"#/$defs/{public_schema_name(member)}__tag"}
-                    )
+                    refs.append({"$ref": f"#/$defs/{public_schema_name(member)}__tag"})
                 else:
                     refs.append(_project_hint(member, defs, seen))
             if len(refs) == 1:
