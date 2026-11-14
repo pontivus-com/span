@@ -225,8 +225,8 @@ class ReconsiderService:
             )
         try:
             return self._support.evaluate_revision(ref)
-        except (OSError, ValueError) as exc:
-            return m.SupportUnavailable(str(exc))
+        except (OSError, ValueError):
+            return m.SupportUnavailable("conclusion support evaluation is unavailable")
 
     def _raise_challenge(
         self, repository_id: str, challenge: m.ChallengeRaise
