@@ -12,6 +12,7 @@ from span.core import model as m
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.service.answer import AnswerService
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.continuation import ContinuationCursor, encode_continuation
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 from span.shell.sqlite_store.lifecycle import LifecycleStore
@@ -1261,6 +1262,35 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertTrue(first.admission.continuation)
         return first
 
+    def _state_continuation(
+        self, *, expires_at: datetime.datetime
+    ) -> tuple[str, str]:
+        context_id = "ctx-continuation-state"
+        request_id = m.RequestId("req-continuation-state")
+        digest = m.ContentDigest("sha256:continuation-state")
+        self.store.put_context(
+            m.InvestigationContext(
+                context_id=m.InvestigationContextId(context_id),
+                repository_id="repo-1",
+                request_id=request_id,
+                request_digest=digest,
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+                created_at=NOW,
+                expires_at=expires_at,
+            )
+        )
+        token = encode_continuation(
+            ContinuationCursor(
+                repository_id="repo-1",
+                context_id=context_id,
+                request_id=request_id,
+                request_digest=digest,
+            )
+        )
+        return token, context_id
+
     def test_binding_conflict_is_not_converted_to_a_semantic_gap(self) -> None:
         from unittest import mock
 
@@ -1314,10 +1344,11 @@ class AnswerServiceTest(unittest.TestCase):
 
     def test_abandoned_context_rejects_the_continuation(self) -> None:
         service = self._page_service()
-        first = self._cold_page(service)
-        assert first.admission.context is not None
-        self.store.abandon_context(first.admission.context.context_id.value)
-        page = service.ask(m.AskRequest(continuation=first.admission.continuation))
+        continuation, context_id = self._state_continuation(
+            expires_at=NOW + RETENTION.context_lifetime
+        )
+        self.store.abandon_context(context_id)
+        page = service.ask(m.AskRequest(continuation=continuation))
         self.assertIsInstance(page, m.Unavailable)
         assert isinstance(page, m.Unavailable)
         self.assertNotIn("reaped", page.failure.lower())
@@ -1326,9 +1357,11 @@ class AnswerServiceTest(unittest.TestCase):
     def test_expired_context_rejects_the_continuation(self) -> None:
         now = [NOW]
         service = self._page_service(clock=lambda: now[0])
-        first = self._cold_page(service)
+        continuation, _ = self._state_continuation(
+            expires_at=NOW + RETENTION.context_lifetime
+        )
         now[0] = NOW + datetime.timedelta(hours=2)
-        page = service.ask(m.AskRequest(continuation=first.admission.continuation))
+        page = service.ask(m.AskRequest(continuation=continuation))
         self.assertIsInstance(page, m.Unavailable)
 
     def test_continuation_rejects_a_repository_override(self) -> None:
