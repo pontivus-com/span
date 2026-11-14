@@ -160,7 +160,9 @@ class McpAdapter:
         except ValueError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_rejected(request, exc))
-            rejection = exc if isinstance(exc, Rejection) else Rejection("invalid request")
+            rejection = (
+                exc if isinstance(exc, Rejection) else Rejection("invalid request")
+            )
             return encode_error(
                 rejection.cause_kind.value,
                 _public_rejection_cause(rejection.cause_kind),
