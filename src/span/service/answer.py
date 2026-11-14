@@ -679,7 +679,7 @@ class AnswerService:
         surface: m.SurfaceKey,
         understandings: tuple[m.Understanding, ...],
         status: m.SurfaceStatus,
-    ) -> m.AskResult:
+    ) -> m.Answer | m.Gap:
         grouped: dict[str, list[m.ConclusionView]] = {}
         gaps: list[m.RecordedQuestionGap] = []
         historical: list[m.HistoricalConclusion] = []
