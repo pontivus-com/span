@@ -119,13 +119,13 @@ class AnswerCarrierTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.Answer(
                 surface=KEY,
-                    conclusions=(),
+                conclusions=(),
                 status=status(),
             )
         with self.assertRaises(ValueError):
             m.Answer(
                 surface=KEY,
-                    conclusions=(REF,),
+                conclusions=(REF,),
                 status=status(FILE_KEY),
             )
 

@@ -397,9 +397,9 @@ class ReconsiderServiceTest(unittest.TestCase):
                     challenge=m.ChallengeRaise(
                         request_id="req-challenge-2",
                         context=m.InvestigationContextRef(
-                        repository_id="repo-1",
-                        context_id=CONTEXT_ID,
-                    ),
+                            repository_id="repo-1",
+                            context_id=CONTEXT_ID,
+                        ),
                         understanding_id="u-a",
                         target_version=1,
                         target_conclusions=(

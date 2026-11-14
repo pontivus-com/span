@@ -1131,9 +1131,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         outcome = await self._session(journey)
         settled = outcome["settled"]
         self.assertEqual(settled["$type"], "UnderstandingRecorded")
-        self.assertEqual(
-            settled["version"]["value"], 2
-        )
+        self.assertEqual(settled["version"]["value"], 2)
         store = LifecycleStore(
             self.data / f"{REPOSITORY_ID}.db",
             retention=DEFAULT_LIFECYCLE_RETENTION,

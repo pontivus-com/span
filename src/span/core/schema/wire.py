@@ -454,9 +454,7 @@ def public_schema_name(cls: type) -> str:
     try:
         return _PUBLIC_SCHEMA_NAMES[key]
     except KeyError:
-        raise TypeError(
-            "schema carrier has no declared public protocol name"
-        ) from None
+        raise TypeError("schema carrier has no declared public protocol name") from None
 
 
 def from_wire(root: object, payload: dict) -> object:

@@ -246,18 +246,21 @@ class LifecycleServiceTest(unittest.TestCase):
         return result
 
     def _record_add(self, expected: int, submission: str) -> m.RecordReceipt:
-        return _receipt(self.store, self._update(
-            submission,
-            w.RecordActionsWire(
-                add=(
-                    w.AddConclusionWire(
-                        conclusion="Another conclusion",
-                        locator="src/a.py",
-                    ),
-                )
+        return _receipt(
+            self.store,
+            self._update(
+                submission,
+                w.RecordActionsWire(
+                    add=(
+                        w.AddConclusionWire(
+                            conclusion="Another conclusion",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+                expected,
             ),
-            expected,
-        ))
+        )
 
     def _version_conclusion_id(
         self, understanding_id: str, version: int, index: int = 0
@@ -271,69 +274,81 @@ class LifecycleServiceTest(unittest.TestCase):
     def _record_confirm(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return _receipt(self.store, self._update(
-            submission,
-            w.RecordActionsWire(
-                confirm=(
-                    w.ConfirmConclusionWire(
-                        conclusion_id=conclusion_id,
-                        locator="src/a.py",
-                    ),
-                )
+        return _receipt(
+            self.store,
+            self._update(
+                submission,
+                w.RecordActionsWire(
+                    confirm=(
+                        w.ConfirmConclusionWire(
+                            conclusion_id=conclusion_id,
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+                expected,
             ),
-            expected,
-        ))
+        )
 
     def _record_correct(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return _receipt(self.store, self._update(
-            submission,
-            w.RecordActionsWire(
-                correct=(
-                    w.CorrectConclusionWire(
-                        conclusion_id=conclusion_id,
-                        conclusion="A does Y",
-                        locator="src/a.py",
-                    ),
-                )
+        return _receipt(
+            self.store,
+            self._update(
+                submission,
+                w.RecordActionsWire(
+                    correct=(
+                        w.CorrectConclusionWire(
+                            conclusion_id=conclusion_id,
+                            conclusion="A does Y",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+                expected,
             ),
-            expected,
-        ))
+        )
 
     def _record_replace(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return _receipt(self.store, self._update(
-            submission,
-            w.RecordActionsWire(
-                replace=(
-                    w.ReplaceActionWire(
-                        conclusion_id=conclusion_id,
-                        conclusion="A is now described by Z",
-                        reason="A's behaviour changed.",
-                        locator="src/a.py",
-                    ),
-                )
+        return _receipt(
+            self.store,
+            self._update(
+                submission,
+                w.RecordActionsWire(
+                    replace=(
+                        w.ReplaceActionWire(
+                            conclusion_id=conclusion_id,
+                            conclusion="A is now described by Z",
+                            reason="A's behaviour changed.",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+                expected,
             ),
-            expected,
-        ))
+        )
 
     def _record_withdraw(
         self, conclusion_id: str, expected: int, submission: str
     ) -> m.RecordReceipt:
-        return _receipt(self.store, self._update(
-            submission,
-            w.RecordActionsWire(
-                withdraw=(
-                    w.WithdrawActionWire(
-                        conclusion_id=conclusion_id,
-                        reason="withdrawn after re-check",
-                    ),
-                )
+        return _receipt(
+            self.store,
+            self._update(
+                submission,
+                w.RecordActionsWire(
+                    withdraw=(
+                        w.WithdrawActionWire(
+                            conclusion_id=conclusion_id,
+                            reason="withdrawn after re-check",
+                        ),
+                    )
+                ),
+                expected,
             ),
-            expected,
-        ))
+        )
 
     # -- contexts ----------------------------------------------------------
 
@@ -772,9 +787,7 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertIn("locator", raised.exception.required_action)
         result = self.service.record(wire("sub-v", "obs-1"))
         assert isinstance(result, m.VerificationRecorded)
-        run = self.store.get_verification_run(
-            result.run_id.value
-        )
+        run = self.store.get_verification_run(result.run_id.value)
         self.assertEqual(run.outcome, m.VerificationOutcome.PASS)
 
     def test_verification_accepts_evidence_only(self) -> None:
@@ -885,7 +898,9 @@ class LifecycleServiceTest(unittest.TestCase):
         assert context is not None
         self.assertEqual(context.origin, m.ContextOrigin.EVIDENCE_ONLY)
         self.assertIn("src/a.py", context.scope.paths)
-        self.assertEqual(_receipt(self.store, self._service("ctx-unused").record(wire)), receipt)
+        self.assertEqual(
+            _receipt(self.store, self._service("ctx-unused").record(wire)), receipt
+        )
 
     def test_create_with_support_only_derives_scope_from_context(self) -> None:
         result = self.service.record(
@@ -2013,7 +2028,9 @@ class LifecycleServiceTest(unittest.TestCase):
             ),
         ):
             replay = self.service.record(wire)
-            self.assertEqual(_receipt(self.store, replay), _receipt(self.store, original))
+            self.assertEqual(
+                _receipt(self.store, replay), _receipt(self.store, original)
+            )
             with self.assertRaises(RecordingConflict) as raised:
                 self.service.record(dataclasses.replace(wire, conclusion="Changed"))
             self.assertEqual(
@@ -2191,7 +2208,9 @@ class LifecycleServiceTest(unittest.TestCase):
                     response["qualification"]["$type"], "UnderstandingQualification"
                 )
                 retry = adapter.dispatch("record", payload).structured_content
-                self.assertEqual(retry["receipt_selector"], response["receipt_selector"])
+                self.assertEqual(
+                    retry["receipt_selector"], response["receipt_selector"]
+                )
                 self.assertEqual(retry["status"]["$type"], "SurfaceStatus")
 
     def test_verification_store_failure_preserves_accepted_receipt(self):
@@ -2226,7 +2245,9 @@ class LifecycleServiceTest(unittest.TestCase):
                 ),
             ):
                 replay = self.service.record(wire)
-                self.assertEqual(_receipt(self.store, replay), _receipt(self.store, result))
+                self.assertEqual(
+                    _receipt(self.store, replay), _receipt(self.store, result)
+                )
                 self.assertIsInstance(replay.qualification, m.SupportUnavailable)
         with mock.patch.object(
             self.support,
@@ -2250,8 +2271,12 @@ class LifecycleServiceTest(unittest.TestCase):
                     side_effect=error,
                 ),
             ):
-                qualified = self.service.qualify_understanding(_receipt(self.store, result))
-                self.assertEqual(_receipt(self.store, qualified), _receipt(self.store, result))
+                qualified = self.service.qualify_understanding(
+                    _receipt(self.store, result)
+                )
+                self.assertEqual(
+                    _receipt(self.store, qualified), _receipt(self.store, result)
+                )
                 self.assertIsInstance(qualified.qualification, m.SupportUnavailable)
                 self.assertIsInstance(qualified.status, m.SurfaceStatusUnavailable)
                 self.assertIsNone(qualified.status.surface)
