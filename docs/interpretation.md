@@ -65,10 +65,13 @@ before sending. Matching replay returns its retained receipt before checking
 whether a new write could be accepted today. Different content under the same
 identity conflicts. A new update uses a new request identity.
 
-A record result contains the receipt and present support qualification.
-`SupportUnavailable` after commit means acceptance succeeded but qualification
-failed; recover the receipt and investigate availability. It is not a rejected
-write and is not a support verdict.
+Ordinary record acceptance contains a receipt selector, accepted subject
+coordinates and present support qualification; the full immutable receipt
+remains in storage and is retrieved explicitly when exact replay/audit detail is
+needed. `SupportUnavailable` after commit means acceptance succeeded but
+qualification failed; retrieve the receipt if exact acceptance detail is needed
+and investigate availability. It is not a rejected write and is not a support
+verdict.
 
 ## Independent verification
 
