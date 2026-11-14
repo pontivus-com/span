@@ -762,9 +762,8 @@ class LifecycleServiceTest(unittest.TestCase):
     def test_verification_requires_admitted_observation(self) -> None:
         def wire(submission: str, observation: str) -> w.RecordRequestWire:
             return w.RecordRequestWire(
-                repository_id="repo-1",
                 request_id=submission,
-                context_id="ctx-1",
+                context=_context_ref("ctx-1"),
                 kind=m.RecordKind.VERIFICATION,
                 run=w.VerificationRunWire(
                     repository_id="repo-1",
@@ -793,9 +792,8 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_verification_accepts_evidence_only(self) -> None:
         wire = w.RecordRequestWire(
-            repository_id="repo-1",
             request_id="sub-v-evidence",
-            context_id="ctx-1",
+            context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
                 repository_id="repo-1",
@@ -816,9 +814,8 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_record_verification_accepts_evidence_only(self) -> None:
         request = w.RecordRequestWire(
-            repository_id="repo-1",
             request_id="sub-v-wire",
-            context_id="ctx-1",
+            context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
                 repository_id="repo-1",
@@ -1011,9 +1008,8 @@ class LifecycleServiceTest(unittest.TestCase):
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
                 identity=m.RecordingIdentity(
-                    repository_id="repo-1",
                     request_id=m.RequestId("sub-dependent"),
-                    context_id=dependent_context.context_id,
+                    context=_context_ref(dependent_context.context_id),
                 ),
                 surface=m.SurfaceKey(
                     repository_id="repo-1",
@@ -2147,9 +2143,8 @@ class LifecycleServiceTest(unittest.TestCase):
             evidence=(w.SourceSupportWire(locator="src/a.py"),),
         )
         wire = w.RecordRequestWire(
-            repository_id="repo-1",
             request_id="verify-replay",
-            context_id="ctx-1",
+            context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=run,
         )
@@ -2220,9 +2215,8 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_verification_store_failure_preserves_accepted_receipt(self):
         wire = w.RecordRequestWire(
-            repository_id="repo-1",
             request_id="verify-store-failure",
-            context_id="ctx-1",
+            context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
                 repository_id="repo-1",

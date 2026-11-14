@@ -1330,14 +1330,14 @@ class AnswerServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(page, m.Unavailable)
 
-    def test_wrong_repository_continuation_is_rejected(self) -> None:
-        self.store.register_repository("repo-2", str(self.root))
+    def test_continuation_rejects_a_repository_override(self) -> None:
         service = self._page_service()
         first = self._cold_page(service)
-        page = service.ask(
-            m.AskRequest(repository_id="repo-2", continuation=first.admission.continuation)
-        )
-        self.assertIsInstance(page, m.Unavailable)
+        with self.assertRaisesRegex(ValueError, "no repository override"):
+            m.AskRequest(
+                repository_id="repo-2",
+                continuation=first.admission.continuation,
+            )
 
     def test_one_line_too_large_is_refused(self) -> None:
         import dataclasses

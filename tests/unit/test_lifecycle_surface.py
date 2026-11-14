@@ -380,7 +380,7 @@ class ErrorEnvelopeTest(unittest.TestCase):
             )
         message = str(raised.exception)
         self.assertNotIn("RecordRequestWire", message)
-        self.assertIn("flat", message)
+        self.assertIn("action", message)
 
     def test_ask_operational_failure_is_an_unavailable_result(self):
         context = _context()
