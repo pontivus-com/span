@@ -119,10 +119,10 @@ class McpAdapter:
             repository_id = repository_route(tool_name, request, route)
         except (RoutingError, ValueError) as exc:
             if isinstance(request, m.AskRequest) and request.continuation is not None:
-                rejection = RecordingValidationError.continuation_invalid(
+                continuation_rejection = RecordingValidationError.continuation_invalid(
                     "the continuation cannot be routed"
                 )
-                return _encoded_result(_rejected(request, rejection))
+                return _encoded_result(_rejected(request, continuation_rejection))
             return encode_error("ingress", str(exc))
         try:
             context = self._context(repository_id)
