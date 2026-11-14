@@ -563,7 +563,7 @@ class RejectionCauseKind(enum.Enum):
 
 class Rejection(ValueError):
     cause_kind: RejectionCauseKind
-    cause: str                       # the server's exact message
+    public_cause: str                # contract vocabulary, never raw exception text
     required_action: str             # one function of cause_kind only
     current_version: int | None = None
     current_boundary_version: int | None = None
@@ -577,10 +577,22 @@ conflict. `OBSERVATION_NOT_ADMITTED` is the remedy gap a flat-create host hit:
 the field was right and the value was an id `ask` never returned, so “correct the
 named field” sent it back to the same call.
 
-The service and store raise a `Rejection`; the adapter copies it into the
-public `Rejected` result and adds the request identity. The adapter must not
-parse the cause, call `re.search`, or choose an action from words such as
-“context”, “drift”, or “current”.
+The service and store raise a `Rejection`; the adapter copies
+`public_cause`, the typed kind, structured versions and required action into
+the public `Rejected` result and adds the request identity. The adapter must
+not call `str(exc)`, parse the cause, call `re.search`, or choose an action
+from words such as “context”, “drift”, or “current”. Internal diagnostics stay
+with the owning exception/log path.
+
+**Public failure boundary.** Expected operational exceptions are classified by
+their typed owner and mapped by one shell-level table to stable public
+`Unavailable.failure` and recovery text. No expected public result is built
+from `str(exc)`. Unexpected exceptions are logged with their internal
+diagnostics and cross the MCP transport only as a stable generic tool failure;
+the transport never serializes their message, traceback, module/class name,
+filesystem/store path or database detail. This containment is an egress safety
+boundary, not a semantic fallback: it does not turn a programming defect into
+Gap, Rejected or ordinary operational state.
 
 **Gap recovery.** Keep one service-owned gap_recovery builder implementing
 FD-25/FD-41 and lifecycle §4.1. Typed lookup/operational failures reach the
@@ -609,6 +621,15 @@ Keep null/default/empty/unknown-field behavior equivalent. Context origin,
 membership, owner containment and CAS still consult their canonical state owners.
 Do not use a root tagged union merely to evade hosts that cannot deliver the
 approved grammar; test the real packaged schema through each claimed host.
+
+**Public discriminator vocabulary.** Where structural ambiguity genuinely
+requires a discriminator, declare its wire value explicitly beside the canonical
+branch rule and make both schema projection and decoding consume that declaration.
+Never derive a public tag, schema branch name or accepted-value list from
+`type.__name__`, module paths or another runtime implementation identifier.
+Internal carrier renames therefore cannot change the protocol. Where branch
+structure is already unambiguous, omit the tag rather than exposing implementation
+shape for convenience.
 
 **Bound context implementation.** Put the lifecycle §4.1 reference carrier in
 core/model. Parse its canonical wire branch once, then route through the typed

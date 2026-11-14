@@ -412,9 +412,10 @@ and owning `SurfaceStatus` are
 composed after acceptance. Expected operational failure is represented by
 `SupportUnavailable` or `SurfaceStatusUnavailable` while preserving the accepted
 effect and its receipt selector. The full immutable receipt stays in storage;
-status is never persisted in it. The cause is the server's
-exact validation
-message; the adapter does not replace it with a generic action.
+status is never persisted in it. A rejection's `cause` and
+`required_action` are server-owned public contract text derived from its typed
+cause and structured public coordinates; they are never copied from raw
+exception text.
 
 **Compact public acceptance and exact detail.** The ordinary acceptance carriers
 are fixed before implementation:
@@ -566,6 +567,24 @@ discovered by accident.
 The agent calls `reconsider` after changes and completes the applicable
 re-establishment work under §7.
 
+**Public agent boundary.** Agent-facing request schemas, results, rejections,
+unavailable results, recoveries, examples and tool descriptions contain only
+lifecycle-contract vocabulary, semantic/user-visible coordinates and opaque
+contract handles. `Rejected.cause` and `Unavailable.failure` are public
+descriptions produced from typed public failure classification; raw exception
+messages are never serialized. Public recovery names only an action available
+through the lifecycle or supported setup surface.
+
+Implementation class/module names, exception types or tracebacks, filesystem or
+store paths, database/table/index/schema mechanics, internal context/request
+issuance keys or digests, context-origin mechanics and administrative state are
+not agent-facing data. A returned `InvestigationContextRef`,
+`ReceiptRetrievalSelector`, understanding/version/revision coordinate or
+observation identifier is an opaque contract handle: the agent may copy it into
+a declared operation but never needs to parse it or infer the mechanism that
+created it. A wire discriminator, when required, is explicit public protocol
+vocabulary rather than a runtime type/class name. *(A4, A8, A9, F6, F7, F10)*
+
 ## 5. The internal boundary
 
 Everything in this table exists. None of it is the agent's job. The right-hand
@@ -573,9 +592,9 @@ column is the law that forces it inward.
 
 | Internal | Why it is not public |
 | --- | --- |
-| Context issuance | the agent never needs an id to ask or record (F7) |
+| Context issuance mechanics | Span owns issuance keys, origin and binding; when continuation/re-establishment needs context, the agent receives only the opaque `InvestigationContextRef` (F7) |
 | Evidence admission | a step inside `ask`/`record`/`reconsider`, not a task (F7) |
-| Observation identity | derived by Span from source (A5, F7) |
+| Observation identity generation | derived by Span from source; any returned observation identifier is only an opaque contract handle (A5, F7) |
 | Submission identity | derived from the caller's request identity and content; receipts make retry safe (A2, F7) |
 | Support evaluation | an attribute of every returned answer (F2, F6) |
 | Surface status computation | an attribute of every returned answer (F9) |

@@ -223,6 +223,14 @@ A failure that prevents evaluation — unavailable store, provider error, schema
 version — returns `Unavailable` with the recovery. An unreadable source is not
 `Unavailable`; it is `UNVERIFIABLE` support. *(A8, L3)*
 
+Expected operational failures are classified at their typed owner and projected
+into the public vocabulary fixed by lifecycle §4. Raw exception messages,
+tracebacks, filesystem/store details, runtime carrier/module names, internal
+keys/digests/origins and administrative state never cross the agent boundary.
+Unexpected defects remain defects: transport containment may return a stable
+generic tool failure while retaining diagnostics internally, but it never turns
+the defect into a semantic Gap or an actionable Rejected result. *(A8, L3, L7)*
+
 Context-issuance conflicts propagate as typed rejection; expected store/provider
 access failures propagate as Unavailable. A catch-all conversion to Gap is
 forbidden. Missing/invalid references identify the bound repository/context and
@@ -330,9 +338,11 @@ A replay returns the original acceptance. A rejection returns the offending
 identity and the required action. Unavailability returns the operational failure
 and recovery. They are never merged. *(A2, A8)*
 
-A rejection carries what `lifecycle-contract` §4.2 fixes. This design owns only
-the separation above: a failure that prevents evaluation is `Unavailable`
-(FD-27), never a rejection. *(A2, A8)*
+A rejection carries what `lifecycle-contract` §4.2 fixes. Its public cause and
+action are a deterministic function of the typed rejection kind plus structured
+public coordinates; neither is derived by parsing or copying exception text.
+This design owns only the separation above: a failure that prevents evaluation
+is `Unavailable` (FD-27), never a rejection. *(A2, A8)*
 
 **FD-40 — No partial application.** A rejected write commits nothing: no version,
 no revision, no challenge disposition, and no consumed context. *(A2, L4)*
@@ -393,7 +403,11 @@ no last-write-wins and no silent merge. *(A3)*
 
 **FD-49 — The host delivers the advertised schema.**
 Span requires the host to expose the declared tool schemas without coercion or
-re-encoding that changes their meaning. *(L8)*
+re-encoding that changes their meaning. Any required union discriminator has an
+explicit public protocol value independent of runtime class/type names; renaming
+an internal carrier cannot silently change the wire contract. Structurally
+unambiguous branches need no discriminator merely to expose their implementation
+type. *(L8, A9, F10)*
 
 **FD-50 — The host preserves request identity.**
 A retry must carry the same request identity if it is the same act. If a host
