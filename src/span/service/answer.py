@@ -179,7 +179,6 @@ class AnswerService:
                 m.Answer(
                     surface=surface,
                     status=status,
-                    question=selected_question,
                     conclusions=tuple(current),
                     gaps=tuple(gaps),
                     verification=self._verification(surface),
@@ -197,9 +196,11 @@ class AnswerService:
             reason=reason,
             recovery=gap_recovery(reason),
             changed_evidence=tuple(
-                item.evidence
-                for item in historical
-                for item in ()
+                {
+                    ref.evidence_id.value: ref
+                    for item in historical
+                    for ref in item.evidence
+                }.values()
             ),
             historical=tuple(historical),
             missing=(selected_question,),
@@ -369,63 +370,11 @@ class AnswerService:
             return self._fit(request, _dataclasses.replace(result, admission=view))
         return self._fit(request, _dataclasses.replace(result, admission=view))
 
-    def _investigate(self, request: m.AskRequest, surface: m.SurfaceKey) -> tuple[
-        m.InvestigationContextId | None,
-        tuple[m.EvidenceUnit, ...],
-        tuple[m.SourceObservationId, ...],
-    ]:
-        paths = self._surface_paths(surface)
-        if not paths:
-            return None, (), ()
-        scope = m.EvidenceScope(paths=paths)
-        try:
-            context = issue_context(
-                self._store,
-                payload=request,
-                repository_id=request.repository_id,
-                request_id=m.RequestId(str(request.request_id)),
-                scope=scope,
-                question=selected_question,
-                clock=self._clock,
-                new_context_id=self._new_context_id,
-            )
-            bounds = self._policy.default_query_bounds
-            self._evidence.admit(
-                context,
-                tuple(m.EvidenceRequest(path) for path in paths),
-                bounds,
-            )
-            records = self._evidence.context_observations(context.context_id.value)
-            evidence = tuple(self._evidence.context_unit(record) for record in records)
-            observation_ids = tuple(record.observation_id.value for record in records)
-        except ValueError:
-            return None, (), ()
-        return (
-            context.context_id,
-            evidence,
-            tuple(m.SourceObservationId(value) for value in observation_ids),
-        )
-
     def _surface_paths(self, surface: m.SurfaceKey) -> tuple[str, ...]:
         if surface.kind is m.SurfaceKind.FILE:
             return (surface.locator,)
         declared = self._store.find_surface(surface)
         return () if declared is None else declared.boundary.paths
-
-    def _context(
-        self, request: m.AskRequest, surface: m.SurfaceKey
-    ) -> m.InvestigationContextId:
-        context = issue_context(
-            self._store,
-            payload=request,
-            repository_id=request.repository_id,
-            request_id=m.RequestId(str(request.request_id)),
-            scope=m.EvidenceScope(paths=self._surface_paths(surface)),
-            question=selected_question,
-            clock=self._clock,
-            new_context_id=self._new_context_id,
-        )
-        return context.context_id
 
     def _verification_members(self, surface: m.SurfaceKey) -> tuple[str, ...] | None:
         """The file members the asked surface denotes, or None when unresolvable.
