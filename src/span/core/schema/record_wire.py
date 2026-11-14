@@ -478,6 +478,42 @@ class RecordRequestWire:
         ),
         _constraints.PresenceRule(
             fields=(
+                _constraints.PresenceField("question"),
+                _constraints.PresenceField("context"),
+            ),
+            minimum=1,
+            maximum=2,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("conclusion"), True
+                ),
+            ),
+            label="understanding create target",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("understanding_id"),
+                _constraints.PresenceField("expected_version"),
+                _constraints.PresenceField("run"),
+                _constraints.PresenceField("action"),
+                _constraints.PresenceField("expected_boundary_version"),
+                _constraints.PresenceField(
+                    "challenge_dispositions", non_empty=True
+                ),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("conclusion"), True
+                ),
+            ),
+            label="understanding create unrelated fields",
+        ),
+        _constraints.PresenceRule(
+            fields=(
                 _constraints.PresenceField("understanding_id"),
                 _constraints.PresenceField("expected_version"),
             ),

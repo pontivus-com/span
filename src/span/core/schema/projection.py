@@ -235,12 +235,15 @@ def _ensure_def(cls: type, defs: dict[str, dict], seen: set[str]) -> None:
     except TypeError:
         return
     tagged_properties["$type"] = {"const": tag}
-    defs[f"{name}__tag"] = {
+    tagged_definition: dict[str, object] = {
         "type": "object",
         "properties": tagged_properties,
         "required": sorted([*required, "$type"]),
         "additionalProperties": False,
     }
+    if constraints:
+        tagged_definition["allOf"] = constraints
+    defs[f"{name}__tag"] = tagged_definition
 
 
 def definition_closure(root: type) -> dict[str, dict]:
