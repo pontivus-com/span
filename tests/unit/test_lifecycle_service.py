@@ -1008,8 +1008,9 @@ class LifecycleServiceTest(unittest.TestCase):
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
                 identity=m.RecordingIdentity(
+                    repository_id="repo-1",
                     request_id=m.RequestId("sub-dependent"),
-                    context=_context_ref(dependent_context.context_id),
+                    context_id=dependent_context.context_id,
                 ),
                 surface=m.SurfaceKey(
                     repository_id="repo-1",
@@ -1633,6 +1634,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 context_id=context_id,
                 surface=w.SurfaceWire(kind="SYMBOL", locator="src/a.py::A"),
                 question="What supports A?",
+                scope_paths=("src/a.py::A",),
                 conclusion=_conclusion(
                     "A is supported by every form.",
                     scope_paths=("src/a.py::A",),

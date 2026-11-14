@@ -93,6 +93,16 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
     def _created_conclusion_id(self, recorded: dict) -> str:
         return next(iter(self._qualification_ids(recorded)))
 
+    def _answer_conclusions(self, answer: dict) -> list[dict]:
+        direct = list(answer.get("conclusions", []))
+        if direct:
+            return direct
+        return [
+            conclusion
+            for group in answer.get("groups", [])
+            for conclusion in group["conclusions"]
+        ]
+
     async def _record_create(self, session: ClientSession, request: str) -> dict:
         return await self._call(
             session,
@@ -255,9 +265,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(warm["$type"], "Answer")
             self.assertEqual(
-                warm["conclusions"][0]["statement"], "The app emits line1."
+                self._answer_conclusions(warm)[0]["statement"], "The app emits line1."
             )
-            self.assertTrue(warm["conclusions"][0]["evidence"])
+            self.assertTrue(self._answer_conclusions(warm)[0]["evidence"])
             return warm
 
         async def second(session: ClientSession) -> dict:
@@ -274,7 +284,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         again = await self._session(second)
         self.assertEqual(again["$type"], "Answer")
         self.assertEqual(
-            again["conclusions"][0]["ref"]["understanding_id"]["value"],
+            self._answer_conclusions(again)[0]["ref"]["understanding_id"]["value"],
             "u:sub-create-1",
         )
 
@@ -284,6 +294,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
+                    "repository_id": REPOSITORY_ID,
                     "request_id": "req-context-bound",
                     "reference": "src/app.py",
                     "evidence": [{"locator": "src/app.py"}],
@@ -322,6 +333,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
+                    "repository_id": REPOSITORY_ID,
                     "request_id": "req-context-conflict",
                     "reference": "src/app.py",
                     "evidence": [{"locator": "src/app.py"}],
@@ -772,7 +784,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         answer = await self._session(journey)
         self.assertEqual(answer["$type"], "Answer")
         self.assertEqual(
-            answer["conclusions"][0]["statement"], "The app emits changed."
+            self._answer_conclusions(answer)[0]["statement"], "The app emits changed."
         )
 
     async def test_reconsider_race_rejects_on_stale_expected_version(self) -> None:
@@ -870,9 +882,10 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
+                    "repository_id": REPOSITORY_ID,
                     "request_id": "svc-ctx-ask",
                     "surface": {"kind": "SERVICE", "locator": "pipeline"},
-                    "evidence": [{"locator": path}],
+                    "evidence": [{"locator": path} for path in paths],
                 },
             )
             self.assertEqual(gap["$type"], "Gap", gap)
@@ -1056,11 +1069,11 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         after = await self._session(journey)
         self.assertEqual(after["$type"], "Answer", after)
         self.assertEqual(
-            after["conclusions"][0]["statement"],
+            self._answer_conclusions(after)[0]["statement"],
             "The pipeline flows A through D.",
         )
         self.assertEqual(
-            after["conclusions"][0]["support"]["evaluation"]["state"], "CURRENT"
+            self._answer_conclusions(after)[0]["support"]["evaluation"]["state"], "CURRENT"
         )
 
     async def test_challenge_raised_by_reconsider_is_settled_by_record(self) -> None:
@@ -1161,6 +1174,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 session,
                 "ask",
                 {
+                    "repository_id": REPOSITORY_ID,
                     "request_id": "wrong-route-ask",
                     "surface": {"kind": "FILE", "locator": "src/app.py"},
                     "evidence": [{"locator": "src/app.py"}],

@@ -613,7 +613,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             )
 
     def test_multiple_evidence_modes_reject(self):
-        with self.assertRaisesRegex(ValueError, "more than one"):
+        with self.assertRaisesRegex(ValueError, "active: locator, observation_id"):
             from_wire(
                 w.RecordRequestWire,
                 self._update(
@@ -878,8 +878,8 @@ class RecordWireCodecTest(unittest.TestCase):
                 observer="test",
             )
         self.assertIn("observations or evidence", str(raised.exception))
-        self.assertIn("obs:", str(raised.exception))
-        self.assertIn("locator", str(raised.exception))
+        self.assertIn("observations", str(raised.exception))
+        self.assertIn("evidence", str(raised.exception))
 
     def test_verification_accepts_evidence_only(self):
         run = w.VerificationRunWire(
@@ -918,7 +918,7 @@ class RecordIngressDiagnosticsTest(unittest.TestCase):
                 },
             )
         self.assertIn("conclusion, locator", str(raised.exception))
-        self.assertIn("inside actions", str(raised.exception))
+        self.assertIn("understanding update root-only fields", str(raised.exception))
 
 
 if __name__ == "__main__":

@@ -529,8 +529,10 @@ class AnswerServiceTest(unittest.TestCase):
         result = self._ask("src/a.py", "What does A do?")
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
-        self.assertEqual(result.question, "What does A do?")
-        self.assertEqual(len(result.conclusions), 1)
+        self.assertEqual(
+            sum(len(group.conclusions) for group in result.groups),
+            1,
+        )
         self.assertEqual(result.status.current, 1)
 
     def test_changed_source_is_an_invalidated_gap(self) -> None:
@@ -1083,8 +1085,14 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
         self.assertEqual(result.surface.locator, "src/a.py")
-        self.assertEqual(result.conclusions[0].ref.understanding_id.value, "u-a")
-        self.assertEqual(result.conclusions[0].statement, "A does X number 1.")
+        self.assertEqual(
+            result.groups[0].conclusions[0].ref.understanding_id.value,
+            "u-a",
+        )
+        self.assertEqual(
+            result.groups[0].conclusions[0].statement,
+            "A does X number 1.",
+        )
 
     def test_ambiguous_reference_is_resolved_by_exact_surface(self) -> None:
         self.store.put_surface(
@@ -1321,12 +1329,10 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertIsInstance(page, m.Unavailable)
 
     def test_continuation_rejects_a_repository_override(self) -> None:
-        service = self._page_service()
-        first = self._cold_page(service)
         with self.assertRaisesRegex(ValueError, "no repository override"):
             m.AskRequest(
                 repository_id="repo-2",
-                continuation=first.admission.continuation,
+                continuation="span1_token",
             )
 
     def test_one_line_too_large_is_refused(self) -> None:

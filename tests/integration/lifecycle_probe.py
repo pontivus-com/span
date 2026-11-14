@@ -105,7 +105,7 @@ async def _run(exe, repo, data_dir, repository_id):
                 "retrieved_error": retrieved_error,
                 "understanding_id": understanding_id,
                 "found_kind": warm.get("$type"),
-                "statement": warm["conclusions"][0]["statement"],
+                "statement": warm["groups"][0]["conclusions"][0]["statement"],
                 "version": retrieved["version"]["version"]["value"],
             }
 

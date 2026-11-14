@@ -392,7 +392,6 @@ class ReconsiderServiceTest(unittest.TestCase):
         with self.assertRaisesRegex(RecordingValidationError, "not admitted"):
             self.service.reconsider(
                 m.ReconsiderRequest(
-                    repository_id="repo-1",
                     challenge=m.ChallengeRaise(
                         request_id="req-challenge-2",
                         context=m.InvestigationContextRef(
