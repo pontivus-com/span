@@ -64,8 +64,8 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "create is flat: no action and no actions; action belongs to "
         "kind=surface. State the evidence you already hold; Span "
         "derives context, ids, and revisions. "
-        "A create may use the context reference returned by ask/reconsider instead of question and "
-        "scope_paths; do not send both. "
+        "A create may use the context reference returned by explicit evidence admission "
+        "or reconsider instead of question and scope_paths; do not send both. "
         "CREATE TEMPLATE (copy and fill): "
         '{"repository_id":"<id>","request_id":"<new id>",'
         '"kind":"understanding","question":"<exact question>",'
@@ -73,7 +73,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '"locator":"<path>"} '
         "Create evidence is exactly one of locator, observation_id, or "
         "non-empty support; scope is supplied or derived independently. Use "
-        "observation_id instead of locator when the ask Gap gave you one. Use "
+        "observation_id instead of locator when explicit evidence admission returned one. Use "
         "support when you already hold the complete dependency set; then do "
         "not also send observation_id. Omit surface; Span derives it from one "
         "scope_path, or from the context. With a context, omit question and "
@@ -111,7 +111,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '{"request_id":"<new id>","context":{"repository_id":"<id>",'
         '"context_id":{"value":"<context id>"}},"kind":"verification",'
         '"run":{"repository_id":"<id>","scope_description":"<what was tested>",'
-        '"scope_paths":["<path>"],"observations":["<obs id from ask>"],'
+        '"scope_paths":["<path>"],"observations":["<obs id from explicit admission>"],'
         '"command":"<command>","scenario":"<scenario>","outcome":"PASS",'
         '"observed_at":"<ISO 8601>","observer":"<agent>"}} '
         "A run requires at least one observation or evidence item; both may coexist. "
