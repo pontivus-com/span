@@ -525,7 +525,7 @@ and that statement remains in its owning layer.
 
 | Concern | Owner | Decision |
 | --- | --- | --- |
-| Obtain membership | `core` + `service` | Surface/current understanding identity; retained questions are metadata; no similarity matching |
+| Obtain membership | `core` + `service` | Surface/current understanding identity/exact surface-scoped recorded question; retained questions are metadata; no similarity matching |
 | Rejection cause kind | `core` | Typed enum; no text classification |
 | Current version / boundary version | `shell/sqlite_store` + `service` | Structured values carried through the result; no regex extraction |
 | `Gap.recovery` composition | `service` | One builder keyed by gap reason; reuse the `Unavailable.recovery` shape |
@@ -536,9 +536,11 @@ and that statement remains in its owning layer.
 | Descriptions and snippet | `shell/docs` | Layer-4 delivery; no semantic decisions |
 | Tests | `tests` | One rejection case per cause; one surface case per conflict; shared fixtures only |
 
-Do not add a parallel `ToolError` cause path, a second question projection, or a
-second surface-declaration path. The document-view composer and the rejection
-builder are single owners.
+Do not add a parallel `ToolError` cause path, a second free-text question
+matcher/projection, or a second surface-declaration path. The exact
+`RecordedQuestionSelector` is part of the one obtain grammar, not another
+semantic writer. The document-view composer and the rejection builder are single
+owners.
 
 **Typed rejection.** Replace adapter text classification with one typed carrier
 and one typed cause enum:
@@ -597,11 +599,14 @@ no absent context is described as reaped without evidence.
 `test_result_union_declarations_agree` asserts the reference and the runtime
 union. There is no second declaration.
 
-**Surface-first reuse.** Replace the optional-question branch with pure surface
-obtain. Add CurrentUnderstandingSelector to the existing selector union; do not
-add a public operation. Both use the one current support/status composer. Retire
-string-question lookup rather than retaining a legacy parser. Pure obtain and
-change-scope reconsider issue no contexts and need no request IDs.
+**Surface-first reuse.** Replace the ordinary optional-question branch with pure
+surface obtain. Add `RecordedQuestionSelector{repository_id, surface, question}`
+and `CurrentUnderstandingSelector` to the existing selector union; do not add a
+public operation. The recorded-question selector uses exact equality only within
+the supplied surface. All current obtain forms use the one support/status
+composer. Retire the legacy free-text question branch and `no_match` path rather
+than retaining a compatibility parser. Pure obtain forms issue no contexts and
+need no request IDs.
 
 **Delivered surface (F10).** The product surface tested for F10 is the MCP
 server plus the installer-managed pre-read notice in `docs/agents-snippet.md`.
@@ -618,28 +623,51 @@ membership, owner containment and CAS still consult their canonical state owners
 Do not use a root tagged union merely to evade hosts that cannot deliver the
 approved grammar; test the real packaged schema through each claimed host.
 
-**Bound context reference.** Use one canonical InvestigationContextRef containing
-repository_id and context_id at public context positions. Emit it from the
-persisted context; the typed bound-operation branch derives its route from it
-and forbids a parallel repository input. Direct branches carry repository_id and
+**Bound context reference.** Use one canonical
+`InvestigationContextRef{repository_id, context_id}` at every public context
+position. T03 owns this and every other public carrier shape. Emit it from the
+persisted context; the typed bound-operation branch derives its route from it and
+forbids a parallel repository input. Direct branches carry repository_id and
 derive context internally. Adapt verification, challenge, explicit ask admission,
-record updates and their results together. Internal context storage/identity and
-retention remain unchanged. No UUID search, shape-guessing adapter, new registry
-or data migration is selected. Typed lookup errors distinguish invalid references
-from unavailable stores; the adapter faithfully projects them.
+`Changed`, record updates and their results to that one carrier. Internal
+context storage/identity and retention remain unchanged. No UUID search,
+shape-guessing adapter, new registry or data migration is selected. Typed lookup
+errors distinguish invalid references from unavailable stores; the adapter
+faithfully projects them.
 
-**Change-scope reconsider.** Remove _reconsider_context from the pure read path.
-Its present content-derived request ID reuses an expired binding for identical
-changed paths; source audit reproduced the failure after 25 hours with shipped
-retention. Return current update coordinates and source references instead.
-Challenge remains a write with caller-owned identity and bound context when used.
+**Change-scope reconsider.** Keep the F4 re-establishment context but replace the
+present deterministic `_reconsider_context` request key. Source audit reproduced
+that content-derived key reusing an expired binding for identical changed paths
+after 25 hours with shipped retention. Use a Span-owned issuance path that creates
+a fresh normal retained context for each changed-scope evaluation, bounded to the
+affected scope/evidence, and return its `InvestigationContextRef` in `Changed`.
+The internal issuance key is not caller-visible and is not derived from the
+payload. A later identical reconsideration therefore gets a usable live context
+without renewing the old context, changing TTLs, searching stores, or requiring
+caller bookkeeping. Challenge remains a write with caller-owned identity.
 
-**Compact projection.** Keep durable RecordReceipt and exact snapshot owners.
-Implement lifecycle §4.2's compact public result carriers once in core/model;
+**Public admission projection.** Add one canonical `EvidenceAdmissionView` in
+`core/model`, shared by `Answer.admission` and `Gap.admission`. Its exact
+fields are `context: InvestigationContextRef`,
+`outcomes: tuple[EvidenceAdmissionOutcome, ...]`,
+`observations: tuple[SourceObservation, ...]`, `continuation: str | None`,
+`omitted: tuple[str, ...]`, and `truncated: bool`. Reuse the existing
+`EvidenceRequest`, `EvidenceAdmissionOutcome`, `SourceObservation`,
+`SourceRange` and their validation. `EvidenceRequest` is the unadmitted
+source-pointer/selection carrier; `EvidenceRef` remains the observed/cited
+source identity. Do not retain parallel top-level Answer/Gap
+context/evidence/observation/continuation fields after this projection lands.
+
+**Compact projection.** Keep durable `RecordReceipt` and exact snapshot owners.
+Implement lifecycle §4.2's compact public result carriers once in `core/model`;
 service composition uses the same support/status owners and the wire generator
-projects those carriers. The adapter never deletes JSON fields after encoding.
-Exact snapshot/receipt selectors supply audit detail without a new store. Keep
-all non-current findings and qualification timestamps observable.
+projects those carriers. `UnderstandingRecorded` and `VerificationRecorded`
+use exactly the fields fixed in lifecycle §4.2 and do not nest the full
+`RecordReceipt`. Where current qualification carriers would repeat the same
+accepted run/identity body, T03 changes that public projection once at the
+canonical carrier rather than trimming it in the adapter. Exact snapshot/receipt
+selectors supply audit detail without a new store. Keep all non-current findings
+and qualification timestamps observable.
 
 **Context-bound create.** The service chooses `ContextBoundTarget` or
 `ExplicitTarget` once from the context origin (FD-30). The adapter does not

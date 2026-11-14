@@ -30,15 +30,20 @@ conflict. A path surface's identity is `(repository, path)`; a symbol surface's
 identity is `(repository, canonical locator)`. An identity is never reused for a
 different kind. *(F9, L1)*
 
-**FD-2 — Request identity binds a context.**
-Only explicit admission or writes issue contexts. Pure obtain and change-scope
-reconsider issue none. An issued context is bound to `(repository, request
-identity, question when applicable, scope, source selection)`. Repeating
-a request with the same identity and the same binding returns the same context;
-the same identity with a different binding is `CONTEXT_BINDING_CONFLICT`,
-unless a retained recording receipt has already resolved the request (FD-3).
-Recovery is original content or a new request identity, never a version change.
-*(F7, L7)*
+**FD-2 — Context issuance and request identity are distinct.**
+Ordinary obtain issues no context. Explicit evidence admission and writes issue
+contexts under their caller-owned request identities. Change-scope reconsider
+also issues the bounded re-establishment context required by F4, but its issuance
+identity is Span-owned and not a caller retry key. Any identity-bearing context
+is bound to `(repository, request identity, question when applicable, scope,
+source selection)`. Repeating a caller-identified request with the same identity
+and binding returns the same context; the same identity with a different binding
+is `CONTEXT_BINDING_CONFLICT`, unless a retained recording receipt has already
+resolved the request (FD-3). A repeated changed-scope reconsider is instead a new
+read and receives a usable live context even when an earlier one expired; its
+internal identity is never derived from the changed-scope payload. Recovery for
+caller-identified requests is original content or a new request identity, never a
+version change or TTL increase. *(F4, F7, L7, L10)*
 
 **FD-3 — Submission identity is derived from request identity and content.**
 For a write, Span looks up the retained receipt for `(repository, request
@@ -194,13 +199,19 @@ reports stale and unassessed items, and while recorded gaps are returned. The
 agent can act on the current part and see exactly what is missing. *(A9, L3)*
 
 **FD-25 — Gap reasons are exhaustive.**
-For surface/current-identity membership selected under lifecycle §4.1, no current
-conclusion yields one reason from combined support: REASSESSMENT_REQUIRED becomes
-`invalidated`, UNVERIFIABLE becomes `unverifiable`, and no retained usable
-understanding becomes `unassessed`. String-question matching and its `no_match`
-production path are retired. Stored question metadata/history is not rewritten.
-An unknown exact identity is a lookup rejection, not a newly invented Gap.
-Context binding/admission failures never become semantic absence. *(F4, A8, L3)*
+For surface/current-identity/exact-recorded-question membership selected under
+lifecycle §4.1, no current conclusion yields one reason from combined support:
+REASSESSMENT_REQUIRED becomes `invalidated`, UNVERIFIABLE becomes
+`unverifiable`, and no retained usable understanding becomes `unassessed`.
+The ordinary free `question` lookup branch and its `no_match` production path
+are retired. `RecordedQuestionSelector` performs exact equality only within its
+supplied surface. No recorded membership for that exact question is
+`unassessed`; matched membership with lost support still follows the ordinary
+`invalidated`/`unverifiable` mapping. The selector does not reintroduce
+natural-language or similarity matching. Stored question metadata/history is not
+rewritten. An unknown exact identity is a lookup rejection, not a newly invented
+Gap. Context binding/admission failures never become semantic absence.
+*(F3, F4, A8, L3)*
 
 **FD-26 — Ambiguity is a separate result.**
 When a surface reference resolves to more than one granularity, the result is
@@ -222,10 +233,12 @@ Stateful validation stays with its canonical owner. *(FD-39, FD-41, L3, L5)*
 The view is composed on read from current conclusions; no stored copy exists. Its
 contents are fixed in `lifecycle-contract` §4.1. *(G6, L11)*
 
-Pure surface obtain groups all current membership by recorded question metadata;
-current identity selectors restrict membership before the same composition.
-No pure read issues a context or requires request identity. Its role as
-the reuse path is stated in `lifecycle-contract` §4.1. *(G2, F3, A4, L11)*
+Pure surface obtain groups all current membership by recorded question metadata.
+`RecordedQuestionSelector` restricts membership to one exact recorded question
+on one exact surface; current identity selectors restrict membership to one
+returned understanding identity. All three reuse forms use the same composition,
+issue no context and require no request identity. Their role as the reuse paths
+is stated in `lifecycle-contract` §4.1. *(G2, F3, A4, L11)*
 
 **FD-29 — Result ordering is stable.**
 Current conclusions first, grouped by question; then status; then gaps and
@@ -349,13 +362,15 @@ becomes `UNVERIFIABLE` and is reported. Reaping never turns a broken premise int
 a current one. *(F2, F3)*
 
 **FD-45 — Restart recovery is by identity.**
-After a restart, a request identity recovers its context if retained and its
-receipt if retained. No conversation replay is required. The canonical context reference binds
-repository and context identity at issuance. Context-bound routing derives from
-that reference with no separate override; lookup still validates actual liveness
-and membership. No cross-store search or context replacement is implicit. Pure
-change-scope reconsider is not assigned a content-derived expiring identity.
-*(A1, A2, L7)*
+After a restart, a caller request identity recovers its context if retained and
+its receipt if retained. No conversation replay is required. The canonical
+context reference binds repository and context identity at issuance.
+Context-bound routing derives from that reference with no separate override;
+lookup still validates actual liveness and membership. No cross-store search or
+context replacement is implicit. Change-scope reconsider receives a fresh
+Span-owned issuance identity on each evaluation, never a deterministic digest of
+the changed scope; the returned context follows normal retention and a later
+identical reconsideration must not be blocked by its expiry. *(A1, A2, F4, L7, L10)*
 
 ## 10. Concurrency
 
@@ -455,8 +470,9 @@ unsupported content to appear as history or references instead. F2 preserves the
 Therefore: if at least one matched conclusion is current, the result is an
 `Answer` containing only current conclusions, with the rest reported as status
 references. If none is current, the result is a `Gap`. The Gap reason follows the
-combined state under FD-25; membership is selected by surface/current identity,
-not by a supplied question string.
+combined state under FD-25; membership is selected by surface, current identity,
+or the explicit exact recorded-question selector, never by an ordinary supplied
+question string or semantic similarity.
 
 Withholding a supported conclusion because a sibling is stale would satisfy no
 principle and violate two.

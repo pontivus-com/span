@@ -7,13 +7,15 @@
 - Add the low-friction lifecycle solution and implementation plan, with a
   source-bound behavior-class audit, reproduced failure evidence, ordered tasks,
   and a mandatory regression baseline before production changes.
-- Amend the target lifecycle, functional and technical contracts for surface-only
-  obtain, exact current-understanding selection, explicit ranged evidence,
-  canonical structural validation, compact results and existing audit retrieval.
+- Amend the target lifecycle, functional and technical contracts for surface-first
+  obtain, exact recorded-question/current-understanding selection, explicit ranged
+  evidence, canonical structural validation, compact results and existing audit
+  retrieval.
 - Define bound context routing and typed failure production instead of concealed
   context/store errors, false expiry attribution or inaccessible recovery.
-- Require context-free pure obtain and change-scope reconsider, preserving stable
-  caller-owned identity for writes and explicit evidence admission.
+- Keep pure obtain context-free while requiring change-scope reconsider to return
+  F4's bounded re-establishment context through Span-owned issuance; preserve
+  stable caller-owned identity for writes and explicit evidence admission.
 
 ### Planned implementation and upgrade
 
@@ -30,7 +32,7 @@ store, TTL increase or automatic re-ask is selected.
   and lifecycle-store behavior; a separate context/startup scope passed 81 tests.
 - Isolated production-code probes reproduced schema/decoder disagreement,
   live-context wrong-store lookup, concealed binding/store failures and repeated
-  pure-reconsider failure after its internally generated context expired.
+  reconsider failure after its content-derived internal binding expired.
 - These results establish existing defects and baselines, not successful 0.10.3
   implementation, installed-host delivery or comparative product acceptance.
 
