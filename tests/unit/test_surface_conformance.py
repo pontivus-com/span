@@ -414,6 +414,105 @@ class SurfaceConformanceTest(unittest.TestCase):
                 False,
             ),
             (
+                "ask-null-defaults-match-omission",
+                "ask",
+                {
+                    "repository_id": "r",
+                    "request_id": None,
+                    "surface": {"kind": "FILE", "locator": "a.py"},
+                    "evidence": None,
+                },
+                True,
+            ),
+            (
+                "ask-selector-empty-question",
+                "ask",
+                {
+                    "selector": {
+                        "$type": "RecordedQuestionSelector",
+                        "repository_id": "r",
+                        "surface": {"kind": "FILE", "locator": "a.py"},
+                        "question": "",
+                    }
+                },
+                False,
+            ),
+            (
+                "ask-selector-rejects-embedded-surface-repository",
+                "ask",
+                {
+                    "selector": {
+                        "$type": "RecordedQuestionSelector",
+                        "repository_id": "r",
+                        "surface": {
+                            "repository_id": "r",
+                            "kind": "FILE",
+                            "locator": "a.py",
+                        },
+                        "question": "Why?",
+                    }
+                },
+                False,
+            ),
+            (
+                "reconsider-null-challenge-matches-default",
+                "reconsider",
+                {
+                    "repository_id": "r",
+                    "changed_paths": ["a.py"],
+                    "challenge": None,
+                },
+                True,
+            ),
+            (
+                "record-context-bound-rejects-repository-override",
+                "record",
+                {
+                    "repository_id": "r",
+                    "request_id": "w",
+                    "kind": "understanding",
+                    "context": {
+                        "repository_id": "r",
+                        "context_id": {"value": "ctx-1"},
+                    },
+                    "conclusion": "Because.",
+                    "locator": "a.py",
+                },
+                False,
+            ),
+            (
+                "record-context-bound-null-repository-matches-omission",
+                "record",
+                {
+                    "repository_id": None,
+                    "request_id": "w",
+                    "kind": "understanding",
+                    "context": {
+                        "repository_id": "r",
+                        "context_id": {"value": "ctx-1"},
+                    },
+                    "conclusion": "Because.",
+                    "locator": "a.py",
+                },
+                True,
+            ),
+            (
+                "record-unknown-surface-kind",
+                "record",
+                {
+                    "repository_id": "r",
+                    "request_id": "w",
+                    "kind": "surface",
+                    "action": "create",
+                    "surface": {
+                        "kind": "UNKNOWN",
+                        "locator": "svc",
+                        "boundary": {"paths": ["src"], "symbols": []},
+                    },
+                },
+                False,
+            ),
+            (
                 "ask-explicit-admission",
                 "ask",
                 {
