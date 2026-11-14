@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from span.core import model as m
+from span.core.recording import RecordingValidationError
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.service.answer import AnswerService
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
@@ -1347,11 +1348,12 @@ class AnswerServiceTest(unittest.TestCase):
             expires_at=NOW + RETENTION.context_lifetime
         )
         self.store.abandon_context(context_id)
-        page = service.ask(m.AskRequest(continuation=continuation))
-        self.assertIsInstance(page, m.Unavailable)
-        assert isinstance(page, m.Unavailable)
-        self.assertNotIn("reaped", page.failure.lower())
-        self.assertNotIn("reaped", page.recovery.lower())
+        with self.assertRaises(RecordingValidationError) as raised:
+            service.ask(m.AskRequest(continuation=continuation))
+        self.assertIs(
+            raised.exception.cause_kind, m.RejectionCauseKind.CONTINUATION_INVALID
+        )
+        self.assertNotIn("reaped", raised.exception.required_action.lower())
 
     def test_expired_context_rejects_the_continuation(self) -> None:
         now = [NOW]
@@ -1360,8 +1362,18 @@ class AnswerServiceTest(unittest.TestCase):
             expires_at=NOW + RETENTION.context_lifetime
         )
         now[0] = NOW + datetime.timedelta(hours=2)
-        page = service.ask(m.AskRequest(continuation=continuation))
-        self.assertIsInstance(page, m.Unavailable)
+        with self.assertRaises(RecordingValidationError) as raised:
+            service.ask(m.AskRequest(continuation=continuation))
+        self.assertIs(
+            raised.exception.cause_kind, m.RejectionCauseKind.CONTINUATION_INVALID
+        )
+
+    def test_malformed_continuation_is_a_typed_rejection(self) -> None:
+        with self.assertRaises(RecordingValidationError) as raised:
+            self.service.ask(m.AskRequest(continuation="span1_not-base64"))
+        self.assertIs(
+            raised.exception.cause_kind, m.RejectionCauseKind.CONTINUATION_INVALID
+        )
 
     def test_continuation_rejects_a_repository_override(self) -> None:
         with self.assertRaisesRegex(ValueError, "no repository override"):

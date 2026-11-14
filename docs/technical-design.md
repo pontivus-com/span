@@ -555,7 +555,10 @@ class RejectionCauseKind(enum.Enum):
     SURFACE_AMBIGUOUS = "surface_ambiguous"
     SURFACE_MISMATCH = "surface_mismatch"
     CONTEXT_TARGET_CONFLICT = "context_target_conflict"
+    CONTEXT_BINDING_CONFLICT = "context_binding_conflict"
+    CONTEXT_SCOPE_CONFLICT = "context_scope_conflict"
     CONTEXT_REQUIRED = "context_required"
+    CONTINUATION_INVALID = "continuation_invalid"
     OBSERVATION_NOT_ADMITTED = "observation_not_admitted"
     REPLAY_CONFLICT = "replay_conflict"
     ALREADY_EXISTS = "already_exists"
@@ -571,9 +574,13 @@ class Rejection(ValueError):
 
 Every raise site selects its kind; one cause-to-action function is the only place
 that maps a kind to a remedy. `SOURCE_DRIFT`, `CONTEXT_REQUIRED`,
-`OBSERVATION_NOT_ADMITTED`, and `ALREADY_EXISTS` exist because the prior text
+`CONTINUATION_INVALID`, `OBSERVATION_NOT_ADMITTED`, and `ALREADY_EXISTS`
+exist because the prior text
 classifier distinguished them and folding any into `VALIDATION` would misname the
-conflict. `OBSERVATION_NOT_ADMITTED` is the remedy gap a flat-create host hit:
+conflict. `CONTINUATION_INVALID` owns malformed, missing, wrong-binding,
+non-live, expired, exhausted, or out-of-position continuation references; its
+recovery starts a new explicit evidence admission rather than asking the caller
+to inspect internal context state. `OBSERVATION_NOT_ADMITTED` is the remedy gap a flat-create host hit:
 the field was right and the value was an id `ask` never returned, so “correct the
 named field” sent it back to the same call.
 

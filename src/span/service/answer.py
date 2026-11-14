@@ -527,39 +527,29 @@ class AnswerService:
         try:
             cursor = decode_continuation(request.continuation or "")
         except ValueError:
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation is invalid",
-                recovery="ask again for the surface with a current continuation",
-            )
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation is malformed"
+            ) from None
         context = self._store.find_context_by_id(cursor.context_id)
         if context is None:
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation context no longer exists",
-                recovery="ask again for the surface to establish a new evidence context",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation context is unavailable"
             )
         if (
             context.repository_id != cursor.repository_id
             or context.request_id != cursor.request_id
             or context.request_digest != cursor.request_digest
         ):
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation does not match its context",
-                recovery="ask again for the surface",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation does not match its context"
             )
         if context.state is not m.ContextState.LIVE:
-            return m.Unavailable(
-                operation="ask",
-                failure=f"the continuation context is {context.state.value.lower()}",
-                recovery="ask again for the surface; the context is no longer live",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation context is not live"
             )
         if context.expires_at is not None and context.expires_at < self._clock():
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation context has expired",
-                recovery="ask again for the surface; the context expired",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation context is expired"
             )
         deliveries = tuple(
             delivery
@@ -567,10 +557,8 @@ class AnswerService:
             for delivery in self._evidence.context_deliveries(record)
         )
         if cursor.unit_index > len(deliveries):
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation position is outside its context",
-                recovery="ask again for the surface",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation position is outside its context"
             )
         return self._fit_evidence_page(deliveries, cursor)
 
@@ -671,10 +659,8 @@ class AnswerService:
                 omitted.append(_delivery_label(delivery))
             break
         if not pages:
-            return m.Unavailable(
-                operation="ask",
-                failure="the continuation has no remaining evidence",
-                recovery="ask again for the surface",
+            raise RecordingValidationError.continuation_invalid(
+                "the continuation has no remaining evidence"
             )
         final = build(pages, omitted, next_index, next_line)
         while _encoded_size(final) > limit and committed:

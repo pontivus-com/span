@@ -31,6 +31,7 @@ class RejectionCauseKind(_enum.Enum):
     CONTEXT_BINDING_CONFLICT = "context_binding_conflict"
     CONTEXT_SCOPE_CONFLICT = "context_scope_conflict"
     CONTEXT_REQUIRED = "context_required"
+    CONTINUATION_INVALID = "continuation_invalid"
     OBSERVATION_NOT_ADMITTED = "observation_not_admitted"
     REPLAY_CONFLICT = "replay_conflict"
     ALREADY_EXISTS = "already_exists"
@@ -65,6 +66,11 @@ def required_action_for(kind: RejectionCauseKind) -> str:
         return "use evidence inside this context's scope, or omit context_id and supply direct scope/evidence so Span derives a recording context"
     if kind is RejectionCauseKind.CONTEXT_REQUIRED:
         return "supply the context that admitted these references, or provide explicit scope with direct source/discovery evidence"
+    if kind is RejectionCauseKind.CONTINUATION_INVALID:
+        return (
+            "start a new explicit evidence admission for the surface and use its "
+            "returned continuation"
+        )
     if kind is RejectionCauseKind.OBSERVATION_NOT_ADMITTED:
         return (
             "use an observation admitted to this context, or cite a direct locator "

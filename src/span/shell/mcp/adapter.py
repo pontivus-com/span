@@ -113,8 +113,16 @@ class McpAdapter:
         try:
             request = decode_request(tool_name, arguments)
             _, route = strip_route(tool_name, arguments)
+        except (RoutingError, ValueError) as exc:
+            return encode_error("ingress", str(exc))
+        try:
             repository_id = repository_route(tool_name, request, route)
         except (RoutingError, ValueError) as exc:
+            if isinstance(request, m.AskRequest) and request.continuation is not None:
+                rejection = RecordingValidationError.continuation_invalid(
+                    "the continuation cannot be routed"
+                )
+                return _encoded_result(_rejected(request, rejection))
             return encode_error("ingress", str(exc))
         try:
             context = self._context(repository_id)
@@ -231,6 +239,8 @@ def _public_rejection_cause(kind: RejectionCauseKind) -> str:
         return "the requested evidence lies outside the bound investigation context"
     if kind is RejectionCauseKind.CONTEXT_REQUIRED:
         return "the required investigation context is unavailable"
+    if kind is RejectionCauseKind.CONTINUATION_INVALID:
+        return "the continuation cannot be used"
     if kind is RejectionCauseKind.OBSERVATION_NOT_ADMITTED:
         return "the referenced observation is not admitted to the investigation context"
     if kind is RejectionCauseKind.REPLAY_CONFLICT:

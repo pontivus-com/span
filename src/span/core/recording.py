@@ -101,6 +101,11 @@ class RecordingValidationError(Rejection):
         """Construct the canonical missing-context validation failure."""
         return cls(cause, cause_kind=RejectionCauseKind.CONTEXT_REQUIRED)
 
+    @classmethod
+    def continuation_invalid(cls, cause: str) -> RecordingValidationError:
+        """Construct the canonical unusable-continuation validation failure."""
+        return cls(cause, cause_kind=RejectionCauseKind.CONTINUATION_INVALID)
+
 
 @_dataclass(frozen=True)
 class ChallengeEffect:

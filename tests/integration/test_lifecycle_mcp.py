@@ -726,6 +726,20 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(page["$type"], "EvidencePage")
         self.assertTrue(page["deliveries"])
 
+    async def test_malformed_continuation_is_rejected_without_internal_state(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            return await self._call(
+                session,
+                "ask",
+                {"continuation": "span1_not-base64"},
+            )
+
+        result = await self._session(journey)
+        self.assertEqual(result["$type"], "Rejected")
+        self.assertEqual(result["cause_kind"], "continuation_invalid")
+        self.assertNotIn("base64", result["cause"].lower())
+        self.assertIn("explicit evidence admission", result["required_action"])
+
     async def test_reconsider_record_succeeds_without_an_intervening_ask(self) -> None:
         async def journey(session: ClientSession) -> dict:
             created = await self._record_create(session, "sub-create-reconsider")
