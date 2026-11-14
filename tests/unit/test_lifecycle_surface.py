@@ -156,9 +156,7 @@ class RoutingTest(unittest.TestCase):
             "ask",
             {
                 "repository_id": REPO,
-                "request_id": "req-1",
                 "surface": {"kind": "FILE", "locator": "src/a.py"},
-                "question": "What does it do?",
             },
         )
         self.assertIsInstance(request, m.AskRequest)
@@ -167,9 +165,7 @@ class RoutingTest(unittest.TestCase):
         self.assertEqual(request.surface.locator, "src/a.py")
 
     def test_ask_accepts_a_continuation_without_request_id(self):
-        request = decode_request(
-            "ask", {"repository_id": REPO, "continuation": "span1_token"}
-        )
+        request = decode_request("ask", {"continuation": "span1_token"})
         assert isinstance(request, m.AskRequest)
         self.assertEqual(request.continuation, "span1_token")
         self.assertIsNone(request.request_id)

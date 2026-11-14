@@ -185,17 +185,17 @@ class SurfaceConformanceTest(unittest.TestCase):
         self.assertNotIn("conclusion_id", properties)
         self.assertNotIn("scope_evidence_refs", properties)
         self.assertIn("expected_version", properties)
-        add = defs["AddConclusionWire"]["properties"]
+        add = defs["AddConclusion"]["properties"]
         self.assertNotIn("conclusion_id", add)
         self.assertNotIn("scope_evidence_refs", add)
-        replace = defs["ReplaceActionWire"]["properties"]
+        replace = defs["ReplaceConclusion"]["properties"]
         self.assertNotIn("new_conclusion_id", replace)
         self.assertNotIn("scope_evidence_refs", replace)
         for name in (
-            "ConfirmConclusionWire",
-            "CorrectConclusionWire",
-            "ReplaceActionWire",
-            "WithdrawActionWire",
+            "ConfirmConclusion",
+            "CorrectConclusion",
+            "ReplaceConclusion",
+            "WithdrawConclusion",
         ):
             self.assertIn("conclusion_id", defs[name]["properties"])
         with self.assertRaisesRegex(ValueError, "expected_version"):
