@@ -594,7 +594,9 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.reap_expired(NOW + datetime.timedelta(hours=2))
         with self.assertRaises(RecordingValidationError) as raised:
             self.store.get_context("ctx-1")
-        self.assertIs(raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_REQUIRED)
+        self.assertIs(
+            raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_REQUIRED
+        )
         self.assertEqual(self.store.get_receipt(_identity()), receipt)
 
     def test_reaping_preserves_accepted_history(self) -> None:
