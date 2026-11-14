@@ -167,7 +167,7 @@ def _create_wire(
         request_id=submission,
         context=_context_ref(),
         kind=m.RecordKind.UNDERSTANDING,
-        surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+        surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
         conclusion=spec.statement,
         assertion_nature=spec.assertion_nature,
         support=spec.support,
@@ -571,7 +571,7 @@ class LifecycleServiceTest(unittest.TestCase):
             request_id="sub-scope",
             context=_context_ref(context.context_id.value),
             kind=m.RecordKind.UNDERSTANDING,
-            surface=w.SurfaceWire(kind="FILE", locator="docs/other.md"),
+            surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="docs/other.md"),
             question="What is outside?",
             scope_paths=("docs/other.md",),
             conclusion="Outside scope",
@@ -877,7 +877,7 @@ class LifecycleServiceTest(unittest.TestCase):
             repository_id="repo-1",
             request_id=submission,
             kind=m.RecordKind.UNDERSTANDING,
-            surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+            surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
             question="What does A do?",
             scope_paths=("src/a.py",),
             conclusion="A does X",
@@ -904,7 +904,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 request_id="sub-support-only",
                 context=_context_ref("ctx-1"),
                 kind=m.RecordKind.UNDERSTANDING,
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion="A is supported by the source.",
                 support=(w.SourceSupportWire(locator="src/a.py"),),
             )
@@ -952,7 +952,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 repository_id="repo-1",
                 request_id="sub-bound",
                 kind=m.RecordKind.UNDERSTANDING,
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion="A does X",
                 locator="src/a.py",
             )
@@ -1146,7 +1146,7 @@ class LifecycleServiceTest(unittest.TestCase):
         result = self.service.record(
             self._record_request(
                 "sub-one-create",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion=_conclusion(),
             )
         )
@@ -1161,7 +1161,7 @@ class LifecycleServiceTest(unittest.TestCase):
             self._record_request(
                 "sub-context-bound-create",
                 context_id="ctx-1",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 question=None,
                 scope_paths=(),
                 conclusion=_conclusion(),
@@ -1177,7 +1177,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 self._record_request(
                     "sub-context-bound-conflict",
                     context_id="ctx-1",
-                    surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                    surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                     question="What does A do?",
                     scope_paths=(),
                     conclusion=_conclusion(),
@@ -1192,7 +1192,7 @@ class LifecycleServiceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "question or context"):
             self._record_request(
                 "sub-unbound-create",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 question=None,
                 conclusion=_conclusion(),
             )
@@ -1247,7 +1247,7 @@ class LifecycleServiceTest(unittest.TestCase):
             self.service.record(
                 self._record_request(
                     "sub-mismatched-surface",
-                    surface=w.SurfaceWire(kind="FILE", locator="src/b.py"),
+                    surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/b.py"),
                     question="What does A do?",
                     scope_paths=("src/a.py",),
                     conclusion=_conclusion(),
@@ -1266,7 +1266,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 action=m.SurfaceAction.CREATE,
                 question=None,
                 surface=w.SurfaceWire(
-                    kind="SERVICE",
+                    kind=m.SurfaceKind.SERVICE,
                     locator="billing",
                     boundary=w.SurfaceBoundaryWire(paths=("src",)),
                 ),
@@ -1284,7 +1284,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 question=None,
                 expected_boundary_version=1,
                 surface=w.SurfaceWire(
-                    kind="SERVICE",
+                    kind=m.SurfaceKind.SERVICE,
                     locator="billing",
                     boundary=w.SurfaceBoundaryWire(paths=("src", "tests")),
                 ),
@@ -1299,7 +1299,7 @@ class LifecycleServiceTest(unittest.TestCase):
         result = self.service.record(
             self._record_request(
                 "sub-discovery",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion=_conclusion(
                     support=(
                         w.DiscoveryBoundarySupportWire(
@@ -1318,7 +1318,7 @@ class LifecycleServiceTest(unittest.TestCase):
         created = self.service.record(
             self._record_request(
                 "sub-one-create",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion=_conclusion(),
             )
         )
@@ -1375,7 +1375,7 @@ class LifecycleServiceTest(unittest.TestCase):
         created = self.service.record(
             self._record_request(
                 "sub-atomic-create",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion=_conclusion(),
             )
         )
@@ -1453,7 +1453,7 @@ class LifecycleServiceTest(unittest.TestCase):
         created = self.service.record(
             self._record_request(
                 "sub-replace-create",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion=_conclusion(),
             )
         )
@@ -1525,7 +1525,7 @@ class LifecycleServiceTest(unittest.TestCase):
         created = self.service.record(
             self._record_request(
                 "sub-challenge-create",
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion=_conclusion(),
             )
         )
@@ -1596,7 +1596,7 @@ class LifecycleServiceTest(unittest.TestCase):
             self._record_request(
                 "sub-support-base",
                 context_id=context_id,
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion=_conclusion(),
             )
         )
@@ -1632,7 +1632,7 @@ class LifecycleServiceTest(unittest.TestCase):
             self._record_request(
                 "sub-support-union",
                 context_id=context_id,
-                surface=w.SurfaceWire(kind="SYMBOL", locator="src/a.py::A"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.SYMBOL, locator="src/a.py::A"),
                 question="What supports A?",
                 scope_paths=("src/a.py::A",),
                 conclusion=_conclusion(
@@ -1662,11 +1662,11 @@ class LifecycleServiceTest(unittest.TestCase):
     def _declare_surface(
         self,
         submission: str,
-        kind: str,
+        kind: m.SurfaceKind,
         locator: str,
         *,
         boundary: tuple[str, ...] | None = ("src",),
-        parent: tuple[str, str] | None = None,
+        parent: tuple[m.SurfaceKind, str] | None = None,
         action: m.SurfaceAction = m.SurfaceAction.CREATE,
         expected: int | None = None,
     ) -> m.RecordResult:
@@ -1698,53 +1698,53 @@ class LifecycleServiceTest(unittest.TestCase):
         with self.assertRaisesRegex(RecordingValidationError, "unknown parent surface"):
             self._declare_surface(
                 "surface-unknown-parent",
-                "SERVICE",
+                m.SurfaceKind.SERVICE,
                 "billing",
-                parent=("DOMAIN", "missing"),
+                parent=(m.SurfaceKind.DOMAIN, "missing"),
             )
 
     def test_surface_create_rejects_self_parenting(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot be its own parent"):
             self._declare_surface(
                 "surface-self-parent",
-                "SERVICE",
+                m.SurfaceKind.SERVICE,
                 "billing",
-                parent=("SERVICE", "billing"),
+                parent=(m.SurfaceKind.SERVICE, "billing"),
             )
 
     def test_surface_update_rejects_a_parent_cycle(self) -> None:
         self.assertIsInstance(
-            self._declare_surface("surface-domain", "DOMAIN", "platform"),
+            self._declare_surface("surface-domain", m.SurfaceKind.DOMAIN, "platform"),
             m.SurfaceDeclared,
         )
         self.assertIsInstance(
             self._declare_surface(
                 "surface-service",
-                "SERVICE",
+                m.SurfaceKind.SERVICE,
                 "billing",
-                parent=("DOMAIN", "platform"),
+                parent=(m.SurfaceKind.DOMAIN, "platform"),
             ),
             m.SurfaceDeclared,
         )
         with self.assertRaisesRegex(RecordingValidationError, "cycle"):
             self._declare_surface(
                 "surface-cycle",
-                "DOMAIN",
+                m.SurfaceKind.DOMAIN,
                 "platform",
-                parent=("SERVICE", "billing"),
+                parent=(m.SurfaceKind.SERVICE, "billing"),
                 action=m.SurfaceAction.UPDATE,
                 expected=1,
             )
 
     def test_surface_update_stale_boundary_returns_rejected(self) -> None:
         self.assertIsInstance(
-            self._declare_surface("surface-cas-create", "SERVICE", "billing"),
+            self._declare_surface("surface-cas-create", m.SurfaceKind.SERVICE, "billing"),
             m.SurfaceDeclared,
         )
         with self.assertRaises(Rejection) as raised:
             self._declare_surface(
                 "surface-cas-update",
-                "SERVICE",
+                m.SurfaceKind.SERVICE,
                 "billing",
                 boundary=("src", "tests"),
                 action=m.SurfaceAction.UPDATE,
@@ -1758,11 +1758,11 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_surface_kind_conflict_returns_rejected(self) -> None:
         self.assertIsInstance(
-            self._declare_surface("surface-kind-create", "SERVICE", "billing"),
+            self._declare_surface("surface-kind-create", m.SurfaceKind.SERVICE, "billing"),
             m.SurfaceDeclared,
         )
         with self.assertRaises(Rejection) as raised:
-            self._declare_surface("surface-kind-conflict", "DOMAIN", "billing")
+            self._declare_surface("surface-kind-conflict", m.SurfaceKind.DOMAIN, "billing")
         self.assertIs(
             raised.exception.cause_kind,
             m.RejectionCauseKind.SURFACE_CONFLICT,
@@ -1785,33 +1785,33 @@ class LifecycleServiceTest(unittest.TestCase):
         ):
             self._declare_surface(
                 "surface-file-parent",
-                "SERVICE",
+                m.SurfaceKind.SERVICE,
                 "billing",
-                parent=("FILE", "src/a.py"),
+                parent=(m.SurfaceKind.FILE, "src/a.py"),
             )
 
-    def test_path_surface_boundary_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "rejects a boundary"):
-            self._declare_surface("surface-file-boundary", "FILE", "src/a.py")
+    def test_path_surface_declaration_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "path surfaces are derived, not declared"):
+            self._declare_surface("surface-file-boundary", m.SurfaceKind.FILE, "src/a.py")
 
     def test_declared_surface_requires_a_boundary(self) -> None:
-        with self.assertRaisesRegex(ValueError, "requires a boundary"):
+        with self.assertRaisesRegex(ValueError, "service surface boundary requires"):
             self._declare_surface(
                 "surface-no-boundary",
-                "SERVICE",
+                m.SurfaceKind.SERVICE,
                 "billing",
                 boundary=None,
             )
 
     def test_surface_create_with_a_changed_boundary_is_rejected(self) -> None:
         self.assertIsInstance(
-            self._declare_surface("surface-dup-create", "SERVICE", "billing"),
+            self._declare_surface("surface-dup-create", m.SurfaceKind.SERVICE, "billing"),
             m.SurfaceDeclared,
         )
         with self.assertRaises(Rejection) as raised:
             self._declare_surface(
                 "surface-dup-boundary",
-                "SERVICE",
+                m.SurfaceKind.SERVICE,
                 "billing",
                 boundary=("src", "tests"),
             )
@@ -1853,7 +1853,7 @@ class LifecycleServiceTest(unittest.TestCase):
             },
             {"locator": "src/a.py"},
             {
-                "surface": w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                "surface": w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 "support": (w.SourceSupportWire(locator="src/a.py"),),
             },
         )
@@ -2093,7 +2093,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 request_id="ref-create",
                 context=_context_ref(context.context_id.value),
                 kind=m.RecordKind.UNDERSTANDING,
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion="A does X",
                 locator="src/a.py",
             )
@@ -2109,7 +2109,7 @@ class LifecycleServiceTest(unittest.TestCase):
             wire = self._scope_create(
                 f"owner-{kind.value}",
                 scope_paths=("docs/plan.md",),
-                surface=w.SurfaceWire(kind=kind.value, locator=key.locator),
+                surface=w.SurfaceWire(kind=kind, locator=key.locator),
                 support=(w.SourceSupportWire(locator="src/a.py"),),
             )
             result = self.service.record(wire)
@@ -2317,7 +2317,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 request_id="coverage-ref-create",
                 context=_context_ref(context.context_id.value),
                 kind=m.RecordKind.UNDERSTANDING,
-                surface=w.SurfaceWire(kind="FILE", locator="src/a.py"),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion="A does X",
                 locator="src/a.py",
             )
@@ -2379,9 +2379,9 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         for index, (kind, owner) in enumerate(
             (
-                ("FILE", "src/a.py"),
-                ("FILE", "docs/unrelated.md"),
-                ("SYMBOL", "src/a.py:example"),
+                (m.SurfaceKind.FILE, "src/a.py"),
+                (m.SurfaceKind.FILE, "docs/unrelated.md"),
+                (m.SurfaceKind.SYMBOL, "src/a.py:example"),
             )
         ):
             with (
@@ -2409,10 +2409,10 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_explicit_path_owner_rejects_every_outside_semantic_member(self):
         cases = (
-            ("FILE", "src/a.py", ("src/a.py", "src/b.py")),
-            ("SYMBOL", "src/a.py::f", ("src/b.py",)),
-            ("SYMBOL", "src/a.py::f", ("src/a.py::g",)),
-            ("SYMBOL", "src/a.py::f", ("src/a.py::f", "src/b.py::f")),
+            (m.SurfaceKind.FILE, "src/a.py", ("src/a.py", "src/b.py")),
+            (m.SurfaceKind.SYMBOL, "src/a.py::f", ("src/b.py",)),
+            (m.SurfaceKind.SYMBOL, "src/a.py::f", ("src/a.py::g",)),
+            (m.SurfaceKind.SYMBOL, "src/a.py::f", ("src/a.py::f", "src/b.py::f")),
         )
         for index, (kind, owner, paths) in enumerate(cases):
             with (
@@ -2443,7 +2443,7 @@ class LifecycleServiceTest(unittest.TestCase):
         result = self.service.record(
             self._scope_create(
                 "exact-symbol",
-                surface=w.SurfaceWire(kind="SYMBOL", locator=symbol),
+                surface=w.SurfaceWire(kind=m.SurfaceKind.SYMBOL, locator=symbol),
                 scope_paths=(symbol,),
                 support=(w.SourceSupportWire(locator="src/a.py"),),
             )
