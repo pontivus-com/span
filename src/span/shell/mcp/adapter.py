@@ -305,8 +305,13 @@ def _require_same_repository(
 def _encoded_result(result: object) -> ToolResult:
     try:
         payload = canonical_result_payload(result)
-    except (TypeError, ValueError) as exc:
-        return encode_error("transport", f"cannot encode result: {exc}")
+    except (TypeError, ValueError):
+        _LOGGER.exception("failed to encode lifecycle operation result")
+        return encode_error(
+            "transport",
+            "Span could not encode the operation result",
+            "report the operation failure without internal diagnostics",
+        )
     return ToolResult(
         content=_json.dumps(payload, sort_keys=True),
         structured_content=payload,
