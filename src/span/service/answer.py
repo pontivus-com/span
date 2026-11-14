@@ -508,7 +508,7 @@ class AnswerService:
             return m.Unavailable(
                 operation="ask",
                 failure="the continuation context no longer exists",
-                recovery="ask again for the surface; the context was reaped",
+                recovery="ask again for the surface to establish a new evidence context",
             )
         if (
             context.repository_id != cursor.repository_id

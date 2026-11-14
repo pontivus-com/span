@@ -71,7 +71,7 @@ class LifecycleStorePort(_typing.Protocol):
         ...
 
     def get_context(self, context_id: str) -> m.InvestigationContext:
-        """Return one stored context or reject an unknown identity."""
+        """Return one stored context or reject an unknown reference."""
         ...
 
     def find_context_by_id(self, context_id: str) -> m.InvestigationContext | None:
