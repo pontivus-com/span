@@ -192,28 +192,14 @@ class EvidenceService:
         units: list[m.EvidenceUnit] = []
         total_bytes = 0
         for record in selected:
-            content = record.excerpt
-            total_bytes += len(content.encode("utf-8"))
-            if total_bytes > bounds.max_evidence_bytes:
-                raise ValueError("evidence exceeds max_evidence_bytes")
-            content_range = None
-            if len(record.delivered_ranges) == 1:
-                only = record.delivered_ranges[0]
-                content_range = m.EvidenceLineRange(
-                    start_line=only.start_line,
-                    end_line=only.end_line,
-                    total_lines=record.total_lines,
-                )
-            units.append(
-                m.EvidenceUnit(
-                    evidence_ref=record.evidence,
-                    content=content,
-                    content_fingerprint=record.content_digest.value.split(":", 1)[1],
-                    content_range=content_range,
-                )
-            )
-        if len(units) > bounds.max_evidence_units:
-            raise ValueError("evidence exceeds max_evidence_units")
+            for delivery in self.context_deliveries(record):
+                content = delivery.unit.content
+                total_bytes += len(content.encode("utf-8"))
+                if total_bytes > bounds.max_evidence_bytes:
+                    raise ValueError("evidence exceeds max_evidence_bytes")
+                units.append(delivery.unit)
+                if len(units) > bounds.max_evidence_units:
+                    raise ValueError("evidence exceeds max_evidence_units")
         return tuple(units)
 
     # -- admission ---------------------------------------------------------
