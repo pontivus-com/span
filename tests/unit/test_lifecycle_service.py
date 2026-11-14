@@ -2087,7 +2087,10 @@ class LifecycleServiceTest(unittest.TestCase):
             qualified = self.service.qualify_understanding(_receipt(self.store, result))
         self.assertEqual(_receipt(self.store, qualified), _receipt(self.store, result))
         self.assertIsInstance(qualified.qualification, m.SupportUnavailable)
+        self.assertNotIn("store unavailable", qualified.qualification.reason)
+        self.assertNotIn("OSError", qualified.qualification.reason)
         self.assertIsInstance(qualified.status, m.SurfaceStatusUnavailable)
+        self.assertNotIn("store unavailable", qualified.status.reason)
         self.assertIsNone(qualified.status.surface)
 
     def test_complete_question_context_scope_refs_are_preserved(self):
@@ -2262,6 +2265,7 @@ class LifecycleServiceTest(unittest.TestCase):
                     _receipt(self.store, replay), _receipt(self.store, result)
                 )
                 self.assertIsInstance(replay.qualification, m.SupportUnavailable)
+                self.assertNotIn(str(error), replay.qualification.reason)
         with mock.patch.object(
             self.support,
             "evaluate_verification",
