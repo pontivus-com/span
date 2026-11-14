@@ -10,7 +10,7 @@ The functional scenario set covers:
 
 | ID | Behavior | Representative current tests |
 | --- | --- | --- |
-| F-01 | A cold surface question returns inspectable evidence and an honest gap. | `test_unknown_surface_is_unassessed` |
+| F-01 | A cold surface obtain returns an honest unassessed gap with source pointers; selected evidence is admitted explicitly. | `test_unknown_surface_is_unassessed`, evidence-admission and continuation tests |
 | F-02 | Record a real supported investigation and inspect its receipt. | `test_create_records_and_replays`, installed MCP lane |
 | F-03 | Fresh-session reuse of a recorded answer without a supplied saved ID. | installed MCP fresh-process lane, host capture |
 | F-04 | Relevant support change requires reassessment. | `test_source_support_current_changed_missing` |
@@ -42,7 +42,7 @@ marked pending are not current coverage.
 
 | ID | Behavior | Status | Evidence |
 | --- | --- | --- | --- |
-| F-20 | A paraphrased question returns `no_match` with a recovery; the surface document view answers the intent without semantic ranking. | implemented | `test_no_match_gap_names_document_view`, `test_surface_document_view_is_reuse_path` |
+| F-20 | Surface-first document view is the normal reuse path; `RecordedQuestionSelector` is exact and surface-scoped, and a non-matching or paraphrased selector returns `Gap/unassessed` without semantic ranking. | implemented | `test_exact_question_without_membership_is_unassessed`, `test_exact_question_selector_does_not_paraphrase_match`, `test_surface_document_view_is_reuse_path` |
 | F-21 | A rejection carries the exact cause, required action, and structured current version or boundary version. | implemented | `test_version_conflict_names_the_current_version`, `test_surface_conflict_is_rejected_with_the_current_boundary_version`, `test_replay_conflict_carries_its_own_cause`, `test_verification_requires_admitted_observation`, `test_schema_version_failure_is_unavailable_not_rejected`, `test_malformed_ingress_is_a_transport_error` |
 | F-22 | A create with a question context uses the bound target; supplying an explicit question or scope is rejected. | implemented | `test_context_bound_create_rejects_an_explicit_target`, `test_question_context_rejects_an_explicit_target` |
 | F-23 | A stale surface boundary version or surface kind conflict is `Rejected`, not `Unavailable`. | implemented | `test_surface_update_stale_boundary_returns_rejected`, `test_surface_kind_conflict_returns_rejected` |
