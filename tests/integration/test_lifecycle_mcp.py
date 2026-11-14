@@ -1073,7 +1073,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             "The pipeline flows A through D.",
         )
         self.assertEqual(
-            self._answer_conclusions(after)[0]["support"]["evaluation"]["state"], "CURRENT"
+            self._answer_conclusions(after)[0]["support"]["evaluation"]["state"],
+            "CURRENT",
         )
 
     async def test_challenge_raised_by_reconsider_is_settled_by_record(self) -> None:
