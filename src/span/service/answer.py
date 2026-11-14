@@ -621,9 +621,7 @@ class AnswerService:
                 continue
             remaining = lines[next_line:]
             candidate_delivery = _slice_delivery(delivery, next_line, len(remaining))
-            candidate = build(
-                [*pages, candidate_delivery], omitted, next_index + 1, 0
-            )
+            candidate = build([*pages, candidate_delivery], omitted, next_index + 1, 0)
             if _encoded_size(candidate) <= limit:
                 committed.append((list(pages), list(omitted), next_index, next_line))
                 pages.append(candidate_delivery)
@@ -881,9 +879,7 @@ def _slice_delivery(
     selected = "".join(lines[line_offset : line_offset + line_count])
     base_line = unit.content_range.start_line if unit.content_range is not None else 1
     total_lines = (
-        unit.content_range.total_lines
-        if unit.content_range is not None
-        else len(lines)
+        unit.content_range.total_lines if unit.content_range is not None else len(lines)
     )
     return m.EvidenceDelivery(
         observation_id=delivery.observation_id,
