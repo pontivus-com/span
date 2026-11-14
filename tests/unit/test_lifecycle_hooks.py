@@ -74,7 +74,7 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
             context_id=admitted.context.context_id,
         ),
         kind=m.RecordKind.UNDERSTANDING,
-        surface=rw.SurfaceWire(kind="FILE", locator="src/app.py"),
+        surface=rw.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/app.py"),
         question="What does the app do?",
         scope_paths=("src/app.py",),
         conclusion="The app emits line1.",

@@ -531,7 +531,7 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Answer)
         self.assertEqual(
             sum(len(group.conclusions) for group in result.groups),
-            1,
+            2,
         )
         self.assertEqual(result.status.current, 1)
 

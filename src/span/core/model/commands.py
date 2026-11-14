@@ -284,7 +284,7 @@ class AskRequest:
                     _constraints.PresenceField("continuation"), True
                 ),
             ),
-            label="continuation ask namespace",
+            label="continuation ask has no repository override",
         ),
         _constraints.PresenceRule(
             fields=(
