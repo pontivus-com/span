@@ -70,6 +70,8 @@ def run_mypy() -> tuple[collections.Counter[str], int]:
             "an unusable run as a clean ratchet:\n"
             f"{result.stdout.strip()}\n{result.stderr.strip()}"
         )
+    if result.returncode == 1:
+        print(result.stdout, end="")
     return counts, total
 
 
