@@ -371,15 +371,29 @@ class AskRequest:
 class ChallengeConclusionRef:
     """One exact conclusion revision named by a public challenge."""
 
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("understanding_id", non_empty=True),
+            ),
+            minimum=1,
+            maximum=1,
+            label="challenge conclusion understanding identity",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("conclusion_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="challenge conclusion identity",
+        ),
+    )
+
     understanding_id: str
     conclusion_id: str
     revision: int
 
     def __post_init__(self) -> None:
-        _require_non_empty(
-            "ChallengeConclusionRef.understanding_id", self.understanding_id
-        )
-        _require_non_empty("ChallengeConclusionRef.conclusion_id", self.conclusion_id)
+        _constraints.validate_structural_rules(self)
         if self.revision < 1:
             raise ValueError("ChallengeConclusionRef.revision must be positive")
 
