@@ -371,9 +371,7 @@ class ChallengeConclusionRef:
 
     __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
         _constraints.PresenceRule(
-            fields=(
-                _constraints.PresenceField("understanding_id", non_empty=True),
-            ),
+            fields=(_constraints.PresenceField("understanding_id", non_empty=True),),
             minimum=1,
             maximum=1,
             label="challenge conclusion understanding identity",

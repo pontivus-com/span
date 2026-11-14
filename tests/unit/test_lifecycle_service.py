@@ -1738,7 +1738,9 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_surface_update_stale_boundary_returns_rejected(self) -> None:
         self.assertIsInstance(
-            self._declare_surface("surface-cas-create", m.SurfaceKind.SERVICE, "billing"),
+            self._declare_surface(
+                "surface-cas-create", m.SurfaceKind.SERVICE, "billing"
+            ),
             m.SurfaceDeclared,
         )
         with self.assertRaises(Rejection) as raised:
@@ -1758,11 +1760,15 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_surface_kind_conflict_returns_rejected(self) -> None:
         self.assertIsInstance(
-            self._declare_surface("surface-kind-create", m.SurfaceKind.SERVICE, "billing"),
+            self._declare_surface(
+                "surface-kind-create", m.SurfaceKind.SERVICE, "billing"
+            ),
             m.SurfaceDeclared,
         )
         with self.assertRaises(Rejection) as raised:
-            self._declare_surface("surface-kind-conflict", m.SurfaceKind.DOMAIN, "billing")
+            self._declare_surface(
+                "surface-kind-conflict", m.SurfaceKind.DOMAIN, "billing"
+            )
         self.assertIs(
             raised.exception.cause_kind,
             m.RejectionCauseKind.SURFACE_CONFLICT,
@@ -1791,8 +1797,12 @@ class LifecycleServiceTest(unittest.TestCase):
             )
 
     def test_path_surface_declaration_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "path surfaces are derived, not declared"):
-            self._declare_surface("surface-file-boundary", m.SurfaceKind.FILE, "src/a.py")
+        with self.assertRaisesRegex(
+            ValueError, "path surfaces are derived, not declared"
+        ):
+            self._declare_surface(
+                "surface-file-boundary", m.SurfaceKind.FILE, "src/a.py"
+            )
 
     def test_declared_surface_requires_a_boundary(self) -> None:
         with self.assertRaisesRegex(ValueError, "service surface boundary requires"):
@@ -1805,7 +1815,9 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_surface_create_with_a_changed_boundary_is_rejected(self) -> None:
         self.assertIsInstance(
-            self._declare_surface("surface-dup-create", m.SurfaceKind.SERVICE, "billing"),
+            self._declare_surface(
+                "surface-dup-create", m.SurfaceKind.SERVICE, "billing"
+            ),
             m.SurfaceDeclared,
         )
         with self.assertRaises(Rejection) as raised:

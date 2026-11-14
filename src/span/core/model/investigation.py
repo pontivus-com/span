@@ -51,9 +51,7 @@ class InvestigationContextRef:
             label="context repository",
         ),
         _constraints.PresenceRule(
-            fields=(
-                _constraints.PresenceField("context_id.value", non_empty=True),
-            ),
+            fields=(_constraints.PresenceField("context_id.value", non_empty=True),),
             minimum=1,
             maximum=1,
             label="context identity",

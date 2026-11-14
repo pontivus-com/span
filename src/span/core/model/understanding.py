@@ -273,9 +273,7 @@ class RecordedQuestionSelector:
             label="recorded-question text",
         ),
         _constraints.PresenceRule(
-            fields=(
-                _constraints.PresenceField("surface.repository_id"),
-            ),
+            fields=(_constraints.PresenceField("surface.repository_id"),),
             minimum=0,
             maximum=0,
             label="recorded-question surface repository",
@@ -302,9 +300,7 @@ class CurrentUnderstandingSelector:
             label="current-understanding repository",
         ),
         _constraints.PresenceRule(
-            fields=(
-                _constraints.PresenceField("understanding_id", non_empty=True),
-            ),
+            fields=(_constraints.PresenceField("understanding_id", non_empty=True),),
             minimum=1,
             maximum=1,
             label="current-understanding identity",
@@ -330,9 +326,7 @@ class UnderstandingSnapshotSelector:
             label="understanding-snapshot repository",
         ),
         _constraints.PresenceRule(
-            fields=(
-                _constraints.PresenceField("understanding_id", non_empty=True),
-            ),
+            fields=(_constraints.PresenceField("understanding_id", non_empty=True),),
             minimum=1,
             maximum=1,
             label="understanding-snapshot identity",

@@ -204,10 +204,7 @@ class LifecycleService:
             return m.EvidenceScope(paths=wire.scope_paths)
         if wire.locator is not None:
             return m.EvidenceScope(paths=(wire.locator,))
-        if (
-            wire.surface is not None
-            and wire.surface.kind is m.SurfaceKind.FILE
-        ):
+        if wire.surface is not None and wire.surface.kind is m.SurfaceKind.FILE:
             return m.EvidenceScope(paths=(wire.surface.locator,))
         raise Rejection(
             "a create requires scope_paths, a locator, a FILE surface, or a question context",
