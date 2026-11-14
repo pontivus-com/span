@@ -9,6 +9,7 @@ and perform no work.
 from __future__ import annotations
 
 import json as _json
+import logging as _logging
 import pathlib as _pathlib
 from collections.abc import Callable as _Callable
 from dataclasses import dataclass as _dataclass
@@ -17,7 +18,7 @@ from typing import cast as _cast
 
 from span.core import model as m
 from span.core.recording import RecordingConflict, RecordingValidationError
-from span.core.rejection import Rejection
+from span.core.rejection import Rejection, RejectionCauseKind
 from span.core.schema import record_wire as _rw
 from span.ports.structural import StaleContinuationError
 from span.shell.mcp.models import ServiceContext, ToolResult
@@ -44,6 +45,7 @@ except Exception:  # pragma: no cover - import-time fallback
 __all__ = ["McpAdapter"]
 
 _RESULT_UNION_TOOLS = frozenset({"ask", "record", "reconsider"})
+_LOGGER = _logging.getLogger(__name__)
 
 
 @_dataclass
@@ -117,56 +119,69 @@ class McpAdapter:
         try:
             context = self._context(repository_id)
         except LifecycleStoreError as exc:
-            return encode_error(
-                "unavailable",
-                str(exc),
-                "run the installer to bind this repository",
-            )
+            if tool_name in _RESULT_UNION_TOOLS:
+                return _encoded_result(_unavailable(tool_name, exc))
+            failure, recovery = _operational_failure(exc)
+            return encode_error("unavailable", failure, recovery)
         try:
             outcome = _call_operation(tool_name, request, context)
-        except StaleContinuationError as exc:
+        except StaleContinuationError:
             return encode_error(
                 "stale_continuation",
-                f"{exc}; restart the listing from page one with " "page_token null",
+                "the continuation is stale",
+                "restart the listing from its first page",
             )
         except RecordingConflict as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_rejected(request, exc))
-            return encode_error(exc.cause_kind.value, str(exc))
+            return encode_error(
+                exc.cause_kind.value,
+                _public_rejection_cause(exc.cause_kind),
+                exc.required_action,
+            )
         except RecordingValidationError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_rejected(request, exc))
-            return encode_error(exc.cause_kind.value, str(exc))
+            return encode_error(
+                exc.cause_kind.value,
+                _public_rejection_cause(exc.cause_kind),
+                exc.required_action,
+            )
         except SchemaVersionError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_unavailable(tool_name, exc))
-            return encode_error(
-                "unavailable",
-                str(exc),
-                "run `span-install --transition-store <repository-id> "
-                "--transition-phase inspect` for the offline transition",
-            )
+            failure, recovery = _operational_failure(exc)
+            return encode_error("unavailable", failure, recovery)
         except LifecycleStoreError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_unavailable(tool_name, exc))
-            return encode_error("rejected", str(exc))
+            failure, recovery = _operational_failure(exc)
+            return encode_error("unavailable", failure, recovery)
         except ValueError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_rejected(request, exc))
-            return encode_error("rejected", str(exc))
+            rejection = exc if isinstance(exc, Rejection) else Rejection("invalid request")
+            return encode_error(
+                rejection.cause_kind.value,
+                _public_rejection_cause(rejection.cause_kind),
+                rejection.required_action,
+            )
         except Exception as exc:  # noqa: BLE001 - typed provider boundary
             if GraftUnavailableError is not None and isinstance(
                 exc, GraftUnavailableError
             ):
-                return encode_error("unavailable", str(exc))
-            raise
+                return encode_error(
+                    "unavailable",
+                    "the structural provider is unavailable",
+                    "continue without this structural operation",
+                )
+            _LOGGER.exception("unexpected lifecycle operation failure")
+            return encode_error(
+                "internal",
+                "Span could not complete the operation",
+                "report the operation failure without internal diagnostics",
+            )
         return _encoded_result(outcome)
-
-
-_TRANSITION_RECOVERY = (
-    "run `span-install --transition-store <repository-id> "
-    "--transition-phase inspect` for the offline transition"
-)
 
 
 def _request_identity(request: object) -> str:
@@ -192,29 +207,73 @@ def _request_identity(request: object) -> str:
     return "unknown"
 
 
+def _public_rejection_cause(kind: RejectionCauseKind) -> str:
+    """Stable contract vocabulary for caller-correctable failures."""
+    if kind is RejectionCauseKind.SOURCE_DRIFT:
+        return "recorded support is not current"
+    if kind is RejectionCauseKind.VERSION_CONFLICT:
+        return "the requested understanding version is not current"
+    if kind is RejectionCauseKind.SURFACE_CONFLICT:
+        return "the requested surface boundary conflicts with current state"
+    if kind is RejectionCauseKind.SURFACE_REQUIRED:
+        return "the request does not identify one semantic surface"
+    if kind is RejectionCauseKind.SURFACE_AMBIGUOUS:
+        return "the semantic scope identifies multiple candidate surfaces"
+    if kind is RejectionCauseKind.SURFACE_MISMATCH:
+        return "the selected surface does not own the carried semantic scope"
+    if kind is RejectionCauseKind.CONTEXT_TARGET_CONFLICT:
+        return "the explicit target conflicts with the bound investigation context"
+    if kind is RejectionCauseKind.CONTEXT_BINDING_CONFLICT:
+        return "the request identity is bound to different context content"
+    if kind is RejectionCauseKind.CONTEXT_SCOPE_CONFLICT:
+        return "the requested evidence lies outside the bound investigation context"
+    if kind is RejectionCauseKind.CONTEXT_REQUIRED:
+        return "the required investigation context is unavailable"
+    if kind is RejectionCauseKind.OBSERVATION_NOT_ADMITTED:
+        return "the referenced observation is not admitted to the investigation context"
+    if kind is RejectionCauseKind.REPLAY_CONFLICT:
+        return "the request identity is already bound to different content"
+    if kind is RejectionCauseKind.ALREADY_EXISTS:
+        return "the understanding already exists"
+    return "the request failed lifecycle validation"
+
+
 def _rejected(request: object, exc: Exception) -> m.Rejected:
-    """Copy the typed rejection; never classify a message or extract a version."""
-    rejection = exc if isinstance(exc, Rejection) else Rejection(str(exc))
+    """Project one typed rejection without serializing internal diagnostics."""
+    rejection = exc if isinstance(exc, Rejection) else Rejection("invalid request")
     return m.Rejected(
         identity=_request_identity(request),
         required_action=rejection.required_action,
         cause_kind=rejection.cause_kind,
-        cause=rejection.cause,
+        cause=_public_rejection_cause(rejection.cause_kind),
         current_version=rejection.current_version,
         current_boundary_version=rejection.current_boundary_version,
     )
 
 
-def _unavailable(operation: str, exc: Exception) -> m.Unavailable:
+def _operational_failure(exc: Exception) -> tuple[str, str]:
+    """Map typed operational owners to stable public failure/recovery text."""
     if isinstance(exc, SchemaVersionError):
-        recovery = _TRANSITION_RECOVERY
-    elif isinstance(exc, UnknownRepository):
-        recovery = "run the installer to bind this repository"
-    else:
-        recovery = "read the named operational state, then retry"
+        return (
+            "the repository store is incompatible with this Span runtime",
+            "use a Span runtime compatible with this repository before continuing",
+        )
+    if isinstance(exc, UnknownRepository):
+        return (
+            "the requested repository is not available to Span",
+            "open or register the repository with Span before continuing",
+        )
+    return (
+        "the repository lifecycle state is unavailable",
+        "continue without retained lifecycle state until repository availability is restored",
+    )
+
+
+def _unavailable(operation: str, exc: Exception) -> m.Unavailable:
+    failure, recovery = _operational_failure(exc)
     return m.Unavailable(
         operation=operation,
-        failure=str(exc),
+        failure=failure,
         recovery=recovery,
     )
 
