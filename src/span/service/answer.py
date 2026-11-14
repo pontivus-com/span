@@ -442,8 +442,10 @@ class AnswerService:
                 qualification: m.VerificationQualification | m.SupportUnavailable = (
                     m.compact_verification(detailed)
                 )
-            except (OSError, ValueError) as exc:
-                qualification = m.SupportUnavailable(str(exc))
+            except (OSError, ValueError):
+                qualification = m.SupportUnavailable(
+                    "verification support evaluation is unavailable"
+                )
             selected.append(m.VerificationView(run=run, qualification=qualification))
         return tuple(selected)
 
@@ -466,8 +468,10 @@ class AnswerService:
                         selector.understanding_id, version_number
                     )
                 )
-            except (OSError, ValueError) as exc:
-                support = m.SupportUnavailable(str(exc))
+            except (OSError, ValueError):
+                support = m.SupportUnavailable(
+                    "understanding support evaluation is unavailable"
+                )
             return m.RetrievedUnderstanding(
                 understanding=understanding,
                 version=version,
@@ -497,11 +501,11 @@ class AnswerService:
     def _evidence_page(self, request: m.AskRequest) -> m.AskResult:
         try:
             cursor = decode_continuation(request.continuation or "")
-        except ValueError as exc:
+        except ValueError:
             return m.Unavailable(
                 operation="ask",
-                failure=str(exc),
-                recovery="ask again for the surface; the continuation is invalid",
+                failure="the continuation is invalid",
+                recovery="ask again for the surface with a current continuation",
             )
         context = self._store.find_context_by_id(cursor.context_id)
         if context is None:
