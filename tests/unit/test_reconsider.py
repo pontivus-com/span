@@ -366,7 +366,10 @@ class ReconsiderServiceTest(unittest.TestCase):
                 repository_id="repo-1",
                 challenge=m.ChallengeRaise(
                     request_id="req-challenge",
-                    context_id=CONTEXT_ID.value,
+                    context=m.InvestigationContextRef(
+                        repository_id="repo-1",
+                        context_id=CONTEXT_ID,
+                    ),
                     understanding_id="u-a",
                     target_version=1,
                     target_conclusions=(
@@ -393,7 +396,10 @@ class ReconsiderServiceTest(unittest.TestCase):
                     repository_id="repo-1",
                     challenge=m.ChallengeRaise(
                         request_id="req-challenge-2",
-                        context_id=CONTEXT_ID.value,
+                        context=m.InvestigationContextRef(
+                        repository_id="repo-1",
+                        context_id=CONTEXT_ID,
+                    ),
                         understanding_id="u-a",
                         target_version=1,
                         target_conclusions=(
@@ -519,7 +525,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             )
         )
         self.assertNotEqual(second.context, first.context)
-        context = self.store.get_context(second.context.value)
+        context = self.store.get_context(second.context.context_id.value)
         self.assertEqual(context.state, m.ContextState.LIVE)
 
     def test_refs_only_challenge_context_retains_scope_for_symbol_and_declared_owner(
@@ -571,7 +577,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                         ),
                     )
                 )
-                context = self.store.get_context(challenged.context.value)
+                context = self.store.get_context(challenged.context.context_id.value)
                 self.assertEqual(context.scope, scope)
                 self.assertFalse(
                     m.evidence_scope_contains(
