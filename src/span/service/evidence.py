@@ -15,6 +15,7 @@ from span.core import model as m
 from span.core import support_rules
 from span.core.identity import source_observation_identity
 from span.core.recording import RecordingValidationError
+from span.core.rejection import RejectionCauseKind
 from span.ports.evidence import EvidenceSource
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
@@ -79,26 +80,48 @@ class EvidenceService:
     def context_deliveries(
         self, record: m.SourceObservation
     ) -> tuple[m.EvidenceDelivery, ...]:
-        """Project immutable observation content into exact positioned deliveries."""
+        """Re-read the source and verify the admitted content hash."""
+        unit = self._evidence.read_exact(
+            record.repository_id,
+            m.EvidenceRequest(record.evidence.locator, record.delivered_ranges),
+            None,
+        )
+        if isinstance(unit, m.EvidenceSourceFailure):
+            raise RecordingValidationError(
+                f"admitted evidence {record.evidence.locator!r} is unavailable: "
+                f"{unit.reason}",
+                cause_kind=RejectionCauseKind.SOURCE_DRIFT,
+            )
         fingerprint = record.content_digest.value.split(":", 1)[1]
         if record.whole_file:
+            if unit.content_fingerprint != fingerprint:
+                raise RecordingValidationError(
+                    f"admitted evidence {record.evidence.locator!r} is no longer "
+                    "current",
+                    cause_kind=RejectionCauseKind.SOURCE_DRIFT,
+                )
             return (
                 m.EvidenceDelivery(
                     observation_id=record.observation_id,
                     unit=m.EvidenceUnit(
                         evidence_ref=record.evidence,
-                        content=record.excerpt,
+                        content=unit.content,
                         content_fingerprint=fingerprint,
                     ),
                 ),
             )
-        lines = record.excerpt.splitlines(keepends=True)
-        offset = 0
+        ranged = support_rules.ranged_fingerprint(unit.content, record.delivered_ranges)
+        if ranged != fingerprint:
+            raise RecordingValidationError(
+                f"admitted evidence {record.evidence.locator!r} is no longer current",
+                cause_kind=RejectionCauseKind.SOURCE_DRIFT,
+            )
+        lines = unit.content.splitlines(keepends=True)
         deliveries: list[m.EvidenceDelivery] = []
         for source_range in record.delivered_ranges:
-            count = source_range.end_line - source_range.start_line + 1
-            content = "".join(lines[offset : offset + count])
-            offset += count
+            content = "".join(
+                lines[source_range.start_line - 1 : source_range.end_line]
+            )
             deliveries.append(
                 m.EvidenceDelivery(
                     observation_id=record.observation_id,
@@ -176,7 +199,7 @@ class EvidenceService:
         observation_ids: tuple[str, ...],
         bounds: m.QueryBounds,
     ) -> tuple[m.EvidenceUnit, ...]:
-        """Read stored admitted excerpts without re-reading the workspace."""
+        """Read admitted observations by re-reading and verifying the source."""
         records = {
             record.observation_id.value: record
             for record in self._store.list_context_evidence(context_id)
@@ -214,10 +237,8 @@ class EvidenceService:
     ) -> m.EvidenceAdmissionResult:
         now = self._clock()
         outcomes: list[m.EvidenceAdmissionOutcome] = []
-        total_bytes = 0
-        stop = False
         for index, request in enumerate(requests):
-            if stop or index >= bounds.max_evidence_units:
+            if index >= bounds.max_evidence_units:
                 outcomes.append(
                     m.OmittedEvidence(
                         request,
@@ -236,7 +257,7 @@ class EvidenceService:
                     )
                 )
                 continue
-            unit = self._evidence.read_exact(context.repository_id, request, bounds)
+            unit = self._evidence.read_exact(context.repository_id, request, None)
             if isinstance(unit, m.EvidenceSourceFailure):
                 outcomes.append(unit)
                 continue
@@ -258,14 +279,9 @@ class EvidenceService:
                         )
                     )
                     continue
-                excerpt = "".join(
-                    "".join(lines[item.start_line - 1 : item.end_line])
-                    for item in delivered
-                )
                 whole_file = False
             else:
                 delivered = ()
-                excerpt = unit.content
                 whole_file = True
             if request.ranges:
                 ranged = support_rules.ranged_fingerprint(unit.content, delivered)
@@ -280,17 +296,6 @@ class EvidenceService:
                 digest = m.ContentDigest(f"sha256:{ranged}")
             else:
                 digest = m.ContentDigest(f"sha256:{unit.content_fingerprint}")
-            size = len(excerpt.encode("utf-8"))
-            if total_bytes + size > bounds.max_evidence_bytes:
-                outcomes.append(
-                    m.OmittedEvidence(
-                        request,
-                        "max_evidence_bytes reached; resubmit the remaining " "items",
-                    )
-                )
-                stop = True
-                continue
-            total_bytes += size
             observation_id = source_observation_identity(
                 context.repository_id,
                 request.locator,
@@ -310,7 +315,6 @@ class EvidenceService:
                         total_lines=total_lines,
                         delivered_ranges=delivered,
                         whole_file=whole_file,
-                        excerpt=excerpt,
                     )
                 )
             self._store.add_context_evidence(

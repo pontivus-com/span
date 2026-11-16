@@ -316,3 +316,109 @@ class RestoreResult:
             "schema_actions": self.schema_actions,
             "dry_run": self.dry_run,
         }
+
+
+REPOSITORY_MANIFEST_FORMAT = "span-repository-backup/1"
+
+
+@dataclasses.dataclass(frozen=True)
+class RepositoryBackupManifest:
+    """One repository's deployable artifact, stored inside that repository."""
+
+    repository_id: str
+    source_root: str
+    created_at: str
+    span_version: str | None
+    artifact: BackupArtifact
+    format: str = REPOSITORY_MANIFEST_FORMAT
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "format": self.format,
+            "repository_id": self.repository_id,
+            "source_root": self.source_root,
+            "created_at": self.created_at,
+            "span_version": self.span_version,
+            "artifact": self.artifact.payload(),
+        }
+
+    @classmethod
+    def parse(cls, payload: Mapping[str, object]) -> RepositoryBackupManifest:
+        _only_keys(
+            payload,
+            "repository manifest",
+            {
+                "format",
+                "repository_id",
+                "source_root",
+                "created_at",
+                "span_version",
+                "artifact",
+            },
+        )
+        manifest_format = _string(payload, "format")
+        if manifest_format != REPOSITORY_MANIFEST_FORMAT:
+            raise BackupManifestError(
+                f"format {manifest_format!r} is not " f"{REPOSITORY_MANIFEST_FORMAT!r}"
+            )
+        repository_id = _string(payload, "repository_id")
+        source_root = _string(payload, "source_root")
+        if not Path(source_root).is_absolute():
+            raise BackupManifestError("source_root must be an absolute path")
+        artifact = BackupArtifact.parse(_mapping(payload, "artifact"))
+        if artifact.database is None:
+            raise BackupManifestError("artifact must carry database facts")
+        if artifact.path != f"{repository_id}.db":
+            raise BackupManifestError(
+                "artifact path must be the repository store " f"{repository_id}.db"
+            )
+        return cls(
+            repository_id=repository_id,
+            source_root=source_root,
+            created_at=_string(payload, "created_at"),
+            span_version=_optional_string(payload, "span_version"),
+            artifact=artifact,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class RepositoryVerification:
+    """Verification outcome for one repository artifact."""
+
+    ok: bool
+    artifact_dir: str
+    manifest: RepositoryBackupManifest
+    artifact: VerifiedArtifact
+    failures: tuple[str, ...]
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "ok": self.ok,
+            "artifact_dir": self.artifact_dir,
+            "repository_id": self.manifest.repository_id,
+            "source_root": self.manifest.source_root,
+            "artifact": self.artifact.payload(),
+            "failures": self.failures,
+        }
+
+
+@dataclasses.dataclass(frozen=True)
+class RepositoryLoadResult:
+    """The outcome of loading one repository artifact for deployment."""
+
+    repository_id: str
+    root: str
+    restored_store: str
+    pre_load_backup: str | None
+    rebound_from: str | None
+    dry_run: bool = False
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "repository_id": self.repository_id,
+            "root": self.root,
+            "restored_store": self.restored_store,
+            "pre_load_backup": self.pre_load_backup,
+            "rebound_from": self.rebound_from,
+            "dry_run": self.dry_run,
+        }

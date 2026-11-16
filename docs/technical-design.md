@@ -152,10 +152,10 @@ older twenty-tool captures are historical/void (§6 O-6, §15).
 ### WP-1 — Surface model, containment, and status *(largest)*
 
 Covers FD-1 and FD-5–FD-8. New carriers (`Surface`, `SurfaceKind`,
-`SurfaceBoundary`, `SurfaceStatus`), schema 11 tables, a containment resolver,
+`SurfaceBoundary`, `SurfaceStatus`), schema 12 tables, a containment resolver,
 path and declared surfaces, `unexamined`, and descendant status.
 
-A schema-11 transition path is required at the same boundary; see §14 and O-4.
+A schema-12 transition path is required at the same boundary; see §14 and O-4.
 
 Reuse: 0.8.3 resolution and coverage. No existing surface tests; new tests are
 required.
@@ -657,7 +657,7 @@ projection in core/model and construct it through EvidenceService. Keep stored
 SourceObservation immutable; associate its ID with existing EvidenceUnit page
 fragments produced by the answer fitter/_slice_unit. Schema generation handles
 that canonical delivery carrier on both initial and continuation results. Do
-not introduce a second excerpt/range parser or reconstruct source identity in
+not introduce a second source-copy/range parser or reconstruct source identity in
 transport code.
 
 **Compact implementation.** Implement only lifecycle §4.2's public field sets
@@ -826,7 +826,7 @@ Represent individual failing dependency evaluations in the canonical support
 carrier. Reuse the core precedence calculation after collecting those results;
 do not recover dependency identities by parsing `_revision_eval`'s reason text.
 Use the same evaluator for reads, writes, verification qualification, and notices.
-Range binding follows FD-18; delivered excerpts alone do not prove a reliable
+Range binding follows FD-18; delivered ranges alone do not prove a reliable
 range identity and do not justify widening the implementation into a new parser.
 
 ## 12. Acceptance, replay, and transition composition
@@ -936,15 +936,16 @@ budget below the minimum result. Expiry and restart fixtures cover context,
 receipt, and accepted-history survival. The O-2 duration and O-3 per-host value
 remain unmeasured, so FG-4 stays `OPEN`.
 
-## 14. Offline schema-10 transition
+## 14. Offline schema transition
 
 **Authority:** F3, F7, L4; FD-1, FD-6, FD-35–FD-36, FD-42–FD-45.
 
 Extend `shell/store_transition.py` and the existing installer transition command.
-The current `SUPPORTED_SOURCE_SCHEMAS` contains 7–10, and staging imports binding
-and seeds into an otherwise empty schema-11 store. A schema-10 input needs its
-own mapping and staged verification; the old export mechanism alone is not that
-mapping. Retain historical old-format exports without a second active decoder
+The current `SUPPORTED_SOURCE_SCHEMAS` contains 7–11, and staging imports binding
+and seeds into an otherwise empty schema-12 store. A schema-10 or schema-11 input
+needs its own mapping and staged verification; the schema-11 mapping copies every
+semantic table and drops `source_observations.excerpt`; the old export mechanism
+alone is not that mapping. Retain historical old-format exports without a second active decoder
 or semantic writer in the MCP runtime.
 
 **Schema-10 mapping rule (O-4).** Each schema-10 understanding maps to the path

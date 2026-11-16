@@ -284,11 +284,32 @@ already understands your repository. Continue with the [usage guide](usage.md).
 
 ---
 
-## Back up and recover
+## Back up, deploy and recover
 
-A recovery artifact covers the databases, the install receipt, the indexer
-pointer and a verified manifest. It is written by one command and can be
-verified or restored without reinstalling:
+Span has two artifact classes.
+
+**Repository-portable** — one repository's store inside that repository at
+`.span/backups/`, intended to be committed with the code and loaded on a fresh
+deployment:
+
+```bash
+span-install --backup-repository <REPO_ROOT>
+span-install --verify-repository-backup <ARTIFACT_DIR>
+span-install --load-repository-backup <TARGET_ROOT>
+```
+
+The clone directory basename must match the repository id. Load verifies the
+artifact, snapshots the current data directory, replaces the store and
+explicitly rebinds its recorded root to the clone. Install first, then load:
+
+```bash
+span-install --repo .
+span-install --load-repository-backup .
+span-install --verify-only
+```
+
+**Full data-directory** — the whole installation, including the receipt,
+written outside Git:
 
 ```bash
 span-install --data-dir <DATA_DIR> --backup
@@ -297,12 +318,13 @@ span-install --data-dir <DATA_DIR> \
   --restore-backup <BACKUP_DIR> --restore-confirm <name>
 ```
 
-The installer takes the same backup before a reinstall mutation, so the
-mechanism is not a reinstall side effect. `structural/` is regenerable and is
-excluded; the artifact records that reason. Retention is explicit
-(`--reap-backups KEEP`) and is never applied automatically. Stop every Span
-process before restoring. The full policy, storage guidance and isolated
-restore procedure are in [backup and recovery](recovery.md).
+The installer takes the same full backup before a reinstall mutation.
+`structural/` is regenerable and excluded; the artifact records that reason.
+Retention is explicit (`--reap-backups KEEP`,
+`--reap-repository-backups <REPO_ROOT> <KEEP>`) and is never applied
+automatically. Stop every Span process before restoring or loading. The full
+policy, storage guidance, security consequence and isolated restore procedure
+are in [backup and recovery](recovery.md).
 
 ---
 

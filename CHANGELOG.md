@@ -1,5 +1,74 @@
 # Changelog
 
+## 0.10.5 — 2026-11-16
+
+### Evidence references, not source copies
+
+- Remove `source_observations.excerpt`: Span stores the source reference, the
+  calculated content hash and the delivered ranges, not a copy of the source.
+  This fixes whole-file admission of large files and removes the duplicated
+  source storage measured in the live databases.
+- Admission binds a reference without applying the delivery bound. Delivery
+  re-reads the source, verifies the stored hash and pages large content; a
+  changed source is a typed stale outcome and is never presented as admitted
+  content.
+- Store schema 12 drops the excerpt column. The offline transition supports
+  7–11 → 12; the schema-11 mapping copies every semantic table and drops the
+  column.
+- Support evaluation continues to re-read and compare hashes; it never needed
+  the stored bytes.
+
+### Repository-portable backup and load
+
+- Add `span-install --backup-repository <REPO_ROOT>`, which writes one
+  deployable artifact into `<REPO_ROOT>/.span/backups/<UTC timestamp>/`:
+  the repository's `<id>.db`, a `span-repository-backup/1` manifest and its
+  SHA-256 digest. The artifact is intended to be committed with the
+  repository.
+- Add `--verify-repository-backup` and `--load-repository-backup`. Load
+  verifies the artifact, snapshots the current data directory, replaces the
+  repository store and explicitly rebinds its recorded root from the
+  artifact's source root to the clone's canonical root.
+- Add `--reap-repository-backups KEEP`; the count is explicit and Git history
+  remains the durable retention.
+- The artifact contains only the repository's store. `install.json`,
+  `structural/` and `transitions/` are excluded; install-first and index
+  rebuild remain the deployment steps.
+- The full data-directory backup commands from 0.10.4 remain for global
+  disaster recovery and are not committed.
+
+### Policy and rules
+
+- Amend `AGENTS.md` and `docs/recovery.md`: repository-portable artifacts are
+  intentional Git content; all other raw captures, receipts and ad-hoc
+  manifests remain out of Git.
+- State the confidentiality consequence: the store contains recorded
+  conclusions and evidence text, which become available to everyone with
+  repository access and in history.
+
+### Compatibility
+
+- Store schema is 12. A 0.10.4 runtime cannot open a schema-12 store; run the
+  documented offline transition when upgrading an existing installation.
+- No public MCP operation change.
+- Clones must keep the repository directory basename; renamed clones are
+  refused because Span's repository identity is the basename.
+- A 0.10.5 artifact is not loadable by 0.10.4.
+- Historical source bytes are no longer retained. The content hash and ranges
+  identify the source state; Git history is the archive.
+
+### Verification
+
+- Full suite: **763 passed, 1 skipped, 125 subtests passed**.
+- Ruff, Black and the zero-error typing ratchet pass.
+- Disposable CLI proof: artifact manifest SHA-256
+  `9c068a66e11c4dfd2d386df691f4d5df07e4bdc7f0acee5edc4fa25da422ebac`,
+  schema 12, 204,800 bytes. It verified, loaded into a clone at a different
+  absolute path with the same basename, rebound to the clone, and reported
+  ready. The loaded store has no `excerpt` column.
+- The 134 KB whole-file admission case and the 11 → 12 transition are covered
+  by tests. No live-store transition or live restore was performed.
+
 ## 0.10.4 — 2026-11-16
 
 ### Data backup and recovery

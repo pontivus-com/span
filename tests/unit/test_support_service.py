@@ -81,7 +81,6 @@ class SupportServiceTest(unittest.TestCase):
                 captured_at=NOW,
                 total_lines=len(data.decode().splitlines()),
                 whole_file=True,
-                excerpt=data.decode(),
             )
         )
         return observation_id

@@ -88,7 +88,9 @@ not authority; it is debt, and it never decides what work may proceed.
   compatibility bridges, fallback parsing, or parallel semantic writers.
 - Do not edit generated artifacts or `BUILD_IDENTITY`.
 - Keep raw acceptance captures, transcripts, receipts and manifests out of Git
-  and distributions. Report sanitized verification summaries in release notes.
+  and distributions. Exception: the deployable per-repository artifact under
+  `<repo>/.span/backups/` is intended Git content and is committed by the
+  operator; all other raw captures, receipts and ad-hoc manifests remain out. Report sanitized verification summaries in release notes.
 
 ## Testing
 

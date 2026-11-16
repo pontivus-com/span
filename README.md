@@ -153,12 +153,12 @@ see [using Span](docs/usage.md).
 
 ## Beta host status
 
-The 0.10.4 repository/installable contract is verified through the built package
+The 0.10.5 repository/installable contract is verified through the built package
 and installed stdio MCP lane. Candidate-specific live model-host conversion was
 not rerun from this execution environment; earlier captures are historical and
-are not reused as 0.10.4 acceptance evidence.
+are not reused as 0.10.5 acceptance evidence.
 
-| Host | 0.10.4 candidate status |
+| Host | 0.10.5 candidate status |
 | --- | --- |
 | Codex | Integration target retained; candidate-specific live model-delivery **UNVERIFIED**. |
 | OpenCode | Integration target and packaged notice delivery retained; candidate-specific live model-delivery **UNVERIFIED**. |
@@ -185,12 +185,13 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.10.4**: operator-facing backup, verification,
-restore and reaping for the local data directory, on top of the 0.10.3
-surface-first lifecycle. The public operations remain `ask`, `record`, and
-`reconsider`; storage remains schema 11. See [the changelog](CHANGELOG.md) for
-verification and upgrade instructions, and [backup and recovery](docs/recovery.md)
-for the operator policy.
+This checkout describes **0.10.5**: evidence is retained as references and
+hashes rather than stored source copies, and each repository can carry a
+deployable Span artifact at `.span/backups/` that loads and rebinds on a fresh
+clone. The public operations remain `ask`, `record`, and `reconsider`; storage is
+schema 12. See [the changelog](CHANGELOG.md) for verification and upgrade
+instructions, and [backup and recovery](docs/recovery.md) for the operator
+policy.
 
 - [Install and connect](docs/install.md)
 - [Using Span](docs/usage.md) and [first investigation](docs/onboarding-runbook.md)

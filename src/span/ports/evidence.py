@@ -66,13 +66,14 @@ class EvidenceSource(_typing.Protocol):
         self,
         repository_id: str,
         request: EvidenceRequest,
-        bounds: QueryBounds,
+        bounds: QueryBounds | None,
     ) -> EvidenceUnit | EvidenceSourceFailure:
-        """Read source for exact binding, budgeting the declared excerpt.
+        """Read source for exact binding, budgeting only when bounds is given.
 
         Content retains the enclosing text for range identity and total lines.
-        Reliable request ranges bound the evidence budget; an unbindable range
-        is budgeted as a whole file for support-evaluation fallback.
+        Admission passes ``None`` because a reference is not delivered; the
+        delivery path supplies bounds. An unbindable range is budgeted as a
+        whole file for support-evaluation fallback.
         """
         ...
 

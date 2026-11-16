@@ -64,7 +64,10 @@ Forms (exactly one):
   `evidence` and a caller-owned `request_id`. It returns the same Answer/Gap
   classification plus one `EvidenceAdmissionView` with a bound
   `InvestigationContextRef`, admission outcomes, exact deliveries, omissions,
-  and a continuation when selected bytes do not fit.
+  and a continuation when selected bytes do not fit. Admission stores the
+  reference, content hash and delivered ranges; delivery re-reads the source
+  and verifies the hash. A changed source is stale and is never presented as
+  admitted content.
 - `CurrentUnderstandingSelector` reads one understanding's current membership.
   Snapshot and receipt selectors are historical/audit retrieval and are never
   merged into current Answer content.

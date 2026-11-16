@@ -56,7 +56,6 @@ def _observation(evidence_id: str = "ev-1") -> SourceObservationRecord:
         captured_at=NOW,
         total_lines=1,
         whole_file=True,
-        excerpt="A does X",
     )
 
 

@@ -85,7 +85,6 @@ class ReconsiderServiceTest(unittest.TestCase):
                 captured_at=NOW,
                 total_lines=1,
                 whole_file=True,
-                excerpt="a",
             )
         )
         self.store.put_source_observation(
@@ -103,7 +102,6 @@ class ReconsiderServiceTest(unittest.TestCase):
                 captured_at=NOW,
                 total_lines=1,
                 whole_file=True,
-                excerpt="b",
             )
         )
         self._create(

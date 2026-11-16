@@ -74,8 +74,8 @@ content.
 **Scope** — The declared paths/evidence references bounding the investigation,
 conclusion, or verification run. Unexamined and truncated scope stays explicit.
 
-**Observation** — Immutable admitted source content identity and excerpts, or
-a recorded discovery-membership fingerprint. See [authority](authority-trust.md).
+**Observation** — Immutable admitted source reference, content hash and delivered
+ranges, or a recorded discovery-membership fingerprint. See [authority](authority-trust.md).
 
 **Support** — A declared dependency on a source observation, authority binding,
 exact premise revision, or discovery observation.

@@ -29,13 +29,18 @@ import sys
 from contextlib import ExitStack
 from pathlib import Path
 
+from span.shell.install.backup_io import (
+    copy_database,
+    database_facts,
+    sha256_file,
+    utc_stamp,
+)
 from span.shell.install.constants import INSTALL_VERSION
 from span.shell.install.manifest import (
     BackupArtifact,
     BackupManifest,
     BackupManifestError,
     BackupVerification,
-    DatabaseFacts,
     ManifestReason,
     RestoreResult,
     VerifiedArtifact,
@@ -62,65 +67,6 @@ EXCLUDED_DIRECTORIES = (
 )
 
 
-def _utc_stamp():
-    # Microsecond precision keeps two artifacts from the same process-second
-    # distinct without inventing a counter; an exact collision still fails
-    # closed rather than overwriting.
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%f")
-
-
-def _sha256(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _read_only_uri(path):
-    return Path(path).resolve().as_uri() + "?mode=ro"
-
-
-def _database_facts(path):
-    """Read the facts a recovery artifact must carry for one database.
-
-    Raises ``sqlite3.Error`` when the file is not a readable database so the
-    caller can fail closed instead of recording a false integrity result.
-    """
-    connection = sqlite3.connect(_read_only_uri(path), uri=True)
-    try:
-        row = connection.execute("PRAGMA integrity_check").fetchone()
-        integrity = str(row[0]) if row is not None else "unreported"
-        tables = {
-            str(item[0])
-            for item in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
-        schema_version = None
-        if "meta" in tables:
-            row = connection.execute(
-                "SELECT value FROM meta WHERE key='schema_version'"
-            ).fetchone()
-            if row is not None:
-                try:
-                    schema_version = int(row[0])
-                except (TypeError, ValueError):
-                    schema_version = None
-        max_conclusion_revision = None
-        if "conclusions" in tables:
-            row = connection.execute("SELECT MAX(revision) FROM conclusions").fetchone()
-            if row is not None and row[0] is not None:
-                max_conclusion_revision = int(row[0])
-    finally:
-        connection.close()
-    return DatabaseFacts(
-        schema_version=schema_version,
-        integrity=integrity,
-        max_conclusion_revision=max_conclusion_revision,
-    )
-
-
 def _installer_identity():
     """Record the running code version, not an unrelated installed package.
 
@@ -133,18 +79,6 @@ def _installer_identity():
     except (ImportError, AttributeError):
         version = None
     return {"install_version": INSTALL_VERSION, "span_version": version}
-
-
-def _copy_database(source, destination):
-    src = sqlite3.connect(_read_only_uri(source), uri=True)
-    try:
-        dst = sqlite3.connect(str(destination))
-        try:
-            src.backup(dst)
-        finally:
-            dst.close()
-    finally:
-        src.close()
 
 
 def _backup_root(data_dir, backup_root):
@@ -165,7 +99,7 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
     if not databases:
         return None
     root = _backup_root(data_dir, backup_root)
-    destination = root / _utc_stamp()
+    destination = root / utc_stamp()
     try:
         destination.mkdir(parents=True, exist_ok=False)
     except OSError as exc:
@@ -175,13 +109,13 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
         absent = []
         for db in databases:
             copied = destination / db.name
-            _copy_database(db, copied)
+            copy_database(db, copied)
             artifacts.append(
                 BackupArtifact(
                     path=db.name,
-                    sha256=_sha256(copied),
+                    sha256=sha256_file(copied),
                     size_bytes=copied.stat().st_size,
-                    database=_database_facts(copied),
+                    database=database_facts(copied),
                 )
             )
         for name in SUPPORT_FILES:
@@ -196,7 +130,7 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
             artifacts.append(
                 BackupArtifact(
                     path=name,
-                    sha256=_sha256(copied),
+                    sha256=sha256_file(copied),
                     size_bytes=copied.stat().st_size,
                 )
             )
@@ -309,7 +243,7 @@ def verify_backup(backup_dir):
             )
             continue
         size_ok = path.stat().st_size == artifact.size_bytes
-        sha256_ok = _sha256(path) == artifact.sha256
+        sha256_ok = sha256_file(path) == artifact.sha256
         if not size_ok:
             failures.append(f"{name}: size does not match the manifest")
         if not sha256_ok:
@@ -318,7 +252,7 @@ def verify_backup(backup_dir):
         unreadable = None
         if path.suffix == ".db":
             try:
-                database = _database_facts(path)
+                database = database_facts(path)
             except sqlite3.Error as exc:
                 unreadable = f"unreadable: {exc}"
                 failures.append(f"{name}: unreadable database ({exc})")
@@ -383,7 +317,7 @@ def _restore_artifact(backup_dir, data_dir, artifact):
             if stale.exists():
                 stale.unlink()
     shutil.copy2(source, destination)
-    if _sha256(destination) != artifact.sha256:
+    if sha256_file(destination) != artifact.sha256:
         raise SystemExit(f"restored file does not match the manifest: {destination}")
     return destination
 

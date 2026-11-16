@@ -95,7 +95,6 @@ class AnswerServiceTest(unittest.TestCase):
                 captured_at=NOW,
                 total_lines=1,
                 whole_file=True,
-                excerpt=data.decode("utf-8"),
             )
         )
 
@@ -485,7 +484,6 @@ class AnswerServiceTest(unittest.TestCase):
                 total_lines=3,
                 delivered_ranges=(m.SourceRange(1, 2),),
                 whole_file=False,
-                excerpt="one\ntwo\n",
             )
         )
         self.store.record_understanding(

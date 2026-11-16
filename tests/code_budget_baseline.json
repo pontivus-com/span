@@ -10,7 +10,7 @@
   "getattr": 9,
   "inline_addendum_refs": 0,
   "longest_function": 141,
-  "longest_module": 1881,
+  "longest_module": 1909,
   "mapping_symbols": 0,
   "max_carrier_fields": 13,
   "most_branches": 36,
@@ -20,9 +20,9 @@
   "provider_paging_helpers": 0,
   "service_shell_imports": 0,
   "test_doubles_in_src": 0,
-  "test_files": 51,
+  "test_files": 52,
   "test_helper_definitions": 3,
-  "test_lines": 21859,
+  "test_lines": 22225,
   "type_ignore": 22,
-  "untyped_defs": 101
+  "untyped_defs": 103
 }

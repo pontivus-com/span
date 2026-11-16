@@ -243,7 +243,7 @@ class EvidenceServiceTest(unittest.TestCase):
         with self.assertRaises(RecordingValidationError):
             support.assert_observations((admitted.observation_id,))
 
-    def test_large_file_whole_and_oversized_range_fail_explicitly(self) -> None:
+    def test_large_file_whole_is_admitted_without_delivery_bound(self) -> None:
         _write(self.root, "src/app.py", "x" * (BOUNDS.max_evidence_bytes + 1) + "\n")
         result = self._start(
             (
@@ -253,12 +253,10 @@ class EvidenceServiceTest(unittest.TestCase):
             policy_bounds=BOUNDS,
         )
         for outcome in result.outcomes:
-            self.assertIsInstance(outcome, m.EvidenceSourceFailure)
-        self.assertEqual(self.service.admitted("ctx-ev-1"), ())
+            self.assertIsInstance(outcome, m.AdmittedEvidence)
+        self.assertEqual(len(self.service.admitted("ctx-ev-1")), 2)
 
-    def test_range_batch_budgets_excerpts_and_invalid_range_does_not_consume_budget(
-        self,
-    ) -> None:
+    def test_invalid_range_does_not_consume_admission_budget(self) -> None:
         import dataclasses
 
         bounds = dataclasses.replace(BOUNDS, max_evidence_bytes=12)
@@ -272,10 +270,10 @@ class EvidenceServiceTest(unittest.TestCase):
             ),
             policy_bounds=bounds,
         )
-        self.assertIsInstance(result.outcomes[0], m.EvidenceSourceFailure)
+        self.assertIsInstance(result.outcomes[0], m.OmittedEvidence)
         self.assertIsInstance(result.outcomes[1], m.AdmittedEvidence)
         self.assertIsInstance(result.outcomes[2], m.AlreadyAdmittedEvidence)
-        self.assertIsInstance(result.outcomes[3], m.OmittedEvidence)
+        self.assertIsInstance(result.outcomes[3], m.AlreadyAdmittedEvidence)
 
     def test_out_of_range_request_is_omitted(self) -> None:
         result = self._start(
@@ -339,7 +337,7 @@ class EvidenceServiceTest(unittest.TestCase):
         self.assertIsInstance(result.outcomes[0], m.AdmittedEvidence)
         self.assertIsInstance(result.outcomes[1], m.OmittedEvidence)
 
-    def test_total_byte_bound_omits_remainder(self) -> None:
+    def test_admission_does_not_bound_delivery_bytes(self) -> None:
         bounds = m.QueryBounds(
             max_results=10,
             max_depth=2,
@@ -357,7 +355,7 @@ class EvidenceServiceTest(unittest.TestCase):
             policy_bounds=bounds,
         )
         self.assertIsInstance(result.outcomes[0], m.AdmittedEvidence)
-        self.assertIsInstance(result.outcomes[1], m.OmittedEvidence)
+        self.assertIsInstance(result.outcomes[1], m.AdmittedEvidence)
 
     def test_extend_keeps_same_context(self) -> None:
         first = self._start((m.EvidenceRequest("src/app.py"),))

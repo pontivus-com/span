@@ -26,7 +26,7 @@ semantic interpretation or every host. Execution receipts are separate.
 | I-13 | Structural separation | Review | Store holds canonical JSON plus query columns only; no graph duplication |
 | I-14 | Provider neutrality | Test | `GraftMappingTest`; `StructuralCoverageConformanceTest` |
 | I-15 | No semantic reconstruction | Review | Composers project stored state; transport/store add no judgments |
-| I-16 | Boundedness | Test | `test_total_byte_bound_omits_remainder`; `test_unit_bound_omits_remainder`; `test_bound_reports_truncation_not_unaffected` |
+| I-16 | Boundedness | Test | `test_admission_does_not_bound_delivery_bytes`; `test_unit_bound_omits_remainder`; `test_bound_reports_truncation_not_unaffected` |
 | I-17 | Publication isolation | Test | `IsolationGateTest` (hermetic tree; no enclosing-workspace coupling) |
 | I-18 | No semantic `Any` | Test | `SemanticTypingTest` (annotation scan clean; canonical decode refuses untyped collections) |
 | I-19 | Success-path completeness | Test | `LifecycleMcpTest` (first valid recording on the ordinary path) |

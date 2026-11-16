@@ -25,11 +25,13 @@ carry a locator and optional ranges. Admission returns a typed outcome for
 each item, preserves successful observations, and distinguishes failures
 from omissions. Exact source can be admitted without structural symbols.
 
-A source observation retains its content identity and delivered excerpt
-boundary. Source support checks the declared range when it reliably binds, otherwise the
+A source observation retains its content identity, content hash and delivered
+range boundary; source bytes are not stored. Source support checks the declared range when it reliably binds, otherwise the
 whole file (FD-18). A delivery slice alone does not narrow a declared dependency.
-Admission budgets the declared excerpt, including all requested ranges; binding
-may inspect the enclosing source without admitting it as whole-file evidence. Selection
+Admission binds the reference without a delivery budget; delivery budgets the
+declared content, including all requested ranges, and re-reads the source to
+verify the stored hash. Binding may inspect the enclosing source without
+admitting it as whole-file evidence. Selection
 finds relevant evidence and grants no authority.
 
 ## Structural source

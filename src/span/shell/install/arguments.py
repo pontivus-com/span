@@ -112,6 +112,45 @@ def _add_recovery_arguments(parser) -> None:
     )
 
 
+def _add_repository_recovery_arguments(parser) -> None:
+    """Repository-portable artifact commands (one-shot)."""
+    parser.add_argument(
+        "--backup-repository",
+        default=None,
+        metavar="REPO_ROOT",
+        help="Write one deployable artifact into <REPO_ROOT>/.span/backups/ "
+        "and exit. Commit it with the repository.",
+    )
+    parser.add_argument(
+        "--verify-repository-backup",
+        default=None,
+        metavar="ARTIFACT_DIR",
+        help="Verify one repository artifact and exit.",
+    )
+    parser.add_argument(
+        "--load-repository-backup",
+        default=None,
+        metavar="TARGET_ROOT",
+        help="Load the newest (or --repository-artifact) repository artifact "
+        "into the data directory and rebind it to TARGET_ROOT.",
+    )
+    parser.add_argument(
+        "--repository-artifact",
+        default=None,
+        metavar="ARTIFACT_DIR",
+        help="Explicit artifact directory for --load-repository-backup. "
+        "Never inferred when supplied.",
+    )
+    parser.add_argument(
+        "--reap-repository-backups",
+        nargs=2,
+        default=None,
+        metavar=("REPO_ROOT", "KEEP"),
+        help="Delete all but the newest KEEP working-tree artifacts under "
+        "REPO_ROOT/.span/backups. Git history is unaffected.",
+    )
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="span-install",
@@ -238,6 +277,7 @@ def parse_args(argv=None):
     )
     _add_transition_arguments(parser)
     _add_recovery_arguments(parser)
+    _add_repository_recovery_arguments(parser)
     parser.add_argument(
         "--list-orphans",
         action="store_true",

@@ -147,7 +147,9 @@ A conclusion loses support directly when it declares a source dependency on the
 changed path, or a discovery dependency whose scope membership contains the
 changed path. Where a reliable declared range exists, evaluate that range;
 otherwise evaluate the whole file. A range that cannot be reliably bound falls
-back to the whole file rather than to a narrower claim. *(F2, F4)*
+back to the whole file rather than to a narrower claim. Support evaluation
+re-reads the current source; the observation stores the content hash and
+ranges, not the source bytes. *(F2, F4)*
 
 **FD-19 — Indirect support loss.**
 After direct loss, walk premise chains to a fixed point. A conclusion whose
@@ -438,7 +440,8 @@ meaning. Measure delivered notice cost under F8 and delivery under FD-53.
 
 **FD-54 — Response size is server-owned.**
 The agent does not manage response size; the default is set per host and recorded
-with the delivered result. *(F7)*
+with the delivered result. The bound applies to delivery, not to binding a
+source reference. *(F7)*
 
 **FD-55 — Truncation is explicit and recoverable.**
 A truncated result names what was omitted and provides a public way to retrieve

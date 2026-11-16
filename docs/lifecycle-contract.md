@@ -143,13 +143,14 @@ both result kinds. Its fields are `context: InvestigationContextRef`,
 `outcomes: tuple[EvidenceAdmissionOutcome, ...]`,
 `deliveries: tuple[EvidenceDelivery, ...]`, `continuation: str | None`,
 `omitted: tuple[str, ...]`, and `truncated: bool`. It reuses the existing evidence request/outcome,
-source-observation and range owners; it does not define parallel excerpt or
+source-observation and range owners; it does not define parallel source-copy or
 range shapes. `EvidenceDelivery` has exactly `observation_id: SourceObservationId`
 and `unit: EvidenceUnit`. The unit carries the existing EvidenceRef, content,
 content_fingerprint and content_range; the ID associates each whole/partial
-delivery with its admitted observation. Immutable SourceObservation remains
-stored once; a continuation does not mutate its excerpt/digest to represent a
-page. For disjoint ranges, deliver separately positioned EvidenceUnit fragments
+delivery with its admitted observation. Immutable SourceObservation stores the
+reference, content hash and delivered ranges, not the source bytes; delivery
+re-reads and verifies the hash, and a continuation does not mutate the
+observation to represent a page. For disjoint ranges, deliver separately positioned EvidenceUnit fragments
 rather than labeling concatenated text as contiguous. Before admission, `EvidenceRequest` is the exact source-pointer
 and selection carrier; after observation, `EvidenceRef` remains the canonical
 observed/cited source identity inside `SourceObservation`. Each admission

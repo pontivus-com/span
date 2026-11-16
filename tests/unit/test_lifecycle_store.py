@@ -21,6 +21,7 @@ from span.shell.sqlite_store.lifecycle import (
     LifecycleStoreError,
     SchemaVersionError,
     SourceObservationRecord,
+    UnknownRepository,
 )
 
 NOW = datetime.datetime(2026, 10, 31, 12, 0, tzinfo=datetime.timezone.utc)
@@ -53,7 +54,6 @@ def _observation() -> SourceObservationRecord:
         captured_at=NOW,
         total_lines=1,
         whole_file=True,
-        excerpt="A does X",
     )
 
 
@@ -282,11 +282,32 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.register_repository("repo-1", "/repo/one")
         self.store.put_source_observation(_observation())
 
-    def test_schema_version_is_eleven(self) -> None:
+    def test_schema_version_is_twelve(self) -> None:
         row = self.store._connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        self.assertEqual(row["value"], "11")
+        self.assertEqual(row["value"], "12")
+
+    def test_rebind_repository_moves_only_the_root(self) -> None:
+        self.store.rebind_repository("repo-1", "/repo/two", expected_root="/repo/one")
+        row = self.store._connection.execute(
+            "SELECT root FROM repositories WHERE repository_id='repo-1'"
+        ).fetchone()
+        self.assertEqual(row["root"], "/repo/two")
+        with self.assertRaises(LifecycleStoreError):
+            self.store.register_repository("repo-1", "/repo/three")
+
+    def test_rebind_refuses_a_third_root(self) -> None:
+        with self.assertRaises(LifecycleStoreError):
+            self.store.rebind_repository(
+                "repo-1", "/repo/two", expected_root="/repo/other"
+            )
+
+    def test_rebind_unknown_repository(self) -> None:
+        with self.assertRaises(UnknownRepository):
+            self.store.rebind_repository(
+                "missing", "/repo/two", expected_root="/repo/one"
+            )
 
     def test_create_replay_and_conflict(self) -> None:
         self.store.put_context(_context())
@@ -353,7 +374,6 @@ class LifecycleStoreTest(unittest.TestCase):
             captured_at=NOW,
             total_lines=1,
             whole_file=True,
-            excerpt="A does X",
         )
         with self.assertRaises(LifecycleStoreError):
             self.store.put_source_observation(changed)
@@ -369,7 +389,6 @@ class LifecycleStoreTest(unittest.TestCase):
                 captured_at=NOW,
                 total_lines=1,
                 whole_file=True,
-                excerpt="A does X",
             )
         )
         self.store.put_context(_context())
@@ -874,7 +893,6 @@ class LifecycleStoreTest(unittest.TestCase):
                 captured_at=NOW,
                 total_lines=1,
                 whole_file=True,
-                excerpt="A does X",
             )
         )
         self.store.put_context(_context())
