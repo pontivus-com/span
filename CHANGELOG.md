@@ -1,6 +1,49 @@
 # Changelog
 
-## 0.10.3 — Unreleased
+## 0.10.4 — 2026-11-16
+
+### Data backup and recovery
+
+- Add an operator-facing recovery surface to the installer: `--backup`,
+  `--verify-backup`, `--restore-backup` and `--reap-backups`. The reinstall
+  backup path delegates to the same writer, so there is one artifact format and
+  no second backup behaviour.
+- A recovery artifact contains every top-level database (copied through the
+  SQLite online backup API), `install.json`, `structural-indexer.json`, and a
+  manifest of sizes, SHA-256 digests, per-database `schema_version`, integrity
+  result and highest conclusion revision. `structural/` and `transitions/` are
+  excluded with the reason recorded in the manifest.
+- Introduce the canonical typed manifest carrier
+  (`shell/install/manifest.py`) shared by creation, verification and restore.
+  Unknown manifest formats and unknown keys are rejected rather than interpreted.
+- Restore requires the artifact directory name as explicit confirmation,
+  refuses a store held by a live process through the shared exclusive-ownership
+  rule, snapshots the current data directory, clears stale WAL/SHM/journal files
+  and re-hashes every restored file.
+- Reaping is explicit (`KEEP`), deletes only directories carrying a valid Span
+  manifest, and has no default retention interval.
+- Document the policy and operator runbook in `docs/recovery.md`; link it from
+  `docs/install.md` and `docs/README.md`.
+- Record the running code version in the manifest, not an unrelated installed
+  distribution version.
+
+### Verification
+
+- Full suite: **747 passed, 1 skipped, 125 subtests passed**.
+- Ruff, Black and the zero-error typing ratchet pass.
+- Isolated restore proof: artifact `20261116T030031630758`, manifest SHA-256
+  `1bd6b1b19c8acea0776aafbd44c4c8503efa70668d1b77ef0d77de10e57fed3b`. All
+  seven artifacts matched their recorded identity; restoring the artifact into a
+  disposable data directory returned `u:rec-docgov-r00-20261116` at revision 4
+  and `u:rec-docgov-inventory-20261116` at revision 1, both `CURRENT`, through
+  the public `ask` operation. No live-store restore was performed.
+
+### Compatibility
+
+- No change to the public MCP operations or the schema-11 store; no migration.
+- Backup artifacts are operator data and are not committed to Git.
+
+## 0.10.3 — 2026-11-14
 
 ### Low-friction lifecycle
 

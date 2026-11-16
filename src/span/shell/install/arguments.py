@@ -65,6 +65,53 @@ def _add_claude_arguments(parser) -> None:
     )
 
 
+def _add_recovery_arguments(parser) -> None:
+    """Operator-facing data recovery surface (one-shot commands)."""
+    parser.add_argument(
+        "--backup",
+        action="store_true",
+        help="Take a verified point-in-time backup of the data directory "
+        "(databases, install receipt, indexer pointer, manifest) and exit.",
+    )
+    parser.add_argument(
+        "--backup-root",
+        default=None,
+        metavar="DIR",
+        help="Directory receiving backup artifacts (default: "
+        "<DATA_DIR>/backups). Used by --backup, --restore-backup and "
+        "--reap-backups.",
+    )
+    parser.add_argument(
+        "--verify-backup",
+        default=None,
+        metavar="BACKUP_DIR",
+        help="Verify one backup artifact's manifest, file identity, database "
+        "integrity and schema compatibility, then exit.",
+    )
+    parser.add_argument(
+        "--restore-backup",
+        default=None,
+        metavar="BACKUP_DIR",
+        help="Restore one verified backup artifact into the data directory. "
+        "Requires --restore-confirm and stops every Span process first.",
+    )
+    parser.add_argument(
+        "--restore-confirm",
+        default=None,
+        metavar="NAME",
+        help="Repeat the backup directory name to confirm a restore. "
+        "Required by --restore-backup; never inferred.",
+    )
+    parser.add_argument(
+        "--reap-backups",
+        default=None,
+        type=int,
+        metavar="KEEP",
+        help="Delete all but the newest KEEP recognized backup artifacts. "
+        "The count is explicit; there is no default retention interval.",
+    )
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="span-install",
@@ -190,6 +237,7 @@ def parse_args(argv=None):
         "`<data-dir>/structural/<id>/`). Explicit ID only.",
     )
     _add_transition_arguments(parser)
+    _add_recovery_arguments(parser)
     parser.add_argument(
         "--list-orphans",
         action="store_true",

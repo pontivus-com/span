@@ -39,6 +39,11 @@ import sqlite3 as _sqlite3
 import tempfile as _tempfile
 import typing as _typing
 
+from span.shell.sqlite_ownership import (
+    StoreHeldError as _StoreHeldError,
+    exclusive_ownership as _exclusive_ownership,
+)
+
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
 
@@ -706,30 +711,19 @@ def _build_identity() -> str:
 def _exclusive_source(path: _pathlib.Path) -> _typing.Iterator[_sqlite3.Connection]:
     """Hold SQLite exclusive ownership for the whole archive-to-activate span.
 
-    ``locking_mode=EXCLUSIVE`` keeps the file lock after the first write
-    transaction until this connection closes. The backup runs from this same
+    The shared ownership rule keeps the file lock after the first write
+    transaction until the connection closes. The backup runs from this same
     connection (the backup API cannot run inside an open transaction), so a
     live SQLite writer is refused for the full protocol, not just for a probe.
     """
-    connection = _sqlite3.connect(str(path), timeout=1.0, isolation_level=None)
-    connection.execute("PRAGMA busy_timeout = 1000")
-    connection.execute("PRAGMA locking_mode = EXCLUSIVE")
     try:
-        try:
-            connection.execute("BEGIN EXCLUSIVE")
-        except _sqlite3.OperationalError as exc:
-            raise TransitionError(
-                "store is held by a live process; stop the old server and "
-                f"hooks before transitioning it ({exc})"
-            ) from None
-        connection.execute("COMMIT")
-    except BaseException:
-        connection.close()
-        raise
-    try:
-        yield connection
-    finally:
-        connection.close()
+        with _exclusive_ownership(path) as connection:
+            yield connection
+    except _StoreHeldError as exc:
+        raise TransitionError(
+            "store is held by a live process; stop the old server and "
+            f"hooks before transitioning it ({exc})"
+        ) from None
 
 
 def _archive(

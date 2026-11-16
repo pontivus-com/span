@@ -284,6 +284,28 @@ already understands your repository. Continue with the [usage guide](usage.md).
 
 ---
 
+## Back up and recover
+
+A recovery artifact covers the databases, the install receipt, the indexer
+pointer and a verified manifest. It is written by one command and can be
+verified or restored without reinstalling:
+
+```bash
+span-install --data-dir <DATA_DIR> --backup
+span-install --verify-backup <BACKUP_DIR>
+span-install --data-dir <DATA_DIR> \
+  --restore-backup <BACKUP_DIR> --restore-confirm <name>
+```
+
+The installer takes the same backup before a reinstall mutation, so the
+mechanism is not a reinstall side effect. `structural/` is regenerable and is
+excluded; the artifact records that reason. Retention is explicit
+(`--reap-backups KEEP`) and is never applied automatically. Stop every Span
+process before restoring. The full policy, storage guidance and isolated
+restore procedure are in [backup and recovery](recovery.md).
+
+---
+
 ## Remove or purge
 
 Installation has an explicit terminal. Nothing is removed automatically.
