@@ -59,6 +59,12 @@ from span.shell.install.paths import (
 )
 from span.shell.install.preflight import load_seeds, preflight_facts
 from span.shell.install.receipt import read_receipt, write_receipt
+from span.shell.install.recovery import (
+    create_backup,
+    reap_backups,
+    restore_backup,
+    verify_backup,
+)
 from span.shell.install.skills import deploy_agents_rules, deploy_skills
 from span.shell.install.uninstall import list_orphans, purge_repository, uninstall
 from span.shell.install.venv import (
@@ -123,6 +129,47 @@ def _run_one_shot(env: _Environment) -> bool:
     args = env.args
     if args.list_orphans:
         list_orphans(env.data_dir)
+        return True
+    recovery_commands = [
+        bool(args.backup),
+        args.verify_backup is not None,
+        args.restore_backup is not None,
+        args.reap_backups is not None,
+    ]
+    if sum(recovery_commands) > 1:
+        raise SystemExit(
+            "run one recovery command at a time: --backup, --verify-backup, "
+            "--restore-backup or --reap-backups. Nothing was changed."
+        )
+    if args.restore_confirm is not None and args.restore_backup is None:
+        raise SystemExit(
+            "--restore-confirm only applies to --restore-backup. "
+            "Nothing was changed."
+        )
+    if args.backup:
+        create_backup(env.data_dir, backup_root=args.backup_root, dry_run=env.dry)
+        return True
+    if args.verify_backup is not None:
+        report = verify_backup(args.verify_backup)
+        print(json.dumps(report.payload(), sort_keys=True))
+        if not report.ok:
+            raise SystemExit(2)
+        return True
+    if args.restore_backup is not None:
+        restore_backup(
+            args.restore_backup,
+            env.data_dir,
+            confirm=args.restore_confirm,
+            backup_root=args.backup_root,
+            dry_run=env.dry,
+        )
+        return True
+    if args.reap_backups is not None:
+        reap_backups(
+            args.backup_root or env.data_dir / "backups",
+            args.reap_backups,
+            dry_run=env.dry,
+        )
         return True
     if args.transition_phase is not None or args.transition_root is not None:
         if args.transition_store is None:

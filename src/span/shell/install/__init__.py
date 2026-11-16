@@ -93,6 +93,12 @@ from span.shell.install.receipt import (  # noqa: F401
     write_receipt,
     read_receipt,
 )
+from span.shell.install.recovery import (  # noqa: F401
+    create_backup,
+    verify_backup,
+    restore_backup,
+    reap_backups,
+)
 from span.shell.install.skills import (  # noqa: F401
     ensure_agents_rule,
     remove_agents_block,
@@ -190,6 +196,10 @@ __all__ = [
     "preflight_facts",
     "write_receipt",
     "read_receipt",
+    "create_backup",
+    "verify_backup",
+    "restore_backup",
+    "reap_backups",
     "ensure_agents_rule",
     "remove_agents_block",
     "deploy_agents_rules",

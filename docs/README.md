@@ -28,10 +28,10 @@ and qualifies later reuse.
 ## Implementation
 
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
-  low-friction lifecycle solution design, ordered tasks, decision gates and
-  verification criteria; implementation not started.
-- [0.10.2 implementation plan](implementation-plans/0.10.2.md) — current remediation
-  tasks and verification. Older plans in `.context/plans/` are historical.
+  low-friction lifecycle work package, ordered tasks, decision gates and
+  verification; released 2026-11-14.
+- [0.10.2 implementation plan](implementation-plans/0.10.2.md) — prior
+  remediation tasks and verification. Older plans in `.context/plans/` are historical.
 
 ## Start with the lifecycle
 
@@ -39,6 +39,7 @@ and qualifies later reuse.
 - [First investigation](onboarding-runbook.md) — setup through fresh-session discovery.
 - [Lifecycle](lifecycle.md) — contexts, recording, recovery, support, and transition.
 - [Install and connect](install.md) — installation, host limits, verification, upgrade, and removal.
+- [Backup and recovery](recovery.md) — artifact contents, storage, verification, restore, and retention.
 - [MCP reference](mcp.md) — three tools and authoritative wire grammar.
 - [Scope](scope.md) and [FAQ](faq.md) — product responsibilities and beta limits.
 

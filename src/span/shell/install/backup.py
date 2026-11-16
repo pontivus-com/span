@@ -2,48 +2,23 @@
 
 from __future__ import annotations
 
-import datetime
 import json
 import shutil
-import sqlite3
 from pathlib import Path
+
+from span.shell.install.recovery import create_backup
 
 
 def backup_data_dir(data_dir, dry_run=False):
-    """Online SQLite backup before mutation ([design note E](docs/design-references.md#e) §9.2).
+    """Back up the data dir immediately before a reinstall mutation.
 
-    Copies every ``*.db`` under the data dir into a timestamped
-    ``backups/`` subdirectory using the sqlite3 online backup API
-    (consistent under concurrent readers). Returns the backup dir, or
-    None when there is nothing to back up. Never touches targets.
+    One writer: delegates to :func:`span.shell.install.recovery.create_backup`,
+    which copies every database through the SQLite online backup API and
+    records the install receipt, indexer pointer and a verified manifest.
+    Returns the artifact dir, or None when there is nothing to back up. Never
+    touches targets.
     """
-    data_dir = Path(data_dir)
-    if dry_run or not data_dir.is_dir():
-        return None
-    dbs = sorted(data_dir.glob("*.db"))
-    if not dbs:
-        return None
-    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
-    dest_dir = data_dir / "backups" / stamp
-    try:
-        dest_dir.mkdir(parents=True, exist_ok=False)
-    except OSError as exc:
-        raise SystemExit(f"cannot create backup dir {dest_dir}: {exc}")
-    for db in dbs:
-        try:
-            src = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-            try:
-                dst = sqlite3.connect(str(dest_dir / db.name))
-                try:
-                    src.backup(dst)
-                finally:
-                    dst.close()
-            finally:
-                src.close()
-        except Exception as exc:
-            raise SystemExit(f"backup failed for {db}: {exc}")
-    print(f"data dir backed up: {dest_dir} ({len(dbs)} databases).")
-    return str(dest_dir)
+    return create_backup(data_dir, label="reinstall", dry_run=dry_run)
 
 
 def snapshot_census(targets, out_path, dry_run=False):

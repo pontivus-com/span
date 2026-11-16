@@ -46,6 +46,7 @@ class NoSpanImportTest(unittest.TestCase):
         allowed_roots = {
             "__future__",
             "argparse",
+            "contextlib",
             "dataclasses",
             "datetime",
             "hashlib",
@@ -2953,7 +2954,11 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         self.assertTrue(args.verify_only)
         self.assertFalse(hasattr(args, "verify"))
         verification_keys = {key for key in vars(args).keys() if "verify" in key}
-        self.assertEqual(verification_keys, {"verify_only"})
+        self.assertEqual(verification_keys, {"verify_only", "verify_backup"})
+        # The doctor stays the only install-verification flag. Backup artifact
+        # verification is a different subject: it takes a directory and never
+        # inspects the installation.
+        self.assertIsNone(args.verify_backup)
         source = install_source()
         self.assertNotIn('"--verify"', source)
         self.assertIn('"--verify-only"', source)
