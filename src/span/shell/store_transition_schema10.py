@@ -24,6 +24,7 @@ from span.shell.store_transition import (
     TransitionPaths,
     _connect_read_only,
     _table_names,
+    _verify_staged_references,
 )
 
 __all__ = ["stage_schema10", "verify_schema10_staging"]
@@ -229,14 +230,13 @@ def _import_source_observations(
                 m.from_canonical(m.SourceRange, item) for item in _json.loads(row[7])
             ),
             whole_file=bool(row[8]),
-            excerpt=row[9],
         )
         connection.execute(
             "INSERT OR REPLACE INTO source_observations"
             "(observation_id, repository_id, evidence_id, locator,"
             " content_digest, captured_at, total_lines, delivered_ranges_json,"
-            " whole_file, excerpt, canonical_json)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            " whole_file, canonical_json)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
             (
                 observation.observation_id.value,
                 observation.repository_id,
@@ -250,7 +250,6 @@ def _import_source_observations(
                     sort_keys=True,
                 ),
                 int(observation.whole_file),
-                observation.excerpt,
                 row[10],
             ),
         )
@@ -890,89 +889,7 @@ def verify_schema10_staging(paths: TransitionPaths, config: TransitionConfig) ->
                 raise TransitionError(
                     f"staged {table} holds {actual} rows, mapping expects {count}"
                 )
-        for kind, ref in connection.execute(
-            "SELECT dependency_kind, dependency_ref FROM support_dependencies"
-        ).fetchall():
-            if (
-                kind == "SOURCE"
-                and connection.execute(
-                    "SELECT 1 FROM source_observations WHERE observation_id=?", (ref,)
-                ).fetchone()
-                is None
-            ):
-                raise TransitionError(
-                    f"source dependency {ref} does not resolve in the staged store"
-                )
-            if (
-                kind == "DISCOVERY"
-                and connection.execute(
-                    "SELECT 1 FROM discovery_observations WHERE observation_id=?",
-                    (ref,),
-                ).fetchone()
-                is None
-            ):
-                raise TransitionError(
-                    f"discovery dependency {ref} does not resolve in the staged store"
-                )
-            if kind == "PREMISE":
-                understanding_id, rest = ref.split("/", 1)
-                conclusion_id, revision = rest.rsplit("@", 1)
-                if (
-                    connection.execute(
-                        "SELECT 1 FROM conclusions WHERE understanding_id=?"
-                        " AND conclusion_id=? AND revision=?",
-                        (understanding_id, conclusion_id, int(revision)),
-                    ).fetchone()
-                    is None
-                ):
-                    raise TransitionError(
-                        f"premise dependency {ref} does not resolve in the staged store"
-                    )
-        for row in connection.execute(
-            "SELECT canonical_json FROM record_receipts"
-        ).fetchall():
-            receipt = m.from_canonical(m.RecordReceipt, _json.loads(row[0]))
-            if receipt.identity.repository_id != config.repository_id:
-                raise TransitionError(
-                    "a mapped receipt names another repository: "
-                    f"{receipt.identity.repository_id}"
-                )
-            for understanding_id in receipt.accepted_understanding_ids:
-                if (
-                    connection.execute(
-                        "SELECT 1 FROM understandings WHERE understanding_id=?",
-                        (understanding_id.value,),
-                    ).fetchone()
-                    is None
-                ):
-                    raise TransitionError(
-                        "a mapped receipt names a missing understanding: "
-                        f"{understanding_id.value}"
-                    )
-            for run_id in receipt.accepted_verification_run_ids:
-                if (
-                    connection.execute(
-                        "SELECT 1 FROM verification_runs WHERE run_id=?",
-                        (run_id.value,),
-                    ).fetchone()
-                    is None
-                ):
-                    raise TransitionError(
-                        f"a mapped receipt names a missing verification run: "
-                        f"{run_id.value}"
-                    )
-            for challenge_id in receipt.accepted_challenge_ids:
-                if (
-                    connection.execute(
-                        "SELECT 1 FROM challenges WHERE challenge_id=?",
-                        (challenge_id.value,),
-                    ).fetchone()
-                    is None
-                ):
-                    raise TransitionError(
-                        f"a mapped receipt names a missing challenge: "
-                        f"{challenge_id.value}"
-                    )
+        _verify_staged_references(connection, config)
     finally:
         connection.close()
     return

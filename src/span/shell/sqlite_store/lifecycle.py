@@ -47,7 +47,7 @@ __all__ = [
     "UnknownRepository",
 ]
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 class LifecycleStoreError(ValueError):
@@ -115,7 +115,6 @@ _DDL = (
         total_lines INTEGER NOT NULL DEFAULT 0,
         delivered_ranges_json TEXT NOT NULL DEFAULT '[]',
         whole_file INTEGER NOT NULL DEFAULT 0,
-        excerpt TEXT NOT NULL DEFAULT '',
         canonical_json TEXT NOT NULL,
         UNIQUE(repository_id, observation_id)
     )
@@ -427,6 +426,40 @@ class LifecycleStore:
                 (seeds, bindings, repository_id),
             )
 
+    def rebind_repository(
+        self, repository_id: str, root: str, *, expected_root: str
+    ) -> None:
+        """Explicitly move one repository root after a verified restore.
+
+        Refuses an unknown repository and any current root other than
+        ``expected_root``; implicit rebinding remains refused by
+        :meth:`register_repository`. Only ``repositories.root`` changes.
+        """
+        if not repository_id:
+            raise LifecycleStoreError("repository_id is required")
+        if not root:
+            raise LifecycleStoreError("repository root is required")
+        if not expected_root:
+            raise LifecycleStoreError("expected repository root is required")
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT root FROM repositories WHERE repository_id=?",
+                (repository_id,),
+            ).fetchone()
+            if row is None:
+                raise UnknownRepository(f"repository {repository_id!r} is not bound")
+            if row["root"] != expected_root:
+                raise LifecycleStoreError(
+                    f"repository {repository_id} is bound to {row['root']!r}, "
+                    f"not the expected {expected_root!r}"
+                )
+            if row["root"] == root:
+                return
+            connection.execute(
+                "UPDATE repositories SET root=? WHERE repository_id=?",
+                (root, repository_id),
+            )
+
     def load_authority_seeds(self, repository_id: str) -> tuple[m.EvidenceRef, ...]:
         """Return the declared authority seeds for one repository.
 
@@ -723,8 +756,8 @@ class LifecycleStore:
             ranges = _ranges_json(record.delivered_ranges)
             row = connection.execute(
                 "SELECT repository_id, evidence_id, locator, content_digest,"
-                " captured_at, total_lines, delivered_ranges_json, whole_file,"
-                " excerpt FROM source_observations WHERE observation_id=?",
+                " captured_at, total_lines, delivered_ranges_json, whole_file"
+                " FROM source_observations WHERE observation_id=?",
                 (record.observation_id.value,),
             ).fetchone()
             if row is not None:
@@ -737,7 +770,6 @@ class LifecycleStore:
                     int(row["total_lines"]),
                     row["delivered_ranges_json"],
                     int(row["whole_file"]),
-                    row["excerpt"],
                 )
                 proposed = (
                     record.repository_id,
@@ -748,7 +780,6 @@ class LifecycleStore:
                     record.total_lines,
                     ranges,
                     int(record.whole_file),
-                    record.excerpt,
                 )
                 if observed != proposed:
                     raise LifecycleStoreError(
@@ -761,8 +792,8 @@ class LifecycleStore:
                 "INSERT INTO source_observations"
                 "(observation_id, repository_id, evidence_id, locator,"
                 " content_digest, captured_at, total_lines,"
-                " delivered_ranges_json, whole_file, excerpt, canonical_json)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                " delivered_ranges_json, whole_file, canonical_json)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     record.observation_id.value,
                     record.repository_id,
@@ -773,7 +804,6 @@ class LifecycleStore:
                     record.total_lines,
                     ranges,
                     int(record.whole_file),
-                    record.excerpt,
                     _json.dumps(m.to_canonical(record.evidence), sort_keys=True),
                 ),
             )
@@ -830,7 +860,7 @@ class LifecycleStore:
         row = self._connection.execute(
             "SELECT observation_id, repository_id, evidence_id, locator,"
             " content_digest, captured_at, total_lines,"
-            " delivered_ranges_json, whole_file, excerpt, canonical_json"
+            " delivered_ranges_json, whole_file, canonical_json"
             " FROM source_observations WHERE observation_id=?",
             (observation_id,),
         ).fetchone()
@@ -848,8 +878,7 @@ class LifecycleStore:
         rows = self._connection.execute(
             "SELECT o.observation_id, o.repository_id, o.evidence_id,"
             " o.locator, o.content_digest, o.captured_at, o.total_lines,"
-            " o.delivered_ranges_json, o.whole_file, o.excerpt,"
-            " o.canonical_json"
+            " o.delivered_ranges_json, o.whole_file, o.canonical_json"
             " FROM context_evidence ce"
             " JOIN source_observations o"
             " ON o.observation_id = ce.observation_id"
@@ -1841,7 +1870,6 @@ def _observation_from_row(row: _sqlite3.Row) -> SourceObservationRecord:
         total_lines=int(row["total_lines"]),
         delivered_ranges=ranges,
         whole_file=bool(row["whole_file"]),
-        excerpt=row["excerpt"],
     )
 
 

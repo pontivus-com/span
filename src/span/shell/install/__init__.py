@@ -99,6 +99,12 @@ from span.shell.install.recovery import (  # noqa: F401
     restore_backup,
     reap_backups,
 )
+from span.shell.install.repository_backup import (  # noqa: F401
+    create_repository_backup,
+    verify_repository_backup,
+    load_repository_backup,
+    reap_repository_backups,
+)
 from span.shell.install.skills import (  # noqa: F401
     ensure_agents_rule,
     remove_agents_block,
@@ -200,6 +206,10 @@ __all__ = [
     "verify_backup",
     "restore_backup",
     "reap_backups",
+    "create_repository_backup",
+    "verify_repository_backup",
+    "load_repository_backup",
+    "reap_repository_backups",
     "ensure_agents_rule",
     "remove_agents_block",
     "deploy_agents_rules",

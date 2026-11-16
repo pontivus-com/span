@@ -20,6 +20,7 @@ from span.core import containment
 from span.core import model as m
 from span.core import support_rules
 from span.core.recording import RecordingValidationError
+from span.core.rejection import RejectionCauseKind
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import issue_context
@@ -551,11 +552,20 @@ class AnswerService:
             raise RecordingValidationError.continuation_invalid(
                 "the continuation context is expired"
             )
-        deliveries = tuple(
-            delivery
-            for record in self._evidence.context_observations(context.context_id.value)
-            for delivery in self._evidence.context_deliveries(record)
-        )
+        try:
+            deliveries = tuple(
+                delivery
+                for record in self._evidence.context_observations(
+                    context.context_id.value
+                )
+                for delivery in self._evidence.context_deliveries(record)
+            )
+        except RecordingValidationError as exc:
+            if exc.cause_kind is RejectionCauseKind.SOURCE_DRIFT:
+                raise RecordingValidationError.continuation_invalid(
+                    "the admitted evidence changed; start a new admission"
+                ) from None
+            raise
         if cursor.unit_index > len(deliveries):
             raise RecordingValidationError.continuation_invalid(
                 "the continuation position is outside its context"

@@ -92,13 +92,15 @@ class DiscoveryObservation:
 
 @_dataclass(frozen=True)
 class SourceObservation:
-    """One immutable observed source plus its delivered excerpt boundary.
+    """One immutable source reference plus its delivered boundary.
 
     ``evidence`` is the reference other carriers cite; ``content_digest`` is
-    the observed full-content fingerprint. ``delivered_ranges`` records the
-    exact lines delivered; an empty tuple with ``whole_file`` means the full
-    text was delivered. The observation ID is the membership key a context
-    admits; the evidence ID is the citation key.
+    the hash of the delivered content (whole file or exact ranges).
+    ``delivered_ranges`` records the exact lines delivered; an empty tuple with
+    ``whole_file`` means the full text was delivered. The observation ID is the
+    membership key a context admits; the evidence ID is the citation key.
+    Source bytes are never stored: delivery re-reads the source and verifies
+    ``content_digest``.
     """
 
     observation_id: SourceObservationId
@@ -109,7 +111,6 @@ class SourceObservation:
     total_lines: int
     delivered_ranges: tuple[SourceRange, ...] = ()
     whole_file: bool = False
-    excerpt: str = ""
 
     def __post_init__(self) -> None:
         if self.evidence.repository_id != self.repository_id:

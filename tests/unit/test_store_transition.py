@@ -208,10 +208,53 @@ def _legacy_store(
     return path
 
 
+def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
+    """Build one schema-11-shaped store with a stored excerpt."""
+    from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+    from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+    root.mkdir(parents=True, exist_ok=True)
+    store = LifecycleStore(
+        path, retention=DEFAULT_LIFECYCLE_RETENTION, clock=lambda: NOW
+    )
+    store.register_repository("demo", str(root))
+    store.put_source_observation(
+        m.SourceObservation(
+            observation_id=m.SourceObservationId("obs-a"),
+            repository_id="demo",
+            evidence=m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-a"),
+                repository_id="demo",
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/a.py",
+                revision_or_fingerprint="sha256:a",
+            ),
+            content_digest=m.ContentDigest("sha256:a"),
+            captured_at=NOW,
+            total_lines=1,
+            whole_file=True,
+        )
+    )
+    store.close()
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            "ALTER TABLE source_observations ADD COLUMN excerpt TEXT NOT NULL DEFAULT ''"
+        )
+        connection.execute(
+            "UPDATE source_observations SET excerpt='a\n' WHERE observation_id='obs-a'"
+        )
+        connection.execute("UPDATE meta SET value='11' WHERE key='schema_version'")
+        connection.commit()
+    finally:
+        connection.close()
+    return path
+
+
 def _schema10_store(
     path: pathlib.Path, root: pathlib.Path, *, unresolved: bool = False
 ) -> pathlib.Path:
-    """Build one real schema-11 store, then present its schema-10 shape."""
+    """Build one real schema-12 store, then present its schema-10 shape."""
     from span.core.recording import create_challenge
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
@@ -239,7 +282,6 @@ def _schema10_store(
             captured_at=NOW,
             total_lines=1,
             whole_file=True,
-            excerpt="a",
         )
     )
     for context_id, request_id in (("ctx-1", "req-1"), ("ctx-2", "req-2")):
@@ -381,6 +423,12 @@ def _schema10_store(
     connection = sqlite3.connect(path)
     try:
         connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute(
+            "ALTER TABLE source_observations ADD COLUMN excerpt TEXT NOT NULL DEFAULT ''"
+        )
+        connection.execute(
+            "UPDATE source_observations SET excerpt='a\n' WHERE observation_id='obs-a'"
+        )
         connection.execute("UPDATE meta SET value='10' WHERE key='schema_version'")
         connection.execute("DROP TABLE surfaces")
         connection.execute("DROP TABLE surface_boundary_versions")
@@ -543,7 +591,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "11")
+                self.assertEqual(version, "12")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -738,6 +786,38 @@ class RefusalTest(unittest.TestCase):
                 st.apply(_config(root, data, free_bytes=lambda _path: 0))
             self.assertFalse((data / "transitions" / "demo" / "archive.db").exists())
 
+    def test_schema11_copies_without_excerpt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            _schema11_store(data / "demo.db", root)
+            report = st.apply(_config(root, data))
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            connection = sqlite3.connect(data / "demo.db")
+            try:
+                columns = [
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(source_observations)"
+                    )
+                ]
+                self.assertNotIn("excerpt", columns)
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT value FROM meta WHERE key='schema_version'"
+                    ).fetchone()[0],
+                    "12",
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM source_observations"
+                    ).fetchone()[0],
+                    1,
+                )
+            finally:
+                connection.close()
+
     def test_already_current_apply_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "demo"
@@ -746,7 +826,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 11"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 12"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -1035,7 +1115,7 @@ class InstallerCommandTest(unittest.TestCase):
             mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
             self.assertEqual(mapping["counts"]["unresolved"], 0)
             self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
-            self.assertEqual(st._read_schema_version_ro(source), 11)
+            self.assertEqual(st._read_schema_version_ro(source), 12)
             from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 

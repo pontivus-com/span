@@ -65,6 +65,12 @@ from span.shell.install.recovery import (
     restore_backup,
     verify_backup,
 )
+from span.shell.install.repository_backup import (
+    create_repository_backup,
+    load_repository_backup,
+    reap_repository_backups,
+    verify_repository_backup,
+)
 from span.shell.install.skills import deploy_agents_rules, deploy_skills
 from span.shell.install.uninstall import list_orphans, purge_repository, uninstall
 from span.shell.install.venv import (
@@ -124,12 +130,59 @@ def _environment(args: argparse.Namespace) -> _Environment:
     )
 
 
-def _run_one_shot(env: _Environment) -> bool:
-    """Run a maintenance command that exits without a full install."""
+def _run_repository_command(env: _Environment) -> bool:
+    """Run one repository-portable artifact command."""
     args = env.args
-    if args.list_orphans:
-        list_orphans(env.data_dir)
+    repository_commands = [
+        args.backup_repository is not None,
+        args.verify_repository_backup is not None,
+        args.load_repository_backup is not None,
+        args.reap_repository_backups is not None,
+    ]
+    if sum(repository_commands) > 1:
+        raise SystemExit(
+            "run one repository command at a time: --backup-repository, "
+            "--verify-repository-backup, --load-repository-backup or "
+            "--reap-repository-backups. Nothing was changed."
+        )
+    if args.repository_artifact is not None and args.load_repository_backup is None:
+        raise SystemExit(
+            "--repository-artifact only applies to --load-repository-backup. "
+            "Nothing was changed."
+        )
+    if args.backup_repository is not None:
+        create_repository_backup(args.backup_repository, env.data_dir, dry_run=env.dry)
         return True
+    if args.verify_repository_backup is not None:
+        report = verify_repository_backup(args.verify_repository_backup)
+        print(json.dumps(report.payload(), sort_keys=True))
+        if not report.ok:
+            raise SystemExit(2)
+        return True
+    if args.load_repository_backup is not None:
+        load_repository_backup(
+            args.load_repository_backup,
+            env.data_dir,
+            artifact=args.repository_artifact,
+            dry_run=env.dry,
+        )
+        return True
+    if args.reap_repository_backups is not None:
+        root, keep_text = args.reap_repository_backups
+        try:
+            keep = int(keep_text)
+        except ValueError:
+            raise SystemExit(
+                "--reap-repository-backups KEEP must be an integer"
+            ) from None
+        reap_repository_backups(root, keep, dry_run=env.dry)
+        return True
+    return False
+
+
+def _run_recovery_command(env: _Environment) -> bool:
+    """Run one full data-directory recovery command."""
+    args = env.args
     recovery_commands = [
         bool(args.backup),
         args.verify_backup is not None,
@@ -170,6 +223,19 @@ def _run_one_shot(env: _Environment) -> bool:
             args.reap_backups,
             dry_run=env.dry,
         )
+        return True
+    return False
+
+
+def _run_one_shot(env: _Environment) -> bool:
+    """Run a maintenance command that exits without a full install."""
+    args = env.args
+    if args.list_orphans:
+        list_orphans(env.data_dir)
+        return True
+    if _run_repository_command(env):
+        return True
+    if _run_recovery_command(env):
         return True
     if args.transition_phase is not None or args.transition_root is not None:
         if args.transition_store is None:

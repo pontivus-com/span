@@ -8,7 +8,8 @@ semantic truth.
 ## Evidence and support
 
 Exact source admission creates an immutable `SourceObservation`: its repository,
-locator, content identity, and delivered excerpts/ranges. A recorded conclusion
+locator, content hash and delivered ranges. Source bytes are re-read and verified
+on delivery; they are not stored. A recorded conclusion
 cites admitted support rather than resending source bodies or inventing
 fingerprints. CSS and configuration can support investigation even when
 structural parsing is unavailable.

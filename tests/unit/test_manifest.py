@@ -106,3 +106,68 @@ class ManifestCarrierTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RepositoryManifestTest(unittest.TestCase):
+    def _manifest(self):
+        from span.shell.install.manifest import (
+            BackupArtifact,
+            DatabaseFacts,
+            RepositoryBackupManifest,
+        )
+
+        return RepositoryBackupManifest(
+            repository_id="repo",
+            source_root="/source/repo",
+            created_at="2026-11-16T00:00:00+00:00",
+            span_version="0.10.5",
+            artifact=BackupArtifact(
+                path="repo.db",
+                sha256="c" * 64,
+                size_bytes=100,
+                database=DatabaseFacts(
+                    schema_version=12,
+                    integrity="ok",
+                    max_conclusion_revision=4,
+                ),
+            ),
+        )
+
+    def test_round_trip(self):
+        from span.shell.install.manifest import RepositoryBackupManifest
+
+        manifest = self._manifest()
+        self.assertEqual(RepositoryBackupManifest.parse(manifest.payload()), manifest)
+
+    def test_rejects_artifact_name_mismatch(self):
+        from span.shell.install.manifest import (
+            BackupManifestError,
+            RepositoryBackupManifest,
+        )
+
+        payload = self._manifest().payload()
+        payload["artifact"]["path"] = "other.db"
+        with self.assertRaises(BackupManifestError):
+            RepositoryBackupManifest.parse(payload)
+
+    def test_rejects_relative_source_root(self):
+        from span.shell.install.manifest import (
+            BackupManifestError,
+            RepositoryBackupManifest,
+        )
+
+        payload = self._manifest().payload()
+        payload["source_root"] = "repo"
+        with self.assertRaises(BackupManifestError):
+            RepositoryBackupManifest.parse(payload)
+
+    def test_rejects_unknown_key(self):
+        from span.shell.install.manifest import (
+            BackupManifestError,
+            RepositoryBackupManifest,
+        )
+
+        payload = self._manifest().payload()
+        payload["extra"] = True
+        with self.assertRaises(BackupManifestError):
+            RepositoryBackupManifest.parse(payload)

@@ -188,7 +188,7 @@ class EvidenceSourceBase(ABC):
         self,
         repository_id: str,
         request: m.EvidenceRequest,
-        bounds: m.QueryBounds,
+        bounds: m.QueryBounds | None,
     ) -> m.EvidenceUnit | m.EvidenceSourceFailure:
         """Read one exact locator without structural subjects.
 
@@ -225,7 +225,7 @@ class EvidenceSourceBase(ABC):
                     )
                     for item in request.ranges
                 )
-        if admitted_bytes > bounds.max_evidence_bytes:
+        if bounds is not None and admitted_bytes > bounds.max_evidence_bytes:
             return m.EvidenceSourceFailure(
                 request,
                 m.EvidenceSourceFailureKind.UNREADABLE,

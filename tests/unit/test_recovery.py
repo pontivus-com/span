@@ -218,7 +218,7 @@ class RecoveryTests(unittest.TestCase):
             _make_store(data / "repo.db")
             with mock.patch.object(
                 recovery,
-                "_utc_stamp",
+                "utc_stamp",
                 side_effect=[
                     "20260101T000000",
                     "20260102T000000",

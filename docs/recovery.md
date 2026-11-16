@@ -2,132 +2,133 @@
 
 Span stores its retained understanding in a SQLite data directory outside any
 target repository. This page is the canonical policy and operator runbook for
-protecting that directory: what a recovery artifact contains, how to verify it,
-how to restore it, and what Span deliberately does not back up.
+protecting that directory and for deploying a repository with its retained
+understanding.
 
-## What is recoverable state
+Span stores evidence **references and hashes**, not source-file copies. A
+recovery artifact therefore carries conclusions, support, observations,
+declared surfaces, repository bindings and the content hashes those
+observations reference. The repository files remain the authority and are
+re-read when delivery or support evaluation needs them.
 
-A recovery artifact holds the state Span cannot regenerate:
+## Two artifact classes
 
-| Included | Why |
-| --- | --- |
-| every top-level `*.db` | conclusions, support, observations, surfaces, repository bindings |
-| `install.json` | registered repositories and host registration |
-| `structural-indexer.json` | managed indexer pointer |
-| `manifest.json`, `manifest.sha256` | artifact identity and database facts |
+| Class | Location | Git | Purpose |
+| --- | --- | --- | --- |
+| **Repository-portable** | `<repo>/.span/backups/<UTC timestamp>/` | **Committed** | Deploy the repository with its Span understanding |
+| **Full data-directory** | `<DATA_DIR>/backups/<UTC timestamp>/` | Not committed | Recover the whole installation, including `install.json` |
 
-Two data-directory trees are excluded, and the manifest records why:
+### Repository-portable artifact
 
-| Excluded | Reason |
-| --- | --- |
-| `structural/` | a regenerable structural index; the installer rebuilds it from the target tree |
-| `transitions/` | rollback archives of superseded stores; the transition command owns that path |
-
-Excluding the structural index means a restored installation may re-index. That
-is a rebuild, not lost understanding.
-
-## Storage
-
-Artifacts default to `<DATA_DIR>/backups/<UTC-timestamp>/`. Use
-`--backup-root DIR` to place them on a different filesystem. A backup stored
-inside the data directory does not survive loss of that directory, so keep at
-least one copy elsewhere.
-
-Artifacts are operator data, never Git content. Do not commit artifact
-directories, raw restore captures, or verification transcripts. Report a
-sanitized verification summary — artifact identity, schema, recovered
-revisions — in release notes when a change needs recovery evidence.
-
-Owner: the operator of this Span installation. Span is local and keeps no
-server-side copy, so the recovery window is a property of the operator's change
-and release process, not of this repository.
-
-## Commands
-
-```bash
-# Take a verified artifact and print its path.
-span-install --data-dir <DATA_DIR> --backup [--backup-root <DIR>]
-
-# Verify identity, integrity and schema compatibility without changing state.
-span-install --verify-backup <BACKUP_DIR>
-
-# Restore one verified artifact. The confirmation repeats the directory name.
-span-install --data-dir <DATA_DIR> \
-  --restore-backup <BACKUP_DIR> --restore-confirm <BACKUP_DIR basename>
-
-# Delete all but the newest KEEP recognized artifacts.
-span-install --data-dir <DATA_DIR> --reap-backups <KEEP> [--backup-root <DIR>]
+```text
+<REPO_ROOT>/.span/backups/<UTC timestamp>/
+  <repository-id>.db
+  manifest.json
+  manifest.sha256
 ```
 
-`--backup` uses the SQLite online backup API, so it is consistent under
-concurrent readers. The installer also takes this backup immediately before a
-reinstall mutation; the command exposes the same writer to the operator.
+- One repository's store only; no `install.json`, `structural/` or
+  `transitions/`.
+- `manifest.json` uses `span-repository-backup/1`: repository id, source root,
+  created at, running code version, artifact path/hash/size, schema version,
+  integrity and highest conclusion revision.
+- The artifact is intended to be committed with the code. Span writes it; the
+  operator runs `git add` / `git commit`. Span never invokes Git.
+- The store contains recorded conclusions and evidence text references; it does
+  not contain source-file copies. Committing it exposes the recorded
+  understanding to everyone with repository access and in history. Commit only
+  to a repository whose access controls are appropriate.
+- `structural/` is regenerable and excluded; install rebuilds it.
 
-`--verify-backup` checks the manifest digest, every artifact's size and SHA-256,
-each database's `PRAGMA integrity_check`, its `meta.schema_version`, and its
-highest conclusion revision. It exits non-zero when any check fails.
+```bash
+# Write one artifact into the repository.
+span-install --backup-repository <REPO_ROOT>
 
-## When to take one
+# Verify it without changing anything.
+span-install --verify-repository-backup <ARTIFACT_DIR>
 
-- before any destructive change to the data directory, not only reinstalls;
-- before a schema transition, in addition to the transition archive;
-- at the boundary of a change that deletes or rewrites retained understanding,
-  so the artifact covers the exact revisions the change relies on;
-- before restoring, because the restore command snapshots the current directory
-  automatically.
+# Remove older working-tree artifacts; Git history is unaffected.
+span-install --reap-repository-backups <REPO_ROOT> <KEEP>
+```
 
-A backup taken at a different time does not prove coverage for a later change.
+`KEEP` is explicit; there is no default retention interval. Reaping removes
+only directories carrying a valid Span repository manifest and leaves any other
+directory untouched.
 
-## Retention and reaping
+### Deploy a repository with its Span data
 
-Default policy: retain every artifact. Span never deletes a backup on its own.
-There is no age threshold and no default retention interval, because the useful
-recovery window is an operator decision that Span cannot observe.
+```bash
+git clone <remote> pontivus-awb
+cd pontivus-awb
+span-install --repo .
+span-install --load-repository-backup .
+span-install --verify-only
+```
 
-`--reap-backups KEEP` is explicit and requires the count. It deletes only
-directories carrying a valid Span manifest; any other directory is reported and
-left untouched. Reaping a corrupt artifact is harmless, but reaping is still
-only performed on request.
+1. `--repo .` installs the runtime, receipt, host registration, AGENTS block and
+   structural index, and binds the clone's canonical root.
+2. `--load-repository-backup .` verifies the newest artifact, snapshots the
+   current data directory, replaces `<DATA_DIR>/<repository-id>.db`, and
+   explicitly rebinds the store's recorded root from the artifact's
+   `source_root` to the clone's canonical root.
+3. `--verify-only` reports readiness. The agent can then ask a recorded surface
+   and receive the retained conclusions.
 
-## Restore procedure
+Rules:
 
-1. Stop every Span server and hook. The restore takes SQLite exclusive
-   ownership of each store and refuses while a live connection holds one.
-2. Verify the artifact with `--verify-backup` and record the manifest digest.
-3. Restore into a disposable directory first:
+- The clone directory basename must equal the artifact's `repository_id`.
+  Renamed clones are refused because Span's repository identity is the basename.
+- Load never rewrites `install.json`; install first.
+- Load refuses a store held by a live process, a tampered artifact, a legacy
+  schema and a third recorded root. It snapshots the current data directory
+  before replacing anything.
+- A `pre-load` snapshot is written to the full data-directory backup location.
 
-   ```bash
-   span-install --data-dir /tmp/span-restore-check \
-     --restore-backup <BACKUP_DIR> --restore-confirm <name>
-   span-install --data-dir /tmp/span-restore-check --verify-only
-   ```
+### Full data-directory artifact
 
-4. Request one recorded surface through the supported lifecycle
-   (`ask`) and confirm the status reflects the restored revisions. A changed or
-   missing source must produce a non-current result, not an unjustified current
-   answer.
-5. Only then restore into the live data directory. The command snapshots the
-   current directory as a `pre-restore` artifact before replacing anything, and
-   removes stale `-wal`, `-shm` and `-journal` files for each restored
-   database.
-6. Record the artifact identity, verify result, restored revisions and
-   read-back result alongside the change that needed recovery.
+The full artifact is the disaster-recovery path for the whole installation. It
+contains every top-level `*.db`, `install.json`, `structural-indexer.json`, a
+manifest of sizes, SHA-256 digests and per-database facts, and its digest. It is
+not committed.
+
+```bash
+span-install --data-dir <DATA_DIR> --backup [--backup-root <DIR>]
+span-install --verify-backup <BACKUP_DIR>
+span-install --data-dir <DATA_DIR> \
+  --restore-backup <BACKUP_DIR> --restore-confirm <name>
+span-install --data-dir <DATA_DIR> --reap-backups <KEEP>
+```
+
+`structural/` (regenerable) and `transitions/` (superseded-store rollback
+archives) are excluded with the reason recorded in the manifest. The restore
+requires the artifact directory name as explicit confirmation, refuses a
+live-held store, snapshots the current data directory, clears stale
+WAL/SHM/journal files and re-hashes every restored file. Stop every Span process
+before restoring.
+
+## Integrity and compatibility
+
+- The repository and full artifacts verify the manifest digest, every file's
+  size and SHA-256, each database's `PRAGMA integrity_check`, its
+  `meta.schema_version` and its highest conclusion revision.
+- The current store schema is 12. An artifact holding schema 12 loads directly.
+  Older supported schemas (7–11) are transition sources; after restoring one,
+  run the documented offline transition before use.
+- The manifest records the installer version, the running Span code version (or
+  `null` when the package cannot be imported), and each database's schema
+  version.
+
+## Verification record
 
 The durable verification record is the artifact's own `manifest.json` plus a
-sanitized summary in the change record that required recovery: manifest
-digest, restored revisions, isolated target, and the lifecycle read-back
-result. Keep the artifact directory out of Git; a summary is sufficient evidence
-and the artifact itself is operator data.
+sanitized summary in the change record that required recovery: manifest digest,
+restored revisions, isolated target, and the lifecycle read-back result. Keep a full data-directory artifact out of Git; a repository-portable artifact
+is committed by design. A sanitized summary is sufficient evidence for the
+full data-directory artifact.
 
-## Compatibility
+## Owner and triggers
 
-The current store schema is 11. An artifact holding schema 11 restores directly.
-Schemas 7–10 are accepted as transition sources; after restoring one, run the
-documented offline transition before use, as the restore output instructs.
-Anything else fails verification and is not restorable.
-
-The manifest records the installer version, the running Span code version (or
-`null` when the package cannot be imported), and each database's schema version,
-so compatibility is a recorded fact rather than an assumption about the
-artifact's age. The manifest is a versioned typed carrier: an unknown format or
-an unknown key is rejected instead of interpreted.
+Owner: the operator of this Span installation. Span keeps no server-side copy.
+Take a repository artifact when the retained understanding must travel with the
+code; take a full data-directory artifact before a destructive change to the
+installation, before a schema transition, and before restoring.

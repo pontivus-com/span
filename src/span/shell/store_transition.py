@@ -1,4 +1,4 @@
-"""Offline legacy → schema-11 store transition (N-06, §8.3/§8.5).
+"""Offline legacy → schema-12 store transition (N-06, §8.3/§8.5).
 
 This is the one canonical transition tool. It is deliberately raw: legacy
 stores are inspected and exported by reading their observed SQLite catalog and
@@ -69,8 +69,8 @@ __all__ = [
 ]
 
 
-TARGET_SCHEMA = 11
-SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10})
+TARGET_SCHEMA = 12
+SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11})
 
 #: Every table the schema-7/8/9 runtime could own. A table outside this set is
 #: preserved and reported, never silently omitted.
@@ -434,7 +434,7 @@ def _file_bytes(path: _pathlib.Path) -> int:
 
 
 def _empty_target_bytes() -> int:
-    """Measured size of an empty schema-11 store (not an invented floor)."""
+    """Measured size of an empty schema-12 store (not an invented floor)."""
     connection = _sqlite3.connect(":memory:")
     try:
         from span.shell.sqlite_store.lifecycle import _DDL
@@ -472,7 +472,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
             unknown_tables=(),
             limitations=(
                 f"no store at {source}; explicit installer provisioning creates "
-                "a new schema-11 store instead of a transition",
+                "a new schema-12 store instead of a transition",
             ),
         )
     connection = _connect_read_only(source)
@@ -488,7 +488,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
     file_bytes = _file_bytes(source)
     empty_target = _empty_target_bytes()
     # Archive copy + lossless export (raw rows cannot exceed the logical
-    # database bytes) + one empty schema-11 store.
+    # database bytes) + one empty schema-12 store.
     required = file_bytes + logical + empty_target
     limitations: list[str] = []
     if version is None:
@@ -1011,6 +1011,11 @@ def _stage(
 
         limits, _ = stage_schema10(paths, config, root)
         limitations = limitations + limits
+    elif source_schema == 11:
+        from span.shell.store_transition_schema11 import stage_schema11
+
+        limits, _ = stage_schema11(paths, config, root)
+        limitations = limitations + limits
     _fsync_file(paths.staging)
     _fsync_dir(paths.transition_dir)
     return (), limitations
@@ -1085,6 +1090,15 @@ def _verify_staged(
             "staged store carries the schema-10 mapping with reconciled references",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
+    if source_schema == 11:
+        from span.shell.store_transition_schema11 import verify_schema11_staging
+
+        verify_schema11_staging(paths, config)
+        _smoke(paths, config)
+        return (
+            "staged store carries the schema-11 copy with reconciled references",
+            "fresh lifecycle smoke test passed on an isolated copy",
+        )
     counts = _semantic_counts(paths.staging)
     if any(counts.values()):
         raise TransitionError(
@@ -1097,6 +1111,95 @@ def _verify_staged(
         "semantic rows",
         "fresh lifecycle smoke test passed on an isolated copy",
     )
+
+
+def _verify_staged_references(
+    connection: _sqlite3.Connection, config: TransitionConfig
+) -> None:
+    """Verify every preserved cross-table reference in a staged store."""
+    for kind, ref in connection.execute(
+        "SELECT dependency_kind, dependency_ref FROM support_dependencies"
+    ).fetchall():
+        if (
+            kind == "SOURCE"
+            and connection.execute(
+                "SELECT 1 FROM source_observations WHERE observation_id=?", (ref,)
+            ).fetchone()
+            is None
+        ):
+            raise TransitionError(
+                f"source dependency {ref} does not resolve in the staged store"
+            )
+        if (
+            kind == "DISCOVERY"
+            and connection.execute(
+                "SELECT 1 FROM discovery_observations WHERE observation_id=?",
+                (ref,),
+            ).fetchone()
+            is None
+        ):
+            raise TransitionError(
+                f"discovery dependency {ref} does not resolve in the staged store"
+            )
+        if kind == "PREMISE":
+            understanding_id, rest = ref.split("/", 1)
+            conclusion_id, revision = rest.rsplit("@", 1)
+            if (
+                connection.execute(
+                    "SELECT 1 FROM conclusions WHERE understanding_id=?"
+                    " AND conclusion_id=? AND revision=?",
+                    (understanding_id, conclusion_id, int(revision)),
+                ).fetchone()
+                is None
+            ):
+                raise TransitionError(
+                    f"premise dependency {ref} does not resolve in the staged store"
+                )
+    for row in connection.execute(
+        "SELECT canonical_json FROM record_receipts"
+    ).fetchall():
+        receipt = m.from_canonical(m.RecordReceipt, _json.loads(row[0]))
+        if receipt.identity.repository_id != config.repository_id:
+            raise TransitionError(
+                "a mapped receipt names another repository: "
+                f"{receipt.identity.repository_id}"
+            )
+        for understanding_id in receipt.accepted_understanding_ids:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM understandings WHERE understanding_id=?",
+                    (understanding_id.value,),
+                ).fetchone()
+                is None
+            ):
+                raise TransitionError(
+                    "a mapped receipt names a missing understanding: "
+                    f"{understanding_id.value}"
+                )
+        for run_id in receipt.accepted_verification_run_ids:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM verification_runs WHERE run_id=?",
+                    (run_id.value,),
+                ).fetchone()
+                is None
+            ):
+                raise TransitionError(
+                    f"a mapped receipt names a missing verification run: "
+                    f"{run_id.value}"
+                )
+        for challenge_id in receipt.accepted_challenge_ids:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM challenges WHERE challenge_id=?",
+                    (challenge_id.value,),
+                ).fetchone()
+                is None
+            ):
+                raise TransitionError(
+                    f"a mapped receipt names a missing challenge: "
+                    f"{challenge_id.value}"
+                )
 
 
 def _smoke(paths: TransitionPaths, config: TransitionConfig) -> None:
@@ -1246,7 +1349,7 @@ def _check_space(config: TransitionConfig, inspection: LegacyInspection) -> None
         raise TransitionError(
             "insufficient free space for a lossless transition: "
             f"{free} bytes free, {inspection.required_free_bytes} required "
-            "(archive copy + raw export + staged schema-11 store)"
+            "(archive copy + raw export + staged schema-12 store)"
         )
 
 
