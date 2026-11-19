@@ -52,7 +52,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                 context_id=CONTEXT_ID,
                 repository_id="repo-1",
                 request_id=m.RequestId("req-1"),
-                request_digest=m.ContentDigest("sha256:request"),
+                binding_digest=m.ContentDigest("sha256:request"),
                 origin=m.ContextOrigin.EVIDENCE_ONLY,
                 state=m.ContextState.LIVE,
                 scope=m.EvidenceScope(),

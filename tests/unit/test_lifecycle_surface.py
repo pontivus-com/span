@@ -316,7 +316,7 @@ class ErrorEnvelopeTest(unittest.TestCase):
         from span.core.recording import RecordingConflict
         from span.core.rejection import RejectionCauseKind
 
-        sentinel = "/private/span/SECRET.db request_digest=deadbeef"
+        sentinel = "/private/span/SECRET.db binding_digest=deadbeef"
         result = self._dispatch(
             _context(),
             RecordingConflict(

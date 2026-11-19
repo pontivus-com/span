@@ -897,6 +897,38 @@ class LifecycleServiceTest(unittest.TestCase):
             _receipt(self.store, self._service("ctx-unused").record(wire)), receipt
         )
 
+    def test_context_free_record_uses_caller_request_identity_for_context(self) -> None:
+        wire = self._context_free_create("sub-binding")
+        result = self._service("ctx-binding").record(wire)
+        assert isinstance(result, m.UnderstandingRecorded)
+        context = self.store.find_context("repo-1", "sub-binding")
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertEqual(context.context_id.value, "ctx-binding")
+
+    def test_context_binding_conflicts_when_same_request_changes_scope(self) -> None:
+        service = self._service("ctx-binding-conflict")
+        first = service.start_context(
+            m.StartContextRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-binding"),
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+            )
+        )
+        self.assertEqual(first.context_id.value, "ctx-binding-conflict")
+        with self.assertRaises(RecordingConflict) as raised:
+            service.start_context(
+                m.StartContextRequest(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-binding"),
+                    scope=m.EvidenceScope(paths=("src/b.py",)),
+                )
+            )
+        self.assertEqual(
+            raised.exception.cause_kind,
+            m.RejectionCauseKind.CONTEXT_BINDING_CONFLICT,
+        )
+
     def test_create_with_support_only_derives_scope_from_context(self) -> None:
         result = self.service.record(
             w.RecordRequestWire(
@@ -1014,7 +1046,7 @@ class LifecycleServiceTest(unittest.TestCase):
             context_id=m.InvestigationContextId("ctx-dep"),
             repository_id="repo-1",
             request_id=m.RequestId("req-dep"),
-            request_digest=m.ContentDigest("sha256:dep"),
+            binding_digest=m.ContentDigest("sha256:dep"),
             origin=m.ContextOrigin.EVIDENCE_ONLY,
             state=m.ContextState.LIVE,
             scope=m.EvidenceScope(paths=("src/b.py",)),

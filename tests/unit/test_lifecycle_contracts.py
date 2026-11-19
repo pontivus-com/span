@@ -129,7 +129,7 @@ def _context(
         context_id=m.InvestigationContextId("ctx-1"),
         repository_id="repo-1",
         request_id=m.RequestId("req-1"),
-        request_digest=m.ContentDigest("sha256:request"),
+        binding_digest=m.ContentDigest("sha256:request"),
         origin=origin,
         state=state,
         scope=scope or _scope(),

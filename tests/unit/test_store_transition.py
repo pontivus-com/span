@@ -254,7 +254,7 @@ def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
 def _schema10_store(
     path: pathlib.Path, root: pathlib.Path, *, unresolved: bool = False
 ) -> pathlib.Path:
-    """Build one real schema-12 store, then present its schema-10 shape."""
+    """Build one real schema-13 store, then present its schema-10 shape."""
     from span.core.recording import create_challenge
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
@@ -290,7 +290,7 @@ def _schema10_store(
                 context_id=m.InvestigationContextId(context_id),
                 repository_id="demo",
                 request_id=m.RequestId(request_id),
-                request_digest=m.ContentDigest(f"sha256:{request_id}"),
+                binding_digest=m.ContentDigest(f"sha256:{request_id}"),
                 origin=m.ContextOrigin.QUESTION,
                 state=m.ContextState.LIVE,
                 scope=m.EvidenceScope(paths=("src/a.py",)),
@@ -379,7 +379,7 @@ def _schema10_store(
                 context_id=m.InvestigationContextId("ctx-3"),
                 repository_id="demo",
                 request_id=m.RequestId("req-3"),
-                request_digest=m.ContentDigest("sha256:req-3"),
+                binding_digest=m.ContentDigest("sha256:req-3"),
                 origin=m.ContextOrigin.QUESTION,
                 state=m.ContextState.LIVE,
                 scope=m.EvidenceScope(paths=("src/a.py", "src/b.py")),
@@ -503,6 +503,108 @@ def _schema10_store(
     return path
 
 
+def _schema12_store(
+    path: pathlib.Path,
+    root: pathlib.Path,
+    *,
+    live_context: bool,
+) -> pathlib.Path:
+    """Build schema-13 durable state, then rewrite only the context shape to 12."""
+    from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+    from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "src").mkdir(exist_ok=True)
+    (root / "src/a.py").write_text("a\n", encoding="utf-8")
+    store = LifecycleStore(
+        path, retention=DEFAULT_LIFECYCLE_RETENTION, clock=lambda: NOW
+    )
+    store.register_repository("demo", str(root))
+    observation = m.SourceObservation(
+        observation_id=m.SourceObservationId("obs-schema12"),
+        repository_id="demo",
+        evidence=m.EvidenceRef(
+            evidence_id=m.EvidenceId("ev-schema12"),
+            repository_id="demo",
+            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+            locator="src/a.py",
+            revision_or_fingerprint="sha256:a",
+        ),
+        content_digest=m.ContentDigest("sha256:a"),
+        captured_at=NOW,
+        total_lines=1,
+        whole_file=True,
+    )
+    store.put_source_observation(observation)
+    created_at = NOW if live_context else NOW - datetime.timedelta(days=2)
+    expires_at = (
+        NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime
+        if live_context
+        else NOW - datetime.timedelta(days=1)
+    )
+    context = m.InvestigationContext(
+        context_id=m.InvestigationContextId("ctx-schema12"),
+        repository_id="demo",
+        request_id=m.RequestId("req-schema12"),
+        binding_digest=m.ContentDigest("sha256:legacy-wire"),
+        origin=m.ContextOrigin.EVIDENCE_ONLY,
+        state=m.ContextState.LIVE,
+        scope=m.EvidenceScope(paths=("src/a.py",)),
+        created_at=created_at,
+        expires_at=expires_at,
+    )
+    store.put_context(context)
+    store.add_context_evidence("ctx-schema12", "obs-schema12")
+    receipt = store.record_verification(
+        m.RecordVerificationCommand(
+            identity=m.RecordingIdentity(
+                repository_id="demo",
+                request_id=m.RequestId("req-schema12"),
+                context_id=m.InvestigationContextId("ctx-schema12"),
+            ),
+            run=m.ProposedVerificationRun(
+                repository_id="demo",
+                scope=m.VerificationScope(
+                    description="schema12 fixture",
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                ),
+                observations=(m.SourceObservationId("obs-schema12"),),
+                command="python3 -m unittest",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="fixture",
+            ),
+        )
+    )
+    assert receipt.accepted_verification_run_ids
+    store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            "ALTER TABLE investigation_contexts"
+            " RENAME COLUMN binding_digest TO request_digest"
+        )
+        rows = connection.execute(
+            "SELECT context_id, canonical_json FROM investigation_contexts"
+        ).fetchall()
+        for context_id, canonical in rows:
+            payload = json.loads(canonical)
+            payload["request_digest"] = payload.pop("binding_digest")
+            connection.execute(
+                "UPDATE investigation_contexts SET canonical_json=?"
+                " WHERE context_id=?",
+                (json.dumps(payload, sort_keys=True), context_id),
+            )
+        connection.execute("UPDATE meta SET value='12' WHERE key='schema_version'")
+        connection.commit()
+    finally:
+        connection.close()
+    return path
+
+
 def _config(
     root: pathlib.Path,
     data: pathlib.Path,
@@ -591,7 +693,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "12")
+                self.assertEqual(version, "13")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -807,7 +909,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "12",
+                    "13",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -818,6 +920,69 @@ class RefusalTest(unittest.TestCase):
             finally:
                 connection.close()
 
+    def test_schema12_live_context_refuses_cutover(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            source = _schema12_store(data / "demo.db", root, live_context=True)
+            with self.assertRaisesRegex(
+                st.TransitionError, "live investigation context"
+            ):
+                st.apply(_config(root, data))
+            self.assertEqual(st._read_schema_version_ro(source), 12)
+
+    def test_schema12_drained_context_cutover_preserves_durable_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            _schema12_store(data / "demo.db", root, live_context=False)
+            report = st.apply(_config(root, data))
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            connection = sqlite3.connect(data / "demo.db")
+            try:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT value FROM meta WHERE key='schema_version'"
+                    ).fetchone()[0],
+                    "13",
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM investigation_contexts"
+                    ).fetchone()[0],
+                    0,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM context_evidence"
+                    ).fetchone()[0],
+                    0,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM verification_runs"
+                    ).fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM record_receipts"
+                    ).fetchone()[0],
+                    1,
+                )
+            finally:
+                connection.close()
+            mapping = json.loads(
+                (data / "transitions" / "demo" / "mapping.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                mapping["drained_not_copied"]["investigation_contexts"], 1
+            )
+
     def test_already_current_apply_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "demo"
@@ -826,7 +991,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 12"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 13"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -1115,7 +1280,7 @@ class InstallerCommandTest(unittest.TestCase):
             mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
             self.assertEqual(mapping["counts"]["unresolved"], 0)
             self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
-            self.assertEqual(st._read_schema_version_ro(source), 12)
+            self.assertEqual(st._read_schema_version_ro(source), 13)
             from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 
