@@ -241,15 +241,7 @@ def _resolved(challenge_id: str, expected: int) -> m.ChallengeDisposition:
         challenge_id=m.ChallengeId(challenge_id),
         expected_challenge_revision=m.ChallengeRevision(expected),
         reasoning="checked the recorded source",
-        resulting_understanding_id=m.UnderstandingId("u-1"),
-        resulting_version=m.UnderstandingVersionNumber(expected + 1),
-        conclusions=(
-            m.ConclusionRevisionRef(
-                understanding_id=m.UnderstandingId("u-1"),
-                conclusion_id=m.ConclusionId("c-1"),
-                revision=m.ConclusionRevisionNumber(expected + 1),
-            ),
-        ),
+        target_conclusion_ids=(m.ConclusionId("c-1"),),
     )
 
 
@@ -282,11 +274,11 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.register_repository("repo-1", "/repo/one")
         self.store.put_source_observation(_observation())
 
-    def test_schema_version_is_twelve(self) -> None:
+    def test_schema_version_is_thirteen(self) -> None:
         row = self.store._connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        self.assertEqual(row["value"], "12")
+        self.assertEqual(row["value"], "13")
 
     def test_rebind_repository_moves_only_the_root(self) -> None:
         self.store.rebind_repository("repo-1", "/repo/two", expected_root="/repo/one")
@@ -489,8 +481,12 @@ class LifecycleStoreTest(unittest.TestCase):
         self._seed_understanding()
         self.store.create_challenge(_challenge("ch-1"))
         self.assertEqual(self.store.get_challenge("ch-1"), _challenge("ch-1"))
-        with self.assertRaises(LifecycleStoreError):
+        with self.assertRaises(RecordingValidationError) as raised:
             self.store.create_challenge(_challenge("ch-1"))
+        self.assertIs(
+            raised.exception.cause_kind,
+            m.RejectionCauseKind.ALREADY_EXISTS,
+        )
         receipt = self.store.record_understanding(
             _disposition_command(1, "sub-ch-1", (_unresolved("ch-1", 1),))
         )

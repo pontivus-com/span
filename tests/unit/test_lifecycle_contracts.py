@@ -546,6 +546,7 @@ class ChallengeTransitionTest(unittest.TestCase):
             resulting_understanding_id=m.UnderstandingId("u-1"),
             resulting_understanding=_resulting_version(version, 2),
             known_revisions=revisions,
+            actions=(),
             now=NOW,
         )
         self.assertEqual(effects[0].new_revision.value, 2)
@@ -572,21 +573,19 @@ class ChallengeTransitionTest(unittest.TestCase):
                     challenge_id=m.ChallengeId("ch-1"),
                     expected_challenge_revision=m.ChallengeRevision(1),
                     reasoning="confirmed by source",
-                    resulting_understanding_id=m.UnderstandingId("u-1"),
-                    resulting_version=m.UnderstandingVersionNumber(2),
-                    conclusions=version.conclusions,
                     evidence=(_evidence(),),
                 ),
             ),
             resulting_understanding_id=m.UnderstandingId("u-1"),
             resulting_understanding=_resulting_version(version, 2),
             known_revisions=revisions,
+            actions=(),
             now=NOW,
         )
         self.assertEqual(effects[0].state, m.ChallengeState.RESOLVED)
         self.assertIsNotNone(effects[0].resolution)
 
-    def test_resolution_rejects_a_nonexistent_revision(self) -> None:
+    def test_resolution_rejects_an_unknown_target_lineage(self) -> None:
         understanding, version, revisions = _created()
         challenge = create_challenge(
             challenge_id=m.ChallengeId("ch-1"),
@@ -606,15 +605,7 @@ class ChallengeTransitionTest(unittest.TestCase):
                         challenge_id=m.ChallengeId("ch-1"),
                         expected_challenge_revision=m.ChallengeRevision(1),
                         reasoning="settled",
-                        resulting_understanding_id=m.UnderstandingId("u-1"),
-                        resulting_version=m.UnderstandingVersionNumber(2),
-                        conclusions=(
-                            m.ConclusionRevisionRef(
-                                understanding_id=m.UnderstandingId("u-1"),
-                                conclusion_id=m.ConclusionId("never-existed"),
-                                revision=m.ConclusionRevisionNumber(999),
-                            ),
-                        ),
+                        target_conclusion_ids=(m.ConclusionId("never-existed"),),
                     ),
                 ),
                 resulting_understanding_id=m.UnderstandingId("u-1"),
@@ -660,47 +651,10 @@ class ChallengeTransitionTest(unittest.TestCase):
             resulting_understanding_id=m.UnderstandingId("u-1"),
             resulting_understanding=_resulting_version(version, 2),
             known_revisions=revisions,
+            actions=(),
             now=NOW,
         )
         self.assertEqual(effects, ())
-
-    def test_resolution_cannot_cite_another_understanding(self):
-        understanding, version, revisions = _created()
-        challenge = create_challenge(
-            challenge_id=m.ChallengeId("ch-1"),
-            understanding_id=m.UnderstandingId("u-1"),
-            target_version=version.version,
-            target_conclusions=version.conclusions,
-            reason="why?",
-            evidence=(_evidence(),),
-            provenance="test",
-            now=NOW,
-        )
-        with self.assertRaises(RecordingValidationError):
-            apply_challenge_dispositions(
-                existing_challenges=(challenge,),
-                dispositions=(
-                    m.ResolvedChallengeDisposition(
-                        challenge_id=m.ChallengeId("ch-1"),
-                        expected_challenge_revision=m.ChallengeRevision(1),
-                        reasoning="settled",
-                        resulting_understanding_id=m.UnderstandingId("u-1"),
-                        resulting_version=m.UnderstandingVersionNumber(2),
-                        conclusions=(
-                            m.ConclusionRevisionRef(
-                                understanding_id=m.UnderstandingId("u-2"),
-                                conclusion_id=m.ConclusionId("c-other"),
-                                revision=m.ConclusionRevisionNumber(1),
-                            ),
-                        ),
-                    ),
-                ),
-                resulting_understanding_id=m.UnderstandingId("u-1"),
-                resulting_understanding=_resulting_version(version, 2),
-                known_revisions=revisions,
-                now=NOW,
-            )
-
 
 if __name__ == "__main__":
     unittest.main()
