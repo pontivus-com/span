@@ -898,6 +898,41 @@ class LifecycleStoreTest(unittest.TestCase):
         self.assertEqual(self.store.find_admitted_evidence("ctx-1", "obs-1"), evidence)
         self.assertTrue(self.store.has_admitted_observation("ctx-1", "obs-1"))
 
+    def test_concurrent_distinct_updates_one_version_yield_one_conflict(
+        self,
+    ) -> None:
+        self._seed_understanding()
+        second = LifecycleStore(self.path, retention=RETENTION, clock=lambda: NOW)
+        self.addCleanup(second.close)
+        outcomes: list[str] = []
+        barrier = threading.Barrier(2)
+
+        def run(store: LifecycleStore, submission: str) -> None:
+            barrier.wait()
+            try:
+                store.record_understanding(
+                    _update_command(expected=1, submission=submission),
+                    understanding_id=m.UnderstandingId("u-1"),
+                )
+                outcomes.append("accepted")
+            except RecordingConflict:
+                outcomes.append("conflict")
+
+        threads = [
+            threading.Thread(target=run, args=(self.store, "sub-race-a")),
+            threading.Thread(target=run, args=(second, "sub-race-b")),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(sorted(outcomes), ["accepted", "conflict"])
+        self.assertEqual(
+            self.store.get_understanding("u-1").current_version.value,
+            2,
+        )
+
     def test_concurrent_same_submission_commits_once(self) -> None:
         self.store.put_context(_context())
         second = LifecycleStore(self.path, retention=RETENTION, clock=lambda: NOW)

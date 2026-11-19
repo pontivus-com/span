@@ -932,6 +932,59 @@ class RefusalTest(unittest.TestCase):
                 st.apply(_config(root, data))
             self.assertEqual(st._read_schema_version_ro(source), 12)
 
+    def test_schema12_live_context_without_expiry_refuses_and_is_preserved(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            source = _schema12_store(data / "demo.db", root, live_context=True)
+            connection = sqlite3.connect(source)
+            try:
+                row = connection.execute(
+                    "SELECT context_id, canonical_json"
+                    " FROM investigation_contexts WHERE repository_id='demo'"
+                ).fetchone()
+                payload = json.loads(row[1])
+                payload["expires_at"] = None
+                connection.execute(
+                    "UPDATE investigation_contexts"
+                    " SET canonical_json=?, expires_at=NULL"
+                    " WHERE repository_id='demo' AND context_id=?",
+                    (json.dumps(payload, sort_keys=True), row[0]),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            before = hashlib.sha256(source.read_bytes()).hexdigest()
+            with self.assertRaisesRegex(
+                st.TransitionError, "live investigation context"
+            ):
+                st.apply(_config(root, data))
+            self.assertEqual(st._read_schema_version_ro(source), 12)
+
+            connection = sqlite3.connect(source)
+            try:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM investigation_contexts"
+                        " WHERE repository_id='demo'"
+                    ).fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM context_evidence"
+                        " WHERE repository_id='demo'"
+                    ).fetchone()[0],
+                    1,
+                )
+            finally:
+                connection.close()
+            self.assertEqual(before, hashlib.sha256(source.read_bytes()).hexdigest())
+
     def test_schema12_drained_context_cutover_preserves_durable_history(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "demo"
@@ -980,6 +1033,33 @@ class RefusalTest(unittest.TestCase):
                 )
             )
             self.assertEqual(mapping["drained_not_copied"]["investigation_contexts"], 1)
+
+            from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+            from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+            store = LifecycleStore(
+                data / "demo.db",
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
+            )
+            try:
+                receipt = store.get_receipt(
+                    m.RecordingKey(
+                        repository_id="demo",
+                        request_id=m.RequestId("req-schema12"),
+                    )
+                )
+                self.assertIsNotNone(receipt)
+                assert receipt is not None
+                self.assertEqual(len(receipt.accepted_verification_run_ids), 1)
+                run = store.get_verification_run(
+                    receipt.accepted_verification_run_ids[0].value
+                )
+                self.assertEqual(run.command, "python3 -m unittest")
+                self.assertEqual(run.repository_id, "demo")
+                self.assertEqual(run.scope.scope.paths, ("src/a.py",))
+            finally:
+                store.close()
 
     def test_already_current_apply_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:

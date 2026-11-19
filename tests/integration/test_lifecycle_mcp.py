@@ -1331,6 +1331,271 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         }
         self.assertEqual(locators, {"src/app.py", "docs/adr.md"})
 
+    async def test_structural_rejections_and_unknown_tool_through_stdio(
+        self,
+    ) -> None:
+        async def journey(session: ClientSession) -> dict:
+            surface_rejections = []
+            for nested_repository in (REPOSITORY_ID, None):
+                rejected = await self._call(
+                    session,
+                    "ask",
+                    {
+                        "repository_id": REPOSITORY_ID,
+                        "surface": {
+                            "kind": "FILE",
+                            "locator": "src/app.py",
+                            "repository_id": nested_repository,
+                        },
+                    },
+                )
+                self.assertEqual(rejected["$type"], "Rejected")
+                self.assertEqual(rejected["cause_kind"], "validation")
+                self.assertIn("repository_id", rejected["cause"])
+                surface_rejections.append(rejected)
+
+            verification_rejected = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "structural-verification",
+                    "kind": "verification",
+                    "run": {
+                        "repository_id": REPOSITORY_ID,
+                        "scope_description": "probe",
+                        "scope_paths": ["src/app.py"],
+                        "observations": [],
+                        "evidence": [
+                            {
+                                "$type": "source",
+                                "locator": "src/app.py",
+                                "ranges": [],
+                            }
+                        ],
+                        "command": "pytest -q",
+                        "scenario": None,
+                        "outcome": "PASS",
+                        "observed_at": "2026-11-19T00:00:00Z",
+                        "observer": "tester",
+                    },
+                },
+            )
+            self.assertEqual(verification_rejected["$type"], "Rejected")
+            self.assertIn("run.repository_id", verification_rejected["cause"])
+
+            created = await self._record_create(session, "structural-challenge-create")
+            understanding_id = created["understanding_id"]["value"]
+            target_id = self._created_conclusion_id(created)
+            challenged = await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "challenge": {
+                        "request_id": "structural-challenge",
+                        "understanding_id": understanding_id,
+                        "target_version": 1,
+                        "target_conclusions": [
+                            {
+                                "understanding_id": understanding_id,
+                                "conclusion_id": target_id,
+                                "revision": 1,
+                            }
+                        ],
+                        "reason": "Exercise structural disposition rejection.",
+                        "evidence": [],
+                    },
+                },
+            )
+            challenge = challenged["challenge"]
+            disposition_rejected = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "structural-disposition",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": 1,
+                    "actions": {
+                        "confirm": [
+                            {
+                                "conclusion_id": target_id,
+                                "locator": "src/app.py",
+                            }
+                        ]
+                    },
+                    "challenge_dispositions": [
+                        {
+                            "$type": "resolved",
+                            "challenge_id": challenge["challenge_id"]["value"],
+                            "expected_challenge_revision": challenge[
+                                "challenge_revision"
+                            ]["value"],
+                            "reasoning": "This payload must reject before the write.",
+                            "resulting_version": 2,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(disposition_rejected["$type"], "Rejected")
+            self.assertIn("resulting_version", disposition_rejected["cause"])
+
+            unknown = await session.call_tool("span_unknown_tool", {})
+            self.assertTrue(unknown.is_error)
+            return {
+                "understanding_id": understanding_id,
+                "challenge_id": challenge["challenge_id"]["value"],
+                "surface_rejections": surface_rejections,
+            }
+
+        outcome = await self._session(journey)
+        store = LifecycleStore(
+            self.data / f"{REPOSITORY_ID}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        self.addCleanup(store.close)
+        self.assertEqual(
+            store.get_understanding(outcome["understanding_id"]).current_version.value,
+            1,
+        )
+        self.assertEqual(
+            store.get_challenge(outcome["challenge_id"]).state,
+            m.ChallengeState.OPEN,
+        )
+
+    async def test_reconsider_context_reuses_unchanged_admitted_support(
+        self,
+    ) -> None:
+        _write(self.repo, "src/b.py", "support b\n")
+
+        async def create(session: ClientSession) -> dict:
+            return await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "multi-support-create",
+                    "kind": "understanding",
+                    "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    "question": "What does the app emit?",
+                    "scope_paths": ["src/app.py"],
+                    "conclusion": "The app emits line1 using B.",
+                    "support": [
+                        {"$type": "source", "locator": "src/app.py"},
+                        {"$type": "source", "locator": "src/b.py"},
+                    ],
+                },
+            )
+
+        created = await self._session(create)
+        understanding_id = created["understanding_id"]["value"]
+        target_id = self._created_conclusion_id(created)
+
+        store = LifecycleStore(
+            self.data / f"{REPOSITORY_ID}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        version_one = store.get_version_conclusions(understanding_id, 1)
+        revision_one = next(
+            item for item in version_one if item.conclusion_id.value == target_id
+        )
+        assert isinstance(revision_one.content, m.SupportedConclusion)
+        by_locator = {
+            store.get_source_observation(dependency.observation_id.value)
+            .evidence.locator: dependency.observation_id.value
+            for dependency in revision_one.content.support
+            if isinstance(dependency, m.SourceSupport)
+        }
+        unchanged_observation = by_locator["src/b.py"]
+        store.close()
+
+        _write(self.repo, "src/app.py", "changed\n")
+
+        async def reconsider(session: ClientSession) -> dict:
+            return await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "changed_paths": ["src/app.py"],
+                },
+            )
+
+        changed = await self._session(reconsider)
+        affected = next(
+            item
+            for item in changed["surfaces"]
+            if item["surface"]["locator"] == "src/app.py"
+        )
+        conclusion = next(
+            item
+            for item in affected["conclusions"]
+            if item["ref"]["understanding_id"]["value"] == understanding_id
+        )
+        context_id = changed["context"]["context_id"]["value"]
+
+        store = LifecycleStore(
+            self.data / f"{REPOSITORY_ID}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        self.assertTrue(
+            store.has_admitted_observation(context_id, unchanged_observation)
+        )
+        store.close()
+
+        async def reestablish(session: ClientSession) -> dict:
+            return await self._call(
+                session,
+                "record",
+                {
+                    "request_id": "multi-support-reestablish",
+                    "context": changed["context"],
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": conclusion["expected_version"]["value"],
+                    "actions": {
+                        "confirm": [
+                            {
+                                "conclusion_id": target_id,
+                                "support": [
+                                    {
+                                        "$type": "source",
+                                        "locator": "src/app.py",
+                                    },
+                                    {
+                                        "$type": "admitted_source",
+                                        "observation_id": unchanged_observation,
+                                    },
+                                ],
+                            }
+                        ]
+                    },
+                },
+            )
+
+        updated = await self._session(reestablish)
+        self.assertEqual(updated["$type"], "UnderstandingRecorded")
+        self.assertEqual(updated["version"]["value"], 2)
+
+        store = LifecycleStore(
+            self.data / f"{REPOSITORY_ID}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        self.addCleanup(store.close)
+        version_two = store.get_version_conclusions(understanding_id, 2)
+        revision_two = next(
+            item for item in version_two if item.conclusion_id.value == target_id
+        )
+        assert isinstance(revision_two.content, m.SupportedConclusion)
+        support_ids = {
+            dependency.observation_id.value
+            for dependency in revision_two.content.support
+            if isinstance(dependency, m.SourceSupport)
+        }
+        self.assertIn(unchanged_observation, support_ids)
+
     async def test_live_context_cannot_be_misrouted_to_another_repository(self) -> None:
         other_id = "repo-other"
         other = self.repo.parent / other_id
