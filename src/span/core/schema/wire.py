@@ -6,6 +6,8 @@ import dataclasses as _dataclasses
 import types as _types
 import typing as _typing
 
+from span.core.rejection import StructuralFault, StructuralValidationError
+
 _PUBLIC_TYPE_TAGS: _typing.Mapping[str, str] = _types.MappingProxyType(
     {
         "span.core.model.administration.InitializeRepositoryRequest": "InitializeRepositoryRequest",
@@ -466,9 +468,19 @@ def from_wire(root: object, payload: dict) -> object:
     from span.core import model as _m
 
     if not isinstance(payload, dict):
-        raise ValueError("request payload must be an object")
+        raise StructuralValidationError(
+            (StructuralFault("root", "shape", "request payload must be an object"),)
+        )
     if "$type" in payload:
-        raise ValueError("top-level $type is never supplied on the wire")
+        raise StructuralValidationError(
+            (
+                StructuralFault(
+                    "$type",
+                    "root discriminator",
+                    "top-level $type is never supplied on the wire",
+                ),
+            )
+        )
     tagged = _inject(root, payload, "")
     return _m.from_canonical(_typing.cast(type, root), tagged)
 
@@ -484,14 +496,27 @@ def _inject(hint: object, value: object, path: str) -> object:
         if len(dms) >= 2:
             if not isinstance(value, dict) or not isinstance(value.get("$type"), str):
                 accepted = ", ".join(public_type_tag(member) for member in dms)
-                raise ValueError(
-                    f"missing $type discriminator at {path or 'root'} "
-                    f"(accepted: {accepted})"
+                raise StructuralValidationError(
+                    (
+                        StructuralFault(
+                            f"{path + '.' if path else ''}$type",
+                            "discriminator",
+                            f"missing $type discriminator (accepted: {accepted})",
+                        ),
+                    )
                 )
             tag = value["$type"]
             member = next((mm for mm in dms if public_type_tag(mm) == tag), None)
             if member is None:
-                raise ValueError(f"unknown $type {tag!r} at {path or 'root'}")
+                raise StructuralValidationError(
+                    (
+                        StructuralFault(
+                            f"{path + '.' if path else ''}$type",
+                            "discriminator",
+                            f"unknown $type {tag!r}",
+                        ),
+                    )
+                )
             return _inject_dataclass(member, value, path, keep_tag=True)
         if len(dms) == 1 and len(non_none) == 1:
             return _inject_dataclass(dms[0], value, path, keep_tag=False)
@@ -502,47 +527,68 @@ def _inject(hint: object, value: object, path: str) -> object:
         return _inject_dataclass(hint, value, path, keep_tag=False)
     if origin in (tuple, list):
         if not isinstance(value, list):
-            raise ValueError(f"expected list at {path or 'root'}, got {value!r}")
+            raise StructuralValidationError(
+                (
+                    StructuralFault(
+                        path or "root",
+                        "shape",
+                        "expected a list",
+                    ),
+                )
+            )
         item = args[0] if args else None
         # Aggregate sibling faults so one call reports every bad member
         # instead of the caller discovering them one round trip at a
         # time; a single fault keeps its exact previous text.
         injected: list[object] = []
-        faults: list[str] = []
+        faults: list[StructuralFault] = []
         for i, v in enumerate(value):
             try:
                 injected.append(_inject(item, v, f"{path}[{i}]"))
-            except ValueError as exc:
-                faults.append(str(exc))
+            except StructuralValidationError as exc:
+                faults.extend(exc.faults)
                 injected.append(v)
         if faults:
-            raise ValueError("; ".join(faults))
+            raise StructuralValidationError(tuple(faults))
         return injected
     return value
 
 
 def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) -> dict:
     if not isinstance(value, dict):
-        raise ValueError(f"expected object at {path or cls.__name__}")
+        raise StructuralValidationError(
+            (StructuralFault(path or "root", "shape", "expected an object"),)
+        )
     hints = _typing.get_type_hints(cls)
     fields = {field.name: field for field in _dataclasses.fields(cls)}
-    at = f"{path}: " if path else ""
-    faults: list[str] = []
+    faults: list[StructuralFault] = []
     if "$type" in value and not keep_tag and value["$type"] != public_type_tag(cls):
         # A redundant tag that names the only candidate carrier is accepted:
         # it carries no ambiguity. A tag naming anything else is a mistake.
         faults.append(
-            "unexpected $type at unambiguous position: "
-            f"{path or public_schema_name(cls)}; this position accepts "
-            f"{public_schema_name(cls)} without a $type"
+            StructuralFault(
+                f"{path + '.' if path else ''}$type",
+                "discriminator",
+                (
+                    "unexpected $type at unambiguous position; this position "
+                    f"accepts {public_schema_name(cls)} without a $type"
+                ),
+            )
         )
     # The tagging pass is the first ingress pass, so it also reports the
     # field-shape faults the strict decoder would raise later; otherwise
     # a tag fault and an unknown/missing field cost two round trips.
     # Texts match the decoder's for the single-fault case.
     unknown = sorted(key for key in value if key != "$type" and key not in fields)
-    if unknown:
-        faults.append(f"{at}unknown fields for {cls.__name__}: {unknown}")
+    for key in unknown:
+        coordinate = f"{path}.{key}" if path else key
+        faults.append(
+            StructuralFault(
+                coordinate,
+                "unknown field",
+                f"unknown field {coordinate!r}",
+            )
+        )
     for field in fields.values():
         if field.name in value:
             continue
@@ -550,7 +596,14 @@ def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) ->
             field.default is _dataclasses.MISSING
             and field.default_factory is _dataclasses.MISSING  # type: ignore[misc]
         ):
-            faults.append(f"{at}missing field {field.name!r} for {cls.__name__}")
+            coordinate = f"{path}.{field.name}" if path else field.name
+            faults.append(
+                StructuralFault(
+                    coordinate,
+                    "required field",
+                    f"missing required field {coordinate!r}",
+                )
+            )
     out: dict = {"$type": cls.__name__}
     for key, v in value.items():
         if key == "$type" or key not in fields:
@@ -558,11 +611,11 @@ def _inject_dataclass(cls: type, value: object, path: str, *, keep_tag: bool) ->
         child_path = f"{path}.{key}" if path else key
         try:
             out[key] = _inject(hints.get(key), v, child_path)
-        except ValueError as exc:
-            faults.append(str(exc))
+        except StructuralValidationError as exc:
+            faults.extend(exc.faults)
             out[key] = v
     if faults:
-        raise ValueError("; ".join(faults))
+        raise StructuralValidationError(tuple(faults))
     return out
 
 

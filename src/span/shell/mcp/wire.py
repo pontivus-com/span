@@ -11,6 +11,7 @@ from typing import cast as _cast
 
 from span.core import model as m
 from span.core import schema as _schema
+from span.core.rejection import StructuralFault, StructuralValidationError
 from span.shell.mcp.models import ToolError, ToolResult
 from span.shell.mcp.schemas import TOOL_REQUEST_TYPES
 from span.service.continuation import decode_continuation
@@ -59,21 +60,56 @@ def decode_request(tool_name: str, arguments: dict[str, object]) -> object:
         tag = payload.pop("$type", None)
         if not isinstance(tag, str):
             accepted = ", ".join(_schema.public_type_tag(member) for member in members)
-            raise ValueError(
-                f"missing $type discriminator at root (accepted: {accepted})"
+            raise StructuralValidationError(
+                (
+                    StructuralFault(
+                        "$type",
+                        "discriminator",
+                        f"missing $type discriminator (accepted: {accepted})",
+                    ),
+                )
             )
         member = next(
             (item for item in members if _schema.public_type_tag(item) == tag),
             None,
         )
         if member is None:
-            raise ValueError(f"unknown $type {tag!r} at root")
+            raise StructuralValidationError(
+                (
+                    StructuralFault(
+                        "$type",
+                        "discriminator",
+                        f"unknown $type {tag!r}",
+                    ),
+                )
+            )
         root = member
     try:
         return _schema.from_wire(root, payload)
-    except (m.CanonicalDecodeError, ValueError) as exc:
-        raise ValueError(
-            f"invalid {tool_name} arguments: {_agent_reason(exc)}"
+    except StructuralValidationError:
+        raise
+    except m.CanonicalDecodeError as exc:
+        coordinate = (
+            ".".join(exc.path).replace(".[", "[") if exc.path else "root"
+        )
+        raise StructuralValidationError(
+            (
+                StructuralFault(
+                    coordinate,
+                    "declared value",
+                    "value does not match the declared request type or value",
+                ),
+            )
+        ) from None
+    except ValueError:
+        raise StructuralValidationError(
+            (
+                StructuralFault(
+                    "root",
+                    "declared value",
+                    "request value does not satisfy the declared contract",
+                ),
+            )
         ) from None
 
 

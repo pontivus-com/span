@@ -351,6 +351,60 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["cause_kind"], "replay_conflict")
         self.assertIsNone(payload["current_version"])
 
+    def test_structural_lifecycle_ingress_is_a_rejected_result(self):
+        adapter = _adapter(_context())
+        result = adapter.dispatch(
+            "record",
+            {
+                "repository_id": REPO,
+                "request_id": "req-structural",
+                "kind": "verification",
+                "run": {
+                    "repository_id": REPO,
+                    "scope_description": "probe",
+                    "scope_paths": ["src/a.py"],
+                    "observations": ["obs-1"],
+                    "command": "pytest",
+                    "scenario": None,
+                    "outcome": "PASS",
+                    "observed_at": "2026-11-19T00:00:00+00:00",
+                    "observer": "test",
+                },
+            },
+        )
+        payload = json.loads(result.content)
+        self.assertFalse(result.is_error)
+        self.assertEqual(payload["$type"], "Rejected")
+        self.assertEqual(payload["cause_kind"], "validation")
+        self.assertIn("run.repository_id", payload["cause"])
+        self.assertIn("run.repository_id", payload["required_action"])
+        self.assertNotIn("VerificationRunWire", json.dumps(payload))
+
+    def test_structural_ingress_reports_independent_sibling_faults(self):
+        adapter = _adapter(_context())
+        result = adapter.dispatch(
+            "record",
+            {
+                "repository_id": REPO,
+                "request_id": "req-siblings",
+                "kind": "verification",
+                "run": {
+                    "scope_paths": ["src/a.py"],
+                    "observations": ["obs-1"],
+                    "command": "pytest",
+                    "scenario": None,
+                    "outcome": "PASS",
+                    "observed_at": "2026-11-19T00:00:00+00:00",
+                    "observer": "test",
+                    "extra": True,
+                },
+            },
+        )
+        payload = json.loads(result.content)
+        self.assertEqual(payload["$type"], "Rejected")
+        self.assertIn("run.scope_description", payload["cause"])
+        self.assertIn("run.extra", payload["cause"])
+
     def test_malformed_ingress_is_a_transport_error(self):
         adapter = _adapter(_context())
         with mock.patch.object(
