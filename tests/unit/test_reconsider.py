@@ -252,6 +252,19 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertEqual(a_conclusions[0].expected_version.value, 2)
 
+    def test_changed_scope_context_admits_existing_source_support(self) -> None:
+        result = self.service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        self.assertTrue(
+            self.store.has_admitted_observation(
+                result.context.context_id.value, "obs-a"
+            )
+        )
+
     def test_unowned_path_reports_only_its_path_surface(self) -> None:
         result = self.service.reconsider(
             m.ReconsiderRequest(
@@ -464,6 +477,11 @@ class ReconsiderServiceTest(unittest.TestCase):
             if item.ref.understanding_id.value == "u-discovery"
         )
         self.assertIn(m.ChangeReason.DIRECT, changed.reasons)
+        self.assertTrue(
+            self.store.has_admitted_discovery(
+                result.context.context_id.value, "disc-1"
+            )
+        )
 
     def test_refs_only_discovery_tracks_only_the_referenced_changed_path(self):
         reference = self.store.get_source_observation("obs-a").evidence

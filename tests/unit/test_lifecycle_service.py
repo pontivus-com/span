@@ -758,6 +758,122 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertEqual(updated.challenge_revision.value, 2)
         self.assertEqual(updated.state, m.ChallengeState.UNRESOLVED)
 
+    def test_resolved_challenge_derives_resulting_revision(self) -> None:
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
+        self.store.create_challenge(
+            create_challenge(
+                challenge_id=m.ChallengeId("ch-resolve"),
+                understanding_id=m.UnderstandingId("u:sub-create"),
+                target_version=m.UnderstandingVersionNumber(1),
+                target_conclusions=(
+                    m.ConclusionRevisionRef(
+                        understanding_id=m.UnderstandingId("u:sub-create"),
+                        conclusion_id=m.ConclusionId(target_id),
+                        revision=m.ConclusionRevisionNumber(1),
+                    ),
+                ),
+                reason="the conclusion is disputed",
+                evidence=(),
+                provenance="test",
+                now=NOW,
+            )
+        )
+        result = self.service.record(
+            w.RecordRequestWire(
+                request_id="sub-resolve",
+                context=_context_ref("ctx-1"),
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id="u:sub-create",
+                expected_version=1,
+                actions=w.RecordActionsWire(
+                    correct=(
+                        w.CorrectConclusionWire(
+                            conclusion_id=target_id,
+                            conclusion="A does the corrected thing.",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+                challenge_dispositions=(
+                    w.ResolvedDispositionWire(
+                        challenge_id="ch-resolve",
+                        expected_challenge_revision=1,
+                        reasoning="The corrected statement resolves the challenge.",
+                    ),
+                ),
+            )
+        )
+        assert isinstance(result, m.UnderstandingRecorded)
+        self.assertEqual(result.version.value, 2)
+        challenge = self.store.get_challenge("ch-resolve")
+        self.assertEqual(challenge.state, m.ChallengeState.RESOLVED)
+        assert challenge.resolution is not None
+        self.assertEqual(challenge.resolution.resulting_version.value, 2)
+        self.assertEqual(len(challenge.resolution.conclusions), 1)
+        self.assertEqual(
+            challenge.resolution.conclusions[0].conclusion_id.value,
+            target_id,
+        )
+        self.assertEqual(challenge.resolution.conclusions[0].revision.value, 2)
+        self.assertEqual(challenge.resolution.withdrawn, ())
+
+    def test_invalid_resolved_target_rolls_back_update_and_challenge(self) -> None:
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
+        self.store.create_challenge(
+            create_challenge(
+                challenge_id=m.ChallengeId("ch-reject"),
+                understanding_id=m.UnderstandingId("u:sub-create"),
+                target_version=m.UnderstandingVersionNumber(1),
+                target_conclusions=(
+                    m.ConclusionRevisionRef(
+                        understanding_id=m.UnderstandingId("u:sub-create"),
+                        conclusion_id=m.ConclusionId(target_id),
+                        revision=m.ConclusionRevisionNumber(1),
+                    ),
+                ),
+                reason="disputed",
+                evidence=(),
+                provenance="test",
+                now=NOW,
+            )
+        )
+        with self.assertRaises(RecordingValidationError):
+            self.service.record(
+                w.RecordRequestWire(
+                    request_id="sub-resolve-bad",
+                    context=_context_ref("ctx-1"),
+                    kind=m.RecordKind.UNDERSTANDING,
+                    understanding_id="u:sub-create",
+                    expected_version=1,
+                    actions=w.RecordActionsWire(
+                        correct=(
+                            w.CorrectConclusionWire(
+                                conclusion_id=target_id,
+                                conclusion="A changed.",
+                                locator="src/a.py",
+                            ),
+                        )
+                    ),
+                    challenge_dispositions=(
+                        w.ResolvedDispositionWire(
+                            challenge_id="ch-reject",
+                            expected_challenge_revision=1,
+                            reasoning="Attempted resolution.",
+                            target_conclusion_ids=("c:missing",),
+                        ),
+                    ),
+                )
+            )
+        self.assertEqual(
+            self.store.get_understanding("u:sub-create").current_version.value, 1
+        )
+        self.assertEqual(
+            self.store.get_challenge("ch-reject").state,
+            m.ChallengeState.OPEN,
+        )
+
     def test_verification_requires_admitted_observation(self) -> None:
         def wire(submission: str, observation: str) -> w.RecordRequestWire:
             return w.RecordRequestWire(

@@ -584,7 +584,6 @@ class RecordWireMalformedTest(unittest.TestCase):
             "request_id": "sub-verification",
             "kind": "verification",
             "run": {
-                "repository_id": "repo-1",
                 "scope_description": "probe",
                 "scope_paths": ["src/a.py"],
                 "observations": ["obs-1"],
@@ -763,6 +762,46 @@ class RecordWireMalformedTest(unittest.TestCase):
                     },
                 ),
             )
+
+    def test_nested_verification_repository_rejects(self):
+        payload = self._verification()
+        payload["run"]["repository_id"] = "repo-1"
+        with self.assertRaisesRegex(ValueError, "unknown fields"):
+            from_wire(w.RecordRequestWire, payload)
+
+    def test_resolved_disposition_has_only_semantic_targets(self):
+        command = w.record_command(
+            _update_request(
+                w.RecordActionsWire(
+                    confirm=(
+                        w.ConfirmConclusionWire(
+                            conclusion_id="c-1",
+                            locator="src/a.py",
+                        ),
+                    )
+                )
+            ),
+            _resolver(),
+            current_revisions=(_revision(),),
+        )
+        # command construction remains valid without a disposition result coordinate.
+        self.assertEqual(command.expected_version.value, 1)
+        disposition = w.ResolvedDispositionWire(
+            challenge_id="ch-1",
+            expected_challenge_revision=1,
+            reasoning="The corrected conclusion settles the dispute.",
+            target_conclusion_ids=("c-1",),
+        )
+        resolved = w._disposition(disposition, _resolver())
+        self.assertEqual(
+            tuple(item.value for item in resolved.target_conclusion_ids),
+            ("c-1",),
+        )
+        schema = schema_for_request(w.ResolvedDispositionWire)
+        self.assertNotIn("resulting_understanding_id", schema["properties"])
+        self.assertNotIn("resulting_version", schema["properties"])
+        self.assertNotIn("conclusions", schema["properties"])
+        self.assertNotIn("withdrawn", schema["properties"])
 
     def test_irrelevant_update_root_fields_reject(self):
         for field, value in (

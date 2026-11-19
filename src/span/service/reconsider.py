@@ -191,9 +191,9 @@ class ReconsiderService:
         request: m.ReconsiderRequest,
         surfaces: tuple[m.ChangedSurface, ...],
     ) -> m.InvestigationContextRef:
-        scopes: list[m.EvidenceScope] = [
-            m.EvidenceScope(paths=tuple(request.changed_paths))
-        ]
+        scopes: list[m.EvidenceScope] = []
+        if request.changed_paths:
+            scopes.append(m.EvidenceScope(paths=tuple(request.changed_paths)))
         source_observations: set[str] = set()
         discovery_observations: set[str] = set()
         for changed in surfaces:

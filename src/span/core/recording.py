@@ -661,10 +661,6 @@ def apply_challenge_dispositions(
     by_revision = {
         (item.conclusion_id, item.revision.value): item for item in known_revisions
     }
-    membership = {
-        (ref.conclusion_id, ref.revision.value)
-        for ref in resulting_understanding.conclusions
-    }
     seen: set[ChallengeId] = set()
     effects: list[ChallengeEffect] = []
     for disposition in dispositions:
