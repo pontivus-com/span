@@ -311,10 +311,7 @@ class ResolvedDispositionWire:
     challenge_id: str
     expected_challenge_revision: int
     reasoning: str
-    resulting_understanding_id: str
-    resulting_version: int
-    conclusions: tuple[ConclusionRefWire, ...] = ()
-    withdrawn: tuple[ConclusionRefWire, ...] = ()
+    target_conclusion_ids: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
 
 
@@ -1160,25 +1157,8 @@ def _disposition(
                 value.expected_challenge_revision
             ),
             reasoning=value.reasoning,
-            resulting_understanding_id=_p.UnderstandingId(
-                value.resulting_understanding_id
-            ),
-            resulting_version=_p.UnderstandingVersionNumber(value.resulting_version),
-            conclusions=tuple(
-                _p.ConclusionRevisionRef(
-                    understanding_id=_p.UnderstandingId(item.understanding_id),
-                    conclusion_id=_p.ConclusionId(item.conclusion_id),
-                    revision=_p.ConclusionRevisionNumber(item.revision),
-                )
-                for item in value.conclusions
-            ),
-            withdrawn=tuple(
-                _p.ConclusionRevisionRef(
-                    understanding_id=_p.UnderstandingId(item.understanding_id),
-                    conclusion_id=_p.ConclusionId(item.conclusion_id),
-                    revision=_p.ConclusionRevisionNumber(item.revision),
-                )
-                for item in value.withdrawn
+            target_conclusion_ids=tuple(
+                _p.ConclusionId(item) for item in value.target_conclusion_ids
             ),
             evidence=tuple(resolver.reference(item) for item in value.evidence_refs),
         )

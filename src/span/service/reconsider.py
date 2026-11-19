@@ -124,32 +124,31 @@ class ReconsiderService:
             truncated = True
 
         current_versions: dict[str, m.UnderstandingVersion] = {}
-        return m.Changed(
-            surfaces=tuple(
-                m.ChangedSurface(
-                    surface=surface,
-                    reasons=tuple(
-                        sorted(reasons[surface], key=lambda item: item.value)
-                    ),
-                    conclusions=tuple(
-                        conclusion
-                        for conclusion in (
-                            self._changed_conclusion(
-                                ref, reasons[surface], current_versions
-                            )
-                            for ref in sorted(
-                                affected.get(surface, ()),
-                                key=lambda ref: ref.sort_key,
-                            )
+        changed_surfaces = tuple(
+            m.ChangedSurface(
+                surface=surface,
+                reasons=tuple(sorted(reasons[surface], key=lambda item: item.value)),
+                conclusions=tuple(
+                    conclusion
+                    for conclusion in (
+                        self._changed_conclusion(ref, reasons[surface], current_versions)
+                        for ref in sorted(
+                            affected.get(surface, ()),
+                            key=lambda ref: ref.sort_key,
                         )
-                        if conclusion is not None
-                    ),
-                )
-                for surface in ordered
-            ),
+                    )
+                    if conclusion is not None
+                ),
+            )
+            for surface in ordered
+        )
+        return m.Changed(
+            surfaces=changed_surfaces,
             omitted=tuple(omitted),
             truncated=truncated,
-            context=self._reconsider_context(repository_id, request, ordered),
+            context=self._reconsider_context(
+                repository_id, request, changed_surfaces
+            ),
         )
 
     def _changed_conclusion(
@@ -190,30 +189,78 @@ class ReconsiderService:
         self,
         repository_id: str,
         request: m.ReconsiderRequest,
-        surfaces: tuple[m.SurfaceKey, ...],
+        surfaces: tuple[m.ChangedSurface, ...],
     ) -> m.InvestigationContextRef:
-        paths = list(request.changed_paths)
-        for surface in surfaces:
+        scopes: list[m.EvidenceScope] = [
+            m.EvidenceScope(paths=tuple(request.changed_paths))
+        ]
+        source_observations: set[str] = set()
+        discovery_observations: set[str] = set()
+        for changed in surfaces:
+            surface = changed.surface
             if surface.kind is m.SurfaceKind.FILE:
-                paths.append(surface.locator)
+                scopes.append(m.EvidenceScope(paths=(surface.locator,)))
             else:
                 declared = self._store.find_surface(surface)
                 if declared is not None:
-                    paths.extend(declared.boundary.paths)
+                    scopes.append(m.EvidenceScope(paths=declared.boundary.paths))
+            for item in changed.conclusions:
+                revision = self._conclusion_revision(item.ref)
+                content = revision.content
+                if not isinstance(content, m.SupportedConclusion):
+                    continue
+                scopes.append(content.scope)
+                for dependency in content.support:
+                    if isinstance(dependency, m.SourceSupport):
+                        source_observations.add(dependency.observation_id.value)
+                    elif isinstance(dependency, m.DiscoverySupport):
+                        observation = self._store.get_discovery_observation(
+                            dependency.observation_id.value
+                        )
+                        scopes.append(observation.scope)
+                        discovery_observations.add(
+                            dependency.observation_id.value
+                        )
         context_id = self._new_context_id()
         context = issue_context(
             self._store,
-            binding=context_binding(
-                scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
-            ),
+            binding=context_binding(scope=m.evidence_scope_union(scopes)),
             repository_id=repository_id,
             request_id=m.RequestId(f"reconsider:{context_id}"),
             clock=self._clock,
             new_context_id=lambda: context_id,
         )
+        for observation_id in sorted(source_observations):
+            observation = self._store.get_source_observation(observation_id)
+            if observation.repository_id != repository_id:
+                raise RecordingValidationError(
+                    "re-establishment source observation belongs to another repository"
+                )
+            self._store.add_context_evidence(context_id, observation_id)
+        for observation_id in sorted(discovery_observations):
+            observation = self._store.get_discovery_observation(observation_id)
+            if observation.repository_id != repository_id:
+                raise RecordingValidationError(
+                    "re-establishment discovery observation belongs to another repository"
+                )
+            self._store.add_context_discovery_evidence(context_id, observation_id)
         return m.InvestigationContextRef(
             repository_id=repository_id,
             context_id=context.context_id,
+        )
+
+    def _conclusion_revision(
+        self, ref: m.ConclusionRevisionRef
+    ) -> m.ConclusionRevision:
+        for revision in self._store.get_conclusions(ref.understanding_id.value):
+            if (
+                revision.conclusion_id == ref.conclusion_id
+                and revision.revision == ref.revision
+            ):
+                return revision
+        raise RecordingValidationError(
+            "affected conclusion revision is missing: "
+            f"{ref.conclusion_id.value}@{ref.revision.value}"
         )
 
     def _support_state(

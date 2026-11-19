@@ -628,6 +628,7 @@ def apply_update(
         resulting_understanding_id=current_understanding.understanding_id,
         resulting_understanding=new_version,
         known_revisions=(*existing_conclusions, *revisions),
+        actions=actions,
         now=now,
     )
     return UnderstandingTransition(
@@ -645,6 +646,14 @@ def apply_challenge_dispositions(
     resulting_understanding_id: UnderstandingId,
     resulting_understanding: UnderstandingVersion,
     known_revisions: tuple[ConclusionRevision, ...],
+    actions: tuple[
+        ProposedConclusion
+        | ConfirmConclusion
+        | CorrectConclusion
+        | ReplaceConclusion
+        | WithdrawConclusion,
+        ...,
+    ],
     now: _datetime.datetime,
 ) -> tuple[ChallengeEffect, ...]:
     """Validate and apply only explicitly addressed challenge dispositions."""
@@ -698,48 +707,71 @@ def apply_challenge_dispositions(
             )
             continue
         if isinstance(disposition, ResolvedChallengeDisposition):
-            if disposition.resulting_understanding_id != resulting_understanding_id:
-                raise RecordingValidationError(
-                    "a resolution must name the resulting understanding"
-                )
-            if (
-                disposition.resulting_version.value
-                != resulting_understanding.version.value
-            ):
-                raise RecordingValidationError(
-                    "a resolution must name the new understanding version"
-                )
-            cited: set[tuple[ConclusionId, int]] = set()
-            for ref in disposition.conclusions:
-                cited.add(
-                    _resolution_target(
-                        ref,
-                        understanding_id=resulting_understanding_id,
-                        membership=membership,
-                        by_revision=by_revision,
-                        withdrawn=False,
+            replacement_by_old: dict[ConclusionId, ConclusionId] = {}
+            for action in actions:
+                if not isinstance(action, ReplaceConclusion):
+                    continue
+                if action.old.conclusion_id in replacement_by_old:
+                    raise RecordingValidationError(
+                        "challenge resolution replacement mapping is ambiguous"
                     )
+                replacement_by_old[action.old.conclusion_id] = (
+                    action.new_conclusion_id
                 )
-            for ref in disposition.withdrawn:
-                cited.add(
-                    _resolution_target(
-                        ref,
-                        understanding_id=resulting_understanding_id,
-                        membership=membership,
-                        by_revision=by_revision,
-                        withdrawn=True,
-                    )
-                )
-            if len(cited) != len(disposition.conclusions) + len(disposition.withdrawn):
+
+            target_ids = (
+                disposition.target_conclusion_ids
+                if disposition.target_conclusion_ids
+                else tuple(ref.conclusion_id for ref in challenge.target_conclusions)
+            )
+            if len(set(target_ids)) != len(target_ids):
                 raise RecordingValidationError(
-                    "a resolution cites one conclusion revision twice"
+                    "a challenge resolution names one conclusion lineage twice"
                 )
+            membership_by_id = {
+                ref.conclusion_id: ref for ref in resulting_understanding.conclusions
+            }
+            conclusions: list[ConclusionRevisionRef] = []
+            withdrawn: list[ConclusionRevisionRef] = []
+            resolved_ids: set[ConclusionId] = set()
+            for target_id in target_ids:
+                resolved_id = target_id
+                if resolved_id not in membership_by_id:
+                    replacement = replacement_by_old.get(target_id)
+                    if replacement is None:
+                        raise RecordingValidationError(
+                            "challenge resolution target does not identify a "
+                            f"resulting conclusion: {target_id.value}"
+                        )
+                    resolved_id = replacement
+                if resolved_id in resolved_ids:
+                    raise RecordingValidationError(
+                        "challenge resolution targets collapse to one resulting "
+                        f"conclusion: {resolved_id.value}"
+                    )
+                resolved_ids.add(resolved_id)
+                ref = membership_by_id.get(resolved_id)
+                if ref is None:
+                    raise RecordingValidationError(
+                        "challenge resolution replacement is not in the "
+                        f"resulting membership: {resolved_id.value}"
+                    )
+                revision = by_revision.get((ref.conclusion_id, ref.revision.value))
+                if revision is None:
+                    raise RecordingValidationError(
+                        "challenge resolution resulting revision is missing: "
+                        f"{ref.conclusion_id.value}@{ref.revision.value}"
+                    )
+                if isinstance(revision.content, WithdrawnConclusion):
+                    withdrawn.append(ref)
+                else:
+                    conclusions.append(ref)
             resolution = ChallengeResolution(
                 reasoning=disposition.reasoning,
-                resulting_understanding_id=disposition.resulting_understanding_id,
-                resulting_version=disposition.resulting_version,
-                conclusions=disposition.conclusions,
-                withdrawn=disposition.withdrawn,
+                resulting_understanding_id=resulting_understanding_id,
+                resulting_version=resulting_understanding.version,
+                conclusions=tuple(conclusions),
+                withdrawn=tuple(withdrawn),
                 evidence=disposition.evidence,
             )
             record = ResolvedChallengeRecord(
@@ -762,44 +794,6 @@ def apply_challenge_dispositions(
             f"unhandled challenge disposition: {type(disposition).__name__}"
         )
     return tuple(effects)
-
-
-def _resolution_target(
-    ref: ConclusionRevisionRef,
-    *,
-    understanding_id: UnderstandingId,
-    membership: set[tuple[ConclusionId, int]],
-    by_revision: dict[tuple[ConclusionId, int], ConclusionRevision],
-    withdrawn: bool,
-) -> tuple[ConclusionId, int]:
-    """Validate one resolution target against the resulting snapshot."""
-    if ref.understanding_id != understanding_id:
-        raise RecordingValidationError(
-            "a challenge resolution cites another understanding"
-        )
-    key = (ref.conclusion_id, ref.revision.value)
-    if key not in by_revision:
-        raise RecordingValidationError(
-            "a challenge resolution cites a revision that does not exist: "
-            f"{ref.conclusion_id.value}@{ref.revision.value}"
-        )
-    if key not in membership:
-        raise RecordingValidationError(
-            "a challenge resolution cites a revision outside the resulting "
-            f"version: {ref.conclusion_id.value}@{ref.revision.value}"
-        )
-    content = by_revision[key].content
-    if withdrawn and not isinstance(content, WithdrawnConclusion):
-        raise RecordingValidationError(
-            "a withdrawn resolution target is not withdrawn: "
-            f"{ref.conclusion_id.value}@{ref.revision.value}"
-        )
-    if not withdrawn and isinstance(content, WithdrawnConclusion):
-        raise RecordingValidationError(
-            "a concluded resolution target is withdrawn: "
-            f"{ref.conclusion_id.value}@{ref.revision.value}"
-        )
-    return key
 
 
 def create_challenge(

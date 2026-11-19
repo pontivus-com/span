@@ -180,10 +180,7 @@ class ResolvedChallengeDisposition:
     challenge_id: ChallengeId
     expected_challenge_revision: ChallengeRevision
     reasoning: str
-    resulting_understanding_id: UnderstandingId
-    resulting_version: UnderstandingVersionNumber
-    conclusions: tuple[ConclusionRevisionRef, ...] = ()
-    withdrawn: tuple[ConclusionRevisionRef, ...] = ()
+    target_conclusion_ids: tuple[ConclusionId, ...] = ()
     evidence: tuple[EvidenceRef, ...] = ()
 
     def __post_init__(self) -> None:
