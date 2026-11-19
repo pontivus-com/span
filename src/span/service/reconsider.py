@@ -222,8 +222,8 @@ class ReconsiderService:
                 )
                 if paths:
                     scopes.append(m.EvidenceScope(paths=tuple(paths)))
-        source_observations: set[str] = set()
-        discovery_observations: set[str] = set()
+        source_observations: dict[str, m.SourceObservation] = {}
+        discovery_observations: dict[str, m.DiscoveryObservation] = {}
         for changed in surfaces:
             for item in changed.conclusions:
                 if (
@@ -249,13 +249,20 @@ class ReconsiderService:
                         scopes.append(
                             m.EvidenceScope(evidence_refs=(observation.evidence,))
                         )
-                        source_observations.add(dependency.observation_id.value)
+                        source_observations[dependency.observation_id.value] = observation
                     elif isinstance(dependency, m.DiscoverySupport):
                         observation = self._store.get_discovery_observation(
                             dependency.observation_id.value
                         )
+                        if observation.repository_id != repository_id:
+                            raise RecordingValidationError(
+                                "re-establishment discovery observation belongs to "
+                                "another repository"
+                            )
                         scopes.append(observation.scope)
-                        discovery_observations.add(dependency.observation_id.value)
+                        discovery_observations[dependency.observation_id.value] = (
+                            observation
+                        )
         context_id = self._new_context_id()
         context = issue_context(
             self._store,
@@ -266,20 +273,8 @@ class ReconsiderService:
             new_context_id=lambda: context_id,
         )
         for observation_id in sorted(source_observations):
-            source_observation = self._store.get_source_observation(observation_id)
-            if source_observation.repository_id != repository_id:
-                raise RecordingValidationError(
-                    "re-establishment source observation belongs to another repository"
-                )
             self._store.add_context_evidence(context_id, observation_id)
         for observation_id in sorted(discovery_observations):
-            discovery_observation = self._store.get_discovery_observation(
-                observation_id
-            )
-            if discovery_observation.repository_id != repository_id:
-                raise RecordingValidationError(
-                    "re-establishment discovery observation belongs to another repository"
-                )
             self._store.add_context_discovery_evidence(context_id, observation_id)
         return m.InvestigationContextRef(
             repository_id=repository_id,
