@@ -646,6 +646,104 @@ def apply_update(
     )
 
 
+def _resolved_challenge_effect(
+    challenge: Challenge,
+    disposition: ResolvedChallengeDisposition,
+    new_revision: ChallengeRevision,
+    resulting_understanding: UnderstandingVersion,
+    by_revision: dict[tuple[ConclusionId, int], ConclusionRevision],
+    actions: tuple[
+        ProposedConclusion
+        | ConfirmConclusion
+        | CorrectConclusion
+        | ReplaceConclusion
+        | WithdrawConclusion,
+        ...,
+    ],
+    now: _datetime.datetime,
+) -> ChallengeEffect:
+    """Derive one resolved challenge entirely from the resulting atomic state."""
+    replacement_by_old: dict[ConclusionId, ConclusionId] = {}
+    for action in actions:
+        if not isinstance(action, ReplaceConclusion):
+            continue
+        if action.old.conclusion_id in replacement_by_old:
+            raise RecordingValidationError(
+                "challenge resolution replacement mapping is ambiguous"
+            )
+        replacement_by_old[action.old.conclusion_id] = action.new_conclusion_id
+
+    target_ids = (
+        disposition.target_conclusion_ids
+        if disposition.target_conclusion_ids
+        else tuple(ref.conclusion_id for ref in challenge.target_conclusions)
+    )
+    if len(set(target_ids)) != len(target_ids):
+        raise RecordingValidationError(
+            "a challenge resolution names one conclusion lineage twice"
+        )
+    membership_by_id = {
+        ref.conclusion_id: ref for ref in resulting_understanding.conclusions
+    }
+    conclusions: list[ConclusionRevisionRef] = []
+    withdrawn: list[ConclusionRevisionRef] = []
+    resolved_ids: set[ConclusionId] = set()
+    for target_id in target_ids:
+        resolved_id = target_id
+        if resolved_id not in membership_by_id:
+            replacement = replacement_by_old.get(target_id)
+            if replacement is None:
+                raise RecordingValidationError(
+                    "challenge resolution target does not identify a "
+                    f"resulting conclusion: {target_id.value}"
+                )
+            resolved_id = replacement
+        if resolved_id in resolved_ids:
+            raise RecordingValidationError(
+                "challenge resolution targets collapse to one resulting "
+                f"conclusion: {resolved_id.value}"
+            )
+        resolved_ids.add(resolved_id)
+        ref = membership_by_id.get(resolved_id)
+        if ref is None:
+            raise RecordingValidationError(
+                "challenge resolution replacement is not in the "
+                f"resulting membership: {resolved_id.value}"
+            )
+        revision = by_revision.get((ref.conclusion_id, ref.revision.value))
+        if revision is None:
+            raise RecordingValidationError(
+                "challenge resolution resulting revision is missing: "
+                f"{ref.conclusion_id.value}@{ref.revision.value}"
+            )
+        if isinstance(revision.content, WithdrawnConclusion):
+            withdrawn.append(ref)
+        else:
+            conclusions.append(ref)
+
+    resolution = ChallengeResolution(
+        reasoning=disposition.reasoning,
+        resulting_understanding_id=resulting_understanding.understanding_id,
+        resulting_version=resulting_understanding.version,
+        conclusions=tuple(conclusions),
+        withdrawn=tuple(withdrawn),
+        evidence=disposition.evidence,
+    )
+    record = ResolvedChallengeRecord(
+        challenge_revision=new_revision,
+        resolution=resolution,
+        recorded_at=now,
+    )
+    return ChallengeEffect(
+        challenge_id=challenge.challenge_id,
+        previous_revision=challenge.challenge_revision,
+        new_revision=new_revision,
+        state=ChallengeState.RESOLVED,
+        disposition=record,
+        resolution=resolution,
+    )
+
+
 def apply_challenge_dispositions(
     *,
     existing_challenges: tuple[Challenge, ...],
@@ -710,12 +808,19 @@ def apply_challenge_dispositions(
             )
             continue
         if isinstance(disposition, ResolvedChallengeDisposition):
-            replacement_by_old: dict[ConclusionId, ConclusionId] = {}
-            for action in actions:
-                if not isinstance(action, ReplaceConclusion):
-                    continue
-                if action.old.conclusion_id in replacement_by_old:
-                    raise RecordingValidationError(
+            effects.append(
+                _resolved_challenge_effect(
+                    challenge,
+                    disposition,
+                    new_revision,
+                    resulting_understanding,
+                    by_revision,
+                    actions,
+                    now,
+                )
+            )
+            continue
+        raise RecordingValidationError(
                         "challenge resolution replacement mapping is ambiguous"
                     )
                 replacement_by_old[action.old.conclusion_id] = action.new_conclusion_id
