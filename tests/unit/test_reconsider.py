@@ -450,6 +450,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.challenge.understanding_id.value, "u-a")
         self.assertEqual(result.challenge.target_conclusions, (target,))
         self.assertEqual(result.challenge.state, m.ChallengeState.OPEN)
+
     def test_challenge_rejects_unadmitted_evidence(self) -> None:
         with self.assertRaisesRegex(RecordingValidationError, "not admitted"):
             self.service.reconsider(
