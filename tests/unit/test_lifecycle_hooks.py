@@ -106,6 +106,8 @@ class LifecycleHooksTest(unittest.TestCase):
             self.assertIn("governs semantic understanding", output)
             self.assertIn("_ask", output)
             self.assertIn("direct tools", output)
+            self.assertIn("native read/search", output)
+            self.assertIn("shell commands", output)
             self.assertNotIn("current", output)
             self.assertNotIn("stale", output)
 

@@ -85,6 +85,39 @@ class SupportServiceTest(unittest.TestCase):
         )
         return observation_id
 
+    def _put_ranged_observation(
+        self,
+        observation_id: str,
+        locator: str,
+        start_line: int,
+        end_line: int,
+    ) -> str:
+        content = (self.root / locator).read_text(encoding="utf-8")
+        lines = content.splitlines(keepends=True)
+        source_range = m.SourceRange(start_line, end_line)
+        excerpt = "".join(lines[start_line - 1 : end_line])
+        ranged_digest = hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+        whole_digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        self.store.put_source_observation(
+            m.SourceObservation(
+                observation_id=m.SourceObservationId(observation_id),
+                repository_id="repo-1",
+                evidence=m.EvidenceRef(
+                    evidence_id=m.EvidenceId(f"ev-{locator}"),
+                    repository_id="repo-1",
+                    source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                    locator=locator,
+                    revision_or_fingerprint=whole_digest,
+                ),
+                content_digest=m.ContentDigest(f"sha256:{ranged_digest}"),
+                captured_at=NOW,
+                total_lines=len(lines),
+                delivered_ranges=(source_range,),
+                whole_file=False,
+            )
+        )
+        return observation_id
+
     def _basis(self) -> m.SemanticBasis:
         return m.SemanticBasis(
             derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
@@ -158,6 +191,99 @@ class SupportServiceTest(unittest.TestCase):
         _write(self.root, "docs/rule.md", "changed rule\n")
         self.assertEqual(
             self.service.evaluate_version("u-a").state, m.SupportState.CURRENT
+        )
+
+    def test_ranged_support_ignores_unrelated_edit_below_range(self) -> None:
+        _write(
+            self.root,
+            "src/ranged.py",
+            "header\ntarget\ncontext\nfooter\n",
+        )
+        observation = self._put_ranged_observation(
+            "obs-range", "src/ranged.py", 2, 2
+        )
+        self._create(
+            "u-range",
+            "sub-range",
+            (m.SourceSupport(observation_id=m.SourceObservationId(observation)),),
+        )
+        _write(
+            self.root,
+            "src/ranged.py",
+            "header\ntarget\ncontext\nchanged footer\n",
+        )
+        self.assertEqual(
+            self.service.evaluate_version("u-range").state,
+            m.SupportState.CURRENT,
+        )
+
+    def test_ranged_support_reassesses_edit_inside_range(self) -> None:
+        _write(
+            self.root,
+            "src/ranged.py",
+            "header\ntarget\ncontext\nfooter\n",
+        )
+        observation = self._put_ranged_observation(
+            "obs-range", "src/ranged.py", 2, 2
+        )
+        self._create(
+            "u-range",
+            "sub-range",
+            (m.SourceSupport(observation_id=m.SourceObservationId(observation)),),
+        )
+        _write(
+            self.root,
+            "src/ranged.py",
+            "header\nchanged target\ncontext\nfooter\n",
+        )
+        self.assertEqual(
+            self.service.evaluate_version("u-range").state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+
+    def test_ranged_support_conservatively_reassesses_insertion_above(self) -> None:
+        _write(
+            self.root,
+            "src/ranged.py",
+            "header\ntarget\ncontext\nfooter\n",
+        )
+        observation = self._put_ranged_observation(
+            "obs-range", "src/ranged.py", 2, 2
+        )
+        self._create(
+            "u-range",
+            "sub-range",
+            (m.SourceSupport(observation_id=m.SourceObservationId(observation)),),
+        )
+        _write(
+            self.root,
+            "src/ranged.py",
+            "inserted\nheader\ntarget\ncontext\nfooter\n",
+        )
+        self.assertEqual(
+            self.service.evaluate_version("u-range").state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+
+    def test_unbindable_range_falls_back_to_whole_file_identity(self) -> None:
+        _write(
+            self.root,
+            "src/ranged.py",
+            "header\ntarget\ncontext\nfooter\n",
+        )
+        observation = self._put_ranged_observation(
+            "obs-range", "src/ranged.py", 3, 4
+        )
+        self._create(
+            "u-range",
+            "sub-range",
+            (m.SourceSupport(observation_id=m.SourceObservationId(observation)),),
+        )
+        _write(self.root, "src/ranged.py", "header\ntarget\n")
+        evaluation = self.service.evaluate_version("u-range")
+        self.assertEqual(
+            evaluation.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
         )
 
     def test_sibling_conclusions_retain_independent_support(self) -> None:
