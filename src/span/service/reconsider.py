@@ -238,6 +238,17 @@ class ReconsiderService:
                 scopes.append(content.scope)
                 for dependency in content.support:
                     if isinstance(dependency, m.SourceSupport):
+                        observation = self._store.get_source_observation(
+                            dependency.observation_id.value
+                        )
+                        if observation.repository_id != repository_id:
+                            raise RecordingValidationError(
+                                "re-establishment source observation belongs to "
+                                "another repository"
+                            )
+                        scopes.append(
+                            m.EvidenceScope(evidence_refs=(observation.evidence,))
+                        )
                         source_observations.add(dependency.observation_id.value)
                     elif isinstance(dependency, m.DiscoverySupport):
                         observation = self._store.get_discovery_observation(

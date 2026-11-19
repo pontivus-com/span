@@ -196,7 +196,10 @@ class ReconsiderServiceTest(unittest.TestCase):
         context = self.store.get_context(result.context.context_id.value)
         self.assertEqual(
             context.scope,
-            m.EvidenceScope(paths=("src/a.py", "src/b.py")),
+            m.EvidenceScope(
+                paths=("src/a.py", "src/b.py"),
+                evidence_refs=(self.store.get_source_observation("obs-a").evidence,),
+            ),
         )
 
     def test_historical_revision_is_not_an_actionable_change_target(self) -> None:
