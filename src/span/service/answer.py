@@ -102,8 +102,11 @@ class AnswerService:
                 request.selector.understanding_id
             )
             if selected_understanding is None:
+                identity = request.selector.understanding_id
                 raise RecordingValidationError(
-                    f"unknown understanding: {request.selector.understanding_id!r}"
+                    f"unknown understanding: {identity!r}",
+                    public_identity=identity,
+                    public_cause=f"the exact understanding {identity!r} does not exist",
                 )
             if selected_understanding.repository_id != repository_id:
                 raise RecordingValidationError(
@@ -492,7 +495,12 @@ class AnswerService:
             understanding = self._store.find_understanding(selector.understanding_id)
             if understanding is None:
                 raise RecordingValidationError(
-                    f"unknown understanding: {selector.understanding_id!r}"
+                    f"unknown understanding: {selector.understanding_id!r}",
+                    public_identity=selector.understanding_id,
+                    public_cause=(
+                        "the exact understanding "
+                        f"{selector.understanding_id!r} does not exist"
+                    ),
                 )
             version_number = (
                 understanding.current_version.value
@@ -509,9 +517,14 @@ class AnswerService:
                     selector.understanding_id, version_number
                 )
                 if version is None:
+                    identity = f"{selector.understanding_id}@{version_number}"
                     raise RecordingValidationError(
-                        "unknown understanding version: "
-                        f"{selector.understanding_id}@{version_number}"
+                        f"unknown understanding version: {identity}",
+                        public_identity=identity,
+                        public_cause=(
+                            f"the exact understanding version {identity!r} "
+                            "does not exist"
+                        ),
                     )
             try:
                 support: m.UnderstandingSupport | m.SupportUnavailable = (
@@ -541,12 +554,23 @@ class AnswerService:
             raise RecordingValidationError(
                 f"no receipt for request {selector.request_id!r}"
             )
-        return m.RetrievedReceipt(
-            receipt=receipt,
-            verification_runs=tuple(
+        try:
+            verification_runs = tuple(
                 self._store.get_verification_run(run_id.value)
                 for run_id in receipt.accepted_verification_run_ids
-            ),
+            )
+        except self._store.operational_errors:
+            return m.Unavailable(
+                operation="ask",
+                failure="accepted receipt references unavailable retained history",
+                recovery=(
+                    "report the unavailable history and preserve the receipt; "
+                    "do not repeat the historical write"
+                ),
+            )
+        return m.RetrievedReceipt(
+            receipt=receipt,
+            verification_runs=verification_runs,
         )
 
     def _evidence_page(self, request: m.AskRequest) -> m.AskResult:

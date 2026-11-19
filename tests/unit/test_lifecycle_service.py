@@ -1168,6 +1168,28 @@ class LifecycleServiceTest(unittest.TestCase):
             m.RejectionCauseKind.VALIDATION.value,
         )
 
+    def test_unknown_update_identity_is_actionable(self) -> None:
+        with self.assertRaises(RecordingValidationError) as raised:
+            self._service("ctx-never-issued").record(
+                w.RecordRequestWire(
+                    repository_id="repo-1",
+                    request_id="sub-unknown",
+                    kind=m.RecordKind.UNDERSTANDING,
+                    understanding_id="u:missing",
+                    expected_version=1,
+                    actions=w.RecordActionsWire(
+                        add=(
+                            w.AddConclusionWire(
+                                conclusion="Another conclusion",
+                                locator="src/a.py",
+                            ),
+                        )
+                    ),
+                )
+            )
+        self.assertEqual(raised.exception.public_identity, "u:missing")
+        self.assertIn("does not exist", raised.exception.public_cause or "")
+
     def test_context_free_update_checks_expected_version_before_scope_lookup(self) -> None:
         self.service.record(_create_wire())
         with self.assertRaises(RecordingConflict) as raised:

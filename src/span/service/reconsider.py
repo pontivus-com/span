@@ -25,6 +25,14 @@ from span.service.support import SupportService
 __all__ = ["ReconsiderService"]
 
 
+def _unknown_exact(kind: str, identity: str) -> RecordingValidationError:
+    return RecordingValidationError(
+        f"unknown {kind}: {identity!r}",
+        public_identity=identity,
+        public_cause=f"the exact {kind} {identity!r} does not exist",
+    )
+
+
 class ReconsiderService:
     """Compose one bounded reconsideration result over stored understanding."""
 
@@ -284,10 +292,26 @@ class ReconsiderService:
         self, repository_id: str, challenge: m.ChallengeRaise
     ) -> m.Challenged:
         """Raise one explicit dispute through reconsider (L2 §4.3)."""
+        understanding = self._store.find_understanding(challenge.understanding_id)
+        if understanding is None:
+            raise _unknown_exact("understanding", challenge.understanding_id)
+        version = self._store.find_version(
+            challenge.understanding_id, challenge.target_version
+        )
+        if version is None:
+            raise _unknown_exact(
+                "understanding version",
+                f"{challenge.understanding_id}@{challenge.target_version}",
+            )
         context_id = (
             challenge.context.context_id
             if challenge.context is not None
-            else self._challenge_context(repository_id, challenge)
+            else self._challenge_context(
+                repository_id,
+                challenge,
+                understanding=understanding,
+                version=version,
+            )
         )
         for reference in challenge.evidence:
             admitted = self._store.find_admitted_evidence(
@@ -335,21 +359,13 @@ class ReconsiderService:
         )
 
     def _challenge_context(
-        self, repository_id: str, challenge: m.ChallengeRaise
+        self,
+        repository_id: str,
+        challenge: m.ChallengeRaise,
+        *,
+        understanding: m.Understanding,
+        version: m.UnderstandingVersion,
     ) -> m.InvestigationContextId:
-        understanding = self._store.find_understanding(challenge.understanding_id)
-        if understanding is None:
-            raise RecordingValidationError(
-                f"unknown understanding: {challenge.understanding_id!r}"
-            )
-        version = self._store.find_version(
-            challenge.understanding_id, challenge.target_version
-        )
-        if version is None:
-            raise RecordingValidationError(
-                "unknown understanding version: "
-                f"{challenge.understanding_id}@{challenge.target_version}"
-            )
         scopes = [version.scope]
         if understanding.surface.kind is m.SurfaceKind.FILE:
             scopes.append(m.EvidenceScope(paths=(understanding.surface.locator,)))

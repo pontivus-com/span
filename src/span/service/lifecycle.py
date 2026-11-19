@@ -207,7 +207,11 @@ class LifecycleService:
                 )
             if self._store.find_surface(surface.key) is None:
                 raise RecordingValidationError(
-                    f"unknown surface: {surface.key.locator}"
+                    f"unknown surface: {surface.key.locator}",
+                    public_identity=surface.key.locator,
+                    public_cause=(
+                        f"the exact surface {surface.key.locator!r} does not exist"
+                    ),
                 )
             updated = self._store.update_surface(
                 surface,
@@ -244,7 +248,12 @@ class LifecycleService:
                 observation = self._store.find_source_observation(wire.observation_id)
                 if observation is None:
                     raise RecordingValidationError(
-                        f"unknown source observation: {wire.observation_id!r}"
+                        f"unknown source observation: {wire.observation_id!r}",
+                        public_identity=wire.observation_id,
+                        public_cause=(
+                            "the exact source observation "
+                            f"{wire.observation_id!r} does not exist"
+                        ),
                     )
                 if observation.repository_id != wire.identity.repository_id:
                     raise RecordingValidationError(
@@ -449,7 +458,11 @@ class LifecycleService:
         understanding = self._store.find_understanding(understanding_id)
         if understanding is None:
             raise RecordingValidationError(
-                f"unknown understanding: {understanding_id!r}"
+                f"unknown understanding: {understanding_id!r}",
+                public_identity=understanding_id,
+                public_cause=(
+                    f"the exact understanding {understanding_id!r} does not exist"
+                ),
             )
         if understanding.current_version.value != expected:
             raise RecordingConflict(

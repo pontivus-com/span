@@ -311,10 +311,10 @@ def _rejected(request: object, exc: Exception) -> m.Rejected:
     """Project one typed rejection without serializing internal diagnostics."""
     rejection = exc if isinstance(exc, Rejection) else Rejection("invalid request")
     return m.Rejected(
-        identity=_request_identity(request),
+        identity=rejection.public_identity or _request_identity(request),
         required_action=rejection.required_action,
         cause_kind=rejection.cause_kind,
-        cause=_public_rejection_cause(rejection.cause_kind),
+        cause=rejection.public_cause or _public_rejection_cause(rejection.cause_kind),
         current_version=rejection.current_version,
         current_boundary_version=rejection.current_boundary_version,
     )

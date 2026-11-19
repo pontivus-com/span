@@ -93,8 +93,15 @@ class RecordingValidationError(Rejection):
         cause: str,
         *,
         cause_kind: RejectionCauseKind = RejectionCauseKind.VALIDATION,
+        public_identity: str | None = None,
+        public_cause: str | None = None,
     ) -> None:
-        super().__init__(cause, cause_kind=cause_kind)
+        super().__init__(
+            cause,
+            cause_kind=cause_kind,
+            public_identity=public_identity,
+            public_cause=public_cause,
+        )
 
     @classmethod
     def context_required(cls, cause: str) -> RecordingValidationError:

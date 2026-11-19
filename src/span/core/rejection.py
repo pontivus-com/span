@@ -149,6 +149,8 @@ class Rejection(ValueError):
         cause_kind: RejectionCauseKind = RejectionCauseKind.VALIDATION,
         current_version: int | None = None,
         current_boundary_version: int | None = None,
+        public_identity: str | None = None,
+        public_cause: str | None = None,
     ) -> None:
         super().__init__(cause)
         self.cause = cause
@@ -156,6 +158,8 @@ class Rejection(ValueError):
         self.required_action = required_action_for(cause_kind)
         self.current_version = current_version
         self.current_boundary_version = current_boundary_version
+        self.public_identity = public_identity
+        self.public_cause = public_cause
 
 
 class SurfaceConflict(ValueError):

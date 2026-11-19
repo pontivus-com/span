@@ -258,6 +258,25 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["cause_kind"], "source_drift")
         self.assertEqual(payload["cause"], "recorded support is not current")
 
+    def test_exact_lookup_rejection_names_public_identity(self):
+        from span.core.recording import RecordingValidationError
+
+        result = self._dispatch(
+            _context(),
+            RecordingValidationError(
+                "internal lookup text",
+                public_identity="u:missing",
+                public_cause="the exact understanding 'u:missing' does not exist",
+            ),
+        )
+        payload = json.loads(result.content)
+        self.assertEqual(payload["$type"], "Rejected")
+        self.assertEqual(payload["identity"], "u:missing")
+        self.assertEqual(
+            payload["cause"],
+            "the exact understanding 'u:missing' does not exist",
+        )
+
     def test_version_conflict_names_the_current_version(self):
         from span.core.recording import RecordingConflict
 
