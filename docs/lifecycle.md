@@ -7,7 +7,7 @@ procedure and [MCP reference](mcp.md) for the three-tool grammar.
 
 ```
 SETUP (installer)
-  bind repository, declared authority seeds/bindings, schema 11
+  bind repository, declared authority seeds/bindings, schema 13
   → no understanding is created
 
 ORDINARY SESSION
@@ -44,14 +44,18 @@ selector, accepted coordinates and post-commit qualification; the immutable
 receipt remains in storage for exact retrieval. Surface declaration returns
 `SurfaceDeclared`.
 
-- `kind="understanding"` with `conclusion` and exactly one evidence mode —
-  `locator`, `observation_id`, or non-empty `support` — creates version 1; scope
-  is supplied or derived independently.
+- `kind="understanding"` with `conclusion` and dependency evidence from
+  `locator`, `observation_id`, or non-empty `support` creates version 1; scope
+  is supplied or derived independently. A locator may accompany support solely
+  as carried semantic scope; support remains the complete dependency set.
 - `actions.add`, `confirm`, `correct`, `replace`, and `withdraw` update an exact
   expected version; multiple actions apply atomically. Actions are compact
   deltas: name the conclusion and one evidence mode; Span derives the old
   revision, unchanged content metadata, and the mechanical basis.
 - `challenge_dispositions` settles a challenge raised by `reconsider`.
+  Resolved dispositions name semantic target lineages when needed; Span derives
+  the resulting understanding/version/revision coordinates from the same atomic
+  update.
 - `kind="verification"` records an independent run against the observations or
   evidence actually tested.
 - `kind="surface"` creates a service/domain boundary or updates it with
@@ -90,7 +94,10 @@ understanding version, evidence references, and present non-current state in
 alongside the count. Neither is current answer content; to read the statement,
 use `ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`.
 
-Challenges settle only through an explicit disposition in `record`. A new
+Challenges settle only through an explicit disposition in `record`. A resolved
+disposition carries the challenge/revision, reasoning, optional semantic target
+lineages and optional context-bound evidence references; it never carries the
+resulting version or revision coordinates that the same request creates. A new
 version, a passing test, or a matching fingerprint does not settle a dispute.
 Current support does not certify meaning or complete investigation. Saved gaps
 and open disputes remain relevant to the agent's judgment.
@@ -104,9 +111,11 @@ correctness is evaluated by the lifecycle operations.
 ## Store transition
 
 The runtime never migrates at open. Older stores use the offline
-inspect/apply/verify/rollback commands in [install](install.md). Schema 10
-carries the same semantic tables as the target, so each understanding maps to
-the path surface named by its recorded single-file scope, with unresolved rows
-preserved and reported. Older schemas carry a different meaning: only the
-repository binding and declared seeds are carried forward, and their legacy
-semantic content remains historical export.
+inspect/apply/verify/rollback commands in [install](install.md). Schema 13 is the
+0.11.0 runtime format. A schema-12 store first drains live operational contexts;
+the transition preserves durable semantic/audit history, observations and
+receipts, and deliberately does not reactivate schema-12 contexts or their
+membership because their old whole-request digest cannot be reconstructed as
+the new canonical context binding. Schema 10/11 use their documented mappings
+into the current target. Schemas 7–9 retain only repository binding and declared
+seeds; their legacy semantic content remains historical export.

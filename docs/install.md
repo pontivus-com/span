@@ -359,7 +359,7 @@ data is unused.
 
 ## Upgrade an existing store
 
-Span 0.10.0 uses schema 11. The runtime never migrates at open; an older store
+Span 0.11.0 uses schema 13. The runtime never migrates at open; an older store
 fails closed with a transition action.
 
 Stop every process using the store, then run one phase at a time for each
@@ -382,13 +382,20 @@ span-install --data-dir <DATA_DIR> \
 `inspect` and `verify` are observational. `apply` requires an explicit root
 whose basename matches the repository ID, holds exclusive store ownership
 through activation, archives a WAL-consistent copy, writes a lossless raw
-export and readable report, stages schema 11, verifies it, and atomically
-activates it. Supported source schemas are 7, 8, 9, and 10. Refusals (live
-writer, unsupported schema, failed integrity, insufficient space, wrong root)
-change nothing.
+export and readable report, stages schema 13, verifies it, and atomically
+activates it. Supported source schemas are 7 through 12. A schema-12 cutover
+also refuses while any operational context is still live under its recorded
+liveness/expiry state; waiting an arbitrary number of days is not evidence of
+eligibility. Refusals (live writer, live schema-12 context, unsupported schema,
+failed integrity, insufficient space, wrong root) change nothing.
 
-A schema-10 store carries the same semantic tables as the target, so it is
-mapped, not discarded. Each understanding maps to the path surface named by its
+A schema-12 store preserves durable semantic/audit tables, observations and
+retained receipts but does not copy `investigation_contexts`,
+`context_evidence`, or `context_discovery_evidence`: the old request digest
+does not contain enough information to reconstruct the schema-13
+`binding_digest`. Receipt context IDs remain immutable historical coordinates.
+Schema-10 and schema-11 stores use their documented durable mappings into the
+same target. A schema-10 store is mapped, not discarded. Each understanding maps to the path surface named by its
 recorded scope when that scope names exactly one file; wider, empty, or
 directory scopes stay unresolved with a named reason and remain in the archive.
 `mapping.json` records every source and target identity, count, hash, and the
@@ -406,7 +413,7 @@ span-install --data-dir <DATA_DIR> \
 ```
 
 Before activation, rollback discards only owned staging. After activation, it
-preserves any schema-11 writes as `new-format-*.db` and restores the previous
+preserves any schema-13 writes as `new-format-*.db` and restores the previous
 store. Restart the old binary afterward.
 
 The archive, export, mapping, report, and restart-safe manifest live under

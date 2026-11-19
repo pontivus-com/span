@@ -584,12 +584,17 @@ to inspect internal context state. `OBSERVATION_NOT_ADMITTED` is the remedy gap 
 the field was right and the value was an id `ask` never returned, so “correct the
 named field” sent it back to the same call.
 
-The service and store raise a `Rejection`; the adapter copies
-`public_cause`, the typed kind, structured versions and required action into
-the public `Rejected` result and adds the request identity. The adapter must
-not call `str(exc)`, parse the cause, call `re.search`, or choose an action
-from words such as “context”, “drift”, or “current”. Internal diagnostics stay
-with the owning exception/log path.
+Stateful service/store validation raises `Rejection`. Structural decoding uses
+one internal `StructuralFault{coordinate, rule, message}` and aggregated
+`StructuralValidationError`; canonical branch rules and the strict decoder
+preserve that carrier instead of flattening it into exception text. For a
+recognized lifecycle tool the adapter projects those typed public coordinates
+into the existing `Rejected.identity/cause/required_action` fields with
+`VALIDATION`; it does not add another public result shape. Malformed transport
+envelopes and unknown tools stay on the protocol error path. The adapter copies
+stateful `public_cause`, typed kind, structured versions and required action
+without parsing exception text. Internal diagnostics stay with the owning
+exception/log path.
 
 **Public failure boundary.** Expected operational exceptions are classified by
 their typed owner and mapped by one shell-level table to stable public

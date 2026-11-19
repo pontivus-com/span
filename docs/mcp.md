@@ -24,9 +24,10 @@ The host supplies structural navigation and the installer owns setup. Neither is
 part of the default surface.
 
 `record` carries `kind` (`understanding`, `verification`, or `surface`). An
-understanding create is flat — one `conclusion` plus exactly one evidence mode
-(`locator`, `observation_id`, or non-empty `support`); scope is supplied or
-derived independently. `actions` is for updates and `action` for a surface
+understanding create is flat — one `conclusion` with dependency evidence from
+`locator`, `observation_id`, or non-empty `support`; scope is supplied or
+derived independently. A locator may accompany explicit support only as carried
+semantic scope; support remains the complete dependency set. `actions` is for updates and `action` for a surface
 declaration. Those are semantic fields, not separate tools. Only the current
 three names are registered. Any other operation name follows the ordinary typed
 `unknown_tool` error path and performs no work.
@@ -128,16 +129,19 @@ budget is also `Unavailable`; that is not a continuation-reference rejection.
 }
 ```
 
-A create carries one conclusion and exactly one evidence mode. `locator` cites
-source evidence and may also supply semantic scope; `observation_id` returned by explicit evidence admission may replace it;
-non-empty `support` is the complete typed dependency set the agent already
-holds. A locator may accompany explicit support as the carried code scope, but
-an observation id may not. Scope is supplied or derived independently through
+A create carries one conclusion. Its dependency evidence is a `locator`, an
+`observation_id` returned by explicit evidence admission, or non-empty
+`support`, which is the complete typed dependency set the agent already
+holds. A locator may accompany explicit support as carried code scope; in that
+combined form the locator adds no source dependency. An observation id may not
+accompany either form because it would be ignored by the declared dependency
+set. Scope is supplied or derived independently through
 `scope_paths`, the bound context, or a single carried path. `surface` is
 optional and derived from the carried scope. `assertion_nature` defaults to
 `DESCRIPTIVE`. A create takes no caller-created conclusion identity, no
 `action`, and no `actions`: `action` belongs to `kind="surface"` and `actions`
-to updates. Sending any of them is an ingress error.
+to updates. Sending any of them is a recognized lifecycle structural rejection; malformed
+transport envelopes and unknown tools remain transport errors.
 
 Updates use `actions` with `add`, `confirm`, `correct`, `replace`, or `withdraw`,
 plus `understanding_id` and `expected_version`. Multiple keys apply atomically.
@@ -164,7 +168,13 @@ unchanged content metadata, and the mechanical basis. Supply
 `add`, `correct`, or `replace`. Do not send `statement`, `basis_*`, `old_*`,
 `new_conclusion_id`, or a nested `new_conclusion`; those fields are not part of
 the public grammar. `challenge_dispositions` settles a challenge raised by
-`reconsider`.
+`reconsider`. An unresolved disposition carries `challenge_id`,
+`expected_challenge_revision`, `remaining_question`, and `basis`. A resolved
+disposition carries `challenge_id`, `expected_challenge_revision`, `reasoning`,
+optional `target_conclusion_ids`, and optional context-bound `evidence_refs`.
+When targets are omitted Span uses the challenge's target lineages. The caller
+never sends a resulting understanding/version/revision; Span derives those
+coordinates from the same atomic update, including a same-request replacement.
 
 A create may supply the canonical `context` reference returned by explicit evidence admission or `reconsider`.
 The context's bound target/scope are used where applicable; do not also send a conflicting explicit target — that conflict is rejected. Without a context, a create requires
@@ -241,7 +251,6 @@ Do not substitute scenario text for structural evidence.
   "request_id": "verify-ui-1",
   "kind": "verification",
   "run": {
-    "repository_id": "repo-1",
     "scope_description": "UI form suite",
     "scope_paths": ["ui/"],
     "evidence": [{"locator": "ui/tests/form.test.ts", "ranges": []}],
@@ -262,7 +271,9 @@ membership internally.
 Results: `UnderstandingRecorded`, `VerificationRecorded`, `SurfaceDeclared`,
 `Rejected`, or `Unavailable`. A rejection names the offending identity, the
 stable server-owned public cause text, the required action, and the structured current version or
-current boundary version when one exists; it is a result, not a transport error.
+current boundary version when one exists; recognized lifecycle request-shape
+failures are also `Rejected` with their public field coordinates. It is a
+result, not a transport error.
 An accepted write is never reported as a rejection because present support
 could not be evaluated; that outcome is `SupportUnavailable`. Ordinary acceptance
 carries a receipt selector rather than nesting the full receipt. Accepted
