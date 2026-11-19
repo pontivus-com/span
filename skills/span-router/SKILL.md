@@ -18,8 +18,8 @@ model, or decides a semantic claim.
 
 | About to… | Do instead |
 | --- | --- |
-| `Read` a file to understand it | `ask` |
-| `Grep` for a concept | `ask` |
+| Native `Read`/`Grep` to understand source | `ask` |
+| Shell read/search (`cat`, `rg`, `grep`, etc.) to understand source | `ask` |
 | Hit an ambiguous path or want a specific granularity | `ask` with the exact `surface` |
 | Edit a surface | `ask` first; `reconsider` after the edit |
 | Finish an investigation | `record` |
@@ -44,9 +44,11 @@ handles and never inspect internal context state.
 - **After establishing:** `record` one `kind`. Use `kind="understanding"` to
   create or update, `kind="verification"` to record a test/run, and
   `kind="surface"` to declare a service/domain boundary. A create is flat —
-  one `conclusion` plus exactly one evidence mode: `locator`, `observation_id`,
-  or non-empty `support`; scope is supplied or derived independently. `actions`
-  is for updates and `action` only for a surface declaration.
+  one `conclusion` with dependency evidence from `locator`,
+  `observation_id`, or non-empty `support`; a locator may accompany support
+  solely as carried semantic scope while observation remains exclusive. Scope
+  is supplied or derived independently. `actions` is for updates and `action`
+  only for a surface declaration.
 - **After editing:** `reconsider` the paths you just changed. It returns every
   surface to re-examine, why it was considered, per-conclusion support state,
   and the context for re-establishing what actually changed. A surface with no

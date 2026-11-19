@@ -32,7 +32,11 @@ conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
 ## Then
 
 Use the returned context with `record` or a challenge. Settle a
-challenge through `record` with named `challenge_dispositions`. Record new supported conclusions established during the investigation too.
+challenge through `record` with named `challenge_dispositions`. A resolved
+disposition supplies semantic intent (challenge/revision, reasoning, optional
+target lineage IDs and context-bound evidence refs); Span derives the resulting
+version/revision coordinates. Record new supported conclusions established
+during the investigation too.
 Containment alone does not require changing a conclusion.
 
 Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md), [lifecycle](https://github.com/pontivus-com/span/blob/master/docs/lifecycle.md).

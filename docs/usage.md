@@ -39,10 +39,12 @@ served as current on the strength of its wording.
    paths to see every affected surface, why it was considered, and which
    conclusions actually lost support.
 2. Record a coherent result with `record(kind="understanding")`. A create is
-   one conclusion with exactly one evidence mode: `locator`, the
-   `observation_id` returned by explicit evidence admission, or non-empty `support`. Scope is supplied
-   or derived independently through `scope_paths`, the context, or a surface.
-   Cite what you already hold.
+   one conclusion with dependency evidence from `locator`, the
+   `observation_id` returned by explicit evidence admission, or non-empty
+   `support`. A locator may accompany support solely as carried semantic scope;
+   support remains the complete dependency set and observation remains
+   exclusive. Scope is supplied or derived independently through `scope_paths`,
+   the context, or a surface. Cite what you already hold.
    Distinguish observed behavior from governing intent, and include unresolved
    questions with their basis as gaps. Use `actions.add`, `confirm`, `correct`,
    `replace`, or `withdraw` for an update; each action names the conclusion and

@@ -20,9 +20,11 @@ unresolved questions. Shape acceptance does not prove the prose is correct.
 ## Create and update
 
 `record(kind="understanding", conclusion, locator|observation_id|support)` creates
-an understanding and its first immutable version. `support` is the complete typed
-dependency set when the agent already holds one. Scope is supplied or derived
-independently through `scope_paths`, the context, or a declared surface. A
+an understanding and its first immutable version. `support` is the complete
+typed dependency set when the agent already holds one. A locator may accompany
+support solely as carried semantic scope and adds no dependency in that form;
+an observation id remains exclusive. Scope is supplied or derived independently
+through `scope_paths`, the context, or a declared surface. A
 question-bound context supplies its question/scope; an evidence-only context
 requires an explicit target within the admitted scope.
 
@@ -54,8 +56,11 @@ semantic write.
 `reconsider` records a dispute against an understanding/version and its
 specified conclusions. Challenge revisions are independent of understanding
 versions. `record` names the expected challenge revision and either
-records an unresolved question/basis or an evidence-backed resolution tied to
-the resulting version and conclusion revisions. Unmentioned disputes survive.
+records an unresolved question/basis or an evidence-backed resolution. A
+resolved disposition supplies reasoning, optional semantic
+`target_conclusion_ids`, and optional context-bound `evidence_refs`; Span
+derives the resulting understanding/version/revision coordinates from the same
+atomic update. Unmentioned disputes survive.
 Neither matching bytes nor a passing verification run resolves one implicitly.
 
 ## Acceptance and replay

@@ -101,7 +101,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "existing conclusion_id returned by Span; replace takes conclusion and "
         "reason; withdraw takes reason and optional evidence; confirm preserves "
         "the current content. Do not send conclusion_id on add or "
-        "new_conclusion_id on replace. "
+        "new_conclusion_id on replace. Challenge settlement may be included atomically "
+        "in challenge_dispositions: a resolved disposition supplies challenge_id, "
+        "expected_challenge_revision, reasoning, optional target_conclusion_ids, "
+        "and optional context-bound evidence_refs. Span derives resulting "
+        "understanding/version/revision coordinates; never send them. "
         "SURFACE TEMPLATE (only when the conclusion describes that declared boundary): "
         '{"repository_id":"<id>","request_id":"<new id>","kind":"surface",'
         '"action":"create","surface":{"kind":"SERVICE","locator":"<name>",'
