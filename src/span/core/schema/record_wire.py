@@ -311,10 +311,7 @@ class ResolvedDispositionWire:
     challenge_id: str
     expected_challenge_revision: int
     reasoning: str
-    resulting_understanding_id: str
-    resulting_version: int
-    conclusions: tuple[ConclusionRefWire, ...] = ()
-    withdrawn: tuple[ConclusionRefWire, ...] = ()
+    target_conclusion_ids: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
 
 
@@ -409,7 +406,6 @@ class VerificationRunWire:
         ),
     )
 
-    repository_id: str
     scope_description: str
     scope_paths: tuple[str, ...]
     command: str | None
@@ -490,7 +486,7 @@ class RecordRequestWire:
         _constraints.PresenceRule(
             fields=_EVIDENCE_FIELDS,
             minimum=1,
-            maximum=1,
+            maximum=2,
             when=(
                 _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
                 _constraints.PresenceCondition(
@@ -498,6 +494,24 @@ class RecordRequestWire:
                 ),
             ),
             label="understanding create evidence mode",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("locator"),
+                _constraints.PresenceField("support", non_empty=True),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("conclusion"), True
+                ),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("observation_id"), True
+                ),
+            ),
+            label="understanding create admitted-observation exclusivity",
         ),
         _constraints.PresenceRule(
             fields=(_constraints.PresenceField("conclusion", non_empty=True),),
@@ -1143,25 +1157,8 @@ def _disposition(
                 value.expected_challenge_revision
             ),
             reasoning=value.reasoning,
-            resulting_understanding_id=_p.UnderstandingId(
-                value.resulting_understanding_id
-            ),
-            resulting_version=_p.UnderstandingVersionNumber(value.resulting_version),
-            conclusions=tuple(
-                _p.ConclusionRevisionRef(
-                    understanding_id=_p.UnderstandingId(item.understanding_id),
-                    conclusion_id=_p.ConclusionId(item.conclusion_id),
-                    revision=_p.ConclusionRevisionNumber(item.revision),
-                )
-                for item in value.conclusions
-            ),
-            withdrawn=tuple(
-                _p.ConclusionRevisionRef(
-                    understanding_id=_p.UnderstandingId(item.understanding_id),
-                    conclusion_id=_p.ConclusionId(item.conclusion_id),
-                    revision=_p.ConclusionRevisionNumber(item.revision),
-                )
-                for item in value.withdrawn
+            target_conclusion_ids=tuple(
+                _p.ConclusionId(item) for item in value.target_conclusion_ids
             ),
             evidence=tuple(resolver.reference(item) for item in value.evidence_refs),
         )
@@ -1175,7 +1172,7 @@ def _verification_command(
     return _c.RecordVerificationCommand(
         identity=_identity(identity),
         run=_v.ProposedVerificationRun(
-            repository_id=run.repository_id,
+            repository_id=identity.repository_id,
             scope=_v.VerificationScope(
                 description=run.scope_description,
                 scope=_p.EvidenceScope(paths=run.scope_paths),

@@ -18,11 +18,19 @@ from span.core.identity import record_content_digest
 from span.core.recording import RecordingValidationError
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import issue_context
+from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 
 __all__ = ["ReconsiderService"]
+
+
+def _unknown_exact(kind: str, identity: str) -> RecordingValidationError:
+    return RecordingValidationError(
+        f"unknown {kind}: {identity!r}",
+        public_identity=identity,
+        public_cause=f"the exact {kind} {identity!r} does not exist",
+    )
 
 
 class ReconsiderService:
@@ -124,32 +132,31 @@ class ReconsiderService:
             truncated = True
 
         current_versions: dict[str, m.UnderstandingVersion] = {}
-        return m.Changed(
-            surfaces=tuple(
-                m.ChangedSurface(
-                    surface=surface,
-                    reasons=tuple(
-                        sorted(reasons[surface], key=lambda item: item.value)
-                    ),
-                    conclusions=tuple(
-                        conclusion
-                        for conclusion in (
-                            self._changed_conclusion(
-                                ref, reasons[surface], current_versions
-                            )
-                            for ref in sorted(
-                                affected.get(surface, ()),
-                                key=lambda ref: ref.sort_key,
-                            )
+        changed_surfaces = tuple(
+            m.ChangedSurface(
+                surface=surface,
+                reasons=tuple(sorted(reasons[surface], key=lambda item: item.value)),
+                conclusions=tuple(
+                    conclusion
+                    for conclusion in (
+                        self._changed_conclusion(
+                            ref, reasons[surface], current_versions
                         )
-                        if conclusion is not None
-                    ),
-                )
-                for surface in ordered
-            ),
+                        for ref in sorted(
+                            affected.get(surface, ()),
+                            key=lambda ref: ref.sort_key,
+                        )
+                    )
+                    if conclusion is not None
+                ),
+            )
+            for surface in ordered
+        )
+        return m.Changed(
+            surfaces=changed_surfaces,
             omitted=tuple(omitted),
             truncated=truncated,
-            context=self._reconsider_context(repository_id, request, ordered),
+            context=self._reconsider_context(repository_id, request, changed_surfaces),
         )
 
     def _changed_conclusion(
@@ -190,30 +197,109 @@ class ReconsiderService:
         self,
         repository_id: str,
         request: m.ReconsiderRequest,
-        surfaces: tuple[m.SurfaceKey, ...],
+        surfaces: tuple[m.ChangedSurface, ...],
     ) -> m.InvestigationContextRef:
-        paths = list(request.changed_paths)
-        for surface in surfaces:
+        scopes: list[m.EvidenceScope] = []
+        if request.changed_paths:
+            scopes.append(m.EvidenceScope(paths=tuple(request.changed_paths)))
+        for surface in request.changed_surfaces:
             if surface.kind is m.SurfaceKind.FILE:
-                paths.append(surface.locator)
-            else:
-                declared = self._store.find_surface(surface)
-                if declared is not None:
-                    paths.extend(declared.boundary.paths)
+                scopes.append(m.EvidenceScope(paths=(surface.locator,)))
+                continue
+            if surface.kind is m.SurfaceKind.SYMBOL:
+                containing = containment.surface_file_locator(surface.locator)
+                if containing is not None:
+                    scopes.append(m.EvidenceScope(paths=(containing,)))
+                continue
+            declared = self._store.find_surface(surface)
+            if declared is not None:
+                paths = list(declared.boundary.paths)
+                paths.extend(
+                    containing
+                    for symbol in declared.boundary.symbols
+                    if (containing := containment.surface_file_locator(symbol))
+                    is not None
+                )
+                if paths:
+                    scopes.append(m.EvidenceScope(paths=tuple(paths)))
+        source_observations: dict[str, m.SourceObservation] = {}
+        discovery_observations: dict[str, m.DiscoveryObservation] = {}
+        for changed in surfaces:
+            for item in changed.conclusions:
+                if (
+                    isinstance(item.support, m.SupportEvaluation)
+                    and item.support.state is m.SupportState.CURRENT
+                ):
+                    continue
+                revision = self._conclusion_revision(item.ref)
+                content = revision.content
+                if not isinstance(content, m.SupportedConclusion):
+                    continue
+                scopes.append(content.scope)
+                for dependency in content.support:
+                    if isinstance(dependency, m.SourceSupport):
+                        source_observation = self._store.get_source_observation(
+                            dependency.observation_id.value
+                        )
+                        if source_observation.repository_id != repository_id:
+                            raise RecordingValidationError(
+                                "re-establishment source observation belongs to "
+                                "another repository"
+                            )
+                        scopes.append(
+                            m.EvidenceScope(
+                                evidence_refs=(source_observation.evidence,)
+                            )
+                        )
+                        source_observations[dependency.observation_id.value] = (
+                            source_observation
+                        )
+                    elif isinstance(dependency, m.DiscoverySupport):
+                        discovery_observation = self._store.get_discovery_observation(
+                            dependency.observation_id.value
+                        )
+                        if discovery_observation.repository_id != repository_id:
+                            raise RecordingValidationError(
+                                "re-establishment discovery observation belongs to "
+                                "another repository"
+                            )
+                        scopes.append(discovery_observation.scope)
+                        discovery_observations[dependency.observation_id.value] = (
+                            discovery_observation
+                        )
         context_id = self._new_context_id()
         context = issue_context(
             self._store,
-            payload=request,
+            binding=context_binding(
+                scope=m.evidence_scope_union(scopes),
+                origin=m.ContextOrigin.CHANGED_SUPPORT,
+            ),
             repository_id=repository_id,
             request_id=m.RequestId(f"reconsider:{context_id}"),
-            scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
-            question=None,
             clock=self._clock,
             new_context_id=lambda: context_id,
         )
+        for observation_id in sorted(source_observations):
+            self._store.add_context_evidence(context_id, observation_id)
+        for observation_id in sorted(discovery_observations):
+            self._store.add_context_discovery_evidence(context_id, observation_id)
         return m.InvestigationContextRef(
             repository_id=repository_id,
             context_id=context.context_id,
+        )
+
+    def _conclusion_revision(
+        self, ref: m.ConclusionRevisionRef
+    ) -> m.ConclusionRevision:
+        for revision in self._store.get_conclusions(ref.understanding_id.value):
+            if (
+                revision.conclusion_id == ref.conclusion_id
+                and revision.revision == ref.revision
+            ):
+                return revision
+        raise RecordingValidationError(
+            "affected conclusion revision is missing: "
+            f"{ref.conclusion_id.value}@{ref.revision.value}"
         )
 
     def _support_state(
@@ -232,10 +318,26 @@ class ReconsiderService:
         self, repository_id: str, challenge: m.ChallengeRaise
     ) -> m.Challenged:
         """Raise one explicit dispute through reconsider (L2 §4.3)."""
+        understanding = self._store.find_understanding(challenge.understanding_id)
+        if understanding is None:
+            raise _unknown_exact("understanding", challenge.understanding_id)
+        version = self._store.find_version(
+            challenge.understanding_id, challenge.target_version
+        )
+        if version is None:
+            raise _unknown_exact(
+                "understanding version",
+                f"{challenge.understanding_id}@{challenge.target_version}",
+            )
         context_id = (
             challenge.context.context_id
             if challenge.context is not None
-            else self._challenge_context(repository_id, challenge)
+            else self._challenge_context(
+                repository_id,
+                challenge,
+                understanding=understanding,
+                version=version,
+            )
         )
         for reference in challenge.evidence:
             admitted = self._store.find_admitted_evidence(
@@ -283,12 +385,13 @@ class ReconsiderService:
         )
 
     def _challenge_context(
-        self, repository_id: str, challenge: m.ChallengeRaise
+        self,
+        repository_id: str,
+        challenge: m.ChallengeRaise,
+        *,
+        understanding: m.Understanding,
+        version: m.UnderstandingVersion,
     ) -> m.InvestigationContextId:
-        understanding = self._store.get_understanding(challenge.understanding_id)
-        version = self._store.get_version(
-            challenge.understanding_id, challenge.target_version
-        )
         scopes = [version.scope]
         if understanding.surface.kind is m.SurfaceKind.FILE:
             scopes.append(m.EvidenceScope(paths=(understanding.surface.locator,)))
@@ -300,11 +403,16 @@ class ReconsiderService:
             scopes.append(m.EvidenceScope(evidence_refs=challenge.evidence))
         context = issue_context(
             self._store,
-            payload=challenge,
+            binding=context_binding(
+                scope=m.evidence_scope_union(scopes),
+                origin=m.ContextOrigin.CHALLENGE,
+                source_requests=tuple(
+                    m.EvidenceRequest(reference.locator)
+                    for reference in challenge.evidence
+                ),
+            ),
             repository_id=repository_id,
             request_id=m.RequestId(challenge.request_id),
-            scope=m.evidence_scope_union(scopes),
-            question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )

@@ -443,6 +443,7 @@ __all__ = [
     "ChallengeState",
     "ChallengeResolution",
     "Challenge",
+    "ContextBinding",
     "ContextOrigin",
     "ContextState",
     "DiscoveryObservation",

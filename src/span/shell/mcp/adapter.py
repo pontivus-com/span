@@ -18,7 +18,11 @@ from typing import cast as _cast
 
 from span.core import model as m
 from span.core.recording import RecordingConflict, RecordingValidationError
-from span.core.rejection import Rejection, RejectionCauseKind
+from span.core.rejection import (
+    Rejection,
+    RejectionCauseKind,
+    StructuralValidationError,
+)
 from span.core.schema import record_wire as _rw
 from span.ports.structural import StaleContinuationError
 from span.shell.mcp.models import ServiceContext, ToolResult
@@ -33,6 +37,7 @@ from span.shell.mcp.wire import (
 )
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStoreError,
+    LifecycleStoreInvariantError,
     SchemaVersionError,
     UnknownRepository,
 )
@@ -113,6 +118,14 @@ class McpAdapter:
         try:
             request = decode_request(tool_name, arguments)
             _, route = strip_route(tool_name, arguments)
+        except StructuralValidationError as exc:
+            if tool_name in _RESULT_UNION_TOOLS:
+                return _encoded_result(_structural_rejected(tool_name, arguments, exc))
+            return encode_error(
+                "ingress",
+                "the request does not match the declared tool schema",
+                "correct the named request fields, then retry",
+            )
         except (RoutingError, ValueError) as exc:
             return encode_error("ingress", str(exc))
         try:
@@ -126,6 +139,13 @@ class McpAdapter:
             return encode_error("ingress", str(exc))
         try:
             context = self._context(repository_id)
+        except LifecycleStoreInvariantError:
+            _LOGGER.exception("unexpected lifecycle store invariant failure")
+            return encode_error(
+                "internal",
+                "Span could not complete the operation",
+                "report the operation failure without internal diagnostics",
+            )
         except LifecycleStoreError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_unavailable(tool_name, exc))
@@ -160,6 +180,13 @@ class McpAdapter:
                 return _encoded_result(_unavailable(tool_name, exc))
             failure, recovery = _operational_failure(exc)
             return encode_error("unavailable", failure, recovery)
+        except LifecycleStoreInvariantError:
+            _LOGGER.exception("unexpected lifecycle store invariant failure")
+            return encode_error(
+                "internal",
+                "Span could not complete the operation",
+                "report the operation failure without internal diagnostics",
+            )
         except LifecycleStoreError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_unavailable(tool_name, exc))
@@ -192,6 +219,34 @@ class McpAdapter:
                 "report the operation failure without internal diagnostics",
             )
         return _encoded_result(outcome)
+
+
+def _structural_rejected(
+    tool_name: str,
+    arguments: dict[str, object],
+    exc: StructuralValidationError,
+) -> m.Rejected:
+    """Project typed ingress faults through the existing public result shape."""
+    repository_id = arguments.get("repository_id")
+    request_id = arguments.get("request_id")
+    identity_parts = [tool_name]
+    if isinstance(repository_id, str) and repository_id:
+        identity_parts.append(repository_id)
+    if isinstance(request_id, str) and request_id:
+        identity_parts.append(request_id)
+    coordinates = tuple(dict.fromkeys(item.coordinate for item in exc.faults))
+    cause = "; ".join(f"{item.coordinate}: {item.message}" for item in exc.faults)
+    required_action = (
+        "correct " + ", ".join(coordinates) + ", then retry"
+        if coordinates
+        else "correct the named field, then retry"
+    )
+    return m.Rejected(
+        identity="/".join(identity_parts),
+        required_action=required_action,
+        cause_kind=RejectionCauseKind.VALIDATION,
+        cause=cause,
+    )
 
 
 def _request_identity(request: object) -> str:
@@ -254,10 +309,10 @@ def _rejected(request: object, exc: Exception) -> m.Rejected:
     """Project one typed rejection without serializing internal diagnostics."""
     rejection = exc if isinstance(exc, Rejection) else Rejection("invalid request")
     return m.Rejected(
-        identity=_request_identity(request),
+        identity=rejection.public_identity or _request_identity(request),
         required_action=rejection.required_action,
         cause_kind=rejection.cause_kind,
-        cause=_public_rejection_cause(rejection.cause_kind),
+        cause=rejection.public_cause or _public_rejection_cause(rejection.cause_kind),
         current_version=rejection.current_version,
         current_boundary_version=rejection.current_boundary_version,
     )

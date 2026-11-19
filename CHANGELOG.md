@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.11.0 — 2026-11-19
+
+### Maintained lifecycle and schema-13 candidate
+
+- Correct the public lifecycle, evidence, verification, reconsideration and
+  structural-ingress boundaries identified by the 0.11 implementation plan.
+- Deliver the canonical context binding and schema-12 to schema-13 transition
+  implementation, including refusal, preservation, interruption and rollback
+  behavior in disposable verification stores.
+- Keep exact selectors, challenge settlement, replay/conflict handling and
+  source-currentness behavior on their owning boundaries.
+
+### Verification and release status
+
+- Source candidate verification: GitHub Actions run `44448034572`, including
+  build/distribution, Ruff, Black, zero-error typing, `798 passed, 1 skipped,
+  125 subtests`, plugin notice delivery and 85% aggregate statement coverage.
+- The packaged MCP and cross-cutting architecture and requirements audits are
+  verified for the implementation candidate.
+- Candidate-specific G5/F8 comparative measurement and managed-host T09/T10
+  captures are intentionally outside this PR gate; no cost or managed-host
+  delivery claim is made.
+- The separately authorized schema-12 to schema-13 operational cutover was
+  executed and verified on the installed 0.11.0 store.
+
 ## 0.10.5 — 2026-11-16
 
 ### Evidence references, not source copies

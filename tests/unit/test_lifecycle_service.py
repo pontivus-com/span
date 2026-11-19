@@ -26,7 +26,7 @@ from span.service.lifecycle import LifecycleService
 from span.service.support import SupportService
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
-    LifecycleStoreError,
+    LifecycleStoreDataError,
     SourceObservationRecord,
 )
 
@@ -676,6 +676,43 @@ class LifecycleServiceTest(unittest.TestCase):
             2,
         )
 
+        wire = w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id="sub-race",
+            kind=m.RecordKind.UNDERSTANDING,
+            understanding_id="u:sub-create",
+            expected_version=2,
+            actions=w.RecordActionsWire(
+                add=(
+                    w.AddConclusionWire(conclusion="Race-safe add", locator="src/a.py"),
+                )
+            ),
+        )
+        first = self._service("ctx-race-first")
+        second = self._service("ctx-race-second")
+        accepted: list[m.UnderstandingRecorded] = []
+        original_replay = first._replay
+
+        def concurrent_accept(repository_id, request_id, digest):
+            replay = original_replay(repository_id, request_id, digest)
+            if replay is None and not accepted:
+                outcome = second.record(wire)
+                assert isinstance(outcome, m.UnderstandingRecorded)
+                accepted.append(outcome)
+            return replay
+
+        with mock.patch.object(first, "_replay", side_effect=concurrent_accept):
+            outcome = first.record(wire)
+        assert isinstance(outcome, m.UnderstandingRecorded)
+        self.assertEqual(
+            _receipt(self.store, outcome),
+            _receipt(self.store, accepted[0]),
+        )
+        self.assertEqual(
+            self.store.get_understanding("u:sub-create").current_version.value,
+            3,
+        )
+
     # -- verification ------------------------------------------------------
 
     def test_discovery_support_requires_admission(self) -> None:
@@ -758,6 +795,122 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertEqual(updated.challenge_revision.value, 2)
         self.assertEqual(updated.state, m.ChallengeState.UNRESOLVED)
 
+    def test_resolved_challenge_derives_resulting_revision(self) -> None:
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
+        self.store.create_challenge(
+            create_challenge(
+                challenge_id=m.ChallengeId("ch-resolve"),
+                understanding_id=m.UnderstandingId("u:sub-create"),
+                target_version=m.UnderstandingVersionNumber(1),
+                target_conclusions=(
+                    m.ConclusionRevisionRef(
+                        understanding_id=m.UnderstandingId("u:sub-create"),
+                        conclusion_id=m.ConclusionId(target_id),
+                        revision=m.ConclusionRevisionNumber(1),
+                    ),
+                ),
+                reason="the conclusion is disputed",
+                evidence=(),
+                provenance="test",
+                now=NOW,
+            )
+        )
+        result = self.service.record(
+            w.RecordRequestWire(
+                request_id="sub-resolve",
+                context=_context_ref("ctx-1"),
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id="u:sub-create",
+                expected_version=1,
+                actions=w.RecordActionsWire(
+                    correct=(
+                        w.CorrectConclusionWire(
+                            conclusion_id=target_id,
+                            conclusion="A does the corrected thing.",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+                challenge_dispositions=(
+                    w.ResolvedDispositionWire(
+                        challenge_id="ch-resolve",
+                        expected_challenge_revision=1,
+                        reasoning="The corrected statement resolves the challenge.",
+                    ),
+                ),
+            )
+        )
+        assert isinstance(result, m.UnderstandingRecorded)
+        self.assertEqual(result.version.value, 2)
+        challenge = self.store.get_challenge("ch-resolve")
+        self.assertEqual(challenge.state, m.ChallengeState.RESOLVED)
+        assert challenge.resolution is not None
+        self.assertEqual(challenge.resolution.resulting_version.value, 2)
+        self.assertEqual(len(challenge.resolution.conclusions), 1)
+        self.assertEqual(
+            challenge.resolution.conclusions[0].conclusion_id.value,
+            target_id,
+        )
+        self.assertEqual(challenge.resolution.conclusions[0].revision.value, 2)
+        self.assertEqual(challenge.resolution.withdrawn, ())
+
+    def test_invalid_resolved_target_rolls_back_update_and_challenge(self) -> None:
+        self.service.record(_create_wire())
+        target_id = self._version_conclusion_id("u:sub-create", 1)
+        self.store.create_challenge(
+            create_challenge(
+                challenge_id=m.ChallengeId("ch-reject"),
+                understanding_id=m.UnderstandingId("u:sub-create"),
+                target_version=m.UnderstandingVersionNumber(1),
+                target_conclusions=(
+                    m.ConclusionRevisionRef(
+                        understanding_id=m.UnderstandingId("u:sub-create"),
+                        conclusion_id=m.ConclusionId(target_id),
+                        revision=m.ConclusionRevisionNumber(1),
+                    ),
+                ),
+                reason="disputed",
+                evidence=(),
+                provenance="test",
+                now=NOW,
+            )
+        )
+        with self.assertRaises(RecordingValidationError):
+            self.service.record(
+                w.RecordRequestWire(
+                    request_id="sub-resolve-bad",
+                    context=_context_ref("ctx-1"),
+                    kind=m.RecordKind.UNDERSTANDING,
+                    understanding_id="u:sub-create",
+                    expected_version=1,
+                    actions=w.RecordActionsWire(
+                        correct=(
+                            w.CorrectConclusionWire(
+                                conclusion_id=target_id,
+                                conclusion="A changed.",
+                                locator="src/a.py",
+                            ),
+                        )
+                    ),
+                    challenge_dispositions=(
+                        w.ResolvedDispositionWire(
+                            challenge_id="ch-reject",
+                            expected_challenge_revision=1,
+                            reasoning="Attempted resolution.",
+                            target_conclusion_ids=("c:missing",),
+                        ),
+                    ),
+                )
+            )
+        self.assertEqual(
+            self.store.get_understanding("u:sub-create").current_version.value, 1
+        )
+        self.assertEqual(
+            self.store.get_challenge("ch-reject").state,
+            m.ChallengeState.OPEN,
+        )
+
     def test_verification_requires_admitted_observation(self) -> None:
         def wire(submission: str, observation: str) -> w.RecordRequestWire:
             return w.RecordRequestWire(
@@ -765,7 +918,6 @@ class LifecycleServiceTest(unittest.TestCase):
                 context=_context_ref("ctx-1"),
                 kind=m.RecordKind.VERIFICATION,
                 run=w.VerificationRunWire(
-                    repository_id="repo-1",
                     scope_description="fixture",
                     scope_paths=("src/a.py",),
                     observations=(observation,),
@@ -795,7 +947,6 @@ class LifecycleServiceTest(unittest.TestCase):
             context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
-                repository_id="repo-1",
                 scope_description="fixture",
                 scope_paths=("src/a.py",),
                 command="python3 -m unittest",
@@ -817,7 +968,6 @@ class LifecycleServiceTest(unittest.TestCase):
             context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
-                repository_id="repo-1",
                 scope_description="fixture",
                 scope_paths=("src/a.py",),
                 command="python3 -m unittest",
@@ -892,9 +1042,42 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertIsNotNone(context)
         assert context is not None
         self.assertEqual(context.origin, m.ContextOrigin.EVIDENCE_ONLY)
+        self.assertIsNone(context.question)
         self.assertIn("src/a.py", context.scope.paths)
         self.assertEqual(
             _receipt(self.store, self._service("ctx-unused").record(wire)), receipt
+        )
+
+    def test_context_free_record_uses_caller_request_identity_for_context(self) -> None:
+        wire = self._context_free_create("sub-binding")
+        result = self._service("ctx-binding").record(wire)
+        assert isinstance(result, m.UnderstandingRecorded)
+        context = self.store.find_context("repo-1", "sub-binding")
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertEqual(context.context_id.value, "ctx-binding")
+
+    def test_context_binding_conflicts_when_same_request_changes_scope(self) -> None:
+        service = self._service("ctx-binding-conflict")
+        first = service.start_context(
+            m.StartContextRequest(
+                repository_id="repo-1",
+                request_id=m.RequestId("req-binding"),
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+            )
+        )
+        self.assertEqual(first.context_id.value, "ctx-binding-conflict")
+        with self.assertRaises(RecordingConflict) as raised:
+            service.start_context(
+                m.StartContextRequest(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-binding"),
+                    scope=m.EvidenceScope(paths=("src/b.py",)),
+                )
+            )
+        self.assertEqual(
+            raised.exception.cause_kind,
+            m.RejectionCauseKind.CONTEXT_BINDING_CONFLICT,
         )
 
     def test_create_with_support_only_derives_scope_from_context(self) -> None:
@@ -982,6 +1165,94 @@ class LifecycleServiceTest(unittest.TestCase):
         assert context is not None
         self.assertIn("src/a.py", context.scope.paths)
 
+    def test_unknown_update_understanding_is_rejected_not_unavailable(self) -> None:
+        from span.shell.context import compose_context
+        from span.shell.mcp.adapter import McpAdapter
+        from span.ports.structural import StructuralSource
+
+        adapter = McpAdapter(
+            contexts={
+                "repo-1": compose_context(
+                    repository_id="repo-1",
+                    root="/repo/one",
+                    structural=mock.Mock(spec=StructuralSource),
+                    evidence=_CurrentEvidence(),
+                    store=self.store,
+                )
+            }
+        )
+        result = adapter.dispatch(
+            "record",
+            {
+                "repository_id": "repo-1",
+                "request_id": "unknown-update",
+                "kind": "understanding",
+                "understanding_id": "u:missing",
+                "expected_version": 1,
+                "actions": {
+                    "add": [
+                        {
+                            "conclusion": "A new statement.",
+                            "locator": "src/a.py",
+                        }
+                    ]
+                },
+            },
+        )
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.structured_content["$type"], "Rejected")
+        self.assertEqual(
+            result.structured_content["cause_kind"],
+            m.RejectionCauseKind.VALIDATION.value,
+        )
+
+    def test_unknown_update_identity_is_actionable(self) -> None:
+        with self.assertRaises(RecordingValidationError) as raised:
+            self._service("ctx-never-issued").record(
+                w.RecordRequestWire(
+                    repository_id="repo-1",
+                    request_id="sub-unknown",
+                    kind=m.RecordKind.UNDERSTANDING,
+                    understanding_id="u:missing",
+                    expected_version=1,
+                    actions=w.RecordActionsWire(
+                        add=(
+                            w.AddConclusionWire(
+                                conclusion="Another conclusion",
+                                locator="src/a.py",
+                            ),
+                        )
+                    ),
+                )
+            )
+        self.assertEqual(raised.exception.public_identity, "u:missing")
+        self.assertIn("does not exist", raised.exception.public_cause or "")
+
+    def test_context_free_update_checks_expected_version_before_scope_lookup(
+        self,
+    ) -> None:
+        self.service.record(_create_wire())
+        with self.assertRaises(RecordingConflict) as raised:
+            self._service("ctx-never-issued").record(
+                w.RecordRequestWire(
+                    repository_id="repo-1",
+                    request_id="sub-missing-version",
+                    kind=m.RecordKind.UNDERSTANDING,
+                    understanding_id="u:sub-create",
+                    expected_version=99,
+                    actions=w.RecordActionsWire(
+                        add=(
+                            w.AddConclusionWire(
+                                conclusion="Another conclusion",
+                                locator="src/a.py",
+                            ),
+                        )
+                    ),
+                )
+            )
+        self.assertEqual(raised.exception.current_version, 1)
+        self.assertIsNone(self.store.find_context_by_id("ctx-never-issued"))
+
     # -- FD-37 premise effects --------------------------------------------
 
     def test_correct_names_the_affected_dependent(self) -> None:
@@ -991,7 +1262,7 @@ class LifecycleServiceTest(unittest.TestCase):
             context_id=m.InvestigationContextId("ctx-dep"),
             repository_id="repo-1",
             request_id=m.RequestId("req-dep"),
-            request_digest=m.ContentDigest("sha256:dep"),
+            binding_digest=m.ContentDigest("sha256:dep"),
             origin=m.ContextOrigin.EVIDENCE_ONLY,
             state=m.ContextState.LIVE,
             scope=m.EvidenceScope(paths=("src/b.py",)),
@@ -1354,7 +1625,6 @@ class LifecycleServiceTest(unittest.TestCase):
                 kind=m.RecordKind.VERIFICATION,
                 question=None,
                 run=w.VerificationRunWire(
-                    repository_id="repo-1",
                     scope_description="unit",
                     scope_paths=("src/a.py",),
                     observations=("obs-1",),
@@ -1735,6 +2005,23 @@ class LifecycleServiceTest(unittest.TestCase):
                 expected=1,
             )
 
+    def test_unknown_surface_update_is_rejected_not_unavailable(self) -> None:
+        with self.assertRaises(RecordingValidationError):
+            self.service.record(
+                w.RecordRequestWire(
+                    repository_id="repo-1",
+                    request_id="surface-missing-update",
+                    kind=m.RecordKind.SURFACE,
+                    action=m.SurfaceAction.UPDATE,
+                    expected_boundary_version=1,
+                    surface=w.SurfaceWire(
+                        kind=m.SurfaceKind.SERVICE,
+                        locator="missing-service",
+                        boundary=w.SurfaceBoundaryWire(paths=("src",)),
+                    ),
+                )
+            )
+
     def test_surface_update_stale_boundary_returns_rejected(self) -> None:
         self.assertIsInstance(
             self._declare_surface(
@@ -2070,8 +2357,13 @@ class LifecycleServiceTest(unittest.TestCase):
         wire = self._scope_create(locator="missing.py")
         with self.assertRaises(RecordingValidationError):
             self.service.record(wire)
+        context = self.store.find_context("repo-1", wire.request_id)
+        assert context is not None
+        self.assertIsNone(context.question)
         with self.assertRaises(RecordingConflict) as raised:
-            self.service.record(dataclasses.replace(wire, locator="src/a.py"))
+            self.service.record(
+                dataclasses.replace(wire, question="A different semantic question")
+            )
         self.assertEqual(
             raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_BINDING_CONFLICT
         )
@@ -2168,7 +2460,6 @@ class LifecycleServiceTest(unittest.TestCase):
         self,
     ):
         run = w.VerificationRunWire(
-            repository_id="repo-1",
             scope_description="fixture",
             scope_paths=("src",),
             command="test",
@@ -2217,7 +2508,7 @@ class LifecycleServiceTest(unittest.TestCase):
         adapter = McpAdapter(contexts={"repo-1": context})
         for index, error in enumerate(
             (
-                LifecycleStoreError("store read unavailable"),
+                LifecycleStoreDataError("store read unavailable"),
                 sqlite3.OperationalError("disk I/O error"),
             )
         ):
@@ -2256,7 +2547,6 @@ class LifecycleServiceTest(unittest.TestCase):
             context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
-                repository_id="repo-1",
                 scope_description="source test",
                 scope_paths=("src",),
                 command="test",
@@ -2269,7 +2559,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         result = self.service.record(wire)
         for error in (
-            LifecycleStoreError("read unavailable"),
+            LifecycleStoreDataError("read unavailable"),
             sqlite3.OperationalError("disk I/O error"),
         ):
             with (
@@ -2297,7 +2587,7 @@ class LifecycleServiceTest(unittest.TestCase):
     def test_postcommit_owner_read_failure_preserves_receipt_without_owner(self):
         result = self.service.record(self._scope_create(locator="src/a.py"))
         for error in (
-            LifecycleStoreError("read unavailable"),
+            LifecycleStoreDataError("read unavailable"),
             sqlite3.OperationalError("disk I/O error"),
         ):
             with (

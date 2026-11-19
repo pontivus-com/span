@@ -40,9 +40,10 @@ even when a parser supplies no symbols.
 
 Record coherent conclusions with the evidence you hold and a short account of
 how it led to them. Use `record(kind="understanding")` with `conclusion` and
-exactly one evidence mode — `locator`, `observation_id`, or non-empty `support`
-— for a first version, and an explicit update action for an existing one. Scope
-is supplied or derived independently. Keep unresolved questions and their basis
+dependency evidence from `locator`, `observation_id`, or non-empty `support`
+for a first version, and an explicit update action for an existing one. A
+locator may accompany support solely as carried semantic scope; support remains
+the complete dependency set. Scope is supplied or derived independently. Keep unresolved questions and their basis
 as gaps.
 
 Use the live tool schemas and the [recording guide](interpretation.md). Preserve

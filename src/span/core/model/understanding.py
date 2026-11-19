@@ -272,12 +272,6 @@ class RecordedQuestionSelector:
             maximum=1,
             label="recorded-question text",
         ),
-        _constraints.PresenceRule(
-            fields=(_constraints.PresenceField("surface.repository_id"),),
-            minimum=0,
-            maximum=0,
-            label="recorded-question surface repository",
-        ),
     )
 
     repository_id: str

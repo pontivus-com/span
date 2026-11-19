@@ -6,6 +6,8 @@ import dataclasses as _dataclasses
 import enum as _enum
 import typing as _typing
 
+from span.core.rejection import StructuralFault, StructuralValidationError
+
 
 @_dataclasses.dataclass(frozen=True)
 class PresenceField:
@@ -95,7 +97,7 @@ def validate_structural_rules(value: object) -> None:
 
     declared = vars(type(value)).get("__structural_rules__", ())
     rules = _typing.cast(tuple[PresenceRule, ...], declared)
-    faults: list[str] = []
+    faults: list[StructuralFault] = []
     for rule in rules:
         if rule.when and not all(
             _condition_matches(value, condition) for condition in rule.when
@@ -105,18 +107,34 @@ def validate_structural_rules(value: object) -> None:
         count = len(active)
         if count < rule.minimum:
             expected = ", ".join(field.name for field in rule.fields)
-            faults.append(
-                f"{rule.label} requires at least {rule.minimum} active field(s) "
-                f"from: {expected}"
+            message = (
+                f"{rule.label} requires at least {rule.minimum} active "
+                f"field(s) from: {expected}"
+            )
+            faults.extend(
+                StructuralFault(
+                    coordinate=field.name,
+                    rule=rule.label,
+                    message=message,
+                )
+                for field in rule.fields
             )
         elif count > rule.maximum:
             names = ", ".join(active)
-            faults.append(
-                f"{rule.label} permits at most {rule.maximum} active field(s); "
-                f"active: {names}"
+            message = (
+                f"{rule.label} permits at most {rule.maximum} active "
+                f"field(s); active: {names}"
+            )
+            faults.extend(
+                StructuralFault(
+                    coordinate=name,
+                    rule=rule.label,
+                    message=message,
+                )
+                for name in active
             )
     if faults:
-        raise ValueError("; ".join(faults))
+        raise StructuralValidationError(tuple(faults))
 
 
 def _nested_field_schema(

@@ -1,4 +1,4 @@
-"""Candidate schema-11 lifecycle store.
+"""Schema-13 lifecycle store.
 
 This is the replacement store boundary for the 0.10 lifecycle: canonical
 contexts, understanding versions, conclusion revisions, challenges,
@@ -38,245 +38,57 @@ from span.core.recording import (
 )
 from span.core.rejection import RejectionCauseKind, SurfaceConflict
 from span.shell.sqlite_store import dependents as _dependents
+from span.shell.sqlite_store.schema import DDL as _DDL, SCHEMA_VERSION
 
 __all__ = [
     "LifecycleStore",
     "LifecycleStoreError",
+    "LifecycleRecordNotFound",
+    "LifecycleStoreConfigurationError",
+    "LifecycleStoreDataError",
+    "LifecycleStoreInvariantError",
+    "LifecycleStoreOperationalError",
     "SchemaVersionError",
     "SourceObservationRecord",
     "UnknownRepository",
 ]
-
-SCHEMA_VERSION = 12
 
 
 class LifecycleStoreError(ValueError):
     """The store cannot satisfy this operation."""
 
 
-class SchemaVersionError(LifecycleStoreError):
+class LifecycleStoreOperationalError(LifecycleStoreError):
+    """The store cannot presently evaluate retained lifecycle state."""
+
+
+class LifecycleRecordNotFound(LifecycleStoreError):
+    """One exact retained lifecycle record is absent."""
+
+    def __init__(self, record_kind: str, identity: str) -> None:
+        self.record_kind = record_kind
+        self.identity = identity
+        super().__init__(f"unknown {record_kind}: {identity}")
+
+
+class LifecycleStoreConfigurationError(LifecycleStoreError):
+    """Repository/setup state cannot satisfy the configured binding."""
+
+
+class LifecycleStoreDataError(LifecycleStoreOperationalError):
+    """Persisted canonical state is unreadable or internally inconsistent."""
+
+
+class LifecycleStoreInvariantError(LifecycleStoreError):
+    """A programming or transaction invariant was violated."""
+
+
+class SchemaVersionError(LifecycleStoreOperationalError):
     """The store is not the supported schema version."""
 
 
-class UnknownRepository(LifecycleStoreError):
+class UnknownRepository(LifecycleStoreConfigurationError):
     """The repository has not been bound by the installer."""
-
-
-_DDL = (
-    """
-    CREATE TABLE IF NOT EXISTS meta(
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS repositories(
-        repository_id TEXT PRIMARY KEY,
-        root TEXT NOT NULL,
-        authority_seeds_json TEXT NOT NULL DEFAULT '[]',
-        authority_bindings_json TEXT NOT NULL DEFAULT '[]'
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS surfaces(
-        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
-        kind TEXT NOT NULL,
-        locator TEXT NOT NULL,
-        parent_kind TEXT,
-        parent_locator TEXT,
-        boundary_version INTEGER NOT NULL,
-        canonical_json TEXT NOT NULL,
-        PRIMARY KEY(repository_id, kind, locator),
-        UNIQUE(repository_id, locator)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS surface_boundary_versions(
-        repository_id TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        locator TEXT NOT NULL,
-        boundary_version INTEGER NOT NULL,
-        boundary_digest TEXT NOT NULL,
-        canonical_json TEXT NOT NULL,
-        PRIMARY KEY(repository_id, kind, locator, boundary_version),
-        FOREIGN KEY(repository_id, kind, locator)
-            REFERENCES surfaces(repository_id, kind, locator)
-            ON DELETE CASCADE
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS source_observations(
-        observation_id TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
-        evidence_id TEXT NOT NULL,
-        locator TEXT NOT NULL,
-        content_digest TEXT NOT NULL,
-        captured_at TEXT NOT NULL,
-        total_lines INTEGER NOT NULL DEFAULT 0,
-        delivered_ranges_json TEXT NOT NULL DEFAULT '[]',
-        whole_file INTEGER NOT NULL DEFAULT 0,
-        canonical_json TEXT NOT NULL,
-        UNIQUE(repository_id, observation_id)
-    )
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS source_observations_evidence
-    ON source_observations(evidence_id)
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS source_observations_locator
-    ON source_observations(repository_id, locator)
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS discovery_observations(
-        observation_id TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
-        canonical_json TEXT NOT NULL,
-        UNIQUE(repository_id, observation_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS investigation_contexts(
-        context_id TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
-        request_id TEXT NOT NULL,
-        request_digest TEXT NOT NULL,
-        canonical_json TEXT NOT NULL,
-        expires_at TEXT,
-        UNIQUE(repository_id, request_id),
-        UNIQUE(repository_id, context_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS context_evidence(
-        repository_id TEXT NOT NULL,
-        context_id TEXT NOT NULL,
-        observation_id TEXT NOT NULL,
-        PRIMARY KEY(repository_id, context_id, observation_id),
-        FOREIGN KEY(repository_id, context_id)
-            REFERENCES investigation_contexts(repository_id, context_id)
-            ON DELETE CASCADE,
-        FOREIGN KEY(repository_id, observation_id)
-            REFERENCES source_observations(repository_id, observation_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS context_discovery_evidence(
-        repository_id TEXT NOT NULL,
-        context_id TEXT NOT NULL,
-        observation_id TEXT NOT NULL,
-        PRIMARY KEY(repository_id, context_id, observation_id),
-        FOREIGN KEY(repository_id, context_id)
-            REFERENCES investigation_contexts(repository_id, context_id)
-            ON DELETE CASCADE,
-        FOREIGN KEY(repository_id, observation_id)
-            REFERENCES discovery_observations(repository_id, observation_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS understandings(
-        understanding_id TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
-        surface_kind TEXT NOT NULL,
-        surface_locator TEXT NOT NULL,
-        question TEXT NOT NULL,
-        scope_json TEXT NOT NULL,
-        current_version INTEGER NOT NULL,
-        canonical_json TEXT NOT NULL,
-        UNIQUE(repository_id, surface_kind, surface_locator, question)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS understanding_versions(
-        understanding_id TEXT NOT NULL
-            REFERENCES understandings(understanding_id),
-        version INTEGER NOT NULL,
-        canonical_json TEXT NOT NULL,
-        PRIMARY KEY(understanding_id, version)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS conclusions(
-        understanding_id TEXT NOT NULL
-            REFERENCES understandings(understanding_id),
-        conclusion_id TEXT NOT NULL,
-        revision INTEGER NOT NULL,
-        canonical_json TEXT NOT NULL,
-        PRIMARY KEY(understanding_id, conclusion_id, revision)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS support_dependencies(
-        understanding_id TEXT NOT NULL,
-        conclusion_id TEXT NOT NULL,
-        revision INTEGER NOT NULL,
-        dependency_kind TEXT NOT NULL,
-        dependency_ref TEXT NOT NULL,
-        PRIMARY KEY(
-            understanding_id, conclusion_id, revision,
-            dependency_kind, dependency_ref
-        ),
-        FOREIGN KEY(understanding_id, conclusion_id, revision)
-            REFERENCES conclusions(understanding_id, conclusion_id, revision)
-    )
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS support_dependencies_ref
-    ON support_dependencies(dependency_kind, dependency_ref)
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS understanding_membership(
-        understanding_id TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        conclusion_id TEXT NOT NULL,
-        revision INTEGER NOT NULL,
-        PRIMARY KEY(understanding_id, version, conclusion_id),
-        FOREIGN KEY(understanding_id, version)
-            REFERENCES understanding_versions(understanding_id, version),
-        FOREIGN KEY(understanding_id, conclusion_id, revision)
-            REFERENCES conclusions(understanding_id, conclusion_id, revision)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS challenges(
-        challenge_id TEXT PRIMARY KEY,
-        understanding_id TEXT NOT NULL
-            REFERENCES understandings(understanding_id),
-        canonical_json TEXT NOT NULL
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS verification_runs(
-        run_id TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
-        canonical_json TEXT NOT NULL,
-        UNIQUE(repository_id, run_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS verification_observations(
-        repository_id TEXT NOT NULL,
-        run_id TEXT NOT NULL,
-        observation_id TEXT NOT NULL,
-        PRIMARY KEY(repository_id, run_id, observation_id),
-        FOREIGN KEY(repository_id, run_id)
-            REFERENCES verification_runs(repository_id, run_id)
-            ON DELETE CASCADE,
-        FOREIGN KEY(repository_id, observation_id)
-            REFERENCES source_observations(repository_id, observation_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS record_receipts(
-        repository_id TEXT NOT NULL,
-        request_id TEXT NOT NULL,
-        content_digest TEXT NOT NULL,
-        canonical_json TEXT NOT NULL,
-        replay_expires_at TEXT,
-        PRIMARY KEY(repository_id, request_id)
-    )
-    """,
-)
 
 
 SourceObservationRecord = m.SourceObservation
@@ -295,7 +107,8 @@ class LifecycleStore:
     """One candidate SQLite store with atomic lifecycle acceptance."""
 
     operational_errors: tuple[type[Exception], ...] = (
-        LifecycleStoreError,
+        LifecycleStoreOperationalError,
+        LifecycleRecordNotFound,
         _sqlite3.OperationalError,
     )
 
@@ -387,9 +200,9 @@ class LifecycleStore:
         tuple clears them; a non-empty tuple replaces them.
         """
         if not repository_id:
-            raise LifecycleStoreError("repository_id is required")
+            raise LifecycleStoreConfigurationError("repository_id is required")
         if not root:
-            raise LifecycleStoreError("repository root is required")
+            raise LifecycleStoreConfigurationError("repository root is required")
         seeds = _json.dumps(
             [m.to_canonical(item) for item in authority_seeds],
             sort_keys=True,
@@ -416,7 +229,7 @@ class LifecycleStore:
                 )
                 return
             if row["root"] != root:
-                raise LifecycleStoreError(
+                raise LifecycleStoreConfigurationError(
                     f"repository {repository_id} is bound to {row['root']!r}, "
                     f"not {root!r}"
                 )
@@ -436,11 +249,13 @@ class LifecycleStore:
         :meth:`register_repository`. Only ``repositories.root`` changes.
         """
         if not repository_id:
-            raise LifecycleStoreError("repository_id is required")
+            raise LifecycleStoreConfigurationError("repository_id is required")
         if not root:
-            raise LifecycleStoreError("repository root is required")
+            raise LifecycleStoreConfigurationError("repository root is required")
         if not expected_root:
-            raise LifecycleStoreError("expected repository root is required")
+            raise LifecycleStoreConfigurationError(
+                "expected repository root is required"
+            )
         with self._transaction() as connection:
             row = connection.execute(
                 "SELECT root FROM repositories WHERE repository_id=?",
@@ -449,7 +264,7 @@ class LifecycleStore:
             if row is None:
                 raise UnknownRepository(f"repository {repository_id!r} is not bound")
             if row["root"] != expected_root:
-                raise LifecycleStoreError(
+                raise LifecycleStoreConfigurationError(
                     f"repository {repository_id} is bound to {row['root']!r}, "
                     f"not the expected {expected_root!r}"
                 )
@@ -478,12 +293,12 @@ class LifecycleStore:
                 raise ValueError("authority seeds are not a list")
             seeds = tuple(m.from_canonical(m.EvidenceRef, item) for item in payload)
         except (TypeError, ValueError) as exc:
-            raise LifecycleStoreError(
+            raise LifecycleStoreDataError(
                 f"authority seeds for {repository_id} are not canonical: {exc}"
             ) from None
         for seed in seeds:
             if seed.repository_id != repository_id:
-                raise LifecycleStoreError(
+                raise LifecycleStoreDataError(
                     f"authority seed for {repository_id} belongs to "
                     f"{seed.repository_id}"
                 )
@@ -507,12 +322,12 @@ class LifecycleStore:
                 m.from_canonical(m.AuthorityBinding, item) for item in payload
             )
         except (TypeError, ValueError) as exc:
-            raise LifecycleStoreError(
+            raise LifecycleStoreDataError(
                 f"authority bindings for {repository_id} are not canonical: {exc}"
             ) from None
         for binding in bindings:
             if binding.evidence_ref.repository_id != repository_id:
-                raise LifecycleStoreError(
+                raise LifecycleStoreDataError(
                     f"authority binding for {repository_id} belongs to "
                     f"{binding.evidence_ref.repository_id}"
                 )
@@ -593,7 +408,7 @@ class LifecycleStore:
                 (key.repository_id, key.locator),
             ).fetchone()
             if row is None:
-                raise LifecycleStoreError(f"unknown surface: {key.locator}")
+                raise LifecycleRecordNotFound("surface", key.locator)
             current = int(row["boundary_version"])
             if surface.boundary_version != expected_boundary_version + 1:
                 raise SurfaceConflict(
@@ -642,9 +457,8 @@ class LifecycleStore:
     def get_surface(self, key: m.SurfaceKey) -> m.Surface:
         surface = self.find_surface(key)
         if surface is None:
-            raise LifecycleStoreError(
-                f"unknown surface: {key.repository_id}/{key.kind.value}/"
-                f"{key.locator}"
+            raise LifecycleRecordNotFound(
+                "surface", f"{key.repository_id}/{key.kind.value}/{key.locator}"
             )
         return surface
 
@@ -782,7 +596,7 @@ class LifecycleStore:
                     int(record.whole_file),
                 )
                 if observed != proposed:
-                    raise LifecycleStoreError(
+                    raise LifecycleStoreInvariantError(
                         "source observation is immutable: "
                         f"{record.observation_id.value} already exists with "
                         "different content"
@@ -819,7 +633,7 @@ class LifecycleStore:
             ).fetchone()
             if row is not None:
                 if row["canonical_json"] != encoded:
-                    raise LifecycleStoreError(
+                    raise LifecycleStoreInvariantError(
                         "discovery observation is immutable: "
                         f"{observation.observation_id.value} already exists "
                         "with different content"
@@ -869,7 +683,7 @@ class LifecycleStore:
     def get_source_observation(self, observation_id: str) -> SourceObservationRecord:
         record = self.find_source_observation(observation_id)
         if record is None:
-            raise LifecycleStoreError(f"unknown source observation: {observation_id}")
+            raise LifecycleRecordNotFound("source observation", observation_id)
         return record
 
     def list_context_evidence(
@@ -906,9 +720,7 @@ class LifecycleStore:
     def get_discovery_observation(self, observation_id: str) -> m.DiscoveryObservation:
         observation = self.find_discovery_observation(observation_id)
         if observation is None:
-            raise LifecycleStoreError(
-                f"unknown discovery observation: {observation_id}"
-            )
+            raise LifecycleRecordNotFound("discovery observation", observation_id)
         return observation
 
     def list_discovery_observations(
@@ -961,7 +773,7 @@ class LifecycleStore:
             (context_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown context: {context_id}")
+            raise LifecycleRecordNotFound("context", context_id)
         return str(row["repository_id"])
 
     def add_context_evidence(self, context_id: str, observation_id: str) -> None:
@@ -1001,7 +813,7 @@ class LifecycleStore:
         self,
         repository_id: str,
         request_id: m.RequestId,
-        request_digest: m.ContentDigest,
+        binding_digest: m.ContentDigest,
         factory: _typing.Callable[[], m.InvestigationContext],
     ) -> m.InvestigationContext:
         """Return the context bound to this request, or create exactly one.
@@ -1011,13 +823,13 @@ class LifecycleStore:
         """
         with self._transaction() as connection:
             row = connection.execute(
-                "SELECT request_digest, canonical_json"
+                "SELECT binding_digest, canonical_json"
                 " FROM investigation_contexts"
                 " WHERE repository_id=? AND request_id=?",
                 (repository_id, request_id.value),
             ).fetchone()
             if row is not None:
-                if row["request_digest"] != request_digest.value:
+                if row["binding_digest"] != binding_digest.value:
                     raise RecordingConflict(
                         "this request identity is already bound to "
                         "different context content",
@@ -1042,9 +854,9 @@ class LifecycleStore:
             if (
                 context.repository_id != repository_id
                 or context.request_id != request_id
-                or context.request_digest != request_digest
+                or context.binding_digest != binding_digest
             ):
-                raise LifecycleStoreError(
+                raise LifecycleStoreInvariantError(
                     "the created context does not match its request binding"
                 )
             self._insert_context(connection, context)
@@ -1061,13 +873,13 @@ class LifecycleStore:
     ) -> None:
         connection.execute(
             "INSERT INTO investigation_contexts"
-            "(context_id, repository_id, request_id, request_digest,"
+            "(context_id, repository_id, request_id, binding_digest,"
             " canonical_json, expires_at) VALUES(?,?,?,?,?,?)",
             (
                 context.context_id.value,
                 context.repository_id,
                 context.request_id.value,
-                context.request_digest.value,
+                context.binding_digest.value,
                 _json.dumps(m.to_canonical(context), sort_keys=True),
                 _timestamp(context.expires_at) if context.expires_at else None,
             ),
@@ -1137,7 +949,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, content_digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1204,7 +1018,7 @@ class LifecycleStore:
         digest = content_digest or record_content_digest(command)
         if isinstance(command, m.CreateUnderstandingCommand):
             if understanding_id is None:
-                raise LifecycleStoreError(
+                raise LifecycleStoreInvariantError(
                     "a create recording requires an understanding identity"
                 )
             selected = understanding_id
@@ -1213,7 +1027,7 @@ class LifecycleStore:
                 understanding_id is not None
                 and understanding_id != command.understanding_id
             ):
-                raise LifecycleStoreError(
+                raise LifecycleStoreInvariantError(
                     "the update understanding identity does not match the command"
                 )
             selected = command.understanding_id
@@ -1224,7 +1038,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1323,7 +1139,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1416,6 +1234,15 @@ class LifecycleStore:
             for row in rows
         )
 
+    def find_understanding(self, understanding_id: str) -> m.Understanding | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM understandings WHERE understanding_id=?",
+            (understanding_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(m.Understanding, _json.loads(row["canonical_json"]))
+
     def get_understanding(self, understanding_id: str) -> m.Understanding:
         return self._get_understanding_in(self._connection, understanding_id)
 
@@ -1427,8 +1254,22 @@ class LifecycleStore:
             (understanding_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown understanding: {understanding_id}")
+            raise LifecycleRecordNotFound("understanding", understanding_id)
         return m.from_canonical(m.Understanding, _json.loads(row["canonical_json"]))
+
+    def find_version(
+        self, understanding_id: str, version: int
+    ) -> m.UnderstandingVersion | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM understanding_versions"
+            " WHERE understanding_id=? AND version=?",
+            (understanding_id, version),
+        ).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(
+            m.UnderstandingVersion, _json.loads(row["canonical_json"])
+        )
 
     def get_version(
         self, understanding_id: str, version: int
@@ -1447,8 +1288,8 @@ class LifecycleStore:
             (understanding_id, version),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(
-                f"unknown understanding version: {understanding_id}@{version}"
+            raise LifecycleRecordNotFound(
+                "understanding version", f"{understanding_id}@{version}"
             )
         return m.from_canonical(
             m.UnderstandingVersion, _json.loads(row["canonical_json"])
@@ -1558,8 +1399,9 @@ class LifecycleStore:
                 "SELECT 1 FROM challenges WHERE challenge_id=?",
                 (challenge.challenge_id.value,),
             ).fetchone():
-                raise LifecycleStoreError(
-                    f"challenge already exists: {challenge.challenge_id.value}"
+                raise RecordingValidationError(
+                    f"challenge already exists: {challenge.challenge_id.value}",
+                    cause_kind=RejectionCauseKind.ALREADY_EXISTS,
                 )
             self._insert_challenge(connection, challenge)
 
@@ -1624,7 +1466,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1659,6 +1503,15 @@ class LifecycleStore:
             self._write_receipt(connection, receipt)
             return receipt
 
+    def find_challenge(self, challenge_id: str) -> m.Challenge | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM challenges WHERE challenge_id=?",
+            (challenge_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(m.Challenge, _json.loads(row["canonical_json"]))
+
     def get_challenge(self, challenge_id: str) -> m.Challenge:
         return self._get_challenge_in(self._connection, challenge_id)
 
@@ -1670,7 +1523,7 @@ class LifecycleStore:
             (challenge_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown challenge: {challenge_id}")
+            raise LifecycleRecordNotFound("challenge", challenge_id)
         return m.from_canonical(m.Challenge, _json.loads(row["canonical_json"]))
 
     def get_challenges(self, understanding_id: str) -> tuple[m.Challenge, ...]:
@@ -1689,14 +1542,20 @@ class LifecycleStore:
             for row in rows
         )
 
-    def get_verification_run(self, run_id: str) -> m.VerificationRun:
+    def find_verification_run(self, run_id: str) -> m.VerificationRun | None:
         row = self._connection.execute(
             "SELECT canonical_json FROM verification_runs WHERE run_id=?",
             (run_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown verification run: {run_id}")
+            return None
         return m.from_canonical(m.VerificationRun, _json.loads(row["canonical_json"]))
+
+    def get_verification_run(self, run_id: str) -> m.VerificationRun:
+        run = self.find_verification_run(run_id)
+        if run is None:
+            raise LifecycleRecordNotFound("verification run", run_id)
+        return run
 
     def list_verification_runs(
         self, repository_id: str

@@ -27,7 +27,7 @@ class ContinuationCursor:
     repository_id: str
     context_id: str
     request_id: RequestId
-    request_digest: ContentDigest
+    binding_digest: ContentDigest
     unit_index: int = 0
     line_offset: int = 0
 
@@ -46,7 +46,7 @@ def encode_continuation(cursor: ContinuationCursor) -> str:
         "r": cursor.repository_id,
         "c": cursor.context_id,
         "q": cursor.request_id.value,
-        "d": cursor.request_digest.value,
+        "d": cursor.binding_digest.value,
         "i": cursor.unit_index,
         "l": cursor.line_offset,
     }
@@ -79,7 +79,7 @@ def decode_continuation(token: str) -> ContinuationCursor:
         repository_id=payload["r"],
         context_id=payload["c"],
         request_id=RequestId(payload["q"]),
-        request_digest=ContentDigest(payload["d"]),
+        binding_digest=ContentDigest(payload["d"]),
         unit_index=payload["i"],
         line_offset=payload["l"],
     )

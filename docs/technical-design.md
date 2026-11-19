@@ -584,12 +584,29 @@ to inspect internal context state. `OBSERVATION_NOT_ADMITTED` is the remedy gap 
 the field was right and the value was an id `ask` never returned, so “correct the
 named field” sent it back to the same call.
 
-The service and store raise a `Rejection`; the adapter copies
-`public_cause`, the typed kind, structured versions and required action into
-the public `Rejected` result and adds the request identity. The adapter must
-not call `str(exc)`, parse the cause, call `re.search`, or choose an action
-from words such as “context”, “drift”, or “current”. Internal diagnostics stay
-with the owning exception/log path.
+Stateful service/store validation raises `Rejection`. Structural decoding uses
+one internal `StructuralFault{coordinate, rule, message}` and aggregated
+`StructuralValidationError`; canonical branch rules and the strict decoder
+preserve that carrier instead of flattening it into exception text. For a
+recognized lifecycle tool the adapter projects those typed public coordinates
+into the existing `Rejected.identity/cause/required_action` fields with
+`VALIDATION`; it does not add another public result shape. Malformed transport
+envelopes and unknown tools stay on the protocol error path. The adapter copies
+stateful `public_cause`, typed kind, structured versions and required action
+without parsing exception text. Internal diagnostics stay with the owning
+exception/log path.
+
+**Store failure taxonomy (0.11.0).** SQLite uses distinct
+`LifecycleStoreConfigurationError`, `LifecycleRecordNotFound`,
+`LifecycleStoreDataError`/`LifecycleStoreOperationalError`, and
+`LifecycleStoreInvariantError` classes. Caller-supplied exact identities are
+checked through the corresponding `find_*` owner and become `Rejected` with
+safe public identity/cause coordinates when absent. An exact retained record
+missing behind already-accepted history remains an operational unavailability;
+persisted-data/schema failures are operational; configuration follows the setup
+or repository-access boundary; invariant failures are logged and contained as
+generic internal tool failure. The generic `LifecycleStoreError` is no longer
+the operational catch-all.
 
 **Public failure boundary.** Expected operational exceptions are classified by
 their typed owner and mapped by one shell-level table to stable public
@@ -645,12 +662,16 @@ context constructor/reader sites together; internal stored InvestigationContext,
 RecordingIdentity and receipt keys are retained. Existing store/port lookup
 errors supply typed failures for the mapper; no secondary context lookup exists.
 
-**Reconsider issuance implementation.** ReconsiderService._reconsider_context
+**Reconsider issuance implementation.** `ReconsiderService._reconsider_context`
 allocates a new internal request key through the existing UUID identity utility
-for each evaluation and delegates creation/recovery to service/contexts.issue_context.
-The changed-scope digest remains binding content, not the issuance key. Other
-caller-identified operations continue using their existing keys through the same
-issuance owner. This implements FD-2/FD-45; lifecycle §4.3 owns the public guarantee.
+for each evaluation and delegates creation/recovery to
+`service/contexts.issue_context` with explicit `CHANGED_SUPPORT` origin. The
+changed-scope digest remains binding content, not the issuance key. Challenge
+issuance uses the same owner with explicit `CHALLENGE` origin when no context is
+supplied; an already supplied context is preserved. Other caller-identified
+operations continue using their existing keys through the same issuance owner.
+This implements FD-2/FD-45 without a second context constructor or origin
+heuristic; lifecycle §4.3 owns the public guarantee.
 
 **Admission implementation.** Implement lifecycle §4.1's single public admission
 projection in core/model and construct it through EvidenceService. Keep stored
@@ -702,6 +723,39 @@ rejects before context issuance; references are never globally resolved.
 Source admission checks locator membership for restricted contexts. Discovery
 checks full containment before inventory. EvidenceService keeps its admission
 backstop. Neither path widens a supplied context.
+
+**Canonical context binding (FD-2–FD-4, FD-59; 0.11.0).** One internal
+`ContextBinding` carrier owns the digest projection used by every
+`issue_context` caller. Repository and caller request identity remain the
+store key and are not duplicated inside the digest. The binding contains the
+explicit `ContextOrigin`, the effective complete `EvidenceScope`, the exact
+source requests as locator plus inclusive ranges, the exact discovery scopes
+selected for admission, and `question` when it is part of caller-owned binding
+identity. Source requests and discovery scopes are canonicalized by their
+canonical value, deduplicated and sorted before hashing; caller order therefore
+cannot create another binding for the same selection. Origin is never inferred
+from question presence. The binding excludes conclusion wording, update
+actions, challenge disposition text, verification outcome, submission digest,
+and every other semantic write field. `payload_digest(ContextBinding)` is the
+sole `binding_digest`.
+
+`issue_context` receives that typed binding rather than an arbitrary payload.
+The persisted context stores `binding_digest`; repository/request uniqueness
+plus that digest is the recovery/conflict boundary. The complete write wire is
+still hashed independently at the receipt owner before context/evidence work.
+Explicit ask/source admission is `EVIDENCE_ONLY`. A context-free record is also
+`EVIDENCE_ONLY`; for a create its question participates in the binding digest so
+a changed semantic request under the same caller identity conflicts, but the
+operational context does not become a question-bound semantic target and does
+not persist that question. A genuine question-bound start is `QUESTION`.
+Changed-scope reconsider is `CHANGED_SUPPORT`, and a challenge context issued by
+reconsider is `CHALLENGE`; when the caller already supplies a valid context,
+reconsider preserves that context rather than manufacturing a second one.
+Context-free record derives source requests and discovery scopes from the same
+direct-evidence fields that admission consumes. Challenge issuance binds its
+effective scope and direct challenge evidence selection. Changed-scope
+reconsider continues to use a fresh Span-owned request identity on every read,
+so it does not reuse caller request identity.
 
 **Surface conflicts.** `SurfaceConflict` carries the current boundary version.
 `put_surface` and `update_surface` raise it for a kind conflict, a changed
@@ -757,7 +811,7 @@ as a new one or assume a new wire digest equals the old request. New direct
 writes still use stable caller-owned identities. Registration refresh and
 publication require separate authorization; this disposition performs neither.
 
-## 10. Schema-11 layout and indexes
+## 10. Schema-13 layout and indexes
 
 **Authority:** FD-1–FD-8, FD-30, FD-35–FD-36, FD-42–FD-48.
 
@@ -770,11 +824,11 @@ The proposed physical changes are:
 | `surfaces` (new) | repository plus canonical surface key; declared-name uniqueness and kind-conflict validation | `Surface`, including boundary and parent reference; no persistent currency flag |
 | `understandings` | add owning surface reference and unique repository/surface/question index | adapt `Understanding`; preserve stable IDs and version pointers |
 | `understanding_versions`, `conclusions`, `understanding_membership` | retain immutable revision and membership keys; bind ownership through the understanding | adapt canonical payload references; no duplicated conclusion bodies |
-| `investigation_contexts` | retain repository/request uniqueness; adapt binding digest inputs | existing context carrier with surface-aware scope; remove budget input from binding |
+| `investigation_contexts` | retain repository/request uniqueness; rename the persisted digest column to `binding_digest` | `InvestigationContext.binding_digest` commits the canonical context binding; scope/question remain canonical context fields |
 | `record_receipts` | replace repository/context/submission key with repository/request key | adapted acceptance identity, digest, effects, and expiry; no cascading dependence on live context |
 | `support_dependencies` | retain reverse index and exact revision keys | project dependencies from canonical revisions in the acceptance transaction |
 | source/discovery observations, challenges, verification runs | retain canonical records and their reference integrity | only required ownership/identity adaptations; run-ingress mapping is the resolved O-7 path recorded in §12 |
-| `meta` | advance expected schema to 11 | existing runtime format check; no migration on ordinary open |
+| `meta` | advance expected schema to 13 | existing runtime format check; no migration on ordinary open |
 
 Resolve path containment from canonical boundaries and existing inventory/locator
 capabilities. Compute surface status on read; do not add a second maintained
@@ -941,12 +995,41 @@ remain unmeasured, so FG-4 stays `OPEN`.
 **Authority:** F3, F7, L4; FD-1, FD-6, FD-35–FD-36, FD-42–FD-45.
 
 Extend `shell/store_transition.py` and the existing installer transition command.
-The current `SUPPORTED_SOURCE_SCHEMAS` contains 7–11, and staging imports binding
-and seeds into an otherwise empty schema-12 store. A schema-10 or schema-11 input
-needs its own mapping and staged verification; the schema-11 mapping copies every
-semantic table and drops `source_observations.excerpt`; the old export mechanism
-alone is not that mapping. Retain historical old-format exports without a second active decoder
-or semantic writer in the MCP runtime.
+For 0.11.0 the target is schema 13 and `SUPPORTED_SOURCE_SCHEMAS` contains
+7–12. The runtime never migrates at open. Historical schemas 7–9 retain their
+export-only treatment; schema 10 and 11 keep their documented semantic mappings
+into the current target; schema 12 has the dedicated mapping below. Retain
+historical old-format exports without a second active decoder or semantic writer
+in the MCP runtime.
+
+**Schema-12 to schema-13 mapping (0.11.0).** Schema 13 changes the meaning and
+name of the context digest from whole-request `request_digest` to the canonical
+`binding_digest` defined in §9.2. A schema-12 context cannot be mechanically
+rebound because the persisted row does not retain every original source
+selection. Therefore the transition is an offline drain, not a context rewrite.
+
+Before staging, inspect every schema-12 `investigation_contexts` row. Refuse
+while any context is `LIVE` and either has no expiry or has an expiry at or
+after the transition clock. Expired or non-live contexts do not block the
+transition and are not copied. The staged schema-13 store copies every repository
+and durable semantic/audit table for the selected repository, including source
+and discovery observations, surfaces and boundary history, understandings,
+versions, conclusions, support dependencies and membership, challenges,
+verification runs and verification-observation membership, and retained
+`record_receipts`. It deliberately copies no `investigation_contexts`,
+`context_evidence`, or `context_discovery_evidence` rows. Receipt
+`RecordingIdentity.context_id` values remain immutable historical coordinates;
+they do not require the operational context row to survive (FD-42).
+
+The mapping artifact classifies those three context tables as
+`drained_not_copied` and every other target table as `preserved`, recording
+source/target counts. Verification requires zero staged operational contexts,
+exact preserved counts, SQLite integrity, support/dependency reconciliation,
+verification-observation references, and every receipt's accepted understanding,
+challenge and verification references. A refused drain leaves schema 12
+untouched. Rollback before schema-13 writes restores schema 12 through the
+existing owner; after schema-13 writes the existing rollback preservation rule
+keeps the new-format store rather than discarding accepted writes.
 
 **Schema-10 mapping rule (O-4).** Each schema-10 understanding maps to the path
 surface named by its recorded `EvidenceScope` when that scope names exactly one
@@ -1107,19 +1190,19 @@ second declaration of those requirements.
 | Authority | Mechanism section | Test owner / required scenario family | Present status |
 | --- | --- | --- | --- |
 | FD-1, FD-5–FD-8 | §10–§11 | `test_lifecycle_store.py`, `test_answer_service.py`; identity, boundaries, ownership, overlap, partial inventory, computed `unexamined`, descendant status | computed status tested; boundary enumeration is store-known members with the limit reported |
-| FD-2–FD-4 | §9–§12 | `test_lifecycle_service.py`, `test_lifecycle_store.py`, `test_record_wire.py`; new request key and restart/expiry | old-key baseline only |
+| FD-2–FD-4 | §9–§12 | `test_lifecycle_service.py`, `test_lifecycle_store.py`, `test_record_wire.py`, `test_store_transition.py`; canonical request binding, restart/expiry and schema transition | 0.11 canonical `ContextBinding`, caller request identity, replay/restart, schema-12 live/no-expiry refusal and exact post-cutover receipt/run retrieval verified |
 | FD-9–FD-16 | §9, §11 | `test_support_service.py`; dependency findings, mixed states, withdrawal, cycles | adapt; O-5 AMBIGUOUS |
-| FD-17–FD-22 | §11 | `test_reconsider.py` plus the installed MCP lane; cross-boundary closure, bounded traversal, challenge raise | bounded walk and `Challenged` tested; live lane revalidation is FP-6 |
+| FD-17–FD-22 | §11 | `test_reconsider.py` plus the installed MCP lane; cross-boundary closure, bounded traversal, challenge raise and re-establishment | bounded walk, fresh changed-support context, exact evidence membership, ordinary re-establishment and packaged challenge resolution verified; T08 comparative measurement remains separate |
 | FD-23–FD-29 | §11 | `test_answer_service.py`; mixed-support answers, gap variants, ambiguity, document view | candidate tests added |
 | FD-30–FD-37 | §10, §12 | `test_lifecycle_service.py`, `test_lifecycle_store.py`; duplicate create, confirm no-op, dependent effects, disputes | dependent effects named on the receipt; tested |
-| FD-38–FD-41 | §9, §12 | `test_record_wire.py`, `test_lifecycle_surface.py`, `tests/integration/test_lifecycle_mcp.py`; closed unions, rejection identity/action/version, post-commit failure | closed `RecordResult`/`ReconsiderResult` wired; rejections carry identity, action, current version |
-| FD-42–FD-45 | §13–§14 | `test_lifecycle_store.py`, `test_store_transition.py`; expiry boundaries, restart recovery, and preserved references | O-2 settled at a 7-day replay promise / 1-day context; expiry and replay tested |
-| FD-46–FD-48 | §10, §12 | `test_lifecycle_store.py`; concurrent first write, duplicate create, CAS and replay | request-key tests added |
-| FD-49–FD-53 | §15 | `test_host_contract.py`, `test_installed_mcp.py`, raw live-host capture | the three-tool surface is implemented and locally gated. 2026-11-07: OpenCode delivered the valid compact create/add/correct/replace lifecycle but removed an unknown old-form field before delivery; Codex delivered a current-candidate smoke create with a derived identity; Claude remains unverified. Strict unknown-field preservation through OpenCode is not established |
+| FD-38–FD-41 | §9, §12 | `test_record_wire.py`, `test_lifecycle_surface.py`, `tests/integration/test_lifecycle_mcp.py`; closed unions, rejection identity/action/version, post-commit failure | packaged MCP exercises all declared result families including `Unavailable`; structural faults are typed `Rejected`, unknown tools remain transport errors, and malformed ingress is separately contained |
+| FD-42–FD-45 | §13–§14 | `test_lifecycle_store.py`, `test_store_transition.py`; expiry boundaries, restart recovery, context drain and preserved references | expiry/replay verified; schema-12 live and no-expiry contexts refuse cutover without mutation; drained activation preserves exact retained receipt and verification history; interruption/rollback paths are verified |
+| FD-46–FD-48 | §10, §12 | `test_lifecycle_store.py`, `test_lifecycle_service.py`; concurrent first write, duplicate create, CAS and replay | same-identity replay/conflict, receipt-first concurrent acceptance, and distinct request identities racing one expected version are verified |
+| FD-49–FD-53 | §15 | `test_host_contract.py`, installed stdio lifecycle coverage, raw live-host capture | 0.11 packaged stdio exact selectors, public grammar, structural rejection and result families are verified. Candidate-specific managed-host schema/argument/server-receipt capture and session handoff remain T09 external acceptance; older host captures do not substitute for it |
 | FD-54–FD-57 | §13, §15 | `test_answer_service.py`; result fitting, explicit omission, minimum-result refusal | O-3 measured per host and applied as the delivered-wire budget |
-| FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | 84 input tokens per session; OpenCode first `ask` before first source read 5/5; Codex pending |
+| FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | canonical native/shell guidance, hooks, skills and plugin notice-delivery lane are verified; 0.11 candidate-specific managed-host native/search/shell captures remain T10 external acceptance |
 | F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
-| F8, G5 | §15 | frozen comparative task captures and scorecards | core value accepted on Codex and OpenCode (retained, current, reusable understanding; exact change isolation). Two reuse classes are positive with capture counted (break-even 2 and 11); the single-use cross-file class is negative (1.74× billed). No universal cost claim |
+| F8, G5 | §15 | frozen comparative task captures and scorecards | prior measurements remain historical evidence only for their named candidates. The 0.11 T08 deterministic range behavior is verified, but its candidate-specific comparative steps/tokens measurement remains open and no prior score is reused as the 0.11 verdict |
 
 Part B is complete only after its executable contracts, reviewed migration
 mappings, authority decisions, and measured deployment inputs are present.

@@ -71,11 +71,12 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '"kind":"understanding","question":"<exact question>",'
         '"scope_paths":["<path>"],"conclusion":"<statement>",'
         '"locator":"<path>"} '
-        "Create evidence is exactly one of locator, observation_id, or "
-        "non-empty support; scope is supplied or derived independently. Use "
-        "observation_id instead of locator when explicit evidence admission returned one. Use "
-        "support when you already hold the complete dependency set; then do "
-        "not also send observation_id. Omit surface; Span derives it from one "
+        "Create dependency evidence is locator, observation_id, or non-empty support; "
+        "scope is supplied or derived independently. A locator may accompany "
+        "support only as carried semantic scope and then adds no dependency. Use "
+        "observation_id when explicit evidence admission returned one; it is "
+        "exclusive with locator/support. Use support when you already hold the "
+        "complete dependency set. Omit surface; Span derives it from one "
         "scope_path, or from the context. With a context, omit question and "
         "scope_paths. "
         "Semantic scope describes the conclusion's subject; support names what "
@@ -100,7 +101,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "existing conclusion_id returned by Span; replace takes conclusion and "
         "reason; withdraw takes reason and optional evidence; confirm preserves "
         "the current content. Do not send conclusion_id on add or "
-        "new_conclusion_id on replace. "
+        "new_conclusion_id on replace. Challenge settlement may be included atomically "
+        "in challenge_dispositions: a resolved disposition supplies challenge_id, "
+        "expected_challenge_revision, reasoning, optional target_conclusion_ids, "
+        "and optional context-bound evidence_refs. Span derives resulting "
+        "understanding/version/revision coordinates; never send them. "
         "SURFACE TEMPLATE (only when the conclusion describes that declared boundary): "
         '{"repository_id":"<id>","request_id":"<new id>","kind":"surface",'
         '"action":"create","surface":{"kind":"SERVICE","locator":"<name>",'
@@ -110,7 +115,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "VERIFICATION TEMPLATE (copy and fill): "
         '{"request_id":"<new id>","context":{"repository_id":"<id>",'
         '"context_id":{"value":"<context id>"}},"kind":"verification",'
-        '"run":{"repository_id":"<id>","scope_description":"<what was tested>",'
+        '"run":{"scope_description":"<what was tested>",'
         '"scope_paths":["<path>"],"observations":["<obs id from explicit admission>"],'
         '"command":"<command>","scenario":"<scenario>","outcome":"PASS",'
         '"observed_at":"<ISO 8601>","observer":"<agent>"}} '
@@ -289,7 +294,6 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
             },
             "kind": "verification",
             "run": {
-                "repository_id": "repo-1",
                 "scope_description": "src/a.py behaviour",
                 "scope_paths": ["src/a.py"],
                 "observations": ["obs:..."],

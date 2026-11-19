@@ -8,13 +8,64 @@ action from message text (FD-39, FD-41, TD §9.2).
 from __future__ import annotations
 
 import enum as _enum
+from dataclasses import dataclass as _dataclass
 
 __all__ = [
     "Rejection",
     "RejectionCauseKind",
+    "StructuralFault",
+    "StructuralValidationError",
     "SurfaceConflict",
     "required_action_for",
 ]
+
+
+@_dataclass(frozen=True)
+class StructuralFault:
+    """One public structural coordinate and the canonical rule it violates."""
+
+    coordinate: str
+    rule: str
+    message: str
+
+    def __post_init__(self) -> None:
+        if not self.coordinate or not self.rule or not self.message:
+            raise ValueError("structural faults require coordinate, rule, and message")
+
+
+class StructuralValidationError(ValueError):
+    """Aggregate independently determinable request-shape faults."""
+
+    def __init__(self, faults: tuple[StructuralFault, ...]) -> None:
+        if not faults:
+            raise ValueError(
+                "a structural validation error requires at least one fault"
+            )
+        self.faults = faults
+        super().__init__("; ".join(_render_structural_fault(item) for item in faults))
+
+    def with_prefix(self, prefix: str) -> "StructuralValidationError":
+        def coordinate(value: str) -> str:
+            if value == "root":
+                return prefix
+            if value.startswith("["):
+                return f"{prefix}{value}"
+            return f"{prefix}.{value}"
+
+        return StructuralValidationError(
+            tuple(
+                StructuralFault(
+                    coordinate=coordinate(item.coordinate),
+                    rule=item.rule,
+                    message=item.message,
+                )
+                for item in self.faults
+            )
+        )
+
+
+def _render_structural_fault(fault: StructuralFault) -> str:
+    return f"{fault.coordinate}: {fault.message}"
 
 
 class RejectionCauseKind(_enum.Enum):
@@ -100,6 +151,8 @@ class Rejection(ValueError):
         cause_kind: RejectionCauseKind = RejectionCauseKind.VALIDATION,
         current_version: int | None = None,
         current_boundary_version: int | None = None,
+        public_identity: str | None = None,
+        public_cause: str | None = None,
     ) -> None:
         super().__init__(cause)
         self.cause = cause
@@ -107,6 +160,8 @@ class Rejection(ValueError):
         self.required_action = required_action_for(cause_kind)
         self.current_version = current_version
         self.current_boundary_version = current_boundary_version
+        self.public_identity = public_identity
+        self.public_cause = public_cause
 
 
 class SurfaceConflict(ValueError):

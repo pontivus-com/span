@@ -64,7 +64,7 @@ class LifecycleStorePort(_typing.Protocol):
         self,
         repository_id: str,
         request_id: m.RequestId,
-        request_digest: m.ContentDigest,
+        binding_digest: m.ContentDigest,
         factory: _typing.Callable[[], m.InvestigationContext],
     ) -> m.InvestigationContext:
         """Return the request-bound context, creating exactly one if absent."""
@@ -88,8 +88,18 @@ class LifecycleStorePort(_typing.Protocol):
         """Return one deterministic page of stored understandings."""
         ...
 
+    def find_understanding(self, understanding_id: str) -> m.Understanding | None:
+        """Return one stored understanding, or None when the identity is absent."""
+        ...
+
     def get_understanding(self, understanding_id: str) -> m.Understanding:
-        """Return one stored understanding."""
+        """Return one stored understanding; missing retained state is operational."""
+        ...
+
+    def find_version(
+        self, understanding_id: str, version: int
+    ) -> m.UnderstandingVersion | None:
+        """Return one exact immutable version, or None when it is absent."""
         ...
 
     def get_version(
@@ -112,6 +122,10 @@ class LifecycleStorePort(_typing.Protocol):
 
     def get_challenges(self, understanding_id: str) -> tuple[m.Challenge, ...]:
         """Return every challenge bound to one understanding."""
+        ...
+
+    def find_challenge(self, challenge_id: str) -> m.Challenge | None:
+        """Return one stored challenge, or None when the identity is absent."""
         ...
 
     def get_challenge(self, challenge_id: str) -> m.Challenge:
@@ -212,6 +226,10 @@ class LifecycleStorePort(_typing.Protocol):
         self, repository_id: str
     ) -> tuple[m.DiscoveryObservation, ...]:
         """Return every discovery observation for one repository."""
+        ...
+
+    def find_verification_run(self, run_id: str) -> m.VerificationRun | None:
+        """Return one verification run, or None when the identity is absent."""
         ...
 
     def get_verification_run(self, run_id: str) -> m.VerificationRun:

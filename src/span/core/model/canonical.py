@@ -17,6 +17,7 @@ from dataclasses import MISSING as _MISSING
 from span.core.model.primitives import (
     CanonicalDecodeError,
 )
+from span.core.rejection import StructuralValidationError
 
 
 def to_canonical(value: object) -> object:
@@ -57,6 +58,8 @@ def _decode_union(members: tuple[object, ...], data: object) -> object:
             continue
         try:
             return _decode_value(member, data)
+        except StructuralValidationError:
+            raise
         except (CanonicalDecodeError, TypeError, ValueError) as exc:
             failures.append(str(exc))
     raise CanonicalDecodeError(f"no union member matched {data!r}: {failures}")
@@ -130,6 +133,8 @@ def _decode_value(hint: object, data: object) -> object:
         for index, item in enumerate(data):
             try:
                 decoded.append(_decode_value(item_hint, item))
+            except StructuralValidationError as exc:
+                raise exc.with_prefix(f"[{index}]") from None
             except CanonicalDecodeError as exc:
                 faults.append(str(exc.with_segment(f"[{index}]")))
         # Aggregate sibling member faults (one reported call, not one per
@@ -171,6 +176,8 @@ def _decode_dataclass(cls: type, data: dict) -> object:
             continue
         try:
             kwargs[f.name] = _decode_value(hints[f.name], data[f.name])
+        except StructuralValidationError as exc:
+            raise exc.with_prefix(f.name) from None
         except CanonicalDecodeError as exc:
             faults.append(str(exc.with_segment(f.name)))
     # Aggregate every fault in this object so one call reports all of
@@ -179,6 +186,8 @@ def _decode_dataclass(cls: type, data: dict) -> object:
         raise CanonicalDecodeError("; ".join(faults))
     try:
         return cls(**kwargs)  # type: ignore[arg-type]
+    except StructuralValidationError:
+        raise
     except (ValueError, TypeError) as exc:
         raise CanonicalDecodeError(f"invalid {cls.__name__}: {exc}") from exc
 

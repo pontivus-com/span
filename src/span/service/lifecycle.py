@@ -33,7 +33,7 @@ from span.core.rejection import Rejection, RejectionCauseKind, SurfaceConflict
 from span.core.schema import record_wire as _rw
 from span.ports.lifecycle import LifecycleAuthorityResolver, LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import issue_context
+from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 from span.service.ids import server_context_id
@@ -74,6 +74,76 @@ def _record_wire_locators(value: object) -> tuple[str, ...]:
     return _cited_locators(value)
 
 
+def _direct_source_requests(value: object) -> tuple[m.EvidenceRequest, ...]:
+    """Exact direct source selections that admission will consume."""
+    found: list[m.EvidenceRequest] = []
+    if isinstance(value, _rw.SourceSupportWire):
+        found.append(
+            m.EvidenceRequest(
+                value.locator,
+                tuple(
+                    m.SourceRange(item.start_line, item.end_line)
+                    for item in value.ranges
+                ),
+            )
+        )
+    elif _dataclasses.is_dataclass(value) and not isinstance(value, type):
+        for field in _dataclasses.fields(value):
+            found.extend(_direct_source_requests(getattr(value, field.name)))
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            found.extend(_direct_source_requests(item))
+    return tuple(found)
+
+
+def _direct_discovery_scopes(value: object) -> tuple[m.EvidenceScope, ...]:
+    """Exact direct discovery scopes that admission will consume."""
+    found: list[m.EvidenceScope] = []
+    if isinstance(value, _rw.DiscoveryBoundarySupportWire):
+        found.append(m.EvidenceScope(paths=value.scope.paths))
+    elif _dataclasses.is_dataclass(value) and not isinstance(value, type):
+        for field in _dataclasses.fields(value):
+            found.extend(_direct_discovery_scopes(getattr(value, field.name)))
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            found.extend(_direct_discovery_scopes(item))
+    return tuple(found)
+
+
+def _record_context_selection(
+    wire: _rw.RecordRequestWire,
+) -> tuple[tuple[m.EvidenceRequest, ...], tuple[m.EvidenceScope, ...]]:
+    sources = list(_direct_source_requests(wire.support))
+    discovery = list(_direct_discovery_scopes(wire.support))
+    if wire.locator is not None:
+        sources.append(m.EvidenceRequest(wire.locator))
+    if wire.actions is not None:
+        actions: tuple[_rw.RecordActionWire, ...] = (
+            *wire.actions.add,
+            *wire.actions.confirm,
+            *wire.actions.correct,
+            *wire.actions.replace,
+            *wire.actions.withdraw,
+        )
+        for action in actions:
+            if action.locator is not None:
+                sources.append(m.EvidenceRequest(action.locator))
+            sources.extend(_direct_source_requests(action.support))
+            discovery.extend(_direct_discovery_scopes(action.support))
+    if wire.run is not None:
+        sources.extend(
+            m.EvidenceRequest(
+                item.locator,
+                tuple(
+                    m.SourceRange(value.start_line, value.end_line)
+                    for value in item.ranges
+                ),
+            )
+            for item in wire.run.evidence
+        )
+    return tuple(sources), tuple(discovery)
+
+
 class LifecycleService:
     """One repository-independent lifecycle service over one store."""
 
@@ -101,11 +171,17 @@ class LifecycleService:
         self._store.require_repository(request.repository_id)
         return issue_context(
             self._store,
-            payload=request,
+            binding=context_binding(
+                scope=request.scope,
+                origin=(
+                    m.ContextOrigin.QUESTION
+                    if request.question is not None
+                    else m.ContextOrigin.EVIDENCE_ONLY
+                ),
+                question=request.question,
+            ),
             repository_id=request.repository_id,
             request_id=request.request_id,
-            scope=request.scope,
-            question=request.question,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
@@ -133,6 +209,14 @@ class LifecycleService:
             if not surface.key.kind.is_declared:
                 raise RecordingValidationError(
                     "only a service or domain surface has a mutable boundary"
+                )
+            if self._store.find_surface(surface.key) is None:
+                raise RecordingValidationError(
+                    f"unknown surface: {surface.key.locator}",
+                    public_identity=surface.key.locator,
+                    public_cause=(
+                        f"the exact surface {surface.key.locator!r} does not exist"
+                    ),
                 )
             updated = self._store.update_surface(
                 surface,
@@ -166,7 +250,16 @@ class LifecycleService:
         default: m.SourceSupport | None = None
         if not wire.support:
             if wire.observation_id is not None:
-                observation = self._store.get_source_observation(wire.observation_id)
+                observation = self._store.find_source_observation(wire.observation_id)
+                if observation is None:
+                    raise RecordingValidationError(
+                        f"unknown source observation: {wire.observation_id!r}",
+                        public_identity=wire.observation_id,
+                        public_cause=(
+                            "the exact source observation "
+                            f"{wire.observation_id!r} does not exist"
+                        ),
+                    )
                 if observation.repository_id != wire.identity.repository_id:
                     raise RecordingValidationError(
                         "the observation belongs to another repository"
@@ -302,7 +395,16 @@ class LifecycleService:
             else None
         )
         scope = self._create_scope(wire, supplied_context) if create else None
-        wire = self._resolve_record_request(wire, semantic_scope=scope)
+        current_revisions: tuple[m.ConclusionRevision, ...] = ()
+        update_scope: m.EvidenceScope | None = None
+        if not create:
+            expected_snapshot, current_revisions = self._update_snapshot(wire)
+            update_scope = expected_snapshot.scope
+        wire = self._resolve_record_request(
+            wire,
+            semantic_scope=scope,
+            update_scope=update_scope,
+        )
         context = self._store.get_context(_typing.cast(str, wire.context_id))
         context_bound = context.origin is m.ContextOrigin.QUESTION
         derived = (
@@ -311,9 +413,6 @@ class LifecycleService:
         derived_conclusions = (
             (self._flat_conclusion(wire, scope),) if scope is not None else None
         )
-        current_revisions: tuple[m.ConclusionRevision, ...] = ()
-        if not create:
-            current_revisions = self._current_revisions_for_update(wire)
         command = _rw.record_command(
             wire,
             self._resolver(wire.identity),
@@ -345,27 +444,44 @@ class LifecycleService:
             )
         raise RecordingValidationError("record did not produce a command")
 
-    def _current_revisions_for_update(
+    def _update_snapshot(
         self, wire: _rw.RecordRequestWire
-    ) -> tuple[m.ConclusionRevision, ...]:
-        """Apply the expected-version CAS before deriving compact actions.
+    ) -> tuple[m.UnderstandingVersion, tuple[m.ConclusionRevision, ...]]:
+        """Resolve the caller's exact snapshot without pre-empting receipt-first CAS.
 
-        The store still owns the authoritative compare-and-set inside the
-        acceptance transaction. This read exists so the derivation of
-        confirm/correct/replace uses the version the caller named and so a
-        stale version rejects with the observed current version (FD-46).
+        Compact actions need the membership the caller named. An existing older
+        snapshot is therefore safe to decode against; the store transaction still
+        decides replay/replay-conflict before its authoritative version CAS. A
+        requested snapshot that never existed can reject immediately because no
+        accepted write could have been derived from it.
         """
         understanding_id = _typing.cast(str, wire.understanding_id)
         expected = _typing.cast(int, wire.expected_version)
-        understanding = self._store.get_understanding(understanding_id)
-        if understanding.current_version.value != expected:
+        understanding = self._store.find_understanding(understanding_id)
+        if understanding is None:
+            raise RecordingValidationError(
+                f"unknown understanding: {understanding_id!r}",
+                public_identity=understanding_id,
+                public_cause=(
+                    f"the exact understanding {understanding_id!r} does not exist"
+                ),
+            )
+        version = self._store.find_version(understanding_id, expected)
+        if version is None:
+            if understanding.current_version.value == expected:
+                # A current pointer without its retained row is operational
+                # history loss, not a caller-created validation error.
+                self._store.get_version(understanding_id, expected)
             raise RecordingConflict(
                 "expected understanding version "
                 f"{expected} does not match current "
                 f"{understanding.current_version.value}",
                 current_version=understanding.current_version.value,
             )
-        return self._store.get_version_conclusions(understanding_id, expected)
+        return (
+            version,
+            self._store.get_version_conclusions(understanding_id, expected),
+        )
 
     def _record_verification_request(
         self, wire: _rw.RecordRequestWire
@@ -594,22 +710,32 @@ class LifecycleService:
         wire: _rw.RecordRequestWire,
         *,
         semantic_scope: m.EvidenceScope | None = None,
+        update_scope: m.EvidenceScope | None = None,
     ) -> _rw.RecordRequestWire:
         if wire.context_id is not None:
             return wire
-        requirements = self._record_request_scopes(wire, semantic_scope)
+        requirements = self._record_request_scopes(
+            wire,
+            semantic_scope,
+            update_scope=update_scope,
+        )
         if not requirements:
             raise RecordingValidationError(
                 "context-free recording requires explicit scope or direct evidence",
                 cause_kind=RejectionCauseKind.CONTEXT_REQUIRED,
             )
+        source_requests, discovery_scopes = _record_context_selection(wire)
         context = issue_context(
             self._store,
-            payload=wire,
+            binding=context_binding(
+                scope=m.evidence_scope_union(requirements),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                question=wire.question if wire.conclusion is not None else None,
+                source_requests=source_requests,
+                discovery_scopes=discovery_scopes,
+            ),
             repository_id=wire.bound_repository_id,
-            request_id=m.RequestId(f"{wire.request_id}:record-context"),
-            scope=m.evidence_scope_union(requirements),
-            question=None,
+            request_id=m.RequestId(wire.request_id),
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
@@ -626,22 +752,20 @@ class LifecycleService:
         self,
         wire: _rw.RecordRequestWire,
         semantic_scope: m.EvidenceScope | None,
+        *,
+        update_scope: m.EvidenceScope | None = None,
     ) -> tuple[m.EvidenceScope, ...]:
         """Actual complete scope requirements; absent fields are not operands."""
         scopes: list[m.EvidenceScope] = []
         if semantic_scope is not None:
             scopes.append(semantic_scope)
+        if update_scope is not None:
+            scopes.append(update_scope)
         supports: list[_rw.SupportWire] = list(wire.support)
         locators = list(_cited_locators(wire.support))
         if wire.locator is not None:
             locators.append(wire.locator)
         if wire.actions is not None:
-            if wire.understanding_id is not None and wire.expected_version is not None:
-                scopes.append(
-                    self._store.get_version(
-                        wire.understanding_id, wire.expected_version
-                    ).scope
-                )
             actions: tuple[_rw.RecordActionWire, ...] = (
                 *wire.actions.add,
                 *wire.actions.confirm,

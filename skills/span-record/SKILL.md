@@ -27,11 +27,12 @@ Use `kind="understanding"` for a supported conclusion.
 }
 ```
 
-A create is one conclusion with exactly one evidence mode. `locator` cites
-source evidence; `observation_id` may replace it when you hold an admitted
-observation; non-empty `support` is the complete typed dependency set you
-already hold. These evidence modes are mutually exclusive. `surface` is
-optional and semantic scope is supplied or derived independently from support.
+A create is one conclusion with dependency evidence from `locator`,
+`observation_id`, or non-empty `support`. Support is the complete typed
+dependency set you already hold. A locator may accompany support solely as
+carried semantic scope and adds no dependency in that form; observation remains
+exclusive. `surface` is optional and semantic scope is supplied or derived
+independently from support.
 
 Update an existing understanding with `understanding_id`, `expected_version`,
 and one or more of `add`, `confirm`, `correct`, `replace`, `withdraw`. Multiple
@@ -108,9 +109,18 @@ new lineage identity on `add` and `replace`, the old revision, and the
 mechanical basis. `reconsider` already returns the `expected_version` and
 context, so the update follows without another `ask`.
 
+To settle a challenge in the same update, add `challenge_dispositions`.
+A resolved disposition supplies `challenge_id`, `expected_challenge_revision`,
+`reasoning`, optional `target_conclusion_ids`, and optional context-bound
+`evidence_refs`. Omit targets to resolve the challenge's own lineages. Never
+send the resulting understanding/version/revision; Span derives those from the
+same atomic update.
+
 A create may supply the `context` reference returned by explicit evidence admission or `reconsider` instead of the question and
 scope; do not send both — the conflict is rejected. Without a context, a create
-issues its own evidence-only context from the scope and cited locators.
+issues its own evidence-only operational context from the scope and cited
+locators. That internal context does not replace the create's explicit semantic
+question/scope.
 
 Semantic scope describes what the conclusion is about; support identifies what
 established it. Multiple support files do not create multiple owning surfaces.
@@ -158,7 +168,6 @@ Do not substitute scenario text for structural evidence.
   "request_id": "verify-ui-1",
   "kind": "verification",
   "run": {
-    "repository_id": "repo-1",
     "scope_description": "UI form suite",
     "scope_paths": ["ui/"],
     "evidence": [{"locator": "ui/tests/form.test.ts", "ranges": []}],

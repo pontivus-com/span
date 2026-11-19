@@ -113,6 +113,10 @@ class RecordWireSchemaTest(unittest.TestCase):
         ):
             self.assertFalse(hasattr(w, name), name)
 
+    def test_verification_repository_is_enclosing_record_only(self):
+        schema = schema_for_request(w.VerificationRunWire)
+        self.assertNotIn("repository_id", schema["properties"])
+
     def test_public_update_grammar_is_compact(self):
         schema = schema_for_request(w.RecordRequestWire)
         defs = schema["$defs"]
@@ -155,6 +159,54 @@ def _update_request(
         expected_version=expected_version,
         actions=actions,
     )
+
+
+class CreateEvidenceGrammarTest(unittest.TestCase):
+    def test_create_accepts_locator_with_explicit_support(self):
+        request = w.RecordRequestWire(
+            request_id="sub-create-combined",
+            context=_context_ref(),
+            kind=m.RecordKind.UNDERSTANDING,
+            conclusion="A does X",
+            locator="src/a.py",
+            support=(w.SourceSupportWire(locator="src/b.py"),),
+        )
+        self.assertEqual(request.locator, "src/a.py")
+        self.assertEqual(len(request.support), 1)
+
+    def test_create_observation_remains_exclusive(self):
+        for values in (
+            {"locator": "src/a.py"},
+            {"support": (w.SourceSupportWire(locator="src/a.py"),)},
+        ):
+            with self.assertRaises(ValueError):
+                w.RecordRequestWire(
+                    request_id="sub-create-exclusive",
+                    context=_context_ref(),
+                    kind=m.RecordKind.UNDERSTANDING,
+                    conclusion="A does X",
+                    observation_id="obs-1",
+                    **values,
+                )
+
+    def test_verification_command_derives_repository_from_identity(self):
+        wire = w.RecordRequestWire(
+            request_id="sub-verification-owner",
+            context=_context_ref(),
+            kind=m.RecordKind.VERIFICATION,
+            run=w.VerificationRunWire(
+                scope_description="probe",
+                scope_paths=("src/a.py",),
+                command="pytest",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="test",
+                observations=("obs-1",),
+            ),
+        )
+        command = w.record_command(wire, _resolver())
+        self.assertEqual(command.run.repository_id, "repo-1")
 
 
 class ConclusionIdentityTest(unittest.TestCase):
@@ -532,7 +584,6 @@ class RecordWireMalformedTest(unittest.TestCase):
             "request_id": "sub-verification",
             "kind": "verification",
             "run": {
-                "repository_id": "repo-1",
                 "scope_description": "probe",
                 "scope_paths": ["src/a.py"],
                 "observations": ["obs-1"],
@@ -630,7 +681,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             )
 
     def test_unknown_fields_reject(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             from_wire(
                 w.RecordRequestWire,
                 self._update(
@@ -647,14 +698,14 @@ class RecordWireMalformedTest(unittest.TestCase):
             )
 
     def test_old_create_conclusion_id_rejects(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(conclusion_id="c-1"),
             )
 
     def test_old_add_conclusion_id_rejects(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             from_wire(
                 w.RecordRequestWire,
                 self._update(
@@ -671,7 +722,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             )
 
     def test_old_replace_new_conclusion_id_rejects(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             from_wire(
                 w.RecordRequestWire,
                 self._update(
@@ -690,12 +741,12 @@ class RecordWireMalformedTest(unittest.TestCase):
             )
 
     def test_scope_evidence_refs_is_not_public(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(scope_evidence_refs=[]),
             )
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             from_wire(
                 w.RecordRequestWire,
                 self._update(
@@ -711,6 +762,46 @@ class RecordWireMalformedTest(unittest.TestCase):
                     },
                 ),
             )
+
+    def test_nested_verification_repository_rejects(self):
+        payload = self._verification()
+        payload["run"]["repository_id"] = "repo-1"
+        with self.assertRaisesRegex(ValueError, "unknown field"):
+            from_wire(w.RecordRequestWire, payload)
+
+    def test_resolved_disposition_has_only_semantic_targets(self):
+        command = w.record_command(
+            _update_request(
+                w.RecordActionsWire(
+                    confirm=(
+                        w.ConfirmConclusionWire(
+                            conclusion_id="c-1",
+                            locator="src/a.py",
+                        ),
+                    )
+                )
+            ),
+            _resolver(),
+            current_revisions=(_revision(),),
+        )
+        # command construction remains valid without a disposition result coordinate.
+        self.assertEqual(command.expected_version.value, 1)
+        disposition = w.ResolvedDispositionWire(
+            challenge_id="ch-1",
+            expected_challenge_revision=1,
+            reasoning="The corrected conclusion settles the dispute.",
+            target_conclusion_ids=("c-1",),
+        )
+        resolved = w._disposition(disposition, _resolver())
+        self.assertEqual(
+            tuple(item.value for item in resolved.target_conclusion_ids),
+            ("c-1",),
+        )
+        schema = schema_for_request(w.ResolvedDispositionWire)
+        self.assertNotIn("resulting_understanding_id", schema["properties"])
+        self.assertNotIn("resulting_version", schema["properties"])
+        self.assertNotIn("conclusions", schema["properties"])
+        self.assertNotIn("withdrawn", schema["properties"])
 
     def test_irrelevant_update_root_fields_reject(self):
         for field, value in (
@@ -803,12 +894,13 @@ class RecordWireMalformedTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     from_wire(w.RecordRequestWire, self._surface(**{field: value}))
 
-    def test_create_rejects_support_and_locator(self):
-        with self.assertRaisesRegex(ValueError, "evidence mode"):
-            from_wire(
-                w.RecordRequestWire,
-                self._create(support=[{"$type": "source", "locator": "src/b.py"}]),
-            )
+    def test_create_accepts_support_and_locator(self):
+        request = from_wire(
+            w.RecordRequestWire,
+            self._create(support=[{"$type": "source", "locator": "src/b.py"}]),
+        )
+        self.assertEqual(request.locator, "src/a.py")
+        self.assertEqual(len(request.support), 1)
 
     def test_create_accepts_support_only_with_explicit_scope(self):
         request = from_wire(
@@ -825,14 +917,14 @@ class RecordWireMalformedTest(unittest.TestCase):
         self.assertIsInstance(request, w.RecordRequestWire)
 
     def test_create_rejects_locator_and_observation(self):
-        with self.assertRaisesRegex(ValueError, "evidence mode"):
+        with self.assertRaisesRegex(ValueError, "admitted-observation exclusivity"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(observation_id="obs-1"),
             )
 
     def test_create_rejects_support_and_observation(self):
-        with self.assertRaisesRegex(ValueError, "evidence mode"):
+        with self.assertRaisesRegex(ValueError, "admitted-observation exclusivity"):
             from_wire(
                 w.RecordRequestWire,
                 self._create(
@@ -843,7 +935,7 @@ class RecordWireMalformedTest(unittest.TestCase):
             )
 
     def test_old_full_update_grammar_rejects(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             from_wire(
                 w.RecordRequestWire,
                 self._update(
@@ -868,7 +960,6 @@ class RecordWireCodecTest(unittest.TestCase):
     def test_verification_requires_observations_or_evidence(self):
         with self.assertRaises(ValueError) as raised:
             w.VerificationRunWire(
-                repository_id="repo-1",
                 scope_description="probe",
                 scope_paths=("src/a.py",),
                 command="python3 -m unittest",
@@ -883,7 +974,6 @@ class RecordWireCodecTest(unittest.TestCase):
 
     def test_verification_accepts_evidence_only(self):
         run = w.VerificationRunWire(
-            repository_id="repo-1",
             scope_description="probe",
             scope_paths=("src/a.py",),
             command="python3 -m unittest",

@@ -38,6 +38,7 @@ from span.core.model.support import (
 from span.core.model.surfaces import (
     Surface,
     SurfaceKey,
+    SurfaceReference,
     SurfaceStatus,
 )
 from span.core.model.understanding import (
@@ -212,7 +213,7 @@ class AmbiguousSurface:
     """A reference resolves to more than one granularity (FD-26)."""
 
     reference: str
-    candidates: tuple[SurfaceKey, ...]
+    candidates: tuple[SurfaceReference, ...]
     missing_decision: str
 
     def __post_init__(self) -> None:

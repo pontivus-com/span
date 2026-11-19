@@ -23,7 +23,7 @@ from span.core.recording import RecordingValidationError
 from span.core.rejection import RejectionCauseKind
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import issue_context
+from span.service.contexts import context_binding, issue_context
 from span.service.continuation import (
     ContinuationCursor,
     decode_continuation,
@@ -98,9 +98,16 @@ class AnswerService:
             )
         elif isinstance(request.selector, m.CurrentUnderstandingSelector):
             repository_id = request.selector.repository_id
-            selected_understanding = self._store.get_understanding(
+            selected_understanding = self._store.find_understanding(
                 request.selector.understanding_id
             )
+            if selected_understanding is None:
+                identity = request.selector.understanding_id
+                raise RecordingValidationError(
+                    f"unknown understanding: {identity!r}",
+                    public_identity=identity,
+                    public_cause=f"the exact understanding {identity!r} does not exist",
+                )
             if selected_understanding.repository_id != repository_id:
                 raise RecordingValidationError(
                     "selected understanding belongs to another repository"
@@ -224,7 +231,10 @@ class AnswerService:
         if len(candidates) > 1:
             return m.AmbiguousSurface(
                 reference=reference,
-                candidates=candidates,
+                candidates=tuple(
+                    m.SurfaceReference(kind=item.kind, locator=item.locator)
+                    for item in candidates
+                ),
                 missing_decision=(
                     "choose the file, symbol, service, or domain surface"
                 ),
@@ -332,11 +342,13 @@ class AnswerService:
         assert request_id is not None
         context = issue_context(
             self._store,
-            payload=request,
+            binding=context_binding(
+                scope=m.EvidenceScope(paths=self._surface_paths(surface)),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                source_requests=evidence,
+            ),
             repository_id=repository_id,
             request_id=m.RequestId(request_id),
-            scope=m.EvidenceScope(paths=self._surface_paths(surface)),
-            question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
@@ -386,7 +398,7 @@ class AnswerService:
                     repository_id=context.repository_id,
                     context_id=context.context_id.value,
                     request_id=context.request_id,
-                    request_digest=context.request_digest,
+                    binding_digest=context.binding_digest,
                 )
             )
             if deliveries
@@ -481,13 +493,41 @@ class AnswerService:
     ) -> m.AskResult:
         self._store.require_repository(selector.repository_id)
         if isinstance(selector, m.UnderstandingSnapshotSelector):
-            understanding = self._store.get_understanding(selector.understanding_id)
+            understanding = self._store.find_understanding(selector.understanding_id)
+            if understanding is None:
+                raise RecordingValidationError(
+                    f"unknown understanding: {selector.understanding_id!r}",
+                    public_identity=selector.understanding_id,
+                    public_cause=(
+                        "the exact understanding "
+                        f"{selector.understanding_id!r} does not exist"
+                    ),
+                )
             version_number = (
                 understanding.current_version.value
                 if selector.version is None
                 else selector.version
             )
-            version = self._store.get_version(selector.understanding_id, version_number)
+            if selector.version is None:
+                # A missing current row is retained-state unavailability.
+                version = self._store.get_version(
+                    selector.understanding_id, version_number
+                )
+            else:
+                selected_version = self._store.find_version(
+                    selector.understanding_id, version_number
+                )
+                if selected_version is None:
+                    identity = f"{selector.understanding_id}@{version_number}"
+                    raise RecordingValidationError(
+                        f"unknown understanding version: {identity}",
+                        public_identity=identity,
+                        public_cause=(
+                            f"the exact understanding version {identity!r} "
+                            "does not exist"
+                        ),
+                    )
+                version = selected_version
             try:
                 support: m.UnderstandingSupport | m.SupportUnavailable = (
                     self._support.evaluate_version(
@@ -516,12 +556,23 @@ class AnswerService:
             raise RecordingValidationError(
                 f"no receipt for request {selector.request_id!r}"
             )
-        return m.RetrievedReceipt(
-            receipt=receipt,
-            verification_runs=tuple(
+        try:
+            verification_runs = tuple(
                 self._store.get_verification_run(run_id.value)
                 for run_id in receipt.accepted_verification_run_ids
-            ),
+            )
+        except self._store.operational_errors:
+            return m.Unavailable(
+                operation="ask",
+                failure="accepted receipt references unavailable retained history",
+                recovery=(
+                    "report the unavailable history and preserve the receipt; "
+                    "do not repeat the historical write"
+                ),
+            )
+        return m.RetrievedReceipt(
+            receipt=receipt,
+            verification_runs=verification_runs,
         )
 
     def _evidence_page(self, request: m.AskRequest) -> m.AskResult:
@@ -539,7 +590,7 @@ class AnswerService:
         if (
             context.repository_id != cursor.repository_id
             or context.request_id != cursor.request_id
-            or context.request_digest != cursor.request_digest
+            or context.binding_digest != cursor.binding_digest
         ):
             raise RecordingValidationError.continuation_invalid(
                 "the continuation does not match its context"
@@ -598,7 +649,7 @@ class AnswerService:
                         repository_id=cursor.repository_id,
                         context_id=cursor.context_id,
                         request_id=cursor.request_id,
-                        request_digest=cursor.request_digest,
+                        binding_digest=cursor.binding_digest,
                         unit_index=unit_index,
                         line_offset=line_offset,
                     )

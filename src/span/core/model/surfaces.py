@@ -70,11 +70,7 @@ class SurfaceKey:
 
 @_dataclass(frozen=True)
 class SurfaceReference:
-    """A public exact surface selection: kind and locator.
-
-    ``repository_id`` is optional because ``ask`` already carries the routed
-    repository. An ``AmbiguousSurface`` candidate can be copied back verbatim.
-    """
+    """A public exact surface selection within the enclosing repository."""
 
     __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
         _constraints.PresenceRule(
@@ -83,22 +79,10 @@ class SurfaceReference:
             maximum=1,
             label="surface reference locator",
         ),
-        _constraints.PresenceRule(
-            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
-            minimum=1,
-            maximum=1,
-            when=(
-                _constraints.PresenceCondition(
-                    _constraints.PresenceField("repository_id"), True
-                ),
-            ),
-            label="surface reference repository",
-        ),
     )
 
     kind: SurfaceKind
     locator: str
-    repository_id: str | None = None
 
     def __post_init__(self) -> None:
         _constraints.validate_structural_rules(self)

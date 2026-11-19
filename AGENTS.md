@@ -123,9 +123,11 @@ The public MCP operations are exactly three, one per lifecycle moment:
 `ask`, `record`, `reconsider`.
 
 `record` carries `kind` (`understanding`, `verification`, or `surface`). An
-understanding create is flat — one `conclusion` plus exactly one evidence mode
-(`locator`, `observation_id`, or non-empty `support`); scope is supplied or
-derived independently. `actions` is for updates and `action` for a surface
+understanding create is flat — one `conclusion` with dependency evidence from
+`locator`, `observation_id`, or non-empty `support`; scope is supplied or
+derived independently. A `locator` may accompany explicit `support` solely as
+carried code scope; `support` remains the complete dependency set and
+`observation_id` remains exclusive. `actions` is for updates and `action` for a surface
 declaration. Those are semantic fields, not separate tools. Setup belongs
 to the installer; structural navigation belongs to the host. Any other
 operation name follows the ordinary unknown-tool path. Span carries no
@@ -139,3 +141,21 @@ provider, edits a target repository, or runs tests on the user's behalf.
 Sign off commits with the Developer Certificate of Origin (`git commit -s`).
 Update the affected public document when a contract changes. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+<!-- span:start -->
+## Span lifecycle (MCP only)
+
+Consult Span before deriving semantic understanding. Record supported
+conclusions when established. After edits, reconsider changed paths and record
+the supported dispositions before completing the work.
+
+- Before any source access used to understand a surface — native `Read`/`Grep` or shell reads/searches such as `cat`, `rg`, or `grep` — `ask` the exact surface or reference with no question or request identity.
+- Use `RecordedQuestionSelector` only when you already know the exact recorded question; it is exact surface-scoped lookup, not semantic matching.
+- If a Gap's source pointers need bytes, make an explicit evidence-admission `ask`; follow only the continuation it returns.
+- Treat returned context references as opaque handles; copy them only into declared `context` fields.
+- After editing: `reconsider`; investigate `REASSESSMENT_REQUIRED`/`UNVERIFIABLE` conclusions and record their dispositions.
+- After establishing a conclusion: `record`.
+
+Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md),
+[router skill](https://github.com/pontivus-com/span/blob/master/skills/span-router/SKILL.md).
+<!-- span:end -->

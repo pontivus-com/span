@@ -212,7 +212,7 @@ class RoutingTest(unittest.TestCase):
         self.assertEqual(request.action, m.SurfaceAction.CREATE)
 
     def test_ask_rejects_context_id(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             decode_request(
                 "ask",
                 {
@@ -258,6 +258,25 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["cause_kind"], "source_drift")
         self.assertEqual(payload["cause"], "recorded support is not current")
 
+    def test_exact_lookup_rejection_names_public_identity(self):
+        from span.core.recording import RecordingValidationError
+
+        result = self._dispatch(
+            _context(),
+            RecordingValidationError(
+                "internal lookup text",
+                public_identity="u:missing",
+                public_cause="the exact understanding 'u:missing' does not exist",
+            ),
+        )
+        payload = json.loads(result.content)
+        self.assertEqual(payload["$type"], "Rejected")
+        self.assertEqual(payload["identity"], "u:missing")
+        self.assertEqual(
+            payload["cause"],
+            "the exact understanding 'u:missing' does not exist",
+        )
+
     def test_version_conflict_names_the_current_version(self):
         from span.core.recording import RecordingConflict
 
@@ -292,6 +311,17 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["current_boundary_version"], 2)
         self.assertIsNone(payload["current_version"])
 
+    def test_store_invariant_is_internal_not_unavailable(self):
+        from span.shell.sqlite_store.lifecycle import LifecycleStoreInvariantError
+
+        result = self._dispatch(
+            _context(), LifecycleStoreInvariantError("private invariant detail")
+        )
+        payload = json.loads(result.content)
+        self.assertTrue(result.is_error)
+        self.assertEqual(payload["kind"], "internal")
+        self.assertNotIn("private invariant detail", json.dumps(payload))
+
     def test_schema_version_failure_is_unavailable_not_rejected(self):
         from span.shell.sqlite_store.lifecycle import SchemaVersionError
 
@@ -316,7 +346,7 @@ class ErrorEnvelopeTest(unittest.TestCase):
         from span.core.recording import RecordingConflict
         from span.core.rejection import RejectionCauseKind
 
-        sentinel = "/private/span/SECRET.db request_digest=deadbeef"
+        sentinel = "/private/span/SECRET.db binding_digest=deadbeef"
         result = self._dispatch(
             _context(),
             RecordingConflict(
@@ -350,6 +380,87 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["$type"], "Rejected")
         self.assertEqual(payload["cause_kind"], "replay_conflict")
         self.assertIsNone(payload["current_version"])
+
+    def test_structural_lifecycle_ingress_is_a_rejected_result(self):
+        adapter = _adapter(_context())
+        result = adapter.dispatch(
+            "record",
+            {
+                "repository_id": REPO,
+                "request_id": "req-structural",
+                "kind": "verification",
+                "run": {
+                    "repository_id": REPO,
+                    "scope_description": "probe",
+                    "scope_paths": ["src/a.py"],
+                    "observations": ["obs-1"],
+                    "command": "pytest",
+                    "scenario": None,
+                    "outcome": "PASS",
+                    "observed_at": "2026-11-19T00:00:00+00:00",
+                    "observer": "test",
+                },
+            },
+        )
+        payload = json.loads(result.content)
+        self.assertFalse(result.is_error)
+        self.assertEqual(payload["$type"], "Rejected")
+        self.assertEqual(payload["cause_kind"], "validation")
+        self.assertIn("run.repository_id", payload["cause"])
+        self.assertIn("run.repository_id", payload["required_action"])
+        self.assertNotIn("VerificationRunWire", json.dumps(payload))
+
+    def test_structural_ingress_reports_independent_sibling_faults(self):
+        adapter = _adapter(_context())
+        result = adapter.dispatch(
+            "record",
+            {
+                "repository_id": REPO,
+                "request_id": "req-siblings",
+                "kind": "verification",
+                "run": {
+                    "scope_paths": ["src/a.py"],
+                    "observations": ["obs-1"],
+                    "command": "pytest",
+                    "scenario": None,
+                    "outcome": "PASS",
+                    "observed_at": "2026-11-19T00:00:00+00:00",
+                    "observer": "test",
+                    "extra": True,
+                },
+            },
+        )
+        payload = json.loads(result.content)
+        self.assertEqual(payload["$type"], "Rejected")
+        self.assertIn("run.scope_description", payload["cause"])
+        self.assertIn("run.extra", payload["cause"])
+
+    def test_store_invariant_failure_is_internal_not_unavailable(self):
+        from span.shell.sqlite_store.lifecycle import LifecycleStoreInvariantError
+
+        context = _context()
+        adapter = _adapter(context)
+        with mock.patch.object(
+            context.lifecycle,
+            "record",
+            side_effect=LifecycleStoreInvariantError("internal invariant detail"),
+        ):
+            result = adapter.dispatch(
+                "record",
+                {
+                    "repository_id": REPO,
+                    "request_id": "req-invariant",
+                    "kind": "understanding",
+                    "question": "What happens?",
+                    "conclusion": "A does X.",
+                    "locator": "src/a.py",
+                },
+            )
+        payload = json.loads(result.content)
+        self.assertTrue(result.is_error)
+        self.assertEqual(payload["kind"], "internal")
+        self.assertNotIn("invariant detail", result.content)
+        self.assertNotIn("unavailable", result.content)
 
     def test_malformed_ingress_is_a_transport_error(self):
         adapter = _adapter(_context())

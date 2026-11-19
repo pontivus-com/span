@@ -115,7 +115,7 @@ def _context(
         context_id=m.InvestigationContextId("ctx-1"),
         repository_id="repo-1",
         request_id=m.RequestId("req-1"),
-        request_digest=m.ContentDigest("sha256:request"),
+        binding_digest=m.ContentDigest("sha256:request"),
         origin=m.ContextOrigin.EVIDENCE_ONLY,
         state=m.ContextState.LIVE,
         scope=m.EvidenceScope(paths=("src/a.py",)),
@@ -241,15 +241,7 @@ def _resolved(challenge_id: str, expected: int) -> m.ChallengeDisposition:
         challenge_id=m.ChallengeId(challenge_id),
         expected_challenge_revision=m.ChallengeRevision(expected),
         reasoning="checked the recorded source",
-        resulting_understanding_id=m.UnderstandingId("u-1"),
-        resulting_version=m.UnderstandingVersionNumber(expected + 1),
-        conclusions=(
-            m.ConclusionRevisionRef(
-                understanding_id=m.UnderstandingId("u-1"),
-                conclusion_id=m.ConclusionId("c-1"),
-                revision=m.ConclusionRevisionNumber(expected + 1),
-            ),
-        ),
+        target_conclusion_ids=(m.ConclusionId("c-1"),),
     )
 
 
@@ -282,11 +274,11 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.register_repository("repo-1", "/repo/one")
         self.store.put_source_observation(_observation())
 
-    def test_schema_version_is_twelve(self) -> None:
+    def test_schema_version_is_thirteen(self) -> None:
         row = self.store._connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        self.assertEqual(row["value"], "12")
+        self.assertEqual(row["value"], "13")
 
     def test_rebind_repository_moves_only_the_root(self) -> None:
         self.store.rebind_repository("repo-1", "/repo/two", expected_root="/repo/one")
@@ -489,8 +481,12 @@ class LifecycleStoreTest(unittest.TestCase):
         self._seed_understanding()
         self.store.create_challenge(_challenge("ch-1"))
         self.assertEqual(self.store.get_challenge("ch-1"), _challenge("ch-1"))
-        with self.assertRaises(LifecycleStoreError):
+        with self.assertRaises(RecordingValidationError) as raised:
             self.store.create_challenge(_challenge("ch-1"))
+        self.assertIs(
+            raised.exception.cause_kind,
+            m.RejectionCauseKind.ALREADY_EXISTS,
+        )
         receipt = self.store.record_understanding(
             _disposition_command(1, "sub-ch-1", (_unresolved("ch-1", 1),))
         )
@@ -901,6 +897,41 @@ class LifecycleStoreTest(unittest.TestCase):
         self.assertEqual(self.store.find_admitted_evidence("ctx-1", "ev-1"), evidence)
         self.assertEqual(self.store.find_admitted_evidence("ctx-1", "obs-1"), evidence)
         self.assertTrue(self.store.has_admitted_observation("ctx-1", "obs-1"))
+
+    def test_concurrent_distinct_updates_one_version_yield_one_conflict(
+        self,
+    ) -> None:
+        self._seed_understanding()
+        second = LifecycleStore(self.path, retention=RETENTION, clock=lambda: NOW)
+        self.addCleanup(second.close)
+        outcomes: list[str] = []
+        barrier = threading.Barrier(2)
+
+        def run(store: LifecycleStore, submission: str) -> None:
+            barrier.wait()
+            try:
+                store.record_understanding(
+                    _update_command(expected=1, submission=submission),
+                    understanding_id=m.UnderstandingId("u-1"),
+                )
+                outcomes.append("accepted")
+            except RecordingConflict:
+                outcomes.append("conflict")
+
+        threads = [
+            threading.Thread(target=run, args=(self.store, "sub-race-a")),
+            threading.Thread(target=run, args=(second, "sub-race-b")),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(sorted(outcomes), ["accepted", "conflict"])
+        self.assertEqual(
+            self.store.get_understanding("u-1").current_version.value,
+            2,
+        )
 
     def test_concurrent_same_submission_commits_once(self) -> None:
         self.store.put_context(_context())

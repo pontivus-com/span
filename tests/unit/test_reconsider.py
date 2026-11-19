@@ -6,6 +6,7 @@ import datetime
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 from span.core import model as m
 from span.core.recording import RecordingValidationError
@@ -52,7 +53,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                 context_id=CONTEXT_ID,
                 repository_id="repo-1",
                 request_id=m.RequestId("req-1"),
-                request_digest=m.ContentDigest("sha256:request"),
+                binding_digest=m.ContentDigest("sha256:request"),
                 origin=m.ContextOrigin.EVIDENCE_ONLY,
                 state=m.ContextState.LIVE,
                 scope=m.EvidenceScope(),
@@ -192,6 +193,15 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(
             by_surface["src/b.py"].conclusions[0].expected_version.value, 1
         )
+        context = self.store.get_context(result.context.context_id.value)
+        self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
+        self.assertEqual(
+            context.scope,
+            m.EvidenceScope(
+                paths=("src/a.py", "src/b.py"),
+                evidence_refs=(self.store.get_source_observation("obs-a").evidence,),
+            ),
+        )
 
     def test_historical_revision_is_not_an_actionable_change_target(self) -> None:
         self.store.record_understanding(
@@ -251,6 +261,40 @@ class ReconsiderServiceTest(unittest.TestCase):
             [("c-1", 2)],
         )
         self.assertEqual(a_conclusions[0].expected_version.value, 2)
+
+    def test_changed_scope_context_does_not_admit_current_support(self) -> None:
+        support = mock.Mock()
+        support.evaluate_revision.return_value = support_rules.evaluation(
+            m.SupportState.CURRENT,
+            NOW,
+            "",
+        )
+        service = ReconsiderService(store=self.store, support=support)
+        (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
+        result = service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        self.assertFalse(
+            self.store.has_admitted_observation(
+                result.context.context_id.value, "obs-a"
+            )
+        )
+
+    def test_changed_scope_context_admits_existing_source_support(self) -> None:
+        result = self.service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        self.assertTrue(
+            self.store.has_admitted_observation(
+                result.context.context_id.value, "obs-a"
+            )
+        )
 
     def test_unowned_path_reports_only_its_path_surface(self) -> None:
         result = self.service.reconsider(
@@ -353,6 +397,27 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertIn("src/b.py", locators)
         self.assertNotIn("src/c.py", locators)
 
+    def test_unknown_challenge_understanding_is_rejected(self) -> None:
+        with self.assertRaises(RecordingValidationError):
+            self.service.reconsider(
+                m.ReconsiderRequest(
+                    repository_id="repo-1",
+                    challenge=m.ChallengeRaise(
+                        request_id="challenge-missing",
+                        understanding_id="u:missing",
+                        target_version=1,
+                        target_conclusions=(
+                            m.ChallengeConclusionRef(
+                                understanding_id="u:missing",
+                                conclusion_id="c-1",
+                                revision=1,
+                            ),
+                        ),
+                        reason="disputed",
+                    ),
+                )
+            )
+
     def test_challenge_is_raised_through_reconsider(self) -> None:
         target = m.ConclusionRevisionRef(
             understanding_id=m.UnderstandingId("u-a"),
@@ -447,6 +512,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             clock=lambda: NOW,
         )
         service = ReconsiderService(store=self.store, support=support)
+        (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
         result = service.reconsider(
             m.ReconsiderRequest(
                 repository_id="repo-1",
@@ -464,6 +530,9 @@ class ReconsiderServiceTest(unittest.TestCase):
             if item.ref.understanding_id.value == "u-discovery"
         )
         self.assertIn(m.ChangeReason.DIRECT, changed.reasons)
+        self.assertTrue(
+            self.store.has_admitted_discovery(result.context.context_id.value, "disc-1")
+        )
 
     def test_refs_only_discovery_tracks_only_the_referenced_changed_path(self):
         reference = self.store.get_source_observation("obs-a").evidence
@@ -574,6 +643,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                     )
                 )
                 context = self.store.get_context(challenged.context.context_id.value)
+                self.assertEqual(context.origin, m.ContextOrigin.CHALLENGE)
                 self.assertEqual(context.scope, scope)
                 self.assertFalse(
                     m.evidence_scope_contains(

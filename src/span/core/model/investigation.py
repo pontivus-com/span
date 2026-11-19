@@ -323,7 +323,7 @@ class InvestigationContext:
     context_id: InvestigationContextId
     repository_id: str
     request_id: RequestId
-    request_digest: ContentDigest
+    binding_digest: ContentDigest
     origin: ContextOrigin
     state: ContextState
     scope: EvidenceScope
