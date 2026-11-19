@@ -193,6 +193,11 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(
             by_surface["src/b.py"].conclusions[0].expected_version.value, 1
         )
+        context = self.store.get_context(result.context.context_id.value)
+        self.assertEqual(
+            context.scope,
+            m.EvidenceScope(paths=("src/a.py", "src/b.py")),
+        )
 
     def test_historical_revision_is_not_an_actionable_change_target(self) -> None:
         self.store.record_understanding(

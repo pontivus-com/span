@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import dataclasses as _dataclasses
 import json as _json
-import re as _re
 import types as _types
 import typing as _typing
 from typing import cast as _cast
@@ -109,16 +108,6 @@ def decode_request(tool_name: str, arguments: dict[str, object]) -> object:
                 ),
             )
         ) from None
-
-
-_CLASS_PREFIX = _re.compile(r"\binvalid [A-Za-z_][A-Za-z0-9_]*: ")
-_UNKNOWN_FIELDS = _re.compile(r"\bunknown fields for [A-Za-z_][A-Za-z0-9_]*: ")
-
-
-def _agent_reason(exc: Exception) -> str:
-    """Strip internal carrier names from an ingress reason a host will read."""
-    reason = _UNKNOWN_FIELDS.sub("unknown fields: ", str(exc))
-    return _CLASS_PREFIX.sub("", reason)
 
 
 def _union_members(root: object) -> tuple[type, ...]:

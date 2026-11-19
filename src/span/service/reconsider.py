@@ -202,16 +202,29 @@ class ReconsiderService:
         scopes: list[m.EvidenceScope] = []
         if request.changed_paths:
             scopes.append(m.EvidenceScope(paths=tuple(request.changed_paths)))
+        for surface in request.changed_surfaces:
+            if surface.kind is m.SurfaceKind.FILE:
+                scopes.append(m.EvidenceScope(paths=(surface.locator,)))
+                continue
+            if surface.kind is m.SurfaceKind.SYMBOL:
+                containing = containment.surface_file_locator(surface.locator)
+                if containing is not None:
+                    scopes.append(m.EvidenceScope(paths=(containing,)))
+                continue
+            declared = self._store.find_surface(surface)
+            if declared is not None:
+                paths = list(declared.boundary.paths)
+                paths.extend(
+                    containing
+                    for symbol in declared.boundary.symbols
+                    if (containing := containment.surface_file_locator(symbol))
+                    is not None
+                )
+                if paths:
+                    scopes.append(m.EvidenceScope(paths=tuple(paths)))
         source_observations: set[str] = set()
         discovery_observations: set[str] = set()
         for changed in surfaces:
-            surface = changed.surface
-            if surface.kind is m.SurfaceKind.FILE:
-                scopes.append(m.EvidenceScope(paths=(surface.locator,)))
-            else:
-                declared = self._store.find_surface(surface)
-                if declared is not None:
-                    scopes.append(m.EvidenceScope(paths=declared.boundary.paths))
             for item in changed.conclusions:
                 if (
                     isinstance(item.support, m.SupportEvaluation)

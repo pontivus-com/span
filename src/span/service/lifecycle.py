@@ -393,12 +393,8 @@ class LifecycleService:
         current_revisions: tuple[m.ConclusionRevision, ...] = ()
         update_scope: m.EvidenceScope | None = None
         if not create:
-            current_revisions = self._current_revisions_for_update(wire)
-            understanding_id = _typing.cast(str, wire.understanding_id)
-            expected_version = _typing.cast(int, wire.expected_version)
-            update_scope = self._store.get_version(
-                understanding_id, expected_version
-            ).scope
+            expected_snapshot, current_revisions = self._update_snapshot(wire)
+            update_scope = expected_snapshot.scope
         wire = self._resolve_record_request(
             wire,
             semantic_scope=scope,
@@ -443,15 +439,16 @@ class LifecycleService:
             )
         raise RecordingValidationError("record did not produce a command")
 
-    def _current_revisions_for_update(
+    def _update_snapshot(
         self, wire: _rw.RecordRequestWire
-    ) -> tuple[m.ConclusionRevision, ...]:
-        """Apply the expected-version CAS before deriving compact actions.
+    ) -> tuple[m.UnderstandingVersion, tuple[m.ConclusionRevision, ...]]:
+        """Resolve the caller's exact snapshot without pre-empting receipt-first CAS.
 
-        The store still owns the authoritative compare-and-set inside the
-        acceptance transaction. This read exists so the derivation of
-        confirm/correct/replace uses the version the caller named and so a
-        stale version rejects with the observed current version (FD-46).
+        Compact actions need the membership the caller named. An existing older
+        snapshot is therefore safe to decode against; the store transaction still
+        decides replay/replay-conflict before its authoritative version CAS. A
+        requested snapshot that never existed can reject immediately because no
+        accepted write could have been derived from it.
         """
         understanding_id = _typing.cast(str, wire.understanding_id)
         expected = _typing.cast(int, wire.expected_version)
@@ -464,17 +461,22 @@ class LifecycleService:
                     f"the exact understanding {understanding_id!r} does not exist"
                 ),
             )
-        if understanding.current_version.value != expected:
+        version = self._store.find_version(understanding_id, expected)
+        if version is None:
+            if understanding.current_version.value == expected:
+                # A current pointer without its retained row is operational
+                # history loss, not a caller-created validation error.
+                self._store.get_version(understanding_id, expected)
             raise RecordingConflict(
                 "expected understanding version "
                 f"{expected} does not match current "
                 f"{understanding.current_version.value}",
                 current_version=understanding.current_version.value,
             )
-        # The named version is the current version. If its retained row is now
-        # absent, that is store/history unavailability rather than caller error.
-        self._store.get_version(understanding_id, expected)
-        return self._store.get_version_conclusions(understanding_id, expected)
+        return (
+            version,
+            self._store.get_version_conclusions(understanding_id, expected),
+        )
 
     def _record_verification_request(
         self, wire: _rw.RecordRequestWire
@@ -722,6 +724,7 @@ class LifecycleService:
             self._store,
             binding=context_binding(
                 scope=m.evidence_scope_union(requirements),
+                question=wire.question if wire.conclusion is not None else None,
                 source_requests=source_requests,
                 discovery_scopes=discovery_scopes,
             ),

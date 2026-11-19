@@ -676,6 +676,41 @@ class LifecycleServiceTest(unittest.TestCase):
             2,
         )
 
+        wire = w.RecordRequestWire(
+            repository_id="repo-1",
+            request_id="sub-race",
+            kind=m.RecordKind.UNDERSTANDING,
+            understanding_id="u:sub-create",
+            expected_version=2,
+            actions=w.RecordActionsWire(
+                add=(w.AddConclusionWire(conclusion="Race-safe add", locator="src/a.py"),)
+            ),
+        )
+        first = self._service("ctx-race-first")
+        second = self._service("ctx-race-second")
+        accepted: list[m.UnderstandingRecorded] = []
+        original_replay = first._replay
+
+        def concurrent_accept(repository_id, request_id, digest):
+            replay = original_replay(repository_id, request_id, digest)
+            if replay is None and not accepted:
+                outcome = second.record(wire)
+                assert isinstance(outcome, m.UnderstandingRecorded)
+                accepted.append(outcome)
+            return replay
+
+        with mock.patch.object(first, "_replay", side_effect=concurrent_accept):
+            outcome = first.record(wire)
+        assert isinstance(outcome, m.UnderstandingRecorded)
+        self.assertEqual(
+            _receipt(self.store, outcome),
+            _receipt(self.store, accepted[0]),
+        )
+        self.assertEqual(
+            self.store.get_understanding("u:sub-create").current_version.value,
+            3,
+        )
+
     # -- verification ------------------------------------------------------
 
     def test_discovery_support_requires_admission(self) -> None:
@@ -1004,7 +1039,8 @@ class LifecycleServiceTest(unittest.TestCase):
         context = self.store.find_context_by_id("ctx-issued")
         self.assertIsNotNone(context)
         assert context is not None
-        self.assertEqual(context.origin, m.ContextOrigin.EVIDENCE_ONLY)
+        self.assertEqual(context.origin, m.ContextOrigin.QUESTION)
+        self.assertEqual(context.question, "What does A do?")
         self.assertIn("src/a.py", context.scope.paths)
         self.assertEqual(
             _receipt(self.store, self._service("ctx-unused").record(wire)), receipt
@@ -2319,8 +2355,13 @@ class LifecycleServiceTest(unittest.TestCase):
         wire = self._scope_create(locator="missing.py")
         with self.assertRaises(RecordingValidationError):
             self.service.record(wire)
+        context = self.store.find_context("repo-1", wire.request_id)
+        assert context is not None
+        self.assertEqual(context.question, wire.question)
         with self.assertRaises(RecordingConflict) as raised:
-            self.service.record(dataclasses.replace(wire, locator="src/a.py"))
+            self.service.record(
+                dataclasses.replace(wire, question="A different semantic question")
+            )
         self.assertEqual(
             raised.exception.cause_kind, m.RejectionCauseKind.CONTEXT_BINDING_CONFLICT
         )
