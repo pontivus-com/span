@@ -2359,7 +2359,7 @@ class LifecycleServiceTest(unittest.TestCase):
             self.service.record(wire)
         context = self.store.find_context("repo-1", wire.request_id)
         assert context is not None
-        self.assertEqual(context.question, wire.question)
+        self.assertIsNone(context.question)
         with self.assertRaises(RecordingConflict) as raised:
             self.service.record(
                 dataclasses.replace(wire, question="A different semantic question")
