@@ -288,6 +288,35 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             "u:sub-create-1",
         )
 
+    async def test_exact_recorded_question_selector_through_stdio(self) -> None:
+        async def journey(session: ClientSession) -> dict:
+            created = await self._record_create(session, "sub-exact-selector")
+            self.assertEqual(created["$type"], "UnderstandingRecorded")
+            exact = await self._call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "RecordedQuestionSelector",
+                        "repository_id": REPOSITORY_ID,
+                        "surface": {
+                            "kind": "FILE",
+                            "locator": "src/app.py",
+                        },
+                        "question": "What happens in the app?",
+                    }
+                },
+            )
+            self.assertEqual(exact["$type"], "Answer")
+            self.assertEqual(
+                self._answer_conclusions(exact)[0]["statement"],
+                "The app emits line1.",
+            )
+            return exact
+
+        result = await self._session(journey)
+        self.assertEqual(result["surface"]["locator"], "src/app.py")
+
     async def test_cold_gap_context_is_accepted_by_record(self) -> None:
         async def journey(session: ClientSession) -> dict:
             gap = await self._call(
