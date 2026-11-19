@@ -38,7 +38,9 @@ class StructuralValidationError(ValueError):
 
     def __init__(self, faults: tuple[StructuralFault, ...]) -> None:
         if not faults:
-            raise ValueError("a structural validation error requires at least one fault")
+            raise ValueError(
+                "a structural validation error requires at least one fault"
+            )
         self.faults = faults
         super().__init__("; ".join(_render_structural_fault(item) for item in faults))
 

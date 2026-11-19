@@ -959,7 +959,7 @@ class RecordWireCodecTest(unittest.TestCase):
     def test_verification_requires_observations_or_evidence(self):
         with self.assertRaises(ValueError) as raised:
             w.VerificationRunWire(
-                                scope_description="probe",
+                scope_description="probe",
                 scope_paths=("src/a.py",),
                 command="python3 -m unittest",
                 scenario=None,
@@ -973,7 +973,7 @@ class RecordWireCodecTest(unittest.TestCase):
 
     def test_verification_accepts_evidence_only(self):
         run = w.VerificationRunWire(
-                        scope_description="probe",
+            scope_description="probe",
             scope_paths=("src/a.py",),
             command="python3 -m unittest",
             scenario=None,

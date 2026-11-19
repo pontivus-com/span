@@ -50,7 +50,9 @@ def _copy_table(
 ) -> int:
     target_columns = _columns(target, table)
     if not target_columns:
-        raise TransitionError(f"schema-12 source table {table!r} has no schema-13 target")
+        raise TransitionError(
+            f"schema-12 source table {table!r} has no schema-13 target"
+        )
     source_columns = set(_columns(source, table))
     columns = [name for name in target_columns if name in source_columns]
     if not columns:
@@ -61,7 +63,9 @@ def _copy_table(
     if "repository_id" in columns:
         where = " WHERE repository_id=?"
         parameters = (repository_id,)
-    rows = source.execute(f"SELECT {selection} FROM {table}{where}", parameters).fetchall()
+    rows = source.execute(
+        f"SELECT {selection} FROM {table}{where}", parameters
+    ).fetchall()
     if rows:
         placeholders = ", ".join("?" for _ in columns)
         target.executemany(
@@ -150,7 +154,10 @@ def verify_schema12_staging(paths: TransitionPaths, config: TransitionConfig) ->
     if not paths.mapping.is_file():
         raise TransitionError("schema-12 mapping artifact is missing")
     payload = _json.loads(paths.mapping.read_text(encoding="utf-8"))
-    if payload.get("source_schema") != 12 or payload.get("target_schema") != TARGET_SCHEMA:
+    if (
+        payload.get("source_schema") != 12
+        or payload.get("target_schema") != TARGET_SCHEMA
+    ):
         raise TransitionError("schema-12 mapping reports the wrong transition")
     counts = payload.get("counts", {})
     if not isinstance(counts, dict):
@@ -158,7 +165,9 @@ def verify_schema12_staging(paths: TransitionPaths, config: TransitionConfig) ->
     connection = _connect_read_only(paths.staging)
     try:
         for table, expected in counts.items():
-            actual = int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            actual = int(
+                connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            )
             if actual != expected:
                 raise TransitionError(
                     f"staged {table} holds {actual} rows, mapping expects {expected}"

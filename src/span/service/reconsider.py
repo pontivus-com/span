@@ -139,7 +139,9 @@ class ReconsiderService:
                 conclusions=tuple(
                     conclusion
                     for conclusion in (
-                        self._changed_conclusion(ref, reasons[surface], current_versions)
+                        self._changed_conclusion(
+                            ref, reasons[surface], current_versions
+                        )
                         for ref in sorted(
                             affected.get(surface, ()),
                             key=lambda ref: ref.sort_key,

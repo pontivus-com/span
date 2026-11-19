@@ -1143,7 +1143,8 @@ def _verify_staged(
         verify_schema11_staging(paths, config)
         _smoke(paths, config)
         return (
-            "staged store carries the schema-11 durable copy with operational contexts drained",
+            "staged store carries the schema-11 durable copy with operational "
+            "contexts drained",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
     if source_schema == 12:
@@ -1152,7 +1153,8 @@ def _verify_staged(
         verify_schema12_staging(paths, config)
         _smoke(paths, config)
         return (
-            "staged store carries the schema-12 durable copy with operational contexts drained",
+            "staged store carries the schema-12 durable copy with operational "
+            "contexts drained",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
     counts = _semantic_counts(paths.staging)
