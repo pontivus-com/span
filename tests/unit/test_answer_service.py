@@ -627,6 +627,17 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Gap)
         self.assertEqual(result.reason, m.GapReason.UNASSESSED)
 
+    def test_unknown_current_understanding_selector_is_rejected(self) -> None:
+        with self.assertRaises(RecordingValidationError):
+            self.service.ask(
+                m.AskRequest(
+                    selector=m.CurrentUnderstandingSelector(
+                        repository_id="repo-1",
+                        understanding_id="u:missing",
+                    )
+                )
+            )
+
     def test_exact_question_without_membership_is_unassessed(self) -> None:
         result = self.service.ask(
             m.AskRequest(

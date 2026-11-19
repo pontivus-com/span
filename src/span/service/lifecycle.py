@@ -205,6 +205,10 @@ class LifecycleService:
                 raise RecordingValidationError(
                     "only a service or domain surface has a mutable boundary"
                 )
+            if self._store.find_surface(surface.key) is None:
+                raise RecordingValidationError(
+                    f"unknown surface: {surface.key.locator}"
+                )
             updated = self._store.update_surface(
                 surface,
                 expected_boundary_version=_typing.cast(
@@ -237,7 +241,11 @@ class LifecycleService:
         default: m.SourceSupport | None = None
         if not wire.support:
             if wire.observation_id is not None:
-                observation = self._store.get_source_observation(wire.observation_id)
+                observation = self._store.find_source_observation(wire.observation_id)
+                if observation is None:
+                    raise RecordingValidationError(
+                        f"unknown source observation: {wire.observation_id!r}"
+                    )
                 if observation.repository_id != wire.identity.repository_id:
                     raise RecordingValidationError(
                         "the observation belongs to another repository"
@@ -438,7 +446,11 @@ class LifecycleService:
         """
         understanding_id = _typing.cast(str, wire.understanding_id)
         expected = _typing.cast(int, wire.expected_version)
-        understanding = self._store.get_understanding(understanding_id)
+        understanding = self._store.find_understanding(understanding_id)
+        if understanding is None:
+            raise RecordingValidationError(
+                f"unknown understanding: {understanding_id!r}"
+            )
         if understanding.current_version.value != expected:
             raise RecordingConflict(
                 "expected understanding version "
@@ -446,6 +458,9 @@ class LifecycleService:
                 f"{understanding.current_version.value}",
                 current_version=understanding.current_version.value,
             )
+        # The named version is the current version. If its retained row is now
+        # absent, that is store/history unavailability rather than caller error.
+        self._store.get_version(understanding_id, expected)
         return self._store.get_version_conclusions(understanding_id, expected)
 
     def _record_verification_request(

@@ -1127,6 +1127,47 @@ class LifecycleServiceTest(unittest.TestCase):
         assert context is not None
         self.assertIn("src/a.py", context.scope.paths)
 
+    def test_unknown_update_understanding_is_rejected_not_unavailable(self) -> None:
+        from span.shell.context import compose_context
+        from span.shell.mcp.adapter import McpAdapter
+        from span.ports.structural import StructuralSource
+
+        adapter = McpAdapter(
+            contexts={
+                "repo-1": compose_context(
+                    repository_id="repo-1",
+                    root="/repo/one",
+                    structural=mock.Mock(spec=StructuralSource),
+                    evidence=_CurrentEvidence(),
+                    store=self.store,
+                )
+            }
+        )
+        result = adapter.dispatch(
+            "record",
+            {
+                "repository_id": "repo-1",
+                "request_id": "unknown-update",
+                "kind": "understanding",
+                "understanding_id": "u:missing",
+                "expected_version": 1,
+                "actions": {
+                    "add": [
+                        {
+                            "conclusion": "A new statement.",
+                            "locator": "src/a.py",
+                        }
+                    ]
+                },
+            },
+        )
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.structured_content["$type"], "Rejected")
+        self.assertEqual(
+            result.structured_content["cause_kind"],
+            m.RejectionCauseKind.VALIDATION.value,
+        )
+
     def test_context_free_update_checks_expected_version_before_scope_lookup(self) -> None:
         self.service.record(_create_wire())
         with self.assertRaises(RecordingConflict) as raised:
@@ -1900,6 +1941,23 @@ class LifecycleServiceTest(unittest.TestCase):
                 parent=(m.SurfaceKind.SERVICE, "billing"),
                 action=m.SurfaceAction.UPDATE,
                 expected=1,
+            )
+
+    def test_unknown_surface_update_is_rejected_not_unavailable(self) -> None:
+        with self.assertRaises(RecordingValidationError):
+            self.service.record(
+                w.RecordRequestWire(
+                    repository_id="repo-1",
+                    request_id="surface-missing-update",
+                    kind=m.RecordKind.SURFACE,
+                    action=m.SurfaceAction.UPDATE,
+                    expected_boundary_version=1,
+                    surface=w.SurfaceDeclarationWire(
+                        kind=m.SurfaceKind.SERVICE,
+                        locator="missing-service",
+                        boundary=w.SurfaceBoundaryWire(paths=("src",)),
+                    ),
+                )
             )
 
     def test_surface_update_stale_boundary_returns_rejected(self) -> None:

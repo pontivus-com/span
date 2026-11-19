@@ -366,6 +366,21 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertIn("src/b.py", locators)
         self.assertNotIn("src/c.py", locators)
 
+    def test_unknown_challenge_understanding_is_rejected(self) -> None:
+        with self.assertRaises(RecordingValidationError):
+            self.service.reconsider(
+                m.ReconsiderRequest(
+                    repository_id="repo-1",
+                    challenge=m.ChallengeRaise(
+                        request_id="challenge-missing",
+                        understanding_id="u:missing",
+                        target_version=1,
+                        target_conclusions=(),
+                        reason="disputed",
+                    ),
+                )
+            )
+
     def test_challenge_is_raised_through_reconsider(self) -> None:
         target = m.ConclusionRevisionRef(
             understanding_id=m.UnderstandingId("u-a"),

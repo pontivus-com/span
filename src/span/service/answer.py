@@ -98,9 +98,13 @@ class AnswerService:
             )
         elif isinstance(request.selector, m.CurrentUnderstandingSelector):
             repository_id = request.selector.repository_id
-            selected_understanding = self._store.get_understanding(
+            selected_understanding = self._store.find_understanding(
                 request.selector.understanding_id
             )
+            if selected_understanding is None:
+                raise RecordingValidationError(
+                    f"unknown understanding: {request.selector.understanding_id!r}"
+                )
             if selected_understanding.repository_id != repository_id:
                 raise RecordingValidationError(
                     "selected understanding belongs to another repository"
@@ -485,13 +489,30 @@ class AnswerService:
     ) -> m.AskResult:
         self._store.require_repository(selector.repository_id)
         if isinstance(selector, m.UnderstandingSnapshotSelector):
-            understanding = self._store.get_understanding(selector.understanding_id)
+            understanding = self._store.find_understanding(selector.understanding_id)
+            if understanding is None:
+                raise RecordingValidationError(
+                    f"unknown understanding: {selector.understanding_id!r}"
+                )
             version_number = (
                 understanding.current_version.value
                 if selector.version is None
                 else selector.version
             )
-            version = self._store.get_version(selector.understanding_id, version_number)
+            if selector.version is None:
+                # A missing current row is retained-state unavailability.
+                version = self._store.get_version(
+                    selector.understanding_id, version_number
+                )
+            else:
+                version = self._store.find_version(
+                    selector.understanding_id, version_number
+                )
+                if version is None:
+                    raise RecordingValidationError(
+                        "unknown understanding version: "
+                        f"{selector.understanding_id}@{version_number}"
+                    )
             try:
                 support: m.UnderstandingSupport | m.SupportUnavailable = (
                     self._support.evaluate_version(

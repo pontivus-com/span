@@ -1416,6 +1416,15 @@ class LifecycleStore:
             for row in rows
         )
 
+    def find_understanding(self, understanding_id: str) -> m.Understanding | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM understandings WHERE understanding_id=?",
+            (understanding_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(m.Understanding, _json.loads(row["canonical_json"]))
+
     def get_understanding(self, understanding_id: str) -> m.Understanding:
         return self._get_understanding_in(self._connection, understanding_id)
 
@@ -1429,6 +1438,20 @@ class LifecycleStore:
         if row is None:
             raise LifecycleStoreError(f"unknown understanding: {understanding_id}")
         return m.from_canonical(m.Understanding, _json.loads(row["canonical_json"]))
+
+    def find_version(
+        self, understanding_id: str, version: int
+    ) -> m.UnderstandingVersion | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM understanding_versions"
+            " WHERE understanding_id=? AND version=?",
+            (understanding_id, version),
+        ).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(
+            m.UnderstandingVersion, _json.loads(row["canonical_json"])
+        )
 
     def get_version(
         self, understanding_id: str, version: int
@@ -1659,6 +1682,15 @@ class LifecycleStore:
             self._write_receipt(connection, receipt)
             return receipt
 
+    def find_challenge(self, challenge_id: str) -> m.Challenge | None:
+        row = self._connection.execute(
+            "SELECT canonical_json FROM challenges WHERE challenge_id=?",
+            (challenge_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(m.Challenge, _json.loads(row["canonical_json"]))
+
     def get_challenge(self, challenge_id: str) -> m.Challenge:
         return self._get_challenge_in(self._connection, challenge_id)
 
@@ -1689,14 +1721,20 @@ class LifecycleStore:
             for row in rows
         )
 
-    def get_verification_run(self, run_id: str) -> m.VerificationRun:
+    def find_verification_run(self, run_id: str) -> m.VerificationRun | None:
         row = self._connection.execute(
             "SELECT canonical_json FROM verification_runs WHERE run_id=?",
             (run_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown verification run: {run_id}")
+            return None
         return m.from_canonical(m.VerificationRun, _json.loads(row["canonical_json"]))
+
+    def get_verification_run(self, run_id: str) -> m.VerificationRun:
+        run = self.find_verification_run(run_id)
+        if run is None:
+            raise LifecycleStoreError(f"unknown verification run: {run_id}")
+        return run
 
     def list_verification_runs(
         self, repository_id: str

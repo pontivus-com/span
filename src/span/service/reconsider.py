@@ -332,10 +332,19 @@ class ReconsiderService:
     def _challenge_context(
         self, repository_id: str, challenge: m.ChallengeRaise
     ) -> m.InvestigationContextId:
-        understanding = self._store.get_understanding(challenge.understanding_id)
-        version = self._store.get_version(
+        understanding = self._store.find_understanding(challenge.understanding_id)
+        if understanding is None:
+            raise RecordingValidationError(
+                f"unknown understanding: {challenge.understanding_id!r}"
+            )
+        version = self._store.find_version(
             challenge.understanding_id, challenge.target_version
         )
+        if version is None:
+            raise RecordingValidationError(
+                "unknown understanding version: "
+                f"{challenge.understanding_id}@{challenge.target_version}"
+            )
         scopes = [version.scope]
         if understanding.surface.kind is m.SurfaceKind.FILE:
             scopes.append(m.EvidenceScope(paths=(understanding.surface.locator,)))
