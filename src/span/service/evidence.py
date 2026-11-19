@@ -146,6 +146,7 @@ class EvidenceService:
             self._store,
             binding=context_binding(
                 scope=request.scope,
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
                 source_requests=request.requests,
             ),
             repository_id=request.repository_id,
