@@ -683,7 +683,9 @@ class LifecycleServiceTest(unittest.TestCase):
             understanding_id="u:sub-create",
             expected_version=2,
             actions=w.RecordActionsWire(
-                add=(w.AddConclusionWire(conclusion="Race-safe add", locator="src/a.py"),)
+                add=(
+                    w.AddConclusionWire(conclusion="Race-safe add", locator="src/a.py"),
+                )
             ),
         )
         first = self._service("ctx-race-first")
