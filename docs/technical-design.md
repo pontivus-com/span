@@ -596,6 +596,18 @@ stateful `public_cause`, typed kind, structured versions and required action
 without parsing exception text. Internal diagnostics stay with the owning
 exception/log path.
 
+**Store failure taxonomy (0.11.0).** SQLite uses distinct
+`LifecycleStoreConfigurationError`, `LifecycleRecordNotFound`,
+`LifecycleStoreDataError`/`LifecycleStoreOperationalError`, and
+`LifecycleStoreInvariantError` classes. Caller-supplied exact identities are
+checked through the corresponding `find_*` owner and become `Rejected` with
+safe public identity/cause coordinates when absent. An exact retained record
+missing behind already-accepted history remains an operational unavailability;
+persisted-data/schema failures are operational; configuration follows the setup
+or repository-access boundary; invariant failures are logged and contained as
+generic internal tool failure. The generic `LifecycleStoreError` is no longer
+the operational catch-all.
+
 **Public failure boundary.** Expected operational exceptions are classified by
 their typed owner and mapped by one shell-level table to stable public
 `Unavailable.failure` and recovery text. No expected public result is built

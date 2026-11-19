@@ -58,8 +58,8 @@ marked pending are not current coverage.
 The 0.11.0 source candidate adds direct coverage for canonical context binding
 and the schema-12→13 drain transition, enclosing-repository verification,
 derived challenge-resolution coordinates, reconsider evidence membership,
-exact recorded-question selection through installed stdio, typed structural
-rejection, and ranged-source behavior. The named tests are present in the
+exact lookup/store-failure classification, exact recorded-question selection
+through installed stdio, typed structural rejection, and ranged-source behavior. The named tests are present in the
 candidate; this document does **not** mark them executed until a candidate test
 receipt exists. Managed-host requalification for the exact-selector path and
 the source-access notice is also pending. T08's G5/F8 comparative measurement
