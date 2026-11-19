@@ -249,7 +249,9 @@ class ReconsiderService:
                 )
             self._store.add_context_evidence(context_id, observation_id)
         for observation_id in sorted(discovery_observations):
-            discovery_observation = self._store.get_discovery_observation(observation_id)
+            discovery_observation = self._store.get_discovery_observation(
+                observation_id
+            )
             if discovery_observation.repository_id != repository_id:
                 raise RecordingValidationError(
                     "re-establishment discovery observation belongs to another repository"
