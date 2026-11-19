@@ -238,32 +238,34 @@ class ReconsiderService:
                 scopes.append(content.scope)
                 for dependency in content.support:
                     if isinstance(dependency, m.SourceSupport):
-                        observation = self._store.get_source_observation(
+                        source_observation = self._store.get_source_observation(
                             dependency.observation_id.value
                         )
-                        if observation.repository_id != repository_id:
+                        if source_observation.repository_id != repository_id:
                             raise RecordingValidationError(
                                 "re-establishment source observation belongs to "
                                 "another repository"
                             )
                         scopes.append(
-                            m.EvidenceScope(evidence_refs=(observation.evidence,))
+                            m.EvidenceScope(
+                                evidence_refs=(source_observation.evidence,)
+                            )
                         )
                         source_observations[dependency.observation_id.value] = (
-                            observation
+                            source_observation
                         )
                     elif isinstance(dependency, m.DiscoverySupport):
-                        observation = self._store.get_discovery_observation(
+                        discovery_observation = self._store.get_discovery_observation(
                             dependency.observation_id.value
                         )
-                        if observation.repository_id != repository_id:
+                        if discovery_observation.repository_id != repository_id:
                             raise RecordingValidationError(
                                 "re-establishment discovery observation belongs to "
                                 "another repository"
                             )
-                        scopes.append(observation.scope)
+                        scopes.append(discovery_observation.scope)
                         discovery_observations[dependency.observation_id.value] = (
-                            observation
+                            discovery_observation
                         )
         context_id = self._new_context_id()
         context = issue_context(
