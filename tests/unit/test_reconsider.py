@@ -261,6 +261,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             "",
         )
         service = ReconsiderService(store=self.store, support=support)
+        (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
         result = service.reconsider(
             m.ReconsiderRequest(
                 repository_id="repo-1",
@@ -396,7 +397,13 @@ class ReconsiderServiceTest(unittest.TestCase):
                         request_id="challenge-missing",
                         understanding_id="u:missing",
                         target_version=1,
-                        target_conclusions=(),
+                        target_conclusions=(
+                            m.ChallengeConclusionRef(
+                                understanding_id="u:missing",
+                                conclusion_id="c-1",
+                                revision=1,
+                            ),
+                        ),
                         reason="disputed",
                     ),
                 )

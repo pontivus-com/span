@@ -1976,7 +1976,7 @@ class LifecycleServiceTest(unittest.TestCase):
                     kind=m.RecordKind.SURFACE,
                     action=m.SurfaceAction.UPDATE,
                     expected_boundary_version=1,
-                    surface=w.SurfaceDeclarationWire(
+                    surface=w.SurfaceWire(
                         kind=m.SurfaceKind.SERVICE,
                         locator="missing-service",
                         boundary=w.SurfaceBoundaryWire(paths=("src",)),

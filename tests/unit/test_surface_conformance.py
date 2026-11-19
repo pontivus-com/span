@@ -92,7 +92,7 @@ class SurfaceConformanceTest(unittest.TestCase):
     def test_ask_has_no_context_input(self):
         text = json.dumps(TOOL_SCHEMAS["ask"])
         self.assertNotIn("context_id", text)
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             decode_request(
                 "ask",
                 {

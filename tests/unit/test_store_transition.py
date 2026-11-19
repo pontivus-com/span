@@ -537,12 +537,8 @@ def _schema12_store(
         whole_file=True,
     )
     store.put_source_observation(observation)
-    created_at = NOW if live_context else NOW - datetime.timedelta(days=2)
-    expires_at = (
-        NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime
-        if live_context
-        else NOW - datetime.timedelta(days=1)
-    )
+    created_at = NOW
+    expires_at = NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime
     context = m.InvestigationContext(
         context_id=m.InvestigationContextId("ctx-schema12"),
         repository_id="demo",
@@ -593,10 +589,19 @@ def _schema12_store(
         for context_id, canonical in rows:
             payload = json.loads(canonical)
             payload["request_digest"] = payload.pop("binding_digest")
+            persisted_expiry = payload.get("expires_at")
+            if not live_context:
+                payload["created_at"] = (
+                    NOW - datetime.timedelta(days=2)
+                ).isoformat()
+                payload["expires_at"] = (
+                    NOW - datetime.timedelta(days=1)
+                ).isoformat()
+                persisted_expiry = payload["expires_at"]
             connection.execute(
-                "UPDATE investigation_contexts SET canonical_json=?"
+                "UPDATE investigation_contexts SET canonical_json=?, expires_at=?"
                 " WHERE context_id=?",
-                (json.dumps(payload, sort_keys=True), context_id),
+                (json.dumps(payload, sort_keys=True), persisted_expiry, context_id),
             )
         connection.execute("UPDATE meta SET value='12' WHERE key='schema_version'")
         connection.commit()

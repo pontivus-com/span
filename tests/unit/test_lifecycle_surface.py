@@ -212,7 +212,7 @@ class RoutingTest(unittest.TestCase):
         self.assertEqual(request.action, m.SurfaceAction.CREATE)
 
     def test_ask_rejects_context_id(self):
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
+        with self.assertRaisesRegex(ValueError, "unknown field"):
             decode_request(
                 "ask",
                 {

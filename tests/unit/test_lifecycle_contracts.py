@@ -202,7 +202,7 @@ class SurfaceReferenceContractTest(unittest.TestCase):
         from span.core.schema import from_wire
 
         for repository_id in ("repo-1", None):
-            with self.assertRaisesRegex(ValueError, "unknown fields"):
+            with self.assertRaisesRegex(ValueError, "unknown field"):
                 from_wire(
                     m.AskRequest,
                     {
