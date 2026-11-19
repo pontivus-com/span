@@ -118,7 +118,9 @@ same atomic update.
 
 A create may supply the `context` reference returned by explicit evidence admission or `reconsider` instead of the question and
 scope; do not send both — the conflict is rejected. Without a context, a create
-issues its own evidence-only context from the scope and cited locators.
+issues its own evidence-only operational context from the scope and cited
+locators. That internal context does not replace the create's explicit semantic
+question/scope.
 
 Semantic scope describes what the conclusion is about; support identifies what
 established it. Multiple support files do not create multiple owning surfaces.

@@ -662,12 +662,16 @@ context constructor/reader sites together; internal stored InvestigationContext,
 RecordingIdentity and receipt keys are retained. Existing store/port lookup
 errors supply typed failures for the mapper; no secondary context lookup exists.
 
-**Reconsider issuance implementation.** ReconsiderService._reconsider_context
+**Reconsider issuance implementation.** `ReconsiderService._reconsider_context`
 allocates a new internal request key through the existing UUID identity utility
-for each evaluation and delegates creation/recovery to service/contexts.issue_context.
-The changed-scope digest remains binding content, not the issuance key. Other
-caller-identified operations continue using their existing keys through the same
-issuance owner. This implements FD-2/FD-45; lifecycle §4.3 owns the public guarantee.
+for each evaluation and delegates creation/recovery to
+`service/contexts.issue_context` with explicit `CHANGED_SUPPORT` origin. The
+changed-scope digest remains binding content, not the issuance key. Challenge
+issuance uses the same owner with explicit `CHALLENGE` origin when no context is
+supplied; an already supplied context is preserved. Other caller-identified
+operations continue using their existing keys through the same issuance owner.
+This implements FD-2/FD-45 without a second context constructor or origin
+heuristic; lifecycle §4.3 owns the public guarantee.
 
 **Admission implementation.** Implement lifecycle §4.1's single public admission
 projection in core/model and construct it through EvidenceService. Keep stored
@@ -723,25 +727,33 @@ backstop. Neither path widens a supplied context.
 **Canonical context binding (FD-2–FD-4, FD-59; 0.11.0).** One internal
 `ContextBinding` carrier owns the digest projection used by every
 `issue_context` caller. Repository and caller request identity remain the
-store key and are not duplicated inside the digest. The binding contains:
-`question` when semantically bound, the effective complete `EvidenceScope`,
-the exact source requests as locator plus inclusive ranges, and the exact
-discovery scopes selected for admission. Source requests and discovery scopes
-are canonicalized by their canonical value, deduplicated and sorted before
-hashing; caller order therefore cannot create another binding for the same
-selection. The binding excludes conclusion wording, update actions, challenge
-disposition text, verification outcome, submission digest, and every other
-semantic write field. `payload_digest(ContextBinding)` is the sole
-`binding_digest`.
+store key and are not duplicated inside the digest. The binding contains the
+explicit `ContextOrigin`, the effective complete `EvidenceScope`, the exact
+source requests as locator plus inclusive ranges, the exact discovery scopes
+selected for admission, and `question` when it is part of caller-owned binding
+identity. Source requests and discovery scopes are canonicalized by their
+canonical value, deduplicated and sorted before hashing; caller order therefore
+cannot create another binding for the same selection. Origin is never inferred
+from question presence. The binding excludes conclusion wording, update
+actions, challenge disposition text, verification outcome, submission digest,
+and every other semantic write field. `payload_digest(ContextBinding)` is the
+sole `binding_digest`.
 
 `issue_context` receives that typed binding rather than an arbitrary payload.
 The persisted context stores `binding_digest`; repository/request uniqueness
 plus that digest is the recovery/conflict boundary. The complete write wire is
 still hashed independently at the receipt owner before context/evidence work.
-Explicit ask admission and evidence-only starts bind their submitted source
-requests. Context-free record derives source requests and discovery scopes from
-the same direct-evidence fields that admission consumes. Challenge issuance
-binds its effective scope and direct challenge evidence selection. Changed-scope
+Explicit ask/source admission is `EVIDENCE_ONLY`. A context-free record is also
+`EVIDENCE_ONLY`; for a create its question participates in the binding digest so
+a changed semantic request under the same caller identity conflicts, but the
+operational context does not become a question-bound semantic target and does
+not persist that question. A genuine question-bound start is `QUESTION`.
+Changed-scope reconsider is `CHANGED_SUPPORT`, and a challenge context issued by
+reconsider is `CHALLENGE`; when the caller already supplies a valid context,
+reconsider preserves that context rather than manufacturing a second one.
+Context-free record derives source requests and discovery scopes from the same
+direct-evidence fields that admission consumes. Challenge issuance binds its
+effective scope and direct challenge evidence selection. Changed-scope
 reconsider continues to use a fresh Span-owned request identity on every read,
 so it does not reuse caller request identity.
 

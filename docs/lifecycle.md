@@ -25,9 +25,13 @@ ORDINARY SESSION
 Pure surface/reference obtain creates no context and requires no caller request
 identity. Explicit evidence admission issues or recovers one persisted
 evidence-only context bound to its caller-owned request identity and complete
-selection. Changed-scope `reconsider` issues a fresh Span-owned bounded context
-for re-establishment. Both expose the same opaque `InvestigationContextRef`;
-copy it only into operations that declare a `context` field.
+selection. A context-free `record` likewise uses an evidence-only operational
+context; its explicit semantic target remains on the record request and is not
+inferred from the operational context. Changed-scope `reconsider` issues a fresh
+Span-owned bounded re-establishment context. Challenge issuance without a
+supplied context uses its own challenge context; a supplied valid context is
+preserved. All expose the same opaque `InvestigationContextRef`; copy it only
+into operations that declare a `context` field.
 
 Contexts expire without deleting accepted understanding, challenges,
 verification runs, or retained receipts. A continuation is valid only for its

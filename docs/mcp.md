@@ -178,7 +178,7 @@ coordinates from the same atomic update, including a same-request replacement.
 
 A create may supply the canonical `context` reference returned by explicit evidence admission or `reconsider`.
 The context's bound target/scope are used where applicable; do not also send a conflicting explicit target — that conflict is rejected. Without a context, a create requires
-`question` and issues its own evidence-only context.
+`question` and issues its own evidence-only operational context. That context does not become a question-bound target: the create's explicit question and semantic scope remain authoritative.
 
 Semantic scope describes what the conclusion is about; support identifies what
 established it. Multiple support files do not create multiple owning surfaces.
