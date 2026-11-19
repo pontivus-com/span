@@ -1,4 +1,4 @@
-"""Candidate schema-11 lifecycle store.
+"""Schema-13 lifecycle store.
 
 This is the replacement store boundary for the 0.10 lifecycle: canonical
 contexts, understanding versions, conclusion revisions, challenges,
@@ -47,7 +47,7 @@ __all__ = [
     "UnknownRepository",
 ]
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 class LifecycleStoreError(ValueError):
@@ -140,7 +140,7 @@ _DDL = (
         context_id TEXT PRIMARY KEY,
         repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
         request_id TEXT NOT NULL,
-        request_digest TEXT NOT NULL,
+        binding_digest TEXT NOT NULL,
         canonical_json TEXT NOT NULL,
         expires_at TEXT,
         UNIQUE(repository_id, request_id),
@@ -1001,7 +1001,7 @@ class LifecycleStore:
         self,
         repository_id: str,
         request_id: m.RequestId,
-        request_digest: m.ContentDigest,
+        binding_digest: m.ContentDigest,
         factory: _typing.Callable[[], m.InvestigationContext],
     ) -> m.InvestigationContext:
         """Return the context bound to this request, or create exactly one.
@@ -1011,13 +1011,13 @@ class LifecycleStore:
         """
         with self._transaction() as connection:
             row = connection.execute(
-                "SELECT request_digest, canonical_json"
+                "SELECT binding_digest, canonical_json"
                 " FROM investigation_contexts"
                 " WHERE repository_id=? AND request_id=?",
                 (repository_id, request_id.value),
             ).fetchone()
             if row is not None:
-                if row["request_digest"] != request_digest.value:
+                if row["binding_digest"] != binding_digest.value:
                     raise RecordingConflict(
                         "this request identity is already bound to "
                         "different context content",
@@ -1042,7 +1042,7 @@ class LifecycleStore:
             if (
                 context.repository_id != repository_id
                 or context.request_id != request_id
-                or context.request_digest != request_digest
+                or context.binding_digest != binding_digest
             ):
                 raise LifecycleStoreError(
                     "the created context does not match its request binding"
@@ -1061,13 +1061,13 @@ class LifecycleStore:
     ) -> None:
         connection.execute(
             "INSERT INTO investigation_contexts"
-            "(context_id, repository_id, request_id, request_digest,"
+            "(context_id, repository_id, request_id, binding_digest,"
             " canonical_json, expires_at) VALUES(?,?,?,?,?,?)",
             (
                 context.context_id.value,
                 context.repository_id,
                 context.request_id.value,
-                context.request_digest.value,
+                context.binding_digest.value,
                 _json.dumps(m.to_canonical(context), sort_keys=True),
                 _timestamp(context.expires_at) if context.expires_at else None,
             ),

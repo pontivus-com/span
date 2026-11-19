@@ -23,7 +23,7 @@ from span.core.recording import RecordingValidationError
 from span.core.rejection import RejectionCauseKind
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import issue_context
+from span.service.contexts import context_binding, issue_context
 from span.service.continuation import (
     ContinuationCursor,
     decode_continuation,
@@ -332,11 +332,12 @@ class AnswerService:
         assert request_id is not None
         context = issue_context(
             self._store,
-            payload=request,
+            binding=context_binding(
+                scope=m.EvidenceScope(paths=self._surface_paths(surface)),
+                source_requests=evidence,
+            ),
             repository_id=repository_id,
             request_id=m.RequestId(request_id),
-            scope=m.EvidenceScope(paths=self._surface_paths(surface)),
-            question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
@@ -386,7 +387,7 @@ class AnswerService:
                     repository_id=context.repository_id,
                     context_id=context.context_id.value,
                     request_id=context.request_id,
-                    request_digest=context.request_digest,
+                    binding_digest=context.binding_digest,
                 )
             )
             if deliveries
@@ -539,7 +540,7 @@ class AnswerService:
         if (
             context.repository_id != cursor.repository_id
             or context.request_id != cursor.request_id
-            or context.request_digest != cursor.request_digest
+            or context.binding_digest != cursor.binding_digest
         ):
             raise RecordingValidationError.continuation_invalid(
                 "the continuation does not match its context"
@@ -598,7 +599,7 @@ class AnswerService:
                         repository_id=cursor.repository_id,
                         context_id=cursor.context_id,
                         request_id=cursor.request_id,
-                        request_digest=cursor.request_digest,
+                        binding_digest=cursor.binding_digest,
                         unit_index=unit_index,
                         line_offset=line_offset,
                     )

@@ -1,4 +1,4 @@
-"""Raw schema-10 -> schema-11 semantic staging for the offline transition.
+"""Raw schema-10 -> schema-13 semantic staging for the offline transition.
 
 The mapping is external to the runtime: it reads the archived schema-10 bytes,
 assigns one file surface per recorded single-file scope (O-4), preserves every
@@ -167,41 +167,34 @@ def _import_contexts(
     archive: _sqlite3.Connection,
     records: list[dict[str, object]],
     repository_id: str,
-) -> dict[str, m.InvestigationContext]:
-    contexts: dict[str, m.InvestigationContext] = {}
+) -> dict[str, tuple[str, str]]:
+    """Read legacy context coordinates for receipt mapping; do not reactivate them."""
+    del connection
+    contexts: dict[str, tuple[str, str]] = {}
     for row in archive.execute(
         "SELECT context_id, canonical_json FROM investigation_contexts"
         " WHERE repository_id=?",
         (repository_id,),
     ).fetchall():
-        context = m.from_canonical(m.InvestigationContext, _json.loads(row[1]))
-        contexts[row[0]] = context
-        connection.execute(
-            "INSERT OR REPLACE INTO investigation_contexts"
-            "(context_id, repository_id, request_id, request_digest,"
-            " canonical_json, expires_at) VALUES(?,?,?,?,?,?)",
-            (
-                context.context_id.value,
-                context.repository_id,
-                context.request_id.value,
-                context.request_digest.value,
-                row[1],
-                (
-                    context.expires_at.astimezone(_datetime.timezone.utc).isoformat()
-                    if context.expires_at
-                    else None
-                ),
-            ),
-        )
+        payload = _json.loads(row[1])
+        try:
+            context_repository = _text(payload["repository_id"], "context.repository_id")
+            request_payload = _typing.cast(dict[str, object], payload["request_id"])
+            request_id = _text(request_payload["value"], "context.request_id.value")
+        except (KeyError, TypeError) as exc:
+            raise TransitionError(
+                f"schema-10 context {row[0]!r} cannot supply receipt identity: {exc}"
+            ) from None
+        contexts[str(row[0])] = (context_repository, request_id)
         _mapping(
             records,
             source_table="investigation_contexts",
-            source_id=context.context_id.value,
-            target_table="investigation_contexts",
-            target_id=context.context_id.value,
-            classification="preserved",
+            source_id=str(row[0]),
+            target_table="",
+            target_id="",
+            classification="drained_not_copied",
             source_payload=row[1],
-            target_payload=row[1],
+            reason="pre-schema-13 operational context binding is not translatable",
         )
     return contexts
 
@@ -300,10 +293,9 @@ def _import_context_links(
     records: list[dict[str, object]],
     config: TransitionConfig,
 ) -> None:
-    for source_table, target_table in (
-        ("context_evidence", "context_evidence"),
-        ("context_discovery_evidence", "context_discovery_evidence"),
-    ):
+    """Record legacy membership as drained operational state; copy no links."""
+    del connection
+    for source_table in ("context_evidence", "context_discovery_evidence"):
         for row in archive.execute(
             "SELECT links.context_id, links.observation_id"
             f" FROM {source_table} AS links"
@@ -312,18 +304,14 @@ def _import_context_links(
             " WHERE contexts.repository_id=?",
             (config.repository_id,),
         ).fetchall():
-            connection.execute(
-                f"INSERT OR REPLACE INTO {target_table}"
-                "(repository_id, context_id, observation_id) VALUES(?,?,?)",
-                (config.repository_id, row[0], row[1]),
-            )
             _mapping(
                 records,
                 source_table=source_table,
                 source_id=f"{row[0]}/{row[1]}",
-                target_table=target_table,
-                target_id=f"{row[0]}/{row[1]}",
-                classification="preserved",
+                target_table="",
+                target_id="",
+                classification="drained_not_copied",
+                reason="context membership is operational and pre-schema-13",
             )
 
 
@@ -702,7 +690,7 @@ def _import_receipts(
     limitations: list[str],
     *,
     config: TransitionConfig,
-    contexts: dict[str, m.InvestigationContext],
+    contexts: dict[str, tuple[str, str]],
 ) -> None:
     receipt_keys: set[tuple[str, str]] = set()
     for row in archive.execute(
@@ -712,8 +700,8 @@ def _import_receipts(
         (config.repository_id,),
     ).fetchall():
         receipt_payload = _json.loads(row[3])
-        context = contexts.get(str(row[1]))
-        if context is None:
+        context_coordinates = contexts.get(str(row[1]))
+        if context_coordinates is None:
             _unresolved(
                 records,
                 limitations,
@@ -723,7 +711,8 @@ def _import_receipts(
                 "receipt context is gone",
             )
             continue
-        key = (str(row[0]), context.request_id.value)
+        context_repository, context_request_id = context_coordinates
+        key = (str(row[0]), context_request_id)
         if key in receipt_keys:
             _unresolved(
                 records,
@@ -735,7 +724,12 @@ def _import_receipts(
             )
             continue
         receipt_keys.add(key)
-        receipt = _receipt_from_schema10(payload=receipt_payload, context=context)
+        receipt = _receipt_from_schema10(
+            payload=receipt_payload,
+            repository_id=context_repository,
+            request_id=context_request_id,
+            context_id=str(row[1]),
+        )
         missing = _missing_receipt_effects(connection, receipt)
         if missing:
             _unresolved(
@@ -771,7 +765,7 @@ def _import_receipts(
             source_table="record_receipts",
             source_id=f"{row[1]}/{row[2]}",
             target_table="record_receipts",
-            target_id=f"{row[0]}/{context.request_id.value}",
+            target_id=f"{row[0]}/{context_request_id}",
             classification="transformed",
             source_payload=row[3],
             target_payload=receipt_canonical,
@@ -834,12 +828,16 @@ def _unresolved(
 
 
 def _receipt_from_schema10(
-    *, payload: dict[str, object], context: m.InvestigationContext
+    *,
+    payload: dict[str, object],
+    repository_id: str,
+    request_id: str,
+    context_id: str,
 ) -> m.RecordReceipt:
     identity = m.RecordingIdentity(
-        repository_id=context.repository_id,
-        request_id=context.request_id,
-        context_id=context.context_id,
+        repository_id=repository_id,
+        request_id=m.RequestId(request_id),
+        context_id=m.InvestigationContextId(context_id),
     )
     return m.RecordReceipt(
         identity=identity,

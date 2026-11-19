@@ -18,7 +18,7 @@ from span.core.identity import record_content_digest
 from span.core.recording import RecordingValidationError
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import issue_context
+from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 
@@ -203,11 +203,11 @@ class ReconsiderService:
         context_id = self._new_context_id()
         context = issue_context(
             self._store,
-            payload=request,
+            binding=context_binding(
+                scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
+            ),
             repository_id=repository_id,
             request_id=m.RequestId(f"reconsider:{context_id}"),
-            scope=m.EvidenceScope(paths=tuple(sorted(set(paths)))),
-            question=None,
             clock=self._clock,
             new_context_id=lambda: context_id,
         )
@@ -300,11 +300,15 @@ class ReconsiderService:
             scopes.append(m.EvidenceScope(evidence_refs=challenge.evidence))
         context = issue_context(
             self._store,
-            payload=challenge,
+            binding=context_binding(
+                scope=m.evidence_scope_union(scopes),
+                source_requests=tuple(
+                    m.EvidenceRequest(reference.locator)
+                    for reference in challenge.evidence
+                ),
+            ),
             repository_id=repository_id,
             request_id=m.RequestId(challenge.request_id),
-            scope=m.evidence_scope_union(scopes),
-            question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )

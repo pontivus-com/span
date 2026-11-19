@@ -33,7 +33,7 @@ from span.core.rejection import Rejection, RejectionCauseKind, SurfaceConflict
 from span.core.schema import record_wire as _rw
 from span.ports.lifecycle import LifecycleAuthorityResolver, LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import issue_context
+from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 from span.service.ids import server_context_id
@@ -74,6 +74,76 @@ def _record_wire_locators(value: object) -> tuple[str, ...]:
     return _cited_locators(value)
 
 
+def _direct_source_requests(value: object) -> tuple[m.EvidenceRequest, ...]:
+    """Exact direct source selections that admission will consume."""
+    found: list[m.EvidenceRequest] = []
+    if isinstance(value, _rw.SourceSupportWire):
+        found.append(
+            m.EvidenceRequest(
+                value.locator,
+                tuple(
+                    m.SourceRange(item.start_line, item.end_line)
+                    for item in value.ranges
+                ),
+            )
+        )
+    elif _dataclasses.is_dataclass(value) and not isinstance(value, type):
+        for field in _dataclasses.fields(value):
+            found.extend(_direct_source_requests(getattr(value, field.name)))
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            found.extend(_direct_source_requests(item))
+    return tuple(found)
+
+
+def _direct_discovery_scopes(value: object) -> tuple[m.EvidenceScope, ...]:
+    """Exact direct discovery scopes that admission will consume."""
+    found: list[m.EvidenceScope] = []
+    if isinstance(value, _rw.DiscoveryBoundarySupportWire):
+        found.append(m.EvidenceScope(paths=value.scope.paths))
+    elif _dataclasses.is_dataclass(value) and not isinstance(value, type):
+        for field in _dataclasses.fields(value):
+            found.extend(_direct_discovery_scopes(getattr(value, field.name)))
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            found.extend(_direct_discovery_scopes(item))
+    return tuple(found)
+
+
+def _record_context_selection(
+    wire: _rw.RecordRequestWire,
+) -> tuple[tuple[m.EvidenceRequest, ...], tuple[m.EvidenceScope, ...]]:
+    sources = list(_direct_source_requests(wire.support))
+    discovery = list(_direct_discovery_scopes(wire.support))
+    if wire.locator is not None:
+        sources.append(m.EvidenceRequest(wire.locator))
+    if wire.actions is not None:
+        actions: tuple[_rw.RecordActionWire, ...] = (
+            *wire.actions.add,
+            *wire.actions.confirm,
+            *wire.actions.correct,
+            *wire.actions.replace,
+            *wire.actions.withdraw,
+        )
+        for action in actions:
+            if action.locator is not None:
+                sources.append(m.EvidenceRequest(action.locator))
+            sources.extend(_direct_source_requests(action.support))
+            discovery.extend(_direct_discovery_scopes(action.support))
+    if wire.run is not None:
+        sources.extend(
+            m.EvidenceRequest(
+                item.locator,
+                tuple(
+                    m.SourceRange(value.start_line, value.end_line)
+                    for value in item.ranges
+                ),
+            )
+            for item in wire.run.evidence
+        )
+    return tuple(sources), tuple(discovery)
+
+
 class LifecycleService:
     """One repository-independent lifecycle service over one store."""
 
@@ -101,11 +171,12 @@ class LifecycleService:
         self._store.require_repository(request.repository_id)
         return issue_context(
             self._store,
-            payload=request,
+            binding=context_binding(
+                scope=request.scope,
+                question=request.question,
+            ),
             repository_id=request.repository_id,
             request_id=request.request_id,
-            scope=request.scope,
-            question=request.question,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )
@@ -618,13 +689,16 @@ class LifecycleService:
                 "context-free recording requires explicit scope or direct evidence",
                 cause_kind=RejectionCauseKind.CONTEXT_REQUIRED,
             )
+        source_requests, discovery_scopes = _record_context_selection(wire)
         context = issue_context(
             self._store,
-            payload=wire,
+            binding=context_binding(
+                scope=m.evidence_scope_union(requirements),
+                source_requests=source_requests,
+                discovery_scopes=discovery_scopes,
+            ),
             repository_id=wire.bound_repository_id,
-            request_id=m.RequestId(f"{wire.request_id}:record-context"),
-            scope=m.evidence_scope_union(requirements),
-            question=None,
+            request_id=m.RequestId(wire.request_id),
             clock=self._clock,
             new_context_id=self._new_context_id,
         )

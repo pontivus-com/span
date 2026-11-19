@@ -1,4 +1,4 @@
-"""Lossless schema-11 -> schema-12 staging for the offline transition.
+"""Lossless schema-11 -> schema-13 staging for the offline transition.
 
 The only structural change is the removal of ``source_observations.excerpt``.
 Every semantic table is copied by its common columns; the source excerpt is
@@ -26,7 +26,15 @@ __all__ = ["stage_schema11", "verify_schema11_staging"]
 
 #: Tables owned by the staged store itself; the source copies must not replace
 #: the new schema version or the newly registered repository binding.
-_SKIP_TABLES = frozenset({"meta", "repositories"})
+_SKIP_TABLES = frozenset(
+    {
+        "meta",
+        "repositories",
+        "investigation_contexts",
+        "context_evidence",
+        "context_discovery_evidence",
+    }
+)
 
 
 def _columns(connection: _sqlite3.Connection, table: str) -> list[str]:
@@ -42,7 +50,7 @@ def _copy_table(
     target_columns = _columns(target, table)
     if not target_columns:
         raise TransitionError(
-            f"schema-11 source table {table!r} has no schema-12 target"
+            f"schema-11 source table {table!r} has no schema-13 target"
         )
     source_columns = set(_columns(source, table))
     columns = [name for name in target_columns if name in source_columns]
@@ -71,7 +79,7 @@ def stage_schema11(
     config: TransitionConfig,
     root: str,
 ) -> tuple[tuple[str, ...], dict[str, object]]:
-    """Copy a schema-11 archive into the staged schema-12 store."""
+    """Copy a schema-11 archive into the staged schema-13 store."""
     source = _connect_read_only(paths.archive)
     target = _sqlite3.connect(paths.staging)
     counts: dict[str, int] = {}
@@ -92,6 +100,11 @@ def stage_schema11(
         "target_schema": TARGET_SCHEMA,
         "repository_id": config.repository_id,
         "dropped_columns": {"source_observations": ["excerpt"]},
+        "drained_not_copied": [
+            "investigation_contexts",
+            "context_evidence",
+            "context_discovery_evidence",
+        ],
         "counts": counts,
     }
     paths.mapping.write_text(
@@ -99,8 +112,8 @@ def stage_schema11(
     )
     return (
         (
-            "schema-11 copy preserved every semantic table and dropped "
-            "source_observations.excerpt",
+            "schema-11 copy preserved durable semantic/audit tables, dropped "
+            "source_observations.excerpt, and did not reactivate legacy contexts",
         ),
         payload,
     )
@@ -130,6 +143,13 @@ def verify_schema11_staging(paths: TransitionPaths, config: TransitionConfig) ->
                 raise TransitionError(
                     f"staged {table} holds {actual} rows, mapping expects {expected}"
                 )
+        for table in (
+            "investigation_contexts",
+            "context_evidence",
+            "context_discovery_evidence",
+        ):
+            if connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]:
+                raise TransitionError(f"staged {table} must be empty")
         _verify_staged_references(connection, config)
     finally:
         connection.close()

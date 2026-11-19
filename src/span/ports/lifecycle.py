@@ -64,7 +64,7 @@ class LifecycleStorePort(_typing.Protocol):
         self,
         repository_id: str,
         request_id: m.RequestId,
-        request_digest: m.ContentDigest,
+        binding_digest: m.ContentDigest,
         factory: _typing.Callable[[], m.InvestigationContext],
     ) -> m.InvestigationContext:
         """Return the request-bound context, creating exactly one if absent."""

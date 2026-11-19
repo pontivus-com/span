@@ -19,7 +19,7 @@ from span.core.rejection import RejectionCauseKind
 from span.ports.evidence import EvidenceSource
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import issue_context
+from span.service.contexts import context_binding, issue_context
 from span.service.ids import server_context_id
 
 __all__ = ["EvidenceService"]
@@ -144,11 +144,12 @@ class EvidenceService:
         self._store.require_repository(request.repository_id)
         context = issue_context(
             self._store,
-            payload=request,
+            binding=context_binding(
+                scope=request.scope,
+                source_requests=request.requests,
+            ),
             repository_id=request.repository_id,
             request_id=request.request_id,
-            scope=request.scope,
-            question=None,
             clock=self._clock,
             new_context_id=self._new_context_id,
         )

@@ -1,4 +1,4 @@
-"""Offline legacy → schema-12 store transition (N-06, §8.3/§8.5).
+"""Offline legacy → schema-13 store transition (N-06, §8.3/§8.5).
 
 This is the one canonical transition tool. It is deliberately raw: legacy
 stores are inspected and exported by reading their observed SQLite catalog and
@@ -69,8 +69,8 @@ __all__ = [
 ]
 
 
-TARGET_SCHEMA = 12
-SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11})
+TARGET_SCHEMA = 13
+SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12})
 
 #: Every table the schema-7/8/9 runtime could own. A table outside this set is
 #: preserved and reported, never silently omitted.
@@ -434,7 +434,7 @@ def _file_bytes(path: _pathlib.Path) -> int:
 
 
 def _empty_target_bytes() -> int:
-    """Measured size of an empty schema-12 store (not an invented floor)."""
+    """Measured size of an empty schema-13 store (not an invented floor)."""
     connection = _sqlite3.connect(":memory:")
     try:
         from span.shell.sqlite_store.lifecycle import _DDL
@@ -472,7 +472,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
             unknown_tables=(),
             limitations=(
                 f"no store at {source}; explicit installer provisioning creates "
-                "a new schema-12 store instead of a transition",
+                "a new schema-13 store instead of a transition",
             ),
         )
     connection = _connect_read_only(source)
@@ -488,7 +488,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
     file_bytes = _file_bytes(source)
     empty_target = _empty_target_bytes()
     # Archive copy + lossless export (raw rows cannot exceed the logical
-    # database bytes) + one empty schema-12 store.
+    # database bytes) + one empty schema-13 store.
     required = file_bytes + logical + empty_target
     limitations: list[str] = []
     if version is None:
@@ -934,6 +934,48 @@ def _reconcile_export(paths: TransitionPaths) -> tuple[TableInventory, ...]:
 # -- staging and activation ----------------------------------------------
 
 
+
+def _require_schema12_context_drain(
+    path: _pathlib.Path,
+    config: TransitionConfig,
+) -> None:
+    """Refuse schema-12 cutover while any operational context is still live."""
+    connection = _connect_read_only(path)
+    try:
+        if _read_schema_version(connection) != 12:
+            return
+        if "investigation_contexts" not in _table_names(connection):
+            return
+        rows = connection.execute(
+            "SELECT context_id, canonical_json, expires_at"
+            " FROM investigation_contexts WHERE repository_id=?",
+            (config.repository_id,),
+        ).fetchall()
+        now = config.clock()
+        for context_id, canonical_json, expires_at in rows:
+            try:
+                payload = _json.loads(canonical_json)
+                state = payload.get("state")
+            except (TypeError, ValueError):
+                raise TransitionError(
+                    f"schema-12 context {context_id!r} is unreadable; refusing cutover"
+                ) from None
+            if state != "LIVE":
+                continue
+            expiry = (
+                _datetime.datetime.fromisoformat(str(expires_at))
+                if expires_at is not None
+                else None
+            )
+            if expiry is None or expiry >= now:
+                raise TransitionError(
+                    "schema-12 store has a live investigation context "
+                    f"{context_id!r}; allow legacy contexts to drain before cutover"
+                )
+    finally:
+        connection.close()
+
+
 def _legacy_binding(
     paths: TransitionPaths, repository_id: str
 ) -> tuple[tuple[m.EvidenceRef, ...], tuple[str, ...]]:
@@ -1016,6 +1058,11 @@ def _stage(
 
         limits, _ = stage_schema11(paths, config, root)
         limitations = limitations + limits
+    elif source_schema == 12:
+        from span.shell.store_transition_schema12 import stage_schema12
+
+        limits, _ = stage_schema12(paths, config, root)
+        limitations = limitations + limits
     _fsync_file(paths.staging)
     _fsync_dir(paths.transition_dir)
     return (), limitations
@@ -1096,7 +1143,16 @@ def _verify_staged(
         verify_schema11_staging(paths, config)
         _smoke(paths, config)
         return (
-            "staged store carries the schema-11 copy with reconciled references",
+            "staged store carries the schema-11 durable copy with operational contexts drained",
+            "fresh lifecycle smoke test passed on an isolated copy",
+        )
+    if source_schema == 12:
+        from span.shell.store_transition_schema12 import verify_schema12_staging
+
+        verify_schema12_staging(paths, config)
+        _smoke(paths, config)
+        return (
+            "staged store carries the schema-12 durable copy with operational contexts drained",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
     counts = _semantic_counts(paths.staging)
@@ -1349,7 +1405,7 @@ def _check_space(config: TransitionConfig, inspection: LegacyInspection) -> None
         raise TransitionError(
             "insufficient free space for a lossless transition: "
             f"{free} bytes free, {inspection.required_free_bytes} required "
-            "(archive copy + raw export + staged schema-12 store)"
+            "(archive copy + raw export + staged schema-13 store)"
         )
 
 
@@ -1496,6 +1552,7 @@ def _stage_step(
 ) -> tuple[TransitionManifest, tuple[str, ...], tuple[str, ...]]:
     if manifest.state is not TransitionState.STAGED:
         return manifest, (), ()
+    _require_schema12_context_drain(paths.archive, config)
     _, binding_limitations = _stage(paths, config, root, manifest.source_schema_version)
     effects = [f"staged schema-{TARGET_SCHEMA} store at {paths.staging}"]
     effects.extend(
@@ -1527,6 +1584,7 @@ def _activate_step(
 ) -> tuple[TransitionManifest, tuple[str, ...], tuple[str, ...]]:
     if manifest.state is not TransitionState.ACTIVATED:
         return manifest, (), ()
+    _require_schema12_context_drain(paths.archive, config)
     effects = _activate(paths, clock=config.clock)
     manifest = _advance(
         manifest,
