@@ -450,9 +450,6 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.challenge.understanding_id.value, "u-a")
         self.assertEqual(result.challenge.target_conclusions, (target,))
         self.assertEqual(result.challenge.state, m.ChallengeState.OPEN)
-        context = self.store.get_context(result.context.context_id.value)
-        self.assertEqual(context.origin, m.ContextOrigin.CHALLENGE)
-
     def test_challenge_rejects_unadmitted_evidence(self) -> None:
         with self.assertRaisesRegex(RecordingValidationError, "not admitted"):
             self.service.reconsider(
@@ -645,6 +642,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                     )
                 )
                 context = self.store.get_context(challenged.context.context_id.value)
+                self.assertEqual(context.origin, m.ContextOrigin.CHALLENGE)
                 self.assertEqual(context.scope, scope)
                 self.assertFalse(
                     m.evidence_scope_contains(
