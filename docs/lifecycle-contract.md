@@ -363,6 +363,34 @@ may supply one or none. Span derives the old revision identity, any unchanged
 assertion nature or scope, the mechanical basis, and the submission digest.
 `expected_version` stays mandatory and compare-and-set. *(F5, F7, L4, L7)*
 
+**Challenge dispositions.** An understanding update may settle a named challenge
+in the same atomic `record`. An unresolved disposition carries exactly
+`challenge_id`, `expected_challenge_revision`, `remaining_question`, and
+`basis`. A resolved disposition carries exactly `challenge_id`,
+`expected_challenge_revision`, `reasoning`, optional `target_conclusion_ids`,
+and optional `evidence_refs`. `target_conclusion_ids` are semantic lineage
+identities already returned by Span; they never contain a version or revision.
+When omitted, the targets are the challenge's own target lineages. A target may
+name a challenged lineage being replaced by an action in this same request;
+Span follows that explicit replacement effect to the server-derived replacement
+lineage. Every resolved target must identify exactly one conclusion effect or
+current resulting member in the resulting understanding. Span derives the
+resulting understanding/version and exact resulting revision references,
+classifying a resulting `WithdrawnConclusion` under `withdrawn` and every other
+resulting target under `conclusions`. A caller never predicts an identity,
+version, or revision created by the same request.
+
+`evidence_refs` are optional opaque evidence handles already admitted in the
+recording context. New source evidence that supports the resulting conclusion is
+supplied through that conclusion action's ordinary evidence mode and therefore
+participates in the context-free recording path; the resolved disposition may
+omit `evidence_refs` in that case. Evidence used only for disposition reasoning
+must already be admitted in the supplied context. There is no portable evidence
+handle and no separate disposition-admission operation. Challenge settlement,
+conclusion effects, and the receipt commit atomically; any invalid target,
+challenge revision, or evidence membership rejects the whole write. *(F5, F7,
+L4, L7)*
+
 A first version is not an action. It is the flat create
 (`conclusion`, one of `locator`, `observation_id`, or `support`, and the target)
 stated above. The caller does not supply a conclusion identity; Span derives the

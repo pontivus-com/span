@@ -323,9 +323,23 @@ not thereby withdrawn; withdrawal is explicit. *(L4)*
 newest accepted version is current, and prior versions remain retrievable.
 *(F3)*
 
-**FD-37 — Premise effects are reported, not applied silently.** Any transition
-that invalidates a premise must name the affected dependents in the same result.
-*(F4, L10)*
+**FD-37 — Premise and challenge effects are derived and reported, not applied silently.**
+Any transition that invalidates a premise must name the affected dependents in
+the same result. *(F4, L10)*
+
+For a resolved challenge disposition, Span resolves each semantic target against
+the resulting version after the update actions have been applied. An omitted
+target set uses the challenge's target conclusion lineages. A supplied target
+must either identify a lineage in the resulting membership or identify the old
+lineage of exactly one `replace` action in the same command, in which case the
+replacement action's server-derived lineage is the target. Duplicate or
+ambiguous mappings reject the write. The selected resulting revision is derived
+from the resulting membership: a withdrawal revision is recorded in the
+resolution's `withdrawn` set and any supported revision in its `conclusions`
+set. The resolution's resulting understanding/version are the same atomic
+transition's coordinates. Disposition evidence references are resolved only
+through the recording context. No caller-provided resulting version or revision
+participates in this procedure. *(F5, F7, L4, L7)*
 
 ## 8. Failure taxonomy
 

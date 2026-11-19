@@ -703,6 +703,31 @@ Source admission checks locator membership for restricted contexts. Discovery
 checks full containment before inventory. EvidenceService keeps its admission
 backstop. Neither path widens a supplied context.
 
+**Canonical context binding (FD-2–FD-4, FD-59; 0.11.0).** One internal
+`ContextBinding` carrier owns the digest projection used by every
+`issue_context` caller. Repository and caller request identity remain the
+store key and are not duplicated inside the digest. The binding contains:
+`question` when semantically bound, the effective complete `EvidenceScope`,
+the exact source requests as locator plus inclusive ranges, and the exact
+discovery scopes selected for admission. Source requests and discovery scopes
+are canonicalized by their canonical value, deduplicated and sorted before
+hashing; caller order therefore cannot create another binding for the same
+selection. The binding excludes conclusion wording, update actions, challenge
+disposition text, verification outcome, submission digest, and every other
+semantic write field. `payload_digest(ContextBinding)` is the sole
+`binding_digest`.
+
+`issue_context` receives that typed binding rather than an arbitrary payload.
+The persisted context stores `binding_digest`; repository/request uniqueness
+plus that digest is the recovery/conflict boundary. The complete write wire is
+still hashed independently at the receipt owner before context/evidence work.
+Explicit ask admission and evidence-only starts bind their submitted source
+requests. Context-free record derives source requests and discovery scopes from
+the same direct-evidence fields that admission consumes. Challenge issuance
+binds its effective scope and direct challenge evidence selection. Changed-scope
+reconsider continues to use a fresh Span-owned request identity on every read,
+so it does not reuse caller request identity.
+
 **Surface conflicts.** `SurfaceConflict` carries the current boundary version.
 `put_surface` and `update_surface` raise it for a kind conflict, a changed
 boundary under the existing version, and a stale compare-and-set. The service
@@ -757,7 +782,7 @@ as a new one or assume a new wire digest equals the old request. New direct
 writes still use stable caller-owned identities. Registration refresh and
 publication require separate authorization; this disposition performs neither.
 
-## 10. Schema-11 layout and indexes
+## 10. Schema-13 layout and indexes
 
 **Authority:** FD-1–FD-8, FD-30, FD-35–FD-36, FD-42–FD-48.
 
@@ -770,11 +795,11 @@ The proposed physical changes are:
 | `surfaces` (new) | repository plus canonical surface key; declared-name uniqueness and kind-conflict validation | `Surface`, including boundary and parent reference; no persistent currency flag |
 | `understandings` | add owning surface reference and unique repository/surface/question index | adapt `Understanding`; preserve stable IDs and version pointers |
 | `understanding_versions`, `conclusions`, `understanding_membership` | retain immutable revision and membership keys; bind ownership through the understanding | adapt canonical payload references; no duplicated conclusion bodies |
-| `investigation_contexts` | retain repository/request uniqueness; adapt binding digest inputs | existing context carrier with surface-aware scope; remove budget input from binding |
+| `investigation_contexts` | retain repository/request uniqueness; rename the persisted digest column to `binding_digest` | `InvestigationContext.binding_digest` commits the canonical context binding; scope/question remain canonical context fields |
 | `record_receipts` | replace repository/context/submission key with repository/request key | adapted acceptance identity, digest, effects, and expiry; no cascading dependence on live context |
 | `support_dependencies` | retain reverse index and exact revision keys | project dependencies from canonical revisions in the acceptance transaction |
 | source/discovery observations, challenges, verification runs | retain canonical records and their reference integrity | only required ownership/identity adaptations; run-ingress mapping is the resolved O-7 path recorded in §12 |
-| `meta` | advance expected schema to 11 | existing runtime format check; no migration on ordinary open |
+| `meta` | advance expected schema to 13 | existing runtime format check; no migration on ordinary open |
 
 Resolve path containment from canonical boundaries and existing inventory/locator
 capabilities. Compute surface status on read; do not add a second maintained
@@ -941,12 +966,41 @@ remain unmeasured, so FG-4 stays `OPEN`.
 **Authority:** F3, F7, L4; FD-1, FD-6, FD-35–FD-36, FD-42–FD-45.
 
 Extend `shell/store_transition.py` and the existing installer transition command.
-The current `SUPPORTED_SOURCE_SCHEMAS` contains 7–11, and staging imports binding
-and seeds into an otherwise empty schema-12 store. A schema-10 or schema-11 input
-needs its own mapping and staged verification; the schema-11 mapping copies every
-semantic table and drops `source_observations.excerpt`; the old export mechanism
-alone is not that mapping. Retain historical old-format exports without a second active decoder
-or semantic writer in the MCP runtime.
+For 0.11.0 the target is schema 13 and `SUPPORTED_SOURCE_SCHEMAS` contains
+7–12. The runtime never migrates at open. Historical schemas 7–9 retain their
+export-only treatment; schema 10 and 11 keep their documented semantic mappings
+into the current target; schema 12 has the dedicated mapping below. Retain
+historical old-format exports without a second active decoder or semantic writer
+in the MCP runtime.
+
+**Schema-12 to schema-13 mapping (0.11.0).** Schema 13 changes the meaning and
+name of the context digest from whole-request `request_digest` to the canonical
+`binding_digest` defined in §9.2. A schema-12 context cannot be mechanically
+rebound because the persisted row does not retain every original source
+selection. Therefore the transition is an offline drain, not a context rewrite.
+
+Before staging, inspect every schema-12 `investigation_contexts` row. Refuse
+while any context is `LIVE` and either has no expiry or has an expiry at or
+after the transition clock. Expired or non-live contexts do not block the
+transition and are not copied. The staged schema-13 store copies every repository
+and durable semantic/audit table for the selected repository, including source
+and discovery observations, surfaces and boundary history, understandings,
+versions, conclusions, support dependencies and membership, challenges,
+verification runs and verification-observation membership, and retained
+`record_receipts`. It deliberately copies no `investigation_contexts`,
+`context_evidence`, or `context_discovery_evidence` rows. Receipt
+`RecordingIdentity.context_id` values remain immutable historical coordinates;
+they do not require the operational context row to survive (FD-42).
+
+The mapping artifact classifies those three context tables as
+`drained_not_copied` and every other target table as `preserved`, recording
+source/target counts. Verification requires zero staged operational contexts,
+exact preserved counts, SQLite integrity, support/dependency reconciliation,
+verification-observation references, and every receipt's accepted understanding,
+challenge and verification references. A refused drain leaves schema 12
+untouched. Rollback before schema-13 writes restores schema 12 through the
+existing owner; after schema-13 writes the existing rollback preservation rule
+keeps the new-format store rather than discarding accepted writes.
 
 **Schema-10 mapping rule (O-4).** Each schema-10 understanding maps to the path
 surface named by its recorded `EvidenceScope` when that scope names exactly one
