@@ -1201,6 +1201,135 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(challenge.state, m.ChallengeState.UNRESOLVED)
 
+    async def test_resolved_challenge_reestablishes_with_new_external_support(
+        self,
+    ) -> None:
+        _write(
+            self.repo,
+            "docs/adr.md",
+            "Decision: the app emits line1.\n",
+        )
+
+        async def journey(session: ClientSession) -> dict:
+            created = await self._record_create(session, "sub-challenge-resolved")
+            self.assertEqual(created["$type"], "UnderstandingRecorded")
+            understanding_id = created["understanding_id"]["value"]
+            target_id = self._created_conclusion_id(created)
+            challenged = await self._call(
+                session,
+                "reconsider",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "challenge": {
+                        "request_id": "ch-resolved",
+                        "understanding_id": understanding_id,
+                        "target_version": 1,
+                        "target_conclusions": [
+                            {
+                                "understanding_id": understanding_id,
+                                "conclusion_id": target_id,
+                                "revision": 1,
+                            }
+                        ],
+                        "reason": "The current support does not settle the dispute.",
+                        "evidence": [],
+                    },
+                },
+            )
+            self.assertEqual(challenged["$type"], "Challenged")
+            challenge = challenged["challenge"]
+            resolved = await self._call(
+                session,
+                "record",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "sub-challenge-resolve",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": 1,
+                    "actions": {
+                        "confirm": [
+                            {
+                                "conclusion_id": target_id,
+                                "support": [
+                                    {
+                                        "$type": "source",
+                                        "locator": "src/app.py",
+                                    },
+                                    {
+                                        "$type": "source",
+                                        "locator": "docs/adr.md",
+                                    },
+                                ],
+                            }
+                        ]
+                    },
+                    "challenge_dispositions": [
+                        {
+                            "$type": "resolved",
+                            "challenge_id": challenge["challenge_id"]["value"],
+                            "expected_challenge_revision": challenge[
+                                "challenge_revision"
+                            ]["value"],
+                            "reasoning": (
+                                "The ADR supplies the additional support required "
+                                "to settle the challenge."
+                            ),
+                            "target_conclusion_ids": [target_id],
+                        }
+                    ],
+                },
+            )
+            return {
+                "understanding_id": understanding_id,
+                "target_id": target_id,
+                "challenge_id": challenge["challenge_id"]["value"],
+                "resolved": resolved,
+            }
+
+        outcome = await self._session(journey)
+        resolved = outcome["resolved"]
+        self.assertEqual(resolved["$type"], "UnderstandingRecorded")
+        self.assertEqual(resolved["version"]["value"], 2)
+
+        store = LifecycleStore(
+            self.data / f"{REPOSITORY_ID}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        self.addCleanup(store.close)
+        challenge = store.get_challenge(outcome["challenge_id"])
+        self.assertEqual(challenge.state, m.ChallengeState.RESOLVED)
+        assert challenge.resolution is not None
+        self.assertEqual(challenge.resolution.resulting_version.value, 2)
+        self.assertEqual(len(challenge.resolution.conclusions), 1)
+        self.assertEqual(
+            challenge.resolution.conclusions[0].conclusion_id.value,
+            outcome["target_id"],
+        )
+        self.assertEqual(challenge.resolution.conclusions[0].revision.value, 2)
+        self.assertEqual(challenge.resolution.withdrawn, ())
+
+        context = store.find_context(REPOSITORY_ID, "sub-challenge-resolve")
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertEqual(set(context.scope.paths), {"src/app.py", "docs/adr.md"})
+
+        revision = next(
+            item
+            for item in store.get_conclusions(outcome["understanding_id"])
+            if item.conclusion_id.value == outcome["target_id"]
+            and item.revision.value == 2
+        )
+        assert isinstance(revision.content, m.SupportedConclusion)
+        self.assertEqual(revision.content.scope, m.EvidenceScope(paths=("src/app.py",)))
+        locators = {
+            store.get_source_observation(dependency.observation_id.value)
+            .evidence.locator
+            for dependency in revision.content.support
+            if isinstance(dependency, m.SourceSupport)
+        }
+        self.assertEqual(locators, {"src/app.py", "docs/adr.md"})
+
     async def test_live_context_cannot_be_misrouted_to_another_repository(self) -> None:
         other_id = "repo-other"
         other = self.repo.parent / other_id
