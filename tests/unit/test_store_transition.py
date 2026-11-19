@@ -591,12 +591,8 @@ def _schema12_store(
             payload["request_digest"] = payload.pop("binding_digest")
             persisted_expiry = payload.get("expires_at")
             if not live_context:
-                payload["created_at"] = (
-                    NOW - datetime.timedelta(days=2)
-                ).isoformat()
-                payload["expires_at"] = (
-                    NOW - datetime.timedelta(days=1)
-                ).isoformat()
+                payload["created_at"] = (NOW - datetime.timedelta(days=2)).isoformat()
+                payload["expires_at"] = (NOW - datetime.timedelta(days=1)).isoformat()
                 persisted_expiry = payload["expires_at"]
             connection.execute(
                 "UPDATE investigation_contexts SET canonical_json=?, expires_at=?"

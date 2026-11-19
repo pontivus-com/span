@@ -656,5 +656,6 @@ class ChallengeTransitionTest(unittest.TestCase):
         )
         self.assertEqual(effects, ())
 
+
 if __name__ == "__main__":
     unittest.main()
