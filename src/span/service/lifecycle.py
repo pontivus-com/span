@@ -302,7 +302,20 @@ class LifecycleService:
             else None
         )
         scope = self._create_scope(wire, supplied_context) if create else None
-        wire = self._resolve_record_request(wire, semantic_scope=scope)
+        current_revisions: tuple[m.ConclusionRevision, ...] = ()
+        update_scope: m.EvidenceScope | None = None
+        if not create:
+            current_revisions = self._current_revisions_for_update(wire)
+            understanding_id = _typing.cast(str, wire.understanding_id)
+            expected_version = _typing.cast(int, wire.expected_version)
+            update_scope = self._store.get_version(
+                understanding_id, expected_version
+            ).scope
+        wire = self._resolve_record_request(
+            wire,
+            semantic_scope=scope,
+            update_scope=update_scope,
+        )
         context = self._store.get_context(_typing.cast(str, wire.context_id))
         context_bound = context.origin is m.ContextOrigin.QUESTION
         derived = (
@@ -311,9 +324,6 @@ class LifecycleService:
         derived_conclusions = (
             (self._flat_conclusion(wire, scope),) if scope is not None else None
         )
-        current_revisions: tuple[m.ConclusionRevision, ...] = ()
-        if not create:
-            current_revisions = self._current_revisions_for_update(wire)
         command = _rw.record_command(
             wire,
             self._resolver(wire.identity),
@@ -594,10 +604,15 @@ class LifecycleService:
         wire: _rw.RecordRequestWire,
         *,
         semantic_scope: m.EvidenceScope | None = None,
+        update_scope: m.EvidenceScope | None = None,
     ) -> _rw.RecordRequestWire:
         if wire.context_id is not None:
             return wire
-        requirements = self._record_request_scopes(wire, semantic_scope)
+        requirements = self._record_request_scopes(
+            wire,
+            semantic_scope,
+            update_scope=update_scope,
+        )
         if not requirements:
             raise RecordingValidationError(
                 "context-free recording requires explicit scope or direct evidence",
@@ -626,22 +641,20 @@ class LifecycleService:
         self,
         wire: _rw.RecordRequestWire,
         semantic_scope: m.EvidenceScope | None,
+        *,
+        update_scope: m.EvidenceScope | None = None,
     ) -> tuple[m.EvidenceScope, ...]:
         """Actual complete scope requirements; absent fields are not operands."""
         scopes: list[m.EvidenceScope] = []
         if semantic_scope is not None:
             scopes.append(semantic_scope)
+        if update_scope is not None:
+            scopes.append(update_scope)
         supports: list[_rw.SupportWire] = list(wire.support)
         locators = list(_cited_locators(wire.support))
         if wire.locator is not None:
             locators.append(wire.locator)
         if wire.actions is not None:
-            if wire.understanding_id is not None and wire.expected_version is not None:
-                scopes.append(
-                    self._store.get_version(
-                        wire.understanding_id, wire.expected_version
-                    ).scope
-                )
             actions: tuple[_rw.RecordActionWire, ...] = (
                 *wire.actions.add,
                 *wire.actions.confirm,

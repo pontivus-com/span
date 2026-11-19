@@ -982,6 +982,29 @@ class LifecycleServiceTest(unittest.TestCase):
         assert context is not None
         self.assertIn("src/a.py", context.scope.paths)
 
+    def test_context_free_update_checks_expected_version_before_scope_lookup(self) -> None:
+        self.service.record(_create_wire())
+        with self.assertRaises(RecordingConflict) as raised:
+            self._service("ctx-never-issued").record(
+                w.RecordRequestWire(
+                    repository_id="repo-1",
+                    request_id="sub-missing-version",
+                    kind=m.RecordKind.UNDERSTANDING,
+                    understanding_id="u:sub-create",
+                    expected_version=99,
+                    actions=w.RecordActionsWire(
+                        add=(
+                            w.AddConclusionWire(
+                                conclusion="Another conclusion",
+                                locator="src/a.py",
+                            ),
+                        )
+                    ),
+                )
+            )
+        self.assertEqual(raised.exception.current_version, 1)
+        self.assertIsNone(self.store.find_context_by_id("ctx-never-issued"))
+
     # -- FD-37 premise effects --------------------------------------------
 
     def test_correct_names_the_affected_dependent(self) -> None:
