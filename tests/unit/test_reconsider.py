@@ -194,6 +194,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             by_surface["src/b.py"].conclusions[0].expected_version.value, 1
         )
         context = self.store.get_context(result.context.context_id.value)
+        self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
         self.assertEqual(
             context.scope,
             m.EvidenceScope(
@@ -449,6 +450,8 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.challenge.understanding_id.value, "u-a")
         self.assertEqual(result.challenge.target_conclusions, (target,))
         self.assertEqual(result.challenge.state, m.ChallengeState.OPEN)
+        context = self.store.get_context(result.context.context_id.value)
+        self.assertEqual(context.origin, m.ContextOrigin.CHALLENGE)
 
     def test_challenge_rejects_unadmitted_evidence(self) -> None:
         with self.assertRaisesRegex(RecordingValidationError, "not admitted"):

@@ -1041,8 +1041,8 @@ class LifecycleServiceTest(unittest.TestCase):
         context = self.store.find_context_by_id("ctx-issued")
         self.assertIsNotNone(context)
         assert context is not None
-        self.assertEqual(context.origin, m.ContextOrigin.QUESTION)
-        self.assertEqual(context.question, "What does A do?")
+        self.assertEqual(context.origin, m.ContextOrigin.EVIDENCE_ONLY)
+        self.assertIsNone(context.question)
         self.assertIn("src/a.py", context.scope.paths)
         self.assertEqual(
             _receipt(self.store, self._service("ctx-unused").record(wire)), receipt

@@ -270,7 +270,10 @@ class ReconsiderService:
         context_id = self._new_context_id()
         context = issue_context(
             self._store,
-            binding=context_binding(scope=m.evidence_scope_union(scopes)),
+            binding=context_binding(
+                scope=m.evidence_scope_union(scopes),
+                origin=m.ContextOrigin.CHANGED_SUPPORT,
+            ),
             repository_id=repository_id,
             request_id=m.RequestId(f"reconsider:{context_id}"),
             clock=self._clock,
@@ -402,6 +405,7 @@ class ReconsiderService:
             self._store,
             binding=context_binding(
                 scope=m.evidence_scope_union(scopes),
+                origin=m.ContextOrigin.CHALLENGE,
                 source_requests=tuple(
                     m.EvidenceRequest(reference.locator)
                     for reference in challenge.evidence

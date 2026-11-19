@@ -344,6 +344,7 @@ class AnswerService:
             self._store,
             binding=context_binding(
                 scope=m.EvidenceScope(paths=self._surface_paths(surface)),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
                 source_requests=evidence,
             ),
             repository_id=repository_id,

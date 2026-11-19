@@ -19,6 +19,7 @@ class ContextBinding:
     """Canonical service-owned projection that binds one recoverable context."""
 
     scope: m.EvidenceScope
+    origin: m.ContextOrigin
     question: str | None = None
     source_requests: tuple[m.EvidenceRequest, ...] = ()
     discovery_scopes: tuple[m.EvidenceScope, ...] = ()
@@ -26,6 +27,8 @@ class ContextBinding:
     def __post_init__(self) -> None:
         if self.question is not None and not self.question:
             raise ValueError("ContextBinding.question must be non-empty")
+        if self.origin is m.ContextOrigin.QUESTION and self.question is None:
+            raise ValueError("a QUESTION binding requires a bound question")
 
 
 _T = _typing.TypeVar("_T")
@@ -47,6 +50,7 @@ def _canonical_values(values: tuple[_T, ...]) -> tuple[_T, ...]:
 def context_binding(
     *,
     scope: m.EvidenceScope,
+    origin: m.ContextOrigin,
     question: str | None = None,
     source_requests: tuple[m.EvidenceRequest, ...] = (),
     discovery_scopes: tuple[m.EvidenceScope, ...] = (),
@@ -54,6 +58,7 @@ def context_binding(
     """Build the sole canonical context-binding projection (FD-2, FD-59)."""
     return ContextBinding(
         scope=scope,
+        origin=origin,
         question=question,
         source_requests=_canonical_values(source_requests),
         discovery_scopes=_canonical_values(discovery_scopes),
@@ -79,15 +84,15 @@ def issue_context(
             repository_id=repository_id,
             request_id=request_id,
             binding_digest=digest,
-            origin=(
-                m.ContextOrigin.QUESTION
-                if binding.question is not None
-                else m.ContextOrigin.EVIDENCE_ONLY
-            ),
+            origin=binding.origin,
             state=m.ContextState.LIVE,
             scope=binding.scope,
             created_at=now,
-            question=binding.question,
+            question=(
+                binding.question
+                if binding.origin is m.ContextOrigin.QUESTION
+                else None
+            ),
             expires_at=now + store.retention.context_lifetime,
         )
 

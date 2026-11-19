@@ -173,6 +173,11 @@ class LifecycleService:
             self._store,
             binding=context_binding(
                 scope=request.scope,
+                origin=(
+                    m.ContextOrigin.QUESTION
+                    if request.question is not None
+                    else m.ContextOrigin.EVIDENCE_ONLY
+                ),
                 question=request.question,
             ),
             repository_id=request.repository_id,
@@ -724,6 +729,7 @@ class LifecycleService:
             self._store,
             binding=context_binding(
                 scope=m.evidence_scope_union(requirements),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
                 question=wire.question if wire.conclusion is not None else None,
                 source_requests=source_requests,
                 discovery_scopes=discovery_scopes,
