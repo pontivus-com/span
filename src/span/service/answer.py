@@ -224,7 +224,10 @@ class AnswerService:
         if len(candidates) > 1:
             return m.AmbiguousSurface(
                 reference=reference,
-                candidates=candidates,
+                candidates=tuple(
+                    m.SurfaceReference(kind=item.kind, locator=item.locator)
+                    for item in candidates
+                ),
                 missing_decision=(
                     "choose the file, symbol, service, or domain surface"
                 ),

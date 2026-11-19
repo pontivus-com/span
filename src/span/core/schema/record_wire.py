@@ -409,7 +409,6 @@ class VerificationRunWire:
         ),
     )
 
-    repository_id: str
     scope_description: str
     scope_paths: tuple[str, ...]
     command: str | None
@@ -490,7 +489,7 @@ class RecordRequestWire:
         _constraints.PresenceRule(
             fields=_EVIDENCE_FIELDS,
             minimum=1,
-            maximum=1,
+            maximum=2,
             when=(
                 _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
                 _constraints.PresenceCondition(
@@ -498,6 +497,24 @@ class RecordRequestWire:
                 ),
             ),
             label="understanding create evidence mode",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("locator"),
+                _constraints.PresenceField("support", non_empty=True),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("conclusion"), True
+                ),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("observation_id"), True
+                ),
+            ),
+            label="understanding create admitted-observation exclusivity",
         ),
         _constraints.PresenceRule(
             fields=(_constraints.PresenceField("conclusion", non_empty=True),),
@@ -1175,7 +1192,7 @@ def _verification_command(
     return _c.RecordVerificationCommand(
         identity=_identity(identity),
         run=_v.ProposedVerificationRun(
-            repository_id=run.repository_id,
+            repository_id=identity.repository_id,
             scope=_v.VerificationScope(
                 description=run.scope_description,
                 scope=_p.EvidenceScope(paths=run.scope_paths),
