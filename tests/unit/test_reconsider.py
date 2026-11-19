@@ -6,6 +6,7 @@ import datetime
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 from span.core import model as m
 from span.core.recording import RecordingValidationError
@@ -251,6 +252,26 @@ class ReconsiderServiceTest(unittest.TestCase):
             [("c-1", 2)],
         )
         self.assertEqual(a_conclusions[0].expected_version.value, 2)
+
+    def test_changed_scope_context_does_not_admit_current_support(self) -> None:
+        support = mock.Mock()
+        support.evaluate_revision.return_value = support_rules.evaluation(
+            m.SupportState.CURRENT,
+            NOW,
+            "",
+        )
+        service = ReconsiderService(store=self.store, support=support)
+        result = service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        self.assertFalse(
+            self.store.has_admitted_observation(
+                result.context.context_id.value, "obs-a"
+            )
+        )
 
     def test_changed_scope_context_admits_existing_source_support(self) -> None:
         result = self.service.reconsider(

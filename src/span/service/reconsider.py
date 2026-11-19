@@ -205,6 +205,11 @@ class ReconsiderService:
                 if declared is not None:
                     scopes.append(m.EvidenceScope(paths=declared.boundary.paths))
             for item in changed.conclusions:
+                if (
+                    isinstance(item.support, m.SupportEvaluation)
+                    and item.support.state is m.SupportState.CURRENT
+                ):
+                    continue
                 revision = self._conclusion_revision(item.ref)
                 content = revision.content
                 if not isinstance(content, m.SupportedConclusion):
