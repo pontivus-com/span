@@ -89,9 +89,7 @@ def issue_context(
             scope=binding.scope,
             created_at=now,
             question=(
-                binding.question
-                if binding.origin is m.ContextOrigin.QUESTION
-                else None
+                binding.question if binding.origin is m.ContextOrigin.QUESTION else None
             ),
             expires_at=now + store.retention.context_lifetime,
         )
