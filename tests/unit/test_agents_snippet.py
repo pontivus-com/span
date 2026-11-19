@@ -87,14 +87,16 @@ class AgentsSnippetTest(unittest.TestCase):
 
     def test_entry_guidance_uses_direct_operation(self):
         text = _text(SNIPPET)
-        self.assertIn("Before `Read`/`Grep`", text)
+        self.assertIn("Before any source access", text)
+        self.assertIn("native `Read`/`Grep`", text)
+        self.assertIn("shell reads/searches", text)
         self.assertIn("`ask`", text)
         self.assertIn("`record`", text)
 
     def test_managed_block_carries_lifecycle_hard_rules(self):
         text = _text(SNIPPET)
         for required in (
-            "Before `Read`/`Grep`",
+            "Before any source access",
             "After editing",
             "After establishing a conclusion",
             "continuation",
@@ -139,7 +141,7 @@ class AgentsRuleDeployTest(unittest.TestCase):
                 .strip("\n")
             )
             self.assertEqual(inner, _text(SNIPPET).rstrip("\n"))
-            self.assertIn("Before `Read`/`Grep`", inner)
+            self.assertIn("Before any source access", inner)
             self.assertFalse(dst.with_name("AGENTS.md.bak-span").exists())
             second = self._run(REPO_ROOT, target)
             self.assertEqual(second["status"], "converged")

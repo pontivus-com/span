@@ -152,8 +152,10 @@ class CandidateSchemaTest(unittest.TestCase):
         self.assertIn("basis", unresolved)
         resolved = defs["ResolvedChallengeDisposition__tag"]["properties"]
         self.assertIn("reasoning", resolved)
-        self.assertIn("resulting_understanding_id", resolved)
-        self.assertIn("resulting_version", resolved)
+        self.assertIn("target_conclusion_ids", resolved)
+        self.assertIn("evidence", resolved)
+        self.assertNotIn("resulting_understanding_id", resolved)
+        self.assertNotIn("resulting_version", resolved)
 
     def test_record_command_advertises_all_record_variants(self):
         schema = schema_for_result(m.RecordCommand)

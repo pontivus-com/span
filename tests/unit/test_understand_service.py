@@ -50,7 +50,7 @@ class UnderstandServiceTest(unittest.TestCase):
                 context_id=CONTEXT_ID,
                 repository_id="repo-1",
                 request_id=m.RequestId("req-seed"),
-                request_digest=m.ContentDigest("sha256:seed"),
+                binding_digest=m.ContentDigest("sha256:seed"),
                 origin=m.ContextOrigin.EVIDENCE_ONLY,
                 state=m.ContextState.LIVE,
                 scope=m.EvidenceScope(),

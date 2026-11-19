@@ -489,7 +489,6 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "request_id": "verify-1",
                     "kind": "verification",
                     "run": {
-                        "repository_id": REPOSITORY_ID,
                         "scope_description": "app tests",
                         "scope_paths": ["src/app.py"],
                         "observations": [],
@@ -652,7 +651,6 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "request_id": "verify-multi",
                     "kind": "verification",
                     "run": {
-                        "repository_id": REPOSITORY_ID,
                         "scope_description": "both modules",
                         "scope_paths": ["src/app.py", "src/other.py"],
                         "observations": [],

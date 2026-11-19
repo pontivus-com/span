@@ -47,7 +47,7 @@ class RepositoryBackupTest(unittest.TestCase):
             manifest = json.loads((artifact / "manifest.json").read_text())
             self.assertEqual(manifest["repository_id"], "repo")
             self.assertEqual(manifest["source_root"], str(root.resolve()))
-            self.assertEqual(manifest["artifact"]["database"]["schema_version"], 12)
+            self.assertEqual(manifest["artifact"]["database"]["schema_version"], 13)
             self.assertTrue(
                 (artifact / "manifest.sha256").read_text().endswith("  manifest.json\n")
             )

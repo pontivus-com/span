@@ -491,7 +491,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                     ),
                 )
             self.assertTrue(result.store_ready)
-            self.assertEqual(result.schema_version, 12)
+            self.assertEqual(result.schema_version, 13)
             self.assertTrue(context.structural.has_index())
             # A provider-prefixed locator is not part of the public
             # surface: provisioning rejects it instead of interpreting it.
