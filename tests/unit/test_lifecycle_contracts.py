@@ -197,6 +197,25 @@ def _update_command(
     )
 
 
+class SurfaceReferenceContractTest(unittest.TestCase):
+    def test_surface_reference_rejects_nested_repository_even_null(self) -> None:
+        from span.core.schema import from_wire
+
+        for repository_id in ("repo-1", None):
+            with self.assertRaisesRegex(ValueError, "unknown fields"):
+                from_wire(
+                    m.AskRequest,
+                    {
+                        "repository_id": "repo-1",
+                        "surface": {
+                            "kind": "FILE",
+                            "locator": "src/a.py",
+                            "repository_id": repository_id,
+                        },
+                    },
+                )
+
+
 class CanonicalRoundTripTest(unittest.TestCase):
     def test_create_command_round_trips(self):
         command = _create_command()

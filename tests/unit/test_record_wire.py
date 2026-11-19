@@ -113,6 +113,10 @@ class RecordWireSchemaTest(unittest.TestCase):
         ):
             self.assertFalse(hasattr(w, name), name)
 
+    def test_verification_repository_is_enclosing_record_only(self):
+        schema = schema_for_request(w.VerificationRunWire)
+        self.assertNotIn("repository_id", schema["properties"])
+
     def test_public_update_grammar_is_compact(self):
         schema = schema_for_request(w.RecordRequestWire)
         defs = schema["$defs"]
@@ -155,6 +159,54 @@ def _update_request(
         expected_version=expected_version,
         actions=actions,
     )
+
+
+class CreateEvidenceGrammarTest(unittest.TestCase):
+    def test_create_accepts_locator_with_explicit_support(self):
+        request = w.RecordRequestWire(
+            request_id="sub-create-combined",
+            context=_context_ref(),
+            kind=m.RecordKind.UNDERSTANDING,
+            conclusion="A does X",
+            locator="src/a.py",
+            support=(w.SourceSupportWire(locator="src/b.py"),),
+        )
+        self.assertEqual(request.locator, "src/a.py")
+        self.assertEqual(len(request.support), 1)
+
+    def test_create_observation_remains_exclusive(self):
+        for values in (
+            {"locator": "src/a.py"},
+            {"support": (w.SourceSupportWire(locator="src/a.py"),)},
+        ):
+            with self.assertRaises(ValueError):
+                w.RecordRequestWire(
+                    request_id="sub-create-exclusive",
+                    context=_context_ref(),
+                    kind=m.RecordKind.UNDERSTANDING,
+                    conclusion="A does X",
+                    observation_id="obs-1",
+                    **values,
+                )
+
+    def test_verification_command_derives_repository_from_identity(self):
+        wire = w.RecordRequestWire(
+            request_id="sub-verification-owner",
+            context=_context_ref(),
+            kind=m.RecordKind.VERIFICATION,
+            run=w.VerificationRunWire(
+                scope_description="probe",
+                scope_paths=("src/a.py",),
+                command="pytest",
+                scenario=None,
+                outcome=m.VerificationOutcome.PASS,
+                observed_at=NOW,
+                observer="test",
+                observations=("obs-1",),
+            ),
+        )
+        command = w.record_command(wire, _resolver())
+        self.assertEqual(command.run.repository_id, "repo-1")
 
 
 class ConclusionIdentityTest(unittest.TestCase):
@@ -868,8 +920,7 @@ class RecordWireCodecTest(unittest.TestCase):
     def test_verification_requires_observations_or_evidence(self):
         with self.assertRaises(ValueError) as raised:
             w.VerificationRunWire(
-                repository_id="repo-1",
-                scope_description="probe",
+                                scope_description="probe",
                 scope_paths=("src/a.py",),
                 command="python3 -m unittest",
                 scenario=None,
@@ -883,8 +934,7 @@ class RecordWireCodecTest(unittest.TestCase):
 
     def test_verification_accepts_evidence_only(self):
         run = w.VerificationRunWire(
-            repository_id="repo-1",
-            scope_description="probe",
+                        scope_description="probe",
             scope_paths=("src/a.py",),
             command="python3 -m unittest",
             scenario=None,

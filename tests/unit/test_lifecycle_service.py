@@ -765,8 +765,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 context=_context_ref("ctx-1"),
                 kind=m.RecordKind.VERIFICATION,
                 run=w.VerificationRunWire(
-                    repository_id="repo-1",
-                    scope_description="fixture",
+                                        scope_description="fixture",
                     scope_paths=("src/a.py",),
                     observations=(observation,),
                     command="python3 -m unittest",
@@ -795,8 +794,7 @@ class LifecycleServiceTest(unittest.TestCase):
             context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
-                repository_id="repo-1",
-                scope_description="fixture",
+                                scope_description="fixture",
                 scope_paths=("src/a.py",),
                 command="python3 -m unittest",
                 scenario=None,
@@ -817,8 +815,7 @@ class LifecycleServiceTest(unittest.TestCase):
             context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
-                repository_id="repo-1",
-                scope_description="fixture",
+                                scope_description="fixture",
                 scope_paths=("src/a.py",),
                 command="python3 -m unittest",
                 scenario=None,
@@ -1409,8 +1406,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 kind=m.RecordKind.VERIFICATION,
                 question=None,
                 run=w.VerificationRunWire(
-                    repository_id="repo-1",
-                    scope_description="unit",
+                                        scope_description="unit",
                     scope_paths=("src/a.py",),
                     observations=("obs-1",),
                     command="pytest -q",
@@ -2223,8 +2219,7 @@ class LifecycleServiceTest(unittest.TestCase):
         self,
     ):
         run = w.VerificationRunWire(
-            repository_id="repo-1",
-            scope_description="fixture",
+                        scope_description="fixture",
             scope_paths=("src",),
             command="test",
             scenario=None,
@@ -2311,8 +2306,7 @@ class LifecycleServiceTest(unittest.TestCase):
             context=_context_ref("ctx-1"),
             kind=m.RecordKind.VERIFICATION,
             run=w.VerificationRunWire(
-                repository_id="repo-1",
-                scope_description="source test",
+                                scope_description="source test",
                 scope_paths=("src",),
                 command="test",
                 scenario=None,

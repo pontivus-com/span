@@ -149,21 +149,23 @@ class AnswerCarrierTest(unittest.TestCase):
             )
 
     def test_ambiguity_requires_distinct_candidates(self) -> None:
+        service = m.SurfaceReference(kind=KEY.kind, locator=KEY.locator)
+        file = m.SurfaceReference(kind=FILE_KEY.kind, locator=FILE_KEY.locator)
         m.AmbiguousSurface(
             reference="billing",
-            candidates=(KEY, FILE_KEY),
+            candidates=(service, file),
             missing_decision="choose granularity",
         )
         with self.assertRaises(ValueError):
             m.AmbiguousSurface(
                 reference="billing",
-                candidates=(KEY,),
+                candidates=(service,),
                 missing_decision="choose granularity",
             )
         with self.assertRaises(ValueError):
             m.AmbiguousSurface(
                 reference="billing",
-                candidates=(KEY, KEY),
+                candidates=(service, service),
                 missing_decision="choose granularity",
             )
 
