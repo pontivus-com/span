@@ -249,7 +249,9 @@ class ReconsiderService:
                         scopes.append(
                             m.EvidenceScope(evidence_refs=(observation.evidence,))
                         )
-                        source_observations[dependency.observation_id.value] = (\n                            observation\n                        )
+                        source_observations[dependency.observation_id.value] = (
+                            observation
+                        )
                     elif isinstance(dependency, m.DiscoverySupport):
                         observation = self._store.get_discovery_observation(
                             dependency.observation_id.value
