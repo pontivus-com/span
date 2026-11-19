@@ -37,6 +37,7 @@ from span.shell.mcp.wire import (
 )
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStoreError,
+    LifecycleStoreInvariantError,
     SchemaVersionError,
     UnknownRepository,
 )
@@ -138,6 +139,13 @@ class McpAdapter:
             return encode_error("ingress", str(exc))
         try:
             context = self._context(repository_id)
+        except LifecycleStoreInvariantError:
+            _LOGGER.exception("unexpected lifecycle store invariant failure")
+            return encode_error(
+                "internal",
+                "Span could not complete the operation",
+                "report the operation failure without internal diagnostics",
+            )
         except LifecycleStoreError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_unavailable(tool_name, exc))

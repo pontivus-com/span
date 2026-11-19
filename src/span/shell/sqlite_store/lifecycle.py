@@ -42,6 +42,11 @@ from span.shell.sqlite_store import dependents as _dependents
 __all__ = [
     "LifecycleStore",
     "LifecycleStoreError",
+    "LifecycleRecordNotFound",
+    "LifecycleStoreConfigurationError",
+    "LifecycleStoreDataError",
+    "LifecycleStoreInvariantError",
+    "LifecycleStoreOperationalError",
     "SchemaVersionError",
     "SourceObservationRecord",
     "UnknownRepository",
@@ -54,11 +59,36 @@ class LifecycleStoreError(ValueError):
     """The store cannot satisfy this operation."""
 
 
-class SchemaVersionError(LifecycleStoreError):
+class LifecycleStoreOperationalError(LifecycleStoreError):
+    """The store cannot presently evaluate retained lifecycle state."""
+
+
+class LifecycleRecordNotFound(LifecycleStoreError):
+    """One exact retained lifecycle record is absent."""
+
+    def __init__(self, record_kind: str, identity: str) -> None:
+        self.record_kind = record_kind
+        self.identity = identity
+        super().__init__(f"unknown {record_kind}: {identity}")
+
+
+class LifecycleStoreConfigurationError(LifecycleStoreError):
+    """Repository/setup state cannot satisfy the configured binding."""
+
+
+class LifecycleStoreDataError(LifecycleStoreOperationalError):
+    """Persisted canonical state is unreadable or internally inconsistent."""
+
+
+class LifecycleStoreInvariantError(LifecycleStoreError):
+    """A programming or transaction invariant was violated."""
+
+
+class SchemaVersionError(LifecycleStoreOperationalError):
     """The store is not the supported schema version."""
 
 
-class UnknownRepository(LifecycleStoreError):
+class UnknownRepository(LifecycleStoreConfigurationError):
     """The repository has not been bound by the installer."""
 
 
@@ -295,7 +325,8 @@ class LifecycleStore:
     """One candidate SQLite store with atomic lifecycle acceptance."""
 
     operational_errors: tuple[type[Exception], ...] = (
-        LifecycleStoreError,
+        LifecycleStoreOperationalError,
+        LifecycleRecordNotFound,
         _sqlite3.OperationalError,
     )
 
@@ -387,9 +418,9 @@ class LifecycleStore:
         tuple clears them; a non-empty tuple replaces them.
         """
         if not repository_id:
-            raise LifecycleStoreError("repository_id is required")
+            raise LifecycleStoreConfigurationError("repository_id is required")
         if not root:
-            raise LifecycleStoreError("repository root is required")
+            raise LifecycleStoreConfigurationError("repository root is required")
         seeds = _json.dumps(
             [m.to_canonical(item) for item in authority_seeds],
             sort_keys=True,
@@ -416,7 +447,7 @@ class LifecycleStore:
                 )
                 return
             if row["root"] != root:
-                raise LifecycleStoreError(
+                raise LifecycleStoreConfigurationError(
                     f"repository {repository_id} is bound to {row['root']!r}, "
                     f"not {root!r}"
                 )
@@ -436,11 +467,11 @@ class LifecycleStore:
         :meth:`register_repository`. Only ``repositories.root`` changes.
         """
         if not repository_id:
-            raise LifecycleStoreError("repository_id is required")
+            raise LifecycleStoreConfigurationError("repository_id is required")
         if not root:
-            raise LifecycleStoreError("repository root is required")
+            raise LifecycleStoreConfigurationError("repository root is required")
         if not expected_root:
-            raise LifecycleStoreError("expected repository root is required")
+            raise LifecycleStoreConfigurationError("expected repository root is required")
         with self._transaction() as connection:
             row = connection.execute(
                 "SELECT root FROM repositories WHERE repository_id=?",
@@ -449,7 +480,7 @@ class LifecycleStore:
             if row is None:
                 raise UnknownRepository(f"repository {repository_id!r} is not bound")
             if row["root"] != expected_root:
-                raise LifecycleStoreError(
+                raise LifecycleStoreConfigurationError(
                     f"repository {repository_id} is bound to {row['root']!r}, "
                     f"not the expected {expected_root!r}"
                 )
@@ -478,12 +509,12 @@ class LifecycleStore:
                 raise ValueError("authority seeds are not a list")
             seeds = tuple(m.from_canonical(m.EvidenceRef, item) for item in payload)
         except (TypeError, ValueError) as exc:
-            raise LifecycleStoreError(
+            raise LifecycleStoreDataError(
                 f"authority seeds for {repository_id} are not canonical: {exc}"
             ) from None
         for seed in seeds:
             if seed.repository_id != repository_id:
-                raise LifecycleStoreError(
+                raise LifecycleStoreDataError(
                     f"authority seed for {repository_id} belongs to "
                     f"{seed.repository_id}"
                 )
@@ -507,12 +538,12 @@ class LifecycleStore:
                 m.from_canonical(m.AuthorityBinding, item) for item in payload
             )
         except (TypeError, ValueError) as exc:
-            raise LifecycleStoreError(
+            raise LifecycleStoreDataError(
                 f"authority bindings for {repository_id} are not canonical: {exc}"
             ) from None
         for binding in bindings:
             if binding.evidence_ref.repository_id != repository_id:
-                raise LifecycleStoreError(
+                raise LifecycleStoreDataError(
                     f"authority binding for {repository_id} belongs to "
                     f"{binding.evidence_ref.repository_id}"
                 )
@@ -593,7 +624,7 @@ class LifecycleStore:
                 (key.repository_id, key.locator),
             ).fetchone()
             if row is None:
-                raise LifecycleStoreError(f"unknown surface: {key.locator}")
+                raise LifecycleRecordNotFound("surface", key.locator)
             current = int(row["boundary_version"])
             if surface.boundary_version != expected_boundary_version + 1:
                 raise SurfaceConflict(
@@ -642,9 +673,8 @@ class LifecycleStore:
     def get_surface(self, key: m.SurfaceKey) -> m.Surface:
         surface = self.find_surface(key)
         if surface is None:
-            raise LifecycleStoreError(
-                f"unknown surface: {key.repository_id}/{key.kind.value}/"
-                f"{key.locator}"
+            raise LifecycleRecordNotFound(
+                "surface", f"{key.repository_id}/{key.kind.value}/{key.locator}"
             )
         return surface
 
@@ -782,7 +812,7 @@ class LifecycleStore:
                     int(record.whole_file),
                 )
                 if observed != proposed:
-                    raise LifecycleStoreError(
+                    raise LifecycleStoreInvariantError(
                         "source observation is immutable: "
                         f"{record.observation_id.value} already exists with "
                         "different content"
@@ -819,7 +849,7 @@ class LifecycleStore:
             ).fetchone()
             if row is not None:
                 if row["canonical_json"] != encoded:
-                    raise LifecycleStoreError(
+                    raise LifecycleStoreInvariantError(
                         "discovery observation is immutable: "
                         f"{observation.observation_id.value} already exists "
                         "with different content"
@@ -869,7 +899,7 @@ class LifecycleStore:
     def get_source_observation(self, observation_id: str) -> SourceObservationRecord:
         record = self.find_source_observation(observation_id)
         if record is None:
-            raise LifecycleStoreError(f"unknown source observation: {observation_id}")
+            raise LifecycleRecordNotFound("source observation", observation_id)
         return record
 
     def list_context_evidence(
@@ -906,9 +936,7 @@ class LifecycleStore:
     def get_discovery_observation(self, observation_id: str) -> m.DiscoveryObservation:
         observation = self.find_discovery_observation(observation_id)
         if observation is None:
-            raise LifecycleStoreError(
-                f"unknown discovery observation: {observation_id}"
-            )
+            raise LifecycleRecordNotFound("discovery observation", observation_id)
         return observation
 
     def list_discovery_observations(
@@ -961,7 +989,7 @@ class LifecycleStore:
             (context_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown context: {context_id}")
+            raise LifecycleRecordNotFound("context", context_id)
         return str(row["repository_id"])
 
     def add_context_evidence(self, context_id: str, observation_id: str) -> None:
@@ -1044,7 +1072,7 @@ class LifecycleStore:
                 or context.request_id != request_id
                 or context.binding_digest != binding_digest
             ):
-                raise LifecycleStoreError(
+                raise LifecycleStoreInvariantError(
                     "the created context does not match its request binding"
                 )
             self._insert_context(connection, context)
@@ -1137,7 +1165,7 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, content_digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1204,7 +1232,7 @@ class LifecycleStore:
         digest = content_digest or record_content_digest(command)
         if isinstance(command, m.CreateUnderstandingCommand):
             if understanding_id is None:
-                raise LifecycleStoreError(
+                raise LifecycleStoreInvariantError(
                     "a create recording requires an understanding identity"
                 )
             selected = understanding_id
@@ -1213,7 +1241,7 @@ class LifecycleStore:
                 understanding_id is not None
                 and understanding_id != command.understanding_id
             ):
-                raise LifecycleStoreError(
+                raise LifecycleStoreInvariantError(
                     "the update understanding identity does not match the command"
                 )
             selected = command.understanding_id
@@ -1224,7 +1252,7 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1323,7 +1351,7 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1436,7 +1464,7 @@ class LifecycleStore:
             (understanding_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown understanding: {understanding_id}")
+            raise LifecycleRecordNotFound("understanding", understanding_id)
         return m.from_canonical(m.Understanding, _json.loads(row["canonical_json"]))
 
     def find_version(
@@ -1470,8 +1498,8 @@ class LifecycleStore:
             (understanding_id, version),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(
-                f"unknown understanding version: {understanding_id}@{version}"
+            raise LifecycleRecordNotFound(
+                "understanding version", f"{understanding_id}@{version}"
             )
         return m.from_canonical(
             m.UnderstandingVersion, _json.loads(row["canonical_json"])
@@ -1581,8 +1609,9 @@ class LifecycleStore:
                 "SELECT 1 FROM challenges WHERE challenge_id=?",
                 (challenge.challenge_id.value,),
             ).fetchone():
-                raise LifecycleStoreError(
-                    f"challenge already exists: {challenge.challenge_id.value}"
+                raise RecordingValidationError(
+                    f"challenge already exists: {challenge.challenge_id.value}",
+                    cause_kind=RejectionCauseKind.ALREADY_EXISTS,
                 )
             self._insert_challenge(connection, challenge)
 
@@ -1647,7 +1676,7 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1702,7 +1731,7 @@ class LifecycleStore:
             (challenge_id,),
         ).fetchone()
         if row is None:
-            raise LifecycleStoreError(f"unknown challenge: {challenge_id}")
+            raise LifecycleRecordNotFound("challenge", challenge_id)
         return m.from_canonical(m.Challenge, _json.loads(row["canonical_json"]))
 
     def get_challenges(self, understanding_id: str) -> tuple[m.Challenge, ...]:
@@ -1733,7 +1762,7 @@ class LifecycleStore:
     def get_verification_run(self, run_id: str) -> m.VerificationRun:
         run = self.find_verification_run(run_id)
         if run is None:
-            raise LifecycleStoreError(f"unknown verification run: {run_id}")
+            raise LifecycleRecordNotFound("verification run", run_id)
         return run
 
     def list_verification_runs(
