@@ -1503,8 +1503,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         )
         assert isinstance(revision_one.content, m.SupportedConclusion)
         by_locator = {
-            store.get_source_observation(dependency.observation_id.value)
-            .evidence.locator: dependency.observation_id.value
+            store.get_source_observation(
+                dependency.observation_id.value
+            ).evidence.locator: dependency.observation_id.value
             for dependency in revision_one.content.support
             if isinstance(dependency, m.SourceSupport)
         }
