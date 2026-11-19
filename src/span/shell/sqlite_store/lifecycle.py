@@ -53,6 +53,7 @@ __all__ = [
     "UnknownRepository",
 ]
 
+
 class LifecycleStoreError(ValueError):
     """The store cannot satisfy this operation."""
 
