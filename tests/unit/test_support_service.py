@@ -221,9 +221,7 @@ class SupportServiceTest(unittest.TestCase):
             "src/ranged.py",
             "header\ntarget\ncontext\nfooter\n",
         )
-        observation = self._put_ranged_observation(
-            "obs-range", "src/ranged.py", 2, 2
-        )
+        observation = self._put_ranged_observation("obs-range", "src/ranged.py", 2, 2)
         self._create(
             "u-range",
             "sub-range",
@@ -245,9 +243,7 @@ class SupportServiceTest(unittest.TestCase):
             "src/ranged.py",
             "header\ntarget\ncontext\nfooter\n",
         )
-        observation = self._put_ranged_observation(
-            "obs-range", "src/ranged.py", 2, 2
-        )
+        observation = self._put_ranged_observation("obs-range", "src/ranged.py", 2, 2)
         self._create(
             "u-range",
             "sub-range",
