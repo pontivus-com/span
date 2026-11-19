@@ -513,10 +513,10 @@ class AnswerService:
                     selector.understanding_id, version_number
                 )
             else:
-                version = self._store.find_version(
+                selected_version = self._store.find_version(
                     selector.understanding_id, version_number
                 )
-                if version is None:
+                if selected_version is None:
                     identity = f"{selector.understanding_id}@{version_number}"
                     raise RecordingValidationError(
                         f"unknown understanding version: {identity}",
@@ -526,6 +526,7 @@ class AnswerService:
                             "does not exist"
                         ),
                     )
+                version = selected_version
             try:
                 support: m.UnderstandingSupport | m.SupportUnavailable = (
                     self._support.evaluate_version(

@@ -242,15 +242,15 @@ class ReconsiderService:
             new_context_id=lambda: context_id,
         )
         for observation_id in sorted(source_observations):
-            observation = self._store.get_source_observation(observation_id)
-            if observation.repository_id != repository_id:
+            source_observation = self._store.get_source_observation(observation_id)
+            if source_observation.repository_id != repository_id:
                 raise RecordingValidationError(
                     "re-establishment source observation belongs to another repository"
                 )
             self._store.add_context_evidence(context_id, observation_id)
         for observation_id in sorted(discovery_observations):
-            observation = self._store.get_discovery_observation(observation_id)
-            if observation.repository_id != repository_id:
+            discovery_observation = self._store.get_discovery_observation(observation_id)
+            if discovery_observation.repository_id != repository_id:
                 raise RecordingValidationError(
                     "re-establishment discovery observation belongs to another repository"
                 )
