@@ -15,6 +15,7 @@ from span.shell.store_transition import (
     TransitionConfig,
     TransitionError,
     TransitionPaths,
+    _columns,
     _connect_read_only,
     _table_names,
     _verify_staged_references,
@@ -36,10 +37,6 @@ _DRAINED_TABLES = (
     "context_evidence",
     "context_discovery_evidence",
 )
-
-
-def _columns(connection: _sqlite3.Connection, table: str) -> list[str]:
-    return [str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")]
 
 
 def _copy_table(

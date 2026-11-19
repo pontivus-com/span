@@ -5,12 +5,27 @@ from __future__ import annotations
 import datetime as _datetime
 import json as _json
 import typing as _typing
+from dataclasses import dataclass as _dataclass
 
 from span.core import model as m
 from span.core.identity import payload_digest
 from span.ports.lifecycle import LifecycleStorePort
 
-__all__ = ["context_binding", "issue_context"]
+__all__ = ["ContextBinding", "context_binding", "issue_context"]
+
+
+@_dataclass(frozen=True)
+class ContextBinding:
+    """Canonical service-owned projection that binds one recoverable context."""
+
+    scope: m.EvidenceScope
+    question: str | None = None
+    source_requests: tuple[m.EvidenceRequest, ...] = ()
+    discovery_scopes: tuple[m.EvidenceScope, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.question is not None and not self.question:
+            raise ValueError("ContextBinding.question must be non-empty")
 
 
 _T = _typing.TypeVar("_T")
@@ -35,9 +50,9 @@ def context_binding(
     question: str | None = None,
     source_requests: tuple[m.EvidenceRequest, ...] = (),
     discovery_scopes: tuple[m.EvidenceScope, ...] = (),
-) -> m.ContextBinding:
+) -> ContextBinding:
     """Build the sole canonical context-binding projection (FD-2, FD-59)."""
-    return m.ContextBinding(
+    return ContextBinding(
         scope=scope,
         question=question,
         source_requests=_canonical_values(source_requests),
@@ -48,7 +63,7 @@ def context_binding(
 def issue_context(
     store: LifecycleStorePort,
     *,
-    binding: m.ContextBinding,
+    binding: ContextBinding,
     repository_id: str,
     request_id: m.RequestId,
     clock: _typing.Callable[[], _datetime.datetime],

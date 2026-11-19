@@ -192,7 +192,6 @@ from span.core.model.understanding import (  # noqa: F401
 from span.core.model.investigation import (  # noqa: F401
     AdmittedEvidence,
     AlreadyAdmittedEvidence,
-    ContextBinding,
     ContextOrigin,
     ContextState,
     DiscoveryObservation,

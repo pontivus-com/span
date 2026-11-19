@@ -189,20 +189,6 @@ class EvidenceRequest:
 
 
 @_dataclass(frozen=True)
-class ContextBinding:
-    """Canonical inputs that bind one recoverable investigation context."""
-
-    scope: EvidenceScope
-    question: str | None = None
-    source_requests: tuple[EvidenceRequest, ...] = ()
-    discovery_scopes: tuple[EvidenceScope, ...] = ()
-
-    def __post_init__(self) -> None:
-        if self.question is not None:
-            _require_non_empty("ContextBinding.question", self.question)
-
-
-@_dataclass(frozen=True)
 class AdmittedEvidence:
     request: EvidenceRequest
     observation_id: SourceObservationId
