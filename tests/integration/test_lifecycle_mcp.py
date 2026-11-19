@@ -783,6 +783,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "changed_paths": ["src/app.py"],
                 },
             )
+            self.assertEqual(changed["$type"], "Changed", changed)
             surface = next(
                 item
                 for item in changed["surfaces"]
@@ -1441,6 +1442,39 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(disposition_rejected["$type"], "Rejected")
             self.assertIn("resulting_version", disposition_rejected["cause"])
+
+            unavailable_requests = (
+                (
+                    "ask",
+                    {
+                        "repository_id": "repo-not-registered",
+                        "surface": {"kind": "FILE", "locator": "src/app.py"},
+                    },
+                ),
+                (
+                    "record",
+                    {
+                        "repository_id": "repo-not-registered",
+                        "request_id": "unavailable-record",
+                        "kind": "understanding",
+                        "surface": {"kind": "FILE", "locator": "src/app.py"},
+                        "question": "What does the app do?",
+                        "scope_paths": ["src/app.py"],
+                        "conclusion": "The app emits line1.",
+                        "locator": "src/app.py",
+                    },
+                ),
+                (
+                    "reconsider",
+                    {
+                        "repository_id": "repo-not-registered",
+                        "changed_paths": ["src/app.py"],
+                    },
+                ),
+            )
+            for tool_name, arguments in unavailable_requests:
+                unavailable = await self._call(session, tool_name, arguments)
+                self.assertEqual(unavailable["$type"], "Unavailable", unavailable)
 
             unknown = await session.call_tool("span_unknown_tool", {})
             self.assertTrue(unknown.is_error)
