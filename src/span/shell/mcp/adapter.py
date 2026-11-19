@@ -180,6 +180,13 @@ class McpAdapter:
                 return _encoded_result(_unavailable(tool_name, exc))
             failure, recovery = _operational_failure(exc)
             return encode_error("unavailable", failure, recovery)
+        except LifecycleStoreInvariantError:
+            _LOGGER.exception("unexpected lifecycle store invariant failure")
+            return encode_error(
+                "internal",
+                "Span could not complete the operation",
+                "report the operation failure without internal diagnostics",
+            )
         except LifecycleStoreError as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_unavailable(tool_name, exc))

@@ -405,6 +405,33 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertIn("run.scope_description", payload["cause"])
         self.assertIn("run.extra", payload["cause"])
 
+    def test_store_invariant_failure_is_internal_not_unavailable(self):
+        from span.shell.sqlite_store.lifecycle import LifecycleStoreInvariantError
+
+        context = _context()
+        adapter = _adapter(context)
+        with mock.patch.object(
+            context.lifecycle,
+            "record",
+            side_effect=LifecycleStoreInvariantError("internal invariant detail"),
+        ):
+            result = adapter.dispatch(
+                "record",
+                {
+                    "repository_id": REPO,
+                    "request_id": "req-invariant",
+                    "kind": "understanding",
+                    "question": "What happens?",
+                    "conclusion": "A does X.",
+                    "locator": "src/a.py",
+                },
+            )
+        payload = json.loads(result.content)
+        self.assertTrue(result.is_error)
+        self.assertEqual(payload["kind"], "internal")
+        self.assertNotIn("invariant detail", result.content)
+        self.assertNotIn("unavailable", result.content)
+
     def test_malformed_ingress_is_a_transport_error(self):
         adapter = _adapter(_context())
         with mock.patch.object(
