@@ -611,6 +611,7 @@ class ChallengeTransitionTest(unittest.TestCase):
                 resulting_understanding_id=m.UnderstandingId("u-1"),
                 resulting_understanding=_resulting_version(version, 2),
                 known_revisions=revisions,
+                actions=(),
                 now=NOW,
             )
 
@@ -640,6 +641,7 @@ class ChallengeTransitionTest(unittest.TestCase):
                 resulting_understanding_id=m.UnderstandingId("u-1"),
                 resulting_understanding=_resulting_version(version, 2),
                 known_revisions=revisions,
+                actions=(),
                 now=NOW,
             )
 

@@ -503,6 +503,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             clock=lambda: NOW,
         )
         service = ReconsiderService(store=self.store, support=support)
+        (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
         result = service.reconsider(
             m.ReconsiderRequest(
                 repository_id="repo-1",

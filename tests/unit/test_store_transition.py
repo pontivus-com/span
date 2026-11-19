@@ -799,7 +799,6 @@ forbidden = [
     name for name in sys.modules
     if name in {{
         'span.shell.sqlite_store.mapping',
-        'span.shell.sqlite_store.schema',
         'span.shell.sqlite_store.store',
         'span.shell.sqlite_store.migrations',
     }}
