@@ -156,9 +156,7 @@ class ReconsiderService:
             surfaces=changed_surfaces,
             omitted=tuple(omitted),
             truncated=truncated,
-            context=self._reconsider_context(
-                repository_id, request, changed_surfaces
-            ),
+            context=self._reconsider_context(repository_id, request, changed_surfaces),
         )
 
     def _changed_conclusion(
@@ -233,9 +231,7 @@ class ReconsiderService:
                             dependency.observation_id.value
                         )
                         scopes.append(observation.scope)
-                        discovery_observations.add(
-                            dependency.observation_id.value
-                        )
+                        discovery_observations.add(dependency.observation_id.value)
         context_id = self._new_context_id()
         context = issue_context(
             self._store,

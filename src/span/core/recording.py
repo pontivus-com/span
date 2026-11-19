@@ -718,9 +718,7 @@ def apply_challenge_dispositions(
                     raise RecordingValidationError(
                         "challenge resolution replacement mapping is ambiguous"
                     )
-                replacement_by_old[action.old.conclusion_id] = (
-                    action.new_conclusion_id
-                )
+                replacement_by_old[action.old.conclusion_id] = action.new_conclusion_id
 
             target_ids = (
                 disposition.target_conclusion_ids

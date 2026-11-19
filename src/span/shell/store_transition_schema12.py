@@ -75,9 +75,7 @@ def _copy_table(
     return len(rows)
 
 
-def _drained_counts(
-    source: _sqlite3.Connection, repository_id: str
-) -> dict[str, int]:
+def _drained_counts(source: _sqlite3.Connection, repository_id: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     counts["investigation_contexts"] = int(
         source.execute(

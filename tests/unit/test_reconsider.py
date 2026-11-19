@@ -514,9 +514,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertIn(m.ChangeReason.DIRECT, changed.reasons)
         self.assertTrue(
-            self.store.has_admitted_discovery(
-                result.context.context_id.value, "disc-1"
-            )
+            self.store.has_admitted_discovery(result.context.context_id.value, "disc-1")
         )
 
     def test_refs_only_discovery_tracks_only_the_referenced_changed_path(self):

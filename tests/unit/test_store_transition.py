@@ -979,9 +979,7 @@ class RefusalTest(unittest.TestCase):
                     encoding="utf-8"
                 )
             )
-            self.assertEqual(
-                mapping["drained_not_copied"]["investigation_contexts"], 1
-            )
+            self.assertEqual(mapping["drained_not_copied"]["investigation_contexts"], 1)
 
     def test_already_current_apply_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:

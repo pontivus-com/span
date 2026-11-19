@@ -934,7 +934,6 @@ def _reconcile_export(paths: TransitionPaths) -> tuple[TableInventory, ...]:
 # -- staging and activation ----------------------------------------------
 
 
-
 def _require_schema12_context_drain(
     path: _pathlib.Path,
     config: TransitionConfig,

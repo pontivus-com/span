@@ -1167,7 +1167,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, content_digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1254,7 +1256,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1353,7 +1357,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
@@ -1678,7 +1684,9 @@ class LifecycleStore:
             decision = receipt_decision(existing, key, digest)
             if decision.kind is m.ReceiptDecisionKind.REPLAY:
                 if decision.receipt is None:
-                    raise LifecycleStoreInvariantError("a replay decision carried no receipt")
+                    raise LifecycleStoreInvariantError(
+                        "a replay decision carried no receipt"
+                    )
                 return decision.receipt
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(

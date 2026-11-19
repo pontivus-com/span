@@ -178,7 +178,9 @@ def _import_contexts(
     ).fetchall():
         payload = _json.loads(row[1])
         try:
-            context_repository = _text(payload["repository_id"], "context.repository_id")
+            context_repository = _text(
+                payload["repository_id"], "context.repository_id"
+            )
             request_payload = _typing.cast(dict[str, object], payload["request_id"])
             request_id = _text(request_payload["value"], "context.request_id.value")
         except (KeyError, TypeError) as exc:

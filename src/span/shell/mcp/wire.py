@@ -89,9 +89,7 @@ def decode_request(tool_name: str, arguments: dict[str, object]) -> object:
     except StructuralValidationError:
         raise
     except m.CanonicalDecodeError as exc:
-        coordinate = (
-            ".".join(exc.path).replace(".[", "[") if exc.path else "root"
-        )
+        coordinate = ".".join(exc.path).replace(".[", "[") if exc.path else "root"
         raise StructuralValidationError(
             (
                 StructuralFault(

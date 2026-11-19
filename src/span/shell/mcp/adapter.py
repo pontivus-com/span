@@ -235,9 +235,7 @@ def _structural_rejected(
     if isinstance(request_id, str) and request_id:
         identity_parts.append(request_id)
     coordinates = tuple(dict.fromkeys(item.coordinate for item in exc.faults))
-    cause = "; ".join(
-        f"{item.coordinate}: {item.message}" for item in exc.faults
-    )
+    cause = "; ".join(f"{item.coordinate}: {item.message}" for item in exc.faults)
     required_action = (
         "correct " + ", ".join(coordinates) + ", then retry"
         if coordinates
