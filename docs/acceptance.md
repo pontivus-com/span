@@ -43,7 +43,7 @@ marked pending are not current coverage.
 | ID | Behavior | Status | Evidence |
 | --- | --- | --- | --- |
 | F-20 | Surface-first document view is the normal reuse path; `RecordedQuestionSelector` is exact and surface-scoped, and a non-matching or paraphrased selector returns `Gap/unassessed` without semantic ranking. | implemented | `test_exact_question_without_membership_is_unassessed`, `test_exact_question_selector_does_not_paraphrase_match`, `test_surface_document_view_is_reuse_path` |
-| F-21 | A rejection carries the exact cause, required action, and structured current version or boundary version; recognized lifecycle structural faults remain typed results rather than transport errors. | candidate implemented; execution pending | `test_version_conflict_names_the_current_version`, `test_surface_conflict_is_rejected_with_the_current_boundary_version`, `test_structural_lifecycle_ingress_is_a_rejected_result`, `test_structural_ingress_reports_independent_sibling_faults`, `test_malformed_ingress_is_a_transport_error` |
+| F-21 | A rejection carries the exact cause, required action, and structured current version or boundary version; recognized lifecycle structural faults remain typed results rather than transport errors. | implemented — source CI verified | `test_version_conflict_names_the_current_version`, `test_surface_conflict_is_rejected_with_the_current_boundary_version`, `test_structural_lifecycle_ingress_is_a_rejected_result`, `test_structural_ingress_reports_independent_sibling_faults`, `test_malformed_ingress_is_a_transport_error`; GitHub Actions `44439886790` |
 | F-22 | A create with a question context uses the bound target; supplying an explicit question or scope is rejected. | implemented | `test_context_bound_create_rejects_an_explicit_target`, `test_question_context_rejects_an_explicit_target` |
 | F-23 | A stale surface boundary version or surface kind conflict is `Rejected`, not `Unavailable`. | implemented | `test_surface_update_stale_boundary_returns_rejected`, `test_surface_kind_conflict_returns_rejected` |
 | F-24 | A declared surface parent must be declared, same-repository, and acyclic. | implemented | `test_surface_parent_must_be_declared`, `test_surface_update_rejects_a_parent_cycle` |
@@ -51,7 +51,7 @@ marked pending are not current coverage.
 | F-26 | With the delivered product surface (server plus installer-managed pre-read notice and readiness wait), the first Span call precedes the first source read; bare registration is not claimed. | implemented — OpenCode 5/5 | `natural-use/F10-2026-11-03.md`; Codex 5/5 pre-remediation in `natural-use/realistic/REALISTIC.md` |
 | F-27 | Cost is claimed only for a named task class with positive measured value. | implemented | `five-task/MATRIX.md` (reuse, break-even 2), `g5/REUSE.md` (break-even 11); single-use cross-file is negative and not claimed |
 | F-29 | A create without a surface derives it from one scope path or the question context; multiple paths are rejected with the candidates, and a supplied surface must agree with the carried scope. | implemented | `test_create_without_surface_derives_from_one_scope_path`, `test_create_without_surface_uses_the_question_context_scope`, `test_create_without_surface_rejects_multiple_paths`, `test_create_surface_must_agree_with_the_carried_scope`, `five-task/DERIVED-SURFACE.md` |
-| F-30 | A create states one conclusion with dependency evidence from `locator`, `observation_id`, or non-empty `support`; a locator may accompany support as carried scope without adding a dependency, while observation remains exclusive. Span stores explicit support as supplied and derives the basis, new lineage id, and surface. | candidate implemented; execution pending | `test_create_accepts_locator_with_explicit_support`, `test_create_observation_remains_exclusive`, `test_record_create_through_the_one_request`, `test_record_accepts_every_support_kind`, `five-task/TASK1-FLAT.md` |
+| F-30 | A create states one conclusion with dependency evidence from `locator`, `observation_id`, or non-empty `support`; a locator may accompany support as carried scope without adding a dependency, while observation remains exclusive. Span stores explicit support as supplied and derives the basis, new lineage id, and surface. | implemented — source CI verified | `test_create_accepts_locator_with_explicit_support`, `test_create_observation_remains_exclusive`, `test_record_create_through_the_one_request`, `test_record_accepts_every_support_kind`, `five-task/TASK1-FLAT.md`; GitHub Actions `44439886790` |
 
 ### 0.11.0 remediation candidate
 
@@ -59,10 +59,13 @@ The 0.11.0 source candidate adds direct coverage for canonical context binding
 and the schema-12→13 drain transition, enclosing-repository verification,
 derived challenge-resolution coordinates, reconsider evidence membership,
 exact lookup/store-failure classification, exact recorded-question selection
-through installed stdio, typed structural rejection, and ranged-source behavior. The named tests are present in the
-candidate; this document does **not** mark them executed until a candidate test
-receipt exists. Managed-host requalification for the exact-selector path and
-the source-access notice is also pending. T08's G5/F8 comparative measurement
+through installed stdio, typed structural rejection, and ranged-source behavior.
+GitHub Actions run `44439886790` on
+`0457e95ae6c42fd9a5e7c38974f2d297017624fe` verifies the source candidate:
+build/distribution, Ruff, Black, the zero-error typing ratchet, `793 passed,
+1 skipped, 125 subtests`, plugin notice delivery, and coverage generation all
+passed. Managed-host requalification for the exact-selector path and the
+source-access notice is still pending. T08's G5/F8 comparative measurement
 remains a release gate; deterministic range tests are not a substitute for that
 measurement.
 
