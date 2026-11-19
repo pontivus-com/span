@@ -471,7 +471,9 @@ class LifecycleStore:
         if not root:
             raise LifecycleStoreConfigurationError("repository root is required")
         if not expected_root:
-            raise LifecycleStoreConfigurationError("expected repository root is required")
+            raise LifecycleStoreConfigurationError(
+                "expected repository root is required"
+            )
         with self._transaction() as connection:
             row = connection.execute(
                 "SELECT root FROM repositories WHERE repository_id=?",

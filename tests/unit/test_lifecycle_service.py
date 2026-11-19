@@ -26,7 +26,7 @@ from span.service.lifecycle import LifecycleService
 from span.service.support import SupportService
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
-    LifecycleStoreError,
+    LifecycleStoreDataError,
     SourceObservationRecord,
 )
 
@@ -2465,7 +2465,7 @@ class LifecycleServiceTest(unittest.TestCase):
         adapter = McpAdapter(contexts={"repo-1": context})
         for index, error in enumerate(
             (
-                LifecycleStoreError("store read unavailable"),
+                LifecycleStoreDataError("store read unavailable"),
                 sqlite3.OperationalError("disk I/O error"),
             )
         ):
@@ -2516,7 +2516,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         result = self.service.record(wire)
         for error in (
-            LifecycleStoreError("read unavailable"),
+            LifecycleStoreDataError("read unavailable"),
             sqlite3.OperationalError("disk I/O error"),
         ):
             with (
@@ -2544,7 +2544,7 @@ class LifecycleServiceTest(unittest.TestCase):
     def test_postcommit_owner_read_failure_preserves_receipt_without_owner(self):
         result = self.service.record(self._scope_create(locator="src/a.py"))
         for error in (
-            LifecycleStoreError("read unavailable"),
+            LifecycleStoreDataError("read unavailable"),
             sqlite3.OperationalError("disk I/O error"),
         ):
             with (

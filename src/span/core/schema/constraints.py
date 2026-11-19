@@ -107,27 +107,31 @@ def validate_structural_rules(value: object) -> None:
         count = len(active)
         if count < rule.minimum:
             expected = ", ".join(field.name for field in rule.fields)
-            faults.append(
+            message = (
+                f"{rule.label} requires at least {rule.minimum} active "
+                f"field(s) from: {expected}"
+            )
+            faults.extend(
                 StructuralFault(
-                    coordinate=expected or "root",
+                    coordinate=field.name,
                     rule=rule.label,
-                    message=(
-                        f"{rule.label} requires at least {rule.minimum} active "
-                        f"field(s) from: {expected}"
-                    ),
+                    message=message,
                 )
+                for field in rule.fields
             )
         elif count > rule.maximum:
             names = ", ".join(active)
-            faults.append(
+            message = (
+                f"{rule.label} permits at most {rule.maximum} active "
+                f"field(s); active: {names}"
+            )
+            faults.extend(
                 StructuralFault(
-                    coordinate=names or "root",
+                    coordinate=name,
                     rule=rule.label,
-                    message=(
-                        f"{rule.label} permits at most {rule.maximum} active "
-                        f"field(s); active: {names}"
-                    ),
+                    message=message,
                 )
+                for name in active
             )
     if faults:
         raise StructuralValidationError(tuple(faults))

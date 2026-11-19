@@ -311,6 +311,17 @@ class ErrorEnvelopeTest(unittest.TestCase):
         self.assertEqual(payload["current_boundary_version"], 2)
         self.assertIsNone(payload["current_version"])
 
+    def test_store_invariant_is_internal_not_unavailable(self):
+        from span.shell.sqlite_store.lifecycle import LifecycleStoreInvariantError
+
+        result = self._dispatch(
+            _context(), LifecycleStoreInvariantError("private invariant detail")
+        )
+        payload = json.loads(result.content)
+        self.assertTrue(result.is_error)
+        self.assertEqual(payload["kind"], "internal")
+        self.assertNotIn("private invariant detail", json.dumps(payload))
+
     def test_schema_version_failure_is_unavailable_not_rejected(self):
         from span.shell.sqlite_store.lifecycle import SchemaVersionError
 
