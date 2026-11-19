@@ -91,9 +91,6 @@ class UnknownRepository(LifecycleStoreConfigurationError):
     """The repository has not been bound by the installer."""
 
 
-
-
-
 SourceObservationRecord = m.SourceObservation
 
 
