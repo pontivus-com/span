@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from span.core import functional_pyramid as _fp
 from span.core import model as m
-from span.ports.functional_pyramid import FunctionalPyramidDeclarationPort
+from span.ports.functional_pyramid import (
+    FunctionalPyramidDeclarationInvalid,
+    FunctionalPyramidDeclarationPort,
+    FunctionalPyramidRepositoryUnavailable,
+)
 from span.ports.lifecycle import LifecycleStorePort
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 
@@ -16,7 +20,12 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
         self._store = store
 
     def _source(self, repository_id: str) -> FilesystemEvidenceSource:
-        root = self._store.require_repository(repository_id)
+        try:
+            root = self._store.require_repository(repository_id)
+        except ValueError as exc:
+            raise FunctionalPyramidRepositoryUnavailable(
+                f"Functional Pyramid member {repository_id!r} is unavailable"
+            ) from exc
         return FilesystemEvidenceSource(repository_id, root)
 
     def read_bootstrap(
@@ -28,10 +37,13 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
             if result.kind is m.EvidenceSourceFailureKind.MISSING:
                 return None
             raise ValueError(result.reason)
-        return (
-            result.evidence_ref,
-            _fp.decode_functional_pyramid_bootstrap(result.content),
-        )
+        try:
+            bootstrap = _fp.decode_functional_pyramid_bootstrap(result.content)
+        except ValueError as exc:
+            raise FunctionalPyramidDeclarationInvalid(
+                "Functional Pyramid bootstrap violates the Version-1 contract"
+            ) from exc
+        return result.evidence_ref, bootstrap
 
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
@@ -40,13 +52,16 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
         | m.EvidenceSourceFailure
     ):
         if request.ranges:
-            raise ValueError(
+            raise FunctionalPyramidDeclarationInvalid(
                 "Functional Pyramid declaration sources must be whole documents"
             )
         result = self._source(repository_id).read_exact(repository_id, request, None)
         if isinstance(result, m.EvidenceSourceFailure):
             return result
-        return (
-            result.evidence_ref,
-            _fp.decode_functional_pyramid_declaration(result.content),
-        )
+        try:
+            declaration = _fp.decode_functional_pyramid_declaration(result.content)
+        except ValueError as exc:
+            raise FunctionalPyramidDeclarationInvalid(
+                "Functional Pyramid declaration violates the Version-1 contract"
+            ) from exc
+        return result.evidence_ref, declaration
