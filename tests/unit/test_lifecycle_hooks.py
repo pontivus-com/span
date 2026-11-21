@@ -16,6 +16,9 @@ from span.shell import hooks
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.install.constants import INSTALL_VERSION
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_store.functional_pyramid import (
+    ensure_functional_pyramid_installation_store,
+)
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 from span.service.evidence import EvidenceService
 from span.service.lifecycle import LifecycleService
@@ -51,6 +54,10 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
     _write_receipt(data, root)
     store = LifecycleStore(data / f"{REPO}.db", retention=DEFAULT_LIFECYCLE_RETENTION)
     store.register_repository(REPO, str(root.resolve()))
+    installation = ensure_functional_pyramid_installation_store(
+        data, retention=DEFAULT_LIFECYCLE_RETENTION
+    )
+    installation.close()
     evidence = FilesystemEvidenceSource(REPO, root)
     evidence_service = EvidenceService(store=store, evidence=evidence)
     support = SupportService(store=store, evidence=evidence, authority=store)
@@ -94,10 +101,12 @@ def _capture(fn, *args) -> str:
 
 
 class LifecycleHooksTest(unittest.TestCase):
-    def test_session_start_is_silent_when_ready(self):
+    def test_session_start_reports_unconfigured_when_ready(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)
-            self.assertEqual(_capture(hooks.cmd_session_start, data, str(root)), "")
+            output = _capture(hooks.cmd_session_start, data, str(root))
+            self.assertIn("Functional Pyramid UNCONFIGURED", output)
+            self.assertIn("span-functional-pyramid", output)
 
     def test_adoption_primer_when_understanding_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
