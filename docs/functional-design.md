@@ -240,14 +240,18 @@ member.
 *(G4, F11)*
 
 **FD-70 — Cross-repository references are explicit.**
-Context and rule references may cross repositories only through declared stable
-identities between members of the same Functional Pyramid instance. Registration
-outside the instance is not sufficient. If a referenced member repository is
-not available, the relationship is `REPOSITORY_UNAVAILABLE`. If that member is
-available but the named context/rule does not exist, it is `UNKNOWN_CONTEXT` or
-`UNKNOWN_RULE`. Those states are not conflated and neither is repaired by
-searching for similar content or by binding to another registered repository.
-*(G1, G7, G8, F11, F12, L13)*
+Every declaration edge to a context or rule carries the target registered
+`repository_id` together with the stable context/rule identity; local edges use
+the same qualified form rather than a second shorthand. Context and rule
+references may cross repositories only between members of the same Functional
+Pyramid instance. Registration outside the instance is not sufficient. This
+qualified identity is what makes failure classification deterministic: if the
+named target repository is a member but unavailable, the relationship is
+`REPOSITORY_UNAVAILABLE`; if that member is available but the named context/rule
+does not exist there, it is `UNKNOWN_CONTEXT` or `UNKNOWN_RULE`. A reference
+to a repository outside the instance is invalid declaration state. Those states
+are not conflated and none is repaired by searching for similar content or by
+binding to another registered repository. *(G1, G7, G8, F11, F12, L13)*
 
 **FD-71 — Unresolved route states are typed and preserved.**
 The Version-1 Beta unresolved-reason vocabulary is closed:
