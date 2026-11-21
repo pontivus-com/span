@@ -17,13 +17,18 @@ from span.core import support_rules as _support_rules
 from span.core.recording import RecordingValidationError
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.contexts import context_binding, issue_context
+from span.service.contexts import ContextBinding, context_binding, issue_context
 from span.service.ids import server_context_id
 from span.service.support import SupportService
 
 _FunctionalRouteImpactLookup = _typing.Callable[
     [str, tuple[str, ...], tuple[m.SurfaceKey, ...]],
     tuple[m.FunctionalRouteIdentity, ...],
+]
+
+_ReestablishmentContextIssuer = _typing.Callable[
+    [str, str, ContextBinding, tuple[str, ...], tuple[str, ...]],
+    m.InvestigationContextRef,
 ]
 
 
@@ -39,6 +44,7 @@ class DependencyEffectService:
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
         functional_route_impacts: _FunctionalRouteImpactLookup | None = None,
+        context_issuer: _ReestablishmentContextIssuer | None = None,
     ) -> None:
         self._store = store
         self._support = support
@@ -46,6 +52,7 @@ class DependencyEffectService:
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
         self._functional_route_impacts = functional_route_impacts
+        self._context_issuer = context_issuer or self._issue_reestablishment_context
 
     def repository_change(self, request: m.ReconsiderRequest) -> m.Changed:
         """Project one repository changed-scope root through the shared engine."""
@@ -503,32 +510,47 @@ class DependencyEffectService:
                 scopes.append(m.EvidenceScope())
 
             context_id = self._new_context_id()
-
-            def fixed_context_id() -> str:
-                return context_id
-
-            context = issue_context(
-                self._store,
-                binding=context_binding(
-                    scope=m.evidence_scope_union(scopes),
-                    origin=m.ContextOrigin.CHANGED_SUPPORT,
-                ),
-                repository_id=repository_id,
-                request_id=m.RequestId(f"effects:{context_id}"),
-                clock=self._clock,
-                new_context_id=fixed_context_id,
-            )
-            for observation_id in sorted(source_observations):
-                self._store.add_context_evidence(context_id, observation_id)
-            for observation_id in sorted(discovery_observations):
-                self._store.add_context_discovery_evidence(context_id, observation_id)
             contexts.append(
-                m.InvestigationContextRef(
-                    repository_id=repository_id,
-                    context_id=context.context_id,
+                self._context_issuer(
+                    repository_id,
+                    context_id,
+                    context_binding(
+                        scope=m.evidence_scope_union(scopes),
+                        origin=m.ContextOrigin.CHANGED_SUPPORT,
+                    ),
+                    tuple(sorted(source_observations)),
+                    tuple(sorted(discovery_observations)),
                 )
             )
         return tuple(contexts)
+
+    def _issue_reestablishment_context(
+        self,
+        repository_id: str,
+        context_id: str,
+        binding: ContextBinding,
+        source_observation_ids: tuple[str, ...],
+        discovery_observation_ids: tuple[str, ...],
+    ) -> m.InvestigationContextRef:
+        def fixed_context_id() -> str:
+            return context_id
+
+        context = issue_context(
+            self._store,
+            binding=binding,
+            repository_id=repository_id,
+            request_id=m.RequestId(f"effects:{context_id}"),
+            clock=self._clock,
+            new_context_id=fixed_context_id,
+        )
+        for observation_id in source_observation_ids:
+            self._store.add_context_evidence(context_id, observation_id)
+        for observation_id in discovery_observation_ids:
+            self._store.add_context_discovery_evidence(context_id, observation_id)
+        return m.InvestigationContextRef(
+            repository_id=repository_id,
+            context_id=context.context_id,
+        )
 
     @staticmethod
     def _is_actionable(conclusion: m.ChangedConclusion) -> bool:
