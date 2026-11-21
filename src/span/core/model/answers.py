@@ -6,6 +6,7 @@ Part of the canonical domain carrier package. Import through
 
 from __future__ import annotations
 
+import datetime as _datetime
 import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
@@ -16,10 +17,16 @@ from span.core.model.outcomes import (
     VerificationRecorded,
 )
 from span.core.model.functional_pyramid import (
+    FunctionalPyramidAction,
     FunctionalPyramidCandidate,
+    FunctionalPyramidId,
+    FunctionalPyramidMemberView,
     FunctionalPyramidParticipation,
+    FunctionalPyramidParticipationEffect,
+    FunctionalPyramidReceiptSelector,
     FunctionalPyramidStatus,
     FunctionalPyramidUnavailable,
+    FunctionalPyramidVersion,
     FunctionalPyramidView,
     RetrievedFunctionalPyramidReceipt,
 )
@@ -321,6 +328,36 @@ class ChangedSurface:
 
 
 @_dataclass(frozen=True)
+class FunctionalPyramidRecorded:
+    """Accepted Functional Pyramid write plus its current actionable projection."""
+
+    receipt_selector: FunctionalPyramidReceiptSelector
+    committed_at: _datetime.datetime
+    action: FunctionalPyramidAction
+    pyramid_id: FunctionalPyramidId | None
+    version: FunctionalPyramidVersion | None
+    members: tuple[FunctionalPyramidMemberView, ...]
+    participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]
+    dependent_effects: tuple[ChangedSurface, ...] = ()
+    reestablishment_contexts: tuple[InvestigationContextRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
+            raise ValueError("FunctionalPyramidRecorded.committed_at must be aware")
+        repositories = tuple(
+            context.repository_id for context in self.reestablishment_contexts
+        )
+        if repositories != tuple(sorted(repositories)):
+            raise ValueError(
+                "FunctionalPyramidRecorded contexts must be ordered by repository_id"
+            )
+        if len(set(repositories)) != len(repositories):
+            raise ValueError(
+                "FunctionalPyramidRecorded has at most one context per repository"
+            )
+
+
+@_dataclass(frozen=True)
 class Changed:
     """The bounded reconsideration result (FD-20, FD-21, FD-22, FD-89)."""
 
@@ -372,6 +409,7 @@ RecordResult = _typing.Union[
     UnderstandingRecorded,
     VerificationRecorded,
     SurfaceDeclared,
+    FunctionalPyramidRecorded,
     Rejected,
     Unavailable,
 ]
