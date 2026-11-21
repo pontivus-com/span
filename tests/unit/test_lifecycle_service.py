@@ -2684,7 +2684,7 @@ class LifecycleServiceTest(unittest.TestCase):
             (self.authority.bindings["auth-1"],),
         )
 
-    def test_descriptive_and_inactive_recording_do_not_gain_route_support(self):
+    def test_descriptive_recording_does_not_gain_route_support(self):
         active = self._governed_lifecycle(lambda scope: self._resolved_route(scope))
         result = active.record(_create_wire("sub-descriptive"))
         self.assertIsInstance(result, m.UnderstandingRecorded)
@@ -2693,6 +2693,7 @@ class LifecycleServiceTest(unittest.TestCase):
             any(isinstance(item, m.FunctionalRouteSupport) for item in content.support)
         )
 
+    def test_inactive_normative_recording_does_not_gain_route_support(self):
         inactive = self._governed_lifecycle(
             lambda _scope: m.FunctionalPyramidParticipation(
                 m.FunctionalPyramidParticipationState.UNCONFIGURED
