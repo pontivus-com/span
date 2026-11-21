@@ -500,9 +500,7 @@ class RecordRequestWire:
             minimum=1,
             maximum=1,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
             ),
             label="Functional Pyramid record action",
         ),
@@ -511,9 +509,7 @@ class RecordRequestWire:
             minimum=1,
             maximum=1,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.ACTIVATE
                 ),
@@ -529,9 +525,7 @@ class RecordRequestWire:
             minimum=0,
             maximum=0,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.ACTIVATE
                 ),
@@ -547,9 +541,7 @@ class RecordRequestWire:
             minimum=3,
             maximum=3,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.REVISE
                 ),
@@ -561,9 +553,7 @@ class RecordRequestWire:
             minimum=0,
             maximum=0,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.REVISE
                 ),
@@ -578,9 +568,7 @@ class RecordRequestWire:
             minimum=2,
             maximum=2,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.DEACTIVATE
                 ),
@@ -595,9 +583,7 @@ class RecordRequestWire:
             minimum=0,
             maximum=0,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.DEACTIVATE
                 ),
@@ -609,9 +595,7 @@ class RecordRequestWire:
             minimum=1,
             maximum=1,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.EXCLUDE
                 ),
@@ -627,9 +611,7 @@ class RecordRequestWire:
             minimum=0,
             maximum=0,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
                 _constraints.EqualsCondition(
                     "action", _fp.FunctionalPyramidAction.EXCLUDE
                 ),
@@ -652,17 +634,13 @@ class RecordRequestWire:
                 _constraints.PresenceField("run"),
                 _constraints.PresenceField("expected_boundary_version"),
                 _constraints.PresenceField("gaps"),
-                _constraints.PresenceField(
-                    "challenge_dispositions", non_empty=True
-                ),
+                _constraints.PresenceField("challenge_dispositions", non_empty=True),
                 _constraints.PresenceField("provenance", non_empty=True),
             ),
             minimum=0,
             maximum=0,
             when=(
-                _constraints.EqualsCondition(
-                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
-                ),
+                _constraints.EqualsCondition("kind", _c.RecordKind.FUNCTIONAL_PYRAMID),
             ),
             label="Functional Pyramid record unrelated fields",
         ),
@@ -1014,9 +992,7 @@ class RecordRequestWire:
     @property
     def bound_repository_id(self) -> str:
         if self.kind is _c.RecordKind.FUNCTIONAL_PYRAMID:
-            raise ValueError(
-                "Functional Pyramid recording is installation-scoped"
-            )
+            raise ValueError("Functional Pyramid recording is installation-scoped")
         if self.context is not None:
             return self.context.repository_id
         if self.repository_id is None:
