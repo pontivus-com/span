@@ -1511,7 +1511,7 @@ def _provenance_projection(
     member_repositories: frozenset[str],
     available_repositories: frozenset[str],
     resolved_context_keys: frozenset[tuple[str, str]],
-    valid_rule_keys: frozenset[tuple[str, str]],
+    resolved_rule_keys: frozenset[tuple[str, str]],
 ) -> tuple[FunctionalRouteProvenance, ...]:
     projection: list[FunctionalRouteProvenance] = []
     for atom_scope, _, relation, direct_refs in portions:
@@ -1554,7 +1554,7 @@ def _provenance_projection(
                 rule_ids=tuple(
                     ref.identity
                     for ref in portion_rules
-                    if (ref.repository_id, ref.identity) in valid_rule_keys
+                    if (ref.repository_id, ref.identity) in resolved_rule_keys
                 ),
             )
         )
@@ -1658,7 +1658,7 @@ def resolve_functional_pyramid_route(
         member_repositories=member_repositories,
         available_repositories=available_repositories,
         resolved_context_keys=context_keys,
-        valid_rule_keys=resolved_rule_keys,
+        resolved_rule_keys=resolved_rule_keys,
     )
     relation = _scope_relation(provenance)
     unresolved = _ordered_findings(route_findings)
