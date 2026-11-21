@@ -640,6 +640,41 @@ class LifecycleStoreTest(unittest.TestCase):
         )
         self.assertEqual(self.store.get_receipt(_identity()), receipt)
 
+    def test_reaping_removes_expired_functional_pyramid_receipt(self) -> None:
+        expires_at = NOW + RETENTION.replay_retention
+        self.store._connection.execute(
+            "INSERT INTO functional_pyramid_receipts"
+            "(request_id, content_digest, committed_at, replay_expires_at,"
+            " action, pyramid_id, version, members_json,"
+            " participation_effects_json, dependent_effect_refs_json)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (
+                "fp-request-1",
+                "sha256:fp",
+                NOW.isoformat(),
+                expires_at.isoformat(),
+                "activate",
+                "fp-1",
+                1,
+                "[]",
+                "[]",
+                "[]",
+            ),
+        )
+        self.store._connection.commit()
+
+        reaped = self.store.reap_expired(
+            expires_at + datetime.timedelta(minutes=1)
+        )
+
+        self.assertEqual(reaped, 1)
+        self.assertEqual(
+            self.store._connection.execute(
+                "SELECT COUNT(*) FROM functional_pyramid_receipts"
+            ).fetchone()[0],
+            0,
+        )
+
     def test_reaping_preserves_accepted_history(self) -> None:
         self.store.put_context(_context(expires_at=NOW + RETENTION.context_lifetime))
         self.store.record_understanding(
