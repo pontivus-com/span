@@ -598,6 +598,26 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(self.state.versions, {})
         self.assertIsNone(self.state.receipt(m.RequestId("activate-invalid")))
 
+    def test_activation_handoff_status_matches_committed_result(self):
+        result = self.admin_service.record(
+            request_id=m.RequestId("activate-handoff"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"), self._intent("repo-b")),
+        )
+        assert result.pyramid_id is not None
+        assert result.version is not None
+
+        status = self.admin_service.status(
+            m.FunctionalPyramidSelector(pyramid_id=result.pyramid_id)
+        )
+
+        self.assertEqual(status.state, m.FunctionalPyramidParticipationState.ACTIVE)
+        self.assertEqual(status.health, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(status.pyramid_id, result.pyramid_id)
+        self.assertEqual(status.version, result.version)
+        self.assertEqual(status.members, result.members)
+        self.assertEqual(status.findings, ())
+
     def test_record_activate_commits_members_effects_and_receipt(self):
         result = self.admin_service.record(
             request_id=m.RequestId("activate-1"),
