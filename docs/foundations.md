@@ -134,8 +134,8 @@ is a gap that names what changed or could not be established. Stale content may
 be retained as history; it is never served as current.
 
 ```text
-servable(answer, t)  ⇔  ∀ d ∈ deps_declared(answer):
-                        identity(d, t) = identity(d, t_recorded)
+servable(answer, t)  ⇔  ∀ d ∈ deps_required(answer):
+                        state(d, t) = CURRENT
 ```
 
 **Supported means that every dependency required for the conclusion currently
