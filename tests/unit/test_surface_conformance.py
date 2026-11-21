@@ -216,6 +216,7 @@ class SurfaceConformanceTest(unittest.TestCase):
         for marker in (
             "CREATE TEMPLATE",
             "UPDATE TEMPLATE",
+            "FUNCTIONAL PYRAMID TEMPLATE",
             "SURFACE TEMPLATE",
             "VERIFICATION TEMPLATE",
         ):
