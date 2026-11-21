@@ -11,7 +11,6 @@ from span.ports.functional_pyramid import (
 )
 from span.ports.lifecycle import LifecycleAuthorityResolver
 
-
 _DeclarationEntry = tuple[str, m.FunctionalPyramidDeclaration]
 _AuthorityMap = dict[tuple[str, str], m.AuthorityBinding]
 
