@@ -111,9 +111,7 @@ class _InstallationAuthorityResolver:
 def open_functional_pyramid_service(
     data_dir: str | _pathlib.Path,
     *,
-    repository_runtime: _typing.Callable[
-        [str], FunctionalPyramidRepositoryRuntime
-    ],
+    repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
     registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
 ) -> _typing.Iterator[FunctionalPyramidService | None]:
     """Open existing installation state; never create or migrate it."""
