@@ -26,9 +26,6 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
 
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
-    ) -> (
-        tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration]
-        | m.EvidenceSourceFailure
-    ):
+    ) -> tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration] | m.EvidenceSourceFailure:
         """Read and strict-decode one exact whole-document declaration source."""
         ...
