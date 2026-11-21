@@ -207,6 +207,22 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.FunctionalGraphRef("repo-a", "")
 
+    def test_functional_pyramid_carries_references_not_governing_prose(self):
+        declaration_fields = set(m.FunctionalRuleDeclaration.__dataclass_fields__)
+        route_fields = set(m.FunctionalRuleRoute.__dataclass_fields__)
+        for forbidden in ("text", "content", "summary", "prose", "chunk"):
+            self.assertNotIn(forbidden, declaration_fields)
+            self.assertNotIn(forbidden, route_fields)
+        self.assertIn("owner", declaration_fields)
+        self.assertIn("authority", route_fields)
+
+    def test_conformance_uses_existing_normative_assertion_contract(self):
+        self.assertEqual(
+            {nature.value for nature in m.AssertionNature},
+            {"DESCRIPTIVE", "NORMATIVE"},
+        )
+        self.assertIs(m.AssertionNature.NORMATIVE, m.AssertionNature["NORMATIVE"])
+
     def test_nominal_identity_and_version_are_strict(self):
         with self.assertRaises(ValueError):
             m.FunctionalPyramidId("")
