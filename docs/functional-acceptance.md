@@ -27,7 +27,7 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-17 | Normative create | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_unresolved_governance_is_retained_but_qualified_unverifiable` |
 | FA-18 | Descriptive create | `test_descriptive_recording_does_not_gain_route_support` |
 | FA-19 | Authority-content change | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_source_change_is_considered_not_forced_stale`; `test_authority_support_status_and_presence` |
-| FA-20 | Applicability change | `test_functional_route_support_distinguishes_route_states`; `test_governance_only_change_crosses_repository_boundary` |
+| FA-20 | Applicability change | `test_material_applicability_changes_change_route_identity`; `test_functional_route_support_distinguishes_route_states`; `test_governance_only_change_crosses_repository_boundary` |
 | FA-21 | Reverse authority navigation | `test_reverse_context_dependents_include_inheritance_closure` |
 | FA-22 | Cross-repository reconsideration | `test_governance_only_change_crosses_repository_boundary` |
 | FA-23 | Implementation change | `test_changed_path_maps_containment_direct_and_indirect`; `test_discovery_membership_change_is_direct` |
@@ -40,7 +40,7 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-30 | One active instance per repository | `test_candidate_reports_duplicate_unregistered_and_other_active_members`; `test_concurrent_overlapping_activation_serializes_to_one_active_instance` |
 | FA-31 | Three-tool host surface | `test_only_the_three_core_tools_are_registered`; `test_installed_lifecycle_over_stdio` |
 | FA-32 | Outside FunctionalScope | `test_wholly_outside_scope_is_resolved_empty_governance`; `test_outside_functional_scope_records_resolved_empty_route_only` |
-| FA-33 | Broad scope crossing the functional boundary | `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered` |
+| FA-33 | Broad scope crossing the functional boundary | `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered`; `test_mixed_scope_preserves_covered_uncovered_and_outside_provenance` |
 | FA-34 | Health iff structural findings | `test_status_keeps_participation_and_health_distinct`; `test_partial_uncovered_path_is_route_unresolved_but_health_valid`; `test_degraded_health_recovers_without_participation_change`; `test_authority_currency_does_not_change_route_identity_or_health` |
 | FA-35 | Activation of pre-existing normative understanding | `test_newly_active_repository_reassesses_pre_route_normative_revision` |
 | FA-36 | Functional Pyramid write propagation | `test_record_replay_live_projects_only_retained_effect_refs`; `test_governance_only_change_crosses_repository_boundary` |
