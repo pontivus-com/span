@@ -124,7 +124,11 @@ def _readiness_label(readiness) -> str:
     return "store unbound"
 
 
-def _functional_pyramid_status(data_dir, mapping, repository_id):
+def _functional_pyramid_status(
+    data_dir: str | os.PathLike[str],
+    mapping: dict[str, str],
+    repository_id: str,
+) -> m.FunctionalPyramidStatus | None:
     """Obtain canonical participation/health and close every opened repository."""
     from span.shell.context import close_repository_context, open_repository_context
 
@@ -163,12 +167,16 @@ def _functional_pyramid_status(data_dir, mapping, repository_id):
             close_repository_context(context)
 
 
-def _functional_pyramid_notice(data_dir, mapping, root):
+def _functional_pyramid_notice(
+    data_dir: str | os.PathLike[str],
+    mapping: dict[str, str],
+    root: str,
+) -> str | None:
     """Render FD-94 from canonical status; never derive governance in the hook."""
     repository_id = _repository_id(root)
     try:
         status = _functional_pyramid_status(data_dir, mapping, repository_id)
-    except Exception:  # noqa: BLE001 - hook delivery never breaks a session
+    except (OSError, ValueError):
         return (
             f"span: {repository_id} Functional Pyramid state is unavailable; "
             "run installer verification before governance work."
