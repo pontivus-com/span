@@ -6,6 +6,7 @@ import pathlib
 import tempfile
 import unittest
 
+from span.core import model as m
 from span.shell.install.recovery import create_backup, restore_backup, verify_backup
 from span.shell.install.repository_backup import create_repository_backup
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
@@ -141,6 +142,93 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                 retention=DEFAULT_LIFECYCLE_RETENTION,
             )
             reopened.close()
+
+    def test_attached_transaction_rolls_back_state_context_and_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / "repo"
+            root.mkdir()
+            repository_path = base / "repo.db"
+            repository = LifecycleStore(
+                repository_path,
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
+            )
+            self.addCleanup(repository.close)
+            repository.register_repository("repo", str(root))
+
+            installation = FunctionalPyramidInstallationStore.create(
+                functional_pyramid_installation_path(base),
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
+            )
+            self.addCleanup(installation.close)
+
+            pyramid_id = m.FunctionalPyramidId("fp-rollback")
+            version = m.FunctionalPyramidVersion(1)
+            member = m.FunctionalPyramidMemberView(
+                repository_id="repo",
+                declaration_refs=(),
+                functional_scope=m.FunctionalScope(
+                    (m.FunctionalScopeSelector(m.FunctionalScopeSelectorKind.REPOSITORY),)
+                ),
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+            )
+            context = m.InvestigationContext(
+                context_id=m.InvestigationContextId("ctx-fp-rollback"),
+                repository_id="repo",
+                request_id=m.RequestId("effects:ctx-fp-rollback"),
+                binding_digest=m.ContentDigest("digest-context"),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+                created_at=NOW,
+                expires_at=NOW + datetime.timedelta(hours=1),
+            )
+            receipt = m.RetrievedFunctionalPyramidReceipt(
+                request_id=m.RequestId("fp-write"),
+                content_digest=m.ContentDigest("digest-write"),
+                committed_at=NOW,
+                action=m.FunctionalPyramidAction.ACTIVATE,
+                pyramid_id=pyramid_id,
+                version=version,
+                members=(member,),
+                participation_effects=(
+                    m.FunctionalPyramidParticipationEffect(
+                        repository_id="repo",
+                        state=m.FunctionalPyramidParticipationState.ACTIVE,
+                    ),
+                ),
+                dependent_effect_refs=(),
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "force rollback"):
+                with installation.transaction(
+                    (("repo", str(repository_path)),)
+                ) as transaction:
+                    transaction.write_pyramid_version(
+                        pyramid_id=pyramid_id,
+                        version=version,
+                        content_digest=m.ContentDigest("digest-write"),
+                        committed_at=NOW,
+                        members=(member,),
+                    )
+                    transaction.set_current_pyramid(
+                        pyramid_id=pyramid_id,
+                        version=version,
+                        members=(member,),
+                    )
+                    transaction.write_reestablishment_context(context)
+                    transaction.write_receipt(
+                        receipt,
+                        replay_expires_at=NOW + datetime.timedelta(hours=2),
+                    )
+                    raise RuntimeError("force rollback")
+
+            self.assertIsNone(installation.active_pyramid_id("repo"))
+            self.assertIsNone(installation.pyramid_version(pyramid_id))
+            self.assertIsNone(installation.receipt(m.RequestId("fp-write")))
+            self.assertIsNone(repository.find_context_by_id("ctx-fp-rollback"))
 
     def test_repository_portable_backup_excludes_installation_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
