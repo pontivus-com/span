@@ -12,6 +12,7 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidDeclarationPort,
     FunctionalPyramidRepositoryUnavailable,
+    FunctionalPyramidStatePort,
     FunctionalPyramidStateTransaction,
 )
 from span.ports.lifecycle import LifecycleStorePort
@@ -100,7 +101,7 @@ class _InstallationAuthorityResolver:
 
 def compose_functional_pyramid_service(
     *,
-    state,
+    state: FunctionalPyramidStatePort,
     repository_runtime: _typing.Callable[[str], _RepositoryRuntime],
     registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
     repository_paths: _typing.Callable[
