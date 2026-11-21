@@ -111,6 +111,12 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "expected_challenge_revision, reasoning, optional target_conclusion_ids, "
         "and optional context-bound evidence_refs. Span derives resulting "
         "understanding/version/revision coordinates; never send them. "
+        "FUNCTIONAL PYRAMID TEMPLATE (explicit exclusion): "
+        '{"request_id":"<new id>","kind":"functional_pyramid",'
+        '"action":"exclude","repository_id":"<id>"} '
+        "Use FunctionalPyramidCandidateSelector through ask before activate/revise; "
+        "accepted activate/revise/deactivate results may carry dependent effects "
+        "that must be re-established before lifecycle completion. "
         "SURFACE TEMPLATE (only when the conclusion describes that declared boundary): "
         '{"repository_id":"<id>","request_id":"<new id>","kind":"surface",'
         '"action":"create","surface":{"kind":"SERVICE","locator":"<name>",'
