@@ -471,26 +471,26 @@ def _declaration_indexes(
     for repository_id, declaration in declarations:
         for context in declaration.contexts:
             key = (repository_id, context.context_id)
-            previous = contexts.get(key)
-            if previous is not None and previous != context:
+            previous_context = contexts.get(key)
+            if previous_context is not None and previous_context != context:
                 duplicate_contexts.add(context.context_id)
             contexts.setdefault(key, context)
-            owner = context_owner.get(context.context_id)
-            if owner is None:
+            context_owner_entry = context_owner.get(context.context_id)
+            if context_owner_entry is None:
                 context_owner[context.context_id] = (repository_id, context)
-            elif owner != (repository_id, context):
+            elif context_owner_entry != (repository_id, context):
                 duplicate_contexts.add(context.context_id)
 
         for rule in declaration.rules:
             key = (repository_id, rule.rule_id)
-            previous = rules.get(key)
-            if previous is not None and previous != rule:
+            previous_rule = rules.get(key)
+            if previous_rule is not None and previous_rule != rule:
                 duplicate_rules.add(rule.rule_id)
             rules.setdefault(key, rule)
-            owner = rule_owner.get(rule.rule_id)
-            if owner is None:
+            rule_owner_entry = rule_owner.get(rule.rule_id)
+            if rule_owner_entry is None:
                 rule_owner[rule.rule_id] = (repository_id, rule)
-            elif owner != (repository_id, rule):
+            elif rule_owner_entry != (repository_id, rule):
                 duplicate_rules.add(rule.rule_id)
 
     return contexts, rules, frozenset(duplicate_contexts), frozenset(duplicate_rules)
