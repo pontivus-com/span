@@ -693,7 +693,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result["other"]["verification"]), 1)
 
     async def test_continuation_recovers_omitted_evidence(self) -> None:
-        _write(self.repo, "src/big.py", "line\n" * 500)
+        content = "line\n" * 500
+        _write(self.repo, "src/big.py", content)
+        budget = len(content.encode("utf-8")) - 1
 
         async def journey(session: ClientSession) -> dict:
             first = await self._call(
@@ -716,12 +718,14 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        page = await self._session(journey, budget=1500)
+        page = await self._session(journey, budget=budget)
         self.assertEqual(page["$type"], "EvidencePage")
         self.assertTrue(page["deliveries"])
 
     async def test_continuation_survives_a_fresh_process(self) -> None:
-        _write(self.repo, "src/big.py", "line\n" * 500)
+        content = "line\n" * 500
+        _write(self.repo, "src/big.py", content)
+        budget = len(content.encode("utf-8")) - 1
 
         async def first(session: ClientSession) -> str:
             gap = await self._call(
@@ -738,7 +742,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(gap["admission"].get("continuation"))
             return gap["admission"]["continuation"]
 
-        token = await self._session(first, budget=1500)
+        token = await self._session(first, budget=budget)
 
         async def second(session: ClientSession) -> dict:
             return await self._call(
@@ -749,7 +753,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        page = await self._session(second, budget=1500)
+        page = await self._session(second, budget=budget)
         self.assertEqual(page["$type"], "EvidencePage")
         self.assertTrue(page["deliveries"])
 
