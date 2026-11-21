@@ -1751,10 +1751,11 @@ change requires a new explicit schema transition.
 
 Extend the existing explicit offline repository-store transition from schema
 13 to repository schema 14. Runtime open remains exact-version only and never
-migrates in place. The explicit installer/transition path also creates or
-verifies the installation Functional Pyramid store at
+migrates in place. The explicit installer/setup path creates or verifies the
+installation Functional Pyramid store at
 `<data_dir>/installation/functional-pyramid.db` with installation schema 1;
-pure runtime `ask` never creates or migrates it.
+the repository transition command remains repository-scoped, and pure runtime
+`ask` never creates or migrates either store.
 
 The repository schema-13 → schema-14 transition preserves every existing
 semantic/audit row and receipt exactly and adds the empty derived
