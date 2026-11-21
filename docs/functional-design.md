@@ -141,7 +141,14 @@ The existing canonical semantic owner determines granularity:
 `SERVICE|DOMAIN` uses the selected `EvidenceScope` as declared broad boundary
 membership. The resolver therefore receives the existing `SurfaceKey` together
 with the fixed `EvidenceScope`; it never infers file-versus-directory meaning
-from a locator string. An exact file/symbol scope is matched directly. A
+from an arbitrary locator string. For SERVICE/DOMAIN, the existing canonical
+semantic-containment rule remains authoritative for each `EvidenceScope.paths`
+member: a structural symbol locator already classified by
+`containment.surface_file_locator` is an exact SYMBOL member, while an ordinary
+path member remains a broad path-prefix member. A cold declared-surface obtain
+uses both `SurfaceBoundary.paths` and `SurfaceBoundary.symbols` as those same
+semantic members; an empty declared boundary is not silently widened to a
+repository-wide selection. An exact file/symbol scope is matched directly. A
 declared broad surface or repository-wide scope resolves every Functional
 Context whose declared coverage intersects the functional intersection,
 including contexts narrower than the semantic scope boundary. No context is made
