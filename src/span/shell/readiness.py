@@ -183,7 +183,6 @@ def probe_functional_pyramid_installation_store(
     }
 
 
-
 def _functional_pyramid_participation(
     data_dir: str | _pathlib.Path,
     repository_id: str,
