@@ -268,11 +268,38 @@ not mislabeled as operational failure.
 `scope_relation: OUTSIDE_FUNCTIONAL_SCOPE | COVERED | UNCOVERED | MIXED`, route
 `status: RESOLVED | UNRESOLVED`, the selected semantic scope, all directly
 applicable and inherited functional contexts, all applicable functional rules
-grouped by declared layer, provenance sufficient to trace each scope member
+grouped by declared layer, typed provenance sufficient to trace each scope member
 through contexts to each rule and its governing rules, and every unresolved
-relationship. When the selected scope owns canonical functional rules, the view
-also exposes their declared downstream rule/context dependencies so an authority
-change can be oriented before editing. `OUTSIDE_FUNCTIONAL_SCOPE` means no part of the selected semantic scope is inside
+relationship.
+
+The nested public route carriers are exact:
+
+- `FunctionalContextRoute` carries
+  `context_id: str`, `repository_id: str`, `direct: bool`,
+  `coverage: FunctionalScope`, `inherits: tuple[str, ...]`, and
+  `rule_ids: tuple[str, ...]`. A context that is both directly applicable and
+  reachable by inheritance is represented once with `direct=true`.
+- `FunctionalRuleRoute` carries
+  `rule_id: str`, `layer: P0 | P1 | P2S | P2W | P3 | P4`,
+  `authority: AuthorityBinding`,
+  `governing_rule_ids: tuple[str, ...]`,
+  `downstream_rule_ids: tuple[str, ...]`, and
+  `downstream_context_ids: tuple[str, ...]`. Authority status is therefore
+  the existing `AuthorityBinding.status`; no second rule-status field exists.
+- `FunctionalRouteProvenance` carries one exact
+  `semantic_scope: EvidenceScope`,
+  its `relation: OUTSIDE_FUNCTIONAL_SCOPE | COVERED | UNCOVERED`,
+  `context_ids: tuple[str, ...]`, and `rule_ids: tuple[str, ...]`.
+  Broad `MIXED` views contain several such portions rather than inventing a
+  file list.
+- `FunctionalPyramidView.contexts`,
+  `.rules`, and `.provenance` are tuples of those carriers;
+  `.unresolved` is `tuple[FunctionalPyramidFinding, ...]`.
+
+When the selected scope owns canonical functional rules,
+`FunctionalRuleRoute.downstream_rule_ids` and
+`.downstream_context_ids` expose their declared reverse dependencies so an
+authority change can be oriented before editing. `OUTSIDE_FUNCTIONAL_SCOPE` means no part of the selected semantic scope is inside
 the member's declared FunctionalScope and therefore yields a resolved empty
 governing projection rather than `UNCOVERED_PATH`. `COVERED` means every
 functional portion is covered by applicable contexts. `UNCOVERED` means the
@@ -283,8 +310,9 @@ other unresolved functional branch; `UNRESOLVED` requires at least one typed
 unresolved relationship. The view copies rule IDs, owner references and relationships,
 never canonical rule text, summaries or document chunks.
 
-`FunctionalPyramidUnavailable` carries the public failure and recovery when
-the declared graph could not be evaluated operationally. A descriptive Answer
+`FunctionalPyramidUnavailable` carries exactly non-empty
+`failure: str` and `recovery: str` when the declared graph could not be
+evaluated operationally. A descriptive Answer
 may coexist with this state. A normative conclusion whose required route cannot
 be evaluated is not CURRENT because route support is independently
 `UNVERIFIABLE`.
@@ -332,12 +360,17 @@ parallel setup DTOs.
   `activation_ready: bool`,
   `validation_findings: tuple[FunctionalPyramidValidationFinding, ...]`, and
   `graph_findings: tuple[FunctionalPyramidFinding, ...]`.
-- `FunctionalPyramidFinding` carries one FD-71 graph/route reason, the
-  repository/declared identity coordinates needed to locate it, and concise
-  public recovery/detail. It never carries copied governing prose.
-- `FunctionalPyramidValidationFinding` carries one typed candidate/lifecycle
-  reason from the closed Layer-3 validation taxonomy plus the public coordinates
-  and recovery needed to correct that candidate.
+- `FunctionalPyramidFinding` carries
+  `reason: FunctionalPyramidFindingReason`,
+  optional `repository_id`, `declaration_locator`, `context_id`, and
+  `rule_id` coordinates, plus non-empty `detail` and `recovery`.
+  Unused coordinates are absent rather than empty. It never carries copied
+  governing prose.
+- `FunctionalPyramidValidationFinding` carries
+  `reason: FunctionalPyramidValidationReason`, optional
+  `repository_id`, `pyramid_id`, `declaration_locator`,
+  `expected_version`, and `current_version`, plus non-empty `detail` and
+  `recovery`. Unused coordinates are absent.
 - `FunctionalPyramidReceiptSelector` carries only `request_id` and addresses
   the installation-level Functional Pyramid write namespace.
 - `RetrievedFunctionalPyramidReceipt` carries
