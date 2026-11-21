@@ -52,6 +52,22 @@ _RepositoryPaths = _typing.Callable[
 ]
 
 
+def _ordered_validation_findings(
+    findings: list[m.FunctionalPyramidValidationFinding],
+) -> tuple[m.FunctionalPyramidValidationFinding, ...]:
+    return tuple(
+        sorted(
+            findings,
+            key=lambda item: (
+                item.reason.value,
+                item.repository_id or "",
+                item.declaration_locator or "",
+                "" if item.pyramid_id is None else item.pyramid_id.value,
+            ),
+        )
+    )
+
+
 def _validation_finding(
     reason: m.FunctionalPyramidValidationReason,
     repository_id: str | None,
@@ -172,18 +188,83 @@ class FunctionalPyramidService:
         selector: m.FunctionalPyramidCandidateSelector,
         state: FunctionalPyramidStatePort | FunctionalPyramidStateTransaction,
     ) -> m.FunctionalPyramidCandidate:
+        (
+            target_id,
+            target_version,
+            eligible,
+            validation,
+        ) = self._candidate_lifecycle(selector, state)
+        if validation:
+            return m.FunctionalPyramidCandidate(
+                action=selector.action,
+                pyramid_id=target_id,
+                version=target_version,
+                members=(),
+                activation_ready=False,
+                validation_findings=_ordered_validation_findings(validation),
+                graph_findings=(),
+            )
+
+        members, declarations, available, source_validation, source_graph = (
+            self.load_candidate_members(eligible)
+        )
+        validation.extend(source_validation)
+        _, authority_findings = self._authority_bindings(
+            members, declarations, available
+        )
+        _, structural = _fp.evaluate_functional_pyramid_health(
+            members,
+            declarations,
+            available,
+            source_graph + authority_findings,
+        )
+
+        graph: list[m.FunctionalPyramidFinding] = []
+        for finding in structural:
+            if finding.reason is m.FunctionalPyramidFindingReason.UNCOVERED_PATH:
+                validation.append(
+                    _validation_finding(
+                        m.FunctionalPyramidValidationReason.INCOMPLETE_COMPLETE_COVERAGE,
+                        finding.repository_id,
+                        finding.detail,
+                        finding.recovery,
+                    )
+                )
+            else:
+                graph.append(finding)
+
+        ordered_validation = _ordered_validation_findings(validation)
+        return m.FunctionalPyramidCandidate(
+            action=selector.action,
+            pyramid_id=target_id,
+            version=target_version,
+            members=members,
+            activation_ready=not ordered_validation and not graph,
+            validation_findings=ordered_validation,
+            graph_findings=tuple(graph),
+        )
+
+    def _candidate_lifecycle(
+        self,
+        selector: m.FunctionalPyramidCandidateSelector,
+        state: FunctionalPyramidStatePort | FunctionalPyramidStateTransaction,
+    ) -> tuple[
+        m.FunctionalPyramidId | None,
+        m.FunctionalPyramidVersion | None,
+        tuple[m.FunctionalPyramidMemberIntent, ...],
+        list[m.FunctionalPyramidValidationFinding],
+    ]:
         registered = self._registered()
         validation: list[m.FunctionalPyramidValidationFinding] = []
-
-        intents_by_repository: dict[str, m.FunctionalPyramidMemberIntent] = {}
-        duplicate_repositories: set[str] = set()
+        intents: dict[str, m.FunctionalPyramidMemberIntent] = {}
+        duplicates: set[str] = set()
         for intent in selector.members:
-            if intent.repository_id in intents_by_repository:
-                duplicate_repositories.add(intent.repository_id)
-                continue
-            intents_by_repository[intent.repository_id] = intent
+            if intent.repository_id in intents:
+                duplicates.add(intent.repository_id)
+            else:
+                intents[intent.repository_id] = intent
 
-        for repository_id in sorted(duplicate_repositories):
+        for repository_id in sorted(duplicates):
             validation.append(
                 _validation_finding(
                     m.FunctionalPyramidValidationReason.DUPLICATE_MEMBER,
@@ -198,8 +279,8 @@ class FunctionalPyramidService:
         if selector.action is m.FunctionalPyramidAction.REVISE:
             assert target_id is not None
             assert selector.expected_version is not None
-            current = state.pyramid_version(target_id)
-            if current is None:
+            target_version = state.pyramid_version(target_id)
+            if target_version is None:
                 validation.append(
                     _validation_finding(
                         m.FunctionalPyramidValidationReason.UNKNOWN_PYRAMID,
@@ -209,24 +290,22 @@ class FunctionalPyramidService:
                         pyramid_id=target_id,
                     )
                 )
-            else:
-                target_version = current
-                if current != selector.expected_version:
-                    validation.append(
-                        _validation_finding(
-                            m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION,
-                            None,
-                            "target Functional Pyramid version is stale",
-                            "obtain current status and rebuild the revision candidate",
-                            pyramid_id=target_id,
-                            expected_version=selector.expected_version,
-                            current_version=current,
-                        )
+            elif target_version != selector.expected_version:
+                validation.append(
+                    _validation_finding(
+                        m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION,
+                        None,
+                        "target Functional Pyramid version is stale",
+                        "obtain current status and rebuild the revision candidate",
+                        pyramid_id=target_id,
+                        expected_version=selector.expected_version,
+                        current_version=target_version,
                     )
+                )
 
         eligible: list[m.FunctionalPyramidMemberIntent] = []
-        for repository_id in sorted(intents_by_repository):
-            intent = intents_by_repository[repository_id]
+        for repository_id in sorted(intents):
+            intent = intents[repository_id]
             if repository_id not in registered:
                 validation.append(
                     _validation_finding(
@@ -238,8 +317,7 @@ class FunctionalPyramidService:
                 )
                 continue
             active_id = state.active_pyramid_id(repository_id)
-            retained_target = target_id is not None and active_id == target_id
-            if active_id is not None and not retained_target:
+            if active_id is not None and active_id != target_id:
                 validation.append(
                     _validation_finding(
                         m.FunctionalPyramidValidationReason.MEMBER_ALREADY_ACTIVE,
@@ -252,85 +330,7 @@ class FunctionalPyramidService:
                 continue
             eligible.append(intent)
 
-        lifecycle_blockers = {
-            m.FunctionalPyramidValidationReason.UNREGISTERED_MEMBER,
-            m.FunctionalPyramidValidationReason.DUPLICATE_MEMBER,
-            m.FunctionalPyramidValidationReason.MEMBER_ALREADY_ACTIVE,
-            m.FunctionalPyramidValidationReason.UNKNOWN_PYRAMID,
-            m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION,
-        }
-        if any(item.reason in lifecycle_blockers for item in validation):
-            ordered_validation = tuple(
-                sorted(
-                    validation,
-                    key=lambda item: (
-                        item.reason.value,
-                        item.repository_id or "",
-                        item.declaration_locator or "",
-                        "" if item.pyramid_id is None else item.pyramid_id.value,
-                    ),
-                )
-            )
-            return m.FunctionalPyramidCandidate(
-                action=selector.action,
-                pyramid_id=target_id,
-                version=target_version,
-                members=(),
-                activation_ready=False,
-                validation_findings=ordered_validation,
-                graph_findings=(),
-            )
-
-        members, declarations, available, source_validation, source_graph = (
-            self.load_candidate_members(tuple(eligible))
-        )
-        validation.extend(source_validation)
-        authorities, authority_findings = self._authority_bindings(
-            members, declarations, available
-        )
-        del authorities
-        health, structural = _fp.evaluate_functional_pyramid_health(
-            members,
-            declarations,
-            available,
-            source_graph + authority_findings,
-        )
-        del health
-
-        graph: list[m.FunctionalPyramidFinding] = []
-        for finding in structural:
-            if finding.reason is m.FunctionalPyramidFindingReason.UNCOVERED_PATH:
-                validation.append(
-                    _validation_finding(
-                        m.FunctionalPyramidValidationReason.INCOMPLETE_COMPLETE_COVERAGE,
-                        finding.repository_id,
-                        finding.detail,
-                        finding.recovery,
-                    )
-                )
-                continue
-            graph.append(finding)
-
-        ordered_validation = tuple(
-            sorted(
-                validation,
-                key=lambda item: (
-                    item.reason.value,
-                    item.repository_id or "",
-                    item.declaration_locator or "",
-                    "" if item.pyramid_id is None else item.pyramid_id.value,
-                ),
-            )
-        )
-        return m.FunctionalPyramidCandidate(
-            action=selector.action,
-            pyramid_id=target_id,
-            version=target_version,
-            members=members,
-            activation_ready=not ordered_validation and not graph,
-            validation_findings=ordered_validation,
-            graph_findings=tuple(graph),
-        )
+        return target_id, target_version, tuple(eligible), validation
 
     def receipt(
         self, selector: m.FunctionalPyramidReceiptSelector
