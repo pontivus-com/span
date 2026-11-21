@@ -468,8 +468,17 @@ class FunctionalPyramidCandidate:
         revising = self.action is FunctionalPyramidAction.REVISE
         if revising != (self.pyramid_id is not None):
             raise ValueError("revise candidate requires pyramid_id")
-        if revising != (self.version is not None):
-            raise ValueError("revise candidate requires target version")
+        if revising and self.version is None:
+            unknown_target = any(
+                finding.reason is FunctionalPyramidValidationReason.UNKNOWN_PYRAMID
+                for finding in self.validation_findings
+            )
+            if not unknown_target:
+                raise ValueError(
+                    "revise candidate requires target version unless target is unknown"
+                )
+        if not revising and self.version is not None:
+            raise ValueError("activate candidate has no target version")
         expected_ready = not self.validation_findings and not self.graph_findings
         if self.activation_ready != expected_ready:
             raise ValueError(
