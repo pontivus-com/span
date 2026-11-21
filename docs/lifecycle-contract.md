@@ -1,6 +1,6 @@
 # Span lifecycle contract — layer 2
 
-**Status: binding.** This is the second foundational layer, beneath the
+**Status: binding target for Span 1.0 Beta.** This is the second foundational layer, beneath the
 [goals](goals.md) (layer 0) and layer 1 ([foundations](foundations.md)). Layer 1
 states the axioms about the agent and the principles of the system. This layer
 turns them into functional requirements: the operations that exist, what the
@@ -11,9 +11,9 @@ agent sends and receives, and what is deliberately not the agent's job. The
 Authority and derivation between layers are defined in the
 [requirements pyramid model](requirements-pyramid.md).
 
-**0.10.3 target contract, amended 2026-11-14.** Runtime implementation and
-host delivery are pending. These requirements describe the target behavior;
-they do not certify that the installed server already conforms.
+**1.0 Beta target contract, 21 November 2026.** Runtime implementation and host
+delivery are pending. These requirements describe the target behavior; they do
+not certify that the installed server already conforms.
 
 ## 1. Position in the pyramid
 
@@ -41,6 +41,11 @@ direction of derivation are defined in the [requirements pyramid model](requirem
 | **Gap** | The absence of usable understanding, with its cause and the means to resolve it. |
 | **Challenge** | An explicit dispute against a conclusion revision. |
 | **Verification** | An independent run recorded against the observations or evidence actually tested. |
+| **Functional context** | A declared responsibility/applicability context used by the Functional Pyramid. It is not a semantic surface. Several contexts may apply to one path and one context may cover several paths. |
+| **Functional rule** | One stable canonical governing rule with a declared layer, owner and direct governing rule IDs. Its substantive text remains at its canonical source. |
+| **Functional Pyramid** | The declared graph from repository paths through functional contexts to applicable functional rules and their governing rules. |
+| **Functional Pyramid view** | The resolved contexts, rules, provenance and unresolved relationships applicable to the selected semantic scope. It is orientation/governance state, not an agent-authored conclusion. |
+| **Route support** | Server-derived support binding a normative conclusion to the exact Functional Pyramid route that applied when the conclusion was established. |
 
 An understanding may be unsupported. An **answer never is** — that asymmetry is
 the point of the whole system.
@@ -58,18 +63,26 @@ the point of the whole system.
 | Understanding is retained, versioned, and reachable without the transcript | F3 |
 | Reuse must beat maintaining documentation or acting on stale understanding | F8 |
 | Surface-bound semantic content is the documentation, not a separate artifact | G6 |
+| Canonical governing sources remain canonical and are referenced rather than copied | G6, F1, F11 |
+| The governing path from first principles to implementation is available at orientation | G7, F10, F11 |
 | There are no per-intent operations | F5 |
 
-*What does this do*, *what governs it*, *what depends on it*, *what breaks if I
-change it*, and *is this still true* are **questions**, not operations. Span does
-not classify them; the surface or exact understanding identity selects membership,
-and the agent judges applicability.
+*What does this do*, *what depends on it*, *what breaks if I change it*, and
+*is this still true* remain questions over retained understanding rather than
+operations. Declared governance is different: for a participating repository,
+Span resolves the Functional Pyramid as server-owned orientation and support
+state. It does not generate an answer to "what should govern"; it returns what
+the repository explicitly declared to govern the selected scope. The agent still
+judges semantic and conformance meaning.
 
 Audit needs no sixth operation. Every answer carries the surface status, because
 a reader who cannot tell current from stale has not been answered (F9).
 
 Exactly three public tools realize these moments: `ask`, `record`, `reconsider`.
-The installer binds repositories; the host supplies structural navigation.
+The installer binds repositories; the host supplies general structural
+navigation. Functional Pyramid resolution is not general structural navigation:
+it is deterministic resolution of explicit governance declarations and is folded
+into the three lifecycle operations.
 
 ## 4. Public lifecycle operations
 
@@ -86,6 +99,12 @@ State this before the operations, because everything else depends on it.
   through `record`.
 - Every answer reports the surface status. Status is never optional and never a
   single stamp.
+- For a participating repository, ordinary current surface obtain also reports
+  the Functional Pyramid view for the selected semantic scope. The view may be
+  fully resolved while semantic understanding is a Gap, or unresolved while
+  descriptive understanding remains usable.
+- Governing route state never substitutes for semantic understanding, and
+  semantic support never substitutes for governing applicability.
 
 ### 4.1 `ask` — obtain
 
@@ -121,7 +140,9 @@ or generated answer.
 
 **Pure obtain.** Surface/reference obtain returns all CURRENT conclusions on
 that surface, grouped by recorded question, with status, gaps, verification,
-limitations and explicit omissions. An exact recorded-question selector first
+limitations and explicit omissions. For a repository that participates in the
+Functional Pyramid, the same obtain resolves the selected scope's declared
+Functional Pyramid and returns it as orientation state. An exact recorded-question selector first
 restricts membership by surface and exact recorded question; a current selector
 restricts membership to its returned understanding identity. Both then use the
 same support/status owners as the grouped view. These pure forms create no
@@ -196,6 +217,27 @@ replay against the same live context returns the same page across restart.
 | `EvidencePage` | A continuation page for previously selected evidence |
 | `Rejected` | An actionable invalid selector/reference/binding request |
 | `Unavailable` | An operational failure that prevented evaluation |
+
+The closed result union does not add a Functional-Pyramid-only result. Current
+`Answer` and `Gap` carry
+`functional_pyramid: FunctionalPyramidView | FunctionalPyramidUnavailable | None`.
+`None` means that the repository does not participate in the Functional
+Pyramid. A participating repository returns either the view or explicit
+operational unavailability; unresolved governance is represented inside the
+view and is not mislabeled as operational failure.
+
+`FunctionalPyramidView` carries the selected repository-relative paths,
+all directly matched and inherited functional contexts, all applicable
+functional rules grouped by declared layer, provenance sufficient to trace each
+path through contexts to each rule and its governing rules, and every unresolved
+relationship. It copies rule IDs and owner references, never canonical rule
+text.
+
+`FunctionalPyramidUnavailable` carries the public failure and recovery when
+the declared graph could not be evaluated operationally. A descriptive Answer
+may coexist with this state. A normative conclusion whose required route cannot
+be evaluated is not CURRENT because route support is independently
+`UNVERIFIABLE`.
 
 Answer carries only CURRENT statements, nature, scope, per-conclusion support,
 evidence references, surface status and applicable verification. Gap carries
@@ -311,6 +353,24 @@ not the presence of just one matching member.
 
 Semantic scope describes what the conclusion is about; support identifies what
 established it. Multiple support files do not create additional owning surfaces.
+
+For `assertion_nature=NORMATIVE` in a participating repository, the caller's
+support is not the complete governance dependency set. Span resolves the
+effective semantic scope through the Functional Pyramid and derives one route
+support dependency plus authority support for every applicable canonical rule.
+The caller cannot suppress, replace or narrow those server-derived governance
+dependencies. If the route is unresolved or an applicable authority cannot be
+established, the normative create/update cannot be accepted as currently
+supported. Explicit caller support may still include additional empirical,
+premise, discovery or external authority dependencies that are not substitutes
+for the derived route.
+
+For `DESCRIPTIVE` conclusions, Functional Pyramid state is returned as
+orientation but is not automatically a support dependency. An investigator may
+still cite explicit authority where the descriptive conclusion genuinely
+depends on it.
+
+Multiple support files do not create additional owning surfaces.
 The effective semantic scope is a complete `EvidenceScope`: paths, exact evidence
 references, or an empty scope denoting the whole repository. A supplied
 SERVICE/DOMAIN must already exist and contain the complete semantic scope.
@@ -529,14 +589,22 @@ use `ask` for current understanding. The result includes every surface that must
 be re-examined or repaired, and says why it appears:
 
 - every surface whose boundary contains the change — **containment**;
-- every surface that owns a conclusion with direct source or discovery support
-  loss — **direct**;
+- every surface that owns a conclusion with direct source, discovery,
+  authority or Functional Pyramid route support loss — **direct**;
 - every surface that owns a conclusion with indirect support loss, including a
   surface whose boundary does not contain the change — **indirect**.
 
 Discovery dependents are part of the direct set: a changed path maps to every
 discovery observation whose scope contains it, and the conclusions supported by
 those observations are included before the premise walk.
+
+Functional Pyramid dependents are likewise part of the direct set. A change to a
+participating context declaration, rule declaration, canonical authority source,
+accepted status or governing edge causes Span to re-resolve the affected route
+dependencies. A changed route or authority is reported as direct support loss
+for the normative conclusions that depended on it; premise propagation remains
+indirect. Implementation source need not change for governance-driven
+reassessment to be required.
 
 For each included surface:
 
@@ -632,6 +700,8 @@ column is the law that forces it inward.
 | Challenge persistence | `reconsider` raises; `record` settles (F5, F6) |
 | Status, digest, notices | host-surface notices use the same computation; answer safety remains server-owned (A4, F6) |
 | Structural provider build | setup/maintenance, never per-request (F7) |
+| Functional Pyramid declaration discovery and route resolution | deterministic server-owned orientation/support, folded into `ask`/`record`/`reconsider` rather than an agent bookkeeping operation (F6, F11) |
+| Functional route dependency derivation for normative conclusions | server-owned because allowing the caller to omit an applicable governing rule would make support unsound (F7, F11) |
 | Store migration | explicit offline administration (A2) |
 
 Internal does not mean unimportant. It means **not the agent's work**. An API
@@ -653,12 +723,13 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | **L9** | A surface's status is always reported as a distribution, never a single stamp. | F9 |
 | **L10** | `reconsider` returns every containing surface for a changed path, reports direct and premise-dependent support loss separately, and supplies the bounded re-establishment context F4 requires. | F4, F9 |
 | **L11** | A surface's current conclusions are readable as that surface's documentation; there is no separate document artifact to maintain. | G6, F3 |
+| **L12** | For a participating repository, current surface obtain returns the declared Functional Pyramid route or explicit operational unavailability; normative understanding automatically depends on that route and its applicable authorities. No separate authority operation exists. | G1, G3, G7, F6, F7, F11 |
 
 ## 7. Lifecycle mapping
 
 | Agent moment | Operation | Server guarantee |
 | --- | --- | --- |
-| Orient | `ask` | valid answer, surface status, or actionable gap |
+| Orient | `ask` | valid answer or actionable gap, surface status, and for participating repositories the Functional Pyramid view or explicit route unavailability |
 | Investigate | `ask` returns evidence; the agent reads | evidence bound and addressable |
 | Conclude | `record` | accepted subject, receipt selector, live qualification and applicable status |
 | Reuse | `ask(surface/reference)` or `ask(selector=RecordedQuestionSelector)` | valid, with status, or explicitly not; exact question selection is surface-scoped |
@@ -671,7 +742,10 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 ### Required agent completion
 
 Before deriving semantic understanding, consult Span for the relevant surface.
-For reuse, read its surface document view first. For targeted retrieval by
+For a participating repository, inspect the returned Functional Pyramid view
+before interpreting implementation against governing requirements; unresolved
+relationships remain unresolved rather than being filled by inference. For
+reuse, read the surface document view first. For targeted retrieval by
 question, use `RecordedQuestionSelector` with the exact surface and exact
 recorded question returned by that view; do not send a free-text question or
 expect paraphrase matching. Investigate the returned gaps and evidence, then
@@ -739,6 +813,17 @@ must provide the mechanisms.
 - declared surfaces with a stable identity and an evolvable boundary, and path
   surfaces identified by path or canonical locator;
 - containment mapping, so a changed path resolves to every enclosing surface;
+- Functional Pyramid declarations and deterministic many-to-many path/context
+  resolution, distinct from semantic surface containment;
+- additive context inheritance and explicit cross-repository rule references,
+  with cycles, missing repositories, missing rules and invalid governing edges
+  kept unresolved;
+- canonical functional-rule identity and direct governing-rule traversal without
+  copying canonical rule text into Span;
+- server-derived Functional Pyramid route and authority support for normative
+  conclusions;
+- governance-change propagation through the same support/reconsideration model
+  used for other declared dependencies;
 - dependency evaluation that follows premise chains transitively, so indirect
   support loss is reported alongside direct loss;
 - immutable understanding versions, with supersession rather than overwrite;
@@ -750,7 +835,8 @@ must provide the mechanisms.
 - retained receipts keyed by the caller's request identity, replayable across
   restart within their window;
 - compare-and-set on every update;
-- exactly `ask`, `record`, and `reconsider`, with no per-intent tools;
+- exactly `ask`, `record`, and `reconsider`, with no per-intent or
+  Functional-Pyramid-only MCP tools;
 - host delivery verified against the three declared schemas;
 - host notices that never carry currency or acceptance.
 
