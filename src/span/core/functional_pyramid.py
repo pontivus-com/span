@@ -1236,7 +1236,7 @@ def _route_identity(
 ) -> FunctionalRouteIdentity:
     payload = {
         "scope": {
-            "paths": list(semantic_scope.paths),
+            "paths": tuple(semantic_scope.paths),
             "refs": [
                 (
                     ref.repository_id,
