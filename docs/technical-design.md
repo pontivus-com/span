@@ -1217,22 +1217,71 @@ second declaration of those requirements.
 | FD-92, FD-94; L8, L13–L16 | Part C §20–§22 | generated schema, MCP integration, hooks/skills and host capture; exact three tools, candidate/status/receipt selectors, FunctionalPyramidRecorded affected projection, initialization DECLARE→reconsider→VALIDATE guidance | Version-1 target; implementation pending |
 | Functional design §15 cases 32–41 | Part C §18–§22 | generic acceptance plus installed MCP; outside scope, MIXED scope, structural health equivalence, activation of pre-existing normative understanding, participation-write propagation, deactivation/removal route state, replay/context recovery, concurrency, initialization re-alignment | Version-1 target; implementation pending |
 
-Part B is complete only after its executable contracts, reviewed migration
-mappings, authority decisions, and measured deployment inputs are present.
-Implementation/host/fitness passes need their own observed receipts. Writing this
-matrix, or passing the 85 baseline tests in §8, closes neither category.
+The matrix covers both the established Part-B baseline and the Part-C
+Version-1 target. Part-B historical/current mechanism claims remain governed by
+their existing evidence and open measurements. Part C is design-complete only
+when its derivation map has no unmapped FD owner or unowned mechanism; it becomes
+implementation-complete only after the Version-1 rows above have observed test,
+installed-MCP and host evidence. Writing this matrix or retaining the baseline
+tests closes neither implementation nor delivery verification.
 
 ## Part C — Version 1 Functional Pyramid mechanisms
 
-Part C implements the binding Version-1 behavior in lifecycle `4/`7 and
+Part C implements the binding Version-1 behavior in lifecycle §4/§7 and
 FD-61–FD-94. It does not redefine those requirements. Parts A/B remain evidence
 and mechanism authority for the pre-existing semantic lifecycle unless a Part-C
 decision explicitly adapts that mechanism.
 
+### Part-C derivation map
+
+This is the canonical Layer-3 → Layer-4 association for Version 1. Layer 3
+remains mechanism-independent; this table points downward from each functional
+owner to its primary technical mechanism and verification owner. Supporting
+sections may contribute plumbing, but they do not create another functional
+owner.
+
+| Functional authority | Primary technical mechanism | Verification owner |
+| --- | --- | --- |
+| FD-61 | §19 participation persistence + §20.1 projection | lifecycle store/service + ask integration |
+| FD-62–FD-69 | §17 FunctionalScope/declaration representation + §18 graph resolver | pure scope/graph tests + ask integration |
+| FD-70–FD-74 | §17 declaration/identity carriers + §18 resolution; FD-74 projection in §20.1 | graph/source-binding + ask integration |
+| FD-75–FD-77 | §18 support evaluation + §20.2 understanding record composition | support + lifecycle record tests |
+| FD-78 | §20.1 ask composition | answer-service/MCP tests |
+| FD-79 | §20.3 shared effect engine + §20.4 participation write composition | reconsider + pyramid-write tests |
+| FD-80 | §17 strict declarations + §18 resolver | graph validation tests |
+| FD-81 | §18 FunctionalRouteSupport evaluation | support-service tests |
+| FD-82 | §19 versioned membership persistence + §20.4 write composition | store/service CAS tests |
+| FD-83 | §18 health evaluator + §20.1 status projection | health/status tests |
+| FD-84 | §17 complete declaration input + §20.1 pure candidate validation | candidate-validation tests |
+| FD-85 | §19 receipt/transaction mechanics + §20.4 accepted/replay projection | store/service replay and atomicity tests |
+| FD-86–FD-87 | §17 scope algebra/member binding + §18 resolver | coverage/reachability tests |
+| FD-88 | §18 reverse graph traversal + §20.3 impact traversal | graph/reconsider tests |
+| FD-89 | §20.3 shared effect engine + §20.4 Functional Pyramid projection | reconsider/pyramid-write tests |
+| FD-90 | §20.1 same-scope ask composition + §20.2 normative derivation | ask/record tests |
+| FD-91 | §18 independent support/health evaluation + §20.1/§20.2 composition | support/ask/record tests |
+| FD-92 | §20.1 lifecycle projection separation + §22 generated wire | MCP schema/integration tests |
+| FD-93 | §20.4 Functional Pyramid record composition | lifecycle service/MCP tests |
+| FD-94 | §22 skill/hook/host delivery | hook/skill/host-contract tests |
+
+Version 1 also adapts established mechanisms whose functional ownership remains
+in FD-1–FD-60:
+
+| Existing functional owner | Version-1 adaptation |
+| --- | --- |
+| FD-2–FD-4 | §19 separates repository-scoped receipt/context identity from installation-scoped Functional Pyramid writes |
+| FD-9–FD-16 | §18 adds FunctionalRouteSupport to the one existing support evaluator |
+| FD-17–FD-22 | §20.3 extends the one reconsider/effect traversal across governance dependencies |
+| FD-23–FD-29 | §20.1 composes Functional Pyramid orientation into existing Answer/Gap behavior |
+| FD-30–FD-37 | §20.2 derives governance support inside the existing understanding writer |
+| FD-38–FD-41 | §20/§22 extend existing closed public result/failure unions without another operation |
+| FD-43–FD-48 | §19/§21 extend retention, replay, CAS and offline transition mechanics |
+| FD-49–FD-58 | §22 extends generated wire, hooks, skills and managed-host delivery |
+
+
 ### 17. Canonical carriers, scope algebra and declaration boundary
 
-**Authority:** F1, F6, F7, F11, F12; L7–L8, L12–L15; FD-61–FD-74,
-FD-82–FD-94.
+**Authority:** F1, F6, F7, F11, F12; L7–L8, L12–L14; FD-62–FD-74,
+FD-80, FD-82, FD-84, FD-86–FD-88.
 
 Add one canonical core model module for Functional Pyramid domain carriers and
 export those carriers through the existing `span.core.model` package. Do not
@@ -1349,12 +1398,17 @@ resolved pyramid instance; duplicate non-identical owners are FD-65/FD-71
 findings. The document never contains canonical rule prose.
 
 The `FunctionalPyramidDeclarationPort` reads only the exact bootstrap/declaration
-sources named by member intent across registered repositories. Its shell
-implementation resolves repository roots through the existing
+sources named by member intent across registered repositories. Version-1
+declaration sources are whole documents: each member
+`EvidenceRequest.ranges` must be empty. A non-empty ranges tuple is rejected as
+`INVALID_DECLARATION_SOURCE` before declaration parsing; the port never treats
+a selected fragment as a complete declaration document.
+
+Its shell implementation resolves repository roots through the existing
 `LifecycleStorePort.require_repository` owner and existing exact source
-capability. Strict decoding creates the canonical carriers; semantic graph
-validation remains pure core/service behavior. No directory scan, similarity
-search, file-name inference or model call participates.
+capability. Strict whole-document decoding creates the canonical carriers;
+semantic graph validation remains pure core/service behavior. No directory
+scan, similarity search, file-name inference or model call participates.
 
 No persisted graph index is authoritative in the beta. Any in-memory or
 persisted acceleration is a rebuildable projection of current member intent and
@@ -1363,8 +1417,8 @@ answer.
 
 ### 18. Pure graph resolver, health and support evaluation
 
-**Authority:** G1, G3, G4, G7; F1, F2, F11, F12; L12–L16; FD-62–FD-81,
-FD-83, FD-86–FD-91.
+**Authority:** G1, G3, G4, G7; F1, F2, F11, F12; L12–L16; FD-9–FD-16,
+FD-62–FD-73, FD-75, FD-79–FD-81, FD-83, FD-86–FD-88, FD-91.
 
 Add one pure Functional Pyramid resolver in `src/span/core/` with service
 orchestration in `src/span/service/`. It accepts:
@@ -1420,7 +1474,7 @@ branch. FD-15/FD-16 remain the sole combined-state owner.
 ### 19. Installation-level persistence, receipts and concurrency
 
 **Authority:** A1–A3; F3, F12; L4, L13–L15; FD-3–FD-4, FD-43–FD-48,
-FD-82–FD-85.
+FD-61, FD-82, FD-85.
 
 Keep the existing SQLite `LifecycleStore` as the installation transaction
 owner. It already owns all registered repositories in one database and provides
@@ -1489,10 +1543,14 @@ Thus a context-issuance failure cannot erase or ambiguously follow an already
 committed participation write. EXCLUDE performs the same receipt/participation
 transaction without active-route dependent effects.
 
-A replay returns the retained immutable acceptance/effect set. If its original
-re-establishment contexts have expired, service composition may issue fresh
-contexts for those retained effect coordinates; this is a new transient context
-projection, not a new write or recomputed acceptance.
+A replay returns the retained immutable participation acceptance and
+`dependent_effect_refs`. Service composition then re-evaluates only those
+retained `ConclusionRevisionRef` identities against current support/membership
+state to build the live `ChangedSurface` projection. Revisions that are no
+longer actionable are omitted; no later governance change may add a ref that was
+not in the accepted receipt. Fresh repository-bound contexts are issued only for
+the currently actionable retained refs. This live projection is not a new write
+and never mutates the receipt.
 
 Concurrent REVISE/DEACTIVATE use pyramid-version compare-and-set. Concurrent
 ACTIVATE/REVISE transactions serialize on the same SQLite writer and the unique
@@ -1500,10 +1558,13 @@ ACTIVE-member projection; exactly one overlapping activation can commit.
 
 ### 20. Operation composition and governance-change propagation
 
-**Authority:** G3, G7, G8; F2, F4, F6, F7, F11, F12; L8, L10, L12–L16;
-FD-17–FD-29, FD-75–FD-81, FD-85, FD-88–FD-94.
+Authority is split by operation below; §20 does not create a second functional
+owner.
 
 #### 20.1 `ask`
+
+**Authority:** F6, F10, F11, F12; L1–L3, L8, L12–L14, L16;
+FD-23–FD-29, FD-61, FD-74, FD-78, FD-83–FD-84, FD-90–FD-92.
 
 Extend the existing `AskRequest` selector union and generated wire from its
 canonical model declaration with:
@@ -1520,7 +1581,7 @@ second answer composer.
 
 `AnswerService` keeps semantic membership/Answer/Gap composition unchanged.
 After the semantic scope is fixed, one Functional Pyramid service projection
-looks up participation and, for ACTIVE members, invokes the resolver from `18 on
+looks up participation and, for ACTIVE members, invokes the resolver from §18 on
 that exact scope. UNCONFIGURED/EXCLUDED project participation directly. ACTIVE
 operational graph failure projects `FunctionalPyramidUnavailable` without
 discarding otherwise-current descriptive semantic content.
@@ -1530,6 +1591,9 @@ current registered/declaration state. It uses the FD-84 reason taxonomy and the
 same graph/coverage validators as activation. It persists nothing.
 
 #### 20.2 understanding `record`
+
+**Authority:** F2, F5, F7, F11; L7, L12, L16; FD-30–FD-37,
+FD-75–FD-77, FD-90–FD-91.
 
 Keep the existing create/update command owners and transaction path. After
 semantic scope and assertion nature are fixed and before a NORMATIVE revision is
@@ -1545,6 +1609,9 @@ semantic write path; live qualification is non-current and F2 keeps the revision
 out of CURRENT Answer content.
 
 #### 20.3 `reconsider` and shared effect engine
+
+**Authority:** G3; F4, F11, F12; L10, L15–L16; FD-17–FD-22,
+FD-79, FD-88–FD-89.
 
 Keep the existing repository-scoped changed-path/surface request grammar.
 Refactor the current reconsider dependency traversal into one service-owned
@@ -1571,16 +1638,23 @@ conclusions stale merely because a declaration file path matched.
 
 #### 20.4 Functional Pyramid `record`
 
+**Authority:** G3, G8; F4, F6, F7, F12; L4, L8, L14–L15;
+FD-82, FD-84–FD-85, FD-89, FD-93.
+
 Add the Layer-2 `functional_pyramid` branch to the existing record decoder and
 service dispatcher; do not create a fourth MCP operation. It does not use
 `RecordingIdentity` or an evidence investigation context. It uses the
-installation-level request namespace from `19, strict action-aware candidate
+installation-level request namespace from §19, strict action-aware candidate
 revalidation, the shared effect engine above, and one atomic store transaction.
 
-The accepted result contains the resulting ACTIVE members, only actual durable
-`FunctionalPyramidParticipationEffect` transitions, the canonical dependent
-`ChangedSurface` projection and one live repository-bound context per
-repository with actionable effects.
+On first acceptance, the result contains the resulting ACTIVE members, only
+actual durable `FunctionalPyramidParticipationEffect` transitions, the
+canonical dependent `ChangedSurface` projection and one live repository-bound
+context per repository with actionable effects. The receipt stores only the
+immutable dependent `ConclusionRevisionRef` identities. On replay, §19
+re-evaluates only those retained refs to produce the current actionable
+`ChangedSurface` projection and fresh contexts; replay never expands the
+accepted effect identity set.
 
 ### 21. Offline transition and compatibility boundary
 
@@ -1604,7 +1678,7 @@ Historical and current NORMATIVE revisions are **not** backfilled with invented
 FunctionalRouteSupport.
 
 Consequently, transition alone changes no semantic conclusion's support state.
-When a repository is later ACTIVATED, `20.3 selects current pre-activation
+When a repository is later ACTIVATED, §20.3 selects current pre-activation
 NORMATIVE revisions without route support and returns them as
 REASSESSMENT_REQUIRED dependent effects. This is the only migration path from
 pre-Version-1 normative understanding into governed current understanding.
@@ -1624,7 +1698,7 @@ Existing archive/stage/verify/activate/rollback ownership remains unchanged.
 ### 22. Host delivery, skills and Version-1 verification
 
 **Authority:** A4, A8, A9; F6, F8, F10, F12; L8, L12–L16; FD-38–FD-58,
-FD-92–FD-94 and functional acceptance `15.
+FD-92–FD-94 and functional acceptance §15.
 
 Generate all new selector/result branches from the canonical model/schema owner.
 The shell MCP adapter remains transport-only and may not classify Functional
@@ -1638,8 +1712,8 @@ it must not jump from a repository edit directly to candidate validation.
 Participation/health notices use the canonical status/health evaluator and
 affected projections, never an independent hook computation.
 
-Extend the `16 verification matrix and installed MCP/host lanes to cover every
-functional-design `15 case, specifically:
+Extend the §16 verification matrix and installed MCP/host lanes to cover every
+functional-design §15 case, specifically:
 
 - OUTSIDE_FUNCTIONAL_SCOPE and broad MIXED scope;
 - VALID/DEGRADED iff structural findings;
