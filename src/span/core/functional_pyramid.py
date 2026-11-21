@@ -245,9 +245,7 @@ def _decode_scope_selector(value: object) -> FunctionalScopeSelector:
         kind=kind,
         path=None if path is None else _require_non_empty("selector path", path),
         locator=(
-            None
-            if locator is None
-            else _require_non_empty("selector locator", locator)
+            None if locator is None else _require_non_empty("selector locator", locator)
         ),
     )
 
