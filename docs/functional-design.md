@@ -136,11 +136,16 @@ functional intersection and the semantic remainder outside that boundary.
 - a broad scope containing more than one outside/covered/uncovered portion →
   `MIXED`.
 
-An exact file/symbol scope is matched directly. A directory, declared-surface or
-repository-wide scope resolves every Functional Context whose declared coverage
-intersects the functional intersection, including contexts narrower than the
-semantic scope boundary. No context is made applicable merely because it lies in
-the same repository.
+The existing canonical semantic owner determines granularity:
+`SurfaceKey.kind=FILE|SYMBOL` makes that owner exact, while
+`SERVICE|DOMAIN` uses the selected `EvidenceScope` as declared broad boundary
+membership. The resolver therefore receives the existing `SurfaceKey` together
+with the fixed `EvidenceScope`; it never infers file-versus-directory meaning
+from a locator string. An exact file/symbol scope is matched directly. A
+declared broad surface or repository-wide scope resolves every Functional
+Context whose declared coverage intersects the functional intersection,
+including contexts narrower than the semantic scope boundary. No context is made
+applicable merely because it lies in the same repository.
 
 The one Layer-4 `FunctionalScope` selector grammar used by both Functional
 Contexts and member coverage must make membership, intersection, containment and
