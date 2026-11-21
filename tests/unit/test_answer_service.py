@@ -839,6 +839,52 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Answer)
         self.assertEqual(result.verification, ())
 
+    def test_declared_symbol_boundary_is_exact_functional_pyramid_scope(self) -> None:
+        seen: list[m.EvidenceScope] = []
+
+        def orientation(
+            repository_id: str,
+            surface: m.SurfaceKey,
+            semantic_scope: m.EvidenceScope,
+        ) -> m.FunctionalPyramidParticipation:
+            self.assertEqual(repository_id, "repo-1")
+            self.assertEqual(surface.kind, m.SurfaceKind.SERVICE)
+            seen.append(semantic_scope)
+            return m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.EXCLUDED
+            )
+
+        service_key = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.SERVICE, locator="symbol-svc"
+        )
+        self.store.put_surface(
+            m.Surface(
+                key=service_key,
+                boundary=m.SurfaceBoundary(symbols=("src/a.py::A",)),
+            )
+        )
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=orientation,
+        )
+
+        result = service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                surface=m.SurfaceReference(
+                    kind=m.SurfaceKind.SERVICE, locator="symbol-svc"
+                ),
+            )
+        )
+
+        self.assertIsInstance(result, m.Gap)
+        self.assertEqual(
+            seen,
+            [m.EvidenceScope(paths=("src/a.py::A",))],
+        )
+
     def test_service_wide_run_is_visible_on_service_and_files(self) -> None:
         service_key = m.SurfaceKey(
             repository_id="repo-1", kind=m.SurfaceKind.SERVICE, locator="svc"
@@ -1029,6 +1075,9 @@ class AnswerServiceTest(unittest.TestCase):
         gap = m.Gap(
             surface=status.surface,
             status=status,
+            functional_pyramid=m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.UNCONFIGURED
+            ),
             reason=m.GapReason.INVALIDATED,
             recovery="re-read the cited evidence, then record against the current revision",
             historical=(historical,),
@@ -1062,6 +1111,9 @@ class AnswerServiceTest(unittest.TestCase):
         gap = m.Gap(
             surface=surface,
             status=m.SurfaceStatus(surface=surface),
+            functional_pyramid=m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.UNCONFIGURED
+            ),
             reason=m.GapReason.INVALIDATED,
             recovery="base recovery",
             historical=(historical,),
