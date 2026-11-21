@@ -15,6 +15,11 @@ from span.core.model.outcomes import (
     UnderstandingRecorded,
     VerificationRecorded,
 )
+from span.core.model.functional_pyramid import (
+    FunctionalPyramidCandidate,
+    FunctionalPyramidStatus,
+    RetrievedFunctionalPyramidReceipt,
+)
 from span.core.model.investigation import (
     EvidenceAdmissionView,
     EvidenceDelivery,
@@ -331,7 +336,10 @@ AskResult = _typing.Union[
     AmbiguousSurface,
     RetrievedUnderstanding,
     RetrievedReceipt,
+    RetrievedFunctionalPyramidReceipt,
     EvidencePage,
+    FunctionalPyramidStatus,
+    FunctionalPyramidCandidate,
     Rejected,
     Unavailable,
 ]
