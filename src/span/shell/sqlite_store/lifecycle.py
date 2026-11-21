@@ -37,6 +37,11 @@ from span.core.recording import (
 )
 from span.core.rejection import RejectionCauseKind, SurfaceConflict
 from span.shell.sqlite_store import dependents as _dependents
+from span.shell.sqlite_store.contexts import (
+    add_context_discovery_row as _add_context_discovery_row,
+    add_context_evidence_row as _add_context_evidence_row,
+    insert_context_row as _insert_context_row,
+)
 from span.shell.sqlite_store.schema import DDL as _DDL, SCHEMA_VERSION
 from span.shell.sqlite_store.transactions import immediate_transaction as _transaction
 
@@ -762,10 +767,11 @@ class LifecycleStore:
     def add_context_evidence(self, context_id: str, observation_id: str) -> None:
         with _transaction(self._connection) as connection:
             repository_id = self._context_repository(connection, context_id)
-            connection.execute(
-                "INSERT OR IGNORE INTO context_evidence"
-                "(repository_id, context_id, observation_id) VALUES(?,?,?)",
-                (repository_id, context_id, observation_id),
+            _add_context_evidence_row(
+                connection,
+                repository_id=repository_id,
+                context_id=context_id,
+                observation_id=observation_id,
             )
 
     def add_context_discovery_evidence(
@@ -773,10 +779,11 @@ class LifecycleStore:
     ) -> None:
         with _transaction(self._connection) as connection:
             repository_id = self._context_repository(connection, context_id)
-            connection.execute(
-                "INSERT OR IGNORE INTO context_discovery_evidence"
-                "(repository_id, context_id, observation_id) VALUES(?,?,?)",
-                (repository_id, context_id, observation_id),
+            _add_context_discovery_row(
+                connection,
+                repository_id=repository_id,
+                context_id=context_id,
+                observation_id=observation_id,
             )
 
     def has_admitted_discovery(self, context_id: str, observation_id: str) -> bool:
@@ -854,19 +861,7 @@ class LifecycleStore:
         connection: _sqlite3.Connection,
         context: m.InvestigationContext,
     ) -> None:
-        connection.execute(
-            "INSERT INTO investigation_contexts"
-            "(context_id, repository_id, request_id, binding_digest,"
-            " canonical_json, expires_at) VALUES(?,?,?,?,?,?)",
-            (
-                context.context_id.value,
-                context.repository_id,
-                context.request_id.value,
-                context.binding_digest.value,
-                _json.dumps(m.to_canonical(context), sort_keys=True),
-                _timestamp(context.expires_at) if context.expires_at else None,
-            ),
-        )
+        _insert_context_row(connection, context)
 
     def get_context(self, context_id: str) -> m.InvestigationContext:
         return self._get_context_in(self._connection, context_id)
