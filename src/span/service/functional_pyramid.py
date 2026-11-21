@@ -251,6 +251,35 @@ class FunctionalPyramidService:
                 continue
             eligible.append(intent)
 
+        lifecycle_blockers = {
+            m.FunctionalPyramidValidationReason.UNREGISTERED_MEMBER,
+            m.FunctionalPyramidValidationReason.DUPLICATE_MEMBER,
+            m.FunctionalPyramidValidationReason.MEMBER_ALREADY_ACTIVE,
+            m.FunctionalPyramidValidationReason.UNKNOWN_PYRAMID,
+            m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION,
+        }
+        if any(item.reason in lifecycle_blockers for item in validation):
+            ordered_validation = tuple(
+                sorted(
+                    validation,
+                    key=lambda item: (
+                        item.reason.value,
+                        item.repository_id or "",
+                        item.declaration_locator or "",
+                        "" if item.pyramid_id is None else item.pyramid_id.value,
+                    ),
+                )
+            )
+            return m.FunctionalPyramidCandidate(
+                action=selector.action,
+                pyramid_id=target_id,
+                version=target_version,
+                members=(),
+                activation_ready=False,
+                validation_findings=ordered_validation,
+                graph_findings=(),
+            )
+
         members, declarations, available, source_validation, source_graph = (
             self.load_candidate_members(tuple(eligible))
         )
