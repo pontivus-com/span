@@ -272,8 +272,10 @@ registration is not the product.
 
 A participating repository declares Functional Pyramid contexts, canonical rule
 identities, rule layers and governing relationships. Span resolves every
-applicable context for a selected path, expands context inheritance and rule
-derivation, and returns the resulting route with provenance.
+applicable context for the selected semantic scope, including narrower contexts
+that intersect a broader directory, service, domain or repository-wide scope,
+expands context inheritance and rule derivation, and returns the resulting route
+with provenance.
 
 Matching is additive: a more specific context adds obligations and never
 silently replaces a broader applicable context. Missing repositories, unknown
@@ -295,6 +297,12 @@ makes an affected normative conclusion require reassessment even when its source
 bytes did not change.
 
 ## 4. Lifecycle responsibilities
+
+The agent's required actions and task-completion boundary are owned by
+[lifecycle contract §7](lifecycle-contract.md#required-agent-completion),
+derived from F3, F7, F10 and F11. The contract owns the procedure; these
+principles govern it.
+
 ## 5. Non-goals
 
 Non-goals are scope decisions, not invariants. They are stated once in
