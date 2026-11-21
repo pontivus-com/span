@@ -39,16 +39,18 @@ class SupportService:
         authority: LifecycleAuthorityResolver,
         clock=None,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
-        functional_route_resolver: _typing.Callable[
-            [m.FunctionalRouteSupport, m.SurfaceKey],
-            tuple[
-                m.FunctionalPyramidParticipation
-                | m.FunctionalPyramidView
-                | m.FunctionalPyramidUnavailable,
-                m.FunctionalRouteIdentity | None,
-            ],
-        ]
-        | None = None,
+        functional_route_resolver: (
+            _typing.Callable[
+                [m.FunctionalRouteSupport, m.SurfaceKey],
+                tuple[
+                    m.FunctionalPyramidParticipation
+                    | m.FunctionalPyramidView
+                    | m.FunctionalPyramidUnavailable,
+                    m.FunctionalRouteIdentity | None,
+                ],
+            ]
+            | None
+        ) = None,
     ) -> None:
         self._store = store
         self._evidence = evidence
