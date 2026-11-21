@@ -557,15 +557,21 @@ operational scope never replaces the semantic scope of an understanding.
 Admitted evidence references and observation IDs remain context-bound; supply
 the admitting context or express dependencies through direct evidence.
 
-**Request identity.** Every request carries the caller's request identity.
-Retained receipt resolution precedes context issuance, evidence admission, and
-command construction. Recording derives the submission identity from that
-identity and the content:
-the same identity with the same content is a replay; the same identity with
-different content is a conflict; a new identity with identical content is a new
-intentional act.
-Across a grammar upgrade, retained accepted receipts remain retrievable by their
-original repository/request identity for their promised retention period. A new
+**Request identity.** Every write and explicit source-admission request carries
+the caller's request identity. Retained receipt resolution precedes context
+issuance, evidence admission, and command construction. Ordinary semantic,
+verification, surface and challenge recording use the existing
+`repository_id + request_id` namespace. Functional Pyramid recording uses the
+distinct installation-level Functional Pyramid namespace because one write may
+atomically change several repositories and no member is an artificial owner.
+
+Within either namespace, the same request identity with the same canonical
+content is a replay; the same identity with different content is a conflict; a
+new identity with identical content is a new intentional act.
+Across a grammar upgrade, retained accepted ordinary receipts remain retrievable
+by their original repository/request identity and Functional Pyramid receipts by
+their original `FunctionalPyramidReceiptSelector{request_id}` for their promised
+retention period. A new
 grammar does not authorize translating a historical write into another write or
 blindly repeating it. Recover the accepted outcome first; old input acceptance
 and immutable history retrieval are different promises.
@@ -686,7 +692,7 @@ validation; every timestamp is timezone-aware. No unlisted field is inferred.
 | --- | --- |
 | `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `affected_revisions: tuple[ConclusionRevisionRef, ...]`, `dependent_effects: tuple[ConclusionRevisionRef, ...]`, `qualification: UnderstandingQualification \| SupportUnavailable`, `status: SurfaceStatus \| SurfaceStatusUnavailable` |
 | `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
-| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `state: UNCONFIGURED | EXCLUDED | ACTIVE`, `members: tuple[FunctionalPyramidMemberView, ...]`, `validation_findings: tuple[FunctionalPyramidValidationFinding, ...]`, `graph_findings: tuple[FunctionalPyramidFinding, ...]` |
+| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `state: EXCLUDED | ACTIVE`, `members: tuple[FunctionalPyramidMemberView, ...]`, `validation_findings: tuple[FunctionalPyramidValidationFinding, ...]`, `graph_findings: tuple[FunctionalPyramidFinding, ...]` |
 
 The receipt selector is the only enclosing request coordinate for its owning
 namespace. Ordinary semantic/verification receipts remain repository-scoped;
@@ -732,18 +738,26 @@ retrieval retains its full existing UnderstandingSupport and dependency carriers
 
 Unavailable post-commit qualification/status preserves the accepted effect.
 
-The receipt selector retrieves the full immutable acceptance, digest, context
-binding and replay details. For verification receipts,
+Repository-scoped `ReceiptRetrievalSelector` retrieves the existing full
+immutable ordinary acceptance, digest, context binding and replay details. For
+verification receipts,
 `RetrievedReceipt.verification_runs: tuple[VerificationRun, ...]` returns exactly
-the immutable runs named by receipt.accepted_verification_run_ids; it is empty
-for receipts with no accepted runs. Runs are read from their existing owner, not
-reconstructed from qualification. A missing referenced run is explicit unavailable
-history, never an empty successful detail response. This extends the existing
-receipt retrieval, not a new selector or store. The snapshot selector with the exact accepted
-understanding/version retrieves revisions/dependencies and their live
-qualification, with evaluation time. Neither historical retrieval becomes
-Answer content. Omission remains explicit and recoverable; compact output is not
-permission to drop audit state.
+the immutable runs named by the receipt; it is empty for ordinary receipts with
+no accepted runs. Runs are read from their existing owner, not reconstructed
+from qualification. A missing referenced run is explicit unavailable history,
+never an empty successful detail response.
+
+`FunctionalPyramidReceiptSelector` retrieves the immutable Functional Pyramid
+write acceptance from its installation-level namespace: request identity,
+canonical content digest, committed time, action, affected pyramid
+identity/version, resulting member intent and participation effects. It has no
+investigation-context binding and does not masquerade as an ordinary repository
+receipt.
+
+The snapshot selector with the exact accepted understanding/version retrieves
+revisions/dependencies and their live qualification, with evaluation time.
+Neither historical retrieval becomes Answer content. Omission remains explicit
+and recoverable; compact output is not permission to drop audit state.
 
 **How it helps.** It converts an investigation the agent already performed into
 retained understanding, in one call, through its retained conclusions.
