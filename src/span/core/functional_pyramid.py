@@ -34,7 +34,11 @@ from span.core.model.functional_pyramid import (
     FunctionalScopeSelectorKind,
 )
 from span.core.model.investigation import EvidenceRequest, SourceRange
-from span.core.model.primitives import AuthorityBinding, EvidenceScope
+from span.core.model.primitives import (
+    AuthorityBinding,
+    EvidenceScope,
+    _require_non_empty,
+)
 from span.core.model.surfaces import SurfaceKey, SurfaceKind
 
 _KIND_ORDER = (
@@ -216,19 +220,13 @@ def _require_json_array(value: object, name: str) -> list[object]:
     return value
 
 
-def _require_json_string(value: object, name: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{name} must be a non-empty string")
-    return value
-
-
 def _decode_scope_selector(value: object) -> FunctionalScopeSelector:
     raw = _require_json_object(
         value, frozenset({"kind"}), frozenset({"path", "locator"})
     )
     try:
         kind = FunctionalScopeSelectorKind(
-            _require_json_string(raw["kind"], "FunctionalScopeSelector.kind")
+            _require_non_empty("FunctionalScopeSelector.kind", raw["kind"])
         )
     except ValueError as exc:
         raise ValueError("unknown FunctionalScopeSelector.kind") from exc
@@ -245,11 +243,11 @@ def _decode_scope_selector(value: object) -> FunctionalScopeSelector:
     locator = raw.get("locator")
     return FunctionalScopeSelector(
         kind=kind,
-        path=None if path is None else _require_json_string(path, "selector path"),
+        path=None if path is None else _require_non_empty("selector path", path),
         locator=(
             None
             if locator is None
-            else _require_json_string(locator, "selector locator")
+            else _require_non_empty("selector locator", locator)
         ),
     )
 
@@ -266,10 +264,10 @@ def decode_functional_scope(value: object) -> FunctionalScope:
 def _decode_graph_ref(value: object) -> FunctionalGraphRef:
     raw = _require_json_object(value, frozenset({"repository_id", "identity"}))
     return FunctionalGraphRef(
-        repository_id=_require_json_string(
-            raw["repository_id"], "FunctionalGraphRef.repository_id"
+        repository_id=_require_non_empty(
+            "FunctionalGraphRef.repository_id", raw["repository_id"]
         ),
-        identity=_require_json_string(raw["identity"], "FunctionalGraphRef.identity"),
+        identity=_require_non_empty("FunctionalGraphRef.identity", raw["identity"]),
     )
 
 
@@ -286,7 +284,7 @@ def _decode_evidence_request(value: object) -> EvidenceRequest:
             raise ValueError("SourceRange.end_line must be an integer")
         ranges.append(SourceRange(start_line=start, end_line=end))
     return EvidenceRequest(
-        locator=_require_json_string(raw["locator"], "EvidenceRequest.locator"),
+        locator=_require_non_empty("EvidenceRequest.locator", raw["locator"]),
         ranges=tuple(ranges),
     )
 
@@ -304,7 +302,7 @@ def decode_functional_pyramid_bootstrap(text: str) -> FunctionalPyramidBootstrap
     )
     if raw["version"] != 1:
         raise ValueError("Functional Pyramid bootstrap version must be 1")
-    coverage_raw = _require_json_string(raw["coverage"], "bootstrap coverage")
+    coverage_raw = _require_non_empty("bootstrap coverage", raw["coverage"])
     try:
         coverage = FunctionalPyramidCoverage(coverage_raw)
     except ValueError as exc:
@@ -340,7 +338,7 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
         )
         contexts.append(
             FunctionalContextDeclaration(
-                context_id=_require_json_string(context["context_id"], "context_id"),
+                context_id=_require_non_empty("context_id", context["context_id"]),
                 coverage=decode_functional_scope(context["coverage"]),
                 inherits=tuple(
                     _decode_graph_ref(value)
@@ -366,7 +364,7 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
         )
         try:
             layer = FunctionalPyramidLayer(
-                _require_json_string(rule["layer"], "rule layer")
+                _require_non_empty("rule layer", rule["layer"])
             )
         except ValueError as exc:
             raise ValueError("unknown Functional Pyramid layer") from exc
@@ -382,14 +380,14 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
                 governing.append(_decode_graph_ref(value))
         rules.append(
             FunctionalRuleDeclaration(
-                rule_id=_require_json_string(rule["rule_id"], "rule_id"),
+                rule_id=_require_non_empty("rule_id", rule["rule_id"]),
                 layer=layer,
                 owner=FunctionalRuleOwner(
-                    repository_id=_require_json_string(
-                        owner["repository_id"], "rule owner repository_id"
+                    repository_id=_require_non_empty(
+                        "rule owner repository_id", owner["repository_id"]
                     ),
-                    authority_ref=_require_json_string(
-                        owner["authority_ref"], "rule owner authority_ref"
+                    authority_ref=_require_non_empty(
+                        "rule owner authority_ref", owner["authority_ref"]
                     ),
                 ),
                 governing_rule_ids=tuple(governing),
