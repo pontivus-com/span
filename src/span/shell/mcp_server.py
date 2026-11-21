@@ -23,7 +23,10 @@ from span.shell.context import (
     open_repository_context as _open_context,
     provision_repository as _provision,
 )
-from span.shell.functional_pyramid import compose_functional_pyramid_service
+from span.shell.functional_pyramid import (
+    FunctionalPyramidRepositoryRuntime,
+    compose_functional_pyramid_service,
+)
 from span.shell.sqlite_store.functional_pyramid import (
     FunctionalPyramidInstallationStore,
     functional_pyramid_installation_path,
@@ -102,9 +105,13 @@ def _open_functional_pyramid_runtime(
         path,
         retention=DEFAULT_LIFECYCLE_RETENTION,
     )
+
+    def repository_runtime(repository_id: str) -> FunctionalPyramidRepositoryRuntime:
+        return adapter.repository_context(repository_id)
+
     adapter.functional_pyramid = compose_functional_pyramid_service(
         state=state,
-        repository_runtime=adapter.repository_context,
+        repository_runtime=repository_runtime,
         registered_repository_ids=adapter.registered_repository_ids,
         repository_paths=lambda repository_ids: tuple(
             (repository_id, str(config.data_dir / f"{repository_id}.db"))
