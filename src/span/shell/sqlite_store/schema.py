@@ -215,7 +215,8 @@ DDL = (
         replay_expires_at TEXT,
         PRIMARY KEY(repository_id, request_id)
     )
-    """,    """
+    """,
+    """
     CREATE TABLE IF NOT EXISTS functional_pyramid_versions(
         pyramid_id TEXT NOT NULL,
         version INTEGER NOT NULL,
@@ -285,5 +286,4 @@ DDL = (
         route_identity, pyramid_id, repository_id
     )
     """,
-
 )
