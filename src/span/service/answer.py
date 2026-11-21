@@ -271,7 +271,15 @@ class AnswerService:
         declared = self._store.find_surface(surface)
         if declared is None:
             raise RecordingValidationError("selected declared surface does not exist")
-        return m.EvidenceScope(paths=declared.boundary.paths)
+        semantic_members = (
+            *declared.boundary.paths,
+            *declared.boundary.symbols,
+        )
+        if not semantic_members:
+            raise RecordingValidationError(
+                "selected declared surface has an empty semantic boundary"
+            )
+        return m.EvidenceScope(paths=semantic_members)
 
     def _matched_semantic_scope(
         self, understandings: tuple[m.Understanding, ...]
