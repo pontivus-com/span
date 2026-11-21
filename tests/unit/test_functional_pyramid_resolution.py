@@ -319,7 +319,9 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
         )
         self.assertEqual(recovered, m.FunctionalPyramidHealth.VALID)
         self.assertEqual(recovered_findings, ())
-        self.assertEqual(tuple(member.repository_id for member in members), ("repo-a", "repo-b"))
+        self.assertEqual(
+            tuple(member.repository_id for member in members), ("repo-a", "repo-b")
+        )
 
     def test_one_context_can_cover_disconnected_paths(self):
         member = _member(
