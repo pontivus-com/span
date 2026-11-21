@@ -191,6 +191,18 @@ class FunctionalScope:
 
 
 @_dataclass(frozen=True)
+class FunctionalGraphRef:
+    """Repository-qualified context/rule identity used by declaration edges."""
+
+    repository_id: str
+    identity: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("FunctionalGraphRef.repository_id", self.repository_id)
+        _require_non_empty("FunctionalGraphRef.identity", self.identity)
+
+
+@_dataclass(frozen=True)
 class FunctionalRuleOwner:
     repository_id: str
     authority_ref: str
@@ -204,15 +216,11 @@ class FunctionalRuleOwner:
 class FunctionalContextDeclaration:
     context_id: str
     coverage: FunctionalScope
-    inherits: tuple[str, ...] = ()
-    rules: tuple[str, ...] = ()
+    inherits: tuple[FunctionalGraphRef, ...] = ()
+    rules: tuple[FunctionalGraphRef, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty("FunctionalContextDeclaration.context_id", self.context_id)
-        for context_id in self.inherits:
-            _require_non_empty("FunctionalContextDeclaration.inherits", context_id)
-        for rule_id in self.rules:
-            _require_non_empty("FunctionalContextDeclaration.rules", rule_id)
         if len(set(self.inherits)) != len(self.inherits):
             raise ValueError(
                 "FunctionalContextDeclaration.inherits contains duplicates"
@@ -226,12 +234,15 @@ class FunctionalRuleDeclaration:
     rule_id: str
     layer: FunctionalPyramidLayer
     owner: FunctionalRuleOwner
-    governing_rule_ids: tuple[str, ...] = ()
+    governing_rule_ids: tuple[FunctionalGraphRef | str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty("FunctionalRuleDeclaration.rule_id", self.rule_id)
-        for rule_id in self.governing_rule_ids:
-            _require_non_empty("FunctionalRuleDeclaration.governing_rule_ids", rule_id)
+        for rule_ref in self.governing_rule_ids:
+            if isinstance(rule_ref, str) and rule_ref != "ROOT":
+                raise ValueError(
+                    "FunctionalRuleDeclaration string parent must be ROOT"
+                )
         if len(set(self.governing_rule_ids)) != len(self.governing_rule_ids):
             raise ValueError(
                 "FunctionalRuleDeclaration.governing_rule_ids contains duplicates"
