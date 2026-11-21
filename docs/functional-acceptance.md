@@ -36,7 +36,7 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-26 | Runtime lifecycle preservation | `test_three_tool_journey_and_restart`; `test_reconsider_record_succeeds_without_an_intervening_ask`; `test_challenge_raised_by_reconsider_is_settled_by_record` |
 | FA-27 | Governance-source edit lifecycle | `test_authority_source_change_is_considered_not_forced_stale`; `test_governance_only_change_crosses_repository_boundary`; `test_normative_confirm_reestablishes_changed_server_route_support` |
 | FA-28 | Participation-aware hooks | `test_functional_pyramid_unconfigured_notice_routes_to_skill`; `test_functional_pyramid_excluded_notice_is_silent`; `test_functional_pyramid_active_valid_notice_is_silent`; `test_functional_pyramid_active_degraded_notice_routes_to_lifecycle`; `test_hook_source_has_no_semantic_writer_or_builder` |
-| FA-29 | Initialization handoff | `test_activation_handoff_status_matches_committed_result`; `test_installed_lifecycle_over_stdio` |
+| FA-29 | Initialization handoff | `test_activation_handoff_status_matches_committed_result`; `test_record_revise_only_reports_actual_participation_changes`; `test_installed_lifecycle_over_stdio` |
 | FA-30 | One active instance per repository | `test_candidate_reports_duplicate_unregistered_and_other_active_members`; `test_concurrent_overlapping_activation_serializes_to_one_active_instance` |
 | FA-31 | Three-tool host surface | `test_only_the_three_core_tools_are_registered`; `test_installed_lifecycle_over_stdio` |
 | FA-32 | Outside FunctionalScope | `test_wholly_outside_scope_is_resolved_empty_governance`; `test_outside_functional_scope_records_resolved_empty_route_only` |
@@ -44,7 +44,7 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-34 | Health iff structural findings | `test_status_keeps_participation_and_health_distinct`; `test_partial_uncovered_path_is_route_unresolved_but_health_valid`; `test_degraded_health_recovers_without_participation_change`; `test_authority_currency_does_not_change_route_identity_or_health` |
 | FA-35 | Activation of pre-existing normative understanding | `test_newly_active_repository_reassesses_pre_route_normative_revision`; `test_pyramid_effect_coordinator_uses_shared_dependency_engine` |
 | FA-36 | Functional Pyramid write propagation | `test_pyramid_effect_coordinator_uses_shared_dependency_engine`; `test_record_replay_live_projects_only_retained_effect_refs`; `test_governance_only_change_crosses_repository_boundary` |
-| FA-37 | Deactivation/removal route state | `test_deliberately_inactive_repository_reassesses_recorded_route`; `test_record_deactivate_moves_all_members_to_excluded` |
+| FA-37 | Deactivation/removal route state | `test_deliberately_inactive_repository_reassesses_recorded_route`; `test_functional_route_support_distinguishes_route_states`; `test_record_deactivate_moves_all_members_to_excluded` |
 | FA-38 | Operational route failure while ACTIVE | `test_functional_route_support_distinguishes_route_states`; `test_repository_unavailability_is_graph_state_not_unknown_identity` |
 | FA-39 | Pyramid-write replay projection | `test_record_replay_live_projects_only_retained_effect_refs` |
 | FA-40 | Pyramid concurrency | `test_concurrent_overlapping_activation_serializes_to_one_active_instance`; `test_concurrent_revise_and_deactivate_obey_version_cas`; `test_record_revise_enforces_version_cas`; `test_record_deactivate_enforces_version_cas` |
