@@ -16,7 +16,8 @@ ROUTER = REPO_ROOT / "skills" / "span-router" / "SKILL.md"
 BEFORE = REPO_ROOT / "skills" / "span-before-you-read" / "SKILL.md"
 AFTER = REPO_ROOT / "skills" / "span-after-change" / "SKILL.md"
 RECORD = REPO_ROOT / "skills" / "span-record" / "SKILL.md"
-SKILLS = (ROUTER, BEFORE, AFTER, RECORD)
+FUNCTIONAL_PYRAMID = REPO_ROOT / "skills" / "span-functional-pyramid" / "SKILL.md"
+SKILLS = (ROUTER, BEFORE, AFTER, RECORD, FUNCTIONAL_PYRAMID)
 
 CANONICAL_OPS = {"ask", "record", "reconsider"}
 
@@ -134,11 +135,33 @@ class SpecializedSkillTest(unittest.TestCase):
         self.assertIn("continuation", text)
         self.assertIn("`ask`", text)
 
-    def test_record_skill_covers_all_three_kinds(self):
+    def test_record_skill_covers_all_record_kinds(self):
         text = _text(RECORD)
         self.assertIn('kind="understanding"', text)
         self.assertIn('kind="verification"', text)
         self.assertIn('kind="surface"', text)
+        self.assertIn('kind="functional_pyramid"', text)
+
+    def test_functional_pyramid_skill_covers_result_driven_lifecycle(self):
+        text = _text(FUNCTIONAL_PYRAMID)
+        for required in (
+            "FunctionalPyramidSelector",
+            "FunctionalPyramidCandidateSelector",
+            "UNCONFIGURED",
+            "EXCLUDED",
+            "ACTIVE",
+            "VALID",
+            "DEGRADED",
+            "REASSESSMENT_REQUIRED",
+            "UNVERIFIABLE",
+            "CURRENT",
+            '"kind": "functional_pyramid"',
+            '"action": "activate"',
+            '"action": "exclude"',
+        ):
+            self.assertIn(required, text, required)
+        self.assertIn("Acceptance is not completion", text)
+        self.assertIn("Do not call\n`reconsider` again", text)
 
 
 class SkillLifecycleConsistencyTest(unittest.TestCase):
