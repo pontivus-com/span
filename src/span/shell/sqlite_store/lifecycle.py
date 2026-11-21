@@ -1764,5 +1764,8 @@ def _support_rows(
                 ("AUTHORITY", dependency.authority.evidence_ref.evidence_id.value)
             )
             continue
+        if isinstance(dependency, m.FunctionalRouteSupport):
+            rows.append(("FUNCTIONAL_ROUTE", dependency.route_identity.value))
+            continue
         raise TypeError(f"unhandled support dependency: {type(dependency).__name__}")
     return tuple(rows)
