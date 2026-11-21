@@ -22,6 +22,7 @@ from span.core.identity import conclusion_identity, payload_digest
 from span.core.schema import constraints as _constraints
 from span.core.model.canonical import to_canonical
 from span.core.model import commands as _c
+from span.core.model import functional_pyramid as _fp
 from span.core.model import primitives as _p
 from span.core.model import support as _s
 from span.core.model import surfaces as _surfaces
@@ -471,7 +472,199 @@ class RecordRequestWire:
             ),
             minimum=1,
             maximum=1,
-            label="record repository/context binding",
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),),
+            label="understanding record repository/context binding",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("repository_id"),
+                _constraints.PresenceField("context"),
+            ),
+            minimum=1,
+            maximum=1,
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.VERIFICATION),),
+            label="verification record repository/context binding",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("repository_id"),
+                _constraints.PresenceField("context"),
+            ),
+            minimum=1,
+            maximum=1,
+            when=(_constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),),
+            label="surface record repository/context binding",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("action"),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+            ),
+            label="Functional Pyramid record action",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("members", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.ACTIVATE
+                ),
+            ),
+            label="Functional Pyramid activate members",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("pyramid_id"),
+                _constraints.PresenceField("expected_version"),
+                _constraints.PresenceField("repository_id"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.ACTIVATE
+                ),
+            ),
+            label="Functional Pyramid activate unrelated coordinates",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("members", non_empty=True),
+                _constraints.PresenceField("pyramid_id", non_empty=True),
+                _constraints.PresenceField("expected_version"),
+            ),
+            minimum=3,
+            maximum=3,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.REVISE
+                ),
+            ),
+            label="Functional Pyramid revise coordinates",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id"),),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.REVISE
+                ),
+            ),
+            label="Functional Pyramid revise repository coordinate",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("pyramid_id", non_empty=True),
+                _constraints.PresenceField("expected_version"),
+            ),
+            minimum=2,
+            maximum=2,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.DEACTIVATE
+                ),
+            ),
+            label="Functional Pyramid deactivate coordinates",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("members", non_empty=True),
+                _constraints.PresenceField("repository_id"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.DEACTIVATE
+                ),
+            ),
+            label="Functional Pyramid deactivate unrelated coordinates",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.EXCLUDE
+                ),
+            ),
+            label="Functional Pyramid exclude repository",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("members", non_empty=True),
+                _constraints.PresenceField("pyramid_id"),
+                _constraints.PresenceField("expected_version"),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+                _constraints.EqualsCondition(
+                    "action", _fp.FunctionalPyramidAction.EXCLUDE
+                ),
+            ),
+            label="Functional Pyramid exclude unrelated coordinates",
+        ),
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("context"),
+                _constraints.PresenceField("surface"),
+                _constraints.PresenceField("question"),
+                _constraints.PresenceField("scope_paths", non_empty=True),
+                _constraints.PresenceField("conclusion"),
+                _constraints.PresenceField("locator"),
+                _constraints.PresenceField("observation_id"),
+                _constraints.PresenceField("assertion_nature"),
+                _constraints.PresenceField("support", non_empty=True),
+                _constraints.PresenceField("understanding_id"),
+                _constraints.PresenceField("actions"),
+                _constraints.PresenceField("run"),
+                _constraints.PresenceField("expected_boundary_version"),
+                _constraints.PresenceField("gaps"),
+                _constraints.PresenceField(
+                    "challenge_dispositions", non_empty=True
+                ),
+                _constraints.PresenceField("provenance", non_empty=True),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.EqualsCondition(
+                    "kind", _c.RecordKind.FUNCTIONAL_PYRAMID
+                ),
+            ),
+            label="Functional Pyramid record unrelated fields",
         ),
         _constraints.PresenceRule(
             fields=(
@@ -794,6 +987,8 @@ class RecordRequestWire:
     support: tuple[SupportWire, ...] = ()
     understanding_id: str | None = None
     expected_version: int | None = None
+    pyramid_id: str | None = None
+    members: tuple[_fp.FunctionalPyramidMemberIntent, ...] = ()
     actions: RecordActionsWire | None = _field(
         default=None,
         metadata={
@@ -803,11 +998,12 @@ class RecordRequestWire:
         },
     )
     run: VerificationRunWire | None = None
-    action: _c.SurfaceAction | None = _field(
+    action: _c.SurfaceAction | _fp.FunctionalPyramidAction | None = _field(
         default=None,
         metadata={
-            "description": "Only for kind=surface declarations. Omit action for "
-            "every kind=understanding create or update; updates use actions."
+            "description": "For kind=surface use create/update. For "
+            "kind=functional_pyramid use activate/revise/deactivate/exclude. "
+            "Omit action for understanding and verification."
         },
     )
     expected_boundary_version: int | None = None
@@ -817,6 +1013,10 @@ class RecordRequestWire:
 
     @property
     def bound_repository_id(self) -> str:
+        if self.kind is _c.RecordKind.FUNCTIONAL_PYRAMID:
+            raise ValueError(
+                "Functional Pyramid recording is installation-scoped"
+            )
         if self.context is not None:
             return self.context.repository_id
         if self.repository_id is None:
@@ -1275,7 +1475,11 @@ def record_command(
     derived_conclusions: tuple[_c.ProposedConclusion, ...] | None = None,
     current_revisions: tuple[_ConclusionRevision, ...] = (),
 ) -> _c.RecordCommand:
-    """Decode one public record request into its canonical command."""
+    """Decode one public repository-scoped record request into its command."""
+    if value.kind is _c.RecordKind.FUNCTIONAL_PYRAMID:
+        raise ValueError(
+            "Functional Pyramid recording is installation-scoped and has no RecordCommand"
+        )
     if value.kind is _c.RecordKind.UNDERSTANDING:
         identity = _identity(value.identity)
         if value.conclusion is not None:
