@@ -2584,6 +2584,346 @@ class LifecycleServiceTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "contract defect"):
                 self.service.record(wire)
 
+    def _governed_lifecycle(
+        self,
+        route_for_scope,
+    ) -> LifecycleService:
+        def lifecycle_route(repository_id, surface, scope):
+            self.assertEqual(repository_id, "repo-1")
+            self.assertEqual(surface.repository_id, "repo-1")
+            return route_for_scope(scope)
+
+        def support_route(dependency, surface):
+            self.assertEqual(surface.repository_id, "repo-1")
+            current = route_for_scope(dependency.semantic_scope)
+            if isinstance(current, tuple):
+                return current
+            return current, None
+
+        support = SupportService(
+            store=self.store,
+            evidence=_CurrentEvidence(),
+            authority=self.authority,
+            clock=lambda: self.clock[0],
+            functional_route_resolver=support_route,
+        )
+        return LifecycleService(
+            store=self.store,
+            authority=self.authority,
+            support=support,
+            evidence=self.evidence_service,
+            clock=lambda: self.clock[0],
+            new_context_id=lambda: f"ctx-{next(self._context_ids)}",
+            functional_pyramid_route=lifecycle_route,
+        )
+
+    def _resolved_route(
+        self,
+        scope: m.EvidenceScope,
+        *,
+        route_id: str = "route-1",
+        relation: m.FunctionalScopeRelation = m.FunctionalScopeRelation.COVERED,
+        rules: tuple[m.FunctionalRuleRoute, ...] = (),
+    ):
+        return (
+            m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("fp-1"),
+                version=m.FunctionalPyramidVersion(1),
+                health=m.FunctionalPyramidHealth.VALID,
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                scope_relation=relation,
+                status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                semantic_scope=scope,
+                rules=rules,
+            ),
+            m.FunctionalRouteIdentity(route_id),
+        )
+
+    def _latest_supported_content(
+        self, understanding_id: str = "u:sub-create"
+    ) -> m.SupportedConclusion:
+        version = self.store.get_understanding(understanding_id).current_version.value
+        ref = self.store.get_version(understanding_id, version).conclusions[-1]
+        revision = next(
+            item
+            for item in self.store.get_conclusions(understanding_id)
+            if item.conclusion_id == ref.conclusion_id and item.revision == ref.revision
+        )
+        self.assertIsInstance(revision.content, m.SupportedConclusion)
+        return revision.content
+
+    def test_normative_create_derives_route_and_all_applicable_authorities(self):
+        rule = m.FunctionalRuleRoute(
+            rule_id="rule-1",
+            layer=m.FunctionalPyramidLayer.P1,
+            authority=self.authority.bindings["auth-1"],
+            governing_rule_ids=("ROOT",),
+        )
+        service = self._governed_lifecycle(
+            lambda scope: self._resolved_route(scope, rules=(rule,))
+        )
+        result = service.record(
+            _create_wire(
+                conclusion=_conclusion(assertion_nature=m.AssertionNature.NORMATIVE)
+            )
+        )
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        self.assertEqual(result.qualification.state, m.SupportState.CURRENT)
+        content = self._latest_supported_content()
+        self.assertEqual(content.assertion_nature, m.AssertionNature.NORMATIVE)
+        self.assertEqual(
+            sum(isinstance(item, m.FunctionalRouteSupport) for item in content.support),
+            1,
+        )
+        self.assertEqual(
+            tuple(
+                item.authority
+                for item in content.support
+                if isinstance(item, m.AuthoritySupportDependency)
+            ),
+            (self.authority.bindings["auth-1"],),
+        )
+
+    def test_descriptive_and_inactive_recording_do_not_gain_route_support(self):
+        active = self._governed_lifecycle(lambda scope: self._resolved_route(scope))
+        result = active.record(_create_wire("sub-descriptive"))
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        content = self._latest_supported_content("u:sub-descriptive")
+        self.assertFalse(
+            any(isinstance(item, m.FunctionalRouteSupport) for item in content.support)
+        )
+
+        inactive = self._governed_lifecycle(
+            lambda _scope: m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.UNCONFIGURED
+            )
+        )
+        result = inactive.record(
+            _create_wire(
+                "sub-inactive",
+                conclusion=_conclusion(assertion_nature=m.AssertionNature.NORMATIVE),
+            )
+        )
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        content = self._latest_supported_content("u:sub-inactive")
+        self.assertFalse(
+            any(isinstance(item, m.FunctionalRouteSupport) for item in content.support)
+        )
+
+    def test_outside_functional_scope_records_resolved_empty_route_only(self):
+        service = self._governed_lifecycle(
+            lambda scope: self._resolved_route(
+                scope,
+                route_id="route-empty",
+                relation=m.FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE,
+            )
+        )
+        result = service.record(
+            _create_wire(
+                "sub-outside",
+                conclusion=_conclusion(assertion_nature=m.AssertionNature.NORMATIVE),
+            )
+        )
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        self.assertEqual(result.qualification.state, m.SupportState.CURRENT)
+        content = self._latest_supported_content("u:sub-outside")
+        self.assertEqual(
+            tuple(
+                item.route_identity.value
+                for item in content.support
+                if isinstance(item, m.FunctionalRouteSupport)
+            ),
+            ("route-empty",),
+        )
+        self.assertFalse(
+            any(
+                isinstance(item, m.AuthoritySupportDependency)
+                for item in content.support
+            )
+        )
+
+    def test_unresolved_governance_is_retained_but_qualified_unverifiable(self):
+        finding = m.FunctionalPyramidFinding(
+            reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
+            repository_id="repo-1",
+            detail="functional scope is uncovered",
+            recovery="declare applicable Functional Context coverage",
+        )
+
+        def unresolved(scope):
+            return (
+                m.FunctionalPyramidView(
+                    pyramid_id=m.FunctionalPyramidId("fp-1"),
+                    version=m.FunctionalPyramidVersion(1),
+                    health=m.FunctionalPyramidHealth.VALID,
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                    scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+                    status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                    semantic_scope=scope,
+                    unresolved=(finding,),
+                ),
+                m.FunctionalRouteIdentity("route-unresolved"),
+            )
+
+        service = self._governed_lifecycle(unresolved)
+        result = service.record(
+            _create_wire(
+                "sub-unresolved",
+                conclusion=_conclusion(assertion_nature=m.AssertionNature.NORMATIVE),
+            )
+        )
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        self.assertEqual(result.qualification.state, m.SupportState.UNVERIFIABLE)
+        self.assertEqual(len(self.store.list_understandings("repo-1")), 1)
+        content = self._latest_supported_content("u:sub-unresolved")
+        self.assertTrue(
+            any(isinstance(item, m.FunctionalRouteSupport) for item in content.support)
+        )
+
+    def test_operational_governance_unavailability_does_not_commit(self):
+        service = self._governed_lifecycle(
+            lambda _scope: m.FunctionalPyramidUnavailable(
+                failure="governance source unavailable",
+                recovery="restore the declared source",
+            )
+        )
+        result = service.record(
+            _create_wire(
+                "sub-unavailable",
+                conclusion=_conclusion(assertion_nature=m.AssertionNature.NORMATIVE),
+            )
+        )
+        self.assertIsInstance(result, m.Unavailable)
+        self.assertEqual(result.operation, "record")
+        self.assertEqual(self.store.list_understandings("repo-1"), ())
+
+    def test_normative_add_correct_and_replace_rederive_governance(self):
+        service = self._governed_lifecycle(lambda scope: self._resolved_route(scope))
+        created = service.record(_create_wire())
+        self.assertIsInstance(created, m.UnderstandingRecorded)
+
+        added = service.record(
+            w.RecordRequestWire(
+                request_id="sub-add-governed",
+                context=_context_ref(),
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id=created.understanding_id.value,
+                expected_version=1,
+                actions=w.RecordActionsWire(
+                    add=(
+                        w.AddConclusionWire(
+                            conclusion="Normative addition",
+                            assertion_nature=m.AssertionNature.NORMATIVE,
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+            )
+        )
+        self.assertIsInstance(added, m.UnderstandingRecorded)
+        added_id = self._version_conclusion_id(created.understanding_id.value, 2, 1)
+
+        corrected = service.record(
+            w.RecordRequestWire(
+                request_id="sub-correct-governed",
+                context=_context_ref(),
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id=created.understanding_id.value,
+                expected_version=2,
+                actions=w.RecordActionsWire(
+                    correct=(
+                        w.CorrectConclusionWire(
+                            conclusion_id=added_id,
+                            conclusion="Corrected normative addition",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+            )
+        )
+        self.assertIsInstance(corrected, m.UnderstandingRecorded)
+
+        replaced = service.record(
+            w.RecordRequestWire(
+                request_id="sub-replace-governed",
+                context=_context_ref(),
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id=created.understanding_id.value,
+                expected_version=3,
+                actions=w.RecordActionsWire(
+                    replace=(
+                        w.ReplaceActionWire(
+                            conclusion_id=added_id,
+                            conclusion="Replacement normative addition",
+                            reason="governed correction",
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+            )
+        )
+        self.assertIsInstance(replaced, m.UnderstandingRecorded)
+        version = self.store.get_version(created.understanding_id.value, 4)
+        replacement_ref = version.conclusions[-1]
+        revision = next(
+            item
+            for item in self.store.get_conclusions(created.understanding_id.value)
+            if item.conclusion_id == replacement_ref.conclusion_id
+            and item.revision == replacement_ref.revision
+        )
+        self.assertIsInstance(revision.content, m.SupportedConclusion)
+        self.assertEqual(revision.content.assertion_nature, m.AssertionNature.NORMATIVE)
+        self.assertTrue(
+            any(
+                isinstance(item, m.FunctionalRouteSupport)
+                for item in revision.content.support
+            )
+        )
+
+    def test_normative_confirm_reestablishes_changed_server_route_support(self):
+        route_id = ["route-1"]
+        service = self._governed_lifecycle(
+            lambda scope: self._resolved_route(scope, route_id=route_id[0])
+        )
+        created = service.record(
+            _create_wire(
+                conclusion=_conclusion(assertion_nature=m.AssertionNature.NORMATIVE)
+            )
+        )
+        self.assertIsInstance(created, m.UnderstandingRecorded)
+        conclusion_id = self._version_conclusion_id(created.understanding_id.value, 1)
+
+        route_id[0] = "route-2"
+        confirmed = service.record(
+            w.RecordRequestWire(
+                request_id="sub-confirm-governed",
+                context=_context_ref(),
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id=created.understanding_id.value,
+                expected_version=1,
+                actions=w.RecordActionsWire(
+                    confirm=(
+                        w.ConfirmConclusionWire(
+                            conclusion_id=conclusion_id,
+                            locator="src/a.py",
+                        ),
+                    )
+                ),
+            )
+        )
+        self.assertIsInstance(confirmed, m.UnderstandingRecorded)
+        self.assertEqual(confirmed.version.value, 2)
+        self.assertEqual(confirmed.qualification.state, m.SupportState.CURRENT)
+        content = self._latest_supported_content(created.understanding_id.value)
+        self.assertEqual(
+            tuple(
+                item.route_identity.value
+                for item in content.support
+                if isinstance(item, m.FunctionalRouteSupport)
+            ),
+            ("route-2",),
+        )
+
     def test_postcommit_owner_read_failure_preserves_receipt_without_owner(self):
         result = self.service.record(self._scope_create(locator="src/a.py"))
         for error in (
