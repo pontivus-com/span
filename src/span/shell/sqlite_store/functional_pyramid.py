@@ -79,9 +79,7 @@ class FunctionalPyramidInstallationStoreError(ValueError):
     """The installation-scoped Functional Pyramid store cannot satisfy a request."""
 
 
-class FunctionalPyramidInstallationSchemaError(
-    FunctionalPyramidInstallationStoreError
-):
+class FunctionalPyramidInstallationSchemaError(FunctionalPyramidInstallationStoreError):
     """The installation store is absent or has an unsupported schema."""
 
 
