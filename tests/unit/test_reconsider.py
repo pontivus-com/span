@@ -11,6 +11,7 @@ from unittest import mock
 from span.core import model as m
 from span.core.recording import RecordingValidationError
 from span.core import support_rules
+from span.service.effects import DependencyEffectService
 from span.service.reconsider import ReconsiderService
 from span.service.support import SupportService
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
