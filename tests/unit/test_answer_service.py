@@ -24,6 +24,8 @@ RETENTION = m.LifecycleRetention(
     replay_retention=datetime.timedelta(hours=4),
 )
 CONTEXT_ID = m.InvestigationContextId("ctx-1")
+PAGED_SOURCE = "line\n" * 400
+PAGED_RESPONSE_BUDGET = len(PAGED_SOURCE.encode("utf-8")) - 1
 
 
 def _basis() -> m.SemanticBasis:
@@ -1190,7 +1192,7 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertIsInstance(resolved, m.Answer)
 
     def test_gap_continuation_returns_an_evidence_page(self) -> None:
-        (self.root / "src/big.py").write_text("line\n" * 400, encoding="utf-8")
+        (self.root / "src/big.py").write_text(PAGED_SOURCE, encoding="utf-8")
         import dataclasses
 
         bounds = dataclasses.replace(
@@ -1201,7 +1203,7 @@ class AnswerServiceTest(unittest.TestCase):
             default_query_bounds=bounds,
             maximum_query_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
             hook_fast_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
-            max_response_bytes=1500,
+            max_response_bytes=PAGED_RESPONSE_BUDGET,
         )
         service = AnswerService(
             store=self.store,
@@ -1304,13 +1306,13 @@ class AnswerServiceTest(unittest.TestCase):
                 default_query_bounds=bounds,
                 maximum_query_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
                 hook_fast_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
-                max_response_bytes=1500,
+                max_response_bytes=PAGED_RESPONSE_BUDGET,
             ),
             clock=clock,
         )
 
     def _cold_page(self, service):
-        (self.root / "src/big.py").write_text("line\n" * 400, encoding="utf-8")
+        (self.root / "src/big.py").write_text(PAGED_SOURCE, encoding="utf-8")
         first = service.ask(
             m.AskRequest(
                 repository_id="repo-1",
@@ -1446,7 +1448,8 @@ class AnswerServiceTest(unittest.TestCase):
     def test_one_line_too_large_is_refused(self) -> None:
         import dataclasses
 
-        (self.root / "src/huge.py").write_text("x" * 5000 + "\n", encoding="utf-8")
+        huge_line = "x" * 5000 + "\n"
+        (self.root / "src/huge.py").write_text(huge_line, encoding="utf-8")
         bounds = dataclasses.replace(
             DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
             max_evidence_bytes=100_000,
@@ -1459,7 +1462,7 @@ class AnswerServiceTest(unittest.TestCase):
                 default_query_bounds=bounds,
                 maximum_query_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
                 hook_fast_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
-                max_response_bytes=1500,
+                max_response_bytes=len(huge_line.encode("utf-8")) - 1,
             ),
         )
         first = service.ask(
