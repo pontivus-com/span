@@ -7,12 +7,20 @@ files. Runtime open never creates or migrates this database.
 
 from __future__ import annotations
 
+import contextlib as _contextlib
 import datetime as _datetime
+import json as _json
 import pathlib as _pathlib
 import sqlite3 as _sqlite3
 import typing as _typing
 
 from span.core import model as m
+from span.shell.sqlite_store.contexts import (
+    add_context_discovery_row,
+    add_context_evidence_row,
+    insert_context_row,
+)
+from span.shell.sqlite_store.schema import SCHEMA_VERSION as REPOSITORY_SCHEMA_VERSION
 from span.shell.sqlite_store.transactions import immediate_transaction
 
 INSTALLATION_SCHEMA_VERSION = 1
@@ -81,6 +89,347 @@ class FunctionalPyramidInstallationStoreError(ValueError):
 
 class FunctionalPyramidInstallationSchemaError(FunctionalPyramidInstallationStoreError):
     """The installation store is absent or has an unsupported schema."""
+
+
+
+def _canonical_json(value: object) -> str:
+    return _json.dumps(m.to_canonical(value), sort_keys=True, separators=(",", ":"))
+
+
+def _member_json(member: m.FunctionalPyramidMemberView) -> str:
+    return _canonical_json(member)
+
+
+def _members_json(members: tuple[m.FunctionalPyramidMemberView, ...]) -> str:
+    return _json.dumps(
+        [m.to_canonical(member) for member in members],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _decode_member(payload: str) -> m.FunctionalPyramidMemberView:
+    return m.from_canonical(m.FunctionalPyramidMemberView, _json.loads(payload))
+
+
+def _decode_members(payload: str) -> tuple[m.FunctionalPyramidMemberView, ...]:
+    raw = _json.loads(payload)
+    if not isinstance(raw, list):
+        raise FunctionalPyramidInstallationStoreError("stored pyramid members are invalid")
+    return tuple(
+        m.from_canonical(m.FunctionalPyramidMemberView, item) for item in raw
+    )
+
+
+def _active_pyramid_id(
+    connection: _sqlite3.Connection,
+    repository_id: str,
+) -> m.FunctionalPyramidId | None:
+    row = connection.execute(
+        "SELECT pyramid_id FROM functional_pyramid_active_members"
+        " WHERE repository_id=?",
+        (repository_id,),
+    ).fetchone()
+    return None if row is None else m.FunctionalPyramidId(str(row["pyramid_id"]))
+
+
+def _pyramid_version(
+    connection: _sqlite3.Connection,
+    pyramid_id: m.FunctionalPyramidId,
+) -> m.FunctionalPyramidVersion | None:
+    row = connection.execute(
+        "SELECT version FROM functional_pyramids WHERE pyramid_id=?",
+        (pyramid_id.value,),
+    ).fetchone()
+    return None if row is None else m.FunctionalPyramidVersion(int(row["version"]))
+
+
+def _pyramid_members(
+    connection: _sqlite3.Connection,
+    pyramid_id: m.FunctionalPyramidId,
+    version: m.FunctionalPyramidVersion | None,
+) -> tuple[m.FunctionalPyramidMemberView, ...]:
+    selected = version or _pyramid_version(connection, pyramid_id)
+    if selected is None:
+        return ()
+    row = connection.execute(
+        "SELECT members_json FROM functional_pyramid_versions"
+        " WHERE pyramid_id=? AND version=?",
+        (pyramid_id.value, selected.value),
+    ).fetchone()
+    if row is None:
+        return ()
+    return _decode_members(str(row["members_json"]))
+
+
+def _is_excluded(connection: _sqlite3.Connection, repository_id: str) -> bool:
+    return (
+        connection.execute(
+            "SELECT 1 FROM functional_pyramid_exclusions WHERE repository_id=?",
+            (repository_id,),
+        ).fetchone()
+        is not None
+    )
+
+
+def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
+    members_raw = _json.loads(str(row["members_json"]))
+    effects_raw = _json.loads(str(row["participation_effects_json"]))
+    refs_raw = _json.loads(str(row["dependent_effect_refs_json"]))
+    if not isinstance(members_raw, list):
+        raise FunctionalPyramidInstallationStoreError("stored receipt members are invalid")
+    if not isinstance(effects_raw, list):
+        raise FunctionalPyramidInstallationStoreError(
+            "stored receipt participation effects are invalid"
+        )
+    if not isinstance(refs_raw, list):
+        raise FunctionalPyramidInstallationStoreError(
+            "stored receipt dependent effects are invalid"
+        )
+    pyramid_value = row["pyramid_id"]
+    version_value = row["version"]
+    return m.RetrievedFunctionalPyramidReceipt(
+        request_id=m.RequestId(str(row["request_id"])),
+        content_digest=m.ContentDigest(str(row["content_digest"])),
+        committed_at=_datetime.datetime.fromisoformat(str(row["committed_at"])),
+        action=m.FunctionalPyramidAction(str(row["action"])),
+        pyramid_id=(
+            None
+            if pyramid_value is None
+            else m.FunctionalPyramidId(str(pyramid_value))
+        ),
+        version=(
+            None
+            if version_value is None
+            else m.FunctionalPyramidVersion(int(version_value))
+        ),
+        members=tuple(
+            m.from_canonical(m.FunctionalPyramidMemberView, item)
+            for item in members_raw
+        ),
+        participation_effects=tuple(
+            m.from_canonical(m.FunctionalPyramidParticipationEffect, item)
+            for item in effects_raw
+        ),
+        dependent_effect_refs=tuple(
+            m.from_canonical(m.ConclusionRevisionRef, item) for item in refs_raw
+        ),
+    )
+
+
+def _receipt(
+    connection: _sqlite3.Connection,
+    request_id: m.RequestId,
+) -> m.RetrievedFunctionalPyramidReceipt | None:
+    row = connection.execute(
+        "SELECT request_id, content_digest, committed_at, action, pyramid_id,"
+        " version, members_json, participation_effects_json,"
+        " dependent_effect_refs_json FROM functional_pyramid_receipts"
+        " WHERE request_id=?",
+        (request_id.value,),
+    ).fetchone()
+    return None if row is None else _decode_receipt(row)
+
+
+class FunctionalPyramidInstallationTransaction:
+    """One locked installation write across attached repository stores."""
+
+    def __init__(
+        self,
+        connection: _sqlite3.Connection,
+        aliases: tuple[tuple[str, str], ...],
+    ) -> None:
+        self._connection = connection
+        self._aliases = aliases
+
+    def _schema(self, repository_id: str) -> str:
+        for current, alias in self._aliases:
+            if current == repository_id:
+                return alias
+        raise FunctionalPyramidInstallationStoreError(
+            f"repository is not attached to this pyramid transaction: {repository_id}"
+        )
+
+    def active_pyramid_id(
+        self, repository_id: str
+    ) -> m.FunctionalPyramidId | None:
+        return _active_pyramid_id(self._connection, repository_id)
+
+    def pyramid_version(
+        self, pyramid_id: m.FunctionalPyramidId
+    ) -> m.FunctionalPyramidVersion | None:
+        return _pyramid_version(self._connection, pyramid_id)
+
+    def pyramid_members(
+        self,
+        pyramid_id: m.FunctionalPyramidId,
+        version: m.FunctionalPyramidVersion | None = None,
+    ) -> tuple[m.FunctionalPyramidMemberView, ...]:
+        return _pyramid_members(self._connection, pyramid_id, version)
+
+    def is_excluded(self, repository_id: str) -> bool:
+        return _is_excluded(self._connection, repository_id)
+
+    def receipt(
+        self, request_id: m.RequestId
+    ) -> m.RetrievedFunctionalPyramidReceipt | None:
+        return _receipt(self._connection, request_id)
+
+    def write_pyramid_version(
+        self,
+        *,
+        pyramid_id: m.FunctionalPyramidId,
+        version: m.FunctionalPyramidVersion,
+        content_digest: m.ContentDigest,
+        committed_at: _datetime.datetime,
+        members: tuple[m.FunctionalPyramidMemberView, ...],
+    ) -> None:
+        if committed_at.tzinfo is None or committed_at.utcoffset() is None:
+            raise ValueError("pyramid commit time must be timezone-aware")
+        self._connection.execute(
+            "INSERT INTO functional_pyramid_versions"
+            "(pyramid_id, version, content_digest, committed_at, members_json)"
+            " VALUES(?,?,?,?,?)",
+            (
+                pyramid_id.value,
+                version.value,
+                content_digest.value,
+                committed_at.astimezone(_datetime.timezone.utc).isoformat(),
+                _members_json(members),
+            ),
+        )
+
+    def set_current_pyramid(
+        self,
+        *,
+        pyramid_id: m.FunctionalPyramidId,
+        version: m.FunctionalPyramidVersion,
+        members: tuple[m.FunctionalPyramidMemberView, ...],
+    ) -> None:
+        self._connection.execute(
+            "INSERT INTO functional_pyramids(pyramid_id, version) VALUES(?,?)"
+            " ON CONFLICT(pyramid_id) DO UPDATE SET version=excluded.version",
+            (pyramid_id.value, version.value),
+        )
+        self._connection.execute(
+            "DELETE FROM functional_pyramid_active_members WHERE pyramid_id=?",
+            (pyramid_id.value,),
+        )
+        for member in sorted(members, key=lambda item: item.repository_id):
+            conflict = self._connection.execute(
+                "SELECT pyramid_id FROM functional_pyramid_active_members"
+                " WHERE repository_id=?",
+                (member.repository_id,),
+            ).fetchone()
+            if conflict is not None and str(conflict["pyramid_id"]) != pyramid_id.value:
+                raise FunctionalPyramidInstallationStoreError(
+                    f"repository already belongs to an ACTIVE Functional Pyramid: "
+                    f"{member.repository_id}"
+                )
+            self._connection.execute(
+                "DELETE FROM functional_pyramid_exclusions WHERE repository_id=?",
+                (member.repository_id,),
+            )
+            self._connection.execute(
+                "INSERT INTO functional_pyramid_active_members"
+                "(repository_id, pyramid_id, version, member_json)"
+                " VALUES(?,?,?,?)",
+                (
+                    member.repository_id,
+                    pyramid_id.value,
+                    version.value,
+                    _member_json(member),
+                ),
+            )
+
+    def clear_current_pyramid(self, pyramid_id: m.FunctionalPyramidId) -> None:
+        self._connection.execute(
+            "DELETE FROM functional_pyramid_active_members WHERE pyramid_id=?",
+            (pyramid_id.value,),
+        )
+        self._connection.execute(
+            "DELETE FROM functional_pyramids WHERE pyramid_id=?",
+            (pyramid_id.value,),
+        )
+
+    def set_excluded(self, repository_id: str, excluded: bool) -> None:
+        if excluded:
+            if self.active_pyramid_id(repository_id) is not None:
+                raise FunctionalPyramidInstallationStoreError(
+                    f"ACTIVE repository cannot be excluded: {repository_id}"
+                )
+            self._connection.execute(
+                "INSERT OR IGNORE INTO functional_pyramid_exclusions(repository_id)"
+                " VALUES(?)",
+                (repository_id,),
+            )
+            return
+        self._connection.execute(
+            "DELETE FROM functional_pyramid_exclusions WHERE repository_id=?",
+            (repository_id,),
+        )
+
+    def write_receipt(
+        self,
+        receipt: m.RetrievedFunctionalPyramidReceipt,
+        *,
+        replay_expires_at: _datetime.datetime,
+    ) -> None:
+        if replay_expires_at.tzinfo is None or replay_expires_at.utcoffset() is None:
+            raise ValueError("receipt replay expiry must be timezone-aware")
+        self._connection.execute(
+            "INSERT INTO functional_pyramid_receipts"
+            "(request_id, content_digest, committed_at, replay_expires_at,"
+            " action, pyramid_id, version, members_json,"
+            " participation_effects_json, dependent_effect_refs_json)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (
+                receipt.request_id.value,
+                receipt.content_digest.value,
+                receipt.committed_at.astimezone(_datetime.timezone.utc).isoformat(),
+                replay_expires_at.astimezone(_datetime.timezone.utc).isoformat(),
+                receipt.action.value,
+                None if receipt.pyramid_id is None else receipt.pyramid_id.value,
+                None if receipt.version is None else receipt.version.value,
+                _members_json(receipt.members),
+                _json.dumps(
+                    [m.to_canonical(effect) for effect in receipt.participation_effects],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                _json.dumps(
+                    [m.to_canonical(ref) for ref in receipt.dependent_effect_refs],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ),
+        )
+
+    def write_reestablishment_context(
+        self,
+        context: m.InvestigationContext,
+        *,
+        source_observation_ids: tuple[str, ...] = (),
+        discovery_observation_ids: tuple[str, ...] = (),
+    ) -> None:
+        schema = self._schema(context.repository_id)
+        insert_context_row(self._connection, context, schema=schema)
+        for observation_id in source_observation_ids:
+            add_context_evidence_row(
+                self._connection,
+                repository_id=context.repository_id,
+                context_id=context.context_id.value,
+                observation_id=observation_id,
+                schema=schema,
+            )
+        for observation_id in discovery_observation_ids:
+            add_context_discovery_row(
+                self._connection,
+                repository_id=context.repository_id,
+                context_id=context.context_id.value,
+                observation_id=observation_id,
+                schema=schema,
+            )
 
 
 class FunctionalPyramidInstallationStore:
@@ -201,11 +550,91 @@ class FunctionalPyramidInstallationStore:
                 f"multi-database writes: journal_mode={mode}, synchronous={synchronous}"
             )
 
+    def active_pyramid_id(
+        self, repository_id: str
+    ) -> m.FunctionalPyramidId | None:
+        return _active_pyramid_id(self._connection, repository_id)
+
+    def pyramid_version(
+        self, pyramid_id: m.FunctionalPyramidId
+    ) -> m.FunctionalPyramidVersion | None:
+        return _pyramid_version(self._connection, pyramid_id)
+
+    def pyramid_members(
+        self,
+        pyramid_id: m.FunctionalPyramidId,
+        version: m.FunctionalPyramidVersion | None = None,
+    ) -> tuple[m.FunctionalPyramidMemberView, ...]:
+        return _pyramid_members(self._connection, pyramid_id, version)
+
+    def is_excluded(self, repository_id: str) -> bool:
+        return _is_excluded(self._connection, repository_id)
+
+    def receipt(
+        self, request_id: m.RequestId
+    ) -> m.RetrievedFunctionalPyramidReceipt | None:
+        return _receipt(self._connection, request_id)
+
+    @_contextlib.contextmanager
     def transaction(
         self,
-    ) -> _typing.ContextManager[_sqlite3.Connection]:
-        """Serialize one installation write; T08 extends this with attachments."""
-        return immediate_transaction(self._connection)
+        repository_paths: tuple[tuple[str, str], ...] = (),
+    ) -> _typing.Iterator[FunctionalPyramidInstallationTransaction]:
+        """Serialize one installation write across deterministic repository attachments."""
+        ordered = tuple(sorted(repository_paths))
+        if len({repository_id for repository_id, _ in ordered}) != len(ordered):
+            raise ValueError("repository attachments must have unique repository IDs")
+        aliases: list[tuple[str, str]] = []
+        try:
+            for index, (repository_id, raw_path) in enumerate(ordered):
+                path = _pathlib.Path(raw_path)
+                if not path.is_file():
+                    raise FunctionalPyramidInstallationStoreError(
+                        f"repository lifecycle store is unavailable: {repository_id}"
+                    )
+                alias = f"repo_{index}"
+                self._connection.execute(
+                    f'ATTACH DATABASE ? AS "{alias}"',
+                    (str(path),),
+                )
+                aliases.append((repository_id, alias))
+                row = self._connection.execute(
+                    f'SELECT value FROM "{alias}".meta WHERE key="schema_version"'
+                ).fetchone()
+                if row is None or int(row["value"]) != REPOSITORY_SCHEMA_VERSION:
+                    raise FunctionalPyramidInstallationStoreError(
+                        f"repository store has incompatible schema: {repository_id}"
+                    )
+                mode = str(
+                    self._connection.execute(
+                        f'PRAGMA "{alias}".journal_mode'
+                    ).fetchone()[0]
+                )
+                synchronous = int(
+                    self._connection.execute(
+                        f'PRAGMA "{alias}".synchronous'
+                    ).fetchone()[0]
+                )
+                if mode.lower() in {"wal", "off", "memory"} or synchronous == 0:
+                    raise FunctionalPyramidInstallationStoreError(
+                        "repository store does not support atomic Functional Pyramid "
+                        f"writes: {repository_id}"
+                    )
+            with immediate_transaction(self._connection):
+                yield FunctionalPyramidInstallationTransaction(
+                    self._connection,
+                    tuple(aliases),
+                )
+        except _sqlite3.Error as exc:
+            raise FunctionalPyramidInstallationStoreError(
+                f"Functional Pyramid transaction failed: {exc}"
+            ) from exc
+        finally:
+            for _, alias in reversed(aliases):
+                try:
+                    self._connection.execute(f'DETACH DATABASE "{alias}"')
+                except _sqlite3.Error:
+                    pass
 
     def reap_expired(self, moment: _datetime.datetime | None = None) -> int:
         """Reap installation-scoped replay receipts under the shared retention policy."""
