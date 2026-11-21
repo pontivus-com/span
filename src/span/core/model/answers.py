@@ -17,7 +17,10 @@ from span.core.model.outcomes import (
 )
 from span.core.model.functional_pyramid import (
     FunctionalPyramidCandidate,
+    FunctionalPyramidParticipation,
     FunctionalPyramidStatus,
+    FunctionalPyramidUnavailable,
+    FunctionalPyramidView,
     RetrievedFunctionalPyramidReceipt,
 )
 from span.core.model.investigation import (
@@ -123,6 +126,11 @@ class Answer:
 
     surface: SurfaceKey
     status: SurfaceStatus
+    functional_pyramid: (
+        FunctionalPyramidView
+        | FunctionalPyramidUnavailable
+        | FunctionalPyramidParticipation
+    )
     conclusions: tuple[ConclusionView, ...] = ()
     groups: tuple[AnswerGroup, ...] = ()
     gaps: tuple[RecordedQuestionGap, ...] = ()
@@ -171,6 +179,11 @@ class Gap:
 
     surface: SurfaceKey
     status: SurfaceStatus
+    functional_pyramid: (
+        FunctionalPyramidView
+        | FunctionalPyramidUnavailable
+        | FunctionalPyramidParticipation
+    )
     reason: GapReason
     recovery: str
     changed_evidence: tuple[EvidenceRef, ...] = ()
