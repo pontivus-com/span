@@ -168,7 +168,15 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
             version = m.FunctionalPyramidVersion(1)
             member = m.FunctionalPyramidMemberView(
                 repository_id="repo",
-                declaration_refs=(),
+                declaration_refs=(
+                    m.EvidenceRef(
+                        evidence_id=m.EvidenceId("decl-fp-rollback"),
+                        repository_id="repo",
+                        source_kind=m.EvidenceSourceKind.CONFIGURATION,
+                        locator=".span/functional-pyramid.json",
+                        revision_or_fingerprint="sha256:decl-fp-rollback",
+                    ),
+                ),
                 functional_scope=m.FunctionalScope(
                     (
                         m.FunctionalScopeSelector(
