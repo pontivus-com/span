@@ -429,8 +429,9 @@ authority source or member binding, direct dependency lookup starts from the
 changed repository but traverses FD-88/route-support dependents across every
 member of the same instance. Affected semantic surfaces remain owned by their own repositories. The
 `Changed` result retains those repository-qualified surface identities and
-returns exactly one existing `InvestigationContextRef` for each repository
-that owns actionable affected conclusions. No context spans repositories and the
+returns `reestablishment_contexts: tuple[InvestigationContextRef, ...]` with
+exactly one existing context for each repository that owns actionable affected
+conclusions. No context spans repositories and the
 caller need not submit dependent repository IDs. *(G3, F4, F12, L10, L15)*
 
 **FD-90 — The governing projection uses the same effective semantic scope.**
