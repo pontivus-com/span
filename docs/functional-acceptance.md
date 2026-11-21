@@ -42,8 +42,8 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-32 | Outside FunctionalScope | `test_wholly_outside_scope_is_resolved_empty_governance`; `test_outside_functional_scope_records_resolved_empty_route_only` |
 | FA-33 | Broad scope crossing the functional boundary | `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered`; `test_mixed_scope_preserves_covered_uncovered_and_outside_provenance` |
 | FA-34 | Health iff structural findings | `test_status_keeps_participation_and_health_distinct`; `test_partial_uncovered_path_is_route_unresolved_but_health_valid`; `test_degraded_health_recovers_without_participation_change`; `test_authority_currency_does_not_change_route_identity_or_health` |
-| FA-35 | Activation of pre-existing normative understanding | `test_newly_active_repository_reassesses_pre_route_normative_revision` |
-| FA-36 | Functional Pyramid write propagation | `test_record_replay_live_projects_only_retained_effect_refs`; `test_governance_only_change_crosses_repository_boundary` |
+| FA-35 | Activation of pre-existing normative understanding | `test_newly_active_repository_reassesses_pre_route_normative_revision`; `test_pyramid_effect_coordinator_uses_shared_dependency_engine` |
+| FA-36 | Functional Pyramid write propagation | `test_pyramid_effect_coordinator_uses_shared_dependency_engine`; `test_record_replay_live_projects_only_retained_effect_refs`; `test_governance_only_change_crosses_repository_boundary` |
 | FA-37 | Deactivation/removal route state | `test_deliberately_inactive_repository_reassesses_recorded_route`; `test_record_deactivate_moves_all_members_to_excluded` |
 | FA-38 | Operational route failure while ACTIVE | `test_functional_route_support_distinguishes_route_states`; `test_repository_unavailability_is_graph_state_not_unknown_identity` |
 | FA-39 | Pyramid-write replay projection | `test_record_replay_live_projects_only_retained_effect_refs` |
