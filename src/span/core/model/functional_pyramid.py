@@ -465,8 +465,6 @@ class FunctionalPyramidCandidate:
             FunctionalPyramidAction.REVISE,
         ):
             raise ValueError("candidate action must be activate or revise")
-        if not self.members:
-            raise ValueError("FunctionalPyramidCandidate requires members")
         revising = self.action is FunctionalPyramidAction.REVISE
         if revising != (self.pyramid_id is not None):
             raise ValueError("revise candidate requires pyramid_id")
