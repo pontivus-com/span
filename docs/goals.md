@@ -1,121 +1,176 @@
 # Span goals — layer 0
 
-**Status: binding.** This is the top of the pyramid. It states why Span exists,
-what outcome it is judged on, and what it is deliberately not trying to do.
-Layers 1–3 derive from it. A design that satisfies every principle but not these
-goals is still wrong. Authority and derivation between layers are defined in the
-[requirements pyramid model](requirements-pyramid.md).
+**Status: binding target for Span 1.0 Beta.** This is the top of the pyramid. It
+states why Span exists, what outcomes it is judged on, and what it deliberately
+does not do. Layers 1–3 derive from it. A design that satisfies every lower-layer
+mechanism but not these goals is still wrong. Authority and derivation between
+layers are defined in the [requirements pyramid model](requirements-pyramid.md).
+
+**1.0 Beta product model, 21 November 2026.** Version 1 is the first product
+model that covers both maintained empirical understanding and maintained
+governing understanding. Beta describes delivery maturity, not an incomplete
+product boundary.
 
 ## 1. The problem
 
-Documentation fails statement by statement.
+Software work depends on two different classes of knowledge that drift in
+different ways.
 
-Within a single document, some statements remain true while others quietly stop
-being true. Nothing announces the change. The file still looks valid, the reader
-still trusts it, and the next session starts from the same uncertainty. Staleness
-is not a property of a document; it is a property of each statement, and it is
-invisible until someone re-derives everything to check.
+**Empirical understanding** describes what the implementation currently does.
+Source code, configuration, tests and recorded executions can be observed
+mechanically, but an explanation of their meaning can still become stale when
+its declared evidence changes.
 
-The cost is paid twice: either the reader re-derives what was already known, or
-the reader acts on something that is no longer true. Both are expensive, and the
-second is dangerous.
+**Governing understanding** describes what the implementation is intended to
+satisfy: purpose, invariants, contracts, functional design and technical design.
+Those rules are not made authoritative by execution. They are authoritative
+because a responsible owner has declared them, their applicability is explicit,
+and their derivation is intact. A governing source can remain byte-for-byte
+unchanged while becoming inapplicable, superseded, conflicted or disconnected
+from the rule that justified it.
+
+A coding agent otherwise pays the cost repeatedly. It must re-derive what the
+code does, rediscover which canonical sources govern the work, reconstruct the
+path from first principles to implementation, and decide whether prior
+conclusions still apply. If it skips that work, it can act on stale empirical
+understanding, obsolete authority, or an incomplete governing chain.
+
+The two failure modes require different proof. Execution and source identity can
+support empirical currency. Canonical ownership, accepted status, applicability
+and derivation establish authority currency. Span exists to maintain both
+without pretending that one proves the other.
 
 ## 2. What Span exists to do
 
-Span makes semantic understanding of code. The goals in §3 state the outcomes it
-must produce; the two sections below explain why the shape is right.
+Span maintains auditable understanding of a software system.
 
-### Why it can replace documentation
+It keeps agent-authored semantic understanding attached to the evidence on which
+it rests. It also resolves the repository's declared Functional Pyramid so an
+agent can determine which goals, invariants, contracts and designs govern the
+surface it is about to understand or change.
 
-Code is checked by execution. It runs, or it does not. A failure forces a change,
-so code carries an execution state tied to its source state.
+Span does not originate those meanings. Repository owners originate governing
+authority. The agent or human investigator authors semantic and conformance
+judgments. Span keeps identities, applicability, dependencies, currency,
+history and change consequences mechanically explicit.
 
-Documentation has nothing of the kind. It is written once and read forever, and
-nothing fails when it stops being true. That is why it rots: there is no check,
-so there is no consequence.
+### Why explanatory documentation can shrink
 
-Span gives semantic understanding the property code has — a mechanical check
-against the exact source it describes. A conclusion is supported or it is not,
-and a change to that source invalidates it. Understanding therefore becomes a
-critically checkable artifact that must sustain under code change, and can
-replace documentation instead of accumulating beside it.
+A code explanation that exists only as prose has no mechanical relationship to
+the source it describes. Span gives that explanation a checkable dependency on
+the exact evidence used to establish it. When the declared support changes, the
+understanding stops being served as current.
 
-This is the point of the product, not a side effect: fewer unchecked documents,
-and a checked surface description where the semantic content used to live.
+Surface-bound explanatory documentation can therefore move into retained,
+checked understanding instead of accumulating as an unchecked parallel
+description.
+
+### Why canonical governing documents remain
+
+A goal, invariant or contract cannot be replaced by executing the implementation.
+It is a constitutive decision about what the system is supposed to achieve or
+guarantee. Such a source remains canonical.
+
+Span does not replace canonical governing sources. It gives them stable identity,
+declared applicability, explicit derivation, current status and downstream
+change consequences through the Functional Pyramid.
 
 ### Why the understanding is layered
 
-A codebase does not become understandable at one scale. A domain, the services
-inside it, and the files inside those are different scopes answering different
-questions, and flattening them loses exactly the boundary that makes each one
-checkable.
+A software system does not become understandable at one scale or from one kind
+of proof. A domain, service, file and symbol are different semantic surfaces.
+Purpose, invariants, contracts, functional design and technical design are
+different authority layers. Flattening either hierarchy loses the boundaries
+that make the resulting understanding auditable.
 
-Span applies the same discipline to a target repository that this corpus applies
-to its own requirements: distinct levels, clear boundaries, and no level
-restating the one below. Understanding can begin at a domain and descend into
-detail without the levels blurring. The mechanics are already stated in the
-layers below — surfaces and containment in layer 2, status at granularity in F9,
-and the aggregation rule that keeps a parent's conclusions separate from its
-children's.
-
-The method is not invented here. The evidence that it rests on established,
-validated practice — and the limits of that claim — is recorded in the
-[method grounding](method-grounding.md).
+Span therefore maintains semantic surfaces and Functional Pyramid authority as
+distinct but composable structures. A conclusion has one semantic owner while
+one path may be governed by several functional contexts and several applicable
+authority chains.
 
 ## 3. Goals
 
 | ID | Goal | Meaning | Enforced by |
 | --- | --- | --- | --- |
-| **G1** | **Never present stale as current** | A reader who asks must learn what is current and what is not. No answer, summary, or status may blur the two. | F2, F9, L2, L9 |
+| **G1** | **Never present unsupported or unresolved understanding as current** | A reader who asks must learn what is usable, what is not, and why. No answer, authority route, summary or status may blur current support, unresolved applicability or operational inability. | F2, F9, F11, L1–L3, L9, L12 |
 | **G2** | **Retain established understanding for reuse** | Understanding established during work is retained through Span and reused without the conversation that produced it. | F3, F7 |
-| **G3** | **Never outlive the code silently** | When the code a conclusion rests on changes, the conclusion stops being usable and the change is named. | F2, F4, L2 |
-| **G4** | **Audit any surface at its own granularity** | A file, a service, and a domain each report their own status, and a larger surface may honestly contain both current and stale understanding. | F9, L9, L10 |
-| **G5** | **Cost less than the alternative** | Using Span must beat re-reading the code or maintaining documentation by hand, or it has no claim over the task. | F8 |
-| **G6** | **Replace unchecked documentation** | Surface-bound semantic content lives as checked understanding, not as Markdown that nothing validates. Classic documentation for covered surfaces shrinks; what remains is content that cannot be tied to code. | F1, F2, F4 |
+| **G3** | **Never outlive declared support silently** | When source evidence, governing authority, applicable functional context, discovery membership or a semantic premise changes, dependent understanding stops being usable without reassessment and the cause is named. | F2, F4, F11, L2, L10, L12 |
+| **G4** | **Audit semantic scope and governing scope independently** | A file, service and domain report semantic status at their own granularity, while a participating path also reports the complete declared Functional Pyramid route that governs it. Neither hierarchy is substituted for the other. | F9, F11, L9, L12 |
+| **G5** | **Cost less than the alternative** | Using Span must beat repeatedly re-deriving implementation meaning and governing applicability or maintaining unchecked parallel explanation, or it has no claim over the task. | F8 |
+| **G6** | **Replace unchecked explanation, preserve canonical authority** | Surface-bound explanatory content lives as checked understanding where it can be tied to support. Canonical governing sources remain authoritative artifacts and are referenced, not copied into a competing Span owner. | F1, F2, F4, F11, L11 |
+| **G7** | **Make the governing path from first principles to implementation explicit** | Before interpreting or changing a participating surface, the agent can obtain the declared functional contexts, applicable authority rules, derivation path, provenance and unresolved relationships without inferring them from file names, topology or prose relevance. | F6, F10, F11, L8, L12 |
 
-These six are the whole product intent. Everything in layers 1–2 exists to make
-them true, and nothing may be added that does not.
+These seven are the product intent. Everything below them exists to make them
+true, and nothing may be added merely because it is convenient to implement.
 
 ## 4. What Span is not trying to do
 
-- It does not produce unchecked documents (G6). The agent authors meaning; Span
-  keeps its support current and findable. A Markdown file is only warranted for
-  content that cannot be tied to code.
-- It does not answer from first principles. A surface that has never been
-  investigated returns a gap, not a generated answer.
-- It does not judge semantic truth. It judges support against code.
-- It is not a search engine, model runtime, editor, or test runner.
+- It does not originate product, professional, legal, security or organizational
+  authority. Repository owners and external authorities do that.
+- It does not prove that a governing principle is intrinsically true. It can
+  establish that the principle is the current declared authority, that its
+  governing relationships resolve, and that it applies to a selected scope.
+- It does not judge semantic or conformance truth. The agent or human investigator
+  authors those judgments; Span validates and maintains their declared support.
+- It does not infer authority from repository structure, path names, semantic
+  similarity or structural adjacency.
+- It does not produce unchecked explanatory documents (G6), but it also does not
+  replace canonical governing sources whose function is to originate normative
+  meaning.
+- It does not answer an uninvestigated semantic question from first principles.
+  A surface with no retained understanding returns a gap even when its governing
+  route is fully resolved.
+- It is not a model runtime, source editor, application test runner or general
+  search engine.
 
 ## 5. What success looks like
 
-Understanding established during work is retained before that work completes.
-A fresh agent, in a session with no memory, asks about that surface and
-receives a current answer with its status in one call. After a change, it learns
-exactly which conclusions became stale, at every enclosing granularity, without
-re-reading the code. Nothing stale is ever presented as current. The
-documentation that remains for covered surfaces is smaller, and what remains is
-checked. The whole exchange costs less than the alternative it replaced.
+A fresh agent with no conversation memory asks about a surface and receives, in
+one lifecycle interaction, the current retained semantic understanding or an
+actionable gap, its support status, and—when the repository participates in the
+Functional Pyramid—the declared governing route from applicable first
+principles to implementation.
+
+After implementation evidence changes, dependent semantic understanding is
+identified for reassessment. After a functional-context declaration, authority
+owner, authority content, status or governing relationship changes, dependent
+normative understanding is likewise identified without requiring an
+implementation edit.
+
+A conformance conclusion is reusable only while both the empirical support it
+cites and the governing route it depended on remain usable. Canonical governing
+sources remain single owners rather than being copied into Span. Explanatory
+documentation for covered surfaces shrinks. The complete exchange costs less
+than reconstructing those relationships manually.
 
 ## 6. The pyramid
 
 ```text
-Layer 0   goals.md               why: the problem, the outcomes, success
-Layer 1   foundations.md         truths: axioms A1–A9, principles F1–F10
-Layer 2   lifecycle-contract.md  contract: surfaces, operation families, laws L1–L11
-Layer 3   functional-design.md   behaviour: identity, evaluation, propagation, composition
-Layer 4   technical-design.md    implementation: baseline, refactoring set, schemas
+Layer 0   goals.md               why: problem, outcomes, success, non-goals
+Layer 1   foundations.md         truths: axioms and product principles
+Layer 2   lifecycle-contract.md  contract: surfaces, Functional Pyramid view,
+                                  operations, payloads and laws
+Layer 3   functional-design.md   deterministic behaviour: semantic support,
+                                  authority resolution, propagation and composition
+Layer 4   technical-design.md    implementation choices and migration
 ```
 
 Each layer is a consequence of the one above it. The ownership of each layer,
 the placement test for a new statement, and the rule against restatement are
 defined in the [requirements pyramid model](requirements-pyramid.md).
 
-## 7. Why this document exists
+## 7. Why Version 1 begins here
 
-A previous release built a coherent, well-tested store for agent-authored
-conclusions and removed the operations that answered questions. Every local gate
-passed. The product could not perform its job, because no document stated the
-outcomes it was supposed to produce.
+Earlier Span releases solved the maintained-understanding lifecycle for code
+surfaces and already contained explicit authority-support primitives. Span's own
+development nevertheless required a separate requirements pyramid to answer
+which goals, foundations, contracts and designs governed an implementation
+decision.
 
-The goals are the first thing a change is judged against. Everything below them
-is a means.
+That is product-discovery evidence: a class of indispensable software
+understanding existed outside the product's maintained model.
+
+Version 1 incorporates that missing class through the Functional Pyramid. The
+result is one product that maintains empirical understanding, governing
+understanding and the supported relationship between them while preserving the
+different proof each requires.
