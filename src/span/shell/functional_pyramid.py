@@ -50,10 +50,7 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
 
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
-    ) -> (
-        tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration]
-        | m.EvidenceSourceFailure
-    ):
+    ) -> tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration] | m.EvidenceSourceFailure:
         if request.ranges:
             raise FunctionalPyramidDeclarationInvalid(
                 "Functional Pyramid declaration sources must be whole documents"
