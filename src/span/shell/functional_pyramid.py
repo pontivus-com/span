@@ -25,15 +25,15 @@ from span.service.support import SupportService
 
 
 class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
-    """Read strict declarations from roots already bound by the lifecycle store."""
+    """Read strict declarations from registered repository roots."""
 
-    def __init__(self, store: LifecycleStorePort) -> None:
-        self._store = store
+    def __init__(self, repository_root: _typing.Callable[[str], str]) -> None:
+        self._repository_root = repository_root
 
     def _source(self, repository_id: str) -> FilesystemEvidenceSource:
         try:
-            root = self._store.require_repository(repository_id)
-        except UnknownRepository as exc:
+            root = self._repository_root(repository_id)
+        except (OSError, ValueError, UnknownRepository) as exc:
             raise FunctionalPyramidRepositoryUnavailable(
                 f"Functional Pyramid member {repository_id!r} is unavailable"
             ) from exc
