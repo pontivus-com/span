@@ -19,7 +19,6 @@ from span.shell.sqlite_store.functional_pyramid import (
 )
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
-
 NOW = datetime.datetime(2026, 11, 21, 12, 0, tzinfo=datetime.timezone.utc)
 
 
