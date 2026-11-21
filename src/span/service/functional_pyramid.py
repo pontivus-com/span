@@ -543,6 +543,26 @@ class FunctionalPyramidService:
             expected_version=expected_version,
         )
         candidate = self._candidate(selector, transaction)
+        stale = next(
+            (
+                finding
+                for finding in candidate.validation_findings
+                if finding.reason
+                is m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION
+            ),
+            None,
+        )
+        if stale is not None:
+            observed = (
+                None
+                if stale.current_version is None
+                else stale.current_version.value
+            )
+            raise RecordingConflict(
+                "Functional Pyramid version changed before write commit",
+                cause_kind=RejectionCauseKind.VERSION_CONFLICT,
+                current_version=observed,
+            )
         if not candidate.activation_ready:
             reasons = tuple(
                 item.reason.value for item in candidate.validation_findings
