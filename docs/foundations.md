@@ -174,10 +174,18 @@ understanding. A change has distinct effects, and they must not be conflated:
 - **Indirect support** — conclusions whose premises depend on an unsupported
   conclusion lose support transitively.
 
+Governance effects follow the Functional Pyramid instance rather than stopping
+at a repository boundary. A changed authority, context, governing edge or
+repository availability in one member repository can therefore directly affect
+normative understanding retained in another member repository when the declared
+graph connects them.
+
 Marking something stale and stopping does not satisfy this.
 *Demonstration:* after a commit, one operation returns the impacted surfaces and
-conclusions without re-asking the original questions, and a premise-dependent
-conclusion is reported as unsupported even though its own cited file is unchanged.
+conclusions without re-asking the original questions, including a
+cross-repository normative dependent when the declared governing route crosses
+repository boundaries; a premise-dependent conclusion is likewise reported as
+unsupported even though its own cited file is unchanged.
 
 ### F5 — Span composes; the agent means
 
@@ -272,10 +280,17 @@ registration is not the product.
 
 A participating repository declares Functional Pyramid contexts, canonical rule
 identities, rule layers and governing relationships. Span resolves every
-applicable context for the selected semantic scope, including narrower contexts
-that intersect a broader directory, service, domain or repository-wide scope,
-expands context inheritance and rule derivation, and returns the resulting route
-with provenance.
+applicable context for the same effective semantic scope used by the semantic
+lifecycle, including narrower contexts that intersect a broader directory,
+service, domain or repository-wide scope, expands context inheritance and rule
+derivation, and returns the resulting route with provenance.
+
+The Functional Pyramid view is the governing projection of that semantic scope:
+it exposes stable rule identities, layers, canonical owner references,
+relationships, provenance and unresolved state. It does not ingest, summarize or
+copy the substantive governing content. When the agent needs the meaning of a
+governing rule, it follows the canonical reference and reads that source through
+the ordinary evidence lifecycle.
 
 Matching is additive: a more specific context adds obligations and never
 silently replaces a broader applicable context. Missing repositories, unknown
@@ -296,11 +311,39 @@ complete deduplicated authority route; changing a context or governing edge
 makes an affected normative conclusion require reassessment even when its source
 bytes did not change.
 
+### F12 — Functional Pyramid participation is explicit lifecycle state
+
+Registration makes a repository available to Span; it does not place that
+repository into a Functional Pyramid. One Functional Pyramid instance explicitly
+names the registered repositories whose declared governance may resolve together.
+Membership supplies resolution reachability only: it never makes a member's rules
+applicable to another member without an explicit functional-context or rule
+relationship.
+
+Participation and declared coverage are lifecycle state, not topology inference.
+The lifecycle distinguishes a repository set that has never been configured, one
+explicitly excluded from the Functional Pyramid, one whose declared coverage is
+active and usable, and one whose previously active governing graph is degraded.
+An active pyramid may declare partial coverage; scope outside that coverage stays
+explicitly uncovered rather than being treated as having no governing authority.
+A complete-coverage claim may not coexist with uncovered intended scope.
+
+Activation or revision is based only on explicit repository-owned declarations.
+Canonical governing content remains at its owner. Span retains the instance
+membership, references, relationships, coverage and identities required to
+resolve and maintain the graph; it does not turn the graph into a second
+documentation corpus.
+
+*Demonstration:* registering or adding a repository changes no applicable route
+unless a declared relationship makes it relevant; removing or losing an
+applicable member degrades the affected route instead of deleting or inventing
+the external authority.
+
 ## 4. Lifecycle responsibilities
 
 The agent's required actions and task-completion boundary are owned by
 [lifecycle contract §7](lifecycle-contract.md#required-agent-completion),
-derived from F3, F7, F10 and F11. The contract owns the procedure; these
+derived from F3, F7, F10, F11 and F12. The contract owns the procedure; these
 principles govern it.
 
 ## 5. Non-goals
