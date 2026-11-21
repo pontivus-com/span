@@ -240,9 +240,7 @@ class FunctionalRuleDeclaration:
         _require_non_empty("FunctionalRuleDeclaration.rule_id", self.rule_id)
         for rule_ref in self.governing_rule_ids:
             if isinstance(rule_ref, str) and rule_ref != "ROOT":
-                raise ValueError(
-                    "FunctionalRuleDeclaration string parent must be ROOT"
-                )
+                raise ValueError("FunctionalRuleDeclaration string parent must be ROOT")
         if len(set(self.governing_rule_ids)) != len(self.governing_rule_ids):
             raise ValueError(
                 "FunctionalRuleDeclaration.governing_rule_ids contains duplicates"
