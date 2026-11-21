@@ -239,11 +239,15 @@ class ChangeCarrierTest(unittest.TestCase):
             context_id=m.InvestigationContextId("ctx-1"),
         )
         m.Changed(
-            context=context,
+            reestablishment_contexts=(context,),
             surfaces=(m.ChangedSurface(KEY, (m.ChangeReason.DIRECT,)),),
         )
         with self.assertRaises(ValueError):
-            m.Changed(context=context, truncated=True, unaffected=(FILE_KEY,))
+            m.Changed(
+                reestablishment_contexts=(context,),
+                truncated=True,
+                unaffected=(FILE_KEY,),
+            )
 
     def test_result_unions_are_closed(self) -> None:
         ask = set(typing.get_args(m.AskResult))
