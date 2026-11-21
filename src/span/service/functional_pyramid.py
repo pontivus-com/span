@@ -545,9 +545,8 @@ class FunctionalPyramidService:
         candidate = self._candidate(selector, transaction)
         if not candidate.activation_ready:
             reasons = tuple(
-                item.reason.value
-                for item in (*candidate.validation_findings, *candidate.graph_findings)
-            )
+                item.reason.value for item in candidate.validation_findings
+            ) + tuple(item.reason.value for item in candidate.graph_findings)
             raise ValueError(
                 "Functional Pyramid candidate is not activation-ready: "
                 + ", ".join(reasons)
@@ -566,7 +565,7 @@ class FunctionalPyramidService:
                 raise RecordingConflict(
                     "Functional Pyramid version changed before revision commit: "
                     f"expected {expected_version.value}, observed {observed}",
-                    cause_kind=RejectionCauseKind.STALE_VERSION,
+                    cause_kind=RejectionCauseKind.VERSION_CONFLICT,
                     current_version=observed,
                 )
             old_members = transaction.pyramid_members(pyramid_id, current)
@@ -630,7 +629,7 @@ class FunctionalPyramidService:
             raise RecordingConflict(
                 "Functional Pyramid version changed before deactivation commit: "
                 f"expected {expected_version.value}, observed {observed}",
-                cause_kind=RejectionCauseKind.STALE_VERSION,
+                cause_kind=RejectionCauseKind.VERSION_CONFLICT,
                 current_version=observed,
             )
         old_members = transaction.pyramid_members(pyramid_id, current)
