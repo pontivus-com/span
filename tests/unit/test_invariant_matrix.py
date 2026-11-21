@@ -27,9 +27,13 @@ from span.core import model as m
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 MATRIX = REPO_ROOT / "docs" / "invariants.md"
+FUNCTIONAL_ACCEPTANCE = REPO_ROOT / "docs" / "functional-acceptance.md"
 
 _ROW = re.compile(
     r"^\|\s*(I-\d{2})\s*\|\s*(.+?)\s*\|\s*(Test|Review)\s*\|\s*(.+?)\s*\|\s*$"
+)
+_FA_ROW = re.compile(
+    r"^\|\s*(FA-\d{2})\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$"
 )
 _BACKTICK = re.compile(r"`([^`]+)`")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -44,6 +48,15 @@ def _rows() -> list[tuple[str, str, str, str]]:
             rows.append(
                 (match.group(1), match.group(2), match.group(3), match.group(4))
             )
+    return rows
+
+
+def _functional_acceptance_rows() -> list[tuple[str, str, str]]:
+    rows = []
+    for line in FUNCTIONAL_ACCEPTANCE.read_text(encoding="utf-8").splitlines():
+        match = _FA_ROW.match(line)
+        if match:
+            rows.append((match.group(1), match.group(2), match.group(3)))
     return rows
 
 
@@ -127,6 +140,36 @@ def _annotations(node: ast.AST):
             yield node.returns
     elif isinstance(node, ast.AnnAssign):
         yield node.annotation
+
+
+class FunctionalAcceptanceMatrixTest(unittest.TestCase):
+    def setUp(self):
+        self.rows = _functional_acceptance_rows()
+        self.index = _live_tests()
+
+    def test_matrix_lists_every_version_one_acceptance_case_once_in_order(self):
+        self.assertEqual(
+            [row[0] for row in self.rows],
+            [f"FA-{number:02d}" for number in range(1, 45)],
+            "the Version-1 acceptance matrix must carry FA-01..FA-44 in order",
+        )
+
+    def test_every_acceptance_case_names_live_boundary_tests(self):
+        unnamed = []
+        unresolved = []
+        for identifier, _behavior, evidence in self.rows:
+            claimed = _claimed_tests(evidence)
+            if not claimed:
+                unnamed.append(identifier)
+            for token in claimed:
+                if token not in self.index:
+                    unresolved.append(f"{identifier} → {token}")
+        self.assertEqual(unnamed, [], "acceptance rows that name no boundary test")
+        self.assertEqual(
+            unresolved,
+            [],
+            "acceptance rows naming a missing boundary test",
+        )
 
 
 class SemanticTypingTest(unittest.TestCase):
