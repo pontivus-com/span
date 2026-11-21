@@ -549,12 +549,20 @@ def _semantic_atoms(
 
     atoms: list[tuple[EvidenceScope, FunctionalScopeSelector]] = []
     for path in scope.paths:
-        atoms.append(
-            (
-                EvidenceScope(paths=(path,)),
-                FunctionalScopeSelector(FunctionalScopeSelectorKind.PREFIX, path=path),
+        symbol_path = _containment.surface_file_locator(path)
+        selector = (
+            FunctionalScopeSelector(
+                FunctionalScopeSelectorKind.SYMBOL,
+                path=symbol_path,
+                locator=path,
+            )
+            if symbol_path is not None
+            else FunctionalScopeSelector(
+                FunctionalScopeSelectorKind.PREFIX,
+                path=path,
             )
         )
+        atoms.append((EvidenceScope(paths=(path,)), selector))
     for ref in scope.evidence_refs:
         if ref.repository_id != surface.repository_id:
             raise ValueError("semantic scope crosses its owning repository")
