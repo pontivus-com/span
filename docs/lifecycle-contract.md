@@ -447,7 +447,10 @@ unchanged.
 
 `members` is the same canonical member-intent shape used by candidate
 validation: registered repository identity, exact declaration source requests,
-the member functional scope, and `PARTIAL | COMPLETE` coverage.
+the member functional scope, and `PARTIAL | COMPLETE` coverage. A declaration
+source request denotes one complete declaration document; a non-empty
+`EvidenceRequest.ranges` selection is partial and therefore invalid for
+Functional Pyramid declaration validation.
 
 - `activate` creates one new pyramid instance from UNCONFIGURED/EXCLUDED
   repositories after revalidating every member and declaration.
@@ -495,10 +498,14 @@ acceptance/receipt for audit even though no live instance remains. EXCLUDE carri
 no pyramid identity/version. ACTIVATE/REVISE/DEACTIVATE derive semantic dependent
 effects from the participation/route change before the acceptance transaction is
 committed; EXCLUDE has no active-instance route effects. The immutable receipt
-retains the accepted durable effect set. Replayed accepted writes return that
-same durable acceptance and may issue fresh live re-establishment contexts for
-its retained actionable dependent effects when earlier contexts have expired.
-It is receipted/replay-safe under L4. The server
+retains the accepted durable participation effects and
+`dependent_effect_refs: tuple[ConclusionRevisionRef, ...]`. A replay never
+changes or expands that accepted identity set. Its returned
+`dependent_effects: tuple[ChangedSurface, ...]` is a live projection obtained
+by re-evaluating only those retained refs against current support/membership
+state; revisions that are no longer actionable are omitted from the live
+projection, and fresh repository-bound contexts are issued only for effects that
+are actionable now. It is receipted/replay-safe under L4. The server
 derives the pyramid identity on first activation; callers never choose a stable
 internal identity.
 
