@@ -451,6 +451,55 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             {item.reason for item in unknown_view.unresolved},
         )
 
+    def test_reverse_context_dependents_include_inheritance_closure(self):
+        member = _member("repo-a")
+        declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-base",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py")
+                    ),
+                    rules=(_graph_ref("repo-a", "rule-p0"),),
+                ),
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-dependent",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/b.py")
+                    ),
+                    inherits=(_graph_ref("repo-a", "ctx-base"),),
+                ),
+            ),
+            rules=(
+                _rule(
+                    "repo-a",
+                    "rule-p0",
+                    m.FunctionalPyramidLayer.P0,
+                    ("ROOT",),
+                ),
+            ),
+        )
+        authority = _authority("repo-a", "rules/rule-p0.md")
+        view, _ = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(member,),
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.FILE, "src/a.py"),
+            semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
+            declarations=(("repo-a", declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings={
+                ("repo-a", "rules/rule-p0.md"): authority,
+            },
+        )
+
+        rule = next(item for item in view.rules if item.rule_id == "rule-p0")
+        self.assertEqual(
+            rule.downstream_context_ids,
+            ("ctx-base", "ctx-dependent"),
+        )
+
     def test_surface_kind_prevents_filename_heuristic_scope_inference(self):
         members = (
             _member(
