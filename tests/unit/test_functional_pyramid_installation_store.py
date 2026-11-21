@@ -4,6 +4,7 @@ import datetime
 import json
 import pathlib
 import tempfile
+import threading
 import unittest
 
 from span.core import model as m
@@ -15,6 +16,7 @@ from span.shell.sqlite_store.functional_pyramid import (
     INSTALLATION_SCHEMA_VERSION,
     FunctionalPyramidInstallationSchemaError,
     FunctionalPyramidInstallationStore,
+    FunctionalPyramidInstallationStoreError,
     ensure_functional_pyramid_installation_store,
     functional_pyramid_installation_path,
 )
@@ -241,6 +243,98 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
             self.assertIsNone(installation.pyramid_version(pyramid_id))
             self.assertIsNone(installation.receipt(m.RequestId("fp-write")))
             self.assertIsNone(repository.find_context_by_id("ctx-fp-rollback"))
+
+    def test_concurrent_overlapping_activation_serializes_to_one_active_instance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = functional_pyramid_installation_path(tmp)
+            created = FunctionalPyramidInstallationStore.create(
+                path,
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
+            )
+            created.close()
+            stores = (
+                FunctionalPyramidInstallationStore(
+                    path,
+                    retention=DEFAULT_LIFECYCLE_RETENTION,
+                    clock=lambda: NOW,
+                ),
+                FunctionalPyramidInstallationStore(
+                    path,
+                    retention=DEFAULT_LIFECYCLE_RETENTION,
+                    clock=lambda: NOW,
+                ),
+            )
+            self.addCleanup(stores[0].close)
+            self.addCleanup(stores[1].close)
+            member = m.FunctionalPyramidMemberView(
+                repository_id="repo",
+                declaration_refs=(),
+                functional_scope=m.FunctionalScope(
+                    (
+                        m.FunctionalScopeSelector(
+                            m.FunctionalScopeSelectorKind.REPOSITORY
+                        ),
+                    )
+                ),
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+            )
+            barrier = threading.Barrier(3)
+            successes: list[str] = []
+            failures: list[BaseException] = []
+
+            def activate(
+                store: FunctionalPyramidInstallationStore, pyramid_value: str
+            ) -> None:
+                try:
+                    barrier.wait()
+                    pyramid_id = m.FunctionalPyramidId(pyramid_value)
+                    version = m.FunctionalPyramidVersion(1)
+                    with store.transaction() as transaction:
+                        transaction.write_pyramid_version(
+                            pyramid_id=pyramid_id,
+                            version=version,
+                            content_digest=m.ContentDigest(f"digest-{pyramid_value}"),
+                            committed_at=NOW,
+                            members=(member,),
+                        )
+                        transaction.set_current_pyramid(
+                            pyramid_id=pyramid_id,
+                            version=version,
+                            members=(member,),
+                        )
+                    successes.append(pyramid_value)
+                except BaseException as exc:
+                    failures.append(exc)
+
+            threads = (
+                threading.Thread(target=activate, args=(stores[0], "fp-a")),
+                threading.Thread(target=activate, args=(stores[1], "fp-b")),
+            )
+            for thread in threads:
+                thread.start()
+            barrier.wait()
+            for thread in threads:
+                thread.join(timeout=10)
+                self.assertFalse(thread.is_alive())
+
+            self.assertEqual(len(successes), 1)
+            self.assertEqual(len(failures), 1)
+            self.assertIsInstance(
+                failures[0], FunctionalPyramidInstallationStoreError
+            )
+            active = stores[0].active_pyramid_id("repo")
+            self.assertIsNotNone(active)
+            assert active is not None
+            self.assertEqual(active.value, successes[0])
+            self.assertEqual(
+                stores[0]._connection.execute(
+                    "SELECT COUNT(*) FROM functional_pyramids"
+                ).fetchone()[0],
+                1,
+            )
 
     def test_repository_portable_backup_excludes_installation_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
