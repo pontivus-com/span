@@ -323,7 +323,8 @@ not `Unavailable`. *(A2, A8, L4)*
 the question or the context that binds the target, the surface or the scope
 that derives it, and any gaps. A create names exactly one evidence mode —
 `locator`, `observation_id`, or non-empty `support` — where `support` is the
-complete declared dependency set the agent already holds. A locator may
+complete caller-supplied dependency set the agent already holds. Server-derived
+normative governance dependencies are added independently under F11/L12. A locator may
 accompany explicit support as the carried code scope, but an observation id may
 not: it would be ignored by the dependency set. A create's scope is supplied or
 derived independently of its evidence mode, from explicit `scope_paths`, the
@@ -370,7 +371,6 @@ orientation but is not automatically a support dependency. An investigator may
 still cite explicit authority where the descriptive conclusion genuinely
 depends on it.
 
-Multiple support files do not create additional owning surfaces.
 The effective semantic scope is a complete `EvidenceScope`: paths, exact evidence
 references, or an empty scope denoting the whole repository. A supplied
 SERVICE/DOMAIN must already exist and contain the complete semantic scope.
