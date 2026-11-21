@@ -269,7 +269,7 @@ common path: the agent declares the scope it inspected and Span observes
 membership internally.
 
 Results: `UnderstandingRecorded`, `VerificationRecorded`, `SurfaceDeclared`,
-`Rejected`, or `Unavailable`. A rejection names the offending identity, the
+`FunctionalPyramidRecorded`, `Rejected`, or `Unavailable`. A rejection names the offending identity, the
 stable server-owned public cause text, the required action, and the structured current version or
 current boundary version when one exists; recognized lifecycle request-shape
 failures are also `Rejected` with their public field coordinates. It is a
