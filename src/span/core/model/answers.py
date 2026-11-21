@@ -322,9 +322,9 @@ class ChangedSurface:
 
 @_dataclass(frozen=True)
 class Changed:
-    """The bounded reconsideration result (FD-20, FD-21, FD-22)."""
+    """The bounded reconsideration result (FD-20, FD-21, FD-22, FD-89)."""
 
-    context: InvestigationContextRef
+    reestablishment_contexts: tuple[InvestigationContextRef, ...] = ()
     surfaces: tuple[ChangedSurface, ...] = ()
     unaffected: tuple[SurfaceKey, ...] = ()
     omitted: tuple[str, ...] = ()
@@ -333,6 +333,18 @@ class Changed:
     def __post_init__(self) -> None:
         if self.truncated and self.unaffected:
             raise ValueError("a truncated walk cannot report surfaces as unaffected")
+        repositories = tuple(
+            context.repository_id for context in self.reestablishment_contexts
+        )
+        if len(set(repositories)) != len(repositories):
+            raise ValueError(
+                "Changed.reestablishment_contexts must contain at most one "
+                "context per repository"
+            )
+        if repositories != tuple(sorted(repositories)):
+            raise ValueError(
+                "Changed.reestablishment_contexts must be ordered by repository_id"
+            )
 
 
 @_dataclass(frozen=True)
