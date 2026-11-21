@@ -299,6 +299,7 @@ from span.core.model.answers import (  # noqa: F401
     Challenged,
     ConclusionView,
     EvidencePage,
+    FunctionalPyramidRecorded,
     Gap,
     GapReason,
     HistoricalConclusion,
@@ -624,4 +625,5 @@ __all__ = [
     "RetrievedFunctionalPyramidReceipt",
     "FunctionalRouteSupport",
     "FunctionalGraphRef",
+    "FunctionalPyramidRecorded",
 ]
