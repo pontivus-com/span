@@ -1667,10 +1667,26 @@ completion merely because a later pyramid write occurs.
 **Authority:** F2–F4, F12; L4, L12–L15; FD-35–FD-48, FD-73, FD-79,
 FD-81, FD-85.
 
-The first Version-1 Beta package candidate is `1.0.0b1` (PEP 440) and its
-lifecycle store identity is schema 14. Later beta increments may advance the
-package version without changing schema identity when no persisted contract
-changes; any persisted-contract change requires a new explicit schema transition.
+The first Version-1 Beta release identity is **1.0.0 Beta 1** and its
+lifecycle store identity is schema 14. That one release identity has deterministic
+ecosystem serializations rather than independent version owners:
+
+- Python/PyPI package version and changelog section: `1.0.0b1` (PEP 440);
+- Git tag: `v1.0.0b1`;
+- GitHub Release: title `Span 1.0.0 Beta 1`, explicitly marked prerelease;
+- MCP Registry top-level server version: `1.0.0-beta.1` (SemVer);
+- MCP Registry PyPI package entry version: `1.0.0b1`.
+
+`src/span/__init__.py::__version__` remains the canonical package serialization.
+Release tooling derives the tag, changelog lookup and PyPI package version from
+that value and derives the MCP server SemVer deterministically; `server.json`
+metadata is a generated/validated release projection, not a second version
+authority. Prerelease detection must understand PEP-440 beta/rc/dev forms and
+must not rely on the presence of a hyphen in the package version.
+
+Later beta increments may advance the release/package version without changing
+schema identity when no persisted contract changes; any persisted-contract
+change requires a new explicit schema transition.
 
 Extend the existing explicit offline store-transition architecture from schema 13
 to schema 14. Runtime open remains exact-version only and never migrates in
