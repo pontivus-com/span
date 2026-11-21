@@ -561,7 +561,15 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         request = m.EvidenceRequest("decl.json")
         self.declarations.results[(repository_id, "decl.json")] = (
             _ref(repository_id, "decl.json"),
-            _declaration(),
+            m.FunctionalPyramidDeclaration(
+                version=1,
+                contexts=(
+                    m.FunctionalContextDeclaration(
+                        context_id=f"ctx-{repository_id}",
+                        coverage=_scope(),
+                    ),
+                ),
+            ),
         )
         return m.FunctionalPyramidMemberIntent(
             repository_id=repository_id,
