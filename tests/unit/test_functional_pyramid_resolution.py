@@ -310,7 +310,11 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
         unresolved_view, fourth = fp.resolve_functional_pyramid_route(
             version=m.FunctionalPyramidVersion(4),
             authority_bindings=missing_authority,
-            **{key: value for key, value in kwargs.items() if key != "authority_bindings"},
+            **{
+                key: value
+                for key, value in kwargs.items()
+                if key != "authority_bindings"
+            },
         )
         self.assertEqual(first, fourth)
         self.assertIn(
