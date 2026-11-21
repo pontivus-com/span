@@ -76,6 +76,7 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
             ) from exc
         return result.evidence_ref, declaration
 
+
 class _RepositoryRuntime(_typing.Protocol):
     repository_id: str
     store: LifecycleStorePort
@@ -123,7 +124,10 @@ class FunctionalPyramidEffectCoordinator:
         for repository_id in sorted(old | new):
             runtime = self._repository_runtime(repository_id)
             route_ids: tuple[m.FunctionalRouteIdentity, ...] = ()
-            if action is m.FunctionalPyramidAction.REVISE and repository_id in old & new:
+            if (
+                action is m.FunctionalPyramidAction.REVISE
+                and repository_id in old & new
+            ):
                 route_ids = self._changed_route_identities(
                     runtime=runtime,
                     pyramid_id=pyramid_id,
@@ -146,7 +150,12 @@ class FunctionalPyramidEffectCoordinator:
 
         return (
             self._merge_surfaces(tuple(surfaces)),
-            tuple(sorted(contexts, key=lambda item: (item.repository_id, item.context_id.value))),
+            tuple(
+                sorted(
+                    contexts,
+                    key=lambda item: (item.repository_id, item.context_id.value),
+                )
+            ),
             tuple(sorted(set(refs), key=lambda item: item.sort_key)),
         )
 
@@ -172,7 +181,12 @@ class FunctionalPyramidEffectCoordinator:
             contexts.extend(issued)
         return (
             self._merge_surfaces(tuple(surfaces)),
-            tuple(sorted(contexts, key=lambda item: (item.repository_id, item.context_id.value))),
+            tuple(
+                sorted(
+                    contexts,
+                    key=lambda item: (item.repository_id, item.context_id.value),
+                )
+            ),
         )
 
     def _effect_engine(
@@ -303,7 +317,9 @@ class FunctionalPyramidEffectCoordinator:
             owners = [
                 repository_id
                 for repository_id in repository_ids
-                if self._repository_runtime(repository_id).store.has_conclusion_revision(
+                if self._repository_runtime(
+                    repository_id
+                ).store.has_conclusion_revision(
                     ref.understanding_id.value,
                     ref.conclusion_id.value,
                     ref.revision.value,
@@ -327,7 +343,9 @@ class FunctionalPyramidEffectCoordinator:
     ) -> m.FunctionalPyramidVersion:
         if action is m.FunctionalPyramidAction.ACTIVATE:
             return m.FunctionalPyramidVersion(1)
-        current = self._service.status(m.FunctionalPyramidSelector(pyramid_id=pyramid_id))
+        current = self._service.status(
+            m.FunctionalPyramidSelector(pyramid_id=pyramid_id)
+        )
         if current.version is None:
             raise ValueError("Functional Pyramid version is unavailable")
         return m.FunctionalPyramidVersion(current.version.value + 1)
@@ -357,4 +375,3 @@ class FunctionalPyramidEffectCoordinator:
                 key=lambda item: (item.repository_id, item.kind.value, item.locator),
             )
         )
-
