@@ -23,6 +23,10 @@ REF = m.ConclusionRevisionRef(
     revision=m.ConclusionRevisionNumber(1),
 )
 
+FP_UNCONFIGURED = m.FunctionalPyramidParticipation(
+    m.FunctionalPyramidParticipationState.UNCONFIGURED
+)
+
 
 def status(surface: m.SurfaceKey = KEY) -> m.SurfaceStatus:
     return m.SurfaceStatus(surface=surface, current=1)
@@ -115,6 +119,7 @@ class AnswerCarrierTest(unittest.TestCase):
             surface=KEY,
             conclusions=(REF,),
             status=status(),
+            functional_pyramid=FP_UNCONFIGURED,
         )
         with self.assertRaises(ValueError):
             m.Answer(
@@ -127,6 +132,7 @@ class AnswerCarrierTest(unittest.TestCase):
                 surface=KEY,
                 conclusions=(REF,),
                 status=status(FILE_KEY),
+                functional_pyramid=FP_UNCONFIGURED,
             )
 
     def test_gap_reasons_are_exhaustive(self) -> None:
@@ -137,6 +143,7 @@ class AnswerCarrierTest(unittest.TestCase):
         m.Gap(
             surface=KEY,
             status=status(),
+            functional_pyramid=FP_UNCONFIGURED,
             reason=m.GapReason.UNASSESSED,
             recovery="record supported understanding for this surface",
         )
