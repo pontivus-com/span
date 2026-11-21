@@ -278,7 +278,7 @@ registration is not the product.
 
 ### F11 — Governing applicability is explicit and mechanically composable
 
-A participating repository declares Functional Pyramid contexts, canonical rule
+An ACTIVE Functional Pyramid repository declares Functional Pyramid contexts, canonical rule
 identities, rule layers and governing relationships. Span resolves every
 applicable context for the same effective semantic scope used by the semantic
 lifecycle, including narrower contexts that intersect a broader directory,
@@ -302,7 +302,7 @@ Span never infers applicability or precedence from file names, directory
 placement, document class, prominence, similarity, source age or structural
 adjacency.
 
-For a normative conclusion in a participating repository, Span derives the
+For a normative conclusion in an ACTIVE Functional Pyramid repository, Span derives the
 applicable Functional Pyramid route and authority dependencies from the
 conclusion's semantic scope. The caller cannot omit or override them.
 
