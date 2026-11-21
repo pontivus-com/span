@@ -924,12 +924,11 @@ def _resolve_context_refs(
     tuple[FunctionalPyramidFinding, ...],
 ]:
     ordered: list[tuple[FunctionalGraphRef, bool]] = []
-    direct_keys = {(ref.repository_id, ref.identity) for ref in direct_refs}
     emitted: set[tuple[str, str]] = set()
+    valid_direct: list[FunctionalGraphRef] = []
     findings: list[FunctionalPyramidFinding] = []
 
-    def visit(ref: FunctionalGraphRef, stack: tuple[tuple[str, str], ...]) -> None:
-        key = (ref.repository_id, ref.identity)
+    def validate(ref: FunctionalGraphRef) -> bool:
         if ref.identity in duplicate_contexts:
             findings.append(
                 _finding(
@@ -940,7 +939,7 @@ def _resolve_context_refs(
                     context_id=ref.identity,
                 )
             )
-            return
+            return False
         ref_finding = _ref_finding(
             ref,
             member_repositories=member_repositories,
@@ -951,7 +950,22 @@ def _resolve_context_refs(
         )
         if ref_finding is not None:
             findings.append(ref_finding)
-            return
+            return False
+        return True
+
+    # FD-72: every direct context precedes every inherited context.
+    for ref in direct_refs:
+        key = (ref.repository_id, ref.identity)
+        if key in emitted or not validate(ref):
+            continue
+        emitted.add(key)
+        valid_direct.append(ref)
+        ordered.append((ref, True))
+
+    def visit_inherited(
+        ref: FunctionalGraphRef, stack: tuple[tuple[str, str], ...]
+    ) -> None:
+        key = (ref.repository_id, ref.identity)
         if key in stack:
             findings.append(
                 _finding(
@@ -963,17 +977,21 @@ def _resolve_context_refs(
                 )
             )
             return
+        if not validate(ref):
+            return
         if key not in emitted:
             emitted.add(key)
-            ordered.append((ref, key in direct_keys))
+            ordered.append((ref, False))
         context = contexts[key]
         for inherited in context.inherits:
-            visit(inherited, stack + (key,))
+            visit_inherited(inherited, stack + (key,))
 
-    for ref in direct_refs:
-        visit(ref, ())
+    for ref in valid_direct:
+        key = (ref.repository_id, ref.identity)
+        for inherited in contexts[key].inherits:
+            visit_inherited(inherited, (key,))
+
     return tuple(ordered), _ordered_findings(findings)
-
 
 def _resolve_rule_refs(
     initial_refs: tuple[FunctionalGraphRef, ...],
