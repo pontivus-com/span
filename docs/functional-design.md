@@ -200,7 +200,7 @@ Those states are not conflated and neither is repaired by searching for similar
 content. *(G1, G7, F11)*
 
 **FD-71 — Unresolved route states are typed and preserved.**
-The resolver distinguishes at least:
+The Version-1 Beta unresolved-reason vocabulary is closed:
 
 - `UNCOVERED_PATH`;
 - `INVALID_DECLARATION`;
@@ -217,7 +217,9 @@ The resolver distinguishes at least:
 
 Resolvable branches remain visible when another branch is unresolved, but the
 route reports its unresolved state completely. No unresolved branch is dropped
-to manufacture a complete route. *(G1, A7, F11, L12)*
+to manufacture a complete route. A new unresolved reason requires an amendment
+to this functional design rather than an implementation-local string or fallback.
+*(G1, A7, F11, L12)*
 
 **FD-72 — Route ordering and provenance are deterministic.**
 Paths retain request order after normalization. Direct contexts precede inherited
@@ -837,8 +839,11 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
    no most-specific-wins behavior occurs.
 4. **Distributed context.** One context covering disconnected paths resolves as
    one context without requiring path ancestry.
-5. **Multi-path semantic scope.** Resolution unions context/rule membership while
-   preserving per-path provenance.
+5. **Multi-path and broad semantic scope.** Resolution unions context/rule
+   membership while preserving per-scope provenance. A directory/service/domain
+   scope includes narrower intersecting contexts, and repository-wide normative
+   scope includes every declared context in that repository rather than treating
+   the root path as one literal file.
 6. **Cross-repository authority.** With both repositories registered, a local
    path resolves external governing rules by stable identity. With the external
    repository absent, the same relationship is
