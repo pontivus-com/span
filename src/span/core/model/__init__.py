@@ -142,6 +142,7 @@ from span.core.model.primitives import (  # noqa: F401
 from span.core.model.functional_pyramid import (  # noqa: F401
     FunctionalContextDeclaration,
     FunctionalContextRoute,
+    FunctionalGraphRef,
     FunctionalPyramidAction,
     FunctionalPyramidBootstrap,
     FunctionalPyramidCandidate,
@@ -622,4 +623,5 @@ __all__ = [
     "FunctionalPyramidReceiptSelector",
     "RetrievedFunctionalPyramidReceipt",
     "FunctionalRouteSupport",
+    "FunctionalGraphRef",
 ]
