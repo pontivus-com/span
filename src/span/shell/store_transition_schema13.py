@@ -129,13 +129,14 @@ def stage_schema13(
             "UPDATE repositories SET root=? WHERE repository_id=?",
             (root, config.repository_id),
         )
-        if target.execute(
-            "SELECT 1 FROM repositories WHERE repository_id=?",
-            (config.repository_id,),
-        ).fetchone() is None:
-            raise TransitionError(
-                "schema-13 source has no selected repository binding"
-            )
+        if (
+            target.execute(
+                "SELECT 1 FROM repositories WHERE repository_id=?",
+                (config.repository_id,),
+            ).fetchone()
+            is None
+        ):
+            raise TransitionError("schema-13 source has no selected repository binding")
 
         route_rows = _derive_route_index(target)
         target.commit()
@@ -193,9 +194,7 @@ def verify_schema13_staging(paths: TransitionPaths, config: TransitionConfig) ->
                 )
         for table in _EMPTY_VERSION14_TABLES:
             if connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]:
-                raise TransitionError(
-                    f"schema-13 transition must leave {table} empty"
-                )
+                raise TransitionError(f"schema-13 transition must leave {table} empty")
         route_rows = int(
             connection.execute(
                 "SELECT COUNT(*) FROM functional_route_dependency_index"
