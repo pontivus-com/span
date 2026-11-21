@@ -32,9 +32,7 @@ FUNCTIONAL_ACCEPTANCE = REPO_ROOT / "docs" / "functional-acceptance.md"
 _ROW = re.compile(
     r"^\|\s*(I-\d{2})\s*\|\s*(.+?)\s*\|\s*(Test|Review)\s*\|\s*(.+?)\s*\|\s*$"
 )
-_FA_ROW = re.compile(
-    r"^\|\s*(FA-\d{2})\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$"
-)
+_FA_ROW = re.compile(r"^\|\s*(FA-\d{2})\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$")
 _BACKTICK = re.compile(r"`([^`]+)`")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ANY = re.compile(r"\bAny\b")
