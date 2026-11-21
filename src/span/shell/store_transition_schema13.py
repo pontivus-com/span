@@ -44,15 +44,6 @@ _SCHEMA13_TABLES = (
     "record_receipts",
 )
 
-_EMPTY_VERSION14_TABLES = (
-    "functional_pyramids",
-    "functional_pyramid_versions",
-    "functional_pyramid_active_members",
-    "functional_pyramid_exclusions",
-    "functional_pyramid_receipts",
-)
-
-
 def _copy_table(
     target: _sqlite3.Connection,
     source: _sqlite3.Connection,
@@ -153,7 +144,7 @@ def stage_schema13(
         "repository_id": config.repository_id,
         "counts": counts,
         "derived_functional_route_rows": route_rows,
-        "new_functional_pyramid_state": "empty",
+        "functional_pyramid_installation_state": "separate",
     }
     paths.mapping.write_text(
         _json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -162,7 +153,7 @@ def stage_schema13(
     return (
         (
             "schema-13 state copied without semantic reinterpretation; "
-            "Functional Pyramid participation and receipts remain empty",
+            "Functional Pyramid participation remains installation-owned",
             "existing FunctionalRouteSupport rows indexed without adding support",
         ),
         payload,
@@ -192,9 +183,6 @@ def verify_schema13_staging(paths: TransitionPaths, config: TransitionConfig) ->
                 raise TransitionError(
                     f"staged {table} holds {actual} rows, mapping expects {expected}"
                 )
-        for table in _EMPTY_VERSION14_TABLES:
-            if connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]:
-                raise TransitionError(f"schema-13 transition must leave {table} empty")
         route_rows = int(
             connection.execute(
                 "SELECT COUNT(*) FROM functional_route_dependency_index"
