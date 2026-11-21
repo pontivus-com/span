@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import datetime as _datetime
 import typing as _typing
 
 from span.core import functional_pyramid as _fp
 from span.core import model as m
+from span.core.identity import functional_pyramid_identity, payload_digest
+from span.core.recording import RecordingConflict, receipt_content_decision
+from span.core.rejection import RejectionCauseKind
 from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidDeclarationPort,
@@ -16,6 +20,35 @@ from span.ports.lifecycle import LifecycleAuthorityResolver
 
 _DeclarationEntry = tuple[str, m.FunctionalPyramidDeclaration]
 _AuthorityMap = dict[tuple[str, str], m.AuthorityBinding]
+
+_EffectProjection = _typing.Callable[
+    [
+        FunctionalPyramidStateTransaction,
+        m.FunctionalPyramidAction,
+        m.FunctionalPyramidId,
+        tuple[m.FunctionalPyramidMemberView, ...],
+        tuple[m.FunctionalPyramidMemberView, ...],
+    ],
+    tuple[
+        tuple[m.ChangedSurface, ...],
+        tuple[m.InvestigationContextRef, ...],
+        tuple[m.ConclusionRevisionRef, ...],
+    ],
+]
+_RetainedEffectProjection = _typing.Callable[
+    [
+        FunctionalPyramidStateTransaction,
+        tuple[m.ConclusionRevisionRef, ...],
+    ],
+    tuple[
+        tuple[m.ChangedSurface, ...],
+        tuple[m.InvestigationContextRef, ...],
+    ],
+]
+_RepositoryPaths = _typing.Callable[
+    [tuple[str, ...]],
+    tuple[tuple[str, str], ...],
+]
 
 
 def _validation_finding(
@@ -70,11 +103,19 @@ class FunctionalPyramidService:
         authority: LifecycleAuthorityResolver,
         state: FunctionalPyramidStatePort | None = None,
         registered_repository_ids: _typing.Callable[[], tuple[str, ...]] | None = None,
+        repository_paths: _RepositoryPaths | None = None,
+        effect_projection: _EffectProjection | None = None,
+        retained_effect_projection: _RetainedEffectProjection | None = None,
+        clock: _typing.Callable[[], _datetime.datetime] | None = None,
     ) -> None:
         self._declarations = declarations
         self._authority = authority
         self._state = state
         self._registered_repository_ids = registered_repository_ids
+        self._repository_paths = repository_paths
+        self._effect_projection = effect_projection
+        self._retained_effect_projection = retained_effect_projection
+        self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
 
     def _require_state(self) -> FunctionalPyramidStatePort:
         if self._state is None:
@@ -123,7 +164,13 @@ class FunctionalPyramidService:
         self, selector: m.FunctionalPyramidCandidateSelector
     ) -> m.FunctionalPyramidCandidate:
         """Pure action-aware candidate validation (FD-84)."""
-        state = self._require_state()
+        return self._candidate(selector, self._require_state())
+
+    def _candidate(
+        self,
+        selector: m.FunctionalPyramidCandidateSelector,
+        state: FunctionalPyramidStatePort | FunctionalPyramidStateTransaction,
+    ) -> m.FunctionalPyramidCandidate:
         registered = self._registered()
         validation: list[m.FunctionalPyramidValidationFinding] = []
 
@@ -253,6 +300,509 @@ class FunctionalPyramidService:
             activation_ready=not ordered_validation and not graph,
             validation_findings=ordered_validation,
             graph_findings=tuple(graph),
+        )
+
+    def receipt(
+        self, selector: m.FunctionalPyramidReceiptSelector
+    ) -> m.RetrievedFunctionalPyramidReceipt | None:
+        """Retrieve one immutable installation-scoped Functional Pyramid receipt."""
+        return self._require_state().receipt(selector.request_id)
+
+    def record(
+        self,
+        *,
+        request_id: m.RequestId,
+        action: m.FunctionalPyramidAction,
+        members: tuple[m.FunctionalPyramidMemberIntent, ...] = (),
+        pyramid_id: m.FunctionalPyramidId | None = None,
+        expected_version: m.FunctionalPyramidVersion | None = None,
+        repository_id: str | None = None,
+    ) -> m.FunctionalPyramidRecorded:
+        """Accept/replay one installation-scoped participation write (FD-85/FD-93)."""
+        state = self._require_state()
+        self._validate_record_shape(
+            action=action,
+            members=members,
+            pyramid_id=pyramid_id,
+            expected_version=expected_version,
+            repository_id=repository_id,
+        )
+        digest = self._record_digest(
+            action=action,
+            members=members,
+            pyramid_id=pyramid_id,
+            expected_version=expected_version,
+            repository_id=repository_id,
+        )
+        existing = state.receipt(request_id)
+        decision = receipt_content_decision(
+            None if existing is None else existing.content_digest,
+            digest,
+        )
+        if decision is m.ReceiptDecisionKind.REPLAY:
+            assert existing is not None
+            return self._replay_record(existing)
+        if decision is m.ReceiptDecisionKind.CONFLICT:
+            raise RecordingConflict(
+                "this Functional Pyramid request identity already committed different content",
+                cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+            )
+
+        if action is m.FunctionalPyramidAction.EXCLUDE:
+            assert repository_id is not None
+            return self._record_exclude(
+                request_id=request_id,
+                digest=digest,
+                repository_id=repository_id,
+            )
+
+        if action is m.FunctionalPyramidAction.ACTIVATE:
+            repository_ids = tuple(sorted({item.repository_id for item in members}))
+        else:
+            assert pyramid_id is not None
+            current_members = state.pyramid_members(pyramid_id)
+            repository_ids = tuple(
+                sorted(
+                    {item.repository_id for item in current_members}
+                    | {item.repository_id for item in members}
+                )
+            )
+        repository_paths = self._attached_paths(repository_ids)
+        with state.transaction(repository_paths) as transaction:
+            replay = transaction.receipt(request_id)
+            transaction_decision = receipt_content_decision(
+                None if replay is None else replay.content_digest,
+                digest,
+            )
+            if transaction_decision is m.ReceiptDecisionKind.REPLAY:
+                assert replay is not None
+                return self._project_receipt(transaction, replay)
+            if transaction_decision is m.ReceiptDecisionKind.CONFLICT:
+                raise RecordingConflict(
+                    "this Functional Pyramid request identity already committed different content",
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+                )
+            if action in (
+                m.FunctionalPyramidAction.ACTIVATE,
+                m.FunctionalPyramidAction.REVISE,
+            ):
+                return self._record_active(
+                    transaction=transaction,
+                    request_id=request_id,
+                    digest=digest,
+                    action=action,
+                    members=members,
+                    pyramid_id=pyramid_id,
+                    expected_version=expected_version,
+                )
+            assert action is m.FunctionalPyramidAction.DEACTIVATE
+            assert pyramid_id is not None
+            assert expected_version is not None
+            return self._record_deactivate(
+                transaction=transaction,
+                request_id=request_id,
+                digest=digest,
+                pyramid_id=pyramid_id,
+                expected_version=expected_version,
+            )
+
+    @staticmethod
+    def _validate_record_shape(
+        *,
+        action: m.FunctionalPyramidAction,
+        members: tuple[m.FunctionalPyramidMemberIntent, ...],
+        pyramid_id: m.FunctionalPyramidId | None,
+        expected_version: m.FunctionalPyramidVersion | None,
+        repository_id: str | None,
+    ) -> None:
+        if action is m.FunctionalPyramidAction.ACTIVATE:
+            if not members or any(
+                value is not None
+                for value in (pyramid_id, expected_version, repository_id)
+            ):
+                raise ValueError(
+                    "activate requires members and no pyramid/version/repository selector"
+                )
+            return
+        if action is m.FunctionalPyramidAction.REVISE:
+            if (
+                not members
+                or pyramid_id is None
+                or expected_version is None
+                or repository_id is not None
+            ):
+                raise ValueError(
+                    "revise requires members, pyramid_id and expected_version"
+                )
+            return
+        if action is m.FunctionalPyramidAction.DEACTIVATE:
+            if (
+                members
+                or pyramid_id is None
+                or expected_version is None
+                or repository_id is not None
+            ):
+                raise ValueError(
+                    "deactivate requires pyramid_id and expected_version only"
+                )
+            return
+        if action is m.FunctionalPyramidAction.EXCLUDE:
+            if (
+                members
+                or pyramid_id is not None
+                or expected_version is not None
+                or repository_id is None
+                or not repository_id
+            ):
+                raise ValueError("exclude requires repository_id only")
+            return
+        raise ValueError(f"unsupported Functional Pyramid action: {action!r}")
+
+    @staticmethod
+    def _record_digest(
+        *,
+        action: m.FunctionalPyramidAction,
+        members: tuple[m.FunctionalPyramidMemberIntent, ...],
+        pyramid_id: m.FunctionalPyramidId | None,
+        expected_version: m.FunctionalPyramidVersion | None,
+        repository_id: str | None,
+    ) -> m.ContentDigest:
+        return payload_digest(
+            {
+                "action": action.value,
+                "members": [m.to_canonical(item) for item in members],
+                "pyramid_id": None if pyramid_id is None else pyramid_id.value,
+                "expected_version": (
+                    None if expected_version is None else expected_version.value
+                ),
+                "repository_id": repository_id,
+            }
+        )
+
+    def _attached_paths(
+        self, repository_ids: tuple[str, ...]
+    ) -> tuple[tuple[str, str], ...]:
+        if not repository_ids:
+            return ()
+        if self._repository_paths is None:
+            raise ValueError("Functional Pyramid repository paths are not configured")
+        paths = self._repository_paths(repository_ids)
+        if tuple(repository_id for repository_id, _ in paths) != tuple(
+            sorted(repository_ids)
+        ):
+            raise ValueError(
+                "Functional Pyramid repository paths must cover repositories in sorted order"
+            )
+        return paths
+
+    def _record_active(
+        self,
+        *,
+        transaction: FunctionalPyramidStateTransaction,
+        request_id: m.RequestId,
+        digest: m.ContentDigest,
+        action: m.FunctionalPyramidAction,
+        members: tuple[m.FunctionalPyramidMemberIntent, ...],
+        pyramid_id: m.FunctionalPyramidId | None,
+        expected_version: m.FunctionalPyramidVersion | None,
+    ) -> m.FunctionalPyramidRecorded:
+        selector = m.FunctionalPyramidCandidateSelector(
+            action=action,
+            members=members,
+            pyramid_id=pyramid_id,
+            expected_version=expected_version,
+        )
+        candidate = self._candidate(selector, transaction)
+        if not candidate.activation_ready:
+            reasons = tuple(
+                item.reason.value
+                for item in (*candidate.validation_findings, *candidate.graph_findings)
+            )
+            raise ValueError(
+                "Functional Pyramid candidate is not activation-ready: "
+                + ", ".join(reasons)
+            )
+
+        old_members: tuple[m.FunctionalPyramidMemberView, ...] = ()
+        if action is m.FunctionalPyramidAction.ACTIVATE:
+            selected_id = functional_pyramid_identity(request_id)
+            version = m.FunctionalPyramidVersion(1)
+        else:
+            assert pyramid_id is not None
+            assert expected_version is not None
+            current = transaction.pyramid_version(pyramid_id)
+            if current != expected_version:
+                observed = None if current is None else current.value
+                raise RecordingConflict(
+                    "Functional Pyramid version changed before revision commit: "
+                    f"expected {expected_version.value}, observed {observed}",
+                    cause_kind=RejectionCauseKind.STALE_VERSION,
+                    current_version=observed,
+                )
+            old_members = transaction.pyramid_members(pyramid_id, current)
+            selected_id = pyramid_id
+            version = m.FunctionalPyramidVersion(expected_version.value + 1)
+
+        effects = self._participation_effects(
+            action=action,
+            old_members=old_members,
+            new_members=candidate.members,
+        )
+        dependent, contexts, refs = self._change_effects(
+            transaction,
+            action,
+            selected_id,
+            old_members,
+            candidate.members,
+        )
+        now = self._clock()
+        transaction.write_pyramid_version(
+            pyramid_id=selected_id,
+            version=version,
+            content_digest=digest,
+            committed_at=now,
+            members=candidate.members,
+        )
+        transaction.set_current_pyramid(
+            pyramid_id=selected_id,
+            version=version,
+            members=candidate.members,
+        )
+        receipt = m.RetrievedFunctionalPyramidReceipt(
+            request_id=request_id,
+            content_digest=digest,
+            committed_at=now,
+            action=action,
+            pyramid_id=selected_id,
+            version=version,
+            members=candidate.members,
+            participation_effects=effects,
+            dependent_effect_refs=refs,
+        )
+        transaction.write_receipt(
+            receipt,
+            replay_expires_at=now + self._require_state().retention.replay_retention,
+        )
+        return self._recorded(receipt, dependent, contexts)
+
+    def _record_deactivate(
+        self,
+        *,
+        transaction: FunctionalPyramidStateTransaction,
+        request_id: m.RequestId,
+        digest: m.ContentDigest,
+        pyramid_id: m.FunctionalPyramidId,
+        expected_version: m.FunctionalPyramidVersion,
+    ) -> m.FunctionalPyramidRecorded:
+        current = transaction.pyramid_version(pyramid_id)
+        if current != expected_version:
+            observed = None if current is None else current.value
+            raise RecordingConflict(
+                "Functional Pyramid version changed before deactivation commit: "
+                f"expected {expected_version.value}, observed {observed}",
+                cause_kind=RejectionCauseKind.STALE_VERSION,
+                current_version=observed,
+            )
+        old_members = transaction.pyramid_members(pyramid_id, current)
+        if not old_members:
+            raise ValueError("cannot deactivate an unknown Functional Pyramid")
+        dependent, contexts, refs = self._change_effects(
+            transaction,
+            m.FunctionalPyramidAction.DEACTIVATE,
+            pyramid_id,
+            old_members,
+            (),
+        )
+        effects = tuple(
+            m.FunctionalPyramidParticipationEffect(
+                repository_id=member.repository_id,
+                state=m.FunctionalPyramidParticipationState.EXCLUDED,
+            )
+            for member in sorted(old_members, key=lambda item: item.repository_id)
+        )
+        transaction.clear_current_pyramid(pyramid_id)
+        for member in old_members:
+            transaction.set_excluded(member.repository_id, True)
+        now = self._clock()
+        receipt = m.RetrievedFunctionalPyramidReceipt(
+            request_id=request_id,
+            content_digest=digest,
+            committed_at=now,
+            action=m.FunctionalPyramidAction.DEACTIVATE,
+            pyramid_id=pyramid_id,
+            version=current,
+            members=(),
+            participation_effects=effects,
+            dependent_effect_refs=refs,
+        )
+        transaction.write_receipt(
+            receipt,
+            replay_expires_at=now + self._require_state().retention.replay_retention,
+        )
+        return self._recorded(receipt, dependent, contexts)
+
+    def _record_exclude(
+        self,
+        *,
+        request_id: m.RequestId,
+        digest: m.ContentDigest,
+        repository_id: str,
+    ) -> m.FunctionalPyramidRecorded:
+        if repository_id not in self._registered():
+            raise ValueError("cannot exclude an unregistered repository")
+        state = self._require_state()
+        with state.transaction() as transaction:
+            replay = transaction.receipt(request_id)
+            decision = receipt_content_decision(
+                None if replay is None else replay.content_digest,
+                digest,
+            )
+            if decision is m.ReceiptDecisionKind.REPLAY:
+                assert replay is not None
+                return self._recorded(replay, (), ())
+            if decision is m.ReceiptDecisionKind.CONFLICT:
+                raise RecordingConflict(
+                    "this Functional Pyramid request identity already committed different content",
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+                )
+            if transaction.active_pyramid_id(repository_id) is not None:
+                raise ValueError("ACTIVE repository cannot be excluded")
+            changed = not transaction.is_excluded(repository_id)
+            transaction.set_excluded(repository_id, True)
+            effects = (
+                (
+                    m.FunctionalPyramidParticipationEffect(
+                        repository_id=repository_id,
+                        state=m.FunctionalPyramidParticipationState.EXCLUDED,
+                    ),
+                )
+                if changed
+                else ()
+            )
+            now = self._clock()
+            receipt = m.RetrievedFunctionalPyramidReceipt(
+                request_id=request_id,
+                content_digest=digest,
+                committed_at=now,
+                action=m.FunctionalPyramidAction.EXCLUDE,
+                pyramid_id=None,
+                version=None,
+                members=(),
+                participation_effects=effects,
+                dependent_effect_refs=(),
+            )
+            transaction.write_receipt(
+                receipt,
+                replay_expires_at=now
+                + self._require_state().retention.replay_retention,
+            )
+            return self._recorded(receipt, (), ())
+
+    def _replay_record(
+        self, receipt: m.RetrievedFunctionalPyramidReceipt
+    ) -> m.FunctionalPyramidRecorded:
+        repository_ids = tuple(
+            sorted(
+                {member.repository_id for member in receipt.members}
+                | {
+                    effect.repository_id
+                    for effect in receipt.participation_effects
+                }
+            )
+        )
+        paths = self._attached_paths(repository_ids) if repository_ids else ()
+        with self._require_state().transaction(paths) as transaction:
+            return self._project_receipt(transaction, receipt)
+
+    def _project_receipt(
+        self,
+        transaction: FunctionalPyramidStateTransaction,
+        receipt: m.RetrievedFunctionalPyramidReceipt,
+    ) -> m.FunctionalPyramidRecorded:
+        if not receipt.dependent_effect_refs:
+            return self._recorded(receipt, (), ())
+        if self._retained_effect_projection is None:
+            raise ValueError(
+                "Functional Pyramid retained effect projection is not configured"
+            )
+        surfaces, contexts = self._retained_effect_projection(
+            transaction,
+            receipt.dependent_effect_refs,
+        )
+        return self._recorded(receipt, surfaces, contexts)
+
+    def _change_effects(
+        self,
+        transaction: FunctionalPyramidStateTransaction,
+        action: m.FunctionalPyramidAction,
+        pyramid_id: m.FunctionalPyramidId,
+        old_members: tuple[m.FunctionalPyramidMemberView, ...],
+        new_members: tuple[m.FunctionalPyramidMemberView, ...],
+    ) -> tuple[
+        tuple[m.ChangedSurface, ...],
+        tuple[m.InvestigationContextRef, ...],
+        tuple[m.ConclusionRevisionRef, ...],
+    ]:
+        if self._effect_projection is None:
+            raise ValueError("Functional Pyramid effect projection is not configured")
+        return self._effect_projection(
+            transaction,
+            action,
+            pyramid_id,
+            old_members,
+            new_members,
+        )
+
+    @staticmethod
+    def _participation_effects(
+        *,
+        action: m.FunctionalPyramidAction,
+        old_members: tuple[m.FunctionalPyramidMemberView, ...],
+        new_members: tuple[m.FunctionalPyramidMemberView, ...],
+    ) -> tuple[m.FunctionalPyramidParticipationEffect, ...]:
+        old = {item.repository_id for item in old_members}
+        new = {item.repository_id for item in new_members}
+        effects: list[m.FunctionalPyramidParticipationEffect] = []
+        if action is m.FunctionalPyramidAction.ACTIVATE:
+            changed = sorted(new)
+            target = m.FunctionalPyramidParticipationState.ACTIVE
+            return tuple(
+                m.FunctionalPyramidParticipationEffect(repository_id=item, state=target)
+                for item in changed
+            )
+        if action is m.FunctionalPyramidAction.REVISE:
+            for repository_id in sorted(new - old):
+                effects.append(
+                    m.FunctionalPyramidParticipationEffect(
+                        repository_id=repository_id,
+                        state=m.FunctionalPyramidParticipationState.ACTIVE,
+                    )
+                )
+            for repository_id in sorted(old - new):
+                effects.append(
+                    m.FunctionalPyramidParticipationEffect(
+                        repository_id=repository_id,
+                        state=m.FunctionalPyramidParticipationState.UNCONFIGURED,
+                    )
+                )
+        return tuple(effects)
+
+    @staticmethod
+    def _recorded(
+        receipt: m.RetrievedFunctionalPyramidReceipt,
+        dependent_effects: tuple[m.ChangedSurface, ...],
+        contexts: tuple[m.InvestigationContextRef, ...],
+    ) -> m.FunctionalPyramidRecorded:
+        return m.FunctionalPyramidRecorded(
+            receipt_selector=m.FunctionalPyramidReceiptSelector(receipt.request_id),
+            committed_at=receipt.committed_at,
+            action=receipt.action,
+            pyramid_id=receipt.pyramid_id,
+            version=receipt.version,
+            members=receipt.members,
+            participation_effects=receipt.participation_effects,
+            dependent_effects=dependent_effects,
+            reestablishment_contexts=contexts,
         )
 
     def discover_bootstrap(
