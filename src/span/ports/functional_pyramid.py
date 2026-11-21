@@ -22,6 +22,7 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
         self, repository_id: str
     ) -> tuple[m.EvidenceRef, m.FunctionalPyramidBootstrap] | None:
         """Return the conventional bootstrap, or None when it is absent."""
+        ...
 
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
@@ -30,3 +31,4 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
         | m.EvidenceSourceFailure
     ):
         """Read and strict-decode one exact whole-document declaration source."""
+        ...
