@@ -187,6 +187,17 @@ def _supported_schemas():
     return SCHEMA_VERSION, frozenset(SUPPORTED_SOURCE_SCHEMAS)
 
 
+def _database_schema_supported(name, version, current, supported):
+    """Recognize repository lifecycle and installation-store schema identities."""
+    if name == "installation/functional-pyramid.db":
+        from span.shell.sqlite_store.functional_pyramid import (
+            INSTALLATION_SCHEMA_VERSION,
+        )
+
+        return version == INSTALLATION_SCHEMA_VERSION
+    return version == current or version in supported
+
+
 def _load_manifest(backup_dir):
     backup_dir = Path(backup_dir)
     manifest_path = backup_dir / BACKUP_MANIFEST
@@ -272,11 +283,11 @@ def verify_backup(backup_dir):
                 version = database.schema_version
                 if version is None:
                     failures.append(f"{name}: no readable meta.schema_version")
-                elif version != current and version not in supported:
+                elif not _database_schema_supported(
+                    name, version, current, supported
+                ):
                     failures.append(
-                        f"{name}: schema {version} is neither current ({current}) "
-                        "nor a supported transition source "
-                        f"({sorted(supported)})"
+                        f"{name}: unsupported database schema {version}"
                     )
         results.append(
             VerifiedArtifact(
@@ -371,6 +382,8 @@ def restore_backup(backup_dir, data_dir, confirm, backup_root=None, dry_run=Fals
     actions = []
     for artifact in report.artifacts:
         if artifact.database is None:
+            continue
+        if artifact.path == "installation/functional-pyramid.db":
             continue
         repository_id = Path(artifact.path).stem
         if artifact.database.schema_version != current:
