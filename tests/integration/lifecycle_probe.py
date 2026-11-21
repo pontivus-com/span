@@ -93,6 +93,68 @@ async def _run(exe, repo, data_dir, repository_id):
                     },
                 },
             )
+
+            fp_member = {
+                "repository_id": repository_id,
+                "declaration_sources": [
+                    {"locator": "docs/functional-pyramid.json", "ranges": []}
+                ],
+                "functional_scope": {
+                    "selectors": [{"kind": "PREFIX", "path": "src"}]
+                },
+                "coverage": "PARTIAL",
+            }
+            fp_status_before, fp_status_before_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidSelector",
+                        "repository_id": repository_id,
+                    }
+                },
+            )
+            fp_candidate, fp_candidate_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidCandidateSelector",
+                        "action": "activate",
+                        "members": [fp_member],
+                    }
+                },
+            )
+            fp_activate, fp_activate_error = await _call(
+                session,
+                "record",
+                {
+                    "request_id": "fp-installed-activate",
+                    "kind": "functional_pyramid",
+                    "action": "activate",
+                    "members": [fp_member],
+                },
+            )
+            fp_status_after, fp_status_after_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidSelector",
+                        "repository_id": repository_id,
+                    }
+                },
+            )
+            fp_receipt, fp_receipt_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidReceiptSelector",
+                        "request_id": {"value": "fp-installed-activate"},
+                    }
+                },
+            )
             return {
                 "server_version": initialized.server_info.version,
                 "tools": names,
@@ -107,6 +169,20 @@ async def _run(exe, repo, data_dir, repository_id):
                 "found_kind": warm.get("$type"),
                 "statement": warm["groups"][0]["conclusions"][0]["statement"],
                 "version": retrieved["version"]["version"]["value"],
+                "fp_status_before_error": fp_status_before_error,
+                "fp_status_before_kind": fp_status_before.get("$type"),
+                "fp_status_before_state": fp_status_before.get("state"),
+                "fp_candidate_error": fp_candidate_error,
+                "fp_candidate_kind": fp_candidate.get("$type"),
+                "fp_activation_ready": fp_candidate.get("activation_ready"),
+                "fp_activate_error": fp_activate_error,
+                "fp_activate_kind": fp_activate.get("$type"),
+                "fp_status_after_error": fp_status_after_error,
+                "fp_status_after_state": fp_status_after.get("state"),
+                "fp_status_after_health": fp_status_after.get("health"),
+                "fp_receipt_error": fp_receipt_error,
+                "fp_receipt_kind": fp_receipt.get("$type"),
+                "fp_receipt_action": fp_receipt.get("action"),
             }
 
 
