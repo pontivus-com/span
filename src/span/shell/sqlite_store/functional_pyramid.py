@@ -91,7 +91,6 @@ class FunctionalPyramidInstallationSchemaError(FunctionalPyramidInstallationStor
     """The installation store is absent or has an unsupported schema."""
 
 
-
 def _canonical_json(value: object) -> str:
     return _json.dumps(m.to_canonical(value), sort_keys=True, separators=(",", ":"))
 
@@ -115,10 +114,10 @@ def _decode_member(payload: str) -> m.FunctionalPyramidMemberView:
 def _decode_members(payload: str) -> tuple[m.FunctionalPyramidMemberView, ...]:
     raw = _json.loads(payload)
     if not isinstance(raw, list):
-        raise FunctionalPyramidInstallationStoreError("stored pyramid members are invalid")
-    return tuple(
-        m.from_canonical(m.FunctionalPyramidMemberView, item) for item in raw
-    )
+        raise FunctionalPyramidInstallationStoreError(
+            "stored pyramid members are invalid"
+        )
+    return tuple(m.from_canonical(m.FunctionalPyramidMemberView, item) for item in raw)
 
 
 def _active_pyramid_id(
@@ -177,7 +176,9 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
     effects_raw = _json.loads(str(row["participation_effects_json"]))
     refs_raw = _json.loads(str(row["dependent_effect_refs_json"]))
     if not isinstance(members_raw, list):
-        raise FunctionalPyramidInstallationStoreError("stored receipt members are invalid")
+        raise FunctionalPyramidInstallationStoreError(
+            "stored receipt members are invalid"
+        )
     if not isinstance(effects_raw, list):
         raise FunctionalPyramidInstallationStoreError(
             "stored receipt participation effects are invalid"
@@ -194,9 +195,7 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
         committed_at=_datetime.datetime.fromisoformat(str(row["committed_at"])),
         action=m.FunctionalPyramidAction(str(row["action"])),
         pyramid_id=(
-            None
-            if pyramid_value is None
-            else m.FunctionalPyramidId(str(pyramid_value))
+            None if pyramid_value is None else m.FunctionalPyramidId(str(pyramid_value))
         ),
         version=(
             None
@@ -250,9 +249,7 @@ class FunctionalPyramidInstallationTransaction:
             f"repository is not attached to this pyramid transaction: {repository_id}"
         )
 
-    def active_pyramid_id(
-        self, repository_id: str
-    ) -> m.FunctionalPyramidId | None:
+    def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None:
         return _active_pyramid_id(self._connection, repository_id)
 
     def pyramid_version(
@@ -393,7 +390,10 @@ class FunctionalPyramidInstallationTransaction:
                 None if receipt.version is None else receipt.version.value,
                 _members_json(receipt.members),
                 _json.dumps(
-                    [m.to_canonical(effect) for effect in receipt.participation_effects],
+                    [
+                        m.to_canonical(effect)
+                        for effect in receipt.participation_effects
+                    ],
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
@@ -550,9 +550,7 @@ class FunctionalPyramidInstallationStore:
                 f"multi-database writes: journal_mode={mode}, synchronous={synchronous}"
             )
 
-    def active_pyramid_id(
-        self, repository_id: str
-    ) -> m.FunctionalPyramidId | None:
+    def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None:
         return _active_pyramid_id(self._connection, repository_id)
 
     def pyramid_version(
