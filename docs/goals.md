@@ -133,7 +133,7 @@ explicitly partial rather than being represented as complete governance.
 
 A fresh agent with no conversation memory asks about a surface and receives, in
 one lifecycle interaction, the current retained semantic understanding or an
-actionable gap, its support status, and—when the repository participates in the
+actionable gap, its support status, and—when the repository is ACTIVE in the
 Functional Pyramid—the declared governing route from applicable first
 principles to implementation.
 
