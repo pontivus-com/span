@@ -31,9 +31,7 @@ def _member_intent(repository_id: str = "repo-a") -> m.FunctionalPyramidMemberIn
     return m.FunctionalPyramidMemberIntent(
         repository_id=repository_id,
         declaration_sources=(m.EvidenceRequest("docs/functional-pyramid.json"),),
-        functional_scope=_scope(
-            _selector(m.FunctionalScopeSelectorKind.PREFIX, "src")
-        ),
+        functional_scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
         coverage=m.FunctionalPyramidCoverage.PARTIAL,
     )
 
@@ -42,9 +40,7 @@ def _member_view(repository_id: str = "repo-a") -> m.FunctionalPyramidMemberView
     return m.FunctionalPyramidMemberView(
         repository_id=repository_id,
         declaration_refs=(),
-        functional_scope=_scope(
-            _selector(m.FunctionalScopeSelectorKind.PREFIX, "src")
-        ),
+        functional_scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
         coverage=m.FunctionalPyramidCoverage.PARTIAL,
     )
 
@@ -106,9 +102,7 @@ class FunctionalScopeCarrierTest(unittest.TestCase):
     def test_normalization_removes_redundancy_deterministically(self):
         prefix = _selector(m.FunctionalScopeSelectorKind.PREFIX, "src")
         path = _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py")
-        symbol = _selector(
-            m.FunctionalScopeSelectorKind.SYMBOL, "src/a.py", "main"
-        )
+        symbol = _selector(m.FunctionalScopeSelectorKind.SYMBOL, "src/a.py", "main")
         other = _selector(m.FunctionalScopeSelectorKind.PATH, "README.md")
 
         normalized = normalize_functional_scope((symbol, path, prefix, other))
