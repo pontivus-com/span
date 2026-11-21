@@ -477,6 +477,79 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertIn(affected.ref, refs)
         self.assertEqual(contexts[0].repository_id, "repo-1")
 
+    def test_authority_source_change_is_considered_not_forced_stale(self) -> None:
+        root_auth = pathlib.Path(self._tmp.name) / "repo-auth"
+        root_auth.mkdir()
+        (root_auth / "rules").mkdir()
+        (root_auth / "rules/governance.md").write_text(
+            "governance\n", encoding="utf-8"
+        )
+        authority = m.AuthorityBinding(
+            evidence_ref=m.EvidenceRef(
+                evidence_id=m.EvidenceId("authority-1"),
+                repository_id="repo-auth",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator="rules/governance.md",
+                revision_or_fingerprint="sha256:authority",
+            ),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+        self.store.register_repository(
+            "repo-auth",
+            str(root_auth),
+            authority_bindings=(authority,),
+        )
+        context_auth = m.InvestigationContextId("ctx-repo-auth")
+        self.store.put_context(
+            m.InvestigationContext(
+                context_id=context_auth,
+                repository_id="repo-auth",
+                request_id=m.RequestId("req-repo-auth"),
+                binding_digest=m.ContentDigest("sha256:repo-auth"),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(),
+                created_at=NOW,
+                expires_at=NOW + RETENTION.context_lifetime,
+            )
+        )
+        self._create(
+            "u-authority",
+            "src/authority_user.py",
+            "src/authority_user.py",
+            m.AuthoritySupportDependency(authority=authority),
+            repository_id="repo-auth",
+            context_id=context_auth,
+            assertion_nature=m.AssertionNature.NORMATIVE,
+        )
+        support = mock.Mock()
+        support.evaluate_revision.return_value = support_rules.evaluation(
+            m.SupportState.CURRENT,
+            NOW,
+            "",
+        )
+        service = ReconsiderService(store=self.store, support=support)
+
+        result = service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-auth",
+                changed_paths=("rules/governance.md",),
+            )
+        )
+
+        affected = next(
+            conclusion
+            for surface in result.surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-authority"
+        )
+        self.assertIn(m.ChangeReason.DIRECT, affected.reasons)
+        self.assertIsInstance(affected.support, m.SupportEvaluation)
+        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertEqual(affected.support.state, m.SupportState.CURRENT)
+        self.assertEqual(result.reestablishment_contexts, ())
+
     def test_governance_only_change_crosses_repository_boundary(self) -> None:
         root_two = pathlib.Path(self._tmp.name) / "repo-two"
         root_two.mkdir()
