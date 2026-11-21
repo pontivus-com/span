@@ -155,18 +155,29 @@ class FunctionalAcceptanceMatrixTest(unittest.TestCase):
     def test_every_acceptance_case_names_live_boundary_tests(self):
         unnamed = []
         unresolved = []
+        ambiguous = []
         for identifier, _behavior, evidence in self.rows:
             claimed = _claimed_tests(evidence)
             if not claimed:
                 unnamed.append(identifier)
             for token in claimed:
-                if token not in self.index:
+                locations = self.index.get(token, ())
+                if not locations:
                     unresolved.append(f"{identifier} → {token}")
+                elif len(locations) != 1:
+                    ambiguous.append(
+                        f"{identifier} → {token}: {', '.join(locations)}"
+                    )
         self.assertEqual(unnamed, [], "acceptance rows that name no boundary test")
         self.assertEqual(
             unresolved,
             [],
             "acceptance rows naming a missing boundary test",
+        )
+        self.assertEqual(
+            ambiguous,
+            [],
+            "acceptance rows naming an ambiguous boundary test",
         )
 
 
