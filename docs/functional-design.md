@@ -1,6 +1,6 @@
 # Span functional design — layer 3
 
-**Status: binding.** This is the third layer of the pyramid. It states the
+**Status: binding target for Span 1.0 Beta.** This is the third layer of the pyramid. It states the
 behaviour that makes the lifecycle contract deterministic and testable, without
 choosing a mechanism. Layer 4 — schemas, storage, transport, and host adapters —
 must satisfy it.
@@ -8,15 +8,18 @@ must satisfy it.
 Where this layer and a higher layer disagree, the higher layer governs. A
 requirement here that cannot be traced to a higher-layer statement is a defect.
 
-**0.10.3 target behavior, amended 2026-11-14.** Implementation and host
-verification remain pending; current code is not certified by this amendment.
+**1.0 Beta target behavior, 21 November 2026.** This design completes the
+product model across empirical understanding, declared governing authority and
+the supported relationship between them. Implementation, migration and host
+verification remain pending; current code is not certified by this design.
 
 ## 1. Scope
 
 This layer answers **how the system must behave to keep the contract**, not
-**how it is built**. It defines identity, containment, support evaluation, change
-propagation, response composition, state transitions, failure taxonomy,
-retention, concurrency, host expectations, and truncation.
+**how it is built**. It defines identity, semantic containment, Functional Pyramid resolution,
+support evaluation, governance and source change propagation, response
+composition, state transitions, failure taxonomy, retention, concurrency, host
+expectations, and truncation.
 
 It does not define storage layout, wire encoding, transport framing, host
 adapters, or exact deployment numbers.
@@ -83,11 +86,198 @@ at any granularity covering that member. It is computed from the declared
 boundary and reported. A boundary that cannot be enumerated
 reports the limit rather than claiming completeness. *(F9)*
 
-## 4. Support evaluation
+## 4. Functional Pyramid resolution
 
-**FD-9 — Four dependency kinds.**
-Support is a source observation, a discovery boundary, an authority binding, or a
-conclusion revision (premise). Nothing else counts as declared support. *(F1, F2)*
+The Functional Pyramid is a governance graph, not a semantic surface hierarchy.
+Its resolution is deterministic and uses only explicit declarations. Semantic
+surface ownership continues to follow FD-1–FD-8.
+
+**FD-61 — Participation is explicit.**
+A repository participates in the Functional Pyramid only when its configuration
+declares Functional Pyramid sources. Absence of participation means no pyramid
+view and no route dependency; it is not an error, gap or inferred empty graph.
+A repository that participates must resolve its declarations or report the
+specific unresolved state. *(G4, G7, F11, L12)*
+
+**FD-62 — Path matching is deterministic and repository-relative.**
+Input paths are normalized to one repository-relative identity before matching.
+Absolute paths, traversal outside the repository and ambiguous repository
+identity are rejected. Matching uses only the repository's declared selectors.
+The concrete selector syntax is layer 4; semantic classification, model
+judgment, file-name heuristics and structural proximity never participate.
+*(F11, L12)*
+
+**FD-63 — Every matching context applies.**
+A path resolves to all directly matching functional contexts. Matching is
+additive: a narrower or more specific match adds context and never suppresses a
+broader match. Several contexts applying to one path is normal and is not an
+`AmbiguousSurface`. One functional context may cover several disconnected
+paths. *(G4, G7, F11)*
+
+**FD-64 — Context inheritance is many-to-many and additive.**
+A context may inherit zero or more declared contexts. Resolution expands every
+reachable inherited context to a fixed point and unions its rule references.
+Inheritance expresses applicability composition, not authority precedence.
+A context may not silently override another context. *(F11)*
+
+**FD-65 — Context identity has one declaration owner.**
+A context ID names one canonical declaration within the resolved repository
+set. Two non-identical owners for one context ID are unresolved duplicate
+ownership, not merge candidates. An unknown inherited context is unresolved.
+A context-inheritance cycle is unresolved and every route that depends on the
+cycle carries that limitation. *(G1, F11)*
+
+**FD-66 — Functional rules have stable identity and one canonical owner.**
+A functional rule has a stable rule ID, one declared layer, one canonical
+authority binding and zero or more direct governing rule IDs. The substantive
+rule text remains at that authority source. Span retains references, identity
+and support; it never copies the rule text into a competing rule owner.
+*(G6, F1, F11)*
+
+**FD-67 — The layer relation is fixed and validated.**
+The Functional Pyramid layers are `P0`, `P1`, `P2S`, `P2W`, `P3` and
+`P4`.
+
+- P0 rules have `ROOT`, not a governing rule.
+- P1 rules are governed by applicable P0 rules or an explicitly unresolved
+  relationship.
+- P2S and P2W rules are contract-layer siblings. They identify applicable
+  higher goals/invariants; neither becomes the other's derivation parent merely
+  because both apply.
+- P3 rules identify the applicable contracts/invariants they realize.
+- P4 rules identify the applicable behavior or contracts they realize.
+- A direct governing edge may skip an absent intermediate layer.
+- Same-layer edges and edges from a higher layer to a lower governing parent are
+  invalid derivation edges.
+
+A valid edge establishes derivation only. It does not prove that the semantic
+rule text is correct. *(G7, F11)*
+
+**FD-68 — Route resolution follows declarations to closure.**
+For each selected path Span:
+
+1. finds every directly matching context;
+2. expands context inheritance;
+3. collects every rule referenced by those contexts;
+4. resolves each rule's canonical owner;
+5. walks every direct governing-rule edge to its accepted root or unresolved
+   terminal;
+6. deduplicates by stable identity while preserving every provenance path.
+
+No step selects a preferred route when several valid routes apply. *(G1, G7,
+F11, L12)*
+
+**FD-69 — Multi-path resolution is a provenance-preserving union.**
+When a semantic scope contains several paths, Span resolves each path
+independently, unions identical contexts and rules for presentation, and
+preserves the path-to-context-to-rule provenance for each input. A rule that is
+shared by all paths appears once in the rule set but remains traceable from each
+applicable path. *(G4, F11)*
+
+**FD-70 — Cross-repository references are explicit.**
+Context and rule references may cross repositories only through declared stable
+identities and repository bindings known to the Span installation. If the
+referenced repository is not available, the relationship is
+`REPOSITORY_UNAVAILABLE`. If the repository is available but the named
+context/rule does not exist, it is `UNKNOWN_CONTEXT` or `UNKNOWN_RULE`.
+Those states are not conflated and neither is repaired by searching for similar
+content. *(G1, G7, F11)*
+
+**FD-71 — Unresolved route states are typed and preserved.**
+The resolver distinguishes at least:
+
+- `UNCOVERED_PATH`;
+- `INVALID_DECLARATION`;
+- `DUPLICATE_CONTEXT_OWNER`;
+- `UNKNOWN_CONTEXT`;
+- `CONTEXT_CYCLE`;
+- `REPOSITORY_UNAVAILABLE`;
+- `DUPLICATE_RULE_OWNER`;
+- `UNKNOWN_RULE`;
+- `RULE_CYCLE`;
+- `INVALID_GOVERNING_EDGE`;
+- `UNRESOLVED_RULE_PARENT`.
+
+Resolvable branches remain visible when another branch is unresolved, but the
+route reports its unresolved state completely. No unresolved branch is dropped
+to manufacture a complete route. *(G1, A7, F11, L12)*
+
+**FD-72 — Route ordering and provenance are deterministic.**
+Paths retain request order after normalization. Direct contexts precede inherited
+contexts and use declared stable ordering within each class. Rules are presented
+by layer from P0 through P4 and then stable rule identity. Provenance edges use
+stable identities. The same repository state and semantic scope produce the
+same route ordering. *(A2, F11)*
+
+**FD-73 — Route identity tracks applicability, not rule prose.**
+A route-support identity changes when its normalized scope, directly matched
+contexts, inherited-context closure, applicable rule membership, rule ownership,
+declared layer or governing-rule edges change. Canonical rule content and status
+are evaluated through the rule's authority support, not duplicated into route
+identity. This separation allows Span to state whether *what applies* changed
+independently from whether *an applicable authority itself* changed.
+*(F1, F11)*
+
+**FD-74 — Canonical rule content is never projected as a second authority.**
+The Functional Pyramid view may return stable rule IDs, layer, owner reference,
+status, governing IDs and provenance. It does not copy the canonical rule text.
+When the investigator needs source bytes, ordinary evidence admission reads the
+canonical owner. *(G6, F1, L11, L12)*
+
+**FD-75 — Normative support is server-derived from the complete route.**
+When a new or revised conclusion has `assertion_nature=NORMATIVE` and its
+repository participates, Span resolves the complete effective semantic scope
+under FD-68–FD-70 before acceptance. Span adds:
+
+- one route-support dependency for that resolved applicability graph; and
+- authority-support dependencies for every applicable functional rule.
+
+The caller cannot omit, replace, narrow or mark those dependencies current. If
+any applicable route branch is unresolved or an applicable authority is not
+currently supportable, the normative conclusion is not currently supportable.
+Additional explicit support may be supplied but cannot substitute for the
+server-derived governance dependencies. *(G1, G3, F2, F7, F11, L12)*
+
+**FD-76 — Descriptive understanding and governing orientation remain distinct.**
+A descriptive conclusion does not automatically depend on the Functional
+Pyramid merely because its path has a governing route. The route is still
+returned for orientation. Explicit authority support remains permitted when a
+descriptive conclusion genuinely depends on authority. Source currency cannot
+make authority current, and accepted authority cannot establish observed
+implementation behavior. *(F1, F5, F11)*
+
+**FD-77 — Conformance is a supported judgment, not a generated verdict.**
+Span never computes semantic conformance from rule text and source topology. A
+human or agent authors a normative/conformance conclusion after investigation.
+Span can then establish that the judgment's empirical dependencies, governing
+route and applicable authorities are current. *(G7, F1, F5)*
+
+**FD-78 — Functional Pyramid orientation is available on cold surfaces.**
+An unassessed semantic surface may return `Gap/unassessed` while its Functional
+Pyramid view is fully resolved. Conversely, descriptive understanding may remain
+usable while the Functional Pyramid view contains unresolved governance. The two
+states are composed but never collapsed. *(G1, G4, G7, L3, L12)*
+
+**FD-79 — Governance changes are support changes.**
+A change to a participating context declaration, rule declaration, canonical
+authority identity/content/status, or governing edge causes affected route and
+authority dependencies to be re-evaluated. A normative conclusion may therefore
+become `REASSESSMENT_REQUIRED` or `UNVERIFIABLE` without any implementation
+source change. *(G3, F4, F11, L10, L12)*
+
+**FD-80 — Functional Pyramid resolution never originates missing governance.**
+No resolver path may invent a context, rule, goal, governing edge, exception,
+owner, precedence or repository mapping to complete a graph. The unresolved
+relationship is the result until an owning declaration changes. *(G1, G7, F5,
+F11)*
+
+## 5. Support evaluation
+
+**FD-9 — Five dependency kinds.**
+Support is a source observation, a discovery boundary, an authority binding, a
+Functional Pyramid route, or a conclusion revision (premise). Caller-declared
+support may use the first, second, third and fifth forms; route support is
+server-derived under FD-75. Nothing else counts as support. *(F1, F2, F7, F11)*
 
 **FD-10 — Source dependency.**
 Compare the recorded content identity with the present identity of the declared
@@ -100,9 +290,13 @@ membership → `REASSESSMENT_REQUIRED`. Membership that cannot be observed →
 `UNVERIFIABLE`. *(F2, F4)*
 
 **FD-12 — Authority dependency.**
-Resolve the declared authority. A declaration that no longer exists →
-`UNVERIFIABLE`; a changed authority identity → `REASSESSMENT_REQUIRED`; an
-unchanged declaration → `CURRENT`. *(F2)*
+Resolve the exact declared authority binding. Missing authority is
+`UNVERIFIABLE`; `SUPERSEDED` is `REASSESSMENT_REQUIRED`; draft, declared
+but unaccepted, or unknown authority is `UNVERIFIABLE`. Changed identity,
+kind, applicability or content identity is `REASSESSMENT_REQUIRED`. Only the
+same accepted binding with current canonical source content is `CURRENT`.
+Authority currency never establishes the semantic truth of the governing rule.
+*(F1, F2)*
 
 **FD-13 — Premise dependency.**
 Resolve the exact conclusion revision.
@@ -129,24 +323,36 @@ never reported as current and never silently truncated. *(F2)*
 Across declared dependencies: any `UNVERIFIABLE` → `UNVERIFIABLE`; else any
 `REASSESSMENT_REQUIRED` → `REASSESSMENT_REQUIRED`; else `CURRENT`. Declaring a
 change when a dependency cannot be checked would assert a definite finding that is
-not established (F1, A6). See §13. *(F2, A7)*
+not established (F1, A6). See §14. *(F2, A7)*
 
 **FD-16 — Reasons are complete.**
 The combined evaluation lists every non-current dependency with its state and
 reason, so a definite finding is not lost inside an `UNVERIFIABLE` summary.
 *(F2, A8)*
 
-## 5. Change propagation
+**FD-16a — Route dependency.**
+Re-resolve the exact semantic scope through FD-61–FD-73. If route evaluation is
+operationally impossible, support is `UNVERIFIABLE`. If the route resolves but
+its route-support identity differs from the recorded identity, support is
+`REASSESSMENT_REQUIRED`. If the route contains an unresolved branch, support
+is `UNVERIFIABLE`. Only the same complete resolved route is `CURRENT`.
+Applicable authority content/status is checked separately by FD-12. *(F2, F11)*
+
+## 6. Change propagation
 
 **FD-17 — Paths map to surfaces in both directions.**
 A changed path maps to its path surface and to every declared surface whose
 boundary contains it. *(F4, L10)*
 
 **FD-18 — Direct support loss.**
-A conclusion loses support directly when it declares a source dependency on the
-changed path, or a discovery dependency whose scope membership contains the
-changed path. Where a reliable declared range exists, evaluate that range;
-otherwise evaluate the whole file. A range that cannot be reliably bound falls
+A conclusion loses support directly when a changed path affects any declared or
+server-derived dependency: a source dependency on that path, a discovery
+dependency whose membership contains it, an authority binding whose canonical
+source changed, or a Functional Pyramid route whose declaration/authority graph
+may be affected. Route and authority dependencies are re-evaluated by their
+own owners; a path match alone is never a stale verdict. Where a reliable
+declared source range exists, evaluate that range; otherwise evaluate the whole
+file. A range that cannot be reliably bound falls
 back to the whole file rather than to a narrower claim. Support evaluation
 re-reads the current source; the observation stores the content hash and
 ranges, not the source bytes. *(F2, F4)*
@@ -159,7 +365,8 @@ premise is withdrawn, absent, or cannot be checked, the conclusion is
 
 **FD-20 — Inclusion is complete.**
 The result includes every surface that must be re-examined or repaired: by
-containment, by direct source or discovery loss, or by indirect loss — including
+containment, by direct source/discovery/authority/route support loss, or by
+indirect loss — including
 a surface whose boundary excludes the changed path. Entries are deduplicated by
 surface and carry the set of reasons that apply. Inclusion is not a verdict:
 each affected conclusion carries its own support state, so a considered
@@ -175,15 +382,18 @@ A surface may be reported unaffected only within the examined boundary. A bounde
 walk that cannot complete reports the limit; it does not report "unaffected".
 *(F4, A8)*
 
-## 6. Response composition
+## 7. Response composition
 
 **FD-23 — The Answer/Gap threshold is defined.**
-`ask` returns `Answer` when at least one matched conclusion is `CURRENT`. It
+`ask` returns `Answer` when at least one matched conclusion is `CURRENT`.
+Functional Pyramid orientation does not itself turn a semantic Gap into an
+Answer and an unresolved pyramid does not by itself discard a current
+descriptive conclusion. It
 returns `Gap` when no matched conclusion is current. `Answer` contains only
 current conclusions; stale conclusions appear as references in the surface
 status, never as answer content. A supported conclusion is never withheld because
 another matched conclusion is stale: that would discard usable understanding
-(A9) and force re-derivation (F8). See §13. *(F2, L2)*
+(A9) and force re-derivation (F8). See §14. *(F2, L2)*
 
 The historical view is assembled at read time from the stored revisions. Each
 `Gap.historical` entry carries the exact revision, the understanding version
@@ -221,8 +431,13 @@ When a surface reference resolves to more than one granularity, the result is
 `Gap` reason and never an arbitrary choice. *(F9, L2)*
 
 **FD-27 — Operational failure is not an empty answer.**
-A failure that prevents evaluation — unavailable store, provider error, schema
-version — returns `Unavailable` with the recovery. An unreadable source is not
+A failure that prevents the lifecycle operation itself from evaluating —
+unavailable store, required provider error, schema version — returns
+`Unavailable` with the recovery. If semantic answer composition succeeds but
+Functional Pyramid orientation fails operationally, the Answer/Gap carries
+`FunctionalPyramidUnavailable`; it does not erase otherwise valid descriptive
+understanding. Normative conclusions whose route support cannot be evaluated
+remain non-current through FD-16a. An unreadable source is not
 `Unavailable`; it is `UNVERIFIABLE` support. *(A8, L3)*
 
 Expected operational failures are classified at their typed owner and projected
@@ -239,9 +454,13 @@ forbidden. Missing/invalid references identify the bound repository/context and
 public corrective action; absence alone does not establish expiry or reaping.
 Stateful validation stays with its canonical owner. *(FD-39, FD-41, L3, L5)*
 
-**FD-28 — The document view is assembled, never stored.**
-The view is composed on read from current conclusions; no stored copy exists. Its
-contents are fixed in `lifecycle-contract` §4.1. *(G6, L11)*
+**FD-28 — The surface document view is assembled, never stored.**
+The semantic surface view is composed on read from current conclusions; no stored
+copy exists. This assembled explanatory view is distinct from canonical governing
+documents. Functional Pyramid rules remain at their canonical owners and are
+referenced by the accompanying pyramid view rather than copied into the surface
+document view. Its contents are fixed in `lifecycle-contract` §4.1.
+*(G6, F11, L11, L12)*
 
 Pure surface obtain groups all current membership by recorded question metadata.
 `RecordedQuestionSelector` restricts membership to one exact recorded question
@@ -251,10 +470,13 @@ issue no context and require no request identity. Their role as the reuse paths
 is stated in `lifecycle-contract` §4.1. *(G2, F3, A4, L11)*
 
 **FD-29 — Result ordering is stable.**
-Current conclusions first, grouped by question; then status; then gaps and
-verification; then references. The same request produces the same order. *(A2)*
+The selected surface and Functional Pyramid orientation precede semantic content
+in the canonical projection; current conclusions are grouped by question, then
+status, gaps, verification and references. Functional Pyramid internal ordering
+follows FD-72. The same request against the same state produces the same order.
+*(A2, L12)*
 
-## 7. State transitions
+## 8. State transitions
 
 **FD-30 — create.** The first version for `(surface, question)`. *(L4)*
 
@@ -279,30 +501,35 @@ surface. *(F9, FD-1, L4)*
 A create carries its complete explicit support when supplied, otherwise the
 admitted observation or a re-read of the cited locator. *(F5, F7, L2)*
 The new conclusion lineage identity follows L7; assertion nature defaults to
-`DESCRIPTIVE`; the basis records explicit evidence from the cited source.
-*(F5, F7, L2)*
+`DESCRIPTIVE`; the basis records explicit evidence from the cited source. For
+`NORMATIVE` content in a participating repository, route and authority support
+are derived under FD-75 after semantic scope is fixed and before acceptance.
+*(F5, F7, F11, L2, L12)*
 
 **FD-31 — confirm.** A re-establishment action: accepted only after present
 support has been checked, and only for a version whose recorded support was not
 current. If the version is already current and unchanged, the operation returns
 the current version rather than creating a new one. Unchanged wording alone is
 never a confirmation. A confirm names the conclusion and the reassessed
-evidence; Span preserves the current statement, assertion nature, and scope and
-derives a non-empty mechanical basis. *(F2, A6, F8, L4)*
+evidence; Span preserves the current statement, assertion nature, and scope,
+re-derives required Functional Pyramid support when normative, and derives a
+non-empty mechanical basis. *(F2, A6, F8, F11, L4)*
 
 **FD-32 — correct.** A conclusion's content changes and a new revision is
 created. Dependents on the previous revision become `REASSESSMENT_REQUIRED`.
-The corrected statement and its complete supplied support are explicit; an
-omitted assertion nature or scope is preserved from the current revision, and
-Span derives the content basis. *(F4)*
+The corrected statement and its caller-supplied support are explicit; an
+omitted assertion nature or scope is preserved from the current revision, Span
+derives any required normative route/authority support, and Span derives the
+content basis. *(F4, F7, F11)*
 
 **FD-33 — replace.** A conclusion is superseded by another. Dependents on the
 superseded revision become `REASSESSMENT_REQUIRED`. Replacement never retargets
 another conclusion's premises silently. The action identifies the current
 lineage being replaced. The replacement lineage identity follows L7. Span
 derives the exact current old revision, preserves an omitted assertion nature
-or scope for the new conclusion, uses the supplied reason as the replacement
-basis, and derives the new content basis. *(F4)*
+or scope for the new conclusion, derives any required normative
+route/authority support, uses the supplied reason as the replacement basis, and
+derives the new content basis. *(F4, F7, F11)*
 
 **FD-34 — withdraw.** A conclusion is retracted with its basis. Dependents on the
 withdrawn revision become `UNVERIFIABLE`. The action supplies the reason;
@@ -341,7 +568,7 @@ transition's coordinates. Disposition evidence references are resolved only
 through the recording context. No caller-provided resulting version or revision
 participates in this procedure. *(F5, F7, L4, L7)*
 
-## 8. Failure taxonomy
+## 9. Failure taxonomy
 
 **FD-38 — Closed unions.**
 `ask`, `record`, and `reconsider` each return exactly the results declared in
@@ -364,13 +591,18 @@ is `Unavailable` (FD-27), never a rejection. *(A2, A8)*
 no revision, no challenge disposition, and no consumed context. *(A2, L4)*
 
 **FD-41 — Every rejection is actionable.** The rejection names the exact identity
-that failed validation and what must change. Recovery must correct the actual
+that failed validation and what must change. Functional Pyramid unresolved
+states are not input rejections merely because governance is incomplete: they
+are returned in the pyramid view and make required normative route support
+`UNVERIFIABLE`. A malformed declaration that violates the accepted declaration
+contract is an explicit unresolved/validation condition at its owning boundary,
+never silently ignored. Recovery must correct the actual
 invariant: original content/new identity for binding conflicts, in-scope evidence
 or context-free direct recording for scope conflicts, and the admitting context
 or direct evidence for context-bound references. What it carries is fixed in
 `lifecycle-contract` §4.2. *(A8)*
 
-## 9. Retention and recovery
+## 10. Retention and recovery
 
 **FD-42 — Context expiry removes membership only.** Expiry of a context does not
 remove accepted understanding, challenge history, verification runs, or receipts.
@@ -387,6 +619,12 @@ If retained history is reaped, any premise that referenced a removed revision
 becomes `UNVERIFIABLE` and is reported. Reaping never turns a broken premise into
 a current one. *(F2, F3)*
 
+Historical normative revisions retain their route-support identity and authority
+references. They do not retain copied governing prose. If a referenced repository
+or declaration can no longer be evaluated, live qualification becomes
+`UNVERIFIABLE` while historical membership remains retrievable. *(G6, F2,
+F11)*
+
 **FD-45 — Restart recovery is by identity.**
 After a restart, a caller request identity recovers its context if retained and
 its receipt if retained. No conversation replay is required. The canonical
@@ -396,7 +634,7 @@ lookup still validates actual liveness and membership. No cross-store search or
 context replacement is implicit. Change-scope issuance follows FD-2 and its contexts use the same retention
 owner. *(A1, A2, F4, L7, L10)*
 
-## 10. Concurrency
+## 11. Concurrency
 
 **FD-46 — Updates are compare-and-set.**
 An update names the expected version. A mismatch rejects the write and reports
@@ -415,7 +653,7 @@ conflict. *(A2, A3)*
 Exactly one write succeeds; the other is rejected as a version conflict. There is
 no last-write-wins and no silent merge. *(A3)*
 
-## 11. Host contract
+## 12. Host contract
 
 **FD-49 — The host delivers the advertised schema.**
 Span requires the host to expose the declared tool schemas without coercion or
@@ -441,6 +679,11 @@ of notice delivery. The agent lifecycle remains required by layer 2 §7. *(A4)*
 A host contract is established only by a recorded capture observed or failed.
 *(A8)*
 
+The Version-1 host contract still exposes exactly `ask`, `record` and
+`reconsider`. Functional Pyramid orientation is verified as part of those
+result schemas; no host is accepted on evidence from a separate authority tool
+because no such public operation exists. *(F6, L8, L12)*
+
 **FD-58 — Lifecycle notices reach the agent at the moment of use.**
 For a registered operational repository, the adoption notice names the direct
 lifecycle tools and their required use, including when no understanding has yet
@@ -450,7 +693,7 @@ the canonical computations; they do not author semantic conclusions or certify
 meaning. Measure delivered notice cost under F8 and delivery under FD-53.
 *(F5, F10, G2)*
 
-## 12. Bounds and truncation
+## 13. Bounds and truncation
 
 **FD-54 — Response size is server-owned.**
 The agent does not manage response size; the default is set per host and recorded
@@ -467,9 +710,12 @@ A budget limit never promotes historical content into answer content and never
 omits the fact that truncation occurred. *(F2, A7)*
 
 **FD-57 — A result too small to be safe is refused.**
-If the budget cannot carry the result kind, the surface identity, and the fact of
-truncation, the operation returns an explicit budget refusal rather than a
-misleading fragment. *(A7, A8)*
+If the budget cannot carry the result kind, surface identity, Functional Pyramid
+participation/resolution state when applicable, and the fact of truncation, the
+operation returns an explicit budget refusal rather than a misleading fragment.
+Rule lists or provenance may be continued/omitted only when the result still
+states that they are incomplete; unresolved governance is never truncated into
+an apparently complete route. *(A7, A8, G1, L12)*
 
 **FD-59 — Recording context scope is fixed; derived operational scope is complete.**
 Source evidence admission requires membership in the supplied context's scope;
@@ -487,7 +733,7 @@ After commitment, compose current status for the understanding's canonical owner
 Operational status failure preserves acceptance and reports explicit status
 unavailability. Status is never persisted in the receipt. *(F9, L4)*
 
-## 13. Why these choices follow
+## 14. Why these choices follow
 
 The four choices that resemble judgement calls are derivations, not preferences.
 
@@ -508,8 +754,8 @@ principle and violate two.
 
 ### The state precedence (FD-15)
 
-F1 makes code the authority, A6 says confidence is not evidence, and A7 requires
-a safe default. If any dependency cannot be checked, the conclusion is not
+F1 keeps evidence and authority proof distinct, A6 says confidence is not
+evidence, and A7 requires a safe default. If any dependency cannot be checked, the conclusion is not
 established. Reporting `REASSESSMENT_REQUIRED` in that case would assert a
 definite change that has not been observed — promoting uncertainty to a claim.
 Therefore `UNVERIFIABLE` dominates. FD-16 keeps every definite finding visible,
@@ -523,6 +769,33 @@ therefore outlive the longest suspension a supported host allows. That lower
 bound is derived. The exact window is a deployment measurement because the
 suspension length is a property of the host, not of Span.
 
+### Two proof planes (FD-12, FD-16a, FD-73, FD-76)
+
+G1 and F1 require Span to say only what its evidence establishes. Source identity
+can establish empirical currency but cannot establish that a governing rule is
+legitimate or applicable. Conversely, accepted canonical authority can establish
+governing status but cannot establish what implementation currently does.
+
+Therefore source/verification support and authority/route support remain distinct
+dependencies. A conformance judgment becomes reusable by depending on both,
+rather than by weakening either proof type.
+
+### Additive context resolution (FD-63, FD-64)
+
+G7 requires the complete applicable governing route, and F11 forbids inference.
+A path can legitimately participate in several responsibilities at once.
+Selecting one "best" context would drop obligations without authority to do so.
+Therefore every explicit match composes and inheritance adds rather than
+replaces.
+
+### Server-derived normative governance support (FD-75)
+
+A4 says the agent will omit bookkeeping; F7 says Span derives what can be
+derived; G7 requires governing applicability to be complete. If the caller were
+allowed to enumerate the applicable governing route, omission would create a
+false CURRENT normative conclusion. Therefore Span derives route and authority
+support from the already-declared semantic scope and Functional Pyramid.
+
 ### confirm (FD-31)
 
 F2 requires present support for any claim of currency; A6 forbids treating
@@ -532,8 +805,56 @@ present check and applies to a version that was not current. If the version is
 already current and nothing changed, a new version would be churn, so the current
 version is returned.
 
-## 14. What this layer does not define
+## 15. Version 1 Beta functional acceptance
+
+The implementation is not functionally conformant to this design until the
+following behaviors are demonstrated against the public lifecycle and pure core
+rules. These are behavioral cases, not layer-4 mechanism choices.
+
+1. **Non-participating repository.** Existing descriptive ask/record/reconsider
+   behavior remains valid and no Functional Pyramid state is invented.
+2. **Cold participating path.** `ask(FILE)` returns `Gap/unassessed` plus a
+   resolved Functional Pyramid view without generating semantic understanding.
+3. **Overlapping contexts.** One path matching broad platform, workflow and
+   boundary contexts returns all of them and the union of their governing rules;
+   no most-specific-wins behavior occurs.
+4. **Distributed context.** One context covering disconnected paths resolves as
+   one context without requiring path ancestry.
+5. **Multi-path semantic scope.** Resolution unions context/rule membership while
+   preserving per-path provenance.
+6. **Cross-repository authority.** With both repositories registered, a local
+   path resolves external governing rules by stable identity. With the external
+   repository absent, the same relationship is
+   `REPOSITORY_UNAVAILABLE`, not `UNKNOWN_RULE` and not silently discarded.
+7. **Authority graph defects.** Unknown rules, duplicate owners, context cycles,
+   rule cycles and invalid governing edges are explicit unresolved states.
+8. **Normative create.** The caller supplies semantic intent and empirical
+   evidence; Span derives route and every applicable authority dependency.
+   Omitting governance is impossible through the public grammar.
+9. **Descriptive create.** A descriptive conclusion remains source-supported
+   without automatically becoming normative merely because a pyramid route
+   exists.
+10. **Authority-content change.** Changing an applicable canonical rule without
+    changing its ID requires reassessment through authority support while route
+    applicability can remain unchanged.
+11. **Applicability change.** Changing context coverage, inheritance, rule
+    membership or governing edges requires reassessment through route support
+    even when implementation and rule prose are unchanged.
+12. **Implementation change.** Existing source/discovery/premise propagation
+    remains intact and does not depend on the Functional Pyramid being the cause.
+13. **Mixed answer.** A current descriptive conclusion can be returned while the
+    pyramid view is unresolved; a normative conclusion depending on that route
+    cannot be returned CURRENT.
+14. **Canonical-source singularity.** The pyramid view references rule identities
+    and owner locations but contains no duplicated canonical rule text.
+15. **Three-tool host surface.** All new behavior is reachable through
+    `ask`, `record` and `reconsider`; no authority/pyramid MCP operation is
+    advertised.
+
+## 16. What this layer does not define
 
 Storage layout, wire schemas, transport framing, installer behaviour, host
-adapters, and exact deployment numbers. Those are layer 4 and must satisfy this
-layer.
+adapters, and exact deployment numbers. Those are layer 4 and must satisfy this layer. The concrete declaration file
+format, path-selector grammar, persistence schema, indexing/cache mechanism,
+administrative CLI shape and migration from 0.11 are therefore intentionally
+left to the Version-1 technical design.
