@@ -143,9 +143,7 @@ def _duplicate_source_locations() -> dict[str, tuple[str, ...]]:
                 f"{_relative(path, SRC)}:{node.lineno}:{node.name}"
             )
     return {
-        key: tuple(locations)
-        for key, locations in groups.items()
-        if len(locations) > 1
+        key: tuple(locations) for key, locations in groups.items() if len(locations) > 1
     }
 
 
