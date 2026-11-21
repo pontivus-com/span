@@ -266,16 +266,23 @@ operational unavailability. A route's unresolved governance remains inside the v
 not mislabeled as operational failure.
 
 `FunctionalPyramidView` carries the pyramid identity/version,
-`health: VALID | DEGRADED`, declared coverage, route
+`health: VALID | DEGRADED`, declared coverage,
+`scope_relation: OUTSIDE_FUNCTIONAL_SCOPE | COVERED | UNCOVERED | MIXED`, route
 `status: RESOLVED | UNRESOLVED`, the selected semantic scope, all directly
 applicable and inherited functional contexts, all applicable functional rules
 grouped by declared layer, provenance sufficient to trace each scope member
 through contexts to each rule and its governing rules, and every unresolved
 relationship. When the selected scope owns canonical functional rules, the view
 also exposes their declared downstream rule/context dependencies so an authority
-change can be oriented before editing. `RESOLVED` requires an empty route
-unresolved set; `UNRESOLVED` requires at least one typed unresolved
-relationship. The view copies rule IDs, owner references and relationships,
+change can be oriented before editing. `OUTSIDE_FUNCTIONAL_SCOPE` means no part of the selected semantic scope is inside
+the member's declared FunctionalScope and therefore yields a resolved empty
+governing projection rather than `UNCOVERED_PATH`. `COVERED` means every
+functional portion is covered by applicable contexts. `UNCOVERED` means the
+selected functional portion is wholly uncovered. `MIXED` means a broad semantic
+scope contains more than one of those relations; provenance identifies which
+portion is outside, covered, or uncovered. `RESOLVED` requires no uncovered or
+other unresolved functional branch; `UNRESOLVED` requires at least one typed
+unresolved relationship. The view copies rule IDs, owner references and relationships,
 never canonical rule text, summaries or document chunks.
 
 `FunctionalPyramidUnavailable` carries the public failure and recovery when
@@ -328,12 +335,9 @@ parallel setup DTOs.
 - `FunctionalPyramidFinding` carries one FD-71 graph/route reason, the
   repository/declared identity coordinates needed to locate it, and concise
   public recovery/detail. It never carries copied governing prose.
-- `FunctionalPyramidValidationFinding` uses this closed Version-1 vocabulary:
-  `UNREGISTERED_MEMBER`, `DUPLICATE_MEMBER`,
-  `MEMBER_ALREADY_ACTIVE`, `UNKNOWN_PYRAMID`,
-  `STALE_PYRAMID_VERSION`, `MISSING_DECLARATION_SOURCE`,
-  `INVALID_DECLARATION_SOURCE`, `INVALID_FUNCTIONAL_SCOPE`, and
-  `INCOMPLETE_COMPLETE_COVERAGE`.
+- `FunctionalPyramidValidationFinding` carries one typed candidate/lifecycle
+  reason from the closed Layer-3 validation taxonomy plus the public coordinates
+  and recovery needed to correct that candidate.
 - `FunctionalPyramidReceiptSelector` carries only `request_id` and addresses
   the installation-level Functional Pyramid write namespace.
 - `RetrievedFunctionalPyramidReceipt` carries
@@ -475,15 +479,26 @@ Recording retains references/identities/relationships and source identities, not
 canonical governing prose.
 
 The accepted result is `FunctionalPyramidRecorded`, carrying the receipt,
-resulting ACTIVE member set and exact per-repository durable participation
-effects. Candidate findings remain owned by `FunctionalPyramidCandidate`; a
-successful write has already revalidated `activation_ready=true` and does not
-duplicate empty validation projections.
+resulting ACTIVE member set, exact per-repository durable participation effects,
+`dependent_effects: tuple[ChangedSurface, ...]`, and
+`reestablishment_contexts: tuple[InvestigationContextRef, ...]`. The dependent
+effects use the same canonical affected-surface/conclusion projection as
+`reconsider`; no Functional-Pyramid-specific duplicate shape exists. Exactly one
+repository-bound re-establishment context is returned for each repository with
+an actionable dependent effect. Candidate findings remain owned by
+`FunctionalPyramidCandidate`; a successful write has already revalidated
+`activation_ready=true` and does not duplicate empty validation projections.
 
 ACTIVATE/REVISE carry the live pyramid identity/resulting version. DEACTIVATE
 retains the affected pyramid identity and the deactivated version in the
 acceptance/receipt for audit even though no live instance remains. EXCLUDE carries
-no pyramid identity/version. It is receipted/replay-safe under L4. The server
+no pyramid identity/version. ACTIVATE/REVISE/DEACTIVATE derive semantic dependent
+effects from the participation/route change before the acceptance transaction is
+committed; EXCLUDE has no active-instance route effects. The immutable receipt
+retains the accepted durable effect set. Replayed accepted writes return that
+same durable acceptance and may issue fresh live re-establishment contexts for
+its retained actionable dependent effects when earlier contexts have expired.
+It is receipted/replay-safe under L4. The server
 derives the pyramid identity on first activation; callers never choose a stable
 internal identity.
 
@@ -718,7 +733,7 @@ validation; every timestamp is timezone-aware. No unlisted field is inferred.
 | --- | --- |
 | `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `affected_revisions: tuple[ConclusionRevisionRef, ...]`, `dependent_effects: tuple[ConclusionRevisionRef, ...]`, `qualification: UnderstandingQualification \| SupportUnavailable`, `status: SurfaceStatus \| SurfaceStatusUnavailable` |
 | `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
-| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `members: tuple[FunctionalPyramidMemberView, ...]`, `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]` |
+| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `members: tuple[FunctionalPyramidMemberView, ...]`, `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`, `dependent_effects: tuple[ChangedSurface, ...]`, `reestablishment_contexts: tuple[InvestigationContextRef, ...]` |
 
 The receipt selector is the only enclosing request coordinate for its owning
 namespace. Ordinary semantic/verification receipts remain repository-scoped;
@@ -948,7 +963,7 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | **L11** | A surface's current conclusions are readable as that surface's documentation; there is no separate document artifact to maintain. | G6, F3 |
 | **L12** | For an ACTIVE repository, current surface obtain returns the declared Functional Pyramid route or explicit operational unavailability; normative understanding automatically depends on that route and its applicable authorities. A semantically valid normative record whose derived governance support is non-current may be retained but is qualified non-current and never served as CURRENT Answer content. No separate authority operation exists. | G1, G3, G7, F2, F6, F7, F11 |
 | **L13** | Functional Pyramid participation is explicit and versioned: registration alone means UNCONFIGURED; EXCLUDED is an explicit decision; ACTIVE belongs to exactly one Functional Pyramid instance at a time. Each member declares one functional coverage scope plus PARTIAL or COMPLETE coverage. ACTIVE health is computed as VALID or DEGRADED from present graph/member state and is not a durable participation transition. Membership never implies applicability. | G1, G4, G8, F11, F12 |
-| **L14** | Functional Pyramid candidate validation is pure and action-aware: activation validates a proposed member set; revision additionally validates target pyramid/version and removals. Activation/revision/deactivation/exclusion are atomic installation-scoped receipted `record` writes that revalidate repository-owned declarations, never use a member repository as an artificial receipt owner, and never copy canonical rule content. | G6, G8, A2, A3, F1, F7, F12 |
+| **L14** | Functional Pyramid candidate validation is pure and action-aware: activation validates a proposed member set; revision additionally validates target pyramid/version and removals. Activation/revision/deactivation/exclusion are atomic installation-scoped receipted `record` writes that revalidate repository-owned declarations, never use a member repository as an artificial receipt owner, and never copy canonical rule content. Accepted activation/revision/deactivation writes also return the semantic dependent effects caused by their participation/route change through the same affected-conclusion projection used by `reconsider`. | G3, G6, G8, A2, A3, F1, F4, F7, F12 |
 | **L15** | Governance change analysis crosses repository boundaries within the affected Functional Pyramid instance and returns every directly or indirectly affected retained conclusion without requiring the caller to predict dependent repositories. Every repository with actionable affected conclusions receives its own existing repository-bound re-establishment context; no cross-repository context carrier is invented. | G3, F4, F11, F12 |
 | **L16** | Governed software work uses the same effective semantic scope for retained understanding and Functional Pyramid orientation; completion of work that makes a normative/conformance claim requires all affected governance/support dispositions to be current or an explicit named blocker. | G1, G3, G7, F2, F4, F11 |
 
@@ -986,7 +1001,9 @@ stateDiagram-v2
     DISCOVER --> VALIDATE: declarations already sufficient
     DISCOVER --> DECLARE: declarations missing or incomplete
 
-    DECLARE --> VALIDATE: repository-owned declarations updated
+    DECLARE --> REALIGN: repository-owned declarations updated
+    REALIGN --> VALIDATE: reconsider completed; no unresolved affected disposition remains
+    REALIGN --> DISCOVER: affected understanding requires investigation/re-establishment
 
     VALIDATE --> DECLARE: declaration/coverage/graph findings require source repair
     VALIDATE --> STATUS: registration/membership/version finding requires reorientation
@@ -1006,8 +1023,9 @@ stateDiagram-v2
 | Phase | Existing/new operation | Required outcome |
 | --- | --- | --- |
 | STATUS | `ask(FunctionalPyramidSelector)` | exact durable participation, current instance/version when ACTIVE, and live health when ACTIVE |
-| DISCOVER | ordinary Span `ask`/evidence lifecycle plus source reads | canonical governance owners, existing declarations and missing relationships are understood; Span does not infer or ingest governing prose |
-| DECLARE | external repository editor | repository-owned context/rule/bootstrap declarations are added or corrected; Span never edits them |
+| DISCOVER | ordinary Span `ask`/evidence lifecycle plus source reads | the agent establishes and holds the intended member/declaration/FunctionalScope/coverage inputs or an explicit unresolved owner question; Span returns evidence/orientation but never manufactures the candidate intent |
+| DECLARE | external repository editor | repository-owned context/rule/bootstrap declarations are added or corrected; Span never edits them; the changed repository paths are the input to the existing after-edit lifecycle |
+| REALIGN | `reconsider(changed_scope)` plus ordinary investigation/record as required | every affected semantic/support disposition caused by the declaration edit is current or explicitly blocked before candidate validation continues |
 | VALIDATE | `ask(FunctionalPyramidCandidateSelector)` | pure deterministic action-aware findings; declaration/graph findings lead to source repair, registration/membership/version findings lead back to STATUS, and only `activation_ready=true` proceeds |
 | ACTIVATE | `record(kind="functional_pyramid", action="activate"|"revise")` | current sources are revalidated and one atomic receipted participation/version write succeeds; rejection returns to STATUS because membership/version/source state may have changed |
 | VERIFY | `ask(FunctionalPyramidSelector)` | returned pyramid identity/version and complete member view equal the accepted write, and live health is VALID; DEGRADED/mismatch returns to validation rather than being called complete |
@@ -1017,7 +1035,13 @@ stateDiagram-v2
 A failed validation never changes participation. Post-write VERIFY is exact
 state/health verification, not sampling: candidate validation already owns graph
 and coverage correctness, so no undefined "representative route" set is part of
-the completion contract. An accepted activation/revision does not certify rule
+the completion contract.
+
+At every MCP phase, `Rejected` means the submitted selector/write is invalid for
+its declared contract and the agent follows the returned corrective action before
+retrying; it is not a lifecycle success. `Unavailable` means the valid operation
+could not be evaluated operationally and is a named blocker until that dependency
+recovers. Neither result is silently converted into another state-machine edge. An accepted activation/revision does not certify rule
 prose or semantic truth; it establishes only the explicit
 membership/declaration graph. ACTIVE health is evaluated from current state:
 
@@ -1089,8 +1113,9 @@ A named operational/authority blocker may terminate the current task from any
 phase where required work cannot proceed; it is reported explicitly and is not a
 new Span operation or a successful COMPLETE transition.
 
-The runtime integration therefore adds only three product behaviors to the
-existing semantic lifecycle:
+The ordinary runtime integration therefore adds only three product behaviors to
+the existing semantic lifecycle; Functional Pyramid participation writes use the
+same support-change machinery when they themselves alter governance:
 
 1. **governing orientation on `ask`** for the same semantic scope;
 2. **server-derived route/authority support on normative `record`**;
