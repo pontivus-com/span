@@ -24,6 +24,10 @@ import sys
 
 from span.core import model as m
 from span.core import support_rules as _support_rules
+from span.shell.functional_pyramid import (
+    FunctionalPyramidRepositoryRuntime,
+    open_functional_pyramid_service,
+)
 from span.shell.install.receipt import read_receipt
 from span.shell.policy import HOOK_DIAGNOSTIC_LIMIT
 from span.shell.readiness import probe_store
@@ -120,6 +124,78 @@ def _readiness_label(readiness) -> str:
     return "store unbound"
 
 
+def _functional_pyramid_status(data_dir, mapping, repository_id):
+    """Obtain canonical participation/health and close every opened repository."""
+    from span.shell.context import open_repository_context
+
+    roots = {_repository_id(root): root for root in mapping}
+    contexts = {}
+
+    def repository_runtime(requested: str) -> FunctionalPyramidRepositoryRuntime:
+        context = contexts.get(requested)
+        if context is not None:
+            return context
+        root = roots.get(requested)
+        if root is None:
+            raise ValueError(f"repository is not registered: {requested}")
+        observed_id, context = open_repository_context(data_dir, root)
+        if observed_id != requested:
+            context.store.close()
+            raise ValueError(
+                f"repository identity changed: expected {requested}, observed {observed_id}"
+            )
+        contexts[requested] = context
+        return context
+
+    try:
+        with open_functional_pyramid_service(
+            data_dir,
+            repository_runtime=repository_runtime,
+            registered_repository_ids=lambda: tuple(sorted(roots)),
+        ) as service:
+            if service is None:
+                return None
+            return service.status(
+                m.FunctionalPyramidSelector(repository_id=repository_id)
+            )
+    finally:
+        for context in contexts.values():
+            context.store.close()
+
+
+def _functional_pyramid_notice(data_dir, mapping, root):
+    """Render FD-94 from canonical status; never derive governance in the hook."""
+    repository_id = _repository_id(root)
+    try:
+        status = _functional_pyramid_status(data_dir, mapping, repository_id)
+    except Exception:  # noqa: BLE001 - hook delivery never breaks a session
+        return (
+            f"span: {repository_id} Functional Pyramid state is unavailable; "
+            "run installer verification before governance work."
+        )
+
+    if status is None:
+        return (
+            f"span: {repository_id} Functional Pyramid state is unavailable; "
+            "run installer verification before governance work."
+        )
+    if status.state is m.FunctionalPyramidParticipationState.EXCLUDED:
+        return None
+    if status.state is m.FunctionalPyramidParticipationState.UNCONFIGURED:
+        return (
+            f"span: {repository_id} Functional Pyramid UNCONFIGURED; use the "
+            "span-functional-pyramid skill and ask its status/candidate path "
+            "before activation."
+        )
+    if status.health is m.FunctionalPyramidHealth.DEGRADED:
+        return (
+            f"span: {repository_id} Functional Pyramid ACTIVE/DEGRADED; "
+            "governance needs attention. Ask FunctionalPyramidSelector and "
+            "follow the span-functional-pyramid lifecycle before completion."
+        )
+    return None
+
+
 def _affected_for_root(data_dir, root, rel_paths):
     """Bounded dependent lookup for changed repository-relative locators."""
     from span.shell.context import open_repository_context
@@ -195,6 +271,10 @@ def cmd_session_start(data_dir, repo_root=None):
         line = _readiness_notice(data_dir, root)
         if line:
             print(line)
+            continue
+        functional_pyramid = _functional_pyramid_notice(data_dir, mapping, root)
+        if functional_pyramid:
+            print(functional_pyramid)
 
 
 def _stdin_paths():
