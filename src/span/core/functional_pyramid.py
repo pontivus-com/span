@@ -1207,15 +1207,24 @@ def _downstream_context_ids(
     rule_ids: frozenset[str],
     contexts: dict[tuple[str, str], FunctionalContextDeclaration],
 ) -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            {
-                context_id
-                for (_, context_id), context in contexts.items()
-                if any(ref.identity in rule_ids for ref in context.rules)
-            }
-        )
-    )
+    found: set[tuple[str, str]] = {
+        key
+        for key, context in contexts.items()
+        if any(ref.identity in rule_ids for ref in context.rules)
+    }
+    frontier = list(found)
+    while frontier:
+        current = frontier.pop()
+        for candidate_key, context in contexts.items():
+            if candidate_key in found:
+                continue
+            if any(
+                (inherited.repository_id, inherited.identity) == current
+                for inherited in context.inherits
+            ):
+                found.add(candidate_key)
+                frontier.append(candidate_key)
+    return tuple(sorted(identity for _, identity in found))
 
 
 def _route_identity(
