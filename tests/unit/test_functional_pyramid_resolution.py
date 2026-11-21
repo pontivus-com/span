@@ -597,9 +597,7 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
                     repo_a.rules[0],
                     dataclasses.replace(
                         rule_p4,
-                        governing_rule_ids=(
-                            _graph_ref("repo-b", "rule-p1"),
-                        ),
+                        governing_rule_ids=(_graph_ref("repo-b", "rule-p1"),),
                     ),
                 ),
             ),
