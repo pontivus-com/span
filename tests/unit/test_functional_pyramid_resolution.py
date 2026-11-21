@@ -1,5 +1,6 @@
 """Functional Pyramid declaration/resolution tests (T02)."""
 
+import dataclasses
 import json
 import unittest
 
@@ -542,6 +543,83 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             <= reasons
         )
 
+    def test_material_applicability_changes_change_route_identity(self):
+        members, declarations, authorities = _base_graph()
+        repo_a = declarations[0][1]
+        surface = m.SurfaceKey("repo-a", m.SurfaceKind.FILE, "src/a.py")
+        semantic_scope = m.EvidenceScope(paths=("src/a.py",))
+        _, baseline = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(1),
+            members=members,
+            surface=surface,
+            semantic_scope=semantic_scope,
+            declarations=declarations,
+            available_repositories=frozenset({"repo-a", "repo-b"}),
+            authority_bindings=authorities,
+        )
+
+        workflow = repo_a.contexts[1]
+        rule_p4 = repo_a.rules[1]
+        variants = (
+            dataclasses.replace(
+                repo_a,
+                contexts=(
+                    repo_a.contexts[0],
+                    dataclasses.replace(
+                        workflow,
+                        coverage=_scope(
+                            _selector(
+                                m.FunctionalScopeSelectorKind.PATH,
+                                "src/b.py",
+                            )
+                        ),
+                    ),
+                ),
+            ),
+            dataclasses.replace(
+                repo_a,
+                contexts=(
+                    repo_a.contexts[0],
+                    dataclasses.replace(workflow, inherits=()),
+                ),
+            ),
+            dataclasses.replace(
+                repo_a,
+                contexts=(
+                    repo_a.contexts[0],
+                    dataclasses.replace(workflow, rules=()),
+                ),
+            ),
+            dataclasses.replace(
+                repo_a,
+                rules=(
+                    repo_a.rules[0],
+                    dataclasses.replace(
+                        rule_p4,
+                        governing_rule_ids=(
+                            _graph_ref("repo-b", "rule-p1"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        for changed_repo_a in variants:
+            with self.subTest(changed_repo_a=changed_repo_a):
+                view, changed = fp.resolve_functional_pyramid_route(
+                    pyramid_id=m.FunctionalPyramidId("fp-1"),
+                    version=m.FunctionalPyramidVersion(1),
+                    members=members,
+                    surface=surface,
+                    semantic_scope=semantic_scope,
+                    declarations=(("repo-a", changed_repo_a), declarations[1]),
+                    available_repositories=frozenset({"repo-a", "repo-b"}),
+                    authority_bindings=authorities,
+                )
+                self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+                self.assertNotEqual(changed, baseline)
+
     def test_route_identity_ignores_instance_version_and_unrelated_member(self):
         members, declarations, authorities = _base_graph()
         kwargs = dict(
@@ -647,6 +725,50 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
         self.assertEqual(view.contexts, ())
         self.assertEqual(view.rules, ())
         self.assertEqual(view.unresolved, ())
+
+    def test_mixed_scope_preserves_covered_uncovered_and_outside_provenance(self):
+        member = _member(
+            "repo-a",
+            scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-covered",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PREFIX, "src/a")
+                    ),
+                ),
+            ),
+        )
+
+        view, _ = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(member,),
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.SERVICE, "service-a"),
+            semantic_scope=m.EvidenceScope(paths=("src/a", "src/b", "docs")),
+            declarations=(("repo-a", declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings={},
+        )
+
+        self.assertEqual(view.health, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(view.scope_relation, m.FunctionalScopeRelation.MIXED)
+        self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.UNRESOLVED)
+        self.assertEqual(
+            {portion.relation for portion in view.provenance},
+            {
+                m.FunctionalScopeRelation.COVERED,
+                m.FunctionalScopeRelation.UNCOVERED,
+                m.FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE,
+            },
+        )
+        self.assertEqual(
+            {finding.reason for finding in view.unresolved},
+            {m.FunctionalPyramidFindingReason.UNCOVERED_PATH},
+        )
 
     def test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered(self):
         members, declarations, authorities = _base_graph()
