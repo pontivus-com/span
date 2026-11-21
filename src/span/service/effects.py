@@ -102,6 +102,53 @@ class DependencyEffectService:
             truncated=truncated,
         )
 
+    def retained_functional_pyramid_effects(
+        self,
+        refs: tuple[m.ConclusionRevisionRef, ...],
+    ) -> tuple[
+        tuple[m.ChangedSurface, ...],
+        tuple[m.InvestigationContextRef, ...],
+    ]:
+        """Live-project only immutable accepted effect refs; discover nothing new."""
+        affected: dict[m.SurfaceKey, list[m.ChangedConclusion]] = {}
+        for ref in sorted(set(refs), key=lambda value: value.sort_key):
+            try:
+                surface = self._surface_of(ref)
+                version = self._store.get_understanding(
+                    ref.understanding_id.value
+                ).current_version
+            except (OSError, ValueError):
+                continue
+            current = self._store.get_version(ref.understanding_id.value, version.value)
+            if ref not in current.conclusions:
+                continue
+            support = self._support_state(ref)
+            if (
+                isinstance(support, m.SupportEvaluation)
+                and support.state is m.SupportState.CURRENT
+            ):
+                continue
+            affected.setdefault(surface, []).append(
+                m.ChangedConclusion(
+                    ref=ref,
+                    expected_version=current.version,
+                    reasons=(m.ChangeReason.DIRECT,),
+                    support=support,
+                )
+            )
+
+        surfaces = tuple(
+            m.ChangedSurface(
+                surface=surface,
+                reasons=(m.ChangeReason.DIRECT,),
+                conclusions=tuple(affected[surface]),
+            )
+            for surface in containment.order_surfaces(
+                {surface: {m.ChangeReason.DIRECT} for surface in affected}
+            )
+        )
+        return surfaces, self._reestablishment_contexts(surfaces, {})
+
     def functional_pyramid_change(
         self,
         *,
