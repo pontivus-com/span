@@ -686,6 +686,22 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
                         input_refs=(),
                     ),
                 ),
+                m.ProposedConclusion(
+                    conclusion_id=m.ConclusionId("c-pre-route"),
+                    statement="A was normatively assessed before route support existed.",
+                    assertion_nature=m.AssertionNature.NORMATIVE,
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                    support=(
+                        m.SourceSupport(
+                            observation_id=m.SourceObservationId("obs-schema13")
+                        ),
+                    ),
+                    basis=m.SemanticBasis(
+                        derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
+                        summary="pre-route schema13 fixture",
+                        input_refs=(),
+                    ),
+                ),
             ),
         ),
         understanding_id=m.UnderstandingId("u-schema13"),
@@ -834,6 +850,17 @@ class Schema13To14Test(unittest.TestCase):
                     " FROM functional_route_dependency_index"
                 ).fetchone()
                 self.assertEqual(route, ("fp-dev", "demo", "route-dev"))
+                pre_route_dependencies = connection.execute(
+                    "SELECT dependency_kind, dependency_ref"
+                    " FROM support_dependencies"
+                    " WHERE understanding_id=? AND conclusion_id=? AND revision=?"
+                    " ORDER BY dependency_kind, dependency_ref",
+                    ("u-schema13", "c-pre-route", 1),
+                ).fetchall()
+                self.assertEqual(
+                    pre_route_dependencies,
+                    [("SOURCE", "obs-schema13")],
+                )
             finally:
                 connection.close()
 
