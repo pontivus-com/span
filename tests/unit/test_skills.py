@@ -161,6 +161,8 @@ class SpecializedSkillTest(unittest.TestCase):
         ):
             self.assertIn(required, text, required)
         self.assertIn("Acceptance is not completion", text)
+        self.assertIn("edit them outside Span and then use\n`reconsider`", text)
+        self.assertIn("before candidate validation continues", text)
         self.assertIn("Do not call\n`reconsider` again", text)
 
 
