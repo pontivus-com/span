@@ -105,7 +105,7 @@ State this before the operations, because everything else depends on it.
   through `record`.
 - Every answer reports the surface status. Status is never optional and never a
   single stamp.
-- For a participating repository, ordinary current surface obtain also reports
+- For an ACTIVE Functional Pyramid repository, ordinary current surface obtain also reports
   the Functional Pyramid view for the selected semantic scope. The view may be
   fully resolved while semantic understanding is a Gap, or unresolved while
   descriptive understanding remains usable.
