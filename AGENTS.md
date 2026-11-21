@@ -122,14 +122,17 @@ The public MCP operations are exactly three, one per lifecycle moment:
 
 `ask`, `record`, `reconsider`.
 
-`record` carries `kind` (`understanding`, `verification`, or `surface`). An
+`record` carries `kind` (`understanding`, `verification`, `surface`, or
+`functional_pyramid`). An
 understanding create is flat — one `conclusion` with dependency evidence from
 `locator`, `observation_id`, or non-empty `support`; scope is supplied or
 derived independently. A `locator` may accompany explicit `support` solely as
 carried code scope; `support` remains the complete dependency set and
-`observation_id` remains exclusive. `actions` is for updates and `action` for a surface
-declaration. Those are semantic fields, not separate tools. Setup belongs
-to the installer; structural navigation belongs to the host. Any other
+`observation_id` remains exclusive. `actions` is for understanding updates and `action` for surface or Functional
+Pyramid lifecycle writes. Those are semantic fields, not separate tools.
+Operational repository installation/registration belongs to the installer;
+Functional Pyramid participation is governed through the ordinary MCP lifecycle.
+Structural navigation belongs to the host. Any other
 operation name follows the ordinary unknown-tool path. Span carries no
 retired-name map, aliases, compatibility grammar, or replacement routing for
 removed public operations. There are no `semantic_*` names or dual grammar.
@@ -155,6 +158,7 @@ the supported dispositions before completing the work.
 - Treat returned context references as opaque handles; copy them only into declared `context` fields.
 - After editing: `reconsider`; investigate `REASSESSMENT_REQUIRED`/`UNVERIFIABLE` conclusions and record their dispositions.
 - After establishing a conclusion: `record`.
+- For ACTIVE Functional Pyramid participation, use the governing projection returned by the same `ask`; do not infer or copy governing prose. Functional Pyramid adoption/revision uses the dedicated selector/record branches inside the same three MCP tools.
 
 Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md),
 [router skill](https://github.com/pontivus-com/span/blob/master/skills/span-router/SKILL.md).
