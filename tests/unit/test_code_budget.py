@@ -130,6 +130,25 @@ def _imports(tree: ast.Module) -> list[str]:
     return found
 
 
+def _duplicate_source_locations() -> tuple[tuple[str, ...], ...]:
+    groups: dict[str, list[str]] = {}
+    for path in _python_files(SRC):
+        for node in ast.walk(_tree(path)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            key = _body_key(node)
+            if key is None:
+                continue
+            groups.setdefault(key, []).append(
+                f"{_relative(path, SRC)}:{node.lineno}:{node.name}"
+            )
+    return tuple(
+        tuple(sorted(locations))
+        for locations in sorted(groups.values(), key=lambda values: tuple(values))
+        if len(locations) > 1
+    )
+
+
 def measure() -> dict[str, int]:
     source_files = _python_files(SRC)
     test_files = _python_files(TESTS)
@@ -290,7 +309,16 @@ class CodeBudgetGateTest(unittest.TestCase):
             for metric, value in self.metrics.items()
             if metric in self.baseline and value > self.baseline[metric]
         }
-        self.assertEqual(regressions, {}, "budget regression (baseline, now)")
+        detail = (
+            f"; duplicate source groups: {_duplicate_source_locations()}"
+            if "duplicate_source_groups" in regressions
+            else ""
+        )
+        self.assertEqual(
+            regressions,
+            {},
+            "budget regression (baseline, now)" + detail,
+        )
 
     def test_baseline_covers_every_metric(self) -> None:
         missing = sorted(set(self.metrics) - set(self.baseline))
