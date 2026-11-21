@@ -80,7 +80,9 @@ class AnswerService:
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
-        functional_pyramid_orientation: _FunctionalPyramidOrientationLookup | None = None,
+        functional_pyramid_orientation: (
+            _FunctionalPyramidOrientationLookup | None
+        ) = None,
     ) -> None:
         self._store = store
         self._support = support
