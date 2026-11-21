@@ -371,8 +371,11 @@ source, derives the candidate graph identity/findings, and commits only when
 
 Functional Pyramid writes use their own installation-level recording namespace:
 the caller's `request_id` is the replay/conflict key in that namespace and the
-accepted result returns `FunctionalPyramidReceiptSelector{request_id}`. No
-member repository is selected as an artificial recording/receipt owner. Same
+accepted result returns `FunctionalPyramidReceiptSelector{request_id}`.
+Historical retrieval returns `RetrievedFunctionalPyramidReceipt` with the exact
+accepted action, resulting member set and
+`FunctionalPyramidParticipationEffect` set. No member repository is selected
+as an artificial recording/receipt owner. Same
 request identity + same canonical write content is replay; same identity +
 different content is conflict. Ordinary repository-scoped receipts remain
 unchanged.
@@ -458,10 +461,12 @@ the governing projection for that surface. *(F5, F6, F11, F12, L8, L13, L14)*
 **FD-93 — Functional Pyramid writes are one record kind, not a fourth tool.**
 The `functional_pyramid` record kind implements activate/revise/deactivate/
 exclude exactly as lifecycle §4.2 defines, returns
-`FunctionalPyramidRecorded`, and uses the installation-scoped Functional
-Pyramid receipt/replay namespace from FD-85. The caller supplies intended
-member/declaration/functional-scope/coverage input; Span derives pyramid identity,
-validation, source identities and qualification. *(G8, F6, F7,
+`FunctionalPyramidRecorded` with canonical
+`FunctionalPyramidParticipationEffect` entries, and uses the
+installation-scoped Functional Pyramid receipt/replay namespace from FD-85. The
+caller supplies intended member/declaration/functional-scope/coverage input;
+Span derives pyramid identity, validation, source identities and participation
+effects. *(G8, F6, F7,
 F12, L4, L8, L14)*
 
 **FD-94 — Lifecycle notices reflect participation without becoming governance.**
@@ -1038,11 +1043,14 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 3. **Activation and replay.** A valid activation atomically creates one pyramid
    identity/version and one installation-scoped Functional Pyramid receipt;
    replay is idempotent without choosing a member repository as receipt owner;
-   invalid activation leaves every repository's prior state unchanged.
+   `FunctionalPyramidReceiptSelector` retrieves an exact
+   `RetrievedFunctionalPyramidReceipt`; invalid activation leaves every
+   repository's prior state unchanged.
 4. **Revision and removal.** A compare-and-set revision atomically changes the
-   complete member intent; removed members become UNCONFIGURED, retained members
-   preserve the pyramid identity with a new version, and a stale expected version
-   is reported by candidate validation and rejected at write revalidation.
+   complete member intent; canonical participation effects show retained/added
+   members ACTIVE and removed members UNCONFIGURED, retained members preserve the
+   pyramid identity with a new version, and a stale expected version is reported
+   by candidate validation and rejected at write revalidation.
 5. **Partial coverage.** A PARTIAL member is evaluated only within its explicit
    FunctionalScope; uncovered scope inside that boundary returns
    `UNCOVERED_PATH` without degrading live health, and repository paths outside
