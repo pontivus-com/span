@@ -21,6 +21,9 @@ from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
     LifecycleStoreError,
 )
+from span.shell.sqlite_store.functional_pyramid import (
+    ensure_functional_pyramid_installation_store,
+)
 from span.shell.structural import (
     canonical_root_from_config,
     structural_source_from_config,
@@ -166,6 +169,10 @@ def provision_repository(
             "rerun installation to provision the indexer, then retry setup"
         )
     data_root.mkdir(parents=True, exist_ok=True)
+    installation_store = ensure_functional_pyramid_installation_store(
+        data_root, retention=DEFAULT_LIFECYCLE_RETENTION
+    )
+    installation_store.close()
     store = LifecycleStore(
         data_root / f"{repository_id}.db",
         retention=DEFAULT_LIFECYCLE_RETENTION,
