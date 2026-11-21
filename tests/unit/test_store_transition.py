@@ -1178,7 +1178,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "13",
+                    "14",
                 )
                 self.assertEqual(
                     connection.execute(
