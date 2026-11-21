@@ -47,11 +47,11 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-37 | Deactivation/removal route state | `test_deliberately_inactive_repository_reassesses_recorded_route`; `test_record_deactivate_moves_all_members_to_excluded` |
 | FA-38 | Operational route failure while ACTIVE | `test_functional_route_support_distinguishes_route_states`; `test_repository_unavailability_is_graph_state_not_unknown_identity` |
 | FA-39 | Pyramid-write replay projection | `test_record_replay_live_projects_only_retained_effect_refs` |
-| FA-40 | Pyramid concurrency | `test_concurrent_overlapping_activation_serializes_to_one_active_instance`; `test_record_revise_enforces_version_cas`; `test_record_deactivate_enforces_version_cas` |
+| FA-40 | Pyramid concurrency | `test_concurrent_overlapping_activation_serializes_to_one_active_instance`; `test_concurrent_revise_and_deactivate_obey_version_cas`; `test_record_revise_enforces_version_cas`; `test_record_deactivate_enforces_version_cas` |
 | FA-41 | Initialization declaration edits use ordinary re-alignment | `test_functional_pyramid_skill_covers_result_driven_lifecycle`; `test_governance_only_change_crosses_repository_boundary` |
 | FA-42 | Conformance uses the normative input contract | `test_conformance_uses_existing_normative_assertion_contract`; `test_normative_create_derives_route_and_all_applicable_authorities` |
 | FA-43 | Acceptance is not runtime completion | `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_owner_read_failure_reports_unavailable_without_rejecting_acceptance`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
-| FA-44 | Participation-write acceptance is not initialization completion | `test_record_replay_live_projects_only_retained_effect_refs`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
+| FA-44 | Participation-write acceptance is not initialization completion | `test_pyramid_effect_coordinator_uses_shared_dependency_engine`; `test_record_replay_live_projects_only_retained_effect_refs`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
 
 The matrix names enforcement boundaries; the CI execution receipt remains the
 evidence that those tests passed for a particular candidate.
