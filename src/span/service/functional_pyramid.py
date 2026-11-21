@@ -8,6 +8,7 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidDeclarationPort,
     FunctionalPyramidRepositoryUnavailable,
+    FunctionalPyramidStatePort,
 )
 from span.ports.lifecycle import LifecycleAuthorityResolver
 
@@ -59,9 +60,192 @@ class FunctionalPyramidService:
         *,
         declarations: FunctionalPyramidDeclarationPort,
         authority: LifecycleAuthorityResolver,
+        state: FunctionalPyramidStatePort | None = None,
+        registered_repository_ids: _typing.Callable[[], tuple[str, ...]] | None = None,
     ) -> None:
         self._declarations = declarations
         self._authority = authority
+        self._state = state
+        self._registered_repository_ids = registered_repository_ids
+
+    def _require_state(self) -> FunctionalPyramidStatePort:
+        if self._state is None:
+            raise ValueError("Functional Pyramid state service is not configured")
+        return self._state
+
+    def _registered(self) -> frozenset[str]:
+        if self._registered_repository_ids is None:
+            raise ValueError("Functional Pyramid repository registry is not configured")
+        return frozenset(self._registered_repository_ids())
+
+    def status(
+        self, selector: m.FunctionalPyramidSelector
+    ) -> m.FunctionalPyramidStatus:
+        """Project exact durable participation plus live ACTIVE health (FD-83)."""
+        state = self._require_state()
+        pyramid_id = selector.pyramid_id
+        if selector.repository_id is not None:
+            pyramid_id = state.active_pyramid_id(selector.repository_id)
+            if pyramid_id is None:
+                participation = (
+                    m.FunctionalPyramidParticipationState.EXCLUDED
+                    if state.is_excluded(selector.repository_id)
+                    else m.FunctionalPyramidParticipationState.UNCONFIGURED
+                )
+                return m.FunctionalPyramidStatus(state=participation)
+
+        assert pyramid_id is not None
+        version = state.pyramid_version(pyramid_id)
+        if version is None:
+            return m.FunctionalPyramidStatus(
+                state=m.FunctionalPyramidParticipationState.UNCONFIGURED
+            )
+        members = state.pyramid_members(pyramid_id, version)
+        health, findings = self.health(members)
+        return m.FunctionalPyramidStatus(
+            state=m.FunctionalPyramidParticipationState.ACTIVE,
+            health=health,
+            pyramid_id=pyramid_id,
+            version=version,
+            members=members,
+            findings=findings,
+        )
+
+    def candidate(
+        self, selector: m.FunctionalPyramidCandidateSelector
+    ) -> m.FunctionalPyramidCandidate:
+        """Pure action-aware candidate validation (FD-84)."""
+        state = self._require_state()
+        registered = self._registered()
+        validation: list[m.FunctionalPyramidValidationFinding] = []
+
+        intents_by_repository: dict[str, m.FunctionalPyramidMemberIntent] = {}
+        duplicate_repositories: set[str] = set()
+        for intent in selector.members:
+            if intent.repository_id in intents_by_repository:
+                duplicate_repositories.add(intent.repository_id)
+                continue
+            intents_by_repository[intent.repository_id] = intent
+
+        for repository_id in sorted(duplicate_repositories):
+            validation.append(
+                _validation_finding(
+                    m.FunctionalPyramidValidationReason.DUPLICATE_MEMBER,
+                    repository_id,
+                    "candidate contains the same repository more than once",
+                    "retain exactly one member intent for the repository",
+                )
+            )
+
+        target_id = selector.pyramid_id
+        target_version: m.FunctionalPyramidVersion | None = None
+        if selector.action is m.FunctionalPyramidAction.REVISE:
+            assert target_id is not None
+            assert selector.expected_version is not None
+            current = state.pyramid_version(target_id)
+            if current is None:
+                validation.append(
+                    _validation_finding(
+                        m.FunctionalPyramidValidationReason.UNKNOWN_PYRAMID,
+                        None,
+                        "target Functional Pyramid is not ACTIVE",
+                        "obtain current Functional Pyramid status before revising",
+                        pyramid_id=target_id,
+                    )
+                )
+            else:
+                target_version = current
+                if current != selector.expected_version:
+                    validation.append(
+                        _validation_finding(
+                            m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION,
+                            None,
+                            "target Functional Pyramid version is stale",
+                            "obtain current status and rebuild the revision candidate",
+                            pyramid_id=target_id,
+                            expected_version=selector.expected_version,
+                            current_version=current,
+                        )
+                    )
+
+        eligible: list[m.FunctionalPyramidMemberIntent] = []
+        for repository_id in sorted(intents_by_repository):
+            intent = intents_by_repository[repository_id]
+            if repository_id not in registered:
+                validation.append(
+                    _validation_finding(
+                        m.FunctionalPyramidValidationReason.UNREGISTERED_MEMBER,
+                        repository_id,
+                        "candidate repository is not registered with Span",
+                        "register the repository before Functional Pyramid validation",
+                    )
+                )
+                continue
+            active_id = state.active_pyramid_id(repository_id)
+            retained_target = target_id is not None and active_id == target_id
+            if active_id is not None and not retained_target:
+                validation.append(
+                    _validation_finding(
+                        m.FunctionalPyramidValidationReason.MEMBER_ALREADY_ACTIVE,
+                        repository_id,
+                        "repository already belongs to another ACTIVE Functional Pyramid",
+                        "revise/deactivate the current instance before reassigning it",
+                        pyramid_id=active_id,
+                    )
+                )
+                continue
+            eligible.append(intent)
+
+        members, declarations, available, source_validation, source_graph = (
+            self.load_candidate_members(tuple(eligible))
+        )
+        validation.extend(source_validation)
+        authorities, authority_findings = self._authority_bindings(
+            members, declarations, available
+        )
+        del authorities
+        health, structural = _fp.evaluate_functional_pyramid_health(
+            members,
+            declarations,
+            available,
+            source_graph + authority_findings,
+        )
+        del health
+
+        graph: list[m.FunctionalPyramidFinding] = []
+        for finding in structural:
+            if finding.reason is m.FunctionalPyramidFindingReason.UNCOVERED_PATH:
+                validation.append(
+                    _validation_finding(
+                        m.FunctionalPyramidValidationReason.INCOMPLETE_COMPLETE_COVERAGE,
+                        finding.repository_id,
+                        finding.detail,
+                        finding.recovery,
+                    )
+                )
+                continue
+            graph.append(finding)
+
+        ordered_validation = tuple(
+            sorted(
+                validation,
+                key=lambda item: (
+                    item.reason.value,
+                    item.repository_id or "",
+                    item.declaration_locator or "",
+                    "" if item.pyramid_id is None else item.pyramid_id.value,
+                ),
+            )
+        )
+        return m.FunctionalPyramidCandidate(
+            action=selector.action,
+            pyramid_id=target_id,
+            version=target_version,
+            members=members,
+            activation_ready=not ordered_validation and not graph,
+            validation_findings=ordered_validation,
+            graph_findings=tuple(graph),
+        )
 
     def discover_bootstrap(
         self, repository_id: str
