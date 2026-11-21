@@ -230,6 +230,45 @@ class FunctionalPyramidDeclarationDecodeTest(unittest.TestCase):
 
 
 class FunctionalPyramidResolverTest(unittest.TestCase):
+    def test_service_scope_preserves_canonical_symbol_member(self) -> None:
+        member = _member(
+            "repo-a",
+            scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-symbol",
+                    coverage=_scope(
+                        _selector(
+                            m.FunctionalScopeSelectorKind.SYMBOL,
+                            "src/a.py",
+                            "src/a.py::A",
+                        )
+                    ),
+                ),
+            ),
+        )
+
+        view, _ = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(member,),
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.SERVICE, "svc"),
+            semantic_scope=m.EvidenceScope(paths=("src/a.py::A",)),
+            declarations=(("repo-a", declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings={},
+        )
+
+        self.assertEqual(view.scope_relation, m.FunctionalScopeRelation.COVERED)
+        self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+        self.assertEqual(
+            tuple(context.context_id for context in view.contexts),
+            ("ctx-symbol",),
+        )
+
     def test_overlapping_direct_contexts_precede_inherited_contexts(self):
         members, declarations, authorities = _base_graph()
         view, _ = fp.resolve_functional_pyramid_route(
