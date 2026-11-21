@@ -475,4 +475,3 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(candidate.validation_findings, ())
         self.assertEqual(candidate.graph_findings, ())
         self.assertEqual(len(candidate.members), 1)
-
