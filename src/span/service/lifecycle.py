@@ -472,9 +472,7 @@ class LifecycleService:
         """Derive the server-owned governance dependency set for one NORMATIVE scope."""
         if self._functional_pyramid_route is None:
             return ()
-        current = self._functional_pyramid_route(
-            repository_id, surface, semantic_scope
-        )
+        current = self._functional_pyramid_route(repository_id, surface, semantic_scope)
         if isinstance(current, m.FunctionalPyramidParticipation):
             return ()
         if isinstance(current, m.FunctionalPyramidUnavailable):
@@ -548,13 +546,16 @@ class LifecycleService:
                 | m.ReplaceConclusion,
                 ...,
             ],
-        ) -> tuple[
-            m.ProposedConclusion
-            | m.ConfirmConclusion
-            | m.CorrectConclusion
-            | m.ReplaceConclusion,
-            ...,
-        ] | m.Unavailable:
+        ) -> (
+            tuple[
+                m.ProposedConclusion
+                | m.ConfirmConclusion
+                | m.CorrectConclusion
+                | m.ReplaceConclusion,
+                ...,
+            ]
+            | m.Unavailable
+        ):
             results: list[
                 m.ProposedConclusion
                 | m.ConfirmConclusion
