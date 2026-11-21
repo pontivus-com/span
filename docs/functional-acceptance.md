@@ -14,7 +14,7 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-04 | Revision and removal | `test_record_revise_only_reports_actual_participation_changes`; `test_record_revise_enforces_version_cas`; `test_revision_candidate_reports_unknown_and_stale_target` |
 | FA-05 | Partial coverage | `test_partial_uncovered_path_is_route_unresolved_but_health_valid`; `test_wholly_outside_scope_is_resolved_empty_governance` |
 | FA-06 | Complete coverage | `test_complete_coverage_remainder_is_candidate_validation_finding`; `test_complete_uncovered_scope_degrades_health` |
-| FA-07 | Degraded-health recovery | `test_degraded_health_recovers_without_participation_change` |
+| FA-07 | Degraded-health recovery | `test_degraded_health_recovers_without_participation_change`; `test_degraded_instance_can_resolve_unaffected_local_route` |
 | FA-08 | Cold governed path | `test_cold_governed_path_returns_gap_with_governing_view` |
 | FA-09 | Same semantic scope | `test_exact_question_selector_does_not_paraphrase_match`; `test_surface_kind_prevents_filename_heuristic_scope_inference`; `test_declared_symbol_boundary_is_exact_functional_pyramid_scope` |
 | FA-10 | Overlapping contexts | `test_overlapping_direct_contexts_precede_inherited_contexts` |
