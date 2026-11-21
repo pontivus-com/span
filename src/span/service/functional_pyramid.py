@@ -734,10 +734,7 @@ class FunctionalPyramidService:
         repository_ids = tuple(
             sorted(
                 {member.repository_id for member in receipt.members}
-                | {
-                    effect.repository_id
-                    for effect in receipt.participation_effects
-                }
+                | {effect.repository_id for effect in receipt.participation_effects}
             )
         )
         paths = self._attached_paths(repository_ids) if repository_ids else ()
