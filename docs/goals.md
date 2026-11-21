@@ -99,8 +99,9 @@ authority chains.
 | **G5** | **Cost less than the alternative** | Using Span must beat repeatedly re-deriving implementation meaning and governing applicability or maintaining unchecked parallel explanation, or it has no claim over the task. | F8 |
 | **G6** | **Replace unchecked explanation, preserve canonical authority** | Surface-bound explanatory content lives as checked understanding where it can be tied to support. Canonical governing sources remain authoritative artifacts and are referenced, not copied into a competing Span owner. | F1, F2, F4, F11, L11 |
 | **G7** | **Make the governing path from first principles to implementation explicit** | Before interpreting or changing a participating surface, the agent can obtain the declared functional contexts, applicable authority rules, derivation path, provenance and unresolved relationships without inferring them from file names, topology or prose relevance. | F6, F10, F11, L8, L12 |
+| **G8** | **Make declared governance adoptable without inventing it** | One or more registered repositories can be explicitly brought into, revised within, excluded from, and recovered as a Functional Pyramid without copying canonical rule content or manufacturing missing authority. Incomplete coverage and unresolved relationships are visible before they can be mistaken for a complete governing model. | F11, F12, L13–L16 |
 
-These seven are the product intent. Everything below them exists to make them
+These eight are the product intent. Everything below them exists to make them
 true, and nothing may be added merely because it is convenient to implement.
 
 ## 4. What Span is not trying to do
@@ -124,6 +125,11 @@ true, and nothing may be added merely because it is convenient to implement.
   search engine.
 
 ## 5. What success looks like
+
+A repository set can first be adopted into a Functional Pyramid through an explicit,
+validated lifecycle. Registration alone does not imply participation, repository
+membership does not imply rule applicability, and a partial migration remains
+explicitly partial rather than being represented as complete governance.
 
 A fresh agent with no conversation memory asks about a surface and receives, in
 one lifecycle interaction, the current retained semantic understanding or an
