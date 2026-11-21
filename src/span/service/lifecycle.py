@@ -41,6 +41,16 @@ from span.service.surface_status import compose_surface_status
 
 __all__ = ["LifecycleService"]
 
+_FunctionalPyramidRouteResult = (
+    m.FunctionalPyramidParticipation
+    | m.FunctionalPyramidUnavailable
+    | tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]
+)
+_FunctionalPyramidRouteLookup = _typing.Callable[
+    [str, m.SurfaceKey, m.EvidenceScope],
+    _FunctionalPyramidRouteResult,
+]
+
 
 def _recording_identity(value: _rw.IdentityWire) -> m.RecordingIdentity:
     if value.context_id is None:
@@ -156,6 +166,7 @@ class LifecycleService:
         evidence: EvidenceService,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
+        functional_pyramid_route: _FunctionalPyramidRouteLookup | None = None,
     ) -> None:
         self._store = store
         self._authority = authority
@@ -163,6 +174,7 @@ class LifecycleService:
         self._evidence = evidence
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
+        self._functional_pyramid_route = functional_pyramid_route
 
     # -- context issuance --------------------------------------------------
 
@@ -425,24 +437,168 @@ class LifecycleService:
         if isinstance(command, m.CreateUnderstandingCommand):
             self._require_admitted_support(command)
             self._support.assert_current(command)
+            governed = self._derive_normative_governance(command)
+            if isinstance(governed, m.Unavailable):
+                return governed
             receipt = self._store.record_understanding(
-                command,
-                understanding_id=understanding_identity(command.identity),
+                governed,
+                understanding_id=understanding_identity(governed.identity),
                 content_digest=digest,
             )
             return self.qualify_understanding(receipt)
         if isinstance(command, m.UpdateUnderstandingCommand):
             self._require_admitted_support(command)
             self._support.assert_current(command)
-            no_op = self._confirm_noop(command)
+            governed = self._derive_normative_governance(command)
+            if isinstance(governed, m.Unavailable):
+                return governed
+            no_op = self._confirm_noop(governed)
             if no_op is not None:
                 return self.qualify_understanding(
-                    self._store.record_noop(command.identity, digest, no_op)
+                    self._store.record_noop(governed.identity, digest, no_op)
                 )
             return self.qualify_understanding(
-                self._store.record_understanding(command, content_digest=digest)
+                self._store.record_understanding(governed, content_digest=digest)
             )
         raise RecordingValidationError("record did not produce a command")
+
+    def _governance_support(
+        self,
+        *,
+        repository_id: str,
+        surface: m.SurfaceKey,
+        semantic_scope: m.EvidenceScope,
+    ) -> tuple[m.SupportDependency, ...] | m.Unavailable:
+        """Derive the server-owned governance dependency set for one NORMATIVE scope."""
+        if self._functional_pyramid_route is None:
+            return ()
+        current = self._functional_pyramid_route(
+            repository_id, surface, semantic_scope
+        )
+        if isinstance(current, m.FunctionalPyramidParticipation):
+            return ()
+        if isinstance(current, m.FunctionalPyramidUnavailable):
+            return m.Unavailable(
+                operation="record",
+                failure=current.failure,
+                recovery=current.recovery,
+            )
+        view, route_identity = current
+        derived: list[m.SupportDependency] = [
+            m.FunctionalRouteSupport(
+                repository_id=repository_id,
+                pyramid_id=view.pyramid_id,
+                semantic_scope=semantic_scope,
+                route_identity=route_identity,
+            )
+        ]
+        for rule in view.rules:
+            dependency = m.AuthoritySupportDependency(authority=rule.authority)
+            if dependency not in derived:
+                derived.append(dependency)
+        return tuple(derived)
+
+    def _governed_content(
+        self,
+        content: m.ConclusionContentDraft,
+        *,
+        repository_id: str,
+        surface: m.SurfaceKey,
+    ) -> m.ConclusionContentDraft | m.Unavailable:
+        if content.assertion_nature is not m.AssertionNature.NORMATIVE:
+            return content
+        derived = self._governance_support(
+            repository_id=repository_id,
+            surface=surface,
+            semantic_scope=content.scope,
+        )
+        if isinstance(derived, m.Unavailable):
+            return derived
+        support = list(content.support)
+        for dependency in derived:
+            if dependency not in support:
+                support.append(dependency)
+        return _dataclasses.replace(content, support=tuple(support))
+
+    def _derive_normative_governance(
+        self,
+        command: m.CreateUnderstandingCommand | m.UpdateUnderstandingCommand,
+    ) -> m.CreateUnderstandingCommand | m.UpdateUnderstandingCommand | m.Unavailable:
+        """Add required governance without changing caller-owned semantic content."""
+        if isinstance(command, m.CreateUnderstandingCommand):
+            conclusions: list[m.ProposedConclusion] = []
+            for conclusion in command.conclusions:
+                governed = self._governed_content(
+                    conclusion,
+                    repository_id=command.identity.repository_id,
+                    surface=command.surface,
+                )
+                if isinstance(governed, m.Unavailable):
+                    return governed
+                conclusions.append(_typing.cast(m.ProposedConclusion, governed))
+            return _dataclasses.replace(command, conclusions=tuple(conclusions))
+
+        surface = self._store.get_understanding(command.understanding_id.value).surface
+
+        def governed_tuple(
+            values: tuple[
+                m.ProposedConclusion
+                | m.ConfirmConclusion
+                | m.CorrectConclusion
+                | m.ReplaceConclusion,
+                ...,
+            ],
+        ) -> tuple[
+            m.ProposedConclusion
+            | m.ConfirmConclusion
+            | m.CorrectConclusion
+            | m.ReplaceConclusion,
+            ...,
+        ] | m.Unavailable:
+            results: list[
+                m.ProposedConclusion
+                | m.ConfirmConclusion
+                | m.CorrectConclusion
+                | m.ReplaceConclusion
+            ] = []
+            for value in values:
+                governed = self._governed_content(
+                    value,
+                    repository_id=command.identity.repository_id,
+                    surface=surface,
+                )
+                if isinstance(governed, m.Unavailable):
+                    return governed
+                results.append(
+                    _typing.cast(
+                        m.ProposedConclusion
+                        | m.ConfirmConclusion
+                        | m.CorrectConclusion
+                        | m.ReplaceConclusion,
+                        governed,
+                    )
+                )
+            return tuple(results)
+
+        add = governed_tuple(command.add)
+        if isinstance(add, m.Unavailable):
+            return add
+        confirm = governed_tuple(command.confirm)
+        if isinstance(confirm, m.Unavailable):
+            return confirm
+        correct = governed_tuple(command.correct)
+        if isinstance(correct, m.Unavailable):
+            return correct
+        replace = governed_tuple(command.replace)
+        if isinstance(replace, m.Unavailable):
+            return replace
+        return _dataclasses.replace(
+            command,
+            add=_typing.cast(tuple[m.ProposedConclusion, ...], add),
+            confirm=_typing.cast(tuple[m.ConfirmConclusion, ...], confirm),
+            correct=_typing.cast(tuple[m.CorrectConclusion, ...], correct),
+            replace=_typing.cast(tuple[m.ReplaceConclusion, ...], replace),
+        )
 
     def _update_snapshot(
         self, wire: _rw.RecordRequestWire
@@ -599,11 +755,12 @@ class LifecycleService:
                 content.statement != action.statement
                 or content.assertion_nature != action.assertion_nature
                 or content.scope != action.scope
-                or content.support != action.support
             ):
                 raise RecordingValidationError(
                     "a current conclusion with changed content requires correct"
                 )
+            if content.support != action.support:
+                return None
         return command.understanding_id
 
     def qualify_understanding(
