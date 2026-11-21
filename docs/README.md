@@ -27,6 +27,10 @@ and qualifies later reuse.
 
 ## Implementation
 
+- [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md) —
+  Version-1 Functional Pyramid implementation, migration, generic acceptance,
+  and private first-adopter acceptance gate. Runtime work is blocked until the
+  Version-1 technical design closes the Layer-4 choices.
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
   low-friction lifecycle work package, ordered tasks, decision gates and
   verification; released 2026-11-14.
