@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import sys
 
 from span.core import model as m
@@ -29,6 +30,7 @@ from span.shell.functional_pyramid import (
     open_functional_pyramid_service,
 )
 from span.shell.install.receipt import read_receipt
+from span.shell.mcp.models import ServiceContext
 from span.shell.policy import HOOK_DIAGNOSTIC_LIMIT
 from span.shell.readiness import probe_store
 
@@ -125,7 +127,7 @@ def _readiness_label(readiness) -> str:
 
 
 def _functional_pyramid_status(
-    data_dir: str | os.PathLike[str],
+    data_dir: str | pathlib.Path,
     mapping: dict[str, str],
     repository_id: str,
 ) -> m.FunctionalPyramidStatus | None:
@@ -133,7 +135,7 @@ def _functional_pyramid_status(
     from span.shell.context import close_repository_context, open_repository_context
 
     roots = {_repository_id(root): root for root in mapping}
-    contexts = {}
+    contexts: dict[str, ServiceContext] = {}
 
     def repository_runtime(requested: str) -> FunctionalPyramidRepositoryRuntime:
         context = contexts.get(requested)
@@ -168,7 +170,7 @@ def _functional_pyramid_status(
 
 
 def _functional_pyramid_notice(
-    data_dir: str | os.PathLike[str],
+    data_dir: str | pathlib.Path,
     mapping: dict[str, str],
     root: str,
 ) -> str | None:
