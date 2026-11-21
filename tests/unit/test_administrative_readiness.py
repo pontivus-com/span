@@ -17,7 +17,9 @@ from span.shell.readiness import (
     probe_store,
     probe_structural,
 )
-from span.shell.sqlite_store.functional_pyramid import FunctionalPyramidInstallationStore
+from span.shell.sqlite_store.functional_pyramid import (
+    FunctionalPyramidInstallationStore,
+)
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
 
@@ -142,9 +144,7 @@ class StoreProbeTest(unittest.TestCase):
             self.assertEqual(report["declarations"]["status"], "ready")
             self.assertTrue(report["declarations"]["valid"])
             self.assertEqual(report["declarations"]["coverage"], "PARTIAL")
-            self.assertEqual(
-                report["declarations"]["sources"][0]["status"], "valid"
-            )
+            self.assertEqual(report["declarations"]["sources"][0]["status"], "valid")
 
             (root / "docs" / "functional-pyramid.json").write_text(
                 json.dumps(
