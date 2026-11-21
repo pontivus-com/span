@@ -1253,28 +1253,106 @@ FD-73 applicability state; canonical rule prose is never part of that digest or
 carrier. Existing authority dependencies continue to carry each applicable
 `AuthorityBinding` separately.
 
-**FunctionalScope representation.** Implement one strict repository-relative
-selector-set carrier in core. The same carrier is used by:
+**FunctionalScope representation.** Implement one strict
+`FunctionalScopeSelector` carrier and `FunctionalScope` as a canonical
+non-empty tuple/set of those selectors. The same carrier is used by member
+functional coverage and Functional Context applicability. Version 1 admits
+exactly four selector kinds:
 
-- member functional coverage boundaries; and
-- Functional Context applicability declarations.
+| kind | fields | meaning |
+| --- | --- | --- |
+| `REPOSITORY` | no path/locator | the complete repository functional region |
+| `PATH` | normalized repository-relative `path` | exactly that path and semantic symbols owned by that path |
+| `PREFIX` | normalized repository-relative directory `path` | that directory boundary and all descendant paths/symbols |
+| `SYMBOL` | normalized owning `path` + canonical symbol `locator` | exactly that symbol |
 
-Its pure algebra provides canonical normalization, membership, intersection,
-containment and set difference. The grammar admits only deterministic
-repository-relative selector forms selected in this section's implementation;
-absolute paths, parent traversal and ambiguous repository identity reject at
-ingress. The resolver never converts an `EvidenceScope` into a second selector
-grammar. Instead one pure adapter evaluates the already-fixed semantic
-`EvidenceScope` against a member `FunctionalScope` and produces the FD-62
-scope relation/provenance.
+No glob, regex, negation, suffix match or free-form selector exists in Version 1.
+Paths use canonical POSIX-style repository-relative normalization; empty paths,
+absolute paths, `.`/`..` traversal and trailing-separator aliases reject.
+`REPOSITORY` is the only whole-repository representation.
 
-**Declarations.** Repository-owned bootstrap/declaration source identities stay
-in member intent. Add one port capability for reading the exact declaration
-sources named by that intent across registered repositories. The shell
+Normalization deduplicates selectors and removes selectors wholly contained by
+another selector in the same scope. The pure algebra is symbolic and never uses
+current file inventory:
+
+- REPOSITORY contains/intersects every selector;
+- PREFIX contains an equal/narrower PREFIX, PATH, or SYMBOL whose owning path is
+  inside the prefix boundary;
+- PATH contains the same PATH and SYMBOLs owned by that path;
+- SYMBOL contains only the same canonical symbol;
+- two selectors intersect iff either contains the other under those rules.
+
+For COMPLETE coverage, a member FunctionalScope is covered iff every normalized
+member selector is contained by at least one normalized selector in the union of
+applicable Functional Context coverage. A collection of narrower child prefixes
+does not prove an open parent prefix or repository region complete; that avoids
+inferring absence from current inventory. Set difference need only return
+empty/non-empty plus the uncovered member selectors/provenance needed by FD-86;
+it does not invent complement globs.
+
+The resolver never converts an `EvidenceScope` into a second selector grammar.
+One pure adapter evaluates the already-fixed semantic EvidenceScope against this
+selector algebra and produces the FD-62 relation/provenance.
+
+**Declarations and bootstrap.** Add the canonical domain carriers in
+`src/span/core/model/functional_pyramid.py`, the pure resolver/algebra in
+`src/span/core/functional_pyramid.py`, the orchestration service in
+`src/span/service/functional_pyramid.py`, and the external source capability
+in `src/span/ports/functional_pyramid.py`. The existing package exports remain
+the public import boundary.
+
+For discoverability, a repository may expose exactly one conventional navigation
+bootstrap at `.span/functional-pyramid.json`. This bootstrap is configuration,
+not authority. Its strict JSON shape is:
+
+```text
+{
+  "version": 1,
+  "functional_scope": [FunctionalScopeSelector, ...],
+  "coverage": "PARTIAL" | "COMPLETE",
+  "declaration_sources": [EvidenceRequest, ...]
+}
+```
+
+The initialization skill may use this bootstrap to construct member intent, but
+the public candidate/write still carries the explicit intent and therefore does
+not depend on conversational discovery. Absence of the bootstrap is not inferred
+as exclusion; the agent/user may supply the same explicit member intent directly.
+
+Each named declaration source is strict JSON with one canonical document shape:
+
+```text
+{
+  "version": 1,
+  "contexts": [
+    {
+      "context_id": str,
+      "coverage": [FunctionalScopeSelector, ...],
+      "inherits": [context_id, ...],
+      "rules": [rule_id, ...]
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": str,
+      "layer": "P0" | "P1" | "P2S" | "P2W" | "P3" | "P4",
+      "owner": {"repository_id": str, "authority_ref": str},
+      "governing_rule_ids": [rule_id | "ROOT", ...]
+    }
+  ]
+}
+```
+
+P0 has exactly `ROOT`; other layers use the FD-67 governing-edge rules.
+Documents may contain contexts, rules or both. IDs are stable across the entire
+resolved pyramid instance; duplicate non-identical owners are FD-65/FD-71
+findings. The document never contains canonical rule prose.
+
+The `FunctionalPyramidDeclarationPort` reads only the exact bootstrap/declaration
+sources named by member intent across registered repositories. Its shell
 implementation resolves repository roots through the existing
-`LifecycleStorePort.require_repository`/registered-root owner and reads only
-the requested sources through the existing evidence/source capability. Strict
-decode produces canonical Functional Context/Rule declarations; semantic graph
+`LifecycleStorePort.require_repository` owner and existing exact source
+capability. Strict decoding creates the canonical carriers; semantic graph
 validation remains pure core/service behavior. No directory scan, similarity
 search, file-name inference or model call participates.
 
@@ -1349,21 +1427,35 @@ owner. It already owns all registered repositories in one database and provides
 the `BEGIN IMMEDIATE` serialization boundary; do not create one database/store
 per pyramid and do not select a member repository as coordinator.
 
-Advance the active lifecycle store to the next schema version (schema 14) with
-installation-level Functional Pyramid state:
+Advance the active lifecycle store from schema 13 to schema 14.
+Retain every schema-13 table and add exactly these installation-level tables/
+projections:
 
-- immutable pyramid instance/version records containing canonical complete member
-  intent for each accepted version;
-- a current ACTIVE-member relational projection keyed uniquely by
-  `repository_id`, enforcing one ACTIVE pyramid per repository inside the same
-  transaction;
-- durable explicit EXCLUDED participation state; registered repositories with no
-  ACTIVE binding or exclusion are UNCONFIGURED;
-- installation-level Functional Pyramid receipts keyed by caller `request_id`,
-  separate from ordinary `RecordingKey(repository_id, request_id)`;
-- a relational projection for `FunctionalRouteSupport` sufficient to retrieve
-  route-supported conclusion revisions by owning repository/pyramid and to
-  re-evaluate them after governance changes.
+| table | key / purpose |
+| --- | --- |
+| `functional_pyramids` | `pyramid_id PRIMARY KEY`, current live version; row exists only for a live ACTIVE instance |
+| `functional_pyramid_versions` | `(pyramid_id, version) PRIMARY KEY`; immutable canonical complete member intent + digest/commit time |
+| `functional_pyramid_active_members` | `repository_id PRIMARY KEY`; current `pyramid_id`, version and canonical member intent projection; this key enforces one ACTIVE instance per repository |
+| `functional_pyramid_exclusions` | `repository_id PRIMARY KEY`; explicit EXCLUDED state; absence from both active-members and exclusions means registered repository state UNCONFIGURED |
+| `functional_pyramid_receipts` | `request_id PRIMARY KEY`; digest, action, commit/replay times, pyramid/version, resulting members, participation effects and immutable dependent-effect refs |
+| `functional_route_dependency_index` | conclusion revision key + `pyramid_id` + owning `repository_id` + route identity; derived relational projection for locating governed revisions |
+
+`functional_pyramid_active_members.repository_id` and
+`functional_pyramid_exclusions.repository_id` are mutually exclusive by the
+single participation-write transaction; service/store invariant verification
+rejects any impossible overlap. Active-member rows reference registered
+repositories and the current immutable pyramid version.
+
+Canonical `FunctionalRouteSupport` remains inside the conclusion's existing
+canonical support dependency set. Extend the existing `support_dependencies`
+projection with dependency kind `FUNCTIONAL_ROUTE`; its `dependency_ref` is
+the canonical route identity. `functional_route_dependency_index` is only the
+additional cross-pyramid lookup projection needed to select route-supported
+revisions by pyramid/repository without encoding a second support model.
+
+Durable explicit EXCLUDED state is stored only in
+`functional_pyramid_exclusions`; registered repositories with no ACTIVE binding
+or exclusion are UNCONFIGURED.
 
 The immutable Functional Pyramid receipt stores the canonical write digest,
 action, committed time, affected pyramid/version, resulting ACTIVE member set,
