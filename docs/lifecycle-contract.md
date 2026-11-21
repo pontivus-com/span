@@ -226,12 +226,14 @@ Pyramid. A participating repository returns either the view or explicit
 operational unavailability; unresolved governance is represented inside the
 view and is not mislabeled as operational failure.
 
-`FunctionalPyramidView` carries the selected semantic scope, all directly
-applicable and inherited functional contexts, all applicable
-functional rules grouped by declared layer, provenance sufficient to trace each
-path through contexts to each rule and its governing rules, and every unresolved
-relationship. It copies rule IDs and owner references, never canonical rule
-text.
+`FunctionalPyramidView` carries
+`status: RESOLVED | UNRESOLVED`, the selected semantic scope, all directly
+applicable and inherited functional contexts, all applicable functional rules
+grouped by declared layer, provenance sufficient to trace each scope member
+through contexts to each rule and its governing rules, and every unresolved
+relationship. `RESOLVED` requires an empty unresolved set; `UNRESOLVED`
+requires at least one typed unresolved relationship. The view copies rule IDs
+and owner references, never canonical rule text.
 
 `FunctionalPyramidUnavailable` carries the public failure and recovery when
 the declared graph could not be evaluated operationally. A descriptive Answer
