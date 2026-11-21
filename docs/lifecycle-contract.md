@@ -226,8 +226,8 @@ Pyramid. A participating repository returns either the view or explicit
 operational unavailability; unresolved governance is represented inside the
 view and is not mislabeled as operational failure.
 
-`FunctionalPyramidView` carries the selected repository-relative paths,
-all directly matched and inherited functional contexts, all applicable
+`FunctionalPyramidView` carries the selected semantic scope, all directly
+applicable and inherited functional contexts, all applicable
 functional rules grouped by declared layer, provenance sufficient to trace each
 path through contexts to each rule and its governing rules, and every unresolved
 relationship. It copies rule IDs and owner references, never canonical rule
