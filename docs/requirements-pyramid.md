@@ -23,8 +23,8 @@ supposed to state it.
 | --- | --- | --- | --- | --- |
 | **0** | `goals.md` | the problem, the outcomes, success, non-goals | mechanisms, invariants, operations, carriers | Why does this exist, and what does success look like? |
 | **1** | `foundations.md` | the domain definition, axioms about the agent, and invariants that must hold | outcomes, operation shapes, carriers, storage | What is it, and what must be true at all times? |
-| **2** | `lifecycle-contract.md` | surfaces, Functional Pyramid orientation, operations, payloads, contract laws, internal boundary | restated goals or principles | What must the agent send and receive? |
-| **3** | `functional-design.md` | behaviour that makes the contract deterministic: identity, containment, Functional Pyramid resolution, support evaluation, propagation, composition, transitions, failure, retention, concurrency, host expectations, truncation | implementation mechanisms, wire formats, storage layout, product outcomes | How must it behave to keep the promise? |
+| **2** | `lifecycle-contract.md` | surfaces, Functional Pyramid participation/adoption/orientation, lifecycle state transitions, operations, payloads, contract laws, internal boundary | restated goals or principles | What must the agent send and receive, and which lifecycle states/transitions are public? |
+| **3** | `functional-design.md` | behaviour that makes the contract deterministic: identity, containment, Functional Pyramid instance/coverage resolution, adoption transition rules, support evaluation, cross-repository propagation, composition, failure, retention, concurrency, host expectations, truncation | implementation mechanisms, wire formats, storage layout, product outcomes | How must it behave to keep the promise? |
 | **4** | `technical-design.md` | implementation choices: schemas, storage, transport, hosts; the baseline and refactoring set | new requirements | How is it realised? |
 
 Each layer's document may *reference* a statement in another layer by its ID. It
