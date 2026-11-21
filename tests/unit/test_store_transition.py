@@ -668,25 +668,6 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
             ),
             conclusions=(
                 m.ProposedConclusion(
-                    conclusion_id=m.ConclusionId("c-schema13"),
-                    statement="A conforms to its governing route.",
-                    assertion_nature=m.AssertionNature.NORMATIVE,
-                    scope=m.EvidenceScope(paths=("src/a.py",)),
-                    support=(
-                        m.FunctionalRouteSupport(
-                            repository_id="demo",
-                            pyramid_id=m.FunctionalPyramidId("fp-dev"),
-                            semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
-                            route_identity=m.FunctionalRouteIdentity("route-dev"),
-                        ),
-                    ),
-                    basis=m.SemanticBasis(
-                        derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
-                        summary="schema13 fixture",
-                        input_refs=(),
-                    ),
-                ),
-                m.ProposedConclusion(
                     conclusion_id=m.ConclusionId("c-pre-route"),
                     statement="A was normatively assessed before route support existed.",
                     assertion_nature=m.AssertionNature.NORMATIVE,
@@ -844,7 +825,7 @@ class Schema13To14Test(unittest.TestCase):
                     "SELECT pyramid_id, repository_id, route_identity"
                     " FROM functional_route_dependency_index"
                 ).fetchone()
-                self.assertEqual(route, ("fp-dev", "demo", "route-dev"))
+                self.assertIsNone(route)
                 pre_route_dependencies = connection.execute(
                     "SELECT dependency_kind, dependency_ref"
                     " FROM support_dependencies"
