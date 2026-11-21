@@ -639,7 +639,7 @@ class FunctionalPyramidInstallationStore:
         now = moment or self._clock()
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("reap time must be timezone-aware")
-        with self.transaction() as connection:
+        with immediate_transaction(self._connection) as connection:
             result = connection.execute(
                 "DELETE FROM functional_pyramid_receipts"
                 " WHERE replay_expires_at IS NOT NULL AND replay_expires_at < ?",
