@@ -18,16 +18,22 @@ _AuthorityMap = dict[tuple[str, str], m.AuthorityBinding]
 
 def _validation_finding(
     reason: m.FunctionalPyramidValidationReason,
-    repository_id: str,
+    repository_id: str | None,
     detail: str,
     recovery: str,
     *,
+    pyramid_id: m.FunctionalPyramidId | None = None,
     declaration_locator: str | None = None,
+    expected_version: m.FunctionalPyramidVersion | None = None,
+    current_version: m.FunctionalPyramidVersion | None = None,
 ) -> m.FunctionalPyramidValidationFinding:
     return m.FunctionalPyramidValidationFinding(
         reason=reason,
         repository_id=repository_id,
+        pyramid_id=pyramid_id,
         declaration_locator=declaration_locator,
+        expected_version=expected_version,
+        current_version=current_version,
         detail=detail,
         recovery=recovery,
     )
