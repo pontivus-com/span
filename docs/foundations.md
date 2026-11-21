@@ -316,17 +316,23 @@ bytes did not change.
 Registration makes a repository available to Span; it does not place that
 repository into a Functional Pyramid. One Functional Pyramid instance explicitly
 names the registered repositories whose declared governance may resolve together.
-Membership supplies resolution reachability only: it never makes a member's rules
-applicable to another member without an explicit functional-context or rule
-relationship.
+Membership supplies resolution reachability only: it never makes a member's
+rules applicable to another member without an explicit functional-context or
+rule relationship.
 
-Participation and declared coverage are lifecycle state, not topology inference.
-The lifecycle distinguishes a repository set that has never been configured, one
-explicitly excluded from the Functional Pyramid, one whose declared coverage is
-active and usable, and one whose previously active governing graph is degraded.
+Durable participation state is exactly `UNCONFIGURED`, `EXCLUDED`, or
+`ACTIVE`. Only an accepted Functional Pyramid `record` changes that durable
+state. An ACTIVE pyramid also has live health, computed from present declarations
+and member availability: `VALID` or `DEGRADED`. Health is qualification of
+the active graph, not another durable participation state and never requires a
+hidden write during `ask`, `reconsider`, or hook delivery.
+
 An active pyramid may declare partial coverage; scope outside that coverage stays
 explicitly uncovered rather than being treated as having no governing authority.
-A complete-coverage claim may not coexist with uncovered intended scope.
+A complete-coverage claim may not coexist with uncovered intended functional
+scope. Participation, health and route state remain distinct: an ACTIVE pyramid
+may be DEGRADED while an unaffected route still resolves, and an ACTIVE/PARTIAL
+pyramid may legitimately return an uncovered route outside declared coverage.
 
 Activation or revision is based only on explicit repository-owned declarations.
 Canonical governing content remains at its owner. Span retains the instance
@@ -336,8 +342,11 @@ documentation corpus.
 
 *Demonstration:* registering or adding a repository changes no applicable route
 unless a declared relationship makes it relevant; removing or losing an
-applicable member degrades the affected route instead of deleting or inventing
-the external authority.
+applicable member leaves participation ACTIVE but makes live pyramid health
+DEGRADED and the affected route unresolved instead of deleting or inventing the
+external authority. Restoring the member/declaration returns health to VALID
+without a participation-state write.
+
 
 ## 4. Lifecycle responsibilities
 
