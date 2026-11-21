@@ -22,11 +22,7 @@ def _ref(repository_id: str, locator: str) -> m.EvidenceRef:
 
 def _scope() -> m.FunctionalScope:
     return m.FunctionalScope(
-        (
-            m.FunctionalScopeSelector(
-                m.FunctionalScopeSelectorKind.PREFIX, path="src"
-            ),
-        )
+        (m.FunctionalScopeSelector(m.FunctionalScopeSelectorKind.PREFIX, path="src"),)
     )
 
 
@@ -62,10 +58,7 @@ class _Declarations:
 
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
-    ) -> (
-        tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration]
-        | m.EvidenceSourceFailure
-    ):
+    ) -> tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration] | m.EvidenceSourceFailure:
         self.calls.append((repository_id, request))
         result = self.results[(repository_id, request.locator)]
         if isinstance(result, Exception):
