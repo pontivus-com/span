@@ -144,7 +144,10 @@ class McpAdapter:
             try:
                 repository_id = repository_route(tool_name, request, route)
             except (RoutingError, ValueError) as exc:
-                if isinstance(request, m.AskRequest) and request.continuation is not None:
+                if (
+                    isinstance(request, m.AskRequest)
+                    and request.continuation is not None
+                ):
                     continuation_rejection = (
                         RecordingValidationError.continuation_invalid(
                             "the continuation cannot be routed"
@@ -338,7 +341,10 @@ def _operational_failure(exc: Exception) -> tuple[str, str]:
     """Map typed operational owners to stable public failure/recovery text."""
     if isinstance(
         exc,
-        (FunctionalPyramidInstallationSchemaError, FunctionalPyramidInstallationStoreError),
+        (
+            FunctionalPyramidInstallationSchemaError,
+            FunctionalPyramidInstallationStoreError,
+        ),
     ):
         return (
             "Functional Pyramid installation state is unavailable",
