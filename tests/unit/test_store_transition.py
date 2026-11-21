@@ -606,7 +606,6 @@ def _schema12_store(
     return path
 
 
-
 def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
     """Build schema-14 state, then remove Version-1 projections to reproduce 13."""
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
@@ -778,7 +777,9 @@ class InspectTest(unittest.TestCase):
 
 
 class Schema13To14Test(unittest.TestCase):
-    def test_schema13_state_is_preserved_without_fabricating_pyramid_state(self) -> None:
+    def test_schema13_state_is_preserved_without_fabricating_pyramid_state(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "demo"
             data = pathlib.Path(tmp) / "data"
@@ -822,9 +823,9 @@ class Schema13To14Test(unittest.TestCase):
                     "functional_pyramid_receipts",
                 ):
                     self.assertEqual(
-                        connection.execute(
-                            f"SELECT COUNT(*) FROM {table}"
-                        ).fetchone()[0],
+                        connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[
+                            0
+                        ],
                         0,
                         table,
                     )
