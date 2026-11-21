@@ -50,7 +50,6 @@ governing sources remain canonical sources rather than becoming copied Span
 conclusions.
 
 ## 2. Axioms about the agent
-## 2. Axioms about the agent
 
 These are facts about the thing that uses Span. They cannot be changed by
 design, only accommodated. Each one constrains a different part of the system.
@@ -126,7 +125,6 @@ governing route, and an unchanged governing rule can coexist with changed source
 Span reports those states independently and never promotes one to proof of the
 other.
 
-### F2 — Only supported understanding is an answer
 ### F2 — Only supported understanding is an answer
 
 An answer may be returned only while every dependency required by its support
