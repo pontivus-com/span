@@ -275,6 +275,7 @@ class ChangeCarrierTest(unittest.TestCase):
                 m.UnderstandingRecorded,
                 m.VerificationRecorded,
                 m.SurfaceDeclared,
+                m.FunctionalPyramidRecorded,
                 m.Rejected,
                 m.Unavailable,
             },
