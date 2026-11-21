@@ -1,8 +1,11 @@
 """Functional Pyramid source/service orchestration tests (T02)."""
 
+import contextlib
+import datetime
 import unittest
 
 from span.core import model as m
+from span.core.recording import RecordingConflict
 from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidRepositoryUnavailable,
@@ -83,6 +86,10 @@ class _Authority:
 
 class _State:
     def __init__(self) -> None:
+        self.retention = m.LifecycleRetention(
+            context_lifetime=datetime.timedelta(hours=1),
+            replay_retention=datetime.timedelta(hours=2),
+        )
         self.active: dict[str, m.FunctionalPyramidId] = {}
         self.versions: dict[m.FunctionalPyramidId, m.FunctionalPyramidVersion] = {}
         self.members: dict[
@@ -90,6 +97,8 @@ class _State:
             tuple[m.FunctionalPyramidMemberView, ...],
         ] = {}
         self.excluded: set[str] = set()
+        self.receipts: dict[str, m.RetrievedFunctionalPyramidReceipt] = {}
+        self.transaction_paths: list[tuple[tuple[str, str], ...]] = []
 
     def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None:
         return self.active.get(repository_id)
@@ -115,10 +124,60 @@ class _State:
     def receipt(
         self, request_id: m.RequestId
     ) -> m.RetrievedFunctionalPyramidReceipt | None:
-        return None
+        return self.receipts.get(request_id.value)
 
+    @contextlib.contextmanager
     def transaction(self, repository_paths=()):
-        raise AssertionError("candidate/status do not write state")
+        paths = tuple(repository_paths)
+        self.transaction_paths.append(paths)
+        yield self
+
+    def write_pyramid_version(
+        self,
+        *,
+        pyramid_id,
+        version,
+        content_digest,
+        committed_at,
+        members,
+    ) -> None:
+        del content_digest, committed_at
+        self.versions[pyramid_id] = version
+        self.members[(pyramid_id, version)] = members
+
+    def set_current_pyramid(self, *, pyramid_id, version, members) -> None:
+        for repository_id, active_id in tuple(self.active.items()):
+            if active_id == pyramid_id:
+                del self.active[repository_id]
+        for member in members:
+            self.active[member.repository_id] = pyramid_id
+            self.excluded.discard(member.repository_id)
+        self.versions[pyramid_id] = version
+
+    def clear_current_pyramid(self, pyramid_id) -> None:
+        for repository_id, active_id in tuple(self.active.items()):
+            if active_id == pyramid_id:
+                del self.active[repository_id]
+        self.versions.pop(pyramid_id, None)
+
+    def set_excluded(self, repository_id: str, excluded: bool) -> None:
+        if excluded:
+            self.excluded.add(repository_id)
+        else:
+            self.excluded.discard(repository_id)
+
+    def write_receipt(self, receipt, *, replay_expires_at) -> None:
+        del replay_expires_at
+        self.receipts[receipt.request_id.value] = receipt
+
+    def write_reestablishment_context(
+        self,
+        context,
+        *,
+        source_observation_ids=(),
+        discovery_observation_ids=(),
+    ) -> None:
+        del context, source_observation_ids, discovery_observation_ids
 
 
 class FunctionalPyramidServiceTest(unittest.TestCase):
@@ -130,11 +189,33 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             authority=self.authority,
         )
         self.state = _State()
+        self.effect_calls = []
+        self.retained_effect_calls = []
+
+        def project_effects(transaction, action, pyramid_id, old_members, new_members):
+            self.effect_calls.append(
+                (transaction, action, pyramid_id, old_members, new_members)
+            )
+            return (), (), ()
+
+        def project_retained(transaction, refs):
+            self.retained_effect_calls.append((transaction, refs))
+            return (), ()
+
         self.admin_service = FunctionalPyramidService(
             declarations=self.declarations,
             authority=self.authority,
             state=self.state,
             registered_repository_ids=lambda: ("repo-a", "repo-b"),
+            repository_paths=lambda repository_ids: tuple(
+                (repository_id, f"/stores/{repository_id}.db")
+                for repository_id in sorted(repository_ids)
+            ),
+            effect_projection=project_effects,
+            retained_effect_projection=project_retained,
+            clock=lambda: datetime.datetime(
+                2026, 11, 21, 0, 0, tzinfo=datetime.timezone.utc
+            ),
         )
 
     def test_optional_bootstrap_absence_does_not_imply_exclusion(self):
@@ -475,3 +556,179 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(candidate.validation_findings, ())
         self.assertEqual(candidate.graph_findings, ())
         self.assertEqual(len(candidate.members), 1)
+
+    def _intent(self, repository_id: str) -> m.FunctionalPyramidMemberIntent:
+        request = m.EvidenceRequest("decl.json")
+        self.declarations.results[(repository_id, "decl.json")] = (
+            _ref(repository_id, "decl.json"),
+            _declaration(),
+        )
+        return m.FunctionalPyramidMemberIntent(
+            repository_id=repository_id,
+            declaration_sources=(request,),
+            functional_scope=_scope(),
+            coverage=m.FunctionalPyramidCoverage.PARTIAL,
+        )
+
+    def test_record_activate_commits_members_effects_and_receipt(self):
+        result = self.admin_service.record(
+            request_id=m.RequestId("activate-1"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"), self._intent("repo-b")),
+        )
+
+        self.assertEqual(result.pyramid_id, m.FunctionalPyramidId("fp:activate-1"))
+        self.assertEqual(result.version, m.FunctionalPyramidVersion(1))
+        self.assertEqual(
+            tuple(effect.repository_id for effect in result.participation_effects),
+            ("repo-a", "repo-b"),
+        )
+        self.assertTrue(
+            all(
+                effect.state is m.FunctionalPyramidParticipationState.ACTIVE
+                for effect in result.participation_effects
+            )
+        )
+        self.assertEqual(
+            self.state.active,
+            {
+                "repo-a": m.FunctionalPyramidId("fp:activate-1"),
+                "repo-b": m.FunctionalPyramidId("fp:activate-1"),
+            },
+        )
+        receipt = self.state.receipt(m.RequestId("activate-1"))
+        self.assertIsNotNone(receipt)
+        self.assertEqual(len(self.effect_calls), 1)
+        self.assertEqual(
+            self.state.transaction_paths[-1],
+            (("repo-a", "/stores/repo-a.db"), ("repo-b", "/stores/repo-b.db")),
+        )
+
+    def test_record_replay_preserves_receipt_without_new_effect_discovery(self):
+        intent = self._intent("repo-a")
+        first = self.admin_service.record(
+            request_id=m.RequestId("activate-replay"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(intent,),
+        )
+        self.assertEqual(len(self.effect_calls), 1)
+
+        replay = self.admin_service.record(
+            request_id=m.RequestId("activate-replay"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(intent,),
+        )
+        self.assertEqual(replay.receipt_selector, first.receipt_selector)
+        self.assertEqual(replay.committed_at, first.committed_at)
+        self.assertEqual(len(self.effect_calls), 1)
+        self.assertEqual(self.retained_effect_calls, [])
+
+    def test_record_replay_conflict_rejects_different_content(self):
+        self.admin_service.record(
+            request_id=m.RequestId("same-id"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"),),
+        )
+        with self.assertRaises(RecordingConflict):
+            self.admin_service.record(
+                request_id=m.RequestId("same-id"),
+                action=m.FunctionalPyramidAction.ACTIVATE,
+                members=(self._intent("repo-b"),),
+            )
+
+    def test_record_revise_only_reports_actual_participation_changes(self):
+        activation = self.admin_service.record(
+            request_id=m.RequestId("activate-revise"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"), self._intent("repo-b")),
+        )
+        assert activation.pyramid_id is not None
+        assert activation.version is not None
+
+        revision = self.admin_service.record(
+            request_id=m.RequestId("revise-1"),
+            action=m.FunctionalPyramidAction.REVISE,
+            members=(self._intent("repo-a"),),
+            pyramid_id=activation.pyramid_id,
+            expected_version=activation.version,
+        )
+        self.assertEqual(revision.version, m.FunctionalPyramidVersion(2))
+        self.assertEqual(
+            revision.participation_effects,
+            (
+                m.FunctionalPyramidParticipationEffect(
+                    repository_id="repo-b",
+                    state=m.FunctionalPyramidParticipationState.UNCONFIGURED,
+                ),
+            ),
+        )
+        self.assertNotIn("repo-b", self.state.active)
+        self.assertNotIn("repo-b", self.state.excluded)
+
+    def test_record_revise_enforces_version_cas(self):
+        activation = self.admin_service.record(
+            request_id=m.RequestId("activate-cas"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"),),
+        )
+        assert activation.pyramid_id is not None
+        self.state.versions[activation.pyramid_id] = m.FunctionalPyramidVersion(2)
+
+        with self.assertRaises(RecordingConflict):
+            self.admin_service.record(
+                request_id=m.RequestId("revise-stale"),
+                action=m.FunctionalPyramidAction.REVISE,
+                members=(self._intent("repo-a"),),
+                pyramid_id=activation.pyramid_id,
+                expected_version=m.FunctionalPyramidVersion(1),
+            )
+
+    def test_record_deactivate_moves_all_members_to_excluded(self):
+        activation = self.admin_service.record(
+            request_id=m.RequestId("activate-deactivate"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"), self._intent("repo-b")),
+        )
+        assert activation.pyramid_id is not None
+        assert activation.version is not None
+
+        result = self.admin_service.record(
+            request_id=m.RequestId("deactivate-1"),
+            action=m.FunctionalPyramidAction.DEACTIVATE,
+            pyramid_id=activation.pyramid_id,
+            expected_version=activation.version,
+        )
+        self.assertEqual(result.members, ())
+        self.assertEqual(
+            {effect.repository_id for effect in result.participation_effects},
+            {"repo-a", "repo-b"},
+        )
+        self.assertTrue(
+            all(
+                effect.state is m.FunctionalPyramidParticipationState.EXCLUDED
+                for effect in result.participation_effects
+            )
+        )
+        self.assertEqual(self.state.active, {})
+        self.assertEqual(self.state.excluded, {"repo-a", "repo-b"})
+
+    def test_record_exclude_has_no_semantic_effect_projection(self):
+        result = self.admin_service.record(
+            request_id=m.RequestId("exclude-1"),
+            action=m.FunctionalPyramidAction.EXCLUDE,
+            repository_id="repo-a",
+        )
+        self.assertEqual(
+            result.participation_effects,
+            (
+                m.FunctionalPyramidParticipationEffect(
+                    repository_id="repo-a",
+                    state=m.FunctionalPyramidParticipationState.EXCLUDED,
+                ),
+            ),
+        )
+        self.assertEqual(result.dependent_effects, ())
+        self.assertEqual(result.reestablishment_contexts, ())
+        self.assertEqual(self.effect_calls, [])
+        self.assertIn("repo-a", self.state.excluded)
+
