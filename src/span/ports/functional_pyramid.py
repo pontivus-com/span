@@ -7,6 +7,14 @@ import typing as _typing
 from span.core import model as m
 
 
+class FunctionalPyramidDeclarationInvalid(ValueError):
+    """A named Functional Pyramid source exists but violates its strict contract."""
+
+
+class FunctionalPyramidRepositoryUnavailable(OSError):
+    """A declared Functional Pyramid member cannot currently be read."""
+
+
 class FunctionalPyramidDeclarationPort(_typing.Protocol):
     """Read only exact Functional Pyramid bootstrap/declaration sources."""
 
