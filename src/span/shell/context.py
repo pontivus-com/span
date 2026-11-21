@@ -39,6 +39,7 @@ from span.service.understand import UnderstandService
 
 __all__ = [
     "RepositoryNotInitialized",
+    "close_repository_context",
     "compose_context",
     "open_repository_context",
     "provision_repository",
@@ -141,6 +142,14 @@ def open_repository_context(
         store=store,
         policy=policy,
     )
+
+
+def close_repository_context(context: ServiceContext) -> None:
+    """Close one context opened by this shell module."""
+    store = context.store
+    if not isinstance(store, LifecycleStore):
+        raise TypeError("repository context store is not a LifecycleStore")
+    store.close()
 
 
 def provision_repository(
