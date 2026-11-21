@@ -187,7 +187,12 @@ def _supported_schemas():
     return SCHEMA_VERSION, frozenset(SUPPORTED_SOURCE_SCHEMAS)
 
 
-def _database_schema_supported(name, version, current, supported):
+def _database_schema_supported(
+    name: str,
+    version: int,
+    current: int,
+    supported: frozenset[int],
+) -> bool:
     """Recognize repository lifecycle and installation-store schema identities."""
     if name == "installation/functional-pyramid.db":
         from span.shell.sqlite_store.functional_pyramid import (
