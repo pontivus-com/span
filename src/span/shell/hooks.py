@@ -126,7 +126,7 @@ def _readiness_label(readiness) -> str:
 
 def _functional_pyramid_status(data_dir, mapping, repository_id):
     """Obtain canonical participation/health and close every opened repository."""
-    from span.shell.context import open_repository_context
+    from span.shell.context import close_repository_context, open_repository_context
 
     roots = {_repository_id(root): root for root in mapping}
     contexts = {}
@@ -140,7 +140,7 @@ def _functional_pyramid_status(data_dir, mapping, repository_id):
             raise ValueError(f"repository is not registered: {requested}")
         observed_id, context = open_repository_context(data_dir, root)
         if observed_id != requested:
-            context.store.close()
+            close_repository_context(context)
             raise ValueError(
                 f"repository identity changed: expected {requested}, observed {observed_id}"
             )
@@ -160,7 +160,7 @@ def _functional_pyramid_status(data_dir, mapping, repository_id):
             )
     finally:
         for context in contexts.values():
-            context.store.close()
+            close_repository_context(context)
 
 
 def _functional_pyramid_notice(data_dir, mapping, root):
