@@ -951,9 +951,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
         )
 
-        result = service.ask(
-            m.AskRequest(repository_id="repo-1", reference="src/a.py")
-        )
+        result = service.ask(m.AskRequest(repository_id="repo-1", reference="src/a.py"))
 
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
