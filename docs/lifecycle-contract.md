@@ -269,6 +269,39 @@ may coexist with this state. A normative conclusion whose required route cannot
 be evaluated is not CURRENT because route support is independently
 `UNVERIFIABLE`.
 
+**Functional Pyramid public carriers.** The lifecycle uses one canonical member
+intent/view shape rather than ad-hoc setup DTOs.
+
+- `FunctionalPyramidMemberIntent` carries
+  `repository_id: str`,
+  `declaration_sources: tuple[EvidenceRequest, ...]` (non-empty), and
+  `coverage: PARTIAL | COMPLETE`.
+- `FunctionalPyramidMemberView` carries
+  `repository_id: str`,
+  `declaration_refs: tuple[EvidenceRef, ...]`, and
+  `coverage: PARTIAL | COMPLETE`.
+- `FunctionalPyramidParticipation` carries exactly
+  `state: UNCONFIGURED | EXCLUDED`.
+- `FunctionalPyramidStatus` carries
+  `state: UNCONFIGURED | EXCLUDED | ACTIVE | DEGRADED`,
+  `pyramid_id: FunctionalPyramidId | None`,
+  `version: FunctionalPyramidVersion | None`,
+  `members: tuple[FunctionalPyramidMemberView, ...]`, and
+  `findings: tuple[FunctionalPyramidFinding, ...]`.
+  Pyramid identity/version and members are absent/empty for UNCONFIGURED and
+  EXCLUDED.
+- `FunctionalPyramidCandidate` carries
+  `members: tuple[FunctionalPyramidMemberView, ...]`,
+  `activation_ready: bool`, and complete
+  `findings: tuple[FunctionalPyramidFinding, ...]`.
+- `FunctionalPyramidFinding` carries the typed unresolved/validation reason,
+  the repository/declared identity coordinates needed to locate it, and concise
+  public recovery/detail. It never carries copied governing prose.
+
+`FunctionalPyramidId` and `FunctionalPyramidVersion` are opaque server-owned
+identities. Candidate validation returns no reusable authority token; a later
+record revalidates current declaration source state.
+
 Answer carries only CURRENT statements, nature, scope, per-conclusion support,
 evidence references, surface status and applicable verification. Gap carries
 status, cause (invalidated/unverifiable/unassessed), changed evidence, historical
@@ -366,11 +399,13 @@ topology.
 Recording retains references/identities/relationships and source identities, not
 canonical governing prose.
 
-The accepted result is `FunctionalPyramidRecorded`, carrying the pyramid
-identity/version, resulting participation state, members, coverage and complete
-validation findings. It is receipted/replay-safe under L4. The server derives the
-pyramid identity on first activation; callers never choose a stable internal
-identity.
+The accepted result is `FunctionalPyramidRecorded`, carrying the receipt,
+resulting state, members and complete validation findings. ACTIVE results carry
+the pyramid identity/version. Repository-level EXCLUDED results after
+`exclude`, and the post-deactivation result after an instance has been retired,
+carry no live pyramid identity/version. It is receipted/replay-safe under L4.
+The server derives the pyramid identity on first activation; callers never choose
+a stable internal identity.
 
 **Surface declaration.** A declared surface (`SERVICE`, `DOMAIN`) carries a
 stable name, a boundary, and an optional parent; its identity is the declared
@@ -563,8 +598,9 @@ There is no separate evidence-admission call. This is F7's test: recording
 requires nothing the agent does not already hold.
 
 **The agent receives** exactly one of `UnderstandingRecorded`,
-`VerificationRecorded`, or `SurfaceDeclared` for the requested `kind`, or
-`Rejected`, or `Unavailable`. An ordinary acceptance carries its exact receipt selector, accepted
+`VerificationRecorded`, `SurfaceDeclared`, or
+`FunctionalPyramidRecorded` for the requested `kind`, or `Rejected`, or
+`Unavailable`. An ordinary acceptance carries its exact receipt selector, accepted
 subject coordinates, live qualification and the status required by its result
 kind — or a rejection naming the exact offending identity, the exact
 cause, the structured current version or current boundary version when one
@@ -589,6 +625,7 @@ validation; every timestamp is timezone-aware. No unlisted field is inferred.
 | --- | --- |
 | `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `affected_revisions: tuple[ConclusionRevisionRef, ...]`, `dependent_effects: tuple[ConclusionRevisionRef, ...]`, `qualification: UnderstandingQualification \| SupportUnavailable`, `status: SurfaceStatus \| SurfaceStatusUnavailable` |
 | `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
+| `FunctionalPyramidRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `state: EXCLUDED | ACTIVE`, `members: tuple[FunctionalPyramidMemberView, ...]`, `findings: tuple[FunctionalPyramidFinding, ...]` |
 
 The receipt selector is the only enclosing repository/request coordinate.
 Neither result nests RecordReceipt. Affected revisions identify this acceptance's
