@@ -357,6 +357,9 @@ parallel setup DTOs.
   the requested `action: ACTIVATE | REVISE`,
   target `pyramid_id/version` when revising,
   `members: tuple[FunctionalPyramidMemberView, ...]`,
+  with `version=None` only when `UNKNOWN_PYRAMID` means no observed target
+  version exists; stale revisions carry the observed current version in
+  `version` and the requested/current pair in their validation finding,
   `activation_ready: bool`,
   `validation_findings: tuple[FunctionalPyramidValidationFinding, ...]`, and
   `graph_findings: tuple[FunctionalPyramidFinding, ...]`.
