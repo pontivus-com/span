@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib as _contextlib
 import datetime as _datetime
+import pathlib as _pathlib
 import typing as _typing
 
 from span.core import functional_pyramid as _fp
@@ -17,7 +19,12 @@ from span.ports.functional_pyramid import (
 )
 from span.ports.lifecycle import LifecycleStorePort
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
+from span.shell.sqlite_store.functional_pyramid import (
+    FunctionalPyramidInstallationStore,
+    functional_pyramid_installation_path,
+)
 from span.shell.sqlite_store.lifecycle import UnknownRepository
+from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 from span.service.contexts import ContextBinding, build_context
 from span.service.effects import DependencyEffectService
 from span.service.functional_pyramid import FunctionalPyramidService
@@ -98,6 +105,40 @@ class _InstallationAuthorityResolver:
         return self._repository_runtime(repository_id).store.resolve_authority(
             repository_id, authority_ref
         )
+
+
+@_contextlib.contextmanager
+def open_functional_pyramid_service(
+    data_dir: str | _pathlib.Path,
+    *,
+    repository_runtime: _typing.Callable[
+        [str], FunctionalPyramidRepositoryRuntime
+    ],
+    registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
+) -> _typing.Iterator[FunctionalPyramidService | None]:
+    """Open existing installation state; never create or migrate it."""
+    root = _pathlib.Path(data_dir)
+    path = functional_pyramid_installation_path(root)
+    if not path.is_file():
+        yield None
+        return
+
+    state = FunctionalPyramidInstallationStore(
+        path,
+        retention=DEFAULT_LIFECYCLE_RETENTION,
+    )
+    try:
+        yield compose_functional_pyramid_service(
+            state=state,
+            repository_runtime=repository_runtime,
+            registered_repository_ids=registered_repository_ids,
+            repository_paths=lambda repository_ids: tuple(
+                (repository_id, str(root / f"{repository_id}.db"))
+                for repository_id in repository_ids
+            ),
+        )
+    finally:
+        state.close()
 
 
 def compose_functional_pyramid_service(
