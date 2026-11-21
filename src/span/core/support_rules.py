@@ -200,6 +200,57 @@ def authority_state(
     return evaluation(_m.SupportState.CURRENT, observed_at)
 
 
+def functional_route_state(
+    *,
+    recorded: _m.FunctionalRouteSupport,
+    current: (
+        _m.FunctionalPyramidParticipation
+        | _m.FunctionalPyramidView
+        | _m.FunctionalPyramidUnavailable
+    ),
+    current_route_identity: _m.FunctionalRouteIdentity | None,
+    observed_at: _datetime.datetime,
+) -> _s.SupportEvaluation:
+    """Qualify one recorded Functional Pyramid route against current state."""
+    if isinstance(current, _m.FunctionalPyramidUnavailable):
+        return evaluation(
+            _m.SupportState.UNVERIFIABLE,
+            observed_at,
+            "functional route could not be evaluated: " + current.failure,
+        )
+    if isinstance(current, _m.FunctionalPyramidParticipation):
+        return evaluation(
+            _m.SupportState.REASSESSMENT_REQUIRED,
+            observed_at,
+            "repository is no longer ACTIVE in the recorded Functional Pyramid",
+        )
+    if current.pyramid_id != recorded.pyramid_id:
+        return evaluation(
+            _m.SupportState.REASSESSMENT_REQUIRED,
+            observed_at,
+            "repository is ACTIVE in a different Functional Pyramid",
+        )
+    if current.status is _m.FunctionalPyramidRouteStatus.UNRESOLVED:
+        return evaluation(
+            _m.SupportState.UNVERIFIABLE,
+            observed_at,
+            "current functional route is unresolved",
+        )
+    if current_route_identity is None:
+        return evaluation(
+            _m.SupportState.UNVERIFIABLE,
+            observed_at,
+            "current functional route identity is unavailable",
+        )
+    if current_route_identity != recorded.route_identity:
+        return evaluation(
+            _m.SupportState.REASSESSMENT_REQUIRED,
+            observed_at,
+            "functional route identity changed",
+        )
+    return evaluation(_m.SupportState.CURRENT, observed_at)
+
+
 def premise_membership_state(
     *,
     exists: bool,
