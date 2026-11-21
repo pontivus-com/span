@@ -295,7 +295,14 @@ class LifecycleHooksTest(unittest.TestCase):
             members=(
                 m.FunctionalPyramidMemberView(
                     repository_id=REPO,
-                    declaration_refs=(),
+                    declaration_refs=(
+                        m.EvidenceRef(
+                            evidence_id=m.EvidenceId("fp-declaration"),
+                            repository_id=REPO,
+                            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                            locator="docs/functional-pyramid.json",
+                        ),
+                    ),
                     functional_scope=m.FunctionalScope(
                         (
                             m.FunctionalScopeSelector(
@@ -333,7 +340,14 @@ class LifecycleHooksTest(unittest.TestCase):
             members=(
                 m.FunctionalPyramidMemberView(
                     repository_id=REPO,
-                    declaration_refs=(),
+                    declaration_refs=(
+                        m.EvidenceRef(
+                            evidence_id=m.EvidenceId("fp-declaration"),
+                            repository_id=REPO,
+                            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                            locator="docs/functional-pyramid.json",
+                        ),
+                    ),
                     functional_scope=m.FunctionalScope(
                         (
                             m.FunctionalScopeSelector(
