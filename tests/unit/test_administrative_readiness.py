@@ -12,7 +12,12 @@ import unittest
 
 from span.shell import install_verify
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
-from span.shell.readiness import probe_store, probe_structural
+from span.shell.readiness import (
+    probe_functional_pyramid_repository,
+    probe_store,
+    probe_structural,
+)
+from span.shell.sqlite_store.functional_pyramid import FunctionalPyramidInstallationStore
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
 
@@ -75,6 +80,109 @@ class StoreProbeTest(unittest.TestCase):
             (data / "structural" / "repo").mkdir(parents=True)
             self.assertEqual(probe_structural(data, "repo")["status"], "present")
 
+    def test_functional_pyramid_probe_treats_bootstrap_as_optional(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            root = pathlib.Path(tmp) / "repo"
+            root.mkdir()
+
+            report = probe_functional_pyramid_repository(data, "repo", root)
+
+            self.assertEqual(report["declarations"]["status"], "absent")
+            self.assertTrue(report["declarations"]["valid"])
+            self.assertEqual(report["participation"]["state"], "UNAVAILABLE")
+            self.assertEqual(
+                report["activation_readiness"]["status"], "requires_candidate"
+            )
+            self.assertEqual(list(data.iterdir()), [])
+            self.assertFalse(any(root.rglob("*")))
+
+    def test_functional_pyramid_probe_validates_bootstrap_and_declarations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            root = pathlib.Path(tmp) / "repo"
+            (root / ".span").mkdir(parents=True)
+            (root / "docs").mkdir()
+            (root / ".span" / "functional-pyramid.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "functional_scope": [{"kind": "PREFIX", "path": "src"}],
+                        "coverage": "PARTIAL",
+                        "declaration_sources": [
+                            {
+                                "locator": "docs/functional-pyramid.json",
+                                "ranges": [],
+                            }
+                        ],
+                    }
+                )
+            )
+            (root / "docs" / "functional-pyramid.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "contexts": [
+                            {
+                                "context_id": "ctx-repo",
+                                "coverage": [{"kind": "PREFIX", "path": "src"}],
+                                "inherits": [],
+                                "rules": [],
+                            }
+                        ],
+                        "rules": [],
+                    }
+                )
+            )
+
+            report = probe_functional_pyramid_repository(data, "repo", root)
+
+            self.assertEqual(report["declarations"]["status"], "ready")
+            self.assertTrue(report["declarations"]["valid"])
+            self.assertEqual(report["declarations"]["coverage"], "PARTIAL")
+            self.assertEqual(
+                report["declarations"]["sources"][0]["status"], "valid"
+            )
+
+            (root / "docs" / "functional-pyramid.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "contexts": [],
+                        "rules": [],
+                        "unexpected": True,
+                    }
+                )
+            )
+            invalid = probe_functional_pyramid_repository(data, "repo", root)
+            self.assertEqual(invalid["declarations"]["status"], "invalid")
+            self.assertFalse(invalid["declarations"]["valid"])
+
+    def test_functional_pyramid_probe_reads_participation_without_activation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            root = pathlib.Path(tmp) / "repo"
+            root.mkdir()
+            store = FunctionalPyramidInstallationStore.create(
+                data / "installation" / "functional-pyramid.db",
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+            )
+            try:
+                with store.transaction() as transaction:
+                    transaction.set_excluded("repo", True)
+            finally:
+                store.close()
+
+            before = (data / "installation" / "functional-pyramid.db").read_bytes()
+            report = probe_functional_pyramid_repository(data, "repo", root)
+            after = (data / "installation" / "functional-pyramid.db").read_bytes()
+
+            self.assertEqual(report["participation"]["state"], "EXCLUDED")
+            self.assertEqual(before, after)
+
 
 class InstallVerifyTest(unittest.TestCase):
     def test_verify_only_is_observational(self):
@@ -93,6 +201,14 @@ class InstallVerifyTest(unittest.TestCase):
             self.assertIn("installer", store["action"])
             self.assertEqual(list(data.iterdir()), [])
             self.assertFalse(any(repo.rglob("*")))
+            self.assertEqual(
+                payload["repos"][0]["functional_pyramid"]["declarations"]["status"],
+                "absent",
+            )
+            self.assertEqual(
+                payload["repos"][0]["functional_pyramid"]["participation"]["state"],
+                "UNAVAILABLE",
+            )
 
     def test_verify_only_reports_a_ready_bound_store(self):
         with tempfile.TemporaryDirectory() as tmp:
