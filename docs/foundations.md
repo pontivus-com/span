@@ -316,6 +316,8 @@ bytes did not change.
 Registration makes a repository available to Span; it does not place that
 repository into a Functional Pyramid. One Functional Pyramid instance explicitly
 names the registered repositories whose declared governance may resolve together.
+A repository may belong to at most one ACTIVE Functional Pyramid instance at a
+time so repository-scoped lifecycle operations have one governing instance.
 Membership supplies resolution reachability only: it never makes a member's
 rules applicable to another member without an explicit functional-context or
 rule relationship.
@@ -327,10 +329,15 @@ and member availability: `VALID` or `DEGRADED`. Health is qualification of
 the active graph, not another durable participation state and never requires a
 hidden write during `ask`, `reconsider`, or hook delivery.
 
-An active pyramid may declare partial coverage; scope outside that coverage stays
-explicitly uncovered rather than being treated as having no governing authority.
-A complete-coverage claim may not coexist with uncovered intended functional
-scope. Participation, health and route state remain distinct: an ACTIVE pyramid
+Each ACTIVE member declares an explicit repository-relative functional coverage
+boundary using the same scope model that Functional Context applicability uses.
+Coverage mode is evaluated only against that declared boundary; Span never
+infers functional scope from the repository tree. PARTIAL permits uncovered
+scope inside the declared boundary and keeps it explicit. COMPLETE asserts that
+the complete declared functional boundary is covered by applicable Functional
+Contexts; an uncovered part of that boundary contradicts the COMPLETE claim.
+Repository scope outside the declared functional boundary is not made functional
+merely because files exist there. Participation, health and route state remain distinct: an ACTIVE pyramid
 may be DEGRADED while an unaffected route still resolves, and an ACTIVE/PARTIAL
 pyramid may legitimately return an uncovered route outside declared coverage.
 
