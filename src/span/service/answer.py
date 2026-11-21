@@ -148,12 +148,11 @@ class AnswerService:
                 surface = resolved
         self._store.require_repository(repository_id)
         all_understandings = tuple(self._store.list_understandings(repository_id))
-        if selected_understanding is not None:
-            understandings: tuple[m.Understanding, ...] = (selected_understanding,)
-        else:
-            understandings = tuple(
-                item for item in all_understandings if item.surface == surface
-            )
+        understandings = (
+            (selected_understanding,)
+            if selected_understanding is not None
+            else tuple(item for item in all_understandings if item.surface == surface)
+        )
         status = compose_surface_status(
             surface, store=self._store, support=self._support, evidence=self._evidence
         )
@@ -161,7 +160,6 @@ class AnswerService:
             functional_pyramid = self._functional_pyramid_projection(
                 repository_id,
                 surface,
-                self._surface_semantic_scope(surface),
             )
             result = self._document(
                 request,
@@ -171,18 +169,31 @@ class AnswerService:
                 functional_pyramid,
             )
             return self._with_admission(request, surface, result)
+        return self._question_result(
+            request,
+            repository_id,
+            surface,
+            selected_question,
+            understandings,
+            status,
+        )
+
+    def _question_result(
+        self,
+        request: m.AskRequest,
+        repository_id: str,
+        surface: m.SurfaceKey,
+        selected_question: str,
+        understandings: tuple[m.Understanding, ...],
+        status: m.SurfaceStatus,
+    ) -> m.AskResult:
         matched = tuple(
             item for item in understandings if item.question == selected_question
-        )
-        semantic_scope = (
-            self._matched_semantic_scope(matched)
-            if matched
-            else self._surface_semantic_scope(surface)
         )
         functional_pyramid = self._functional_pyramid_projection(
             repository_id,
             surface,
-            semantic_scope,
+            self._matched_semantic_scope(matched) if matched else None,
         )
         if not matched:
             result = self._cold_gap(
@@ -193,6 +204,7 @@ class AnswerService:
                 missing=(selected_question,),
             )
             return self._with_admission(request, surface, result)
+
         current: list[m.ConclusionView] = []
         historical: list[m.HistoricalConclusion] = []
         gaps: list[m.RecordedQuestionGap] = []
@@ -232,6 +244,7 @@ class AnswerService:
                     verification=self._verification(surface),
                 ),
             )
+
         combined = support_rules.combine_states(tuple(states))
         reason = (
             m.GapReason.INVALIDATED
@@ -297,16 +310,21 @@ class AnswerService:
         self,
         repository_id: str,
         surface: m.SurfaceKey,
-        semantic_scope: m.EvidenceScope,
+        semantic_scope: m.EvidenceScope | None = None,
     ) -> _FunctionalPyramidOrientation:
         if self._functional_pyramid_orientation is None:
             return m.FunctionalPyramidParticipation(
                 m.FunctionalPyramidParticipationState.UNCONFIGURED
             )
+        selected_scope = (
+            self._surface_semantic_scope(surface)
+            if semantic_scope is None
+            else semantic_scope
+        )
         return self._functional_pyramid_orientation(
             repository_id,
             surface,
-            semantic_scope,
+            selected_scope,
         )
 
     def _resolve(
@@ -952,6 +970,7 @@ class AnswerService:
 
     def _fit_gap(self, gap: m.Gap, limit: int) -> m.AskResult:
         historical = list(gap.historical)
+        source_pointers = list(gap.source_pointers)
         omitted = list(gap.omitted)
         candidate = gap
         recovery = gap.recovery
@@ -966,6 +985,19 @@ class AnswerService:
             candidate = _dataclasses.replace(
                 gap,
                 historical=tuple(historical),
+                omitted=tuple(omitted),
+                recovery=recovery,
+                truncated=True,
+            )
+        if _encoded_size(candidate) > limit and source_pointers:
+            omitted.extend(pointer.locator for pointer in source_pointers)
+            source_pointers.clear()
+            recovery += (
+                "; request omitted source pointers directly with EvidenceRequest"
+            )
+            candidate = _dataclasses.replace(
+                candidate,
+                source_pointers=(),
                 omitted=tuple(omitted),
                 recovery=recovery,
                 truncated=True,
