@@ -192,9 +192,7 @@ class DependencyEffectService:
 
         indirect, cut = self._indirect(unique_direct, max_depth, max_nodes)
         if cut:
-            omitted.append(
-                "premise traversal bound reached before the walk completed"
-            )
+            omitted.append("premise traversal bound reached before the walk completed")
             truncated = True
         for ref in indirect:
             record(ref, m.ChangeReason.INDIRECT)
@@ -467,9 +465,9 @@ class DependencyEffectService:
                         scopes.append(
                             m.EvidenceScope(evidence_refs=(observation.evidence,))
                         )
-                        source_observations[
-                            dependency.observation_id.value
-                        ] = observation
+                        source_observations[dependency.observation_id.value] = (
+                            observation
+                        )
                     elif isinstance(dependency, m.DiscoverySupport):
                         observation = self._store.find_discovery_observation(
                             dependency.observation_id.value
@@ -482,16 +480,17 @@ class DependencyEffectService:
                                 "another repository"
                             )
                         scopes.append(observation.scope)
-                        discovery_observations[
-                            dependency.observation_id.value
-                        ] = observation
+                        discovery_observations[dependency.observation_id.value] = (
+                            observation
+                        )
                     elif isinstance(dependency, m.AuthoritySupportDependency):
-                        if dependency.authority.evidence_ref.repository_id == repository_id:
+                        if (
+                            dependency.authority.evidence_ref.repository_id
+                            == repository_id
+                        ):
                             scopes.append(
                                 m.EvidenceScope(
-                                    evidence_refs=(
-                                        dependency.authority.evidence_ref,
-                                    )
+                                    evidence_refs=(dependency.authority.evidence_ref,)
                                 )
                             )
                     elif isinstance(dependency, m.FunctionalRouteSupport):
@@ -516,9 +515,7 @@ class DependencyEffectService:
             for observation_id in sorted(source_observations):
                 self._store.add_context_evidence(context_id, observation_id)
             for observation_id in sorted(discovery_observations):
-                self._store.add_context_discovery_evidence(
-                    context_id, observation_id
-                )
+                self._store.add_context_discovery_evidence(context_id, observation_id)
             contexts.append(
                 m.InvestigationContextRef(
                     repository_id=repository_id,
@@ -560,9 +557,7 @@ class DependencyEffectService:
         try:
             return self._support.evaluate_revision(ref)
         except (OSError, ValueError):
-            return m.SupportUnavailable(
-                "conclusion support evaluation is unavailable"
-            )
+            return m.SupportUnavailable("conclusion support evaluation is unavailable")
 
     def _surface_of(self, ref: m.ConclusionRevisionRef) -> m.SurfaceKey:
         return self._store.get_understanding(ref.understanding_id.value).surface
