@@ -248,10 +248,11 @@ replay against the same live context returns the same page across restart.
 | `Gap` | No current conclusion for the selected membership, with status and recovery |
 | `AmbiguousSurface` | A reference resolves to more than one exact surface |
 | `RetrievedUnderstanding` | Exact historical/audit understanding retrieval |
-| `RetrievedReceipt` | Exact immutable receipt retrieval |
+| `RetrievedReceipt` | Exact immutable repository-scoped ordinary receipt retrieval |
+| `RetrievedFunctionalPyramidReceipt` | Exact immutable installation-scoped Functional Pyramid receipt retrieval |
 | `EvidencePage` | A continuation page for previously selected evidence |
-| `FunctionalPyramidStatus` | Exact durable participation/instance state for a Functional Pyramid selector |
-| `FunctionalPyramidCandidate` | Pure validation of a proposed member/declaration set, including every finding and whether activation is structurally admissible |
+| `FunctionalPyramidStatus` | Exact durable participation/instance state and live health for a Functional Pyramid selector |
+| `FunctionalPyramidCandidate` | Pure action-aware ACTIVATE/REVISE validation with complete validation/graph findings and activation readiness |
 | `Rejected` | An actionable invalid selector/reference/binding request |
 | `Unavailable` | An operational failure that prevented evaluation |
 
@@ -329,6 +330,16 @@ parallel setup DTOs.
   `STALE_PYRAMID_VERSION`, `MISSING_DECLARATION_SOURCE`,
   `INVALID_DECLARATION_SOURCE`, `INVALID_FUNCTIONAL_SCOPE`, and
   `INCOMPLETE_COMPLETE_COVERAGE`.
+- `FunctionalPyramidReceiptSelector` carries only `request_id` and addresses
+  the installation-level Functional Pyramid write namespace.
+- `RetrievedFunctionalPyramidReceipt` carries
+  `request_id`, `content_digest`, `committed_at`,
+  `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`,
+  `pyramid_id: FunctionalPyramidId | None`,
+  `version: FunctionalPyramidVersion | None`,
+  `state: EXCLUDED | ACTIVE`, and
+  `members: tuple[FunctionalPyramidMemberView, ...]`.
+  It has no investigation-context binding or repository receipt owner.
 
 Malformed selector structure is `Rejected`, not a validation finding.
 Operational inability to evaluate an otherwise valid candidate is
@@ -454,8 +465,10 @@ Recording retains references/identities/relationships and source identities, not
 canonical governing prose.
 
 The accepted result is `FunctionalPyramidRecorded`, carrying the receipt,
-resulting state, members and complete validation findings. ACTIVE results carry
-the pyramid identity/version. Repository-level EXCLUDED results after
+resulting state and relevant member view. Candidate findings remain owned by
+`FunctionalPyramidCandidate`; a successful write has already revalidated
+`activation_ready=true` and does not duplicate empty validation projections.
+ACTIVE results carry the pyramid identity/version. Repository-level EXCLUDED results after
 `exclude`, and the post-deactivation result after an instance has been retired,
 carry no live pyramid identity/version. It is receipted/replay-safe under L4.
 The server derives the pyramid identity on first activation; callers never choose
@@ -692,7 +705,7 @@ validation; every timestamp is timezone-aware. No unlisted field is inferred.
 | --- | --- |
 | `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `affected_revisions: tuple[ConclusionRevisionRef, ...]`, `dependent_effects: tuple[ConclusionRevisionRef, ...]`, `qualification: UnderstandingQualification \| SupportUnavailable`, `status: SurfaceStatus \| SurfaceStatusUnavailable` |
 | `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
-| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `state: EXCLUDED | ACTIVE`, `members: tuple[FunctionalPyramidMemberView, ...]`, `validation_findings: tuple[FunctionalPyramidValidationFinding, ...]`, `graph_findings: tuple[FunctionalPyramidFinding, ...]` |
+| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `state: EXCLUDED | ACTIVE`, `members: tuple[FunctionalPyramidMemberView, ...]` |
 
 The receipt selector is the only enclosing request coordinate for its owning
 namespace. Ordinary semantic/verification receipts remain repository-scoped;
@@ -747,12 +760,10 @@ no accepted runs. Runs are read from their existing owner, not reconstructed
 from qualification. A missing referenced run is explicit unavailable history,
 never an empty successful detail response.
 
-`FunctionalPyramidReceiptSelector` retrieves the immutable Functional Pyramid
-write acceptance from its installation-level namespace: request identity,
-canonical content digest, committed time, action, affected pyramid
-identity/version, resulting member intent and participation effects. It has no
-investigation-context binding and does not masquerade as an ordinary repository
-receipt.
+`FunctionalPyramidReceiptSelector` returns
+`RetrievedFunctionalPyramidReceipt` from the installation-level namespace with
+the exact fields defined above. It has no investigation-context binding and does
+not masquerade as an ordinary repository receipt.
 
 The snapshot selector with the exact accepted understanding/version retrieves
 revisions/dependencies and their live qualification, with evaluation time.
