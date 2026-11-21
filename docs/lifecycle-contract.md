@@ -978,8 +978,9 @@ Span/source/editor work; candidate validation is a pure `ask`.
 stateDiagram-v2
     [*] --> STATUS
 
-    STATUS --> EXCLUDED: explicit record exclude
-    STATUS --> DISCOVER: adoption intended
+    STATUS --> ACTIVE: already ACTIVE; no adoption/revision required
+    STATUS --> EXCLUDED: already EXCLUDED or explicit record exclude
+    STATUS --> DISCOVER: adoption/revision discovery required
     EXCLUDED --> DISCOVER: later adoption intended
 
     DISCOVER --> VALIDATE: declarations already sufficient
@@ -987,16 +988,18 @@ stateDiagram-v2
 
     DECLARE --> VALIDATE: repository-owned declarations updated
 
-    VALIDATE --> DECLARE: candidate findings require source repair
+    VALIDATE --> DECLARE: declaration/coverage/graph findings require source repair
+    VALIDATE --> STATUS: registration/membership/version finding requires reorientation
     VALIDATE --> ACTIVATE: candidate structurally admissible
 
-    ACTIVATE --> VALIDATE: activation/revision revalidation or CAS rejects
+    ACTIVATE --> STATUS: write revalidation or CAS rejects
     ACTIVATE --> VERIFY: record activate/revise accepted
 
     VERIFY --> ACTIVE: committed status/version/members visible and health VALID
-    VERIFY --> VALIDATE: committed graph is DEGRADED or does not match
+    VERIFY --> DISCOVER: committed graph is DEGRADED or does not match
 
-    ACTIVE --> VALIDATE: membership/declaration revision intended
+    ACTIVE --> DISCOVER: revision needs governance discovery
+    ACTIVE --> VALIDATE: exact revision candidate already known
     ACTIVE --> EXCLUDED: record deactivate
 ```
 
@@ -1005,8 +1008,8 @@ stateDiagram-v2
 | STATUS | `ask(FunctionalPyramidSelector)` | exact durable participation, current instance/version when ACTIVE, and live health when ACTIVE |
 | DISCOVER | ordinary Span `ask`/evidence lifecycle plus source reads | canonical governance owners, existing declarations and missing relationships are understood; Span does not infer or ingest governing prose |
 | DECLARE | external repository editor | repository-owned context/rule/bootstrap declarations are added or corrected; Span never edits them |
-| VALIDATE | `ask(FunctionalPyramidCandidateSelector)` | pure deterministic findings; no participation mutation; valid candidate is eligible for activation/revision |
-| ACTIVATE | `record(kind="functional_pyramid", action="activate"|"revise")` | current sources are revalidated and one atomic receipted participation/version write succeeds or rejects without partial state |
+| VALIDATE | `ask(FunctionalPyramidCandidateSelector)` | pure deterministic action-aware findings; declaration/graph findings lead to source repair, registration/membership/version findings lead back to STATUS, and only `activation_ready=true` proceeds |
+| ACTIVATE | `record(kind="functional_pyramid", action="activate"|"revise")` | current sources are revalidated and one atomic receipted participation/version write succeeds; rejection returns to STATUS because membership/version/source state may have changed |
 | VERIFY | `ask(FunctionalPyramidSelector)` | returned pyramid identity/version and complete member view equal the accepted write, and live health is VALID; DEGRADED/mismatch returns to validation rather than being called complete |
 | ACTIVE | ordinary Span runtime begins | durable participation is ACTIVE; live health is evaluated as VALID or DEGRADED on use |
 | EXCLUDED | `record(... action="exclude"|"deactivate")` | explicit non-participation; ordinary semantic Span lifecycle remains available without a governing projection |
@@ -1045,6 +1048,7 @@ stateDiagram-v2
 
     ORIENT --> REUSE: current retained understanding is sufficient
     ORIENT --> INVESTIGATE: gap / non-current state / evidence needed
+    ORIENT --> CONCLUDE: supported conclusion already established with held evidence
     ORIENT --> EDIT: current understanding is sufficient before external edit
     ORIENT --> DISPUTE: existing conclusion explicitly challenged
 
@@ -1080,6 +1084,10 @@ stateDiagram-v2
 | Dispute | `reconsider(challenge)` then `record` disposition | normative challenged conclusions retain the same governing-support rules; no Functional-Pyramid-specific dispute operation exists |
 | Start / resume / compact | `ask` when semantic work begins or resumes | ACTIVE repositories regain the current governing projection without conversation memory |
 | Complete | applicable records and re-establishment are accepted; current reuse requires no duplicate record | governed work may not silently leave an affected required route/authority disposition unresolved; an operational blocker is reported as a blocker, not converted into a successful governance conclusion |
+
+A named operational/authority blocker may terminate the current task from any
+phase where required work cannot proceed; it is reported explicitly and is not a
+new Span operation or a successful COMPLETE transition.
 
 The runtime integration therefore adds only three product behaviors to the
 existing semantic lifecycle:
