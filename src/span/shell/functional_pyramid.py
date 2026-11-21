@@ -11,6 +11,7 @@ from span.ports.functional_pyramid import (
 )
 from span.ports.lifecycle import LifecycleStorePort
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
+from span.shell.sqlite_store.lifecycle import UnknownRepository
 
 
 class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
@@ -22,7 +23,7 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
     def _source(self, repository_id: str) -> FilesystemEvidenceSource:
         try:
             root = self._store.require_repository(repository_id)
-        except ValueError as exc:
+        except UnknownRepository as exc:
             raise FunctionalPyramidRepositoryUnavailable(
                 f"Functional Pyramid member {repository_id!r} is unavailable"
             ) from exc
@@ -36,7 +37,9 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
         if isinstance(result, m.EvidenceSourceFailure):
             if result.kind is m.EvidenceSourceFailureKind.MISSING:
                 return None
-            raise ValueError(result.reason)
+            raise FunctionalPyramidDeclarationInvalid(
+                "Functional Pyramid bootstrap cannot be read"
+            )
         try:
             bootstrap = _fp.decode_functional_pyramid_bootstrap(result.content)
         except ValueError as exc:
