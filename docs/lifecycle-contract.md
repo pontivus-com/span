@@ -305,6 +305,10 @@ parallel setup DTOs.
   `coverage: PARTIAL | COMPLETE`.
 - `FunctionalPyramidParticipation` carries exactly
   `state: UNCONFIGURED | EXCLUDED`.
+- `FunctionalPyramidParticipationEffect` carries
+  `repository_id: str` and
+  `state: UNCONFIGURED | EXCLUDED | ACTIVE`; it is the canonical per-repository
+  durable effect of an accepted Functional Pyramid write.
 - `FunctionalPyramidStatus` carries
   `state: UNCONFIGURED | EXCLUDED | ACTIVE`,
   `health: VALID | DEGRADED | None`,
@@ -337,15 +341,21 @@ parallel setup DTOs.
   `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`,
   `pyramid_id: FunctionalPyramidId | None`,
   `version: FunctionalPyramidVersion | None`,
-  `state: EXCLUDED | ACTIVE`, and
-  `members: tuple[FunctionalPyramidMemberView, ...]`.
-  It has no investigation-context binding or repository receipt owner.
+  `members: tuple[FunctionalPyramidMemberView, ...]`, and
+  `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`.
+  It has no investigation-context binding or repository receipt owner. For
+  ACTIVATE/REVISE, `members` is the resulting ACTIVE member set. For
+  DEACTIVATE/EXCLUDE it is empty. The effects tuple records every repository
+  whose durable participation changed.
 
 Malformed selector structure is `Rejected`, not a validation finding.
-Operational inability to evaluate an otherwise valid candidate is
-`Unavailable`. `activation_ready=true` requires empty validation findings and
-no structurally unresolved graph finding in the candidate declarations/claimed
-coverage. Authority status/content currency is not a candidate-graph condition
+`MEMBER_ALREADY_ACTIVE` means ACTIVE in a different pyramid; a retained member
+of the target REVISE pyramid is valid. Operational inability to evaluate an
+otherwise valid candidate is `Unavailable`.
+`activation_ready=true` requires empty validation findings and no structurally
+unresolved graph finding in the candidate declarations/claimed coverage. PARTIAL
+coverage remainder is expected incompleteness, not a candidate graph finding or
+activation blocker. Authority status/content currency is not a candidate-graph condition
 and therefore does not prevent structural activation.
 
 `FunctionalPyramidId` and `FunctionalPyramidVersion` are opaque server-owned
@@ -465,14 +475,17 @@ Recording retains references/identities/relationships and source identities, not
 canonical governing prose.
 
 The accepted result is `FunctionalPyramidRecorded`, carrying the receipt,
-resulting state and relevant member view. Candidate findings remain owned by
-`FunctionalPyramidCandidate`; a successful write has already revalidated
-`activation_ready=true` and does not duplicate empty validation projections.
-ACTIVE results carry the pyramid identity/version. Repository-level EXCLUDED results after
-`exclude`, and the post-deactivation result after an instance has been retired,
-carry no live pyramid identity/version. It is receipted/replay-safe under L4.
-The server derives the pyramid identity on first activation; callers never choose
-a stable internal identity.
+resulting ACTIVE member set and exact per-repository durable participation
+effects. Candidate findings remain owned by `FunctionalPyramidCandidate`; a
+successful write has already revalidated `activation_ready=true` and does not
+duplicate empty validation projections.
+
+ACTIVATE/REVISE carry the live pyramid identity/resulting version. DEACTIVATE
+retains the affected pyramid identity and the deactivated version in the
+acceptance/receipt for audit even though no live instance remains. EXCLUDE carries
+no pyramid identity/version. It is receipted/replay-safe under L4. The server
+derives the pyramid identity on first activation; callers never choose a stable
+internal identity.
 
 **Surface declaration.** A declared surface (`SERVICE`, `DOMAIN`) carries a
 stable name, a boundary, and an optional parent; its identity is the declared
@@ -705,7 +718,7 @@ validation; every timestamp is timezone-aware. No unlisted field is inferred.
 | --- | --- |
 | `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `affected_revisions: tuple[ConclusionRevisionRef, ...]`, `dependent_effects: tuple[ConclusionRevisionRef, ...]`, `qualification: UnderstandingQualification \| SupportUnavailable`, `status: SurfaceStatus \| SurfaceStatusUnavailable` |
 | `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
-| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `state: EXCLUDED | ACTIVE`, `members: tuple[FunctionalPyramidMemberView, ...]` |
+| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`, `pyramid_id: FunctionalPyramidId | None`, `version: FunctionalPyramidVersion | None`, `members: tuple[FunctionalPyramidMemberView, ...]`, `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]` |
 
 The receipt selector is the only enclosing request coordinate for its owning
 namespace. Ordinary semantic/verification receipts remain repository-scoped;
