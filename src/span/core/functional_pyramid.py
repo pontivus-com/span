@@ -10,19 +10,19 @@ from span.core.model.functional_pyramid import (
     FunctionalScopeSelectorKind,
 )
 
-_KIND_ORDER = {
-    FunctionalScopeSelectorKind.REPOSITORY: 0,
-    FunctionalScopeSelectorKind.PREFIX: 1,
-    FunctionalScopeSelectorKind.PATH: 2,
-    FunctionalScopeSelectorKind.SYMBOL: 3,
-}
+_KIND_ORDER = (
+    FunctionalScopeSelectorKind.REPOSITORY,
+    FunctionalScopeSelectorKind.PREFIX,
+    FunctionalScopeSelectorKind.PATH,
+    FunctionalScopeSelectorKind.SYMBOL,
+)
 
 
 def _selector_sort_key(
     selector: FunctionalScopeSelector,
 ) -> tuple[int, str, str]:
     return (
-        _KIND_ORDER[selector.kind],
+        _KIND_ORDER.index(selector.kind),
         selector.path or "",
         selector.locator or "",
     )
