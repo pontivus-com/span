@@ -44,6 +44,7 @@ _SCHEMA13_TABLES = (
     "record_receipts",
 )
 
+
 def _copy_table(
     target: _sqlite3.Connection,
     source: _sqlite3.Connection,
