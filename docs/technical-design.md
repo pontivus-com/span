@@ -1364,6 +1364,16 @@ to decide granularity.
 in `src/span/ports/functional_pyramid.py`. The existing package exports remain
 the public import boundary.
 
+`FunctionalGraphRef` is the single canonical declaration-edge reference:
+`{ "repository_id": str, "identity": str }`. It is used for both context and
+rule edges; the containing field determines which identity namespace is
+required. The target repository is always explicit, including for a local edge,
+so there is no local shorthand/second grammar. Stable context/rule IDs remain
+unique across the resolved instance; the repository coordinate additionally
+makes FD-70 availability/ownership classification possible without a hidden
+identity index. `ROOT` remains the sole non-reference terminal and is allowed
+only where FD-67 permits it.
+
 For discoverability, a repository may expose exactly one conventional navigation
 bootstrap at `.span/functional-pyramid.json`. This bootstrap is configuration,
 not authority. Its strict JSON shape is:
@@ -1391,8 +1401,8 @@ Each named declaration source is strict JSON with one canonical document shape:
     {
       "context_id": str,
       "coverage": [FunctionalScopeSelector, ...],
-      "inherits": [context_id, ...],
-      "rules": [rule_id, ...]
+      "inherits": [FunctionalGraphRef, ...],
+      "rules": [FunctionalGraphRef, ...]
     }
   ],
   "rules": [
@@ -1400,16 +1410,22 @@ Each named declaration source is strict JSON with one canonical document shape:
       "rule_id": str,
       "layer": "P0" | "P1" | "P2S" | "P2W" | "P3" | "P4",
       "owner": {"repository_id": str, "authority_ref": str},
-      "governing_rule_ids": [rule_id | "ROOT", ...]
+      "governing_rule_ids": [FunctionalGraphRef | "ROOT", ...]
     }
   ]
 }
 ```
 
 P0 has exactly `ROOT`; other layers use the FD-67 governing-edge rules.
-Documents may contain contexts, rules or both. IDs are stable across the entire
-resolved pyramid instance; duplicate non-identical owners are FD-65/FD-71
-findings. The document never contains canonical rule prose.
+Documents may contain contexts, rules or both. A declaration's own context/rule
+identity is owned by the repository containing that declaration source; every
+edge names its target repository through `FunctionalGraphRef`. IDs are stable
+and unique across the entire resolved pyramid instance; duplicate non-identical
+owners are FD-65/FD-71 findings. A graph ref whose repository is not an instance
+member is `INVALID_DECLARATION`; a ref into an unavailable member is
+`REPOSITORY_UNAVAILABLE`; a missing identity in an available named member is
+the corresponding `UNKNOWN_CONTEXT`/`UNKNOWN_RULE`. The document never
+contains canonical rule prose.
 
 The `FunctionalPyramidDeclarationPort` reads only the exact bootstrap/declaration
 sources named by member intent across registered repositories. Version-1
