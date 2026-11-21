@@ -41,6 +41,11 @@ from span.shell.sqlite_store.lifecycle import (
     SchemaVersionError,
     UnknownRepository,
 )
+from span.shell.sqlite_store.functional_pyramid import (
+    FunctionalPyramidInstallationSchemaError,
+    FunctionalPyramidInstallationStoreError,
+)
+from span.service.functional_pyramid import FunctionalPyramidService
 
 try:  # Shell-owned provider-error mapping; the port gains no new result.
     from span.shell.structural.graft import GraftUnavailableError
@@ -67,6 +72,7 @@ class McpAdapter:
     ) = None
     repository_locators: dict[str, str] = _field(default_factory=dict)
     context_loader: _Callable[[str], ServiceContext] | None = None
+    functional_pyramid: FunctionalPyramidService | None = None
 
     def register(self, repository_id: str, context: ServiceContext) -> None:
         """Record one repository's wired context (explicit setup path)."""
@@ -91,6 +97,10 @@ class McpAdapter:
 
     def registered_repository_ids(self) -> tuple[str, ...]:
         return tuple(sorted(set(self.contexts) | set(self.repository_locators)))
+
+    def repository_context(self, repository_id: str) -> ServiceContext:
+        """Open/reuse one registered repository context for installation services."""
+        return self._context(repository_id)
 
     def _context(self, repository_id: str) -> ServiceContext:
         context = self.contexts.get(repository_id)
@@ -128,31 +138,31 @@ class McpAdapter:
             )
         except (RoutingError, ValueError) as exc:
             return encode_error("ingress", str(exc))
+        installation_scoped = _is_functional_pyramid_request(tool_name, request)
+        repository_id: str | None = None
+        if not installation_scoped:
+            try:
+                repository_id = repository_route(tool_name, request, route)
+            except (RoutingError, ValueError) as exc:
+                if isinstance(request, m.AskRequest) and request.continuation is not None:
+                    continuation_rejection = (
+                        RecordingValidationError.continuation_invalid(
+                            "the continuation cannot be routed"
+                        )
+                    )
+                    return _encoded_result(_rejected(request, continuation_rejection))
+                return encode_error("ingress", str(exc))
         try:
-            repository_id = repository_route(tool_name, request, route)
-        except (RoutingError, ValueError) as exc:
-            if isinstance(request, m.AskRequest) and request.continuation is not None:
-                continuation_rejection = RecordingValidationError.continuation_invalid(
-                    "the continuation cannot be routed"
+            if installation_scoped:
+                outcome = _call_functional_pyramid(
+                    tool_name,
+                    request,
+                    self.functional_pyramid,
                 )
-                return _encoded_result(_rejected(request, continuation_rejection))
-            return encode_error("ingress", str(exc))
-        try:
-            context = self._context(repository_id)
-        except LifecycleStoreInvariantError:
-            _LOGGER.exception("unexpected lifecycle store invariant failure")
-            return encode_error(
-                "internal",
-                "Span could not complete the operation",
-                "report the operation failure without internal diagnostics",
-            )
-        except LifecycleStoreError as exc:
-            if tool_name in _RESULT_UNION_TOOLS:
-                return _encoded_result(_unavailable(tool_name, exc))
-            failure, recovery = _operational_failure(exc)
-            return encode_error("unavailable", failure, recovery)
-        try:
-            outcome = _call_operation(tool_name, request, context)
+            else:
+                assert repository_id is not None
+                context = self._context(repository_id)
+                outcome = _call_operation(tool_name, request, context)
         except StaleContinuationError:
             return encode_error(
                 "stale_continuation",
@@ -175,7 +185,11 @@ class McpAdapter:
                 _public_rejection_cause(exc.cause_kind),
                 exc.required_action,
             )
-        except SchemaVersionError as exc:
+        except (
+            SchemaVersionError,
+            FunctionalPyramidInstallationSchemaError,
+            FunctionalPyramidInstallationStoreError,
+        ) as exc:
             if tool_name in _RESULT_UNION_TOOLS:
                 return _encoded_result(_unavailable(tool_name, exc))
             failure, recovery = _operational_failure(exc)
@@ -264,6 +278,8 @@ def _request_identity(request: object) -> str:
             repository_id = "unknown"
         return f"{repository_id}/{request.request_id or 'read'}"
     if isinstance(request, _rw.RecordRequestWire):
+        if request.kind is m.RecordKind.FUNCTIONAL_PYRAMID:
+            return f"functional_pyramid/{request.request_id}"
         identity = request.identity
         base = f"{identity.repository_id}/{identity.request_id}"
         if request.understanding_id is not None:
@@ -320,6 +336,14 @@ def _rejected(request: object, exc: Exception) -> m.Rejected:
 
 def _operational_failure(exc: Exception) -> tuple[str, str]:
     """Map typed operational owners to stable public failure/recovery text."""
+    if isinstance(
+        exc,
+        (FunctionalPyramidInstallationSchemaError, FunctionalPyramidInstallationStoreError),
+    ):
+        return (
+            "Functional Pyramid installation state is unavailable",
+            "run the installer/transition for this Span runtime before retrying",
+        )
     if isinstance(exc, SchemaVersionError):
         return (
             "the repository store is incompatible with this Span runtime",
@@ -343,6 +367,76 @@ def _unavailable(operation: str, exc: Exception) -> m.Unavailable:
         failure=failure,
         recovery=recovery,
     )
+
+
+def _is_functional_pyramid_request(tool_name: str, request: object) -> bool:
+    """Whether this canonical request belongs to the installation namespace."""
+    if tool_name == "ask" and isinstance(request, m.AskRequest):
+        return isinstance(
+            request.selector,
+            (
+                m.FunctionalPyramidSelector,
+                m.FunctionalPyramidCandidateSelector,
+                m.FunctionalPyramidReceiptSelector,
+            ),
+        )
+    return (
+        tool_name == "record"
+        and isinstance(request, _rw.RecordRequestWire)
+        and request.kind is m.RecordKind.FUNCTIONAL_PYRAMID
+    )
+
+
+def _call_functional_pyramid(
+    tool_name: str,
+    request: object,
+    service: FunctionalPyramidService | None,
+) -> object:
+    """Project installation-scoped branches without inventing repository ownership."""
+    if service is None:
+        raise FunctionalPyramidInstallationSchemaError(
+            "Functional Pyramid installation store is not initialized"
+        )
+
+    if tool_name == "ask" and isinstance(request, m.AskRequest):
+        selector = request.selector
+        if isinstance(selector, m.FunctionalPyramidSelector):
+            return service.status(selector)
+        if isinstance(selector, m.FunctionalPyramidCandidateSelector):
+            return service.candidate(selector)
+        if isinstance(selector, m.FunctionalPyramidReceiptSelector):
+            receipt = service.receipt(selector)
+            if receipt is None:
+                raise RecordingValidationError(
+                    "no Functional Pyramid receipt for request",
+                    public_identity=selector.request_id.value,
+                    public_cause="the exact Functional Pyramid receipt does not exist",
+                )
+            return receipt
+        raise RoutingError("ask request is not Functional Pyramid installation-scoped")
+
+    if tool_name == "record" and isinstance(request, _rw.RecordRequestWire):
+        action = request.action
+        if not isinstance(action, m.FunctionalPyramidAction):
+            raise ValueError("Functional Pyramid record requires its declared action")
+        return service.record(
+            request_id=m.RequestId(request.request_id),
+            action=action,
+            members=request.members,
+            pyramid_id=(
+                None
+                if request.pyramid_id is None
+                else m.FunctionalPyramidId(request.pyramid_id)
+            ),
+            expected_version=(
+                None
+                if request.expected_version is None
+                else m.FunctionalPyramidVersion(request.expected_version)
+            ),
+            repository_id=request.repository_id,
+        )
+
+    raise RoutingError(f"unknown installation-scoped tool: {tool_name}")
 
 
 def _call_operation(tool_name: str, request: object, context: ServiceContext) -> object:
