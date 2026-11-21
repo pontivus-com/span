@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import datetime
 import tempfile
 import unittest
 from unittest import mock
@@ -19,6 +20,10 @@ from span.shell.context import compose_context
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import TOOL_NAMES, McpAdapter, ServiceContext
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_store.functional_pyramid import (
+    FunctionalPyramidInstallationStore,
+    functional_pyramid_installation_path,
+)
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 from span.shell.structural.memory import (
     InMemoryFile,
@@ -202,6 +207,137 @@ class StartupRegistrationTest(unittest.TestCase):
                 )
             self.assertEqual(list(data_dir.iterdir()), [])
             self.assertFalse((data_dir / f"{REPO}.db").exists())
+
+    def test_cs08_functional_pyramid_ask_is_installation_scoped(self):
+        loader = mock.Mock(side_effect=AssertionError("must not open repository context"))
+        service = mock.Mock()
+        service.status.return_value = m.FunctionalPyramidStatus(
+            state=m.FunctionalPyramidParticipationState.UNCONFIGURED
+        )
+        adapter = McpAdapter(
+            context_loader=loader,
+            functional_pyramid=service,
+        )
+        adapter.register_repository_locator(REPO, "/tmp/startup-svc")
+
+        result = adapter.dispatch(
+            "ask",
+            {
+                "selector": {
+                    "$type": "FunctionalPyramidSelector",
+                    "repository_id": REPO,
+                }
+            },
+        )
+
+        self.assertFalse(result.is_error, result.content)
+        loader.assert_not_called()
+        selector = service.status.call_args.args[0]
+        self.assertEqual(selector.repository_id, REPO)
+
+    def test_cs09_functional_pyramid_record_is_installation_scoped(self):
+        loader = mock.Mock(side_effect=AssertionError("must not open repository context"))
+        service = mock.Mock()
+        service.record.return_value = m.FunctionalPyramidRecorded(
+            receipt_selector=m.FunctionalPyramidReceiptSelector(
+                m.RequestId("fp-exclude-1")
+            ),
+            committed_at=datetime.datetime(
+                2026, 11, 21, tzinfo=datetime.timezone.utc
+            ),
+            action=m.FunctionalPyramidAction.EXCLUDE,
+            pyramid_id=None,
+            version=None,
+            members=(),
+            participation_effects=(
+                m.FunctionalPyramidParticipationEffect(
+                    repository_id=REPO,
+                    state=m.FunctionalPyramidParticipationState.EXCLUDED,
+                ),
+            ),
+        )
+        adapter = McpAdapter(
+            context_loader=loader,
+            functional_pyramid=service,
+        )
+        adapter.register_repository_locator(REPO, "/tmp/startup-svc")
+
+        result = adapter.dispatch(
+            "record",
+            {
+                "request_id": "fp-exclude-1",
+                "kind": "functional_pyramid",
+                "action": "exclude",
+                "repository_id": REPO,
+            },
+        )
+
+        self.assertFalse(result.is_error, result.content)
+        loader.assert_not_called()
+        self.assertEqual(
+            service.record.call_args.kwargs["action"],
+            m.FunctionalPyramidAction.EXCLUDE,
+        )
+        self.assertEqual(service.record.call_args.kwargs["repository_id"], REPO)
+
+    def test_cs10_startup_does_not_create_missing_functional_pyramid_store(self):
+        from span.shell import mcp_server
+
+        captured = {}
+
+        async def _fake_serve(adapter):
+            captured["adapter"] = adapter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = pathlib.Path(tmp) / "data"
+            root = pathlib.Path(tmp) / REPO
+            root.mkdir()
+            with mock.patch.object(mcp_server, "_serve", side_effect=_fake_serve):
+                mcp_server.main(
+                    [
+                        "--data-dir",
+                        str(data_dir),
+                        "--repo",
+                        str(root),
+                    ]
+                )
+
+            self.assertIsNone(captured["adapter"].functional_pyramid)
+            self.assertFalse(functional_pyramid_installation_path(data_dir).exists())
+
+    def test_cs11_startup_opens_existing_functional_pyramid_store_without_repo_io(self):
+        from span.shell import mcp_server
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+
+        captured = {}
+
+        async def _fake_serve(adapter):
+            captured["adapter"] = adapter
+            self.assertEqual(adapter.contexts, {})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = pathlib.Path(tmp) / "data"
+            data_dir.mkdir()
+            root = pathlib.Path(tmp) / REPO
+            root.mkdir()
+            store = FunctionalPyramidInstallationStore.create(
+                functional_pyramid_installation_path(data_dir),
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+            )
+            store.close()
+
+            with mock.patch.object(mcp_server, "_serve", side_effect=_fake_serve):
+                mcp_server.main(
+                    [
+                        "--data-dir",
+                        str(data_dir),
+                        "--repo",
+                        str(root),
+                    ]
+                )
+
+            self.assertIsNotNone(captured["adapter"].functional_pyramid)
+            self.assertEqual(captured["adapter"].contexts, {})
 
 
 if __name__ == "__main__":
