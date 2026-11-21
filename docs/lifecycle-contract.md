@@ -1066,6 +1066,16 @@ initialization/revision/deactivation task is complete. No extra `reconsider`
 call is required for the participation write itself because the write already
 returns that canonical affected projection.
 
+If VERIFY/repair requires another DISCOVER→DECLARE→REALIGN→VALIDATE→write loop,
+an earlier accepted write's immutable `dependent_effect_refs` remain part of
+the task's outstanding obligation until their live projection is no longer
+actionable or has been re-established CURRENT. The agent keeps the returned
+`FunctionalPyramidReceiptSelector` as the public durable handoff; replay/retrieval
+reconstructs the accepted refs and a replayed write result can issue a fresh live
+projection/contexts for those refs. A later accepted pyramid write may add new
+effect obligations but does not silently erase an earlier accepted effect
+identity.
+
 At every MCP phase, `Rejected` means the submitted selector/write is invalid for
 its declared contract and the agent follows the returned corrective action before
 retrying; it is not a lifecycle success. `Unavailable` means the valid operation
