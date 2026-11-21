@@ -132,15 +132,25 @@ class UnderstandingTransition:
     challenge_effects: tuple[ChallengeEffect, ...] = ()
 
 
+def receipt_content_decision(
+    existing_digest: ContentDigest | None,
+    digest: ContentDigest,
+) -> ReceiptDecisionKind:
+    """Namespace-neutral replay/conflict decision for one request content digest."""
+    if existing_digest is None:
+        return ReceiptDecisionKind.NEW
+    if existing_digest == digest:
+        return ReceiptDecisionKind.REPLAY
+    return ReceiptDecisionKind.CONFLICT
+
+
 def receipt_decision(
     existing: RecordReceipt | None,
     key: RecordingKey,
     digest: ContentDigest,
 ) -> ReceiptDecision:
     """Receipt-first decision for one request key/content pair (FD-3)."""
-    if existing is None:
-        return ReceiptDecision(ReceiptDecisionKind.NEW)
-    if (
+    if existing is not None and (
         existing.identity.repository_id != key.repository_id
         or existing.identity.request_id != key.request_id
     ):
@@ -148,10 +158,16 @@ def receipt_decision(
             "receipt identity does not match the recording key",
             cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
         )
-    if existing.content_digest == digest:
-        return ReceiptDecision(ReceiptDecisionKind.REPLAY, receipt=existing)
+    decision = receipt_content_decision(
+        None if existing is None else existing.content_digest,
+        digest,
+    )
+    if decision is ReceiptDecisionKind.NEW:
+        return ReceiptDecision(decision)
+    if decision is ReceiptDecisionKind.REPLAY:
+        return ReceiptDecision(decision, receipt=existing)
     return ReceiptDecision(
-        ReceiptDecisionKind.CONFLICT,
+        decision,
         receipt=existing,
         reason="this submission identity already committed different content",
     )
