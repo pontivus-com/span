@@ -10,7 +10,6 @@ from span.core.model.functional_pyramid import (
     FunctionalScopeSelectorKind,
 )
 
-
 _KIND_ORDER = {
     FunctionalScopeSelectorKind.REPOSITORY: 0,
     FunctionalScopeSelectorKind.PREFIX: 1,
