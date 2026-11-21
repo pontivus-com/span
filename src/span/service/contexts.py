@@ -85,7 +85,9 @@ def build_context(
         state=m.ContextState.LIVE,
         scope=binding.scope,
         created_at=now,
-        question=(binding.question if binding.origin is m.ContextOrigin.QUESTION else None),
+        question=(
+            binding.question if binding.origin is m.ContextOrigin.QUESTION else None
+        ),
         expires_at=now + retention.context_lifetime,
     )
 
