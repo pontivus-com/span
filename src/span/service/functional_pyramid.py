@@ -554,9 +554,7 @@ class FunctionalPyramidService:
         )
         if stale is not None:
             observed = (
-                None
-                if stale.current_version is None
-                else stale.current_version.value
+                None if stale.current_version is None else stale.current_version.value
             )
             raise RecordingConflict(
                 "Functional Pyramid version changed before write commit",
