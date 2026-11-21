@@ -1235,11 +1235,6 @@ def _route_identity(
     rules: dict[tuple[str, str], FunctionalRuleDeclaration],
 ) -> FunctionalRouteIdentity:
     payload = {
-        "surface": (
-            surface.repository_id,
-            surface.kind.value,
-            surface.locator,
-        ),
         "scope": {
             "paths": list(semantic_scope.paths),
             "refs": [
