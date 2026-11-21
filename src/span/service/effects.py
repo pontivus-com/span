@@ -167,8 +167,12 @@ class DependencyEffectService:
         derives their semantic dependents and never accepts caller-supplied
         dependent repository IDs.
         """
-        direct = list(self._route_dependents(changed_route_identities))
-        forced: dict[m.ConclusionRevisionRef, str] = {}
+        route_dependents = self._route_dependents(changed_route_identities)
+        direct = list(route_dependents)
+        forced: dict[m.ConclusionRevisionRef, str] = {
+            ref: "recorded governing route changed under the accepted Functional Pyramid delta"
+            for ref in route_dependents
+        }
 
         for repository_id in sorted(set(newly_active_repositories)):
             self._store.require_repository(repository_id)
