@@ -193,7 +193,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(
             by_surface["src/b.py"].conclusions[0].expected_version.value, 1
         )
-        context = self.store.get_context(result.context.context_id.value)
+        context = self.store.get_context(result.reestablishment_contexts[0].context_id.value)
         self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
         self.assertEqual(
             context.scope,
@@ -277,11 +277,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                 changed_paths=("src/a.py",),
             )
         )
-        self.assertFalse(
-            self.store.has_admitted_observation(
-                result.context.context_id.value, "obs-a"
-            )
-        )
+        self.assertEqual(result.reestablishment_contexts, ())
 
     def test_changed_scope_context_admits_existing_source_support(self) -> None:
         result = self.service.reconsider(
@@ -292,7 +288,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertTrue(
             self.store.has_admitted_observation(
-                result.context.context_id.value, "obs-a"
+                result.reestablishment_contexts[0].context_id.value, "obs-a"
             )
         )
 
@@ -531,7 +527,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertIn(m.ChangeReason.DIRECT, changed.reasons)
         self.assertTrue(
-            self.store.has_admitted_discovery(result.context.context_id.value, "disc-1")
+            self.store.has_admitted_discovery(result.reestablishment_contexts[0].context_id.value, "disc-1")
         )
 
     def test_refs_only_discovery_tracks_only_the_referenced_changed_path(self):
@@ -589,8 +585,12 @@ class ReconsiderServiceTest(unittest.TestCase):
                 changed_paths=("src/a.py",),
             )
         )
-        self.assertNotEqual(second.context, first.context)
-        context = self.store.get_context(second.context.context_id.value)
+        self.assertNotEqual(
+            second.reestablishment_contexts, first.reestablishment_contexts
+        )
+        context = self.store.get_context(
+            second.reestablishment_contexts[0].context_id.value
+        )
         self.assertEqual(context.state, m.ContextState.LIVE)
 
     def test_refs_only_challenge_context_retains_scope_for_symbol_and_declared_owner(
