@@ -564,7 +564,9 @@ class SupportServiceTest(unittest.TestCase):
                 (m.SourceObservationId(observation),),
             )
 
-    def test_functional_route_support_uses_retained_surface_and_shared_index(self) -> None:
+    def test_functional_route_support_uses_retained_surface_and_shared_index(
+        self,
+    ) -> None:
         dependency = m.FunctionalRouteSupport(
             repository_id="repo-1",
             pyramid_id=m.FunctionalPyramidId("fp-1"),
