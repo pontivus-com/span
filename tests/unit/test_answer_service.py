@@ -884,6 +884,93 @@ class AnswerServiceTest(unittest.TestCase):
         )
         self.assertEqual(self.store.list_understandings("repo-1"), before)
 
+    def test_mixed_answer_excludes_noncurrent_normative_conclusion(self) -> None:
+        self.store.record_understanding(
+            m.CreateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-u-normative"),
+                    context_id=CONTEXT_ID,
+                ),
+                surface=m.SurfaceKey(
+                    repository_id="repo-1",
+                    kind=m.SurfaceKind.FILE,
+                    locator="src/a.py",
+                ),
+                target=m.ExplicitTarget(
+                    question="What governs A?",
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                ),
+                conclusions=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-normative"),
+                        statement="A conforms to the governing route.",
+                        assertion_nature=m.AssertionNature.NORMATIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-a")
+                            ),
+                            m.FunctionalRouteSupport(
+                                repository_id="repo-1",
+                                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+                                semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
+                                route_identity=m.FunctionalRouteIdentity(
+                                    "route-unresolved"
+                                ),
+                            ),
+                        ),
+                        basis=_basis(),
+                    ),
+                ),
+            ),
+            understanding_id=m.UnderstandingId("u-normative"),
+        )
+        finding = m.FunctionalPyramidFinding(
+            reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
+            repository_id="repo-1",
+            detail="functional scope is uncovered",
+            recovery="declare applicable Functional Context coverage",
+        )
+
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=lambda _repository_id, _surface, scope: (
+                m.FunctionalPyramidView(
+                    pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+                    version=m.FunctionalPyramidVersion(1),
+                    health=m.FunctionalPyramidHealth.VALID,
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                    scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+                    status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                    semantic_scope=scope,
+                    unresolved=(finding,),
+                )
+            ),
+        )
+
+        result = service.ask(
+            m.AskRequest(repository_id="repo-1", reference="src/a.py")
+        )
+
+        self.assertIsInstance(result, m.Answer)
+        assert isinstance(result, m.Answer)
+        statements = tuple(
+            conclusion.statement
+            for group in result.groups
+            for conclusion in group.conclusions
+        )
+        self.assertIn("A does X number 1.", statements)
+        self.assertNotIn("A conforms to the governing route.", statements)
+        self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
+        assert isinstance(result.functional_pyramid, m.FunctionalPyramidView)
+        self.assertEqual(
+            result.functional_pyramid.status,
+            m.FunctionalPyramidRouteStatus.UNRESOLVED,
+        )
+
     def test_descriptive_answer_survives_unresolved_governing_route(self) -> None:
         def orientation(
             repository_id: str,
