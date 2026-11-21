@@ -578,6 +578,26 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             coverage=m.FunctionalPyramidCoverage.PARTIAL,
         )
 
+    def test_invalid_activation_leaves_participation_state_unchanged(self):
+        intent = self._intent("repo-a")
+        self.declarations.results[("repo-a", "decl.json")] = m.EvidenceSourceFailure(
+            request=m.EvidenceRequest("decl.json"),
+            kind=m.EvidenceSourceFailureKind.MISSING,
+            reason="missing",
+        )
+
+        with self.assertRaises(ValueError):
+            self.admin_service.record(
+                request_id=m.RequestId("activate-invalid"),
+                action=m.FunctionalPyramidAction.ACTIVATE,
+                members=(intent,),
+            )
+
+        self.assertEqual(self.state.active, {})
+        self.assertEqual(self.state.excluded, set())
+        self.assertEqual(self.state.versions, {})
+        self.assertIsNone(self.state.receipt(m.RequestId("activate-invalid")))
+
     def test_record_activate_commits_members_effects_and_receipt(self):
         result = self.admin_service.record(
             request_id=m.RequestId("activate-1"),
@@ -777,6 +797,29 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
                 pyramid_id=activation.pyramid_id,
                 expected_version=m.FunctionalPyramidVersion(1),
             )
+
+    def test_record_deactivate_enforces_version_cas(self):
+        activation = self.admin_service.record(
+            request_id=m.RequestId("activate-deactivate-cas"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"),),
+        )
+        assert activation.pyramid_id is not None
+        self.state.versions[activation.pyramid_id] = m.FunctionalPyramidVersion(2)
+
+        with self.assertRaises(RecordingConflict):
+            self.admin_service.record(
+                request_id=m.RequestId("deactivate-stale"),
+                action=m.FunctionalPyramidAction.DEACTIVATE,
+                pyramid_id=activation.pyramid_id,
+                expected_version=m.FunctionalPyramidVersion(1),
+            )
+
+        self.assertEqual(
+            self.state.active["repo-a"],
+            activation.pyramid_id,
+        )
+        self.assertNotIn("repo-a", self.state.excluded)
 
     def test_record_deactivate_moves_all_members_to_excluded(self):
         activation = self.admin_service.record(
