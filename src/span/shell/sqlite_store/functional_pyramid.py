@@ -7,13 +7,13 @@ files. Runtime open never creates or migrates this database.
 
 from __future__ import annotations
 
-import contextlib as _contextlib
 import datetime as _datetime
 import pathlib as _pathlib
 import sqlite3 as _sqlite3
 import typing as _typing
 
 from span.core import model as m
+from span.shell.sqlite_store.transactions import immediate_transaction
 
 INSTALLATION_SCHEMA_VERSION = 1
 INSTALLATION_STORE_RELATIVE = _pathlib.Path("installation") / "functional-pyramid.db"
@@ -201,17 +201,11 @@ class FunctionalPyramidInstallationStore:
                 f"multi-database writes: journal_mode={mode}, synchronous={synchronous}"
             )
 
-    @_contextlib.contextmanager
-    def transaction(self) -> _typing.Iterator[_sqlite3.Connection]:
+    def transaction(
+        self,
+    ) -> _typing.ContextManager[_sqlite3.Connection]:
         """Serialize one installation write; T08 extends this with attachments."""
-        self._connection.execute("BEGIN IMMEDIATE")
-        try:
-            yield self._connection
-        except BaseException:
-            self._connection.rollback()
-            raise
-        else:
-            self._connection.commit()
+        return immediate_transaction(self._connection)
 
     def reap_expired(self, moment: _datetime.datetime | None = None) -> int:
         """Reap installation-scoped replay receipts under the shared retention policy."""
