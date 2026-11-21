@@ -481,9 +481,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         root_auth = pathlib.Path(self._tmp.name) / "repo-auth"
         root_auth.mkdir()
         (root_auth / "rules").mkdir()
-        (root_auth / "rules/governance.md").write_text(
-            "governance\n", encoding="utf-8"
-        )
+        (root_auth / "rules/governance.md").write_text("governance\n", encoding="utf-8")
         authority = m.AuthorityBinding(
             evidence_ref=m.EvidenceRef(
                 evidence_id=m.EvidenceId("authority-1"),
