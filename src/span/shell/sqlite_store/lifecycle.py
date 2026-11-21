@@ -10,7 +10,6 @@ explicit offline protocol; the runtime never migrates at open.
 
 from __future__ import annotations
 
-import contextlib as _contextlib
 import dataclasses as _dataclasses
 import datetime as _datetime
 import json as _json
@@ -39,6 +38,7 @@ from span.core.recording import (
 from span.core.rejection import RejectionCauseKind, SurfaceConflict
 from span.shell.sqlite_store import dependents as _dependents
 from span.shell.sqlite_store.schema import DDL as _DDL, SCHEMA_VERSION
+from span.shell.sqlite_store.transactions import immediate_transaction as _transaction
 
 __all__ = [
     "LifecycleStore",
@@ -130,23 +130,6 @@ class LifecycleStore:
     def close(self) -> None:
         self._connection.close()
 
-    @_contextlib.contextmanager
-    def _transaction(self) -> _typing.Iterator[_sqlite3.Connection]:
-        """Serialize one write decision with its effects.
-
-        ``BEGIN IMMEDIATE`` acquires the write lock before any receipt or
-        expected-version read, so two writers cannot both accept against a
-        stale snapshot.
-        """
-        self._connection.execute("BEGIN IMMEDIATE")
-        try:
-            yield self._connection
-        except BaseException:
-            self._connection.rollback()
-            raise
-        else:
-            self._connection.commit()
-
     def _initialize_schema(self) -> None:
         tables = {
             str(row["name"])
@@ -172,7 +155,7 @@ class LifecycleStore:
                     f"unsupported lifecycle store schema {row['value']}; "
                     f"expected {SCHEMA_VERSION}"
                 )
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             for statement in _DDL:
                 connection.execute(statement)
             row = connection.execute(
@@ -207,7 +190,7 @@ class LifecycleStore:
             [m.to_canonical(item) for item in authority_seeds],
             sort_keys=True,
         )
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             row = connection.execute(
                 "SELECT root, authority_bindings_json FROM repositories"
                 " WHERE repository_id=?",
@@ -256,7 +239,7 @@ class LifecycleStore:
             raise LifecycleStoreConfigurationError(
                 "expected repository root is required"
             )
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             row = connection.execute(
                 "SELECT root FROM repositories WHERE repository_id=?",
                 (repository_id,),
@@ -373,7 +356,7 @@ class LifecycleStore:
         ``update_surface`` so history stays immutable.
         """
         key = surface.key
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             row = connection.execute(
                 "SELECT kind, canonical_json FROM surfaces"
                 " WHERE repository_id=? AND locator=?",
@@ -401,7 +384,7 @@ class LifecycleStore:
     ) -> m.Surface:
         """Apply one compare-and-set boundary update, preserving history."""
         key = surface.key
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             row = connection.execute(
                 "SELECT kind, boundary_version FROM surfaces"
                 " WHERE repository_id=? AND locator=?",
@@ -566,7 +549,7 @@ class LifecycleStore:
 
     def put_source_observation(self, record: SourceObservationRecord) -> None:
         """Insert one immutable observation; an identity conflict rejects."""
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             ranges = _ranges_json(record.delivered_ranges)
             row = connection.execute(
                 "SELECT repository_id, evidence_id, locator, content_digest,"
@@ -625,7 +608,7 @@ class LifecycleStore:
     def put_discovery_observation(self, observation: m.DiscoveryObservation) -> None:
         """Insert one immutable discovery observation, rejecting drift."""
         encoded = _json.dumps(m.to_canonical(observation), sort_keys=True)
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             row = connection.execute(
                 "SELECT canonical_json FROM discovery_observations"
                 " WHERE observation_id=?",
@@ -777,7 +760,7 @@ class LifecycleStore:
         return str(row["repository_id"])
 
     def add_context_evidence(self, context_id: str, observation_id: str) -> None:
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             repository_id = self._context_repository(connection, context_id)
             connection.execute(
                 "INSERT OR IGNORE INTO context_evidence"
@@ -788,7 +771,7 @@ class LifecycleStore:
     def add_context_discovery_evidence(
         self, context_id: str, observation_id: str
     ) -> None:
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             repository_id = self._context_repository(connection, context_id)
             connection.execute(
                 "INSERT OR IGNORE INTO context_discovery_evidence"
@@ -821,7 +804,7 @@ class LifecycleStore:
         The request binding and creation commit in one write transaction, so
         concurrent first calls cannot issue two contexts for one identity.
         """
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             row = connection.execute(
                 "SELECT binding_digest, canonical_json"
                 " FROM investigation_contexts"
@@ -863,7 +846,7 @@ class LifecycleStore:
             return context
 
     def put_context(self, context: m.InvestigationContext) -> None:
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             self._insert_context(connection, context)
 
     def _insert_context(
@@ -923,7 +906,7 @@ class LifecycleStore:
         not depend on the context row and survives. Returns whether a live row
         was removed.
         """
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             cursor = connection.execute(
                 "DELETE FROM investigation_contexts WHERE context_id=?",
                 (context_id,),
@@ -942,7 +925,7 @@ class LifecycleStore:
         understanding_id: m.UnderstandingId,
     ) -> m.RecordReceipt:
         """Persist acceptance for an unchanged, already-current version (FD-31)."""
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             now = self._clock()
             key = recording_key(identity)
             existing = self._get_receipt_in(connection, key, now)
@@ -1031,7 +1014,7 @@ class LifecycleStore:
                     "the update understanding identity does not match the command"
                 )
             selected = command.understanding_id
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             now = self._clock()
             key = recording_key(command.identity)
             existing = self._get_receipt_in(connection, key, now)
@@ -1132,7 +1115,7 @@ class LifecycleStore:
         content_digest: m.ContentDigest | None = None,
     ) -> m.RecordReceipt:
         digest = content_digest or record_content_digest(command)
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             now = self._clock()
             key = recording_key(command.identity)
             existing = self._get_receipt_in(connection, key, now)
@@ -1393,7 +1376,7 @@ class LifecycleStore:
 
     def create_challenge(self, challenge: m.Challenge) -> None:
         """Persist one explicit dispute at its current revision."""
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             self._validate_challenge_in(connection, challenge)
             if connection.execute(
                 "SELECT 1 FROM challenges WHERE challenge_id=?",
@@ -1459,7 +1442,7 @@ class LifecycleStore:
     ) -> m.RecordReceipt:
         """Accept one challenge create with receipt-first replay."""
         digest = content_digest or record_content_digest(command)
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             now = self._clock()
             key = recording_key(command.identity)
             existing = self._get_receipt_in(connection, key, now)
@@ -1575,7 +1558,7 @@ class LifecycleStore:
     def reap_expired(self, now: _datetime.datetime | None = None) -> int:
         """Remove expired operational context and replay state only."""
         moment = now or self._clock()
-        with self._transaction() as connection:
+        with _transaction(self._connection) as connection:
             contexts = connection.execute(
                 "DELETE FROM investigation_contexts"
                 " WHERE expires_at IS NOT NULL AND expires_at < ?",
