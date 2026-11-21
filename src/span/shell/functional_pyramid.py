@@ -87,7 +87,8 @@ class FunctionalPyramidRepositoryRuntime(_typing.Protocol):
 
 class _InstallationAuthorityResolver:
     def __init__(
-        self, repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime]
+        self,
+        repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
     ) -> None:
         self._repository_runtime = repository_runtime
 
