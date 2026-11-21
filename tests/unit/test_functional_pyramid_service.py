@@ -631,6 +631,93 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(len(self.effect_calls), 1)
         self.assertEqual(self.retained_effect_calls, [])
 
+    def test_record_replay_live_projects_only_retained_effect_refs(self):
+        affected_ref = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-effect"),
+            conclusion_id=m.ConclusionId("c-effect"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        affected_surface = m.ChangedSurface(
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.FILE, "src/a.py"),
+            reasons=(m.ChangeReason.DIRECT,),
+        )
+        initial_context = m.InvestigationContextRef(
+            repository_id="repo-a",
+            context_id=m.InvestigationContextId("ctx-effect-initial"),
+        )
+        fresh_context = m.InvestigationContextRef(
+            repository_id="repo-a",
+            context_id=m.InvestigationContextId("ctx-effect-fresh"),
+        )
+        effect_calls = []
+        retained_calls = []
+        live_projection = [[(affected_surface,), (fresh_context,)]]
+
+        def project_effects(transaction, action, pyramid_id, old_members, new_members):
+            effect_calls.append(
+                (transaction, action, pyramid_id, old_members, new_members)
+            )
+            return (affected_surface,), (initial_context,), (affected_ref,)
+
+        def project_retained(transaction, refs):
+            retained_calls.append((transaction, refs))
+            surfaces, contexts = live_projection[0]
+            return surfaces, contexts
+
+        service = FunctionalPyramidService(
+            declarations=self.declarations,
+            authority=self.authority,
+            state=self.state,
+            registered_repository_ids=lambda: ("repo-a", "repo-b"),
+            repository_paths=lambda repository_ids: tuple(
+                (repository_id, f"/stores/{repository_id}.db")
+                for repository_id in sorted(repository_ids)
+            ),
+            effect_projection=project_effects,
+            retained_effect_projection=project_retained,
+            clock=lambda: datetime.datetime(
+                2026, 11, 21, 0, 0, tzinfo=datetime.timezone.utc
+            ),
+        )
+        intent = self._intent("repo-a")
+
+        first = service.record(
+            request_id=m.RequestId("activate-live-replay"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(intent,),
+        )
+        receipt = self.state.receipt(m.RequestId("activate-live-replay"))
+        assert receipt is not None
+        self.assertEqual(first.dependent_effects, (affected_surface,))
+        self.assertEqual(first.reestablishment_contexts, (initial_context,))
+        self.assertEqual(receipt.dependent_effect_refs, (affected_ref,))
+
+        replay = service.record(
+            request_id=m.RequestId("activate-live-replay"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(intent,),
+        )
+        self.assertEqual(replay.dependent_effects, (affected_surface,))
+        self.assertEqual(replay.reestablishment_contexts, (fresh_context,))
+        self.assertEqual(self.state.receipt(receipt.request_id), receipt)
+        self.assertEqual(len(effect_calls), 1)
+        self.assertEqual(retained_calls[-1][1], (affected_ref,))
+
+        live_projection[0] = [(), ()]
+        repaired = service.record(
+            request_id=m.RequestId("activate-live-replay"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(intent,),
+        )
+        self.assertEqual(repaired.dependent_effects, ())
+        self.assertEqual(repaired.reestablishment_contexts, ())
+        self.assertEqual(self.state.receipt(receipt.request_id), receipt)
+        self.assertEqual(len(effect_calls), 1)
+        self.assertEqual(
+            tuple(refs for _, refs in retained_calls),
+            ((affected_ref,), (affected_ref,)),
+        )
+
     def test_record_replay_conflict_rejects_different_content(self):
         self.admin_service.record(
             request_id=m.RequestId("same-id"),
