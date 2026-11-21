@@ -318,11 +318,13 @@ descriptive conclusion genuinely depends on authority. Source currency cannot
 make authority current, and accepted authority cannot establish observed
 implementation behavior. *(F1, F5, F11)*
 
-**FD-77 — Conformance is a supported judgment, not a generated verdict.**
+**FD-77 — Conformance is a supported normative judgment, not a generated verdict.**
 Span never computes semantic conformance from rule text and source topology. A
-human or agent authors a normative/conformance conclusion after investigation.
-Span can then establish that the judgment's empirical dependencies, governing
-route and applicable authorities are current. *(G7, F1, F5)*
+human or agent authors the conformance judgment after investigation and records
+it as a NORMATIVE conclusion; the public assertion-nature contract has no third
+CONFORMANCE value. Span can then establish that the judgment's empirical
+dependencies, governing route and applicable authorities are current. *(G7, F1,
+F5, L12)*
 
 **FD-78 — Functional Pyramid orientation is available on cold surfaces.**
 An unassessed semantic surface may return `Gap/unassessed` while its Functional
@@ -1275,6 +1277,22 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 41. **Initialization declaration edits use ordinary re-alignment.** Every
     repository declaration edit in lifecycle §7.1 runs through changed-scope
     reconsideration and disposition before candidate validation proceeds.
+42. **Conformance uses the normative input contract.** A conformance judgment
+    is recorded with `assertion_nature=NORMATIVE`; in an ACTIVE repository it
+    receives the same server-derived route/authority support as every other
+    normative conclusion, and no third assertion-nature branch exists.
+43. **Acceptance is not runtime completion.** An otherwise-valid NORMATIVE
+    create/update whose derived governance is non-current returns
+    `UnderstandingRecorded` with REASSESSMENT_REQUIRED/UNVERIFIABLE
+    qualification, but the agent runtime cannot transition to successful
+    COMPLETE until the required disposition becomes CURRENT; post-commit
+    qualification unavailability likewise remains an explicit recovery/blocker.
+44. **Participation-write acceptance is not initialization completion.** An
+    accepted ACTIVATE/REVISE/DEACTIVATE that returns actionable dependent effects
+    supplies their canonical update coordinates and per-repository contexts; the
+    initialization/revision/deactivation procedure must dispose those effects
+    before successful completion, without calling reconsider again for the
+    participation write itself.
 
 
 ## 16. What this layer does not define
