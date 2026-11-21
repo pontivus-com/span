@@ -711,15 +711,7 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
     connection = sqlite3.connect(path)
     try:
         connection.execute("PRAGMA foreign_keys=OFF")
-        for table in (
-            "functional_route_dependency_index",
-            "functional_pyramid_receipts",
-            "functional_pyramid_active_members",
-            "functional_pyramid_exclusions",
-            "functional_pyramids",
-            "functional_pyramid_versions",
-        ):
-            connection.execute(f"DROP TABLE {table}")
+        connection.execute("DROP TABLE functional_route_dependency_index")
         connection.execute("UPDATE meta SET value='13' WHERE key='schema_version'")
         connection.commit()
     finally:
