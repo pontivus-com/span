@@ -14,6 +14,7 @@ import pathlib
 
 from span.shell.readiness import (
     probe_functional_pyramid_installation_store,
+    probe_functional_pyramid_repository,
     probe_store,
     probe_structural,
 )
@@ -103,6 +104,11 @@ def main(argv=None):
                 "canonical_root": canonical_root,
                 "store": readiness.payload(),
                 "provider": probe_structural(data_dir, repository_id),
+                "functional_pyramid": probe_functional_pyramid_repository(
+                    data_dir,
+                    repository_id,
+                    canonical_root,
+                ),
             }
         )
     print(
