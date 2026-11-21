@@ -76,9 +76,8 @@ the point of the whole system.
 
 *What does this do*, *what depends on it*, *what breaks if I change it*, and
 *is this still true* remain questions over retained understanding rather than
-operations. Declared governance is different: for a participating repository,
-Span resolves the Functional Pyramid as server-owned orientation and support
-state. It does not generate an answer to "what should govern"; it returns what
+operations. Declared governance is different: for an ACTIVE repository, Span resolves the
+Functional Pyramid as server-owned orientation and support state. It does not generate an answer to "what should govern"; it returns what
 the repository explicitly declared to govern the selected scope. The agent still
 judges semantic and conformance meaning.
 
@@ -345,8 +344,9 @@ parallel setup DTOs.
   `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`,
   `pyramid_id: FunctionalPyramidId | None`,
   `version: FunctionalPyramidVersion | None`,
-  `members: tuple[FunctionalPyramidMemberView, ...]`, and
-  `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`.
+  `members: tuple[FunctionalPyramidMemberView, ...]`,
+  `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`,
+  and `dependent_effect_refs: tuple[ConclusionRevisionRef, ...]`.
   It has no investigation-context binding or repository receipt owner. For
   ACTIVATE/REVISE, `members` is the resulting ACTIVE member set. For
   DEACTIVATE/EXCLUDE it is empty. The effects tuple records every repository
@@ -1053,10 +1053,11 @@ Health may change from VALID to DEGRADED and back as current source/member state
 changes without any participation-state write. Per-scope
 `RESOLVED | UNRESOLVED` remains separate again: an ACTIVE/DEGRADED pyramid may
 still resolve unaffected routes, and an ACTIVE/PARTIAL pyramid can return
-`UNCOVERED_PATH` outside declared coverage without making the pyramid
-DEGRADED.
+`UNCOVERED_PATH` for a functional portion inside its declared FunctionalScope
+that lacks applicable context coverage without making the pyramid DEGRADED.
+Scope outside FunctionalScope is `OUTSIDE_FUNCTIONAL_SCOPE`, not uncovered.
 
-The initialization skill may guide DISCOVER → DECLARE → VALIDATE, but it does
+The initialization skill may guide DISCOVER → DECLARE → REALIGN → VALIDATE, but it does
 not own a second Functional Pyramid definition and it does not bypass the
 ordinary Span lifecycle while interpreting repository sources.
 
