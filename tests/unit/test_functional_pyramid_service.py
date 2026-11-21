@@ -556,6 +556,10 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(candidate.validation_findings, ())
         self.assertEqual(candidate.graph_findings, ())
         self.assertEqual(len(candidate.members), 1)
+        self.assertEqual(self.state.active, {})
+        self.assertEqual(self.state.excluded, set())
+        self.assertEqual(self.state.versions, {})
+        self.assertEqual(self.state.receipts, {})
 
     def _intent(self, repository_id: str) -> m.FunctionalPyramidMemberIntent:
         request = m.EvidenceRequest("decl.json")
@@ -787,7 +791,12 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             pyramid_id=activation.pyramid_id,
             expected_version=activation.version,
         )
+        self.assertEqual(revision.pyramid_id, activation.pyramid_id)
         self.assertEqual(revision.version, m.FunctionalPyramidVersion(2))
+        self.assertEqual(
+            tuple(member.repository_id for member in revision.members),
+            ("repo-a",),
+        )
         self.assertEqual(
             revision.participation_effects,
             (
