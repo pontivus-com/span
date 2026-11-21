@@ -84,7 +84,8 @@ class RecordWireSchemaTest(unittest.TestCase):
             "object of action lists", schema["properties"]["actions"]["description"]
         )
         self.assertIn(
-            "Only for kind=surface", schema["properties"]["action"]["description"]
+            "kind=functional_pyramid",
+            schema["properties"]["action"]["description"],
         )
 
     def test_component_schemas_are_object_roots(self):
@@ -207,6 +208,49 @@ class CreateEvidenceGrammarTest(unittest.TestCase):
         )
         command = w.record_command(wire, _resolver())
         self.assertEqual(command.run.repository_id, "repo-1")
+
+
+class FunctionalPyramidRecordWireTest(unittest.TestCase):
+    def test_exclude_is_installation_scoped(self):
+        request = from_wire(
+            w.RecordRequestWire,
+            {
+                "request_id": "fp-exclude-1",
+                "kind": "functional_pyramid",
+                "action": "exclude",
+                "repository_id": "repo-1",
+            },
+        )
+        self.assertEqual(request.kind, m.RecordKind.FUNCTIONAL_PYRAMID)
+        self.assertEqual(request.action, m.FunctionalPyramidAction.EXCLUDE)
+        with self.assertRaisesRegex(ValueError, "installation-scoped"):
+            _ = request.bound_repository_id
+
+    def test_functional_pyramid_rejects_repository_record_fields(self):
+        with self.assertRaises(ValueError):
+            from_wire(
+                w.RecordRequestWire,
+                {
+                    "request_id": "fp-bad-1",
+                    "kind": "functional_pyramid",
+                    "action": "exclude",
+                    "repository_id": "repo-1",
+                    "question": "not valid for installation state",
+                },
+            )
+
+    def test_functional_pyramid_never_decodes_to_repository_record_command(self):
+        request = from_wire(
+            w.RecordRequestWire,
+            {
+                "request_id": "fp-exclude-2",
+                "kind": "functional_pyramid",
+                "action": "exclude",
+                "repository_id": "repo-1",
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "installation-scoped"):
+            w.record_command(request, _resolver())
 
 
 class ConclusionIdentityTest(unittest.TestCase):
