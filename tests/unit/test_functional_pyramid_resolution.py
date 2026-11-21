@@ -323,6 +323,74 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             tuple(member.repository_id for member in members), ("repo-a", "repo-b")
         )
 
+    def test_degraded_instance_can_resolve_unaffected_local_route(self):
+        members = (
+            _member(
+                "repo-a",
+                scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
+            ),
+            _member(
+                "repo-b",
+                scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "other")),
+            ),
+        )
+        declarations = (
+            (
+                "repo-a",
+                m.FunctionalPyramidDeclaration(
+                    version=1,
+                    contexts=(
+                        m.FunctionalContextDeclaration(
+                            context_id="ctx-local",
+                            coverage=_scope(
+                                _selector(
+                                    m.FunctionalScopeSelectorKind.PREFIX,
+                                    "src",
+                                )
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            (
+                "repo-b",
+                m.FunctionalPyramidDeclaration(
+                    version=1,
+                    contexts=(
+                        m.FunctionalContextDeclaration(
+                            context_id="ctx-unrelated",
+                            coverage=_scope(
+                                _selector(
+                                    m.FunctionalScopeSelectorKind.PREFIX,
+                                    "other",
+                                )
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        view, _ = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-degraded-local"),
+            version=m.FunctionalPyramidVersion(1),
+            members=members,
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.FILE, "src/a.py"),
+            semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
+            declarations=declarations,
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings={},
+        )
+
+        self.assertEqual(view.health, m.FunctionalPyramidHealth.DEGRADED)
+        self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+        self.assertEqual(view.scope_relation, m.FunctionalScopeRelation.COVERED)
+        self.assertEqual(
+            tuple(context.context_id for context in view.contexts),
+            ("ctx-local",),
+        )
+        self.assertEqual(view.unresolved, ())
+
     def test_one_context_can_cover_disconnected_paths(self):
         member = _member(
             "repo-a",
