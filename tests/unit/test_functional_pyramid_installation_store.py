@@ -170,7 +170,11 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                 repository_id="repo",
                 declaration_refs=(),
                 functional_scope=m.FunctionalScope(
-                    (m.FunctionalScopeSelector(m.FunctionalScopeSelectorKind.REPOSITORY),)
+                    (
+                        m.FunctionalScopeSelector(
+                            m.FunctionalScopeSelectorKind.REPOSITORY
+                        ),
+                    )
                 ),
                 coverage=m.FunctionalPyramidCoverage.PARTIAL,
             )
