@@ -77,6 +77,7 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
         return result.evidence_ref, declaration
 
 class _RepositoryRuntime(_typing.Protocol):
+    repository_id: str
     store: LifecycleStorePort
     evidence: EvidenceSource
 
@@ -260,12 +261,7 @@ class FunctionalPyramidEffectCoordinator:
         members: tuple[m.FunctionalPyramidMemberView, ...],
     ) -> tuple[m.FunctionalRouteIdentity, ...]:
         changed: set[m.FunctionalRouteIdentity] = set()
-        for understanding in runtime.store.list_understandings(
-            runtime.store.require_repository.__self__.require_repository  # type: ignore[attr-defined]
-        ):
-            del understanding
-        repository_id = self._repository_id(runtime)
-        for understanding in runtime.store.list_understandings(repository_id):
+        for understanding in runtime.store.list_understandings(runtime.repository_id):
             version = runtime.store.get_version(
                 understanding.understanding_id.value,
                 understanding.current_version.value,
@@ -324,26 +320,14 @@ class FunctionalPyramidEffectCoordinator:
             for repository_id, values in grouped.items()
         }
 
-    @staticmethod
-    def _repository_id(runtime: _RepositoryRuntime) -> str:
-        roots = tuple(
-            understanding.repository_id
-            for understanding in runtime.store.list_understandings(
-                "__functional_pyramid_repository_probe__"
-            )
-        )
-        if roots:
-            return roots[0]
-        raise ValueError("repository runtime identity is unavailable")
-
     def _proposed_version(
         self,
         action: m.FunctionalPyramidAction,
         pyramid_id: m.FunctionalPyramidId,
     ) -> m.FunctionalPyramidVersion:
-        current = self._service.status(m.FunctionalPyramidSelector(pyramid_id=pyramid_id))
         if action is m.FunctionalPyramidAction.ACTIVATE:
             return m.FunctionalPyramidVersion(1)
+        current = self._service.status(m.FunctionalPyramidSelector(pyramid_id=pyramid_id))
         if current.version is None:
             raise ValueError("Functional Pyramid version is unavailable")
         return m.FunctionalPyramidVersion(current.version.value + 1)
