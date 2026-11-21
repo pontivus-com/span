@@ -731,4 +731,3 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(result.reestablishment_contexts, ())
         self.assertEqual(self.effect_calls, [])
         self.assertIn("repo-a", self.state.excluded)
-
