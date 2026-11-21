@@ -452,36 +452,38 @@ class DependencyEffectService:
                 scopes.append(revision.content.scope)
                 for dependency in revision.content.support:
                     if isinstance(dependency, m.SourceSupport):
-                        observation = self._store.find_source_observation(
+                        source_observation = self._store.find_source_observation(
                             dependency.observation_id.value
                         )
-                        if observation is None:
+                        if source_observation is None:
                             continue
-                        if observation.repository_id != repository_id:
+                        if source_observation.repository_id != repository_id:
                             raise RecordingValidationError(
                                 "re-establishment source observation belongs to "
                                 "another repository"
                             )
                         scopes.append(
-                            m.EvidenceScope(evidence_refs=(observation.evidence,))
+                            m.EvidenceScope(
+                                evidence_refs=(source_observation.evidence,)
+                            )
                         )
                         source_observations[dependency.observation_id.value] = (
-                            observation
+                            source_observation
                         )
                     elif isinstance(dependency, m.DiscoverySupport):
-                        observation = self._store.find_discovery_observation(
+                        discovery_observation = self._store.find_discovery_observation(
                             dependency.observation_id.value
                         )
-                        if observation is None:
+                        if discovery_observation is None:
                             continue
-                        if observation.repository_id != repository_id:
+                        if discovery_observation.repository_id != repository_id:
                             raise RecordingValidationError(
                                 "re-establishment discovery observation belongs to "
                                 "another repository"
                             )
-                        scopes.append(observation.scope)
+                        scopes.append(discovery_observation.scope)
                         discovery_observations[dependency.observation_id.value] = (
-                            observation
+                            discovery_observation
                         )
                     elif isinstance(dependency, m.AuthoritySupportDependency):
                         if (
@@ -501,6 +503,10 @@ class DependencyEffectService:
                 scopes.append(m.EvidenceScope())
 
             context_id = self._new_context_id()
+
+            def fixed_context_id() -> str:
+                return context_id
+
             context = issue_context(
                 self._store,
                 binding=context_binding(
@@ -510,7 +516,7 @@ class DependencyEffectService:
                 repository_id=repository_id,
                 request_id=m.RequestId(f"effects:{context_id}"),
                 clock=self._clock,
-                new_context_id=lambda value=context_id: value,
+                new_context_id=fixed_context_id,
             )
             for observation_id in sorted(source_observations):
                 self._store.add_context_evidence(context_id, observation_id)
