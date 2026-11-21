@@ -917,13 +917,13 @@ class AnswerServiceTest(unittest.TestCase):
             functional_pyramid_orientation=orientation,
         )
 
-        result = service.ask(
-            m.AskRequest(repository_id="repo-1", reference="src/a.py")
-        )
+        result = service.ask(m.AskRequest(repository_id="repo-1", reference="src/a.py"))
 
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
-        self.assertEqual(result.groups[0].conclusions[0].statement, "A does X number 1.")
+        self.assertEqual(
+            result.groups[0].conclusions[0].statement, "A does X number 1."
+        )
         self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
         assert isinstance(result.functional_pyramid, m.FunctionalPyramidView)
         self.assertEqual(
