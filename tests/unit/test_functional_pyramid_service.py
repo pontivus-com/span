@@ -91,9 +91,7 @@ class _State:
         ] = {}
         self.excluded: set[str] = set()
 
-    def active_pyramid_id(
-        self, repository_id: str
-    ) -> m.FunctionalPyramidId | None:
+    def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None:
         return self.active.get(repository_id)
 
     def pyramid_version(
@@ -296,17 +294,20 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(self.authority.calls, [("repo-a", "rules/p0.md")])
         self.assertEqual(view.rules[0].authority, binding)
 
-
     def test_status_projects_inactive_and_live_active_health(self):
         self.assertEqual(
-            self.admin_service.status(m.FunctionalPyramidSelector(repository_id="repo-a")),
+            self.admin_service.status(
+                m.FunctionalPyramidSelector(repository_id="repo-a")
+            ),
             m.FunctionalPyramidStatus(
                 state=m.FunctionalPyramidParticipationState.UNCONFIGURED
             ),
         )
         self.state.excluded.add("repo-a")
         self.assertEqual(
-            self.admin_service.status(m.FunctionalPyramidSelector(repository_id="repo-a")),
+            self.admin_service.status(
+                m.FunctionalPyramidSelector(repository_id="repo-a")
+            ),
             m.FunctionalPyramidStatus(
                 state=m.FunctionalPyramidParticipationState.EXCLUDED
             ),
@@ -407,8 +408,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         finding = next(
             item
             for item in stale.validation_findings
-            if item.reason
-            is m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION
+            if item.reason is m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION
         )
         self.assertEqual(finding.expected_version, m.FunctionalPyramidVersion(1))
         self.assertEqual(finding.current_version, m.FunctionalPyramidVersion(2))
