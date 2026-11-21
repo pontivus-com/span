@@ -126,6 +126,59 @@ def probe_store(
     )
 
 
+def probe_functional_pyramid_installation_store(
+    data_dir: str | _pathlib.Path,
+) -> dict[str, object]:
+    """Observe the installation Functional Pyramid store without creating it."""
+    from span.shell.sqlite_store.functional_pyramid import (
+        INSTALLATION_SCHEMA_VERSION,
+        functional_pyramid_installation_path,
+    )
+
+    path = functional_pyramid_installation_path(data_dir)
+    if not path.is_file():
+        return {
+            "status": "absent",
+            "path": str(path),
+            "schema_version": None,
+            "ready": False,
+            "action": "run the installer to initialize Functional Pyramid state",
+        }
+    connection = _sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        row = connection.execute(
+            "SELECT value FROM meta WHERE key='schema_version'"
+        ).fetchone()
+        version = None if row is None else int(row[0])
+        mode = str(connection.execute("PRAGMA journal_mode").fetchone()[0])
+        synchronous = int(connection.execute("PRAGMA synchronous").fetchone()[0])
+    except (_sqlite3.Error, TypeError, ValueError):
+        return {
+            "status": "invalid",
+            "path": str(path),
+            "schema_version": None,
+            "ready": False,
+            "action": "restore or recreate the Functional Pyramid installation store",
+        }
+    finally:
+        connection.close()
+    ready = (
+        version == INSTALLATION_SCHEMA_VERSION
+        and mode.lower() not in {"wal", "off", "memory"}
+        and synchronous != 0
+    )
+    return {
+        "status": "ready" if ready else "incompatible",
+        "path": str(path),
+        "schema_version": version,
+        "journal_mode": mode,
+        "ready": ready,
+        "action": None
+        if ready
+        else "run the installer to repair Functional Pyramid installation state",
+    }
+
+
 def probe_structural(
     data_dir: str | _pathlib.Path,
     repository_id: str,
