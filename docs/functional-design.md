@@ -903,7 +903,7 @@ unavailability. Status is never persisted in the receipt. *(F9, L4)*
 
 ## 14. Why these choices follow
 
-The four choices that resemble judgement calls are derivations, not preferences.
+The choices below that resemble judgement calls are derivations, not preferences.
 
 ### The Answer/Gap threshold (FD-23, FD-25)
 
