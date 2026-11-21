@@ -841,6 +841,96 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Answer)
         self.assertEqual(result.verification, ())
 
+    def test_cold_governed_path_returns_gap_with_governing_view(self) -> None:
+        seen: list[m.EvidenceScope] = []
+
+        def orientation(
+            repository_id: str,
+            surface: m.SurfaceKey,
+            semantic_scope: m.EvidenceScope,
+        ) -> m.FunctionalPyramidView:
+            self.assertEqual(repository_id, "repo-1")
+            self.assertEqual(surface.locator, "src/missing.py")
+            seen.append(semantic_scope)
+            return m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("fp-cold"),
+                version=m.FunctionalPyramidVersion(1),
+                health=m.FunctionalPyramidHealth.VALID,
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                scope_relation=m.FunctionalScopeRelation.COVERED,
+                status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                semantic_scope=semantic_scope,
+            )
+
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=orientation,
+        )
+        before = self.store.list_understandings("repo-1")
+
+        result = service.ask(
+            m.AskRequest(repository_id="repo-1", reference="src/missing.py")
+        )
+
+        self.assertIsInstance(result, m.Gap)
+        assert isinstance(result, m.Gap)
+        self.assertEqual(result.reason, m.GapReason.UNASSESSED)
+        self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
+        self.assertEqual(
+            seen,
+            [m.EvidenceScope(paths=("src/missing.py",))],
+        )
+        self.assertEqual(self.store.list_understandings("repo-1"), before)
+
+    def test_descriptive_answer_survives_unresolved_governing_route(self) -> None:
+        def orientation(
+            repository_id: str,
+            surface: m.SurfaceKey,
+            semantic_scope: m.EvidenceScope,
+        ) -> m.FunctionalPyramidView:
+            self.assertEqual(repository_id, "repo-1")
+            self.assertEqual(surface.locator, "src/a.py")
+            return m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+                version=m.FunctionalPyramidVersion(1),
+                health=m.FunctionalPyramidHealth.VALID,
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+                status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                semantic_scope=semantic_scope,
+                unresolved=(
+                    m.FunctionalPyramidFinding(
+                        reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
+                        repository_id="repo-1",
+                        detail="functional scope is uncovered",
+                        recovery="declare applicable Functional Context coverage",
+                    ),
+                ),
+            )
+
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=orientation,
+        )
+
+        result = service.ask(
+            m.AskRequest(repository_id="repo-1", reference="src/a.py")
+        )
+
+        self.assertIsInstance(result, m.Answer)
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.groups[0].conclusions[0].statement, "A does X number 1.")
+        self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
+        assert isinstance(result.functional_pyramid, m.FunctionalPyramidView)
+        self.assertEqual(
+            result.functional_pyramid.status,
+            m.FunctionalPyramidRouteStatus.UNRESOLVED,
+        )
+
     def test_declared_symbol_boundary_is_exact_functional_pyramid_scope(self) -> None:
         seen: list[m.EvidenceScope] = []
 
