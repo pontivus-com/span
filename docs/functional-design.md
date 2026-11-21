@@ -24,6 +24,11 @@ expectations, and truncation.
 It does not define storage layout, wire encoding, transport framing, host
 adapters, or exact deployment numbers.
 
+FD-1–FD-60 retain their established identities from the pre-Version-1 design.
+Version-1 Functional Pyramid behavior begins at FD-61 even where those rules are
+placed earlier in this document so the existing requirement identities are not
+renumbered.
+
 ## 2. Identity and binding
 
 **FD-1 — Surface identity is derived, not chosen.**
@@ -330,7 +335,7 @@ The combined evaluation lists every non-current dependency with its state and
 reason, so a definite finding is not lost inside an `UNVERIFIABLE` summary.
 *(F2, A8)*
 
-**FD-16a — Route dependency.**
+**FD-81 — Route dependency.**
 Re-resolve the exact semantic scope through FD-61–FD-73. If route evaluation is
 operationally impossible, support is `UNVERIFIABLE`. If the route resolves but
 its route-support identity differs from the recorded identity, support is
@@ -437,7 +442,7 @@ unavailable store, required provider error, schema version — returns
 Functional Pyramid orientation fails operationally, the Answer/Gap carries
 `FunctionalPyramidUnavailable`; it does not erase otherwise valid descriptive
 understanding. Normative conclusions whose route support cannot be evaluated
-remain non-current through FD-16a. An unreadable source is not
+remain non-current through FD-81. An unreadable source is not
 `Unavailable`; it is `UNVERIFIABLE` support. *(A8, L3)*
 
 Expected operational failures are classified at their typed owner and projected
@@ -769,7 +774,7 @@ therefore outlive the longest suspension a supported host allows. That lower
 bound is derived. The exact window is a deployment measurement because the
 suspension length is a property of the host, not of Span.
 
-### Two proof planes (FD-12, FD-16a, FD-73, FD-76)
+### Two proof planes (FD-12, FD-81, FD-73, FD-76)
 
 G1 and F1 require Span to say only what its evidence establishes. Source identity
 can establish empirical currency but cannot establish that a governing rule is
