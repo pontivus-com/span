@@ -209,7 +209,9 @@ class StartupRegistrationTest(unittest.TestCase):
             self.assertFalse((data_dir / f"{REPO}.db").exists())
 
     def test_cs08_functional_pyramid_ask_is_installation_scoped(self):
-        loader = mock.Mock(side_effect=AssertionError("must not open repository context"))
+        loader = mock.Mock(
+            side_effect=AssertionError("must not open repository context")
+        )
         service = mock.Mock()
         service.status.return_value = m.FunctionalPyramidStatus(
             state=m.FunctionalPyramidParticipationState.UNCONFIGURED
@@ -236,15 +238,15 @@ class StartupRegistrationTest(unittest.TestCase):
         self.assertEqual(selector.repository_id, REPO)
 
     def test_cs09_functional_pyramid_record_is_installation_scoped(self):
-        loader = mock.Mock(side_effect=AssertionError("must not open repository context"))
+        loader = mock.Mock(
+            side_effect=AssertionError("must not open repository context")
+        )
         service = mock.Mock()
         service.record.return_value = m.FunctionalPyramidRecorded(
             receipt_selector=m.FunctionalPyramidReceiptSelector(
                 m.RequestId("fp-exclude-1")
             ),
-            committed_at=datetime.datetime(
-                2026, 11, 21, tzinfo=datetime.timezone.utc
-            ),
+            committed_at=datetime.datetime(2026, 11, 21, tzinfo=datetime.timezone.utc),
             action=m.FunctionalPyramidAction.EXCLUDE,
             pyramid_id=None,
             version=None,
