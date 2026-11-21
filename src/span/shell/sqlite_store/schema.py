@@ -1,6 +1,6 @@
-"""Schema-13 lifecycle SQLite definition."""
+"""Schema-14 lifecycle SQLite definition."""
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 DDL = (
     """
@@ -215,5 +215,75 @@ DDL = (
         replay_expires_at TEXT,
         PRIMARY KEY(repository_id, request_id)
     )
+    """,    """
+    CREATE TABLE IF NOT EXISTS functional_pyramid_versions(
+        pyramid_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        content_digest TEXT NOT NULL,
+        committed_at TEXT NOT NULL,
+        members_json TEXT NOT NULL,
+        PRIMARY KEY(pyramid_id, version)
+    )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS functional_pyramids(
+        pyramid_id TEXT PRIMARY KEY,
+        version INTEGER NOT NULL,
+        FOREIGN KEY(pyramid_id, version)
+            REFERENCES functional_pyramid_versions(pyramid_id, version)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS functional_pyramid_active_members(
+        repository_id TEXT PRIMARY KEY REFERENCES repositories(repository_id),
+        pyramid_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        member_json TEXT NOT NULL,
+        FOREIGN KEY(pyramid_id, version)
+            REFERENCES functional_pyramid_versions(pyramid_id, version)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS functional_pyramid_exclusions(
+        repository_id TEXT PRIMARY KEY REFERENCES repositories(repository_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS functional_pyramid_receipts(
+        request_id TEXT PRIMARY KEY,
+        content_digest TEXT NOT NULL,
+        committed_at TEXT NOT NULL,
+        replay_expires_at TEXT,
+        action TEXT NOT NULL,
+        pyramid_id TEXT,
+        version INTEGER,
+        members_json TEXT NOT NULL,
+        participation_effects_json TEXT NOT NULL,
+        dependent_effect_refs_json TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS functional_route_dependency_index(
+        understanding_id TEXT NOT NULL,
+        conclusion_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        pyramid_id TEXT NOT NULL,
+        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
+        route_identity TEXT NOT NULL,
+        PRIMARY KEY(
+            understanding_id, conclusion_id, revision,
+            pyramid_id, repository_id, route_identity
+        ),
+        FOREIGN KEY(understanding_id, conclusion_id, revision)
+            REFERENCES conclusions(understanding_id, conclusion_id, revision)
+            ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS functional_route_dependency_route
+    ON functional_route_dependency_index(
+        route_identity, pyramid_id, repository_id
+    )
+    """,
+
 )
