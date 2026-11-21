@@ -732,6 +732,12 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
                     m.FunctionalPyramidLayer.P0,
                     ("ROOT",),
                 ),
+                _rule(
+                    "repo-a",
+                    "rule-p1",
+                    m.FunctionalPyramidLayer.P1,
+                    (_graph_ref("repo-a", "rule-p0"),),
+                ),
             ),
         )
         authority = _authority("repo-a", "rules/rule-p0.md")
@@ -749,6 +755,7 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
         )
 
         rule = next(item for item in view.rules if item.rule_id == "rule-p0")
+        self.assertEqual(rule.downstream_rule_ids, ("rule-p1",))
         self.assertEqual(
             rule.downstream_context_ids,
             ("ctx-base", "ctx-dependent"),
