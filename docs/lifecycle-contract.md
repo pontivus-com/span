@@ -353,10 +353,16 @@ validation: registered repository identity, exact declaration source requests an
 Activation/revision accepts only a structurally valid candidate for its claimed
 coverage: declaration ownership, context graph, rule graph, governing edges,
 repository bindings and coverage must validate. A failed candidate changes no
-durable state. `PARTIAL` permits scope outside declared coverage and that scope
-remains explicitly uncovered; `COMPLETE` is rejected if intended
-repository-wide functional scope is uncovered. Authority status/content currency
-is evaluated by authority support and need not be folded into graph topology.
+durable state. `PARTIAL` declares that migration/coverage is knowingly incomplete, so a
+selected scope outside the declared contexts returns `UNCOVERED_PATH` without
+degrading the instance. `COMPLETE` is an owner-supplied governance claim that
+the repository's functional migration is complete; Span validates the declared
+graph but does not infer semantic completeness from the file tree. If a later
+selected functional scope in a COMPLETE member has no applicable declared
+context, that contradiction is `UNCOVERED_PATH` and degrades the instance until
+the declaration or coverage claim is corrected. Authority status/content
+currency is evaluated by authority support and need not be folded into graph
+topology.
 Recording retains references/identities/relationships and source identities, not
 canonical governing prose.
 
@@ -834,8 +840,10 @@ stateDiagram-v2
 The states above are durable participation states. Candidate validation is a pure
 transition attempt, not a fifth durable state. Route
 `RESOLVED | UNRESOLVED` is evaluated per semantic scope and is separate from
-the instance state: for example an ACTIVE/PARTIAL instance can legitimately
-return `UNCOVERED_PATH` outside its declared coverage.
+the instance state: an ACTIVE/PARTIAL instance can legitimately return
+`UNCOVERED_PATH` outside declared contexts, while the same finding in a
+COMPLETE member contradicts its completeness claim and moves the instance to
+DEGRADED.
 
 | From | Trigger / operation | To | Required result |
 | --- | --- | --- | --- |
@@ -846,7 +854,7 @@ return `UNCOVERED_PATH` outside its declared coverage.
 | EXCLUDED | valid activation or inclusion in a valid revision | ACTIVE | exclusion is superseded by explicit participation |
 | ACTIVE | valid `revise` | ACTIVE | one atomic new instance version; removed members become EXCLUDED |
 | ACTIVE | failed revision candidate | ACTIVE | old active version remains authoritative for membership |
-| ACTIVE | member/declaration/graph becomes structurally unavailable or invalid | DEGRADED | previous identity retained; affected routes report the exact unresolved state |
+| ACTIVE | member/declaration/graph becomes structurally unavailable or invalid, or a COMPLETE member yields an uncovered functional scope | DEGRADED | previous identity retained; affected routes report the exact unresolved state |
 | ACTIVE | authority source content/status changes while graph structure still resolves | ACTIVE | route topology remains evaluable; authority support may invalidate normative understanding |
 | ACTIVE | valid `deactivate` | EXCLUDED | all members explicitly excluded; dependent normative support is re-evaluated |
 | DEGRADED | unresolved condition persists | DEGRADED | no silent fallback or graph repair |
