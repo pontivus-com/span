@@ -36,6 +36,16 @@ from span.service.surface_status import compose_surface_status, covers_path
 
 __all__ = ["AnswerService", "gap_recovery"]
 
+_FunctionalPyramidOrientation = (
+    m.FunctionalPyramidView
+    | m.FunctionalPyramidUnavailable
+    | m.FunctionalPyramidParticipation
+)
+_FunctionalPyramidOrientationLookup = _typing.Callable[
+    [str, m.SurfaceKey, m.EvidenceScope],
+    _FunctionalPyramidOrientation,
+]
+
 
 def gap_recovery(reason: m.GapReason) -> str:
     """The one fixed remedy for a gap reason (FD-25, A8, TD §9.2).
@@ -70,6 +80,7 @@ class AnswerService:
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
+        functional_pyramid_orientation: _FunctionalPyramidOrientationLookup | None = None,
     ) -> None:
         self._store = store
         self._support = support
@@ -77,6 +88,7 @@ class AnswerService:
         self._policy = policy
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
+        self._functional_pyramid_orientation = functional_pyramid_orientation
 
     def ask(self, request: m.AskRequest) -> m.AskResult:
         if request.continuation is not None:
@@ -144,15 +156,37 @@ class AnswerService:
             surface, store=self._store, support=self._support, evidence=self._evidence
         )
         if selected_question is None:
-            result = self._document(request, surface, understandings, status)
+            functional_pyramid = self._functional_pyramid_projection(
+                repository_id,
+                surface,
+                self._surface_semantic_scope(surface),
+            )
+            result = self._document(
+                request,
+                surface,
+                understandings,
+                status,
+                functional_pyramid,
+            )
             return self._with_admission(request, surface, result)
         matched = tuple(
             item for item in understandings if item.question == selected_question
+        )
+        semantic_scope = (
+            self._matched_semantic_scope(matched)
+            if matched
+            else self._surface_semantic_scope(surface)
+        )
+        functional_pyramid = self._functional_pyramid_projection(
+            repository_id,
+            surface,
+            semantic_scope,
         )
         if not matched:
             result = self._cold_gap(
                 surface,
                 status,
+                functional_pyramid,
                 m.GapReason.UNASSESSED,
                 missing=(selected_question,),
             )
@@ -190,6 +224,7 @@ class AnswerService:
                 m.Answer(
                     surface=surface,
                     status=status,
+                    functional_pyramid=functional_pyramid,
                     conclusions=tuple(current),
                     gaps=tuple(gaps),
                     verification=self._verification(surface),
@@ -204,6 +239,7 @@ class AnswerService:
         result = m.Gap(
             surface=surface,
             status=status,
+            functional_pyramid=functional_pyramid,
             reason=reason,
             recovery=gap_recovery(reason),
             changed_evidence=tuple(
@@ -218,6 +254,50 @@ class AnswerService:
             source_pointers=self._source_pointers(surface),
         )
         return self._with_admission(request, surface, result)
+
+    def _surface_semantic_scope(self, surface: m.SurfaceKey) -> m.EvidenceScope:
+        """Return the semantic scope selected by an ordinary surface obtain."""
+        if surface.kind is m.SurfaceKind.FILE:
+            return m.EvidenceScope(paths=(surface.locator,))
+        if surface.kind is m.SurfaceKind.SYMBOL:
+            path = containment.surface_file_locator(surface.locator)
+            if path is None:
+                raise RecordingValidationError(
+                    "selected symbol surface has no canonical owning path"
+                )
+            return m.EvidenceScope(paths=(path,))
+        declared = self._store.find_surface(surface)
+        if declared is None:
+            raise RecordingValidationError("selected declared surface does not exist")
+        return m.EvidenceScope(paths=declared.boundary.paths)
+
+    def _matched_semantic_scope(
+        self, understandings: tuple[m.Understanding, ...]
+    ) -> m.EvidenceScope:
+        """Compose the fixed current scopes selected by an exact semantic obtain."""
+        return m.evidence_scope_union(
+            self._store.get_version(
+                item.understanding_id.value,
+                item.current_version.value,
+            ).scope
+            for item in understandings
+        )
+
+    def _functional_pyramid_projection(
+        self,
+        repository_id: str,
+        surface: m.SurfaceKey,
+        semantic_scope: m.EvidenceScope,
+    ) -> _FunctionalPyramidOrientation:
+        if self._functional_pyramid_orientation is None:
+            return m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.UNCONFIGURED
+            )
+        return self._functional_pyramid_orientation(
+            repository_id,
+            surface,
+            semantic_scope,
+        )
 
     def _resolve(
         self, repository_id: str, reference: str
@@ -311,6 +391,7 @@ class AnswerService:
         self,
         surface: m.SurfaceKey,
         status: m.SurfaceStatus,
+        functional_pyramid: _FunctionalPyramidOrientation,
         reason: m.GapReason,
         *,
         missing: tuple[str, ...] = ("no current conclusion on this surface",),
@@ -318,6 +399,7 @@ class AnswerService:
         return m.Gap(
             surface=surface,
             status=status,
+            functional_pyramid=functional_pyramid,
             reason=reason,
             recovery=gap_recovery(reason),
             missing=missing,
@@ -745,6 +827,7 @@ class AnswerService:
         surface: m.SurfaceKey,
         understandings: tuple[m.Understanding, ...],
         status: m.SurfaceStatus,
+        functional_pyramid: _FunctionalPyramidOrientation,
     ) -> m.Answer | m.Gap:
         grouped: dict[str, list[m.ConclusionView]] = {}
         gaps: list[m.RecordedQuestionGap] = []
@@ -793,6 +876,7 @@ class AnswerService:
                 surface=surface,
                 reason=reason,
                 status=status,
+                functional_pyramid=functional_pyramid,
                 recovery=gap_recovery(reason),
                 historical=tuple(historical),
                 missing=("no current conclusion on this surface",),
@@ -801,6 +885,7 @@ class AnswerService:
         return m.Answer(
             surface=surface,
             status=status,
+            functional_pyramid=functional_pyramid,
             groups=tuple(
                 m.AnswerGroup(question=question, conclusions=tuple(views))
                 for question, views in sorted(grouped.items())
@@ -903,6 +988,7 @@ def _replace_answer(
     return m.Answer(
         surface=answer.surface,
         status=answer.status,
+        functional_pyramid=answer.functional_pyramid,
         conclusions=conclusions,
         groups=groups,
         gaps=answer.gaps,
