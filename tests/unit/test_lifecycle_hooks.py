@@ -259,7 +259,9 @@ class LifecycleHooksTest(unittest.TestCase):
         status = m.FunctionalPyramidStatus(
             state=m.FunctionalPyramidParticipationState.UNCONFIGURED
         )
-        with mock.patch.object(hooks, "_functional_pyramid_status", return_value=status):
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
             notice = hooks._functional_pyramid_notice(
                 "/tmp/data",
                 {"/tmp/hooks-repo": "/tmp/hooks-repo"},
@@ -274,7 +276,9 @@ class LifecycleHooksTest(unittest.TestCase):
         status = m.FunctionalPyramidStatus(
             state=m.FunctionalPyramidParticipationState.EXCLUDED
         )
-        with mock.patch.object(hooks, "_functional_pyramid_status", return_value=status):
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
             notice = hooks._functional_pyramid_notice(
                 "/tmp/data",
                 {"/tmp/hooks-repo": "/tmp/hooks-repo"},
@@ -304,7 +308,9 @@ class LifecycleHooksTest(unittest.TestCase):
                 ),
             ),
         )
-        with mock.patch.object(hooks, "_functional_pyramid_status", return_value=status):
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
             notice = hooks._functional_pyramid_notice(
                 "/tmp/data",
                 {"/tmp/hooks-repo": "/tmp/hooks-repo"},
@@ -341,7 +347,9 @@ class LifecycleHooksTest(unittest.TestCase):
             ),
             findings=(finding,),
         )
-        with mock.patch.object(hooks, "_functional_pyramid_status", return_value=status):
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
             notice = hooks._functional_pyramid_notice(
                 "/tmp/data",
                 {"/tmp/hooks-repo": "/tmp/hooks-repo"},
