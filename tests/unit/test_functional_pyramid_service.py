@@ -810,6 +810,16 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertNotIn("repo-b", self.state.active)
         self.assertNotIn("repo-b", self.state.excluded)
 
+        status = self.admin_service.status(
+            m.FunctionalPyramidSelector(pyramid_id=activation.pyramid_id)
+        )
+        self.assertEqual(status.state, m.FunctionalPyramidParticipationState.ACTIVE)
+        self.assertEqual(status.health, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(status.pyramid_id, revision.pyramid_id)
+        self.assertEqual(status.version, revision.version)
+        self.assertEqual(status.members, revision.members)
+        self.assertEqual(status.findings, ())
+
     def test_record_revise_enforces_version_cas(self):
         activation = self.admin_service.record(
             request_id=m.RequestId("activate-cas"),
