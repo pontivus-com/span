@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as _datetime
 import typing as _typing
 
 from span.core import model as m
@@ -60,7 +61,7 @@ class FunctionalPyramidStateTransaction(_typing.Protocol):
         pyramid_id: m.FunctionalPyramidId,
         version: m.FunctionalPyramidVersion,
         content_digest: m.ContentDigest,
-        committed_at: _typing.Any,
+        committed_at: _datetime.datetime,
         members: tuple[m.FunctionalPyramidMemberView, ...],
     ) -> None: ...
 
@@ -80,7 +81,7 @@ class FunctionalPyramidStateTransaction(_typing.Protocol):
         self,
         receipt: m.RetrievedFunctionalPyramidReceipt,
         *,
-        replay_expires_at: _typing.Any,
+        replay_expires_at: _datetime.datetime,
     ) -> None: ...
 
     def write_reestablishment_context(
