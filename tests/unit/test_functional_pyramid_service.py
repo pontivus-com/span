@@ -2,6 +2,7 @@
 
 import contextlib
 import datetime
+import threading
 import unittest
 
 from span.core import model as m
@@ -826,6 +827,85 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
                 pyramid_id=activation.pyramid_id,
                 expected_version=m.FunctionalPyramidVersion(1),
             )
+
+    def test_concurrent_revise_and_deactivate_obey_version_cas(self):
+        activation = self.admin_service.record(
+            request_id=m.RequestId("activate-concurrent-cas"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._intent("repo-a"), self._intent("repo-b")),
+        )
+        assert activation.pyramid_id is not None
+        assert activation.version is not None
+
+        lock = threading.Lock()
+        barrier = threading.Barrier(3)
+
+        @contextlib.contextmanager
+        def serialized_transaction(repository_paths=()):
+            paths = tuple(repository_paths)
+            self.state.transaction_paths.append(paths)
+            with lock:
+                yield self.state
+
+        self.state.transaction = serialized_transaction
+        successes: list[m.FunctionalPyramidAction] = []
+        failures: list[BaseException] = []
+
+        def revise() -> None:
+            try:
+                barrier.wait()
+                self.admin_service.record(
+                    request_id=m.RequestId("revise-concurrent"),
+                    action=m.FunctionalPyramidAction.REVISE,
+                    members=(self._intent("repo-a"), self._intent("repo-b")),
+                    pyramid_id=activation.pyramid_id,
+                    expected_version=activation.version,
+                )
+                successes.append(m.FunctionalPyramidAction.REVISE)
+            except BaseException as exc:
+                failures.append(exc)
+
+        def deactivate() -> None:
+            try:
+                barrier.wait()
+                self.admin_service.record(
+                    request_id=m.RequestId("deactivate-concurrent"),
+                    action=m.FunctionalPyramidAction.DEACTIVATE,
+                    pyramid_id=activation.pyramid_id,
+                    expected_version=activation.version,
+                )
+                successes.append(m.FunctionalPyramidAction.DEACTIVATE)
+            except BaseException as exc:
+                failures.append(exc)
+
+        threads = (threading.Thread(target=revise), threading.Thread(target=deactivate))
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        for thread in threads:
+            thread.join(timeout=10)
+            self.assertFalse(thread.is_alive())
+
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(failures), 1)
+        if successes == [m.FunctionalPyramidAction.REVISE]:
+            self.assertEqual(
+                self.state.versions[activation.pyramid_id],
+                m.FunctionalPyramidVersion(2),
+            )
+            self.assertEqual(
+                set(self.state.active),
+                {"repo-a", "repo-b"},
+            )
+            self.assertEqual(self.state.excluded, set())
+        else:
+            self.assertEqual(
+                successes,
+                [m.FunctionalPyramidAction.DEACTIVATE],
+            )
+            self.assertNotIn(activation.pyramid_id, self.state.versions)
+            self.assertEqual(self.state.active, {})
+            self.assertEqual(self.state.excluded, {"repo-a", "repo-b"})
 
     def test_record_deactivate_enforces_version_cas(self):
         activation = self.admin_service.record(
