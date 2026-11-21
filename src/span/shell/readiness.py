@@ -173,9 +173,11 @@ def probe_functional_pyramid_installation_store(
         "schema_version": version,
         "journal_mode": mode,
         "ready": ready,
-        "action": None
-        if ready
-        else "run the installer to repair Functional Pyramid installation state",
+        "action": (
+            None
+            if ready
+            else "run the installer to repair Functional Pyramid installation state"
+        ),
     }
 
 
