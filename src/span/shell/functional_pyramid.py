@@ -78,7 +78,7 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
         return result.evidence_ref, declaration
 
 
-class _RepositoryRuntime(_typing.Protocol):
+class FunctionalPyramidRepositoryRuntime(_typing.Protocol):
     repository_id: str
     root: str
     store: LifecycleStorePort
@@ -87,7 +87,7 @@ class _RepositoryRuntime(_typing.Protocol):
 
 class _InstallationAuthorityResolver:
     def __init__(
-        self, repository_runtime: _typing.Callable[[str], _RepositoryRuntime]
+        self, repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime]
     ) -> None:
         self._repository_runtime = repository_runtime
 
@@ -102,7 +102,7 @@ class _InstallationAuthorityResolver:
 def compose_functional_pyramid_service(
     *,
     state: FunctionalPyramidStatePort,
-    repository_runtime: _typing.Callable[[str], _RepositoryRuntime],
+    repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
     registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
     repository_paths: _typing.Callable[[tuple[str, ...]], tuple[tuple[str, str], ...]],
     clock: _typing.Callable[[], _datetime.datetime] | None = None,
@@ -176,7 +176,7 @@ class FunctionalPyramidEffectCoordinator:
         self,
         *,
         service: FunctionalPyramidService,
-        repository_runtime: _typing.Callable[[str], _RepositoryRuntime],
+        repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
         registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
@@ -277,7 +277,7 @@ class FunctionalPyramidEffectCoordinator:
 
     def _effect_engine(
         self,
-        runtime: _RepositoryRuntime,
+        runtime: FunctionalPyramidRepositoryRuntime,
         transaction: FunctionalPyramidStateTransaction,
         *,
         current_support: bool,
@@ -355,7 +355,7 @@ class FunctionalPyramidEffectCoordinator:
     def _changed_route_identities(
         self,
         *,
-        runtime: _RepositoryRuntime,
+        runtime: FunctionalPyramidRepositoryRuntime,
         pyramid_id: m.FunctionalPyramidId,
         proposed_version: m.FunctionalPyramidVersion,
         members: tuple[m.FunctionalPyramidMemberView, ...],
