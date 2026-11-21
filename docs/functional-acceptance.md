@@ -24,14 +24,14 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-14 | Cross-repository authority | `test_unavailable_member_is_distinct_from_unknown_context`; `test_rule_owner_uses_existing_authority_resolver` |
 | FA-15 | Authority graph defects | `test_authority_graph_defects_are_explicit` |
 | FA-16 | Route versus authority currency | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_support_status_and_presence` |
-| FA-17 | Normative create | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_unresolved_governance_is_retained_but_qualified_unverifiable` |
+| FA-17 | Normative create | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_mixed_answer_excludes_noncurrent_normative_conclusion` |
 | FA-18 | Descriptive create | `test_descriptive_recording_does_not_gain_route_support` |
 | FA-19 | Authority-content change | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_source_change_is_considered_not_forced_stale`; `test_authority_support_status_and_presence` |
 | FA-20 | Applicability change | `test_material_applicability_changes_change_route_identity`; `test_functional_route_support_distinguishes_route_states`; `test_governance_only_change_crosses_repository_boundary` |
 | FA-21 | Reverse authority navigation | `test_reverse_context_dependents_include_inheritance_closure` |
 | FA-22 | Cross-repository reconsideration | `test_governance_only_change_crosses_repository_boundary` |
 | FA-23 | Implementation change | `test_changed_path_maps_containment_direct_and_indirect`; `test_discovery_membership_change_is_direct` |
-| FA-24 | Mixed answer | `test_descriptive_answer_survives_unresolved_governing_route`; `test_unresolved_governance_is_retained_but_qualified_unverifiable` |
+| FA-24 | Mixed answer | `test_descriptive_answer_survives_unresolved_governing_route`; `test_mixed_answer_excludes_noncurrent_normative_conclusion`; `test_unresolved_governance_is_retained_but_qualified_unverifiable` |
 | FA-25 | Canonical-source singularity | `test_functional_pyramid_carries_references_not_governing_prose` |
 | FA-26 | Runtime lifecycle preservation | `test_three_tool_journey_and_restart`; `test_reconsider_record_succeeds_without_an_intervening_ask`; `test_challenge_raised_by_reconsider_is_settled_by_record` |
 | FA-27 | Governance-source edit lifecycle | `test_authority_source_change_is_considered_not_forced_stale`; `test_governance_only_change_crosses_repository_boundary`; `test_normative_confirm_reestablishes_changed_server_route_support` |
