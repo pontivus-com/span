@@ -304,6 +304,8 @@ class FunctionalPyramidMemberView:
         _require_non_empty(
             "FunctionalPyramidMemberView.repository_id", self.repository_id
         )
+        if not self.declaration_refs:
+            raise ValueError("FunctionalPyramidMemberView requires declaration refs")
         for ref in self.declaration_refs:
             if ref.repository_id != self.repository_id:
                 raise ValueError(
