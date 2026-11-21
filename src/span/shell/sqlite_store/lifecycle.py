@@ -1586,7 +1586,12 @@ class LifecycleStore:
                 " WHERE replay_expires_at IS NOT NULL AND replay_expires_at < ?",
                 (_timestamp(moment),),
             )
-            return contexts.rowcount + receipts.rowcount
+            pyramid_receipts = connection.execute(
+                "DELETE FROM functional_pyramid_receipts"
+                " WHERE replay_expires_at IS NOT NULL AND replay_expires_at < ?",
+                (_timestamp(moment),),
+            )
+            return contexts.rowcount + receipts.rowcount + pyramid_receipts.rowcount
 
     # -- transactional writers --------------------------------------------
 
