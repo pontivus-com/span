@@ -305,6 +305,19 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
         )
         self.assertEqual(first, third)
 
+        missing_authority = dict(authorities)
+        del missing_authority[("repo-b", "rules/rule-p1.md")]
+        unresolved_view, fourth = fp.resolve_functional_pyramid_route(
+            version=m.FunctionalPyramidVersion(4),
+            authority_bindings=missing_authority,
+            **{key: value for key, value in kwargs.items() if key != "authority_bindings"},
+        )
+        self.assertEqual(first, fourth)
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+            {item.reason for item in unresolved_view.unresolved},
+        )
+
     def test_wholly_outside_scope_is_resolved_empty_governance(self):
         members, declarations, authorities = _base_graph()
         view, _ = fp.resolve_functional_pyramid_route(
