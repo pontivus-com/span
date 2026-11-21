@@ -95,7 +95,13 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
     data_dir = Path(data_dir)
     if dry_run or not data_dir.is_dir():
         return None
-    databases = sorted(path for path in data_dir.glob("*.db") if path.is_file())
+    installation_db = data_dir / "installation" / "functional-pyramid.db"
+    databases = sorted(
+        [
+            *(path for path in data_dir.glob("*.db") if path.is_file()),
+            *([installation_db] if installation_db.is_file() else []),
+        ]
+    )
     if not databases:
         return None
     root = _backup_root(data_dir, backup_root)
@@ -108,11 +114,13 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
         artifacts = []
         absent = []
         for db in databases:
-            copied = destination / db.name
+            relative = db.relative_to(data_dir)
+            copied = destination / relative
+            copied.parent.mkdir(parents=True, exist_ok=True)
             copy_database(db, copied)
             artifacts.append(
                 BackupArtifact(
-                    path=db.name,
+                    path=str(relative),
                     sha256=sha256_file(copied),
                     size_bytes=copied.stat().st_size,
                     database=database_facts(copied),
@@ -297,7 +305,14 @@ def _assert_quiescent(data_dir):
     from span.shell.sqlite_ownership import StoreHeldError, exclusive_ownership
 
     with ExitStack() as stack:
-        for db in sorted(Path(data_dir).glob("*.db")):
+        installation_db = (
+            Path(data_dir) / "installation" / "functional-pyramid.db"
+        )
+        databases = [
+            *sorted(Path(data_dir).glob("*.db")),
+            *([installation_db] if installation_db.is_file() else []),
+        ]
+        for db in databases:
             try:
                 stack.enter_context(exclusive_ownership(db))
             except StoreHeldError as exc:
