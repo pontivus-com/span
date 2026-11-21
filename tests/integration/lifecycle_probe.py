@@ -99,9 +99,7 @@ async def _run(exe, repo, data_dir, repository_id):
                 "declaration_sources": [
                     {"locator": "docs/functional-pyramid.json", "ranges": []}
                 ],
-                "functional_scope": {
-                    "selectors": [{"kind": "PREFIX", "path": "src"}]
-                },
+                "functional_scope": {"selectors": [{"kind": "PREFIX", "path": "src"}]},
                 "coverage": "PARTIAL",
             }
             fp_status_before, fp_status_before_error = await _call(
