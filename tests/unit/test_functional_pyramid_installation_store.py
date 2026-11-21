@@ -6,7 +6,6 @@ import pathlib
 import tempfile
 import unittest
 
-from span.core import model as m
 from span.shell.install.recovery import create_backup, restore_backup, verify_backup
 from span.shell.install.repository_backup import create_repository_backup
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
