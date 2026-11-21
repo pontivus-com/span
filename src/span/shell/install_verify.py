@@ -12,7 +12,11 @@ import argparse
 import json
 import pathlib
 
-from span.shell.readiness import probe_store, probe_structural
+from span.shell.readiness import (
+    probe_functional_pyramid_installation_store,
+    probe_store,
+    probe_structural,
+)
 from span.shell.structural import canonical_root_from_config, repository_id_from_config
 
 
@@ -107,6 +111,9 @@ def main(argv=None):
                 "build_identity": _build_identity(),
                 "data_dir": str(data_dir),
                 "restart_required": True,
+                "functional_pyramid": probe_functional_pyramid_installation_store(
+                    data_dir
+                ),
                 "repos": repos,
             },
             sort_keys=True,
