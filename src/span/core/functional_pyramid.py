@@ -1140,7 +1140,6 @@ def _route_identity(
     contexts: tuple[FunctionalContextRoute, ...],
     rule_refs: tuple[FunctionalGraphRef, ...],
     rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    member_repositories: frozenset[str],
 ) -> FunctionalRouteIdentity:
     payload = {
         "surface": (
@@ -1195,7 +1194,16 @@ def _route_identity(
             for ref in rule_refs
             if (ref.repository_id, ref.identity) in rules
         ],
-        "members": sorted(member_repositories),
+        "members": sorted(
+            {surface.repository_id}
+            | {context.repository_id for context in contexts}
+            | {ref.repository_id for ref in rule_refs}
+            | {
+                rules[(ref.repository_id, ref.identity)].owner.repository_id
+                for ref in rule_refs
+                if (ref.repository_id, ref.identity) in rules
+            }
+        ),
     }
     encoded = _json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -1251,7 +1259,7 @@ def resolve_functional_pyramid_route(
             )
         )
         identity = _route_identity(
-            surface, semantic_scope, (), (), rules, member_repositories
+            surface, semantic_scope, (), (), rules
         )
         return (
             FunctionalPyramidView(
@@ -1521,7 +1529,6 @@ def resolve_functional_pyramid_route(
         tuple(context_routes),
         tuple(valid_rule_refs),
         rules,
-        member_repositories,
     )
     return (
         FunctionalPyramidView(
