@@ -24,6 +24,11 @@ _REPO_FILES = {
     "README.md": "# synth\n\nSynthetic repository.\n",
     "src/alpha.py": "VALUE = 1\n",
     "src/beta.py": "OTHER = 2\n",
+    "docs/functional-pyramid.json": (
+        '{"version":1,"contexts":[{"context_id":"ctx-runtime",'
+        '"coverage":[{"kind":"PREFIX","path":"src"}],"inherits":[],"rules":[]}],'
+        '"rules":[]}\n'
+    ),
 }
 
 _SOURCE_SET = ("src", "pyproject.toml", "README.md")
@@ -161,11 +166,16 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         data_dir.mkdir(parents=True, exist_ok=True)
         code = (
             "from span.shell.sqlite_store.lifecycle import LifecycleStore\n"
+            "from span.shell.sqlite_store.functional_pyramid import "
+            "ensure_functional_pyramid_installation_store\n"
             "from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION\n"
             f"store = LifecycleStore({str(data_dir / (repo.name + '.db'))!r},"
             " retention=DEFAULT_LIFECYCLE_RETENTION)\n"
             f"store.register_repository({repo.name!r}, {str(repo.resolve())!r})\n"
             "store.close()\n"
+            f"fp = ensure_functional_pyramid_installation_store({str(data_dir)!r}, "
+            "retention=DEFAULT_LIFECYCLE_RETENTION)\n"
+            "fp.close()\n"
         )
         created = _subprocess.run(
             [self.isolated_python, "-c", code],
@@ -219,6 +229,22 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertEqual(observed["found_kind"], "Answer")
         self.assertEqual(observed["statement"], "Alpha declares VALUE = 1.")
         self.assertEqual(observed["version"], 1)
+        self.assertFalse(observed["fp_status_before_error"])
+        self.assertEqual(observed["fp_status_before_kind"], "FunctionalPyramidStatus")
+        self.assertEqual(observed["fp_status_before_state"], "UNCONFIGURED")
+        self.assertFalse(observed["fp_candidate_error"])
+        self.assertEqual(observed["fp_candidate_kind"], "FunctionalPyramidCandidate")
+        self.assertTrue(observed["fp_activation_ready"])
+        self.assertFalse(observed["fp_activate_error"])
+        self.assertEqual(observed["fp_activate_kind"], "FunctionalPyramidRecorded")
+        self.assertFalse(observed["fp_status_after_error"])
+        self.assertEqual(observed["fp_status_after_state"], "ACTIVE")
+        self.assertEqual(observed["fp_status_after_health"], "VALID")
+        self.assertFalse(observed["fp_receipt_error"])
+        self.assertEqual(
+            observed["fp_receipt_kind"], "RetrievedFunctionalPyramidReceipt"
+        )
+        self.assertEqual(observed["fp_receipt_action"], "activate")
 
     def test_fresh_process_reuses_without_state(self):
         work = self.tmp / "reuse"
