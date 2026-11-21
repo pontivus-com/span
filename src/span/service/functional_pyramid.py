@@ -15,6 +15,7 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationPort,
     FunctionalPyramidRepositoryUnavailable,
     FunctionalPyramidStatePort,
+    FunctionalPyramidStateTransaction,
 )
 from span.ports.lifecycle import LifecycleAuthorityResolver
 
