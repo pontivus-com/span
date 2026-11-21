@@ -1646,8 +1646,8 @@ def resolve_functional_pyramid_route(
     )
     route_findings.extend(authority_findings)
 
-    valid_rule_keys = frozenset(
-        (ref.repository_id, ref.identity) for ref in valid_rule_refs
+    resolved_rule_keys = frozenset(
+        (ref.repository_id, ref.identity) for ref in resolved_rules
     )
     provenance = _provenance_projection(
         portions,
@@ -1658,7 +1658,7 @@ def resolve_functional_pyramid_route(
         member_repositories=member_repositories,
         available_repositories=available_repositories,
         resolved_context_keys=context_keys,
-        valid_rule_keys=valid_rule_keys,
+        valid_rule_keys=resolved_rule_keys,
     )
     relation = _scope_relation(provenance)
     unresolved = _ordered_findings(route_findings)
@@ -1674,7 +1674,7 @@ def resolve_functional_pyramid_route(
         status = FunctionalPyramidRouteStatus.RESOLVED
 
     identity = _route_identity(
-        surface, semantic_scope, context_routes, valid_rule_refs, rules
+        surface, semantic_scope, context_routes, resolved_rules, rules
     )
     return (
         FunctionalPyramidView(
