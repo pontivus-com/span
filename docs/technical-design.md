@@ -1587,6 +1587,11 @@ repository with actionable effects.
 **Authority:** F2–F4, F12; L4, L12–L15; FD-35–FD-48, FD-73, FD-79,
 FD-81, FD-85.
 
+The first Version-1 Beta package candidate is `1.0.0b1` (PEP 440) and its
+lifecycle store identity is schema 14. Later beta increments may advance the
+package version without changing schema identity when no persisted contract
+changes; any persisted-contract change requires a new explicit schema transition.
+
 Extend the existing explicit offline store-transition architecture from schema 13
 to schema 14. Runtime open remains exact-version only and never migrates in
 place.
