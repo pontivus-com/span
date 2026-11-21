@@ -230,24 +230,10 @@ def _receipt(
     return None if row is None else _decode_receipt(row)
 
 
-class FunctionalPyramidInstallationTransaction:
-    """One locked installation write across attached repository stores."""
+class _FunctionalPyramidInstallationReader:
+    """Shared read projection over installation-scoped Functional Pyramid state."""
 
-    def __init__(
-        self,
-        connection: _sqlite3.Connection,
-        aliases: tuple[tuple[str, str], ...],
-    ) -> None:
-        self._connection = connection
-        self._aliases = aliases
-
-    def _schema(self, repository_id: str) -> str:
-        for current, alias in self._aliases:
-            if current == repository_id:
-                return alias
-        raise FunctionalPyramidInstallationStoreError(
-            f"repository is not attached to this pyramid transaction: {repository_id}"
-        )
+    _connection: _sqlite3.Connection
 
     def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None:
         return _active_pyramid_id(self._connection, repository_id)
@@ -271,6 +257,26 @@ class FunctionalPyramidInstallationTransaction:
         self, request_id: m.RequestId
     ) -> m.RetrievedFunctionalPyramidReceipt | None:
         return _receipt(self._connection, request_id)
+
+
+class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationReader):
+    """One locked installation write across attached repository stores."""
+
+    def __init__(
+        self,
+        connection: _sqlite3.Connection,
+        aliases: tuple[tuple[str, str], ...],
+    ) -> None:
+        self._connection = connection
+        self._aliases = aliases
+
+    def _schema(self, repository_id: str) -> str:
+        for current, alias in self._aliases:
+            if current == repository_id:
+                return alias
+        raise FunctionalPyramidInstallationStoreError(
+            f"repository is not attached to this pyramid transaction: {repository_id}"
+        )
 
     def write_pyramid_version(
         self,
@@ -432,7 +438,7 @@ class FunctionalPyramidInstallationTransaction:
             )
 
 
-class FunctionalPyramidInstallationStore:
+class FunctionalPyramidInstallationStore(_FunctionalPyramidInstallationReader):
     """One installation-wide durable owner for Functional Pyramid state."""
 
     def __init__(
@@ -549,29 +555,6 @@ class FunctionalPyramidInstallationStore:
                 "Functional Pyramid installation store does not support atomic "
                 f"multi-database writes: journal_mode={mode}, synchronous={synchronous}"
             )
-
-    def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None:
-        return _active_pyramid_id(self._connection, repository_id)
-
-    def pyramid_version(
-        self, pyramid_id: m.FunctionalPyramidId
-    ) -> m.FunctionalPyramidVersion | None:
-        return _pyramid_version(self._connection, pyramid_id)
-
-    def pyramid_members(
-        self,
-        pyramid_id: m.FunctionalPyramidId,
-        version: m.FunctionalPyramidVersion | None = None,
-    ) -> tuple[m.FunctionalPyramidMemberView, ...]:
-        return _pyramid_members(self._connection, pyramid_id, version)
-
-    def is_excluded(self, repository_id: str) -> bool:
-        return _is_excluded(self._connection, repository_id)
-
-    def receipt(
-        self, request_id: m.RequestId
-    ) -> m.RetrievedFunctionalPyramidReceipt | None:
-        return _receipt(self._connection, request_id)
 
     @_contextlib.contextmanager
     def transaction(
