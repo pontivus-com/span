@@ -1293,6 +1293,15 @@ and `FunctionalRouteSupport`. Existing `EvidenceRequest`, `EvidenceRef`,
 `ChangedSurface`/`ChangedConclusion` and `InvestigationContextRef` remain
 their current owners and are reused.
 
+The public route projection uses the exact Layer-2 carriers
+`FunctionalContextRoute`, `FunctionalRuleRoute`,
+`FunctionalRouteProvenance`, `FunctionalPyramidFinding`,
+`FunctionalPyramidValidationFinding`, `FunctionalPyramidView` and
+`FunctionalPyramidUnavailable`; their field sets are not re-decided in the
+wire/shell layer. Declaration carriers remain distinct from resolved route
+carriers: declarations hold repository-owned references, while resolved rule
+routes reuse the existing `AuthorityBinding`.
+
 The new support union gains exactly one branch:
 `FunctionalRouteSupport`. Its canonical payload contains the repository whose
 semantic conclusion owns the dependency, the Functional Pyramid identity that
