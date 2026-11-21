@@ -298,6 +298,180 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             ["rule-p0", "rule-p1", "rule-p3", "rule-p4"],
         )
 
+    def test_degraded_health_recovers_without_participation_change(self):
+        members, declarations, _ = _base_graph()
+
+        degraded, degraded_findings = fp.evaluate_functional_pyramid_health(
+            members,
+            declarations,
+            frozenset({"repo-a"}),
+        )
+        recovered, recovered_findings = fp.evaluate_functional_pyramid_health(
+            members,
+            declarations,
+            frozenset({"repo-a", "repo-b"}),
+        )
+
+        self.assertEqual(degraded, m.FunctionalPyramidHealth.DEGRADED)
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            {item.reason for item in degraded_findings},
+        )
+        self.assertEqual(recovered, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(recovered_findings, ())
+        self.assertEqual(tuple(member.repository_id for member in members), ("repo-a", "repo-b"))
+
+    def test_one_context_can_cover_disconnected_paths(self):
+        member = _member(
+            "repo-a",
+            scope=_scope(_selector(m.FunctionalScopeSelectorKind.REPOSITORY)),
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-disconnected",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py"),
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "docs/b.md"),
+                    ),
+                ),
+            ),
+        )
+
+        for path in ("src/a.py", "docs/b.md"):
+            with self.subTest(path=path):
+                view, _ = fp.resolve_functional_pyramid_route(
+                    pyramid_id=m.FunctionalPyramidId("fp-disconnected"),
+                    version=m.FunctionalPyramidVersion(1),
+                    members=(member,),
+                    surface=m.SurfaceKey("repo-a", m.SurfaceKind.FILE, path),
+                    semantic_scope=m.EvidenceScope(paths=(path,)),
+                    declarations=(("repo-a", declaration),),
+                    available_repositories=frozenset({"repo-a"}),
+                    authority_bindings={},
+                )
+                self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+                self.assertEqual(
+                    tuple(context.context_id for context in view.contexts),
+                    ("ctx-disconnected",),
+                )
+
+    def test_authority_graph_defects_are_explicit(self):
+        members = (
+            _member(
+                "repo-a",
+                scope=_scope(_selector(m.FunctionalScopeSelectorKind.REPOSITORY)),
+            ),
+            _member(
+                "repo-b",
+                scope=_scope(_selector(m.FunctionalScopeSelectorKind.REPOSITORY)),
+            ),
+        )
+        repo_a = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-duplicate",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py")
+                    ),
+                ),
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-cycle-a",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/b.py")
+                    ),
+                    inherits=(_graph_ref("repo-a", "ctx-cycle-b"),),
+                ),
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-cycle-b",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/c.py")
+                    ),
+                    inherits=(_graph_ref("repo-a", "ctx-cycle-a"),),
+                ),
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-unknown-rule",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/d.py")
+                    ),
+                    rules=(_graph_ref("repo-a", "missing-rule"),),
+                ),
+            ),
+            rules=(
+                _rule(
+                    "repo-a",
+                    "rule-duplicate",
+                    m.FunctionalPyramidLayer.P0,
+                    ("ROOT",),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-no-parent",
+                    m.FunctionalPyramidLayer.P1,
+                    (),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-invalid-root",
+                    m.FunctionalPyramidLayer.P1,
+                    ("ROOT",),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-cycle-a",
+                    m.FunctionalPyramidLayer.P2S,
+                    (_graph_ref("repo-a", "rule-cycle-b"),),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-cycle-b",
+                    m.FunctionalPyramidLayer.P2S,
+                    (_graph_ref("repo-a", "rule-cycle-a"),),
+                ),
+            ),
+        )
+        repo_b = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-duplicate",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "other/a.py")
+                    ),
+                ),
+            ),
+            rules=(
+                _rule(
+                    "repo-b",
+                    "rule-duplicate",
+                    m.FunctionalPyramidLayer.P0,
+                    ("ROOT",),
+                ),
+            ),
+        )
+
+        health, findings = fp.evaluate_functional_pyramid_health(
+            members,
+            (("repo-a", repo_a), ("repo-b", repo_b)),
+            frozenset({"repo-a", "repo-b"}),
+        )
+        reasons = {item.reason for item in findings}
+
+        self.assertEqual(health, m.FunctionalPyramidHealth.DEGRADED)
+        self.assertTrue(
+            {
+                m.FunctionalPyramidFindingReason.UNKNOWN_RULE,
+                m.FunctionalPyramidFindingReason.DUPLICATE_RULE_OWNER,
+                m.FunctionalPyramidFindingReason.CONTEXT_CYCLE,
+                m.FunctionalPyramidFindingReason.RULE_CYCLE,
+                m.FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                m.FunctionalPyramidFindingReason.UNRESOLVED_RULE_PARENT,
+            }
+            <= reasons
+        )
+
     def test_route_identity_ignores_instance_version_and_unrelated_member(self):
         members, declarations, authorities = _base_graph()
         kwargs = dict(
