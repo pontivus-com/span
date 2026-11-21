@@ -197,7 +197,9 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(
             by_surface["src/b.py"].conclusions[0].expected_version.value, 1
         )
-        context = self.store.get_context(result.reestablishment_contexts[0].context_id.value)
+        context = self.store.get_context(
+            result.reestablishment_contexts[0].context_id.value
+        )
         self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
         self.assertEqual(
             context.scope,
@@ -552,10 +554,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             m.SupportState.REASSESSMENT_REQUIRED,
         )
         self.assertEqual(
-            tuple(
-                context.repository_id
-                for context in result.reestablishment_contexts
-            ),
+            tuple(context.repository_id for context in result.reestablishment_contexts),
             ("repo-2",),
         )
         self.assertEqual(
@@ -697,7 +696,9 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertIn(m.ChangeReason.DIRECT, changed.reasons)
         self.assertTrue(
-            self.store.has_admitted_discovery(result.reestablishment_contexts[0].context_id.value, "disc-1")
+            self.store.has_admitted_discovery(
+                result.reestablishment_contexts[0].context_id.value, "disc-1"
+            )
         )
 
     def test_refs_only_discovery_tracks_only_the_referenced_changed_path(self):
