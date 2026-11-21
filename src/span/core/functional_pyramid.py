@@ -11,6 +11,7 @@ from span.core.model.functional_pyramid import (
     FunctionalContextDeclaration,
     FunctionalContextRoute,
     FunctionalGraphRef,
+    FunctionalPyramidBootstrap,
     FunctionalPyramidCoverage,
     FunctionalPyramidDeclaration,
     FunctionalPyramidFinding,
@@ -33,7 +34,7 @@ from span.core.model.functional_pyramid import (
     FunctionalScopeSelectorKind,
 )
 from span.core.model.investigation import EvidenceRequest, SourceRange
-from span.core.model.primitives import AuthorityBinding, EvidenceRef, EvidenceScope
+from span.core.model.primitives import AuthorityBinding, EvidenceScope
 from span.core.model.surfaces import SurfaceKey, SurfaceKind
 
 _KIND_ORDER = (
@@ -295,9 +296,8 @@ def _decode_evidence_request(value: object) -> EvidenceRequest:
     )
 
 
-def decode_functional_pyramid_bootstrap(text: str):
+def decode_functional_pyramid_bootstrap(text: str) -> FunctionalPyramidBootstrap:
     """Decode the optional navigation bootstrap into the canonical carrier."""
-    from span.core.model.functional_pyramid import FunctionalPyramidBootstrap
 
     try:
         value = _json.loads(text)
@@ -901,7 +901,7 @@ def _context_direct_refs(
 ) -> tuple[FunctionalGraphRef, ...]:
     refs: list[FunctionalGraphRef] = []
     for (owner_repository, context_id), context in contexts.items():
-        if owner_repository != repository_id or context_id in duplicate_contexts:
+        if owner_repository != repository_id:
             continue
         if any(
             functional_scope_selector_intersects(selector, coverage)
@@ -1170,7 +1170,6 @@ def _route_identity(
             "refs": [
                 (
                     ref.repository_id,
-                    ref.evidence_id.value,
                     ref.locator,
                     ref.section_or_span,
                 )
