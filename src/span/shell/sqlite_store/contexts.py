@@ -9,7 +9,6 @@ import sqlite3 as _sqlite3
 
 from span.core import model as m
 
-
 _SCHEMA_NAME = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
