@@ -992,9 +992,7 @@ class AnswerService:
         if _encoded_size(candidate) > limit and source_pointers:
             omitted.extend(pointer.locator for pointer in source_pointers)
             source_pointers.clear()
-            recovery += (
-                "; request omitted source pointers directly with EvidenceRequest"
-            )
+            recovery += "; omitted pointers: EvidenceRequest"
             candidate = _dataclasses.replace(
                 candidate,
                 source_pointers=(),
