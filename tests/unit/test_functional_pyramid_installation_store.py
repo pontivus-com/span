@@ -322,17 +322,15 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
 
             self.assertEqual(len(successes), 1)
             self.assertEqual(len(failures), 1)
-            self.assertIsInstance(
-                failures[0], FunctionalPyramidInstallationStoreError
-            )
+            self.assertIsInstance(failures[0], FunctionalPyramidInstallationStoreError)
             active = stores[0].active_pyramid_id("repo")
             self.assertIsNotNone(active)
             assert active is not None
             self.assertEqual(active.value, successes[0])
             self.assertEqual(
-                stores[0]._connection.execute(
-                    "SELECT COUNT(*) FROM functional_pyramids"
-                ).fetchone()[0],
+                stores[0]
+                ._connection.execute("SELECT COUNT(*) FROM functional_pyramids")
+                .fetchone()[0],
                 1,
             )
 
