@@ -1517,85 +1517,105 @@ branch. FD-15/FD-16 remain the sole combined-state owner.
 **Authority:** A1–A3; F3, F12; L4, L13–L15; FD-3–FD-4, FD-43–FD-48,
 FD-61, FD-82, FD-85.
 
-Keep the existing SQLite `LifecycleStore` as the installation transaction
-owner. It already owns all registered repositories in one database and provides
-the `BEGIN IMMEDIATE` serialization boundary; do not create one database/store
-per pyramid and do not select a member repository as coordinator.
+The existing `LifecycleStore` is repository-scoped: the shell opens
+`<data_dir>/<repository_id>.db` and ordinary semantic/audit state remains owned
+there. Version 1 must not pretend that one of those files is installation-wide
+or select one member repository as the Functional Pyramid coordinator.
 
-Advance the active lifecycle store from schema 13 to schema 14.
-Retain every schema-13 table and add exactly these installation-level tables/
-projections:
+Add one installation-scoped SQLite owner,
+`FunctionalPyramidInstallationStore`, at
+`<data_dir>/installation/functional-pyramid.db`. It is the sole durable owner
+of Functional Pyramid participation, instance versions, exclusions and
+installation-scoped receipts. It stores no ordinary understanding, source
+observation, verification or repository-owned governing prose.
 
-| table | key / purpose |
+Repository lifecycle schema 14 retains every schema-13 table and adds only the
+repository-local derived route lookup projection:
+
+| repository-store table | key / purpose |
+| --- | --- |
+| `functional_route_dependency_index` | conclusion revision key + `pyramid_id` + owning `repository_id` + route identity; derived lookup projection over canonical FunctionalRouteSupport |
+
+The installation store has its own schema identity, version 1, and owns exactly:
+
+| installation-store table | key / purpose |
 | --- | --- |
 | `functional_pyramids` | `pyramid_id PRIMARY KEY`, current live version; row exists only for a live ACTIVE instance |
 | `functional_pyramid_versions` | `(pyramid_id, version) PRIMARY KEY`; immutable canonical complete member intent + digest/commit time |
 | `functional_pyramid_active_members` | `repository_id PRIMARY KEY`; current `pyramid_id`, version and canonical member intent projection; this key enforces one ACTIVE instance per repository |
 | `functional_pyramid_exclusions` | `repository_id PRIMARY KEY`; explicit EXCLUDED state; absence from both active-members and exclusions means registered repository state UNCONFIGURED |
 | `functional_pyramid_receipts` | `request_id PRIMARY KEY`; digest, action, commit/replay times, pyramid/version, resulting members, participation effects and immutable dependent-effect refs |
-| `functional_route_dependency_index` | conclusion revision key + `pyramid_id` + owning `repository_id` + route identity; derived relational projection for locating governed revisions |
 
-`functional_pyramid_active_members.repository_id` and
-`functional_pyramid_exclusions.repository_id` are mutually exclusive by the
-single participation-write transaction; service/store invariant verification
-rejects any impossible overlap. Active-member rows reference registered
-repositories and the current immutable pyramid version.
+Repository registration/root/authority configuration remains owned by each
+repository LifecycleStore and the installed repository routing configuration;
+the installation store does not duplicate that configuration. Candidate/write
+service composition revalidates member registration before committing an
+installation record.
 
-Canonical `FunctionalRouteSupport` remains inside the conclusion's existing
-canonical support dependency set. Extend the existing `support_dependencies`
-projection with dependency kind `FUNCTIONAL_ROUTE`; its `dependency_ref` is
-the canonical route identity. `functional_route_dependency_index` is only the
-additional cross-pyramid lookup projection needed to select route-supported
-revisions by pyramid/repository without encoding a second support model.
-
-Durable explicit EXCLUDED state is stored only in
-`functional_pyramid_exclusions`; registered repositories with no ACTIVE binding
-or exclusion are UNCONFIGURED.
+Canonical `FunctionalRouteSupport` remains inside each conclusion's existing
+canonical support dependency set. Repository schema 14 extends the existing
+`support_dependencies` projection with dependency kind `FUNCTIONAL_ROUTE`;
+its `dependency_ref` is the canonical route identity.
+`functional_route_dependency_index` is only a rebuildable repository-local
+lookup projection and never a second support model.
 
 The immutable Functional Pyramid receipt stores the canonical write digest,
 action, committed time, affected pyramid/version, resulting ACTIVE member set,
 actual durable participation changes, and immutable semantic dependent-effect
 coordinates. It does not store live support qualification, health or
-investigation-context liveness. Public `RetrievedFunctionalPyramidReceipt`
-projects this exact acceptance.
+investigation-context liveness. Public
+`RetrievedFunctionalPyramidReceipt` projects this exact acceptance.
 
-Functional Pyramid receipt decision is the same algorithm as ordinary receipt
-decision but in its own key namespace: same request ID + same canonical content
-is replay; same ID + different content is conflict. Reuse the core receipt
-decision/digest utilities through a namespace-neutral helper rather than copying
-the algorithm or coercing the installation write into `RecordingIdentity`.
+Functional Pyramid receipt decision uses the same core replay/conflict algorithm
+as ordinary recording but the installation store owns its distinct request-id
+namespace. Do not coerce the write into `RecordingIdentity`.
 
-**Atomic participation writes.** Add one store transaction operation for each
-accepted Functional Pyramid write family, composed through one service command
-owner. ACTIVATE/REVISE/DEACTIVATE transactionally:
+**Atomic cross-repository participation writes.** The installation store opens
+its real file as SQLite `main` and ATTACHes the affected repository lifecycle
+databases under generated internal schema aliases. The transaction is permitted
+only when the installation database and every attached repository database use a
+rollback-journal mode that preserves SQLite multi-database atomicity; WAL/OFF/
+MEMORY journal modes or `synchronous=OFF` are explicit operational blockers,
+never silently downgraded at runtime. Installation/provisioning establishes the
+supported rollback-journal configuration.
 
-1. re-check receipt/replay;
-2. re-check target version where applicable;
-3. re-check unique ACTIVE membership;
-4. persist the new immutable pyramid version/current member projection and
-   participation effects;
-5. persist the immutable semantic dependent-effect references derived before
-   commit;
-6. issue the initial per-repository re-establishment contexts in the same
-   database transaction when actionable effects exist;
-7. persist the Functional Pyramid receipt.
+Use one `BEGIN IMMEDIATE` transaction across `main` plus all affected
+attached repository databases. This acquires the write reservation before
+effect computation, so ordinary repository writers cannot change semantic state
+between the accepted effect decision and commit. The service-owned shared effect
+engine runs while those locks are held; shell SQL does not classify effects.
 
-Thus a context-issuance failure cannot erase or ambiguously follow an already
-committed participation write. EXCLUDE performs the same receipt/participation
-transaction without active-route dependent effects.
+ACTIVATE/REVISE/DEACTIVATE then commit atomically:
 
-A replay returns the retained immutable participation acceptance and
-`dependent_effect_refs`. Service composition then re-evaluates only those
-retained `ConclusionRevisionRef` identities against current support/membership
-state to build the live `ChangedSurface` projection. Revisions that are no
-longer actionable are omitted; no later governance change may add a ref that was
-not in the accepted receipt. Fresh repository-bound contexts are issued only for
-the currently actionable retained refs. This live projection is not a new write
-and never mutates the receipt.
+1. installation receipt replay/conflict decision;
+2. target pyramid CAS and unique-ACTIVE-member checks;
+3. current dependent-effect calculation against the locked repository stores;
+4. immutable pyramid version/current membership and participation effects;
+5. immutable dependent-effect refs in the installation receipt;
+6. initial repository-bound re-establishment contexts in the affected attached
+   repository stores; and
+7. the installation receipt.
 
-Concurrent REVISE/DEACTIVATE use pyramid-version compare-and-set. Concurrent
-ACTIVATE/REVISE transactions serialize on the same SQLite writer and the unique
-ACTIVE-member projection; exactly one overlapping activation can commit.
+The context row writer is factored from the existing LifecycleStore persistence
+mechanism and reused for both ordinary and attached-database context creation;
+there is no second context format or writer rule. A context-issuance failure
+rolls back the entire multi-database transaction.
+
+EXCLUDE uses the same installation receipt/participation transaction but has no
+active-route semantic effects and therefore need not attach repository stores
+for effect/context writes after registration/state validation.
+
+Replay keeps the immutable accepted effect refs. Service composition re-evaluates
+only those retained refs against current repository support/membership and
+issues fresh repository-bound contexts when they remain actionable; it never
+adds later effects to the accepted receipt.
+
+Concurrent REVISE/DEACTIVATE use pyramid-version CAS. Concurrent
+ACTIVATE/REVISE serialize on the installation store and the unique ACTIVE-member
+key; affected repository databases are locked in deterministic repository-id
+order before effect computation. SQLite ATTACH capacity is an operational
+environment limit: inability to attach the required member set returns
+Unavailable and never changes product semantics or partially commits.
 
 ### 20. Operation composition and governance-change propagation
 
@@ -1729,14 +1749,18 @@ Later beta increments may advance the release/package version without changing
 schema identity when no persisted contract changes; any persisted-contract
 change requires a new explicit schema transition.
 
-Extend the existing explicit offline store-transition architecture from schema 13
-to schema 14. Runtime open remains exact-version only and never migrates in
-place.
+Extend the existing explicit offline repository-store transition from schema
+13 to repository schema 14. Runtime open remains exact-version only and never
+migrates in place. The explicit installer/transition path also creates or
+verifies the installation Functional Pyramid store at
+`<data_dir>/installation/functional-pyramid.db` with installation schema 1;
+pure runtime `ask` never creates or migrates it.
 
-The schema-13 → schema-14 transition preserves every existing semantic/audit row
-and receipt exactly under the existing mapping rules, then creates empty
-Functional Pyramid installation tables/projections. Existing registered
-repositories begin UNCONFIGURED because registration is not participation.
+The repository schema-13 → schema-14 transition preserves every existing
+semantic/audit row and receipt exactly and adds the empty derived
+`functional_route_dependency_index`. The installation store begins with empty
+pyramid/version/member/exclusion/receipt state. Existing registered repositories
+therefore begin UNCONFIGURED because registration is not participation.
 Historical and current NORMATIVE revisions are **not** backfilled with invented
 FunctionalRouteSupport.
 
@@ -1750,11 +1774,15 @@ The transition verifies:
 
 - every pre-existing semantic/audit count and reference under the current
   schema-13 preservation rules;
-- empty initial pyramid/member/receipt state;
-- no FunctionalRouteSupport fabricated for existing revisions;
-- unique ACTIVE-member constraint present;
-- ordinary repository receipts remain in their original namespace;
-- installation Functional Pyramid receipts are empty and independently keyed.
+- repository schema-14 route index exists and is empty after transition;
+- installation schema-1 pyramid/member/exclusion/receipt state is empty;
+- no FunctionalRouteSupport is fabricated for existing revisions;
+- installation-store unique ACTIVE-member constraint is present;
+- ordinary repository receipts remain in their original per-repository namespace;
+- installation Functional Pyramid receipts are independently keyed;
+- full data-directory backup/restore includes the installation database, while
+  repository-portable backups continue to contain only that repository's
+  lifecycle store and never claim to carry cross-repository participation state.
 
 Existing archive/stage/verify/activate/rollback ownership remains unchanged.
 
