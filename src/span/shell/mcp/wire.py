@@ -144,8 +144,17 @@ def _embedded_repository(request: object) -> str | None:
     if isinstance(bound, str) and bound:
         return bound
     if isinstance(request, m.AskRequest):
-        if request.selector is not None:
-            return request.selector.repository_id
+        selector = request.selector
+        if isinstance(
+            selector,
+            (
+                m.RecordedQuestionSelector,
+                m.CurrentUnderstandingSelector,
+                m.UnderstandingSnapshotSelector,
+                m.ReceiptRetrievalSelector,
+            ),
+        ):
+            return selector.repository_id
         if request.continuation is not None:
             return decode_continuation(request.continuation).repository_id
     direct = getattr(request, "repository_id", None)
