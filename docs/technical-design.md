@@ -1348,9 +1348,14 @@ inferring absence from current inventory. Set difference need only return
 empty/non-empty plus the uncovered member selectors/provenance needed by FD-86;
 it does not invent complement globs.
 
-The resolver never converts an `EvidenceScope` into a second selector grammar.
-One pure adapter evaluates the already-fixed semantic EvidenceScope against this
-selector algebra and produces the FD-62 relation/provenance.
+The resolver never converts an `EvidenceScope` into a second public selector
+grammar. One pure adapter consumes the already-fixed semantic `SurfaceKey` and
+`EvidenceScope`: FILE/SYMBOL owner kind supplies exact granularity; SERVICE/
+DOMAIN uses the scope's path members as broad prefix boundaries; an empty scope
+for a repository-wide selection is the whole repository. This adapter evaluates
+that semantic selection against FunctionalScope algebra and produces the FD-62
+relation/provenance. It never uses extensions, filesystem existence or inventory
+to decide granularity.
 
 **Declarations and bootstrap.** Add the canonical domain carriers in
 `src/span/core/model/functional_pyramid.py`, the pure resolver/algebra in
@@ -1433,8 +1438,13 @@ Add one pure Functional Pyramid resolver in `src/span/core/` with service
 orchestration in `src/span/service/`. It accepts:
 
 1. one ACTIVE instance/member view;
-2. the fixed semantic `EvidenceScope`;
+2. the existing semantic owner `SurfaceKey` plus its fixed `EvidenceScope`;
 3. strict-decoded declarations/member availability.
+
+`SurfaceKey` is not copied into FunctionalRouteSupport: a retained conclusion
+already has one owning surface under FD-6, so support re-evaluation recovers that
+canonical owner from the retained understanding and combines it with the
+dependency's persisted semantic EvidenceScope.
 
 It returns the canonical governing projection and route identity. Resolution
 order is exactly FD-62/FD-68: compute the semantic-scope relation to
