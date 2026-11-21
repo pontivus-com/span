@@ -1,4 +1,4 @@
-"""Schema-13 lifecycle store.
+"""Schema-14 lifecycle store.
 
 This is the replacement store boundary for the 0.10 lifecycle: canonical
 contexts, understanding versions, conclusion revisions, challenges,
@@ -1655,6 +1655,20 @@ class LifecycleStore:
                         dependency_ref,
                     ),
                 )
+            for route in _functional_route_rows(revision):
+                connection.execute(
+                    "INSERT INTO functional_route_dependency_index"
+                    "(understanding_id, conclusion_id, revision, pyramid_id,"
+                    " repository_id, route_identity) VALUES(?,?,?,?,?,?)",
+                    (
+                        revision.understanding_id.value,
+                        revision.conclusion_id.value,
+                        revision.revision.value,
+                        route.pyramid_id.value,
+                        route.repository_id,
+                        route.route_identity.value,
+                    ),
+                )
         for ref in version.conclusions:
             connection.execute(
                 "INSERT OR REPLACE INTO understanding_membership"
@@ -1734,6 +1748,17 @@ def _observation_from_row(row: _sqlite3.Row) -> SourceObservationRecord:
 
 def _context_from_json(payload: str) -> m.InvestigationContext:
     return m.from_canonical(m.InvestigationContext, _json.loads(payload))
+
+
+def _functional_route_rows(
+    revision: m.ConclusionRevision,
+) -> tuple[m.FunctionalRouteSupport, ...]:
+    """Derive schema-14 route-index rows from canonical support only."""
+    return tuple(
+        dependency
+        for dependency in revision.content.support
+        if isinstance(dependency, m.FunctionalRouteSupport)
+    )
 
 
 def _support_rows(
