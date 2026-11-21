@@ -1350,12 +1350,18 @@ it does not invent complement globs.
 
 The resolver never converts an `EvidenceScope` into a second public selector
 grammar. One pure adapter consumes the already-fixed semantic `SurfaceKey` and
-`EvidenceScope`: FILE/SYMBOL owner kind supplies exact granularity; SERVICE/
-DOMAIN uses the scope's path members as broad prefix boundaries; an empty scope
-for a repository-wide selection is the whole repository. This adapter evaluates
-that semantic selection against FunctionalScope algebra and produces the FD-62
-relation/provenance. It never uses extensions, filesystem existence or inventory
-to decide granularity.
+`EvidenceScope`: FILE/SYMBOL owner kind supplies exact granularity; for
+SERVICE/DOMAIN, each scope path member is interpreted through the existing
+canonical semantic-containment owner—`containment.surface_file_locator` marks a
+canonical structural symbol locator as an exact SYMBOL member and every other
+path member remains a broad PREFIX boundary. A cold SERVICE/DOMAIN surface
+projection constructs that EvidenceScope from both declared
+`SurfaceBoundary.paths` and `SurfaceBoundary.symbols`. Only an explicitly
+repository-wide semantic selection uses empty EvidenceScope as the whole
+repository; an empty declared surface boundary is invalid/unresolvable rather
+than repository-wide. This adapter evaluates that semantic selection against
+FunctionalScope algebra and produces the FD-62 relation/provenance. It never uses
+extensions, filesystem existence or inventory to decide granularity.
 
 **Declarations and bootstrap.** Add the canonical domain carriers in
 `src/span/core/model/functional_pyramid.py`, the pure resolver/algebra in
