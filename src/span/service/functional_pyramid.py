@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import typing as _typing
+
 from span.core import functional_pyramid as _fp
 from span.core import model as m
 from span.ports.functional_pyramid import (
