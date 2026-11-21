@@ -97,15 +97,19 @@ The Functional Pyramid is a governance graph, not a semantic surface hierarchy.
 Its resolution is deterministic and uses only explicit declarations. Semantic
 surface ownership continues to follow FD-1–FD-8.
 
-**FD-61 — Participation is explicit and distinct from registration.**
+**FD-61 — Participation is explicit and distinct from registration and health.**
 A registered repository is `UNCONFIGURED` until Functional Pyramid lifecycle
 state says otherwise. `EXCLUDED` is an explicit non-participation decision.
-`ACTIVE` and `DEGRADED` mean the repository belongs to one explicit,
-versioned Functional Pyramid instance. Repository installation, co-location,
-imports, directory nesting or host registration never imply participation.
-Surface obtain projects the durable participation state rather than using absence
-or `None` to conflate unconfigured and excluded repositories. *(G4, G7, G8,
-F11, F12, L12, L13)*
+`ACTIVE` means the repository belongs to one explicit, versioned Functional
+Pyramid instance. Those are the only durable participation states. Repository
+installation, co-location, imports, directory nesting or host registration never
+imply participation.
+
+An ACTIVE pyramid's present health is computed independently as
+`VALID | DEGRADED`; evaluating health never performs a participation-state
+write. Surface obtain projects UNCONFIGURED/EXCLUDED explicitly and projects
+ACTIVE together with current health rather than using absence or `None` to
+conflate states. *(G4, G7, G8, F11, F12, L12, L13)*
 
 **FD-62 — Scope matching is deterministic and repository-relative.**
 The effective semantic scope is normalized before Functional Pyramid matching.
@@ -316,22 +320,21 @@ ACTIVE/DEGRADED Functional Pyramid instance at a time so ordinary repository-
 scoped `ask` has one unambiguous governing instance. *(G8, A3, F12, L13, L14)*
 
 **FD-83 — Participation-state transitions are closed.**
-The durable states are exactly `UNCONFIGURED`, `EXCLUDED`, `ACTIVE` and
-`DEGRADED`, with the transitions in lifecycle §7.1.
+The durable states are exactly `UNCONFIGURED`, `EXCLUDED` and `ACTIVE`, with
+the transitions in lifecycle §7.1.
 
 - candidate validation never changes durable state;
 - failed activation/revision leaves the prior durable state/version unchanged;
 - successful activation moves UNCONFIGURED/EXCLUDED members to ACTIVE;
 - successful revision keeps retained members ACTIVE and makes removed members
   EXCLUDED;
-- structural loss in an active graph moves affected instance state to DEGRADED;
-- restoration of the same graph or a valid repair revision moves DEGRADED to
-  ACTIVE;
 - deactivation moves every member to EXCLUDED.
 
-No filesystem/installer/model event creates another transition. Authority
-content/status change alone does not make graph topology DEGRADED when all
-declared identities/edges remain resolvable. *(G1, G8, F12, L13, L14)*
+No source, filesystem, installer, model, `ask`, `reconsider` or hook event
+creates another durable transition. For ACTIVE participation, structural
+availability/validity is instead evaluated as live `VALID | DEGRADED` health.
+The same active version can move between those health results as current
+repository state changes without a write. *(G1, G8, F12, L13, L14)*
 
 **FD-84 — Candidate validation is pure, deterministic and complete.**
 For one member intent and present repository state, validation returns the same
@@ -360,8 +363,8 @@ applicable declared context returns `UNCOVERED_PATH` while the instance may
 remain ACTIVE. `COMPLETE` is an owner-supplied claim that functional migration
 is complete; Span does not infer that claim from repository inventory. If a
 selected functional scope in a COMPLETE member has no applicable context, the
-route returns `UNCOVERED_PATH` and the instance becomes DEGRADED until the
-coverage claim or declarations are corrected. Process/evidence/support files are
+route returns `UNCOVERED_PATH` and ACTIVE pyramid health is `DEGRADED` until
+the coverage claim or declarations are corrected. Process/evidence/support files are
 not automatically functional scope merely because they exist. *(G1, G4, G8,
 F11, F12, L13)*
 
@@ -397,13 +400,14 @@ that scope or select governing documents. The view returns references to every
 declared rule applicable through that scope, regardless of which document genre
 owns each rule. *(G4, G6, G7, F9, F11, L12, L16)*
 
-**FD-91 — Participation state and route/support state remain independent.**
-An ACTIVE/PARTIAL instance can return an `UNCOVERED_PATH` route without
-becoming DEGRADED. A DEGRADED instance can still return RESOLVED routes for
-unaffected scopes. A structurally RESOLVED route can still yield non-current
-normative support because an applicable authority is draft, superseded,
-unavailable or changed under FD-12. No one state is used as a shortcut for the
-other two planes. *(G1, F1, F2, F12, L13, L16)*
+**FD-91 — Participation, health, route and support state remain independent.**
+An ACTIVE/PARTIAL instance can return an `UNCOVERED_PATH` route while its live
+health remains VALID. An ACTIVE pyramid with DEGRADED health can still return
+RESOLVED routes for unaffected scopes. A structurally RESOLVED route can still
+yield non-current normative support because an applicable authority is draft,
+superseded, unavailable or changed under FD-12. Durable participation, live
+pyramid health, per-scope route resolution and conclusion support are never used
+as shortcuts for one another. *(G1, F1, F2, F12, L13, L16)*
 
 **FD-92 — Functional Pyramid status/candidate projection is lifecycle data, not
 semantic understanding.**
@@ -424,9 +428,9 @@ F12, L4, L8, L14)*
 **FD-94 — Lifecycle notices reflect participation without becoming governance.**
 For a registered UNCONFIGURED repository, the session notice directs the agent to
 the Functional Pyramid initialization skill/status path; EXCLUDED is quiet about
-initialization unless explicitly requested. ACTIVE uses ordinary governed-work
-guidance. DEGRADED reports governance attention and the next public lifecycle
-action. Change notices use canonical cross-repository reconsideration results.
+initialization unless explicitly requested. ACTIVE/VALID uses ordinary
+governed-work guidance. ACTIVE/DEGRADED reports governance attention and the next
+public lifecycle action. Change notices use canonical cross-repository reconsideration results.
 Hooks never activate/revise a pyramid, author rule meaning, copy rule content,
 or make support current. *(G8, A4, F5, F10, F12, L13–L16)*
 
@@ -496,8 +500,8 @@ scope is operationally impossible, support is `UNVERIFIABLE`. If its complete
 route-support identity differs from the recorded identity, support is
 `REASSESSMENT_REQUIRED`. If that route contains an unresolved branch, support
 is `UNVERIFIABLE`. Only the same complete resolved route is `CURRENT`.
-A DEGRADED instance does not by itself invalidate an unrelated scope whose route
-still resolves identically. Applicable authority content/status is checked
+DEGRADED live health does not by itself invalidate an unrelated scope whose
+route still resolves identically. Applicable authority content/status is checked
 separately by FD-12. *(F2, F11, F12, L13, L15)*
 
 ## 6. Change propagation
@@ -992,13 +996,15 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
    complete member intent; removed members become EXCLUDED and retained members
    preserve the pyramid identity with a new version.
 5. **Partial coverage.** ACTIVE/PARTIAL scope outside declared contexts returns
-   `UNCOVERED_PATH` without degrading unrelated covered routes or the instance.
+   `UNCOVERED_PATH` without degrading unrelated covered routes or live pyramid
+   health.
 6. **Complete-coverage contradiction.** An uncovered selected functional scope
-   in a COMPLETE member returns `UNCOVERED_PATH` and moves the instance to
-   DEGRADED until corrected.
-7. **Degraded recovery.** Member/declaration/structural unavailability moves an
-   ACTIVE instance to DEGRADED; unaffected routes can still resolve; restoring
-   the graph or committing a valid repair returns ACTIVE.
+   in a COMPLETE member returns `UNCOVERED_PATH` and ACTIVE health is
+   DEGRADED until corrected; participation/version does not mutate.
+7. **Degraded-health recovery.** Member/declaration/structural unavailability
+   makes ACTIVE health DEGRADED; unaffected routes can still resolve; restoring
+   current graph availability/validity returns health to VALID without a
+   participation write.
 8. **Cold governed path.** `ask(FILE)` on an ACTIVE member returns
    `Gap/unassessed` plus the Functional Pyramid view without generating
    semantic understanding.
@@ -1055,17 +1061,19 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 25. **Canonical-source singularity.** Pyramid state/view/storage returns rule
     identities, owner anchors and relationships but no copied summaries, chunks
     or canonical rule prose.
-26. **Governed development lifecycle.** The §7.2 state machine can be exercised
-    from ORIENT through COMPLETE, including INVESTIGATE, BLOCKED,
-    READY_TO_CHANGE, RECONSIDER and REESTABLISH transitions; no hidden transition
-    is required.
+26. **Runtime lifecycle preservation.** Every existing Span runtime path in
+    lifecycle §7.2 remains exercisable with its pre-Version-1 semantic behavior:
+    current reuse without duplicate record, gap → investigate → conclude/record,
+    external edit → reconsider → optional re-establishment, dispute → disposition,
+    start/resume and completion. Functional Pyramid behavior is additive at those
+    same moments and introduces no second ordinary-development lifecycle.
 27. **Governance-source edit lifecycle.** Before editing a canonical rule owner,
     the current downstream graph is obtainable; after the edit, reconsider
     reports cross-repository authority/route effects and record closes the
     affected dispositions.
-28. **Participation-aware hooks.** UNCONFIGURED, ACTIVE, DEGRADED and EXCLUDED
-    produce the FD-94 notice behavior without any hook mutating governance or
-    support.
+28. **Participation-aware hooks.** UNCONFIGURED, EXCLUDED, ACTIVE/VALID and
+    ACTIVE/DEGRADED produce the FD-94 notice behavior without any hook mutating
+    participation, governance or support.
 29. **Three-tool host surface.** Initialization, governed development and
     re-alignment are all reachable through `ask`, `record` and `reconsider`;
     no authority/pyramid MCP operation is advertised.
