@@ -104,9 +104,7 @@ def compose_functional_pyramid_service(
     state: FunctionalPyramidStatePort,
     repository_runtime: _typing.Callable[[str], _RepositoryRuntime],
     registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
-    repository_paths: _typing.Callable[
-        [tuple[str, ...]], tuple[tuple[str, str], ...]
-    ],
+    repository_paths: _typing.Callable[[tuple[str, ...]], tuple[tuple[str, str], ...]],
     clock: _typing.Callable[[], _datetime.datetime] | None = None,
     new_context_id: _typing.Callable[[], str] | None = None,
 ) -> FunctionalPyramidService:
@@ -125,7 +123,9 @@ def compose_functional_pyramid_service(
         tuple[m.ConclusionRevisionRef, ...],
     ]:
         if coordinator is None:
-            raise RuntimeError("Functional Pyramid effect coordinator is not initialized")
+            raise RuntimeError(
+                "Functional Pyramid effect coordinator is not initialized"
+            )
         return coordinator.change(
             transaction,
             action,
@@ -142,7 +142,9 @@ def compose_functional_pyramid_service(
         tuple[m.InvestigationContextRef, ...],
     ]:
         if coordinator is None:
-            raise RuntimeError("Functional Pyramid effect coordinator is not initialized")
+            raise RuntimeError(
+                "Functional Pyramid effect coordinator is not initialized"
+            )
         return coordinator.retained(transaction, refs)
 
     service = FunctionalPyramidService(
