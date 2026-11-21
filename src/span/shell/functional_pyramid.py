@@ -86,10 +86,17 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
 
 
 class FunctionalPyramidRepositoryRuntime(_typing.Protocol):
-    repository_id: str
-    root: str
-    store: LifecycleStorePort
-    evidence: EvidenceSource
+    @property
+    def repository_id(self) -> str: ...
+
+    @property
+    def root(self) -> str: ...
+
+    @property
+    def store(self) -> LifecycleStorePort: ...
+
+    @property
+    def evidence(self) -> EvidenceSource: ...
 
 
 class _InstallationAuthorityResolver:
