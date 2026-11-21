@@ -251,7 +251,9 @@ def _decode_scope_selector(value: object) -> FunctionalScopeSelector:
         kind=kind,
         path=None if path is None else _require_json_string(path, "selector path"),
         locator=(
-            None if locator is None else _require_json_string(locator, "selector locator")
+            None
+            if locator is None
+            else _require_json_string(locator, "selector locator")
         ),
     )
 
