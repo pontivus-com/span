@@ -79,8 +79,91 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
 
 class _RepositoryRuntime(_typing.Protocol):
     repository_id: str
+    root: str
     store: LifecycleStorePort
     evidence: EvidenceSource
+
+
+class _InstallationAuthorityResolver:
+    def __init__(
+        self, repository_runtime: _typing.Callable[[str], _RepositoryRuntime]
+    ) -> None:
+        self._repository_runtime = repository_runtime
+
+    def resolve_authority(
+        self, repository_id: str, authority_ref: str
+    ) -> m.AuthorityBinding:
+        return self._repository_runtime(repository_id).store.resolve_authority(
+            repository_id, authority_ref
+        )
+
+
+def compose_functional_pyramid_service(
+    *,
+    state,
+    repository_runtime: _typing.Callable[[str], _RepositoryRuntime],
+    registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
+    repository_paths: _typing.Callable[
+        [tuple[str, ...]], tuple[tuple[str, str], ...]
+    ],
+    clock: _typing.Callable[[], _datetime.datetime] | None = None,
+    new_context_id: _typing.Callable[[], str] | None = None,
+) -> FunctionalPyramidService:
+    """Compose the one installation-wide Functional Pyramid service."""
+    coordinator: FunctionalPyramidEffectCoordinator | None = None
+
+    def project_change(
+        transaction: FunctionalPyramidStateTransaction,
+        action: m.FunctionalPyramidAction,
+        pyramid_id: m.FunctionalPyramidId,
+        old_members: tuple[m.FunctionalPyramidMemberView, ...],
+        new_members: tuple[m.FunctionalPyramidMemberView, ...],
+    ) -> tuple[
+        tuple[m.ChangedSurface, ...],
+        tuple[m.InvestigationContextRef, ...],
+        tuple[m.ConclusionRevisionRef, ...],
+    ]:
+        if coordinator is None:
+            raise RuntimeError("Functional Pyramid effect coordinator is not initialized")
+        return coordinator.change(
+            transaction,
+            action,
+            pyramid_id,
+            old_members,
+            new_members,
+        )
+
+    def project_retained(
+        transaction: FunctionalPyramidStateTransaction,
+        refs: tuple[m.ConclusionRevisionRef, ...],
+    ) -> tuple[
+        tuple[m.ChangedSurface, ...],
+        tuple[m.InvestigationContextRef, ...],
+    ]:
+        if coordinator is None:
+            raise RuntimeError("Functional Pyramid effect coordinator is not initialized")
+        return coordinator.retained(transaction, refs)
+
+    service = FunctionalPyramidService(
+        declarations=FilesystemFunctionalPyramidDeclarations(
+            lambda repository_id: repository_runtime(repository_id).root
+        ),
+        authority=_InstallationAuthorityResolver(repository_runtime),
+        state=state,
+        registered_repository_ids=registered_repository_ids,
+        repository_paths=repository_paths,
+        effect_projection=project_change,
+        retained_effect_projection=project_retained,
+        clock=clock,
+    )
+    coordinator = FunctionalPyramidEffectCoordinator(
+        service=service,
+        repository_runtime=repository_runtime,
+        registered_repository_ids=registered_repository_ids,
+        clock=clock,
+        new_context_id=new_context_id,
+    )
+    return service
 
 
 class FunctionalPyramidEffectCoordinator:
