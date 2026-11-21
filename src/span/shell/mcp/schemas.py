@@ -48,7 +48,10 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "small Gap with source_pointers; to fetch source bytes, repeat the "
         "surface/reference form with non-empty evidence and a request_id. "
         "Continuation and exact selectors carry their own namespace and therefore "
-        "take no repository override. ASK TEMPLATE: "
+        "take no repository override. FunctionalPyramidSelector, "
+        "FunctionalPyramidCandidateSelector and FunctionalPyramidReceiptSelector "
+        "use the same ask tool for installation-scoped governance lifecycle state. "
+        "ASK TEMPLATE: "
         '{"repository_id":"<id>","surface":{"kind":"FILE","locator":"<path>"}}',
         m.AskRequest,
         m.AskResult,
@@ -60,9 +63,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "use its returned identities/version for the update. Creates, updates, or "
         "verifies understanding, or declares a "
         "service/domain surface and its boundary. `kind` selects what is "
-        "recorded: understanding, verification, or surface. An understanding "
-        "create is flat: no action and no actions; action belongs to "
-        "kind=surface. State the evidence you already hold; Span "
+        "recorded: understanding, verification, surface, or functional_pyramid. "
+        "An understanding create is flat: no action and no actions; action belongs "
+        "to kind=surface or kind=functional_pyramid. Functional Pyramid recording "
+        "is installation-scoped and uses activate/revise/deactivate/exclude without "
+        "an investigation context. State the evidence you already hold; Span "
         "derives context, ids, and revisions. "
         "A create may use the context reference returned by explicit evidence admission "
         "or reconsider instead of question and scope_paths; do not send both. "
@@ -179,6 +184,12 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
                 "question": "What does A do?",
             }
         },
+        {
+            "selector": {
+                "$type": "FunctionalPyramidSelector",
+                "repository_id": "repo-1",
+            }
+        },
     ],
     "record": [
         {
@@ -285,6 +296,12 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
                 "boundary": {"paths": ["src"], "symbols": []},
                 "parent": None,
             },
+        },
+        {
+            "request_id": "fp-exclude-1",
+            "kind": "functional_pyramid",
+            "action": "exclude",
+            "repository_id": "repo-1",
         },
         {
             "request_id": "ver-1",
