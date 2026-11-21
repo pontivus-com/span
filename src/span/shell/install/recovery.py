@@ -283,12 +283,8 @@ def verify_backup(backup_dir):
                 version = database.schema_version
                 if version is None:
                     failures.append(f"{name}: no readable meta.schema_version")
-                elif not _database_schema_supported(
-                    name, version, current, supported
-                ):
-                    failures.append(
-                        f"{name}: unsupported database schema {version}"
-                    )
+                elif not _database_schema_supported(name, version, current, supported):
+                    failures.append(f"{name}: unsupported database schema {version}")
         results.append(
             VerifiedArtifact(
                 path=name,
@@ -316,9 +312,7 @@ def _assert_quiescent(data_dir):
     from span.shell.sqlite_ownership import StoreHeldError, exclusive_ownership
 
     with ExitStack() as stack:
-        installation_db = (
-            Path(data_dir) / "installation" / "functional-pyramid.db"
-        )
+        installation_db = Path(data_dir) / "installation" / "functional-pyramid.db"
         databases = [
             *sorted(Path(data_dir).glob("*.db")),
             *([installation_db] if installation_db.is_file() else []),
