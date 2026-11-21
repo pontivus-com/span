@@ -174,9 +174,8 @@ validation result.
 
 **Pure obtain.** Surface/reference obtain returns all CURRENT conclusions on
 that surface, grouped by recorded question, with status, gaps, verification,
-limitations and explicit omissions. For a repository that participates in the
-Functional Pyramid, the same obtain resolves the selected scope's declared
-Functional Pyramid and returns it as orientation state. An exact recorded-question selector first
+limitations and explicit omissions. For an ACTIVE Functional Pyramid repository, the same obtain resolves the
+selected scope's declared Functional Pyramid and returns it as orientation state. An exact recorded-question selector first
 restricts membership by surface and exact recorded question; a current selector
 restricts membership to its returned understanding identity. Both then use the
 same support/status owners as the grouped view. These pure forms create no
@@ -324,6 +323,8 @@ parallel setup DTOs.
   `findings: tuple[FunctionalPyramidFinding, ...]`.
   Pyramid identity/version and members are absent/empty and health is `None`
   for UNCONFIGURED and EXCLUDED. ACTIVE always reports present live health.
+  `health=VALID` requires `findings=()`; `health=DEGRADED` requires the
+  non-empty current structural finding set that caused degradation.
 - `FunctionalPyramidCandidate` carries
   the requested `action: ACTIVATE | REVISE`,
   target `pyramid_id/version` when revising,
@@ -469,8 +470,9 @@ selector: member identity/uniqueness, declaration sources, functional scope,
 context/rule graph, governing edges, repository bindings and claimed coverage
 must validate. A failed candidate changes no durable state. One repository may
 not be ACTIVE in another Functional Pyramid instance. `PARTIAL` declares that migration/coverage is knowingly incomplete, so a
-selected scope outside the declared contexts returns `UNCOVERED_PATH` without
-degrading the instance. `COMPLETE` is an owner-supplied governance claim that
+functional portion inside the declared FunctionalScope with no applicable
+context returns `UNCOVERED_PATH` without degrading the instance. Scope outside
+FunctionalScope is `OUTSIDE_FUNCTIONAL_SCOPE`, not uncovered governance. `COMPLETE` is an owner-supplied governance claim that
 the repository's functional migration is complete; Span validates the declared
 graph but does not infer semantic completeness from the file tree. If a later
 selected functional scope in a COMPLETE member has no applicable declared
@@ -586,6 +588,12 @@ For `DESCRIPTIVE` conclusions, Functional Pyramid state is returned as
 orientation but is not automatically a support dependency. An investigator may
 still cite explicit authority where the descriptive conclusion genuinely
 depends on it.
+
+Span has exactly two assertion natures: `DESCRIPTIVE` and `NORMATIVE`. A
+conformance judgment is represented as a NORMATIVE conclusion; there is no third
+`CONFORMANCE` assertion nature. Consequently every conformance judgment in an
+ACTIVE Functional Pyramid repository receives the same server-derived
+route/authority support as any other NORMATIVE conclusion.
 
 The effective semantic scope is a complete `EvidenceScope`: paths, exact evidence
 references, or an empty scope denoting the whole repository. A supplied
@@ -972,7 +980,7 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | **L13** | Functional Pyramid participation is explicit and versioned: registration alone means UNCONFIGURED; EXCLUDED is an explicit decision; ACTIVE belongs to exactly one Functional Pyramid instance at a time. Each member declares one functional coverage scope plus PARTIAL or COMPLETE coverage. ACTIVE health is computed as VALID or DEGRADED from present graph/member state and is not a durable participation transition. Membership never implies applicability. | G1, G4, G8, F11, F12 |
 | **L14** | Functional Pyramid candidate validation is pure and action-aware: activation validates a proposed member set; revision additionally validates target pyramid/version and removals. Activation/revision/deactivation/exclusion are atomic installation-scoped receipted `record` writes that revalidate repository-owned declarations, never use a member repository as an artificial receipt owner, and never copy canonical rule content. Accepted activation/revision/deactivation writes also return the semantic dependent effects caused by their participation/route change through the same affected-conclusion projection used by `reconsider`. | G3, G6, G8, A2, A3, F1, F4, F7, F12 |
 | **L15** | Governance change analysis crosses repository boundaries within the affected Functional Pyramid instance and returns every directly or indirectly affected retained conclusion without requiring the caller to predict dependent repositories. Every repository with actionable affected conclusions receives its own existing repository-bound re-establishment context; no cross-repository context carrier is invented. | G3, F4, F11, F12 |
-| **L16** | Governed software work uses the same effective semantic scope for retained understanding and Functional Pyramid orientation; completion of work that makes a normative/conformance claim requires all affected governance/support dispositions to be current or an explicit named blocker. | G1, G3, G7, F2, F4, F11 |
+| **L16** | Governed software work uses the same effective semantic scope for retained understanding and Functional Pyramid orientation; completion of work that makes a normative claim, including a conformance judgment, requires all affected governance/support dispositions to be current or an explicit named blocker. | G1, G3, G7, F2, F4, F11 |
 
 ## 7. Lifecycle mapping
 
@@ -1000,49 +1008,63 @@ Span/source/editor work; candidate validation is a pure `ask`.
 stateDiagram-v2
     [*] --> STATUS
 
-    STATUS --> ACTIVE: already ACTIVE; no adoption/revision required
-    STATUS --> EXCLUDED: already EXCLUDED or explicit record exclude
-    STATUS --> DISCOVER: adoption/revision discovery required
+    STATUS --> ACTIVE: ACTIVE + VALID; no revision intended
+    STATUS --> EXCLUDED: EXCLUDED; no adoption intended
+    STATUS --> DISCOVER: UNCONFIGURED, ACTIVE/DEGRADED, or adoption/revision intended
     EXCLUDED --> DISCOVER: later adoption intended
 
-    DISCOVER --> VALIDATE: declarations already sufficient
+    DISCOVER --> VALIDATE: complete candidate intent already established
     DISCOVER --> DECLARE: declarations missing or incomplete
 
     DECLARE --> REALIGN: repository-owned declarations updated
-    REALIGN --> VALIDATE: reconsider completed; no unresolved affected disposition remains
-    REALIGN --> DISCOVER: affected understanding requires investigation/re-establishment
+    REALIGN --> VALIDATE: no actionable non-current disposition remains
+    REALIGN --> DISCOVER: more investigation/source repair required
 
     VALIDATE --> DECLARE: declaration/coverage/graph findings require source repair
     VALIDATE --> STATUS: registration/membership/version finding requires reorientation
-    VALIDATE --> ACTIVATE: candidate structurally admissible
+    VALIDATE --> ACTIVATE: activation_ready=true
 
     ACTIVATE --> STATUS: write revalidation or CAS rejects
-    ACTIVATE --> VERIFY: record activate/revise accepted
+    ACTIVATE --> VERIFY: activate/revise accepted
 
-    VERIFY --> ACTIVE: committed status/version/members visible and health VALID
-    VERIFY --> DISCOVER: committed graph is DEGRADED or does not match
+    VERIFY --> DISCOVER: committed graph is DEGRADED or committed state mismatches
+    VERIFY --> REESTABLISH: exact VALID state + accepted write returned actionable dependent effects
+    VERIFY --> ACTIVE: exact VALID state + no actionable dependent effects
+
+    REESTABLISH --> ACTIVE: activate/revise effects are current
+    REESTABLISH --> EXCLUDED: deactivate effects are current
 
     ACTIVE --> DISCOVER: revision needs governance discovery
     ACTIVE --> VALIDATE: exact revision candidate already known
-    ACTIVE --> EXCLUDED: record deactivate
+    ACTIVE --> DEACTIVATE: explicit deactivation intended
+    DEACTIVATE --> REESTABLISH: accepted with actionable dependent effects
+    DEACTIVATE --> EXCLUDED: accepted with no actionable dependent effects
 ```
 
-| Phase | Existing/new operation | Required outcome |
-| --- | --- | --- |
-| STATUS | `ask(FunctionalPyramidSelector)` | exact durable participation, current instance/version when ACTIVE, and live health when ACTIVE |
-| DISCOVER | ordinary Span `ask`/evidence lifecycle plus source reads | the agent establishes and holds the intended member/declaration/FunctionalScope/coverage inputs or an explicit unresolved owner question; Span returns evidence/orientation but never manufactures the candidate intent |
-| DECLARE | external repository editor | repository-owned context/rule/bootstrap declarations are added or corrected; Span never edits them; the changed repository paths are the input to the existing after-edit lifecycle |
-| REALIGN | `reconsider(changed_scope)` plus ordinary investigation/record as required | every affected semantic/support disposition caused by the declaration edit is current or explicitly blocked before candidate validation continues |
-| VALIDATE | `ask(FunctionalPyramidCandidateSelector)` | pure deterministic action-aware findings; declaration/graph findings lead to source repair, registration/membership/version findings lead back to STATUS, and only `activation_ready=true` proceeds |
-| ACTIVATE | `record(kind="functional_pyramid", action="activate"|"revise")` | current sources are revalidated and one atomic receipted participation/version write succeeds; rejection returns to STATUS because membership/version/source state may have changed |
-| VERIFY | `ask(FunctionalPyramidSelector)` | returned pyramid identity/version and complete member view equal the accepted write, and live health is VALID; DEGRADED/mismatch returns to validation rather than being called complete |
-| ACTIVE | ordinary Span runtime begins | durable participation is ACTIVE; live health is evaluated as VALID or DEGRADED on use |
-| EXCLUDED | `record(... action="exclude"|"deactivate")` | explicit non-participation; ordinary semantic Span lifecycle remains available without a governing projection |
+| Phase | Agent input / operation | Span-derived state | Output gate |
+| --- | --- | --- | --- |
+| STATUS | `ask(FunctionalPyramidSelector{repository_id|pyramid_id})` | durable participation, exact live instance/version/member projection and current structural health/findings | `FunctionalPyramidStatus`: ACTIVE+VALID with no intended revision → ACTIVE; ACTIVE+DEGRADED, UNCONFIGURED, or intended adoption/revision → DISCOVER/VALIDATE as applicable; EXCLUDED stays EXCLUDED unless adoption is intended |
+| DISCOVER | ordinary `ask`, explicit evidence admission and canonical source reads | evidence identity/current semantic orientation only; Span does not manufacture membership, coverage or governing meaning | agent-held complete `FunctionalPyramidMemberIntent` set → VALIDATE; missing/incomplete repository-owned declarations → DECLARE; unresolved owner/authority question remains explicit |
+| DECLARE | external repository edit | no Span mutation | changed repository paths become the input to REALIGN |
+| REALIGN | `reconsider(changed_scope)`, once per directly edited repository, then ordinary investigate/record where required | containment/direct/indirect effects including governance effects and repository-bound contexts | `Changed` with no actionable non-current conclusions → VALIDATE; actionable effects must be re-established before validation; `Rejected` corrects the request; `Unavailable` is a blocker |
+| VALIDATE | `ask(FunctionalPyramidCandidateSelector{action,members,pyramid_id?,expected_version?})` | registration/membership/version checks, whole-document declaration validation, FunctionalScope coverage and graph validation | `FunctionalPyramidCandidate.activation_ready=true` → ACTIVATE; source/graph/coverage findings → DECLARE/DISCOVER; registration/membership/version findings → STATUS; `Rejected` fixes selector structure; `Unavailable` blocks |
+| ACTIVATE | `record(kind="functional_pyramid", action="activate"|"revise", ...)` | candidate revalidation, old/new participation delta, immutable dependent-effect refs, live affected projection and contexts | `FunctionalPyramidRecorded` → VERIFY while retaining its returned dependent effects/contexts for the post-write gate; `Rejected` → STATUS; pre-commit `Unavailable` blocks |
+| VERIFY | `ask(FunctionalPyramidSelector{pyramid_id})` using the accepted result's identity | current committed instance/version/members and structural health | exact accepted identity/version/members + VALID + no actionable effects from the accepted write → ACTIVE; exact+VALID with actionable effects → REESTABLISH; DEGRADED/mismatch → DISCOVER; `Unavailable` blocks |
+| REESTABLISH | use the `FunctionalPyramidRecorded.dependent_effects` update coordinates and per-repository `reestablishment_contexts`; ordinary investigate + `record(kind="understanding", ...)` as needed | current evidence plus freshly derived support for each affected conclusion | all accepted write effects CURRENT → ACTIVE for activate/revise or EXCLUDED for deactivate; remaining REASSESSMENT_REQUIRED/UNVERIFIABLE loops through investigation; operational inability is a named blocker |
+| DEACTIVATE | `record(kind="functional_pyramid", action="deactivate", pyramid_id, expected_version)` | atomic ACTIVE→EXCLUDED participation effects plus immutable/live dependent effects | accepted with no actionable dependent effects → EXCLUDED; accepted with actionable effects → REESTABLISH; `Rejected` reorients through STATUS; `Unavailable` blocks |
+| ACTIVE | ordinary Span runtime | participation remains ACTIVE; health/route/support remain live independent projections | ordinary §7.2 lifecycle |
+| EXCLUDED | optional `record(... action="exclude")` when not ACTIVE, or accepted deactivation after effect disposition | explicit non-participation | ordinary semantic Span lifecycle remains available without a governing projection; later adoption begins at DISCOVER |
 
 A failed validation never changes participation. Post-write VERIFY is exact
 state/health verification, not sampling: candidate validation already owns graph
 and coverage correctness, so no undefined "representative route" set is part of
-the completion contract.
+the completion contract. Successful participation recording is also not by
+itself initialization completion: ACTIVATE/REVISE/DEACTIVATE may return
+actionable semantic dependent effects under F4/L14, and those returned effects
+must be disposed through their supplied repository-bound contexts before the
+initialization/revision/deactivation task is complete. No extra `reconsider`
+call is required for the participation write itself because the write already
+returns that canonical affected projection.
 
 At every MCP phase, `Rejected` means the submitted selector/write is invalid for
 its declared contract and the agent follows the returned corrective action before
@@ -1064,7 +1086,9 @@ still resolve unaffected routes, and an ACTIVE/PARTIAL pyramid can return
 that lacks applicable context coverage without making the pyramid DEGRADED.
 Scope outside FunctionalScope is `OUTSIDE_FUNCTIONAL_SCOPE`, not uncovered.
 
-The initialization skill may guide DISCOVER → DECLARE → REALIGN → VALIDATE, but it does
+The initialization skill may guide DISCOVER → DECLARE → REALIGN → VALIDATE →
+ACTIVATE → VERIFY → REESTABLISH when the accepted write returns actionable
+effects, but it does
 not own a second Functional Pyramid definition and it does not bypass the
 ordinary Span lifecycle while interpreting repository sources.
 
@@ -1088,7 +1112,8 @@ stateDiagram-v2
     INVESTIGATE --> REESTABLISH: investigation resolves returned non-current understanding
     INVESTIGATE --> EDIT: investigation supports external edit
 
-    CONCLUDE --> COMPLETE: record accepted
+    CONCLUDE --> COMPLETE: accepted + required qualification CURRENT
+    CONCLUDE --> INVESTIGATE: accepted but required qualification non-current
     REUSE --> COMPLETE
 
     EDIT --> REALIGN: external edit then reconsider(changed_scope)
@@ -1096,8 +1121,8 @@ stateDiagram-v2
     REALIGN --> REESTABLISH: affected understanding needs reassessment
     REALIGN --> INVESTIGATE: more evidence is required
 
-    REESTABLISH --> COMPLETE: record accepted
-    REESTABLISH --> INVESTIGATE: re-establishment needs more evidence
+    REESTABLISH --> COMPLETE: accepted + affected required dispositions CURRENT
+    REESTABLISH --> INVESTIGATE: accepted but qualification/effects remain non-current
 
     DISPUTE --> REESTABLISH: reconsider(challenge) returns explicit context
 
@@ -1108,7 +1133,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | Orient | `ask` returns current semantic Answer/Gap and surface status | for ACTIVE participation, the same call resolves the governing projection for the exact same effective semantic scope; UNCONFIGURED/EXCLUDED remain explicit participation results |
 | Investigate | explicit evidence admission + source reading establishes empirical understanding | follow returned canonical owner references only when governing meaning is needed; governing prose stays at its source and is not copied into Span |
-| Conclude | `record(kind="understanding")` retains supported agent-authored meaning | DESCRIPTIVE behavior is unchanged; for NORMATIVE/conformance conclusions Span automatically derives route support and every applicable authority dependency |
+| Conclude | `record(kind="understanding")` retains agent-authored meaning | DESCRIPTIVE behavior is unchanged; a conformance judgment is NORMATIVE, and every NORMATIVE conclusion in an ACTIVE repository automatically receives route support and every applicable authority dependency; acceptance with non-current qualification is retained but does not complete the task |
 | Reuse | `ask(surface/reference)` or exact recorded-question/current selectors reuse retained understanding | governing applicability is re-resolved on read so semantic currency and governing currency remain independently current |
 | Edit | the agent edits externally; Span never predicts or authors the change; after edit use `reconsider(changed_scope)` | before an authority-source edit, ordinary `ask` can expose current declared downstream dependencies; after edit the same reconsider call evaluates authority/route effects |
 | Re-align | `reconsider` preserves containment/direct/indirect semantics and returns bounded re-establishment context | direct support evaluation additionally includes authority and Functional Pyramid route support; dependency traversal may cross member repositories while returned surfaces remain repository-owned |
@@ -1116,6 +1141,19 @@ stateDiagram-v2
 | Dispute | `reconsider(challenge)` then `record` disposition | normative challenged conclusions retain the same governing-support rules; no Functional-Pyramid-specific dispute operation exists |
 | Start / resume / compact | `ask` when semantic work begins or resumes | ACTIVE repositories regain the current governing projection without conversation memory |
 | Complete | applicable records and re-establishment are accepted; current reuse requires no duplicate record | governed work may not silently leave an affected required route/authority disposition unresolved; an operational blocker is reported as a blocker, not converted into a successful governance conclusion |
+
+**Runtime I/O gating.** The lifecycle transition is determined from the returned
+public result, not merely from whether a call was accepted.
+
+| Moment | Agent input | Span derives | Result → next lifecycle state |
+| --- | --- | --- | --- |
+| ORIENT / REUSE | pure `ask(surface|reference|exact selector)` | semantic membership/support/status and, for ACTIVE participation, governing projection for the same effective scope | current `Answer` sufficient for task → REUSE/EDIT/DISPUTE; `Gap` or required non-current state → INVESTIGATE; a descriptive Answer may coexist with unresolved/unavailable governing orientation, but normative interpretation cannot treat that governance as current |
+| INVESTIGATE | explicit-evidence `ask` plus source reads, including canonical owner refs when governing meaning is needed | source observations/evidence context; no semantic or conformance verdict | sufficient evidence → CONCLUDE or REESTABLISH; more evidence → remain INVESTIGATE; `Rejected` corrects request; `Unavailable` is a blocker |
+| CONCLUDE | `record(kind="understanding", ...)` with `assertion_nature=DESCRIPTIVE|NORMATIVE`; conformance uses NORMATIVE | semantic scope/owner, caller support and, for ACTIVE NORMATIVE content, server-derived route/authority support | `UnderstandingRecorded` with required qualification CURRENT → COMPLETE; accepted but REASSESSMENT_REQUIRED/UNVERIFIABLE → INVESTIGATE/REESTABLISH; post-commit `SupportUnavailable` requires recovery and is not COMPLETE; `Rejected` fixes request/CAS |
+| EDIT / REALIGN | external edit then repository-scoped `reconsider(changed_scope)` for each directly edited repository | containment, direct source/discovery/authority/route effects, cross-member dependents, premise closure and per-repository contexts | `Changed` with no actionable non-current conclusions → COMPLETE; actionable effects → REESTABLISH or INVESTIGATE; `Rejected` fixes request; `Unavailable` blocks |
+| REESTABLISH | returned `expected_version` + owning repository context/direct evidence + `record` confirm/correct/replace/withdraw/add | CAS, updated semantic content/support and freshly derived NORMATIVE governance support | accepted with all required affected dispositions CURRENT → COMPLETE; accepted but still non-current → INVESTIGATE; stale CAS → ORIENT/REALIGN; operational inability blocks |
+| DISPUTE | `reconsider(challenge,...)` then `record` named disposition | challenge context/history plus ordinary support evaluation | `Challenged` → REESTABLISH; disposition acceptance completes only when its required resulting support/dispositions are current; otherwise INVESTIGATE |
+| START / RESUME / COMPACT | pure `ask` | reconstructs retained semantic understanding plus current ACTIVE governance without transcript memory | same ORIENT gates above |
 
 A named operational/authority blocker may terminate the current task from any
 phase where required work cannot proceed; it is reported explicitly and is not a
@@ -1161,8 +1199,10 @@ omissions/recovery, and investigate returned `REASSESSMENT_REQUIRED` or
 supported confirmation, correction, replacement, withdrawal, new conclusion or
 verification as applicable.
 
-Complete the applicable lifecycle before claiming the work complete. Reusing a
-current applicable conclusion requires no duplicate record. Preserve genuine
+Complete the applicable lifecycle before claiming the work complete. An accepted
+write is not sufficient when its returned qualification or dependent-effect
+projection still contains a required non-current disposition. Reusing a current
+applicable conclusion requires no duplicate record. Preserve genuine
 uncertainty and disputes; report a named operational blocker when the lifecycle
 cannot complete. A rejected call is not retained understanding. Acceptance with
 unavailable qualification preserves its receipt and requires explicit recovery.
