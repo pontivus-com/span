@@ -17,14 +17,14 @@ Use only `ask`, `record`, and `reconsider`.
 
 Obtain durable participation and live health:
 
-~~~json
+```json
 {
   "selector": {
     "$type": "FunctionalPyramidSelector",
     "repository_id": "repo-1"
   }
 }
-~~~
+```
 
 - UNCONFIGURED: adoption may proceed when intended.
 - EXCLUDED: remain excluded unless adoption is explicitly intended.
@@ -45,7 +45,7 @@ REASSESSMENT_REQUIRED/UNVERIFIABLE result before candidate validation continues.
 
 Validate the complete intended member set through `ask`:
 
-~~~json
+```json
 {
   "selector": {
     "$type": "FunctionalPyramidCandidateSelector",
@@ -64,7 +64,7 @@ Validate the complete intended member set through `ask`:
     ]
   }
 }
-~~~
+```
 
 Proceed only when the returned candidate has no validation/graph blockers and
 activation readiness is true. Source/graph findings require declaration repair;
@@ -75,7 +75,7 @@ Rejected means fix the request. Unavailable is an operational blocker.
 
 Record the already-validated intent through the existing `record` tool:
 
-~~~json
+```json
 {
   "request_id": "fp-activate-1",
   "kind": "functional_pyramid",
@@ -93,7 +93,7 @@ Record the already-validated intent through the existing `record` tool:
     }
   ]
 }
-~~~
+```
 
 Revision uses the exact current pyramid identity/version and the complete
 replacement member set. Do not send an investigation context: participation
@@ -121,14 +121,14 @@ effects are returned, re-establish them before the deactivation task is complete
 
 Use explicit exclusion only for a repository that is not an ACTIVE member:
 
-~~~json
+```json
 {
   "request_id": "fp-exclude-1",
   "kind": "functional_pyramid",
   "action": "exclude",
   "repository_id": "repo-1"
 }
-~~~
+```
 
 ## Ordinary runtime
 
