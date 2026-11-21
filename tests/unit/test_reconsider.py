@@ -15,6 +15,7 @@ from span.service.effects import DependencyEffectService
 from span.service.reconsider import ReconsiderService
 from span.service.support import SupportService
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
+from span.shell.functional_pyramid import FunctionalPyramidEffectCoordinator
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
 NOW = datetime.datetime(2026, 11, 1, 12, 0, tzinfo=datetime.timezone.utc)
@@ -398,6 +399,72 @@ class ReconsiderServiceTest(unittest.TestCase):
         locators = [item.surface.locator for item in result.surfaces]
         self.assertIn("src/b.py", locators)
         self.assertNotIn("src/c.py", locators)
+
+    def test_pyramid_effect_coordinator_uses_shared_dependency_engine(self) -> None:
+        self._create(
+            "u-coordinator",
+            "src/coordinator.py",
+            "src/coordinator.py",
+            m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+            assertion_nature=m.AssertionNature.NORMATIVE,
+        )
+        runtime = mock.Mock(
+            repository_id="repo-1",
+            root=str(self.root),
+            store=self.store,
+            evidence=FilesystemEvidenceSource("repo-1", str(self.root)),
+        )
+        transaction = mock.Mock()
+        coordinator = FunctionalPyramidEffectCoordinator(
+            service=mock.Mock(),
+            repository_runtime=lambda repository_id: (
+                runtime
+                if repository_id == "repo-1"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            registered_repository_ids=lambda: ("repo-1",),
+            clock=lambda: NOW,
+            new_context_id=lambda: "ctx-fp-coordinator",
+        )
+        member = m.FunctionalPyramidMemberView(
+            repository_id="repo-1",
+            declaration_refs=(),
+            functional_scope=m.FunctionalScope(
+                (
+                    m.FunctionalScopeSelector(
+                        m.FunctionalScopeSelectorKind.REPOSITORY
+                    ),
+                )
+            ),
+            coverage=m.FunctionalPyramidCoverage.PARTIAL,
+        )
+
+        surfaces, contexts, refs = coordinator.change(
+            transaction,
+            m.FunctionalPyramidAction.ACTIVATE,
+            m.FunctionalPyramidId("fp-coordinator"),
+            (),
+            (member,),
+        )
+
+        affected = next(
+            conclusion
+            for surface in surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-coordinator"
+        )
+        self.assertIsInstance(affected.support, m.SupportEvaluation)
+        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertEqual(
+            affected.support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertEqual(refs, (affected.ref,))
+        self.assertEqual(
+            tuple(context.repository_id for context in contexts),
+            ("repo-1",),
+        )
+        transaction.write_reestablishment_context.assert_called_once()
 
     def test_newly_active_repository_reassesses_pre_route_normative_revision(
         self,
