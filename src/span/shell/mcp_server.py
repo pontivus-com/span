@@ -23,6 +23,11 @@ from span.shell.context import (
     open_repository_context as _open_context,
     provision_repository as _provision,
 )
+from span.shell.functional_pyramid import compose_functional_pyramid_service
+from span.shell.sqlite_store.functional_pyramid import (
+    FunctionalPyramidInstallationStore,
+    functional_pyramid_installation_path,
+)
 from span.shell.mcp import (
     TOOL_DESCRIPTIONS,
     TOOL_NAMES,
@@ -32,6 +37,7 @@ from span.shell.mcp import (
     ServiceContext,
 )
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY as _DEFAULT_BOUNDS
+from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 from span.shell.structural import repository_id_from_config
 
 __all__ = [
@@ -77,6 +83,35 @@ def open_repository_context(
 ) -> tuple[str, ServiceContext]:
     """Open an already-provisioned repository without setup."""
     return _open_context(config.data_dir, repository_locator, policy=_policy(config))
+
+
+def _open_functional_pyramid_runtime(
+    config: ServerConfig,
+    adapter: McpAdapter,
+) -> FunctionalPyramidInstallationStore | None:
+    """Open the existing installation state and bind its one service.
+
+    Runtime startup never creates or migrates Functional Pyramid state. Missing
+    installation state leaves the installation-scoped MCP branches unavailable;
+    explicit setup remains the installer owner.
+    """
+    path = functional_pyramid_installation_path(config.data_dir)
+    if not path.is_file():
+        return None
+    state = FunctionalPyramidInstallationStore(
+        path,
+        retention=DEFAULT_LIFECYCLE_RETENTION,
+    )
+    adapter.functional_pyramid = compose_functional_pyramid_service(
+        state=state,
+        repository_runtime=adapter.repository_context,
+        registered_repository_ids=adapter.registered_repository_ids,
+        repository_paths=lambda repository_ids: tuple(
+            (repository_id, str(config.data_dir / f"{repository_id}.db"))
+            for repository_id in repository_ids
+        ),
+    )
+    return state
 
 
 #: Repository-scoped tools: their descriptions carry registered canonical IDs
@@ -218,7 +253,13 @@ def main(argv: list[str] | None = None) -> None:
     for repository_locator in args.repo:
         repository_id = repository_id_from_config(repository_locator)
         adapter.register_repository_locator(repository_id, repository_locator)
-    _asyncio.run(_serve(adapter))
+
+    functional_pyramid_state = _open_functional_pyramid_runtime(config, adapter)
+    try:
+        _asyncio.run(_serve(adapter))
+    finally:
+        if functional_pyramid_state is not None:
+            functional_pyramid_state.close()
 
 
 async def _serve(adapter: McpAdapter) -> None:
