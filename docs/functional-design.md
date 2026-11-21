@@ -39,10 +39,13 @@ identity is `(repository, canonical locator)`. An identity is never reused for a
 different kind. *(F9, L1)*
 
 **FD-2 — Context issuance and request identity are distinct.**
-Ordinary obtain issues no context. Explicit evidence admission and writes issue
-contexts under their caller-owned request identities. Change-scope reconsider
-also issues the bounded re-establishment context required by F4, but its issuance
-identity is Span-owned and not a caller retry key. Any identity-bearing context
+Ordinary obtain issues no context. Explicit evidence admission and ordinary
+repository-scoped semantic/verification/challenge writes issue or reuse contexts
+under their caller-owned request identities as required by their evidence path.
+Functional Pyramid participation writes are installation-scoped lifecycle writes
+and issue no investigation context merely because they are writes.
+Change-scope reconsider also issues the bounded re-establishment contexts required
+by F4, but their issuance identities are Span-owned and not caller retry keys. Any identity-bearing context
 is bound to `(repository, request identity, question when applicable, scope,
 source selection)`. Repeating a caller-identified request with the same identity
 and binding returns the same context; the same identity with a different binding
@@ -54,15 +57,22 @@ caller-identified requests is original content or a new request identity, never 
 version change or TTL increase. *(F4, F7, L7, L10)*
 
 **FD-3 — Submission identity is derived from request identity and content.**
-For a write, Span looks up the retained receipt for `(repository, request
-identity)` before context issuance/recovery, evidence admission, or any other
-new-write check.
+Ordinary repository-scoped recording looks up the retained receipt for
+`(repository, request identity)` before context issuance/recovery, evidence
+admission, or any other new-write check. Functional Pyramid recording uses the
+distinct installation-level request-identity namespace fixed by lifecycle §4.2
+and FD-85; no member repository is selected as an artificial key owner.
 
-- receipt found, content digest equal → replay the receipt;
+Within either namespace:
+
+- receipt found, content digest equal → replay the accepted durable effect;
 - receipt found, content digest different → conflict, no new write;
-- no receipt → new write, keyed by that identity.
+- no receipt → new write, keyed by that namespace's identity.
 
-A new intentional act therefore requires a new request identity. *(A2, D-3)*
+A replay whose accepted Functional Pyramid write has actionable dependent
+effects may issue fresh live re-establishment contexts without changing the
+immutable receipt/effect set. A new intentional act therefore requires a new
+request identity. *(A2, D-3, L4, L14)*
 
 **FD-4 — Receipt identity survives context expiry.**
 A receipt is retrievable by submission identity after its context has expired and
@@ -112,21 +122,35 @@ ACTIVE together with current health rather than using absence or `None` to
 conflate states. *(G4, G7, G8, F11, F12, L12, L13)*
 
 **FD-62 — Scope matching is deterministic and repository-relative.**
-The effective semantic scope is normalized before Functional Pyramid matching.
-An exact file/symbol path is matched directly. A directory, declared-surface or
-repository-wide scope resolves every functional context whose declared coverage
-intersects that semantic scope, including contexts narrower than the scope
-boundary. Repository-wide scope therefore intersects every declared context in
-that participating repository.
+The effective semantic scope is normalized before Functional Pyramid matching,
+then related to the ACTIVE member's declared `FunctionalScope`.
 
-The one layer-4 Functional Scope selector grammar used by both Functional
+For the selected semantic scope Span computes, without file-tree inference, the
+functional intersection and the semantic remainder outside that boundary.
+
+- no functional intersection → `OUTSIDE_FUNCTIONAL_SCOPE`;
+- non-empty functional intersection fully covered by applicable contexts and no
+  outside remainder → `COVERED`;
+- non-empty functional intersection wholly uncovered and no outside remainder →
+  `UNCOVERED`;
+- a broad scope containing more than one outside/covered/uncovered portion →
+  `MIXED`.
+
+An exact file/symbol scope is matched directly. A directory, declared-surface or
+repository-wide scope resolves every Functional Context whose declared coverage
+intersects the functional intersection, including contexts narrower than the
+semantic scope boundary. No context is made applicable merely because it lies in
+the same repository.
+
+The one Layer-4 `FunctionalScope` selector grammar used by both Functional
 Contexts and member coverage must make membership, intersection, containment and
-set-difference deterministically decidable. If a declared selector cannot be evaluated against
-the semantic scope, resolution reports `UNRESOLVED_SCOPE_INTERSECTION`; it
-does not assume non-applicability. Absolute paths, traversal outside the
-repository and ambiguous repository identity are rejected. Semantic
-classification, model judgment, file-name heuristics and structural proximity
-never participate. *(G1, G4, F11, L12)*
+set-difference deterministically decidable. If a declared selector cannot be
+evaluated against the semantic scope, resolution reports
+`UNRESOLVED_SCOPE_INTERSECTION`; it does not assume non-applicability.
+Absolute paths, traversal outside the repository and ambiguous repository
+identity are rejected. Semantic classification, model judgment, file-name
+heuristics and structural proximity never participate. *(G1, G4, F11, F12,
+L12–L13)*
 
 **FD-63 — Every applicable context composes.**
 A semantic scope resolves to all directly applicable functional contexts under
@@ -176,17 +200,23 @@ A valid edge establishes derivation only. It does not prove that the semantic
 rule text is correct. *(G7, F11)*
 
 **FD-68 — Route resolution follows declarations to closure.**
-For each selected path Span:
+For each selected semantic-scope portion Span:
 
-1. finds every directly applicable context by deterministic semantic-scope
-   intersection under FD-62;
-2. expands context inheritance;
-3. collects every rule referenced by those contexts;
-4. resolves each rule's canonical owner;
-5. walks every direct governing-rule edge to `ROOT` or a typed structural
+1. computes its FD-62 relation to the member FunctionalScope; an
+   `OUTSIDE_FUNCTIONAL_SCOPE` portion is a resolved empty governing branch and
+   never becomes `UNCOVERED_PATH`;
+2. for each non-empty functional portion, finds every directly applicable
+   context by deterministic intersection; a functional portion with no applicable
+   context is `UNCOVERED_PATH`;
+3. expands context inheritance;
+4. collects every rule referenced by those contexts;
+5. resolves each rule's canonical owner;
+6. walks every direct governing-rule edge to `ROOT` or a typed structural
    unresolved terminal; authority status/content currency is evaluated
    separately by FD-12 and never changes graph topology;
-6. deduplicates by stable identity while preserving every provenance path.
+7. deduplicates by stable identity while preserving every provenance path and
+   the outside/covered/uncovered classification of the originating semantic
+   portion.
 
 No step selects a preferred route when several valid routes apply. *(G1, G7,
 F11, L12)*
@@ -196,8 +226,12 @@ When a semantic scope contains several explicit paths, Span resolves each path
 or path boundary under FD-62, unions identical contexts and rules for
 presentation, and preserves the scope-path-to-context-to-rule provenance for
 each input. A repository-wide scope is represented as that semantic scope, not
-as an invented list of files. A rule shared by several scope members appears
-once in the rule set but remains traceable from every applicable member.
+as an invented list of files. Broad scopes preserve the deterministic
+FunctionalScope set relation: outside portions remain visible as outside,
+covered functional portions retain their context/rule provenance, and uncovered
+functional portions retain `UNCOVERED_PATH`. A rule shared by several scope
+members appears once in the rule set but remains traceable from every applicable
+member.
 *(G4, F11)*
 
 **FD-70 — Cross-repository references are explicit.**
@@ -261,15 +295,18 @@ evidence admission reads the canonical owner. *(G6, F1, F11, L11, L12)*
 
 **FD-75 — Normative support is server-derived from the complete route.**
 When a new or revised conclusion has `assertion_nature=NORMATIVE` and its
-repository participates, Span resolves the complete effective semantic scope
+repository is ACTIVE, Span resolves the complete effective semantic scope
 under FD-68–FD-70 before acceptance. Span adds:
 
 - one route-support dependency for that resolved applicability graph; and
 - authority-support dependencies for every applicable functional rule.
 
-The caller cannot omit, replace, narrow or mark those dependencies current. If
-any applicable route branch is unresolved or an applicable authority is not
-currently supportable, the normative conclusion is not currently supportable.
+For a semantic scope wholly `OUTSIDE_FUNCTIONAL_SCOPE`, the derived route is
+the resolved empty applicability route and no Functional Pyramid authority
+dependency is invented. Otherwise the caller cannot omit, replace, narrow or
+mark derived dependencies current. If any applicable functional route branch is
+unresolved or an applicable authority is not currently supportable, the normative
+conclusion is not currently supportable.
 Additional explicit support may be supplied but cannot substitute for the
 server-derived governance dependencies. *(G1, G3, F2, F7, F11, L12)*
 
@@ -294,14 +331,23 @@ usable while the Functional Pyramid view contains unresolved governance. The two
 states are composed but never collapsed. *(G1, G4, G7, L3, L12)*
 
 **FD-79 — Governance changes are support changes.**
-A change to a participating context declaration, rule declaration, canonical
-authority identity/content/status, governing edge, member availability or active
-pyramid membership causes affected route and authority dependencies to be
-re-evaluated. The affected walk crosses repository boundaries inside the same
-Functional Pyramid instance. A normative conclusion may therefore become
+A change to an ACTIVE context declaration, rule declaration, canonical authority
+identity/content/status, governing edge, member availability or active pyramid
+membership causes affected route and authority dependencies to be re-evaluated.
+The change root may be a repository changed-scope evaluated through
+`reconsider` or an accepted Functional Pyramid ACTIVATE/REVISE/DEACTIVATE
+write; both feed the same dependency-effect computation.
+
+The affected walk crosses repository boundaries inside the relevant Functional
+Pyramid instance. In addition to conclusions that already carry route support,
+activation must include every current NORMATIVE conclusion in a repository that
+becomes ACTIVE when that revision predates required server-derived route support:
+the new governance obligation is a definite applicability change and the
+revision becomes `REASSESSMENT_REQUIRED` until re-established with current
+derived support. A normative conclusion may therefore become
 `REASSESSMENT_REQUIRED` or `UNVERIFIABLE` without any implementation source
 change and without living in the repository where the governance change occurred.
-*(G3, F4, F11, F12, L10, L12, L15)*
+*(G3, F2, F4, F11, F12, L10, L12, L14–L16)*
 
 **FD-80 — Functional Pyramid resolution never originates missing governance.**
 No resolver path may invent a context, rule, goal, governing edge, exception,
@@ -320,22 +366,25 @@ declaration source requests, one explicit `FunctionalScope`, and its declared
 Functional Pyramid instance at a time so ordinary repository-scoped `ask` has
 one unambiguous governing instance. *(G8, A3, F12, L13, L14)*
 
-**FD-83 — Participation-state transitions are closed.**
-The durable states are exactly `UNCONFIGURED`, `EXCLUDED` and `ACTIVE`, with
-the transitions in lifecycle §7.1.
+**FD-83 — Participation transitions and active health have separate
+deterministic owners.**
+Durable participation follows lifecycle §7.1 and changes only through accepted
+Functional Pyramid record actions. No source, filesystem, installer, model,
+`ask`, `reconsider` or hook event performs a hidden participation write.
 
-- candidate validation never changes durable state;
-- failed activation/revision leaves the prior durable state/version unchanged;
-- successful activation moves UNCONFIGURED/EXCLUDED members to ACTIVE;
-- successful revision keeps retained members ACTIVE and makes removed members
-  UNCONFIGURED; removal is not an explicit non-participation decision;
-- deactivation moves every member to EXCLUDED.
+For an ACTIVE instance, live health is computed from current structural state:
 
-No source, filesystem, installer, model, `ask`, `reconsider` or hook event
-creates another durable transition. For ACTIVE participation, structural
-availability/validity is instead evaluated as live `VALID | DEGRADED` health.
-The same active version can move between those health results as current
-repository state changes without a write. *(G1, G8, F12, L13, L14)*
+- `VALID` iff there is no current structural finding for required member
+  availability, declaration-source validity, context/rule identity ownership,
+  context/rule cycles, governing-edge legality, cross-member resolution, or a
+  COMPLETE member's FunctionalScope coverage;
+- `DEGRADED` iff at least one such structural finding exists.
+
+`FunctionalPyramidStatus.findings` is exactly the current set that causes
+DEGRADED health. Authority content/status currency, expected PARTIAL uncovered
+scope and semantic conclusion support do not degrade graph health. The same
+ACTIVE version may therefore move VALID ↔ DEGRADED as current source/member
+state changes without a participation write. *(G1, G8, F11, F12, L13–L14)*
 
 **FD-84 — Candidate validation is pure, action-aware,
 deterministic and complete.**
@@ -380,10 +429,22 @@ request identity + same canonical write content is replay; same identity +
 different content is conflict. Ordinary repository-scoped receipts remain
 unchanged.
 
+Before ACTIVATE/REVISE/DEACTIVATE commits, Span computes the deterministic
+participation changes and FD-79 semantic dependent effects against the same
+transaction decision. The immutable receipt retains the durable participation
+and dependent-effect coordinates; the public result projects them through the
+same `ChangedSurface`/affected-conclusion carriers used by `reconsider`.
+Exactly one repository-bound live re-establishment context is issued for each
+repository with an actionable effect. A replay returns the same durable
+acceptance/effect set and may issue fresh live contexts if prior ones expired;
+it never recomputes a different accepted effect set from later governance state.
+
 Activation/revision stores only the identities, relationships, source identities,
 functional scopes and coverage needed to reproduce resolution; canonical
-governing prose is never stored as pyramid content. Revision remains
-compare-and-set on the target pyramid version. *(G6, G8, A2, A3, F1, F12, L4, L14)*
+governing prose is never stored as pyramid content. Revision/deactivation remain
+compare-and-set on the target pyramid version, and activation/revision atomically
+enforce one ACTIVE pyramid per repository. *(G3, G6, G8, A2, A3, F1, F4, F12,
+L4, L14–L15)*
 
 **FD-86 — Coverage is evaluated against the declared functional
 scope, never repository inventory.**
@@ -404,8 +465,11 @@ grammar as Functional Context coverage.
   declarations or coverage claim are corrected.
 
 Repository paths outside the declared `FunctionalScope` are not made
-functional merely because they exist and do not participate in COMPLETE
-coverage proof. *(G1, G4, G8, F11, F12, L13)*
+functional merely because they exist, do not participate in COMPLETE coverage
+proof, and do not return `UNCOVERED_PATH`. A semantic scope wholly outside the
+boundary is `OUTSIDE_FUNCTIONAL_SCOPE` with a resolved empty governing
+projection. A broad scope crossing the boundary is classified `MIXED` and
+preserves outside/covered/uncovered provenance under FD-62/FD-69. *(G1, G4, G8, F11, F12, L13)*
 
 **FD-87 — Membership is resolution reachability, never applicability.**
 Adding a repository to an instance makes its stable declared identities
@@ -423,16 +487,20 @@ declared contexts that reference them. Reverse traversal is navigation/impact
 orientation only; it does not predict what a proposed edit will do and never
 creates a second dependency registry. *(G3, G7, F4, F11, L15, L16)*
 
-**FD-89 — Cross-repository change propagation uses the whole instance.**
-When changed paths can affect a context declaration, rule declaration, canonical
-authority source or member binding, direct dependency lookup starts from the
-changed repository but traverses FD-88/route-support dependents across every
-member of the same instance. Affected semantic surfaces remain owned by their own repositories. The
-`Changed` result retains those repository-qualified surface identities and
-returns `reestablishment_contexts: tuple[InvestigationContextRef, ...]` with
-exactly one existing context for each repository that owns actionable affected
-conclusions. No context spans repositories and the
-caller need not submit dependent repository IDs. *(G3, F4, F12, L10, L15)*
+**FD-89 — Cross-repository change propagation uses one dependency engine.**
+Repository changed-scope and accepted Functional Pyramid participation changes
+are two roots into the same FD-88/route-support dependency traversal. A
+repository changed-scope starts from the changed repository. A Functional
+Pyramid write starts from its old/new member/binding/route delta. Both traverse
+every reachable dependent inside the relevant instance and then premise closure.
+
+Affected semantic surfaces remain owned by their own repositories. The canonical
+affected projection retains repository-qualified surface identities and exactly
+one repository-bound `InvestigationContextRef` for each repository that owns
+actionable affected conclusions. `reconsider` returns it as `Changed`;
+`FunctionalPyramidRecorded` reuses the same affected carriers. No context spans
+repositories and callers never enumerate dependent repository IDs. *(G3, F4,
+F12, L10, L14–L15)*
 
 **FD-90 — The governing projection uses the same effective semantic scope.**
 For ordinary semantic obtain, Functional Pyramid applicability is resolved from
@@ -451,31 +519,31 @@ superseded, unavailable or changed under FD-12. Durable participation, live
 pyramid health, per-scope route resolution and conclusion support are never used
 as shortcuts for one another. *(G1, F1, F2, F12, L13, L16)*
 
-**FD-92 — Functional Pyramid status/candidate projection is lifecycle data, not
-semantic understanding.**
-`FunctionalPyramidSelector` returns exact participation/instance state;
-`FunctionalPyramidCandidateSelector` returns pure validation findings. Neither
-result creates an Answer, conclusion, investigation context or authority.
-Surface/current-understanding obtain continues to compose semantic content with
-the governing projection for that surface. *(F5, F6, F11, F12, L8, L13, L14)*
+**FD-92 — Functional Pyramid lifecycle projections never become semantic
+understanding.**
+Status, candidate validation and receipt retrieval are lifecycle projections over
+declared/persisted pyramid state. They never create an Answer, conclusion,
+investigation context, rule meaning or authority. Ordinary semantic obtain
+composes its existing Answer/Gap membership with the governing projection for
+the same semantic scope without allowing either plane to manufacture the other.
+*(F1, F5, F6, F11, F12, L8, L12–L14)*
 
-**FD-93 — Functional Pyramid writes are one record kind, not a fourth tool.**
-The `functional_pyramid` record kind implements activate/revise/deactivate/
-exclude exactly as lifecycle §4.2 defines, returns
-`FunctionalPyramidRecorded` with canonical
-`FunctionalPyramidParticipationEffect` entries, and uses the
-installation-scoped Functional Pyramid receipt/replay namespace from FD-85. The
-caller supplies intended member/declaration/functional-scope/coverage input;
-Span derives pyramid identity, validation, source identities and participation
-effects. *(G8, F6, F7,
-F12, L4, L8, L14)*
+**FD-93 — Functional Pyramid writes derive all mechanical state and effects.**
+For the Layer-2 Functional Pyramid record branch, the caller supplies only the
+declared lifecycle intent. Span derives pyramid identity/version, validation,
+source identities, participation effects, semantic dependent effects and
+re-establishment contexts through FD-84/FD-85/FD-89. The write never creates a
+second semantic writer, route carrier or dependency-effect representation.
+*(G3, G8, F6, F7, F12, L4, L8, L14–L15)*
 
 **FD-94 — Lifecycle notices reflect participation without becoming governance.**
 For a registered UNCONFIGURED repository, the session notice directs the agent to
 the Functional Pyramid initialization skill/status path; EXCLUDED is quiet about
 initialization unless explicitly requested. ACTIVE/VALID uses ordinary
 governed-work guidance. ACTIVE/DEGRADED reports governance attention and the next
-public lifecycle action. Change notices use canonical cross-repository reconsideration results.
+public lifecycle action. ACTIVE/DEGRADED means ACTIVE participation with DEGRADED live health, not a
+fourth participation state. Change notices use the canonical affected projection
+from either reconsideration or an accepted Functional Pyramid write.
 Hooks never activate/revise a pyramid, author rule meaning, copy rule content,
 or make support current. *(G8, A4, F5, F10, F12, L13–L16)*
 
@@ -540,11 +608,16 @@ reason, so a definite finding is not lost inside an `UNVERIFIABLE` summary.
 
 **FD-81 — Route dependency.**
 Re-resolve the exact semantic scope through FD-61–FD-73 and the current
-Functional Pyramid instance bindings under FD-82–FD-91. If evaluation of that
-scope is operationally impossible, support is `UNVERIFIABLE`. If its complete
+Functional Pyramid instance bindings under FD-82–FD-91. If the revision recorded route support while its repository was ACTIVE and the
+repository is now UNCONFIGURED/EXCLUDED or has been removed from that instance,
+the governing applicability definitely changed and support is
+`REASSESSMENT_REQUIRED`; this is not operational unavailability. If the
+repository remains ACTIVE but evaluation of the required route/member/declaration
+state is operationally impossible, support is `UNVERIFIABLE`. If its complete
 route-support identity differs from the recorded identity, support is
-`REASSESSMENT_REQUIRED`. If that route contains an unresolved branch, support
-is `UNVERIFIABLE`. Only the same complete resolved route is `CURRENT`.
+`REASSESSMENT_REQUIRED`. If that route contains an unresolved functional
+branch, support is `UNVERIFIABLE`. Only the same complete resolved route is
+`CURRENT`.
 DEGRADED live health does not by itself invalidate an unrelated scope whose
 route still resolves identically. Applicable authority content/status is checked
 separately by FD-12. *(F2, F11, F12, L13, L15)*
@@ -648,7 +721,7 @@ When a surface reference resolves to more than one granularity, the result is
 A failure that prevents the lifecycle operation itself from evaluating —
 unavailable store, required provider error, schema version — returns
 `Unavailable` with the recovery. If semantic answer composition succeeds but
-Functional Pyramid orientation for an ACTIVE/DEGRADED member fails operationally,
+Functional Pyramid orientation for an ACTIVE member, including one whose live health is DEGRADED, fails operationally,
 the Answer/Gap carries `FunctionalPyramidUnavailable`; it does not erase otherwise valid descriptive
 understanding. Normative conclusions whose route support cannot be evaluated
 remain non-current through FD-81. An unreadable source is not
@@ -716,7 +789,7 @@ A create carries its complete explicit support when supplied, otherwise the
 admitted observation or a re-read of the cited locator. *(F5, F7, L2)*
 The new conclusion lineage identity follows L7; assertion nature defaults to
 `DESCRIPTIVE`; the basis records explicit evidence from the cited source. For
-`NORMATIVE` content in a participating repository, route and authority support
+`NORMATIVE` content in an ACTIVE Functional Pyramid repository, route and authority support
 are derived under FD-75 after semantic scope is fixed and before acceptance.
 *(F5, F7, F11, L2, L12)*
 
@@ -859,9 +932,13 @@ owner. *(A1, A2, F4, L7, L10)*
 An update names the expected version. A mismatch rejects the write and reports
 the current version. *(A3, L4)*
 
-This applies to understanding versions and to declared-surface boundary
-versions. The surface-conflict case is fixed in `lifecycle-contract` §4.2.
-*(A3, L4)*
+This applies to understanding versions, declared-surface boundary versions and
+Functional Pyramid revisions/deactivation. A Functional Pyramid revision or
+deactivation names the exact current pyramid version; a stale version rejects
+without participation change. Activation has no prior pyramid version, but the
+same transaction must enforce that no proposed member is already ACTIVE in
+another instance. The surface-conflict and Functional Pyramid write cases are
+fixed in `lifecycle-contract` §4.2. *(A3, F12, L4, L13, L14)*
 
 **FD-47 — Same identity, concurrent writers.**
 Two writers with the same request identity and content produce one acceptance and
@@ -904,16 +981,15 @@ result schemas; no host is accepted on evidence from a separate authority tool
 because no such public operation exists. *(F6, L8, L12)*
 
 **FD-58 — Lifecycle notices reach the agent at the moment of use.**
-For a registered operational repository, the notice reflects the durable
-Functional Pyramid participation state under FD-94 and names only the next
-public lifecycle action: initialization/status orientation for UNCONFIGURED,
-ordinary governed-work orientation for ACTIVE, governance attention for
-DEGRADED, and no unsolicited initialization pressure for EXCLUDED. A
-source/governance-change notice names the next required `reconsider` action and
-may report that affected understanding crosses member repositories. Notices use
-canonical computations; they do not activate/revise governance, author semantic
-conclusions or certify meaning. Measure delivered notice cost under F8 and
-delivery under FD-53. *(F5, F10, F12, G2, G8, L13–L16)*
+The delivered host notice names only the next public lifecycle action computed
+from canonical lifecycle state; it does not duplicate or independently classify
+participation, health, support, or affected understanding. Functional Pyramid
+notice selection is the deterministic case owned by FD-94. A
+source/governance-change notice may report that affected understanding crosses
+member repositories but never computes another affected set. Notices never
+activate/revise governance, author semantic conclusions or certify meaning.
+Measure delivered notice cost under F8 and delivery under FD-53. *(F5, F10, G2,
+F12, L13–L16)*
 
 ## 13. Bounds and truncation
 
@@ -1015,8 +1091,11 @@ replaces.
 A4 says the agent will omit bookkeeping; F7 says Span derives what can be
 derived; G7 requires governing applicability to be complete. If the caller were
 allowed to enumerate the applicable governing route, omission would create a
-false CURRENT normative conclusion. Therefore Span derives route and authority
-support from the already-declared semantic scope and Functional Pyramid.
+false CURRENT normative conclusion. Therefore, when the repository is ACTIVE and the semantic scope has a
+functional portion, Span derives route and authority support from the
+already-declared semantic scope and Functional Pyramid. A scope wholly outside
+the declared FunctionalScope derives a resolved empty applicability route rather
+than invented authority.
 
 ### confirm (FD-31)
 
@@ -1048,9 +1127,10 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
    `RetrievedFunctionalPyramidReceipt`; invalid activation leaves every
    repository's prior state unchanged.
 4. **Revision and removal.** A compare-and-set revision atomically changes the
-   complete member intent; canonical participation effects show retained/added
-   members ACTIVE and removed members UNCONFIGURED, retained members preserve the
-   pyramid identity with a new version, and a stale expected version is reported
+   complete member intent; the resulting member set shows retained/added ACTIVE members while canonical
+   participation effects contain only actual durable-state changes (for example,
+   added members becoming ACTIVE and removed members becoming UNCONFIGURED);
+   retained members preserve the pyramid identity with a new version, and a stale expected version is reported
    by candidate validation and rejected at write revalidation.
 5. **Partial coverage.** A PARTIAL member is evaluated only within its explicit
    FunctionalScope; uncovered scope inside that boundary returns
@@ -1151,6 +1231,41 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 31. **Three-tool host surface.** Initialization, governed development and
     re-alignment are all reachable through `ask`, `record` and `reconsider`;
     no authority/pyramid MCP operation is advertised.
+32. **Outside FunctionalScope.** An ACTIVE member queried wholly outside its
+    declared FunctionalScope returns `OUTSIDE_FUNCTIONAL_SCOPE`, a resolved
+    empty governing projection and no `UNCOVERED_PATH`.
+33. **Broad scope crossing the functional boundary.** A directory/service/domain
+    scope spanning outside and functional portions returns `MIXED` and preserves
+    outside/covered/uncovered provenance without inventing file enumeration.
+34. **Health iff structural findings.** ACTIVE health is VALID exactly when the
+    FD-83 structural finding set is empty and DEGRADED exactly when it is
+    non-empty; authority currency and expected PARTIAL gaps do not change health.
+35. **Activation of pre-existing normative understanding.** A repository with a
+    retained NORMATIVE revision recorded before ACTIVE participation is activated;
+    that revision is returned as a direct dependent effect and becomes
+    REASSESSMENT_REQUIRED until re-established with server-derived governance
+    support.
+36. **Functional Pyramid write propagation.** ACTIVATE/REVISE/DEACTIVATE return
+    the same canonical affected-surface/conclusion projection used by reconsider,
+    plus exactly one repository-bound re-establishment context per repository
+    with actionable effects.
+37. **Deactivation/removal route state.** A revision with recorded route support
+    whose repository becomes UNCONFIGURED or EXCLUDED is
+    REASSESSMENT_REQUIRED, not UNVERIFIABLE merely because participation ended.
+38. **Operational route failure while ACTIVE.** An ACTIVE repository whose
+    required route/member/declaration state cannot presently be evaluated is
+    UNVERIFIABLE; deliberate participation change and operational unavailability
+    remain distinct.
+39. **Pyramid-write replay contexts.** Replaying an accepted Functional Pyramid
+    write returns the same immutable participation/dependent-effect set and may
+    issue fresh live re-establishment contexts after earlier contexts expire; it
+    never recomputes a different accepted effect set.
+40. **Pyramid concurrency.** Concurrent revise/deactivate operations obey pyramid
+    version compare-and-set, and concurrent overlapping activations/revisions
+    cannot make one repository ACTIVE in more than one instance.
+41. **Initialization declaration edits use ordinary re-alignment.** Every
+    repository declaration edit in lifecycle §7.1 runs through changed-scope
+    reconsideration and disposition before candidate validation proceeds.
 
 
 ## 16. What this layer does not define
