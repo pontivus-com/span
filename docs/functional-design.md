@@ -104,20 +104,28 @@ view and no route dependency; it is not an error, gap or inferred empty graph.
 A repository that participates must resolve its declarations or report the
 specific unresolved state. *(G4, G7, F11, L12)*
 
-**FD-62 — Path matching is deterministic and repository-relative.**
-Input paths are normalized to one repository-relative identity before matching.
-Absolute paths, traversal outside the repository and ambiguous repository
-identity are rejected. Matching uses only the repository's declared selectors.
-The concrete selector syntax is layer 4; semantic classification, model
-judgment, file-name heuristics and structural proximity never participate.
-*(F11, L12)*
+**FD-62 — Scope matching is deterministic and repository-relative.**
+The effective semantic scope is normalized before Functional Pyramid matching.
+An exact file/symbol path is matched directly. A directory, declared-surface or
+repository-wide scope resolves every functional context whose declared coverage
+intersects that semantic scope, including contexts narrower than the scope
+boundary. Repository-wide scope therefore intersects every declared context in
+that participating repository.
 
-**FD-63 — Every matching context applies.**
-A path resolves to all directly matching functional contexts. Matching is
-additive: a narrower or more specific match adds context and never suppresses a
-broader match. Several contexts applying to one path is normal and is not an
-`AmbiguousSurface`. One functional context may cover several disconnected
-paths. *(G4, G7, F11)*
+The layer-4 selector grammar must make both membership and scope intersection
+deterministically decidable. If a declared selector cannot be evaluated against
+the semantic scope, resolution reports `UNRESOLVED_SCOPE_INTERSECTION`; it
+does not assume non-applicability. Absolute paths, traversal outside the
+repository and ambiguous repository identity are rejected. Semantic
+classification, model judgment, file-name heuristics and structural proximity
+never participate. *(G1, G4, F11, L12)*
+
+**FD-63 — Every applicable context composes.**
+A semantic scope resolves to all directly applicable functional contexts under
+FD-62. Applicability is additive: a narrower or more specific context adds
+obligations and never suppresses a broader context. Several contexts applying to
+one exact path or broad scope is normal and is not an `AmbiguousSurface`. One
+functional context may cover several disconnected paths. *(G4, G7, F11)*
 
 **FD-64 — Context inheritance is many-to-many and additive.**
 A context may inherit zero or more declared contexts. Resolution expands every
@@ -161,7 +169,8 @@ rule text is correct. *(G7, F11)*
 **FD-68 — Route resolution follows declarations to closure.**
 For each selected path Span:
 
-1. finds every directly matching context;
+1. finds every directly applicable context by deterministic semantic-scope
+   intersection under FD-62;
 2. expands context inheritance;
 3. collects every rule referenced by those contexts;
 4. resolves each rule's canonical owner;
@@ -172,12 +181,14 @@ For each selected path Span:
 No step selects a preferred route when several valid routes apply. *(G1, G7,
 F11, L12)*
 
-**FD-69 — Multi-path resolution is a provenance-preserving union.**
-When a semantic scope contains several paths, Span resolves each path
-independently, unions identical contexts and rules for presentation, and
-preserves the path-to-context-to-rule provenance for each input. A rule that is
-shared by all paths appears once in the rule set but remains traceable from each
-applicable path. *(G4, F11)*
+**FD-69 — Multi-path and broad-scope resolution preserve provenance.**
+When a semantic scope contains several explicit paths, Span resolves each path
+or path boundary under FD-62, unions identical contexts and rules for
+presentation, and preserves the scope-path-to-context-to-rule provenance for
+each input. A repository-wide scope is represented as that semantic scope, not
+as an invented list of files. A rule shared by several scope members appears
+once in the rule set but remains traceable from every applicable member.
+*(G4, F11)*
 
 **FD-70 — Cross-repository references are explicit.**
 Context and rule references may cross repositories only through declared stable
@@ -193,6 +204,7 @@ The resolver distinguishes at least:
 
 - `UNCOVERED_PATH`;
 - `INVALID_DECLARATION`;
+- `UNRESOLVED_SCOPE_INTERSECTION`;
 - `DUPLICATE_CONTEXT_OWNER`;
 - `UNKNOWN_CONTEXT`;
 - `CONTEXT_CYCLE`;
