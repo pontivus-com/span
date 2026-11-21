@@ -36,10 +36,20 @@ def _member_intent(repository_id: str = "repo-a") -> m.FunctionalPyramidMemberIn
     )
 
 
+def _declaration_ref(repository_id: str = "repo-a") -> m.EvidenceRef:
+    return m.EvidenceRef(
+        evidence_id=m.EvidenceId(f"ev-{repository_id}-functional-pyramid"),
+        repository_id=repository_id,
+        source_kind=m.EvidenceSourceKind.CONFIGURATION,
+        locator="docs/functional-pyramid.json",
+        revision_or_fingerprint="digest",
+    )
+
+
 def _member_view(repository_id: str = "repo-a") -> m.FunctionalPyramidMemberView:
     return m.FunctionalPyramidMemberView(
         repository_id=repository_id,
-        declaration_refs=(),
+        declaration_refs=(_declaration_ref(repository_id),),
         functional_scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
         coverage=m.FunctionalPyramidCoverage.PARTIAL,
     )
@@ -187,6 +197,15 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
             {item.value for item in m.FunctionalPyramidLayer},
             {"P0", "P1", "P2S", "P2W", "P3", "P4"},
         )
+
+    def test_graph_reference_is_repository_qualified(self):
+        ref = m.FunctionalGraphRef("repo-a", "C1")
+        self.assertEqual(ref.repository_id, "repo-a")
+        self.assertEqual(ref.identity, "C1")
+        with self.assertRaises(ValueError):
+            m.FunctionalGraphRef("", "C1")
+        with self.assertRaises(ValueError):
+            m.FunctionalGraphRef("repo-a", "")
 
     def test_nominal_identity_and_version_are_strict(self):
         with self.assertRaises(ValueError):
