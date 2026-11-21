@@ -89,7 +89,7 @@ class _Authority:
 
 
 class FunctionalPyramidServiceTest(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.declarations = _Declarations()
         self.authority = _Authority()
         self.service = FunctionalPyramidService(
