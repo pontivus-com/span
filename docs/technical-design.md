@@ -1215,7 +1215,7 @@ second declaration of those requirements.
 | FD-75–FD-81 | Part C §18, §20.2–§20.3 | support/record/reconsider tests; FunctionalRouteSupport derivation/evaluation, authority separation, pre-existing normative activation effects, deliberate participation removal vs operational unavailability | Version-1 target; implementation pending |
 | FD-82–FD-85, FD-93 | Part C §19–§20.4 | lifecycle store/service/schema tests; installation-level receipts, activation/revision/deactivation atomicity, participation effects, dependent effects, replay with fresh contexts, pyramid CAS and one-ACTIVE-instance uniqueness | Version-1 target; implementation pending |
 | FD-92, FD-94; L8, L13–L16 | Part C §20–§22 | generated schema, MCP integration, hooks/skills and host capture; exact three tools, candidate/status/receipt selectors, FunctionalPyramidRecorded affected projection, initialization DECLARE→reconsider→VALIDATE guidance | Version-1 target; implementation pending |
-| Functional design §15 cases 32–41 | Part C §18–§22 | generic acceptance plus installed MCP; outside scope, MIXED scope, structural health equivalence, activation of pre-existing normative understanding, participation-write propagation, deactivation/removal route state, replay/context recovery, concurrency, initialization re-alignment | Version-1 target; implementation pending |
+| Functional design §15 cases 32–44 | Part C §18–§22 | generic acceptance plus installed MCP; outside scope, MIXED scope, structural health equivalence, activation of pre-existing normative understanding, participation-write propagation, deactivation/removal route state, replay/context recovery, concurrency, initialization re-alignment, conformance-as-NORMATIVE, accepted-non-current runtime gating and participation-write effect completion | Version-1 target; implementation pending |
 
 The matrix covers both the established Part-B baseline and the Part-C
 Version-1 target. Part-B historical/current mechanism claims remain governed by
@@ -1606,7 +1606,10 @@ unchanged unless the caller explicitly cites authority.
 
 If derived governance is non-current, acceptance still follows the existing
 semantic write path; live qualification is non-current and F2 keeps the revision
-out of CURRENT Answer content.
+out of CURRENT Answer content. The service does not manufacture a second
+"completed" result: agent lifecycle guidance consumes the returned
+`UnderstandingRecorded.qualification`, and only CURRENT required qualification
+permits successful CONCLUDE/REESTABLISH completion.
 
 #### 20.3 `reconsider` and shared effect engine
 
@@ -1654,7 +1657,10 @@ context per repository with actionable effects. The receipt stores only the
 immutable dependent `ConclusionRevisionRef` identities. On replay, §19
 re-evaluates only those retained refs to produce the current actionable
 `ChangedSurface` projection and fresh contexts; replay never expands the
-accepted effect identity set.
+accepted effect identity set. Receipt selectors from accepted participation
+writes remain the durable public handoff across subsequent DEGRADED repair or
+revision loops so earlier accepted effect refs cannot disappear from lifecycle
+completion merely because a later pyramid write occurs.
 
 ### 21. Offline transition and compatibility boundary
 
@@ -1706,9 +1712,24 @@ Pyramid semantics from strings, paths or runtime class names. Exactly three
 advertised tools remain `ask`, `record`, `reconsider`.
 
 Update the Functional Pyramid skill and managed notices only after the canonical
-wire is generated. The initialization guidance must show
-DISCOVER → DECLARE → ordinary changed-scope reconsider/disposition → VALIDATE;
-it must not jump from a repository edit directly to candidate validation.
+wire is generated. Initialization guidance must consume the Layer-2 result gates,
+not merely call names:
+
+`STATUS → DISCOVER/VALIDATE → DECLARE when needed → reconsider/disposition →
+VALIDATE → ACTIVATE/REVISE → VERIFY → REESTABLISH when accepted write effects
+remain actionable → ACTIVE`.
+
+DEACTIVATE likewise consumes its returned dependent effects before the
+deactivation task is called complete. An accepted participation write is never
+treated as completion solely because it returned a receipt. The skill retains
+the returned Functional Pyramid receipt selector/effect obligation across any
+DEGRADED repair/revision loop and uses replay/live projection when fresh
+re-establishment contexts are required.
+
+Ordinary runtime guidance likewise checks
+`UnderstandingRecorded.qualification`: accepted but non-current NORMATIVE
+content returns to investigation/re-establishment instead of successful
+COMPLETE. Conformance guidance always records that judgment as NORMATIVE.
 Participation/health notices use the canonical status/health evaluator and
 affected projections, never an independent hook computation.
 
@@ -1723,7 +1744,11 @@ functional-design §15 case, specifically:
   UNVERIFIABLE;
 - Functional Pyramid receipt replay with fresh expired-context recovery;
 - pyramid CAS and overlapping activation concurrency;
-- initialization declaration-edit reconsideration;
+- initialization declaration-edit reconsideration and post-write effect
+  disposition before successful adoption/revision/deactivation completion;
+- accepted non-current NORMATIVE record results returning to
+  investigation/re-establishment rather than successful COMPLETE;
+- conformance judgments using the NORMATIVE assertion contract;
 - preservation of every pre-Version-1 semantic lifecycle branch and exactly
   three public MCP tools.
 
