@@ -453,7 +453,9 @@ class LifecycleService:
             if isinstance(governed, m.Unavailable):
                 return governed
             if not isinstance(governed, m.UpdateUnderstandingCommand):
-                raise TypeError("update governance derivation returned a create command")
+                raise TypeError(
+                    "update governance derivation returned a create command"
+                )
             no_op = self._confirm_noop(governed)
             if no_op is not None:
                 return self.qualify_understanding(
