@@ -92,9 +92,7 @@ def _base_graph() -> tuple[
         contexts=(
             m.FunctionalContextDeclaration(
                 context_id="ctx-platform",
-                coverage=_scope(
-                    _selector(m.FunctionalScopeSelectorKind.PREFIX, "src")
-                ),
+                coverage=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
                 rules=(_graph_ref("repo-a", "rule-p3"),),
             ),
             m.FunctionalContextDeclaration(
@@ -143,18 +141,10 @@ def _base_graph() -> tuple[
         ),
     )
     authorities = {
-        ("repo-a", "rules/rule-p3.md"): _authority(
-            "repo-a", "rules/rule-p3.md"
-        ),
-        ("repo-a", "rules/rule-p4.md"): _authority(
-            "repo-a", "rules/rule-p4.md"
-        ),
-        ("repo-b", "rules/rule-p0.md"): _authority(
-            "repo-b", "rules/rule-p0.md"
-        ),
-        ("repo-b", "rules/rule-p1.md"): _authority(
-            "repo-b", "rules/rule-p1.md"
-        ),
+        ("repo-a", "rules/rule-p3.md"): _authority("repo-a", "rules/rule-p3.md"),
+        ("repo-a", "rules/rule-p4.md"): _authority("repo-a", "rules/rule-p4.md"),
+        ("repo-b", "rules/rule-p0.md"): _authority("repo-b", "rules/rule-p0.md"),
+        ("repo-b", "rules/rule-p1.md"): _authority("repo-b", "rules/rule-p1.md"),
     }
     return members, (("repo-a", repo_a), ("repo-b", repo_b)), authorities
 
@@ -167,12 +157,8 @@ class FunctionalPyramidDeclarationDecodeTest(unittest.TestCase):
                 {
                     "context_id": "ctx",
                     "coverage": [{"kind": "PREFIX", "path": "src"}],
-                    "inherits": [
-                        {"repository_id": "repo-b", "identity": "shared"}
-                    ],
-                    "rules": [
-                        {"repository_id": "repo-a", "identity": "rule-p3"}
-                    ],
+                    "inherits": [{"repository_id": "repo-b", "identity": "shared"}],
+                    "rules": [{"repository_id": "repo-a", "identity": "rule-p3"}],
                 }
             ],
             "rules": [
@@ -189,9 +175,7 @@ class FunctionalPyramidDeclarationDecodeTest(unittest.TestCase):
                 }
             ],
         }
-        declaration = fp.decode_functional_pyramid_declaration(
-            json.dumps(payload)
-        )
+        declaration = fp.decode_functional_pyramid_declaration(json.dumps(payload))
         self.assertEqual(
             declaration.contexts[0].inherits,
             (_graph_ref("repo-b", "shared"),),
@@ -222,9 +206,7 @@ class FunctionalPyramidDeclarationDecodeTest(unittest.TestCase):
             fp.decode_functional_pyramid_declaration(json.dumps(payload))
 
         del payload["contexts"][0]["extra"]
-        declaration = fp.decode_functional_pyramid_declaration(
-            json.dumps(payload)
-        )
+        declaration = fp.decode_functional_pyramid_declaration(json.dumps(payload))
         self.assertEqual(
             declaration.contexts[0].coverage,
             _scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
@@ -516,7 +498,5 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             available_repositories=frozenset({"repo-a"}),
             authority_bindings={},
         )
-        self.assertEqual(
-            broad_view.scope_relation, m.FunctionalScopeRelation.COVERED
-        )
+        self.assertEqual(broad_view.scope_relation, m.FunctionalScopeRelation.COVERED)
         self.assertIn("ctx-child", {item.context_id for item in broad_view.contexts})
