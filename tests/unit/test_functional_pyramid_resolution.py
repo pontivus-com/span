@@ -305,6 +305,28 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
         )
         self.assertEqual(first, third)
 
+        _, service_a = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(3),
+            members=members,
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.SERVICE, "service-a"),
+            semantic_scope=m.EvidenceScope(paths=("src",)),
+            declarations=declarations,
+            available_repositories=frozenset({"repo-a", "repo-b"}),
+            authority_bindings=authorities,
+        )
+        _, service_b = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(3),
+            members=members,
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.SERVICE, "service-b"),
+            semantic_scope=m.EvidenceScope(paths=("src",)),
+            declarations=declarations,
+            available_repositories=frozenset({"repo-a", "repo-b"}),
+            authority_bindings=authorities,
+        )
+        self.assertEqual(service_a, service_b)
+
         missing_authority = dict(authorities)
         del missing_authority[("repo-b", "rules/rule-p1.md")]
         unresolved_view, fourth = fp.resolve_functional_pyramid_route(
