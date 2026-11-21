@@ -35,9 +35,7 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
 class FunctionalPyramidStateTransaction(_typing.Protocol):
     """Atomic installation-state writer with attached repository context sinks."""
 
-    def active_pyramid_id(
-        self, repository_id: str
-    ) -> m.FunctionalPyramidId | None: ...
+    def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None: ...
 
     def pyramid_version(
         self, pyramid_id: m.FunctionalPyramidId
@@ -98,9 +96,7 @@ class FunctionalPyramidStatePort(_typing.Protocol):
 
     retention: m.LifecycleRetention
 
-    def active_pyramid_id(
-        self, repository_id: str
-    ) -> m.FunctionalPyramidId | None: ...
+    def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None: ...
 
     def pyramid_version(
         self, pyramid_id: m.FunctionalPyramidId
