@@ -214,7 +214,9 @@ class FunctionalContextDeclaration:
         for rule_id in self.rules:
             _require_non_empty("FunctionalContextDeclaration.rules", rule_id)
         if len(set(self.inherits)) != len(self.inherits):
-            raise ValueError("FunctionalContextDeclaration.inherits contains duplicates")
+            raise ValueError(
+                "FunctionalContextDeclaration.inherits contains duplicates"
+            )
         if len(set(self.rules)) != len(self.rules):
             raise ValueError("FunctionalContextDeclaration.rules contains duplicates")
 
@@ -271,9 +273,13 @@ class FunctionalPyramidMemberIntent:
     coverage: FunctionalPyramidCoverage
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalPyramidMemberIntent.repository_id", self.repository_id)
+        _require_non_empty(
+            "FunctionalPyramidMemberIntent.repository_id", self.repository_id
+        )
         if not self.declaration_sources:
-            raise ValueError("FunctionalPyramidMemberIntent requires declaration sources")
+            raise ValueError(
+                "FunctionalPyramidMemberIntent requires declaration sources"
+            )
 
 
 @_dataclass(frozen=True)
@@ -284,7 +290,9 @@ class FunctionalPyramidMemberView:
     coverage: FunctionalPyramidCoverage
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalPyramidMemberView.repository_id", self.repository_id)
+        _require_non_empty(
+            "FunctionalPyramidMemberView.repository_id", self.repository_id
+        )
         for ref in self.declaration_refs:
             if ref.repository_id != self.repository_id:
                 raise ValueError(
@@ -298,7 +306,9 @@ class FunctionalPyramidParticipation:
 
     def __post_init__(self) -> None:
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
-            raise ValueError("ACTIVE participation is projected as FunctionalPyramidView")
+            raise ValueError(
+                "ACTIVE participation is projected as FunctionalPyramidView"
+            )
 
 
 @_dataclass(frozen=True)
@@ -354,9 +364,7 @@ class FunctionalPyramidValidationFinding:
             ("declaration_locator", self.declaration_locator),
         ):
             if value is not None:
-                _require_non_empty(
-                    f"FunctionalPyramidValidationFinding.{name}", value
-                )
+                _require_non_empty(f"FunctionalPyramidValidationFinding.{name}", value)
 
 
 @_dataclass(frozen=True)
@@ -371,7 +379,9 @@ class FunctionalPyramidStatus:
     def __post_init__(self) -> None:
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
             if self.health is None or self.pyramid_id is None or self.version is None:
-                raise ValueError("ACTIVE status requires health, pyramid_id, and version")
+                raise ValueError(
+                    "ACTIVE status requires health, pyramid_id, and version"
+                )
             if not self.members:
                 raise ValueError("ACTIVE status requires at least one member")
             if self.health is FunctionalPyramidHealth.VALID and self.findings:
@@ -385,7 +395,9 @@ class FunctionalPyramidStatus:
         if self.pyramid_id is not None or self.version is not None or self.members:
             raise ValueError("inactive Functional Pyramid status has no live instance")
         if self.findings:
-            raise ValueError("inactive Functional Pyramid status has no health findings")
+            raise ValueError(
+                "inactive Functional Pyramid status has no health findings"
+            )
 
 
 @_dataclass(frozen=True)
@@ -399,7 +411,9 @@ class FunctionalPyramidSelector:
                 "FunctionalPyramidSelector requires exactly one repository_id or pyramid_id"
             )
         if self.repository_id is not None:
-            _require_non_empty("FunctionalPyramidSelector.repository_id", self.repository_id)
+            _require_non_empty(
+                "FunctionalPyramidSelector.repository_id", self.repository_id
+            )
 
 
 @_dataclass(frozen=True)
@@ -513,7 +527,9 @@ class FunctionalRouteProvenance:
         for value in self.rule_ids:
             _require_non_empty("FunctionalRouteProvenance.rule_ids", value)
         if len(set(self.context_ids)) != len(self.context_ids):
-            raise ValueError("FunctionalRouteProvenance.context_ids contains duplicates")
+            raise ValueError(
+                "FunctionalRouteProvenance.context_ids contains duplicates"
+            )
         if len(set(self.rule_ids)) != len(self.rule_ids):
             raise ValueError("FunctionalRouteProvenance.rule_ids contains duplicates")
 
@@ -534,14 +550,21 @@ class FunctionalPyramidView:
 
     def __post_init__(self) -> None:
         if self.status is FunctionalPyramidRouteStatus.RESOLVED and self.unresolved:
-            raise ValueError("RESOLVED FunctionalPyramidView has no unresolved findings")
-        if self.status is FunctionalPyramidRouteStatus.UNRESOLVED and not self.unresolved:
+            raise ValueError(
+                "RESOLVED FunctionalPyramidView has no unresolved findings"
+            )
+        if (
+            self.status is FunctionalPyramidRouteStatus.UNRESOLVED
+            and not self.unresolved
+        ):
             raise ValueError("UNRESOLVED FunctionalPyramidView requires findings")
         if self.scope_relation is FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE:
             if self.status is not FunctionalPyramidRouteStatus.RESOLVED:
                 raise ValueError("outside FunctionalScope is a resolved empty route")
             if self.contexts or self.rules or self.unresolved:
-                raise ValueError("outside FunctionalScope has no governing route members")
+                raise ValueError(
+                    "outside FunctionalScope has no governing route members"
+                )
         if self.scope_relation is FunctionalScopeRelation.UNCOVERED:
             if self.status is not FunctionalPyramidRouteStatus.UNRESOLVED:
                 raise ValueError("UNCOVERED FunctionalPyramidView is unresolved")
@@ -591,7 +614,9 @@ class RetrievedFunctionalPyramidReceipt:
             FunctionalPyramidAction.REVISE,
         ):
             if self.pyramid_id is None or self.version is None or not self.members:
-                raise ValueError("activate/revise receipt requires live instance members")
+                raise ValueError(
+                    "activate/revise receipt requires live instance members"
+                )
             return
 
         if self.members:
