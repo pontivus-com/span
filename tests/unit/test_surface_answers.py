@@ -126,6 +126,7 @@ class AnswerCarrierTest(unittest.TestCase):
                 surface=KEY,
                 conclusions=(),
                 status=status(),
+                functional_pyramid=FP_UNCONFIGURED,
             )
         with self.assertRaises(ValueError):
             m.Answer(
@@ -151,6 +152,7 @@ class AnswerCarrierTest(unittest.TestCase):
             m.Gap(
                 surface=KEY,
                 status=status(),
+                functional_pyramid=FP_UNCONFIGURED,
                 reason=m.GapReason.UNASSESSED,
                 recovery="",
             )
