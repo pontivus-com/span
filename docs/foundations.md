@@ -115,8 +115,9 @@ governing authority establishes what the repository requires. Neither proof type
 substitutes for the other.
 
 A descriptive conclusion is bound to the exact evidence on which it rests. A
-normative or conformance conclusion that depends on repository governance is
-also bound to the applicable declared authority and Functional Pyramid route.
+normative conclusion—including a conformance judgment, which is recorded as
+`assertion_nature=NORMATIVE`—that depends on repository governance is also
+bound to the applicable declared authority and Functional Pyramid route.
 Canonical governing rules remain at their owning sources; Span records
 references and support, not a competing copy of their meaning.
 
@@ -142,7 +143,7 @@ servable(answer, t)  ⇔  ∀ d ∈ deps_required(answer):
 passes its owning check.** It does not mean the interpretation is correct. For
 ordinary descriptive conclusions, completeness of explicitly supplied empirical
 support remains the investigator's responsibility. For normative conclusions in
-a Functional Pyramid repository, the applicable governing route and its
+an ACTIVE Functional Pyramid repository, the applicable governing route and its
 authority dependencies are server-derived and cannot be omitted by the caller.
 
 *Demonstration:* changing a cited byte makes the answer non-servable. Changing an
@@ -190,8 +191,8 @@ unsupported even though its own cited file is unchanged.
 ### F5 — Span composes; the agent means
 
 Span never originates semantic or governing judgment. It validates, stores,
-qualifies, retrieves, resolves declared applicability and re-aligns. Semantic
-and conformance conclusions are authored by the agent or human investigator;
+qualifies, retrieves, resolves declared applicability and re-aligns. Semantic conclusions, including normative conformance judgments, are authored
+by the agent or human investigator;
 governing meaning is authored by the repository's declared authority owner.
 Span assembles retained conclusions with live evidence and declared governance
 and states exactly what is missing.
@@ -337,9 +338,12 @@ scope inside the declared boundary and keeps it explicit. COMPLETE asserts that
 the complete declared functional boundary is covered by applicable Functional
 Contexts; an uncovered part of that boundary contradicts the COMPLETE claim.
 Repository scope outside the declared functional boundary is not made functional
-merely because files exist there. Participation, health and route state remain distinct: an ACTIVE pyramid
-may be DEGRADED while an unaffected route still resolves, and an ACTIVE/PARTIAL
-pyramid may legitimately return an uncovered route outside declared coverage.
+merely because files exist there. Participation, health and route state remain
+distinct: an ACTIVE pyramid may be DEGRADED while an unaffected route still
+resolves, and an ACTIVE/PARTIAL pyramid may legitimately return
+`UNCOVERED_PATH` for a functional portion inside its declared FunctionalScope
+that has no applicable Functional Context. Scope outside FunctionalScope is
+outside the claimed governing boundary rather than uncovered governance.
 
 Activation or revision is based only on explicit repository-owned declarations.
 Canonical governing content remains at its owner. Span retains the instance
@@ -348,11 +352,14 @@ resolve and maintain the graph; it does not turn the graph into a second
 documentation corpus.
 
 *Demonstration:* registering or adding a repository changes no applicable route
-unless a declared relationship makes it relevant; removing or losing an
-applicable member leaves participation ACTIVE but makes live pyramid health
-DEGRADED and the affected route unresolved instead of deleting or inventing the
-external authority. Restoring the member/declaration returns health to VALID
-without a participation-state write.
+unless a declared relationship makes it relevant. If a still-declared ACTIVE
+member or required declaration becomes operationally unavailable, participation
+remains ACTIVE, live health becomes DEGRADED and affected routes remain explicit;
+restoring that availability can return health to VALID without a participation
+write. By contrast, an accepted revision that removes a member changes that
+repository's durable participation to UNCONFIGURED and affected governed
+understanding requires reassessment; rejoining requires another accepted
+participation write.
 
 
 ## 4. Lifecycle responsibilities
@@ -381,7 +388,7 @@ Non-goals are scope decisions, not invariants. They are stated once in
 - Code and observed execution remain the source of truth for what the software
   does. Canonical governing sources remain the source of truth for what the
   repository declares must hold. When implementation, governing authority and a
-  retained conformance conclusion disagree, preserve the disagreement and fix
+  retained normative conformance conclusion disagree, preserve the disagreement and fix
   the owning defect rather than allowing one proof type to overwrite another.
 
 ## 7. What this document does not define
