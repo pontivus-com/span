@@ -823,20 +823,23 @@ class Schema13To14Test(unittest.TestCase):
                     ).fetchone()[0],
                     1,
                 )
-                for table in (
-                    "functional_pyramids",
-                    "functional_pyramid_versions",
-                    "functional_pyramid_active_members",
-                    "functional_pyramid_exclusions",
-                    "functional_pyramid_receipts",
-                ):
-                    self.assertEqual(
-                        connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[
-                            0
-                        ],
-                        0,
-                        table,
+                functional_tables = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                        " AND name LIKE 'functional_%'"
                     )
+                }
+                self.assertEqual(
+                    functional_tables,
+                    {"functional_route_dependency_index"},
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM functional_route_dependency_index"
+                    ).fetchone()[0],
+                    0,
+                )
                 route = connection.execute(
                     "SELECT pyramid_id, repository_id, route_identity"
                     " FROM functional_route_dependency_index"
