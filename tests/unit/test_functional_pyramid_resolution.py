@@ -639,7 +639,18 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             coverage=m.FunctionalPyramidCoverage.COMPLETE,
             scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
         )
-        declaration = m.FunctionalPyramidDeclaration(
+        complete_declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-complete",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PREFIX, "src")
+                    ),
+                ),
+            ),
+        )
+        changed_declaration = m.FunctionalPyramidDeclaration(
             version=1,
             contexts=(
                 m.FunctionalContextDeclaration(
@@ -650,11 +661,20 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
                 ),
             ),
         )
-        health, findings = fp.evaluate_functional_pyramid_health(
+
+        before, before_findings = fp.evaluate_functional_pyramid_health(
             (member,),
-            (("repo-a", declaration),),
+            (("repo-a", complete_declaration),),
             frozenset({"repo-a"}),
         )
+        health, findings = fp.evaluate_functional_pyramid_health(
+            (member,),
+            (("repo-a", changed_declaration),),
+            frozenset({"repo-a"}),
+        )
+
+        self.assertEqual(before, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(before_findings, ())
         self.assertEqual(health, m.FunctionalPyramidHealth.DEGRADED)
         self.assertIn(
             m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
@@ -704,6 +724,59 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
             {item.reason for item in unknown_view.unresolved},
         )
+
+    def test_authority_currency_does_not_change_route_identity_or_health(self):
+        members, declarations, authorities = _base_graph()
+        surface = m.SurfaceKey("repo-a", m.SurfaceKind.FILE, "src/a.py")
+        semantic_scope = m.EvidenceScope(paths=("src/a.py",))
+
+        current_view, current_route = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(1),
+            members=members,
+            surface=surface,
+            semantic_scope=semantic_scope,
+            declarations=declarations,
+            available_repositories=frozenset({"repo-a", "repo-b"}),
+            authority_bindings=authorities,
+        )
+
+        changed_authorities = dict(authorities)
+        key = ("repo-b", "rules/rule-p1.md")
+        recorded = changed_authorities[key]
+        changed_authorities[key] = m.AuthorityBinding(
+            evidence_ref=m.EvidenceRef(
+                evidence_id=recorded.evidence_ref.evidence_id,
+                repository_id=recorded.evidence_ref.repository_id,
+                source_kind=recorded.evidence_ref.source_kind,
+                locator=recorded.evidence_ref.locator,
+                revision_or_fingerprint="digest-changed-rule-p1",
+            ),
+            authority_kind=recorded.authority_kind,
+            status=m.AuthorityStatus.SUPERSEDED,
+            applicability=recorded.applicability,
+            declared_precedence=recorded.declared_precedence,
+        )
+        changed_view, changed_route = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(1),
+            members=members,
+            surface=surface,
+            semantic_scope=semantic_scope,
+            declarations=declarations,
+            available_repositories=frozenset({"repo-a", "repo-b"}),
+            authority_bindings=changed_authorities,
+        )
+
+        self.assertEqual(current_route, changed_route)
+        self.assertEqual(current_view.health, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(changed_view.health, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(current_view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+        self.assertEqual(changed_view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+        changed_rule = next(
+            rule for rule in changed_view.rules if rule.rule_id == "rule-p1"
+        )
+        self.assertEqual(changed_rule.authority.status, m.AuthorityStatus.SUPERSEDED)
 
     def test_reverse_context_dependents_include_inheritance_closure(self):
         member = _member("repo-a")
