@@ -516,5 +516,7 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             available_repositories=frozenset({"repo-a"}),
             authority_bindings={},
         )
-        self.assertEqual(broad_view.scope_relation, m.FunctionalScopeRelation.MIXED)
+        self.assertEqual(
+            broad_view.scope_relation, m.FunctionalScopeRelation.COVERED
+        )
         self.assertIn("ctx-child", {item.context_id for item in broad_view.contexts})
