@@ -663,9 +663,7 @@ class LifecycleStoreTest(unittest.TestCase):
         )
         self.store._connection.commit()
 
-        reaped = self.store.reap_expired(
-            expires_at + datetime.timedelta(minutes=1)
-        )
+        reaped = self.store.reap_expired(expires_at + datetime.timedelta(minutes=1))
 
         self.assertEqual(reaped, 1)
         self.assertEqual(
