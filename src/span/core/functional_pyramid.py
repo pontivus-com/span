@@ -203,8 +203,7 @@ def _require_json_object(
     missing = required - keys
     if missing:
         raise ValueError(
-            "missing Functional Pyramid JSON fields: "
-            + ", ".join(sorted(missing))
+            "missing Functional Pyramid JSON fields: " + ", ".join(sorted(missing))
         )
     if any(not isinstance(key, str) for key in value):
         raise ValueError("Functional Pyramid JSON object keys must be strings")
@@ -224,7 +223,9 @@ def _require_json_string(value: object, name: str) -> str:
 
 
 def _decode_scope_selector(value: object) -> FunctionalScopeSelector:
-    raw = _require_json_object(value, frozenset({"kind"}), frozenset({"path", "locator"}))
+    raw = _require_json_object(
+        value, frozenset({"kind"}), frozenset({"path", "locator"})
+    )
     try:
         kind = FunctionalScopeSelectorKind(
             _require_json_string(raw["kind"], "FunctionalScopeSelector.kind")
@@ -263,9 +264,7 @@ def decode_functional_scope(value: object) -> FunctionalScope:
 
 
 def _decode_graph_ref(value: object) -> FunctionalGraphRef:
-    raw = _require_json_object(
-        value, frozenset({"repository_id", "identity"})
-    )
+    raw = _require_json_object(value, frozenset({"repository_id", "identity"}))
     return FunctionalGraphRef(
         repository_id=_require_json_string(
             raw["repository_id"], "FunctionalGraphRef.repository_id"
@@ -275,14 +274,10 @@ def _decode_graph_ref(value: object) -> FunctionalGraphRef:
 
 
 def _decode_evidence_request(value: object) -> EvidenceRequest:
-    raw = _require_json_object(
-        value, frozenset({"locator"}), frozenset({"ranges"})
-    )
+    raw = _require_json_object(value, frozenset({"locator"}), frozenset({"ranges"}))
     ranges: list[SourceRange] = []
     for item in _require_json_array(raw.get("ranges", []), "EvidenceRequest.ranges"):
-        range_raw = _require_json_object(
-            item, frozenset({"start_line", "end_line"})
-        )
+        range_raw = _require_json_object(item, frozenset({"start_line", "end_line"}))
         start = range_raw["start_line"]
         end = range_raw["end_line"]
         if not isinstance(start, int) or isinstance(start, bool):
@@ -305,9 +300,7 @@ def decode_functional_pyramid_bootstrap(text: str) -> FunctionalPyramidBootstrap
         raise ValueError("Functional Pyramid bootstrap is not valid JSON") from exc
     raw = _require_json_object(
         value,
-        frozenset(
-            {"version", "functional_scope", "coverage", "declaration_sources"}
-        ),
+        frozenset({"version", "functional_scope", "coverage", "declaration_sources"}),
     )
     if raw["version"] != 1:
         raise ValueError("Functional Pyramid bootstrap version must be 1")
@@ -336,9 +329,7 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
         value = _json.loads(text)
     except _json.JSONDecodeError as exc:
         raise ValueError("Functional Pyramid declaration is not valid JSON") from exc
-    raw = _require_json_object(
-        value, frozenset({"version", "contexts", "rules"})
-    )
+    raw = _require_json_object(value, frozenset({"version", "contexts", "rules"}))
     if raw["version"] != 1:
         raise ValueError("Functional Pyramid declaration version must be 1")
 
@@ -349,9 +340,7 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
         )
         contexts.append(
             FunctionalContextDeclaration(
-                context_id=_require_json_string(
-                    context["context_id"], "context_id"
-                ),
+                context_id=_require_json_string(context["context_id"], "context_id"),
                 coverage=decode_functional_scope(context["coverage"]),
                 inherits=tuple(
                     _decode_graph_ref(value)
@@ -361,9 +350,7 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
                 ),
                 rules=tuple(
                     _decode_graph_ref(value)
-                    for value in _require_json_array(
-                        context["rules"], "context rules"
-                    )
+                    for value in _require_json_array(context["rules"], "context rules")
                 ),
             )
         )
@@ -372,9 +359,7 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
     for item in _require_json_array(raw["rules"], "declaration rules"):
         rule = _require_json_object(
             item,
-            frozenset(
-                {"rule_id", "layer", "owner", "governing_rule_ids"}
-            ),
+            frozenset({"rule_id", "layer", "owner", "governing_rule_ids"}),
         )
         owner = _require_json_object(
             rule["owner"], frozenset({"repository_id", "authority_ref"})
@@ -516,8 +501,7 @@ def _semantic_atoms(
 ) -> tuple[tuple[EvidenceScope, FunctionalScopeSelector], ...]:
     if surface.kind is SurfaceKind.FILE:
         if any(path != surface.locator for path in scope.paths) or any(
-            ref.repository_id != surface.repository_id
-            or ref.locator != surface.locator
+            ref.repository_id != surface.repository_id or ref.locator != surface.locator
             for ref in scope.evidence_refs
         ):
             raise ValueError("FILE semantic scope conflicts with its owning surface")
@@ -564,9 +548,7 @@ def _semantic_atoms(
         atoms.append(
             (
                 EvidenceScope(paths=(path,)),
-                FunctionalScopeSelector(
-                    FunctionalScopeSelectorKind.PREFIX, path=path
-                ),
+                FunctionalScopeSelector(FunctionalScopeSelectorKind.PREFIX, path=path),
             )
         )
     for ref in scope.evidence_refs:
@@ -596,9 +578,7 @@ def _intersection_selectors(
         if not functional_scope_selector_intersects(semantic, member):
             continue
         found.append(
-            semantic
-            if functional_scope_selector_contains(member, semantic)
-            else member
+            semantic if functional_scope_selector_contains(member, semantic) else member
         )
     if not found:
         return ()
@@ -743,9 +723,7 @@ def _context_cycle_findings(
     findings: list[FunctionalPyramidFinding] = []
     complete: set[tuple[str, str]] = set()
 
-    def walk(
-        key: tuple[str, str], stack: tuple[tuple[str, str], ...]
-    ) -> None:
+    def walk(key: tuple[str, str], stack: tuple[tuple[str, str], ...]) -> None:
         if key in stack:
             findings.append(
                 _finding(
@@ -858,9 +836,7 @@ def _rule_cycle_findings(
     findings: list[FunctionalPyramidFinding] = []
     complete: set[tuple[str, str]] = set()
 
-    def walk(
-        key: tuple[str, str], stack: tuple[tuple[str, str], ...]
-    ) -> None:
+    def walk(key: tuple[str, str], stack: tuple[tuple[str, str], ...]) -> None:
         if key in stack:
             findings.append(
                 _finding(
@@ -933,18 +909,14 @@ def _graph_structural_findings(
     member_repositories = frozenset(member.repository_id for member in members)
     findings: list[FunctionalPyramidFinding] = list(declaration_findings)
     findings.extend(_availability_findings(members, available_repositories))
-    findings.extend(
-        _duplicate_identity_findings(duplicate_contexts, duplicate_rules)
-    )
+    findings.extend(_duplicate_identity_findings(duplicate_contexts, duplicate_rules))
     findings.extend(
         _context_reference_findings(
             contexts, rules, member_repositories, available_repositories
         )
     )
     findings.extend(
-        _context_cycle_findings(
-            contexts, member_repositories, available_repositories
-        )
+        _context_cycle_findings(contexts, member_repositories, available_repositories)
     )
     for (repository_id, rule_id), rule in rules.items():
         findings.extend(
@@ -963,6 +935,7 @@ def _graph_structural_findings(
     )
     findings.extend(_complete_coverage_findings(members, contexts))
     return _ordered_findings(findings)
+
 
 def evaluate_functional_pyramid_health(
     members: tuple[FunctionalPyramidMemberView, ...],
@@ -1084,6 +1057,7 @@ def _resolve_context_refs(
             visit_inherited(inherited, (key,))
 
     return tuple(ordered), _ordered_findings(findings)
+
 
 def _resolve_rule_refs(
     initial_refs: tuple[FunctionalGraphRef, ...],
@@ -1554,9 +1528,7 @@ def _provenance_projection(
             for ref, _ in portion_contexts
             if (ref.repository_id, ref.identity) in resolved_context_keys
         )
-        initial_rules = (
-            ref for key in context_keys for ref in contexts[key].rules
-        )
+        initial_rules = (ref for key in context_keys for ref in contexts[key].rules)
         portion_rules, _ = _resolve_rule_refs(
             _unique_graph_refs(initial_rules),
             contexts=contexts,
