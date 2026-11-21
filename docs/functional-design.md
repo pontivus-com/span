@@ -408,8 +408,11 @@ Validation has two distinct finding sets.
 Authority content/status currency is not structural candidate validity and never
 blocks activation by itself. Validation reads only explicit declaration sources
 and stable references reached from them; it does not scan for semantically
-similar authority or repair a missing declaration. *(G1, G8, A2, A3, F11, F12,
-L14)*
+similar authority or repair a missing declaration. Each declaration source is
+one complete declaration document. A ranged/partial source selection cannot
+establish that document's complete declaration set and therefore produces
+`INVALID_DECLARATION_SOURCE`; candidate validation never treats a fragment as
+the whole declaration. *(G1, G8, A2, A3, F11, F12, L14)*
 
 **FD-85 — Activation and revision revalidate current source and commit
 atomically.**
@@ -435,9 +438,13 @@ transaction decision. The immutable receipt retains the durable participation
 and dependent-effect coordinates; the public result projects them through the
 same `ChangedSurface`/affected-conclusion carriers used by `reconsider`.
 Exactly one repository-bound live re-establishment context is issued for each
-repository with an actionable effect. A replay returns the same durable
-acceptance/effect set and may issue fresh live contexts if prior ones expired;
-it never recomputes a different accepted effect set from later governance state.
+repository with an actionable effect. The immutable receipt/effect set is the
+accepted `ConclusionRevisionRef` identity set, not a frozen live
+`ChangedSurface` status snapshot. On replay, Span keeps those immutable effect
+identities unchanged, re-evaluates only those retained revisions against current
+support/membership state, returns the current actionable `ChangedSurface`
+projection, and issues fresh contexts only for effects that are actionable now.
+It never discovers additional accepted effects from later governance state.
 
 Activation/revision stores only the identities, relationships, source identities,
 functional scopes and coverage needed to reproduce resolution; canonical
@@ -1256,10 +1263,12 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     required route/member/declaration state cannot presently be evaluated is
     UNVERIFIABLE; deliberate participation change and operational unavailability
     remain distinct.
-39. **Pyramid-write replay contexts.** Replaying an accepted Functional Pyramid
-    write returns the same immutable participation/dependent-effect set and may
-    issue fresh live re-establishment contexts after earlier contexts expire; it
-    never recomputes a different accepted effect set.
+39. **Pyramid-write replay projection.** Replaying an accepted Functional
+    Pyramid write preserves the immutable participation state and accepted
+    dependent `ConclusionRevisionRef` set, re-evaluates only those refs into a
+    current actionable `ChangedSurface` projection, and issues fresh live
+    re-establishment contexts only where the retained effect is actionable now;
+    it never adds effects from later governance state.
 40. **Pyramid concurrency.** Concurrent revise/deactivate operations obey pyramid
     version compare-and-set, and concurrent overlapping activations/revisions
     cannot make one repository ACTIVE in more than one instance.
