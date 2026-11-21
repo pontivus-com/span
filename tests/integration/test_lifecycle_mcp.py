@@ -804,7 +804,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "sub-correct-reconsider",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],
@@ -880,7 +880,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "sub-race-correct",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": expected,
@@ -1081,7 +1081,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "svc-correct",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],
@@ -1573,7 +1573,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             for item in affected["conclusions"]
             if item["ref"]["understanding_id"]["value"] == understanding_id
         )
-        context_id = changed["context"]["context_id"]["value"]
+        context_id = changed["reestablishment_contexts"][0]["context_id"]["value"]
 
         store = LifecycleStore(
             self.data / f"{REPOSITORY_ID}.db",
@@ -1590,7 +1590,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "multi-support-reestablish",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],
