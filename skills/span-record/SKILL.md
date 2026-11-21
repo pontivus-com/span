@@ -11,6 +11,16 @@ blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/
 
 Call `record` with one `kind`. A create is one conclusion; updates use actions.
 
+A conformance judgment is a NORMATIVE conclusion. For an ACTIVE Functional
+Pyramid repository Span derives its governing route/authority support. An
+accepted NORMATIVE result is not task completion while its returned qualification
+is non-current.
+
+Functional Pyramid participation also uses this same `record` tool with
+`kind="functional_pyramid"`; use the `span-functional-pyramid` skill for its
+activate/revise/deactivate/exclude lifecycle rather than duplicating that
+procedure here.
+
 ## Understanding
 
 Use `kind="understanding"` for a supported conclusion.
