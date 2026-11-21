@@ -119,8 +119,9 @@ intersects that semantic scope, including contexts narrower than the scope
 boundary. Repository-wide scope therefore intersects every declared context in
 that participating repository.
 
-The layer-4 selector grammar must make both membership and scope intersection
-deterministically decidable. If a declared selector cannot be evaluated against
+The one layer-4 Functional Scope selector grammar used by both Functional
+Contexts and member coverage must make membership, intersection, containment and
+set-difference deterministically decidable. If a declared selector cannot be evaluated against
 the semantic scope, resolution reports `UNRESOLVED_SCOPE_INTERSECTION`; it
 does not assume non-applicability. Absolute paths, traversal outside the
 repository and ambiguous repository identity are rejected. Semantic
@@ -313,11 +314,11 @@ versioned.**
 First activation derives one stable pyramid identity and version 1 from an
 accepted activation; the caller does not manufacture that identity. A revision
 names the existing identity and expected version and atomically replaces the
-complete member intent. Every member names one registered repository, its exact
-repository-owned declaration source requests and its declared
-`PARTIAL | COMPLETE` coverage. A repository may belong to at most one
-ACTIVE/DEGRADED Functional Pyramid instance at a time so ordinary repository-
-scoped `ask` has one unambiguous governing instance. *(G8, A3, F12, L13, L14)*
+complete member intent. Every member names one registered repository, its exact repository-owned
+declaration source requests, one explicit `FunctionalScope`, and its declared
+`PARTIAL | COMPLETE` coverage. A repository may belong to at most one ACTIVE
+Functional Pyramid instance at a time so ordinary repository-scoped `ask` has
+one unambiguous governing instance. *(G8, A3, F12, L13, L14)*
 
 **FD-83 — Participation-state transitions are closed.**
 The durable states are exactly `UNCONFIGURED`, `EXCLUDED` and `ACTIVE`, with
@@ -327,7 +328,7 @@ the transitions in lifecycle §7.1.
 - failed activation/revision leaves the prior durable state/version unchanged;
 - successful activation moves UNCONFIGURED/EXCLUDED members to ACTIVE;
 - successful revision keeps retained members ACTIVE and makes removed members
-  EXCLUDED;
+  UNCONFIGURED; removal is not an explicit non-participation decision;
 - deactivation moves every member to EXCLUDED.
 
 No source, filesystem, installer, model, `ask`, `reconsider` or hook event
@@ -336,37 +337,72 @@ availability/validity is instead evaluated as live `VALID | DEGRADED` health.
 The same active version can move between those health results as current
 repository state changes without a write. *(G1, G8, F12, L13, L14)*
 
-**FD-84 — Candidate validation is pure, deterministic and complete.**
-For one member intent and present repository state, validation returns the same
-ordered findings and changes nothing. It validates registered-member identity,
-declaration-source existence, duplicate ownership, selector decidability,
-context inheritance, rule identity/ownership/layer, governing-edge legality,
-cross-member references, cycles and the declared coverage mode. It reads only
-explicit declaration sources and references reached from them; it does not scan
-for semantically similar authority or repair a missing declaration. *(G1, G8,
-A2, F11, F12, L14)*
+**FD-84 — Candidate validation is pure, action-aware,
+deterministic and complete.**
+For one candidate and present repository state, validation returns the same
+ordered findings and changes nothing. ACTIVATE validates the complete proposed
+member set. REVISE additionally resolves the target pyramid, expected version,
+current membership and removals before validating the replacement member set.
+
+Validation has two distinct finding sets.
+
+1. Candidate/lifecycle findings use exactly:
+   `UNREGISTERED_MEMBER`, `DUPLICATE_MEMBER`,
+   `MEMBER_ALREADY_ACTIVE`, `UNKNOWN_PYRAMID`,
+   `STALE_PYRAMID_VERSION`, `MISSING_DECLARATION_SOURCE`,
+   `INVALID_DECLARATION_SOURCE`, `INVALID_FUNCTIONAL_SCOPE`, and
+   `INCOMPLETE_COMPLETE_COVERAGE`.
+2. Graph findings use FD-71's closed vocabulary for declaration/context/rule
+   defects.
+
+`activation_ready` is true only when both finding sets contain no blocker.
+Authority content/status currency is not structural candidate validity and never
+blocks activation by itself. Validation reads only explicit declaration sources
+and stable references reached from them; it does not scan for semantically
+similar authority or repair a missing declaration. *(G1, G8, A2, A3, F11, F12,
+L14)*
 
 **FD-85 — Activation and revision revalidate current source and commit
 atomically.**
 A Functional Pyramid write never trusts a previous candidate-validation result.
-It resolves the submitted member intent against current source, derives the
-candidate graph identity and findings, and commits only if the candidate is
-structurally admissible. Rejection commits no participation/version change.
-Activation/revision stores the identities, relationships, source identities and
-coverage needed to reproduce resolution; canonical governing prose is never
-stored as pyramid content. All accepted writes obey receipt replay and
-compare-and-set rules. *(G6, G8, A2, A3, F1, F12, L4, L14)*
+It re-runs the corresponding FD-84 ACTIVATE/REVISE validation against current
+source, derives the candidate graph identity/findings, and commits only when
+`activation_ready=true`. Rejection commits no participation/version change.
 
-**FD-86 — Coverage state never invents absence of authority.**
-`PARTIAL` explicitly declares incomplete migration. A selected scope with no
-applicable declared context returns `UNCOVERED_PATH` while the instance may
-remain ACTIVE. `COMPLETE` is an owner-supplied claim that functional migration
-is complete; Span does not infer that claim from repository inventory. If a
-selected functional scope in a COMPLETE member has no applicable context, the
-route returns `UNCOVERED_PATH` and ACTIVE pyramid health is `DEGRADED` until
-the coverage claim or declarations are corrected. Process/evidence/support files are
-not automatically functional scope merely because they exist. *(G1, G4, G8,
-F11, F12, L13)*
+Functional Pyramid writes use their own installation-level recording namespace:
+the caller's `request_id` is the replay/conflict key in that namespace and the
+accepted result returns `FunctionalPyramidReceiptSelector{request_id}`. No
+member repository is selected as an artificial recording/receipt owner. Same
+request identity + same canonical write content is replay; same identity +
+different content is conflict. Ordinary repository-scoped receipts remain
+unchanged.
+
+Activation/revision stores only the identities, relationships, source identities,
+functional scopes and coverage needed to reproduce resolution; canonical
+governing prose is never stored as pyramid content. Revision remains
+compare-and-set on the target pyramid version. *(G6, G8, A2, A3, F1, F12, L4, L14)*
+
+**FD-86 — Coverage is evaluated against the declared functional
+scope, never repository inventory.**
+Every member supplies one `FunctionalScope` under the same FD-62 selector
+grammar as Functional Context coverage.
+
+- `PARTIAL` declares incomplete context coverage inside that scope. A selected
+  member scope inside the functional boundary with no applicable context returns
+  `UNCOVERED_PATH`, but that expected incompleteness does not by itself make
+  live pyramid health DEGRADED.
+- `COMPLETE` asserts that the union of declared applicable Functional Context
+  selectors covers the entire member `FunctionalScope`. Candidate validation
+  proves this using deterministic containment/set-difference; any remainder is
+  `INCOMPLETE_COMPLETE_COVERAGE` and is not activatable.
+- After activation, if current declarations change so any part of a COMPLETE
+  member's declared functional scope becomes uncovered, affected route
+  resolution reports `UNCOVERED_PATH` and live health is DEGRADED until the
+  declarations or coverage claim are corrected.
+
+Repository paths outside the declared `FunctionalScope` are not made
+functional merely because they exist and do not participate in COMPLETE
+coverage proof. *(G1, G4, G8, F11, F12, L13)*
 
 **FD-87 — Membership is resolution reachability, never applicability.**
 Adding a repository to an instance makes its stable declared identities
@@ -388,9 +424,11 @@ creates a second dependency registry. *(G3, G7, F4, F11, L15, L16)*
 When changed paths can affect a context declaration, rule declaration, canonical
 authority source or member binding, direct dependency lookup starts from the
 changed repository but traverses FD-88/route-support dependents across every
-member of the same instance. Affected semantic surfaces remain owned by their
-own repositories and are grouped that way in the reconsider result. The caller
-need not submit dependent repository IDs. *(G3, F4, F12, L10, L15)*
+member of the same instance. Affected semantic surfaces remain owned by their own repositories. The
+`Changed` result retains those repository-qualified surface identities and
+returns exactly one existing `InvestigationContextRef` for each repository
+that owns actionable affected conclusions. No context spans repositories and the
+caller need not submit dependent repository IDs. *(G3, F4, F12, L10, L15)*
 
 **FD-90 — The governing projection uses the same effective semantic scope.**
 For ordinary semantic obtain, Functional Pyramid applicability is resolved from
@@ -420,9 +458,10 @@ the governing projection for that surface. *(F5, F6, F11, F12, L8, L13, L14)*
 **FD-93 — Functional Pyramid writes are one record kind, not a fourth tool.**
 The `functional_pyramid` record kind implements activate/revise/deactivate/
 exclude exactly as lifecycle §4.2 defines, returns
-`FunctionalPyramidRecorded`, and uses the canonical receipt/replay contract.
-The caller supplies intended member/declaration/coverage input; Span derives
-pyramid identity, validation, source identities and qualification. *(G8, F6, F7,
+`FunctionalPyramidRecorded`, and uses the installation-scoped Functional
+Pyramid receipt/replay namespace from FD-85. The caller supplies intended
+member/declaration/functional-scope/coverage input; Span derives pyramid identity,
+validation, source identities and qualification. *(G8, F6, F7,
 F12, L4, L8, L14)*
 
 **FD-94 — Lifecycle notices reflect participation without becoming governance.**
@@ -762,8 +801,11 @@ no revision, no challenge disposition, and no consumed context. *(A2, L4)*
 **FD-41 — Every rejection is actionable.** The rejection names the exact identity
 that failed validation and what must change. Functional Pyramid unresolved
 states are not input rejections merely because governance is incomplete: they
-are returned in the pyramid view and make required normative route support
-`UNVERIFIABLE`. A malformed declaration that violates the accepted declaration
+are returned in the pyramid view and make required normative route/authority
+support non-current. A semantically valid normative create/update with such
+derived non-current governance support is retained and returned with
+`UNVERIFIABLE` or `REASSESSMENT_REQUIRED` qualification; F2 keeps it out of
+CURRENT Answer content. A malformed declaration that violates the accepted declaration
 contract is an explicit unresolved/validation condition at its owning boundary,
 never silently ignored. Recovery must correct the actual
 invariant: original content/new identity for binding conflicts, in-scope evidence
@@ -780,8 +822,10 @@ remove accepted understanding, challenge history, verification runs, or receipts
 **FD-43 — The replay window is derived, not invented.**
 A receipt is retained at least as long as the longest supported session
 suspension, so a caller that can resume can recover its identity. That lower
-bound follows from A1 and A2. The concrete window is a deployment measurement
-recorded in layer 4, not a product choice. *(A2)*
+bound follows from A1 and A2 and applies equally to repository-scoped ordinary
+receipts and installation-scoped Functional Pyramid receipts. The concrete
+window is a deployment measurement recorded in layer 4, not a product choice.
+*(A2)*
 
 **FD-44 — History reaping must not silently break premises.**
 If retained history is reaped, any premise that referenced a removed revision
@@ -986,21 +1030,28 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 1. **Unconfigured versus excluded.** A registered repository starts
    UNCONFIGURED. Explicit exclusion returns EXCLUDED. Neither state invents an
    empty governing route, and descriptive semantic lifecycle remains usable.
-2. **Pure candidate validation.** Validation of a proposed multi-repository
-   member/declaration set returns deterministic complete findings and changes no
-   durable participation state.
+2. **Pure action-aware candidate validation.** ACTIVATE validation of a proposed
+   multi-repository member/declaration set and REVISE validation of an exact
+   pyramid/version replacement return deterministic validation + graph findings,
+   change no durable participation state, and set `activation_ready` exactly
+   from the closed blocker rules.
 3. **Activation and replay.** A valid activation atomically creates one pyramid
-   identity/version; replay is idempotent; invalid activation leaves every
-   repository's prior state unchanged.
+   identity/version and one installation-scoped Functional Pyramid receipt;
+   replay is idempotent without choosing a member repository as receipt owner;
+   invalid activation leaves every repository's prior state unchanged.
 4. **Revision and removal.** A compare-and-set revision atomically changes the
-   complete member intent; removed members become EXCLUDED and retained members
-   preserve the pyramid identity with a new version.
-5. **Partial coverage.** ACTIVE/PARTIAL scope outside declared contexts returns
-   `UNCOVERED_PATH` without degrading unrelated covered routes or live pyramid
-   health.
-6. **Complete-coverage contradiction.** An uncovered selected functional scope
-   in a COMPLETE member returns `UNCOVERED_PATH` and ACTIVE health is
-   DEGRADED until corrected; participation/version does not mutate.
+   complete member intent; removed members become UNCONFIGURED, retained members
+   preserve the pyramid identity with a new version, and a stale expected version
+   is reported by candidate validation and rejected at write revalidation.
+5. **Partial coverage.** A PARTIAL member is evaluated only within its explicit
+   FunctionalScope; uncovered scope inside that boundary returns
+   `UNCOVERED_PATH` without degrading live health, and repository paths outside
+   the boundary create no coverage obligation.
+6. **Complete coverage.** COMPLETE activation is impossible when deterministic
+   set-difference leaves any part of the declared FunctionalScope outside the
+   union of applicable Functional Context coverage. If a later declaration
+   change creates such a remainder, affected routes become uncovered and ACTIVE
+   health becomes DEGRADED without a participation/version write.
 7. **Degraded-health recovery.** Member/declaration/structural unavailability
    makes ACTIVE health DEGRADED; unaffected routes can still resolve; restoring
    current graph availability/validity returns health to VALID without a
@@ -1036,7 +1087,10 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     normative support becomes non-current through authority support.
 17. **Normative create.** The caller supplies semantic intent and empirical
     evidence; Span derives route and every applicable authority dependency.
-    Omitting governance is impossible through the public grammar.
+    Omitting governance is impossible through the public grammar. If those
+    derived governance dependencies are unresolved/non-current but the semantic
+    request is otherwise valid, the revision is retained with non-current
+    qualification and is not served as CURRENT Answer content.
 18. **Descriptive create.** A descriptive conclusion remains source-supported
     without automatically becoming normative merely because a pyramid route
     exists.
@@ -1052,7 +1106,10 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     predicting a proposed edit or copying rule text.
 22. **Cross-repository reconsideration.** A governing change in repository A
     returns affected normative understanding in repository B when the same
-    pyramid graph connects them; the caller does not enumerate B.
+    pyramid graph connects them; the caller does not enumerate B. The Changed
+    result returns exactly one repository-bound re-establishment context for A
+    and/or B wherever that repository has actionable affected conclusions; no
+    cross-repository context is created.
 23. **Implementation change.** Existing source/discovery/premise propagation
     remains intact and does not depend on the Functional Pyramid being the cause.
 24. **Mixed answer.** A current descriptive conclusion can be returned while its
@@ -1064,8 +1121,8 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 26. **Runtime lifecycle preservation.** Every existing Span runtime path in
     lifecycle §7.2 remains exercisable with its pre-Version-1 semantic behavior:
     current reuse without duplicate record, gap → investigate → conclude/record,
-    external edit → reconsider → optional re-establishment, dispute → disposition,
-    start/resume and completion. Functional Pyramid behavior is additive at those
+    external edit → reconsider → investigate when needed → re-establish,
+    dispute → disposition, start/resume and completion. Functional Pyramid behavior is additive at those
     same moments and introduces no second ordinary-development lifecycle.
 27. **Governance-source edit lifecycle.** Before editing a canonical rule owner,
     the current downstream graph is obtainable; after the edit, reconsider
@@ -1074,7 +1131,15 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 28. **Participation-aware hooks.** UNCONFIGURED, EXCLUDED, ACTIVE/VALID and
     ACTIVE/DEGRADED produce the FD-94 notice behavior without any hook mutating
     participation, governance or support.
-29. **Three-tool host surface.** Initialization, governed development and
+29. **Initialization handoff.** After accepted activation/revision, lifecycle
+    verification succeeds only when `FunctionalPyramidSelector` returns the
+    exact committed pyramid identity/version/member view with live health VALID;
+    no undefined representative-route sample is required.
+30. **One active instance per repository.** Attempting to activate/revise a
+    member already ACTIVE in another pyramid produces
+    `MEMBER_ALREADY_ACTIVE` and cannot create ambiguous repository-scoped
+    governing orientation.
+31. **Three-tool host surface.** Initialization, governed development and
     re-alignment are all reachable through `ask`, `record` and `reconsider`;
     no authority/pyramid MCP operation is advertised.
 
