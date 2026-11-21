@@ -636,6 +636,13 @@ class SupportServiceTest(unittest.TestCase):
                 m.SupportState.REASSESSMENT_REQUIRED,
             ),
             (
+                m.FunctionalPyramidParticipation(
+                    m.FunctionalPyramidParticipationState.EXCLUDED
+                ),
+                None,
+                m.SupportState.REASSESSMENT_REQUIRED,
+            ),
+            (
                 m.FunctionalPyramidView(
                     pyramid_id=m.FunctionalPyramidId("fp-2"),
                     version=m.FunctionalPyramidVersion(1),
