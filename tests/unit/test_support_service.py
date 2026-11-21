@@ -564,6 +564,190 @@ class SupportServiceTest(unittest.TestCase):
                 (m.SourceObservationId(observation),),
             )
 
+    def test_functional_route_support_uses_retained_surface_and_shared_index(self) -> None:
+        dependency = m.FunctionalRouteSupport(
+            repository_id="repo-1",
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            semantic_scope=m.EvidenceScope(paths=("src/u-a.py",)),
+            route_identity=m.FunctionalRouteIdentity("route-1"),
+        )
+        self._create("u-a", "sub-route", (dependency,))
+        ref = self.store.get_version("u-a", 1).conclusions[0]
+        self.assertEqual(
+            self.store.support_dependents("FUNCTIONAL_ROUTE", "route-1"),
+            (ref,),
+        )
+
+        seen: list[m.SurfaceKey] = []
+
+        def current_route(recorded, surface):
+            seen.append(surface)
+            return (
+                m.FunctionalPyramidView(
+                    pyramid_id=recorded.pyramid_id,
+                    version=m.FunctionalPyramidVersion(1),
+                    health=m.FunctionalPyramidHealth.VALID,
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                    scope_relation=m.FunctionalScopeRelation.COVERED,
+                    status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                    semantic_scope=recorded.semantic_scope,
+                ),
+                recorded.route_identity,
+            )
+
+        service = SupportService(
+            store=self.store,
+            evidence=self.evidence,
+            authority=self.store,
+            clock=lambda: NOW,
+            functional_route_resolver=current_route,
+        )
+        evaluation = service.evaluate_revision(ref)
+        self.assertEqual(evaluation.state, m.SupportState.CURRENT)
+        self.assertEqual(
+            seen,
+            [
+                m.SurfaceKey(
+                    repository_id="repo-1",
+                    kind=m.SurfaceKind.FILE,
+                    locator="src/u-a.py",
+                )
+            ],
+        )
+
+    def test_functional_route_support_distinguishes_route_states(self) -> None:
+        dependency = m.FunctionalRouteSupport(
+            repository_id="repo-1",
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            semantic_scope=m.EvidenceScope(paths=("src/u-a.py",)),
+            route_identity=m.FunctionalRouteIdentity("route-1"),
+        )
+        self._create("u-a", "sub-route-states", (dependency,))
+        ref = self.store.get_version("u-a", 1).conclusions[0]
+
+        cases = (
+            (
+                m.FunctionalPyramidParticipation(
+                    m.FunctionalPyramidParticipationState.UNCONFIGURED
+                ),
+                None,
+                m.SupportState.REASSESSMENT_REQUIRED,
+            ),
+            (
+                m.FunctionalPyramidView(
+                    pyramid_id=m.FunctionalPyramidId("fp-2"),
+                    version=m.FunctionalPyramidVersion(1),
+                    health=m.FunctionalPyramidHealth.VALID,
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                    scope_relation=m.FunctionalScopeRelation.COVERED,
+                    status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                    semantic_scope=dependency.semantic_scope,
+                ),
+                m.FunctionalRouteIdentity("route-1"),
+                m.SupportState.REASSESSMENT_REQUIRED,
+            ),
+            (
+                m.FunctionalPyramidView(
+                    pyramid_id=dependency.pyramid_id,
+                    version=m.FunctionalPyramidVersion(1),
+                    health=m.FunctionalPyramidHealth.VALID,
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                    scope_relation=m.FunctionalScopeRelation.COVERED,
+                    status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                    semantic_scope=dependency.semantic_scope,
+                ),
+                m.FunctionalRouteIdentity("route-2"),
+                m.SupportState.REASSESSMENT_REQUIRED,
+            ),
+            (
+                m.FunctionalPyramidView(
+                    pyramid_id=dependency.pyramid_id,
+                    version=m.FunctionalPyramidVersion(1),
+                    health=m.FunctionalPyramidHealth.VALID,
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                    scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+                    status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                    semantic_scope=dependency.semantic_scope,
+                    unresolved=(
+                        m.FunctionalPyramidFinding(
+                            reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
+                            repository_id="repo-1",
+                            detail="functional scope is uncovered",
+                            recovery="declare applicable Functional Context coverage",
+                        ),
+                    ),
+                ),
+                None,
+                m.SupportState.UNVERIFIABLE,
+            ),
+            (
+                m.FunctionalPyramidUnavailable(
+                    failure="declaration source unavailable",
+                    recovery="restore the declared source",
+                ),
+                None,
+                m.SupportState.UNVERIFIABLE,
+            ),
+        )
+        for current, route_identity, expected in cases:
+            with self.subTest(current=type(current).__name__, expected=expected.value):
+                service = SupportService(
+                    store=self.store,
+                    evidence=self.evidence,
+                    authority=self.store,
+                    clock=lambda: NOW,
+                    functional_route_resolver=lambda _dependency, _surface: (
+                        current,
+                        route_identity,
+                    ),
+                )
+                self.assertEqual(service.evaluate_revision(ref).state, expected)
+
+        self.assertEqual(
+            self.service.evaluate_revision(ref).state,
+            m.SupportState.UNVERIFIABLE,
+        )
+
+    def test_functional_route_support_propagates_through_premises(self) -> None:
+        route_identity = [m.FunctionalRouteIdentity("route-1")]
+        dependency = m.FunctionalRouteSupport(
+            repository_id="repo-1",
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            semantic_scope=m.EvidenceScope(paths=("src/u-a.py",)),
+            route_identity=route_identity[0],
+        )
+        self._create("u-a", "sub-route-premise", (dependency,))
+        premise = self.store.get_version("u-a", 1).conclusions[0]
+        self._create("u-b", "sub-route-dependent", (m.PremiseSupport(premise),))
+
+        def current_route(recorded, _surface):
+            return (
+                m.FunctionalPyramidView(
+                    pyramid_id=recorded.pyramid_id,
+                    version=m.FunctionalPyramidVersion(1),
+                    health=m.FunctionalPyramidHealth.VALID,
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                    scope_relation=m.FunctionalScopeRelation.COVERED,
+                    status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                    semantic_scope=recorded.semantic_scope,
+                ),
+                route_identity[0],
+            )
+
+        service = SupportService(
+            store=self.store,
+            evidence=self.evidence,
+            authority=self.store,
+            clock=lambda: NOW,
+            functional_route_resolver=current_route,
+        )
+        self.assertEqual(service.evaluate_version("u-b").state, m.SupportState.CURRENT)
+        route_identity[0] = m.FunctionalRouteIdentity("route-2")
+        self.assertEqual(
+            service.evaluate_version("u-b").state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+
     def test_provider_failure_does_not_erase_acceptance(self) -> None:
         observation = self._put_observation("obs-1", "src/app.py")
         receipt = self._create(
