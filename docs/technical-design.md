@@ -1451,6 +1451,32 @@ persisted acceleration is a rebuildable projection of current member intent and
 repository-owned declarations and must be discardable without changing a route
 answer.
 
+**Runtime composition boundary.** Version 1 has two construction levels and
+they must not be collapsed.
+
+A repository runtime is the raw registered-repository capability set: canonical
+repository identity/root, its repository-scoped `LifecycleStore`, exact
+filesystem evidence source and structural source. It contains no composed
+`AnswerService`, `LifecycleService`, `SupportService`,
+`ReconsiderService` or `ServiceContext`.
+
+The installation runtime owns the registry/resolver of those raw repository
+runtimes, the installation-scoped Functional Pyramid store, declaration and
+repository-qualified authority/evidence access, one
+`FunctionalPyramidService`, and the factory that composes ordinary repository
+`ServiceContext` instances with those installation capabilities. The
+Functional Pyramid service may depend on raw repository-runtime capabilities;
+it must not obtain repository access through an already-composed
+`ServiceContext`. MCP transport is downstream of this graph and never becomes
+a semantic owner.
+
+This split is required to avoid a composition cycle in which the Functional
+Pyramid service depends on repository services that themselves require
+Functional Pyramid orientation/support. No second repository-runtime DTO family
+is introduced: the shell may use one internal typed capability object/port for
+the raw runtime and the existing `ServiceContext` remains the composed
+operation context.
+
 ### 18. Pure graph resolver, health and support evaluation
 
 **Authority:** G1, G3, G4, G7; F1, F2, F11, F12; L12–L16; FD-9–FD-16,
@@ -1489,6 +1515,15 @@ The same declaration graph owns reverse navigation. Reverse traversal derives
 dependent rules/contexts from the forward declaration edges; no second impact
 registry is stored.
 
+For FD-88 canonical-owner navigation, exact semantic selection of a
+Functional Rule's canonical `FunctionalRuleOwner.authority_ref` is itself a
+rule-resolution seed even when that selected owner scope is not covered by a
+Functional Context. The resolver maps the exact selected owner reference through
+the already-resolved `AuthorityBinding` set to the owning declared rule, then
+uses the same forward/reverse declaration graph to derive downstream rules and
+contexts. It does not perform semantic similarity, source scanning or maintain a
+second authority-to-rule registry.
+
 **Health.** One health evaluator consumes current ACTIVE member/declaration graph
 state and returns `VALID` when the FD-83 structural finding set is empty,
 otherwise `DEGRADED` with exactly those findings. Do not persist health. Do
@@ -1511,6 +1546,25 @@ semantic scope/current participation state:
 
 Authority dependencies remain evaluated through the existing authority-support
 branch. FD-15/FD-16 remain the sole combined-state owner.
+
+**Repository-qualified support access.** The existing support evaluator is the
+single evaluator, but its external capabilities are repository-qualified.
+Evaluating an `AuthoritySupportDependency` or evidence reference uses the
+repository id carried by that canonical dependency/reference to obtain the
+registered repository runtime that owns the authority/evidence. A semantic
+revision owned by repository A may therefore be governed by canonical authority
+owned and re-read from repository B without copying B's authority/evidence into
+A. Repository-local stores remain the owners of their own authority bindings and
+observations.
+
+Functional Pyramid route evaluation is likewise a required installation
+capability of the Version-1 runtime. Absence of the production composition is
+not a domain state: a missing route/orientation/effect capability must fail as a
+program/invariant error and must never be converted to UNCONFIGURED, empty
+governance, skipped route propagation or an operational UNVERIFIABLE result.
+Operational unavailability after correct composition remains the explicit
+UNVERIFIABLE/Unavailable behavior defined above. Unit tests may supply typed
+deterministic fakes at these ports; production assembly may not omit them.
 
 ### 19. Installation-level persistence, receipts and concurrency
 
@@ -1585,6 +1639,18 @@ effect computation, so ordinary repository writers cannot change semantic state
 between the accepted effect decision and commit. The service-owned shared effect
 engine runs while those locks are held; shell SQL does not classify effects.
 
+The transaction boundary and semantic-decision boundary remain distinct. Shell
+persistence acquires/holds the installation plus repository locks and exposes
+repository-qualified transaction capabilities. Service composition evaluates
+the old/new Functional Pyramid delta through the one shared effect engine while
+those locks are held. The transaction writer persists only the resulting
+participation/version state, immutable dependent-effect refs, canonical context
+rows and receipt. Shell code must not compute changed route identities, group
+semantic effect refs by repository, instantiate a semantic support evaluator for
+projection, merge `ChangedSurface` semantics or classify activation/deactivation
+effects. Replay projects only the retained immutable refs through the same
+service-owned support/effect capabilities.
+
 ACTIVATE/REVISE/DEACTIVATE then commit atomically:
 
 1. installation receipt replay/conflict decision;
@@ -1622,6 +1688,21 @@ Unavailable and never changes product semantics or partially commits.
 Authority is split by operation below; §20 does not create a second functional
 owner.
 
+**Installation composition.** The shell constructs one installation runtime
+before it composes ordinary repository services. Its repository-runtime resolver
+opens raw registered repository capabilities independently of
+`ServiceContext`. The installation Functional Pyramid service uses those raw
+capabilities for declaration, authority/evidence and state access. The repository
+context factory then supplies that same installation capability set to the
+ordinary support, lifecycle, answer and reconsider/effect services.
+
+Production Functional Pyramid dependencies are mandatory, not optional
+behavioral callbacks. A Version-1 process therefore has one coherent state
+projection: the same repository cannot be ACTIVE through
+`FunctionalPyramidSelector` while an ordinary ask treats it as UNCONFIGURED,
+and an ACTIVE NORMATIVE record cannot silently omit route/authority support
+because a callback was absent.
+
 #### 20.1 `ask`
 
 **Authority:** F6, F10, F11, F12; L1–L3, L8, L12–L14, L16;
@@ -1650,6 +1731,22 @@ discarding otherwise-current descriptive semantic content.
 Candidate validation is a pure service call over the proposed member intent plus
 current registered/declaration state. It uses the FD-84 reason taxonomy and the
 same graph/coverage validators as activation. It persists nothing.
+
+Status selectors are exact identities. A registered repository absent from both
+active membership and exclusion is UNCONFIGURED; an explicitly excluded
+registered repository is EXCLUDED; an active registered repository is ACTIVE.
+An unknown repository identity is an exact-lookup rejection, never
+UNCONFIGURED. A pyramid-id selector resolves only a known live/current pyramid
+identity; an unknown or non-live pyramid identity follows the existing exact
+public lookup-failure taxonomy and is never coerced into repository
+participation state.
+
+Candidate evaluation accumulates every deterministic finding that can be
+established from the submitted candidate. A lifecycle-invalid member may be
+uninspectable itself, but its finding must not short-circuit declaration,
+coverage, authority or graph validation for the other validly inspectable
+members. The ordered validation/graph finding sets are therefore the complete
+deterministic result available for that candidate.
 
 #### 20.2 understanding `record`
 
@@ -1689,6 +1786,18 @@ then premise closure, deterministic grouping and one context specification per
 repository with actionable effects. The public `reconsider` operation projects
 that as `Changed`; Functional Pyramid write composition projects the same
 `ChangedSurface` family inside `FunctionalPyramidRecorded`.
+
+The effect engine is genuinely installation-aware while remaining service-owned.
+It receives repository-qualified store/support/context capabilities, not one
+repository `LifecycleStore` treated as if it represented the installation. It
+uses the repository that owns each canonical dependency index to discover direct
+dependents, resolves the semantic owner of each affected conclusion, re-evaluates
+support through the repository-qualified support capability, performs premise
+closure once, groups canonical `ChangedSurface` results by owning repository,
+and produces exactly one context specification for each repository with
+actionable effects. Ordinary reconsider and Functional Pyramid writes invoke
+this same engine. A shell-side loop over per-repository semantic effect engines
+or a second Functional-Pyramid-specific effect coordinator is forbidden.
 
 For a repository newly becoming ACTIVE, the Functional Pyramid root additionally
 selects every current NORMATIVE revision in that repository that lacks
@@ -1841,6 +1950,38 @@ functional-design §15 case, specifically:
 Managed-host captures are candidate-specific delivery evidence only. Historical
 0.10/0.11 captures remain evidence for their named candidates and do not certify
 the Version-1 grammar.
+
+**Production-topology acceptance.** At least one non-editable installed MCP lane
+must exercise physically separate repository-A and repository-B lifecycle
+databases plus the installation Functional Pyramid database. The fixture must
+contain a rule consumed by semantic scope in A whose canonical
+`AuthorityBinding` and authority evidence are owned by B. The lane must prove,
+through the production composition root:
+
+```
+activate A+B
+→ ordinary ask(A scope) returns the governing projection
+→ NORMATIVE record in A derives FunctionalRouteSupport plus B authority support
+→ reuse/ask qualifies CURRENT
+→ B canonical governance source or applicability changes
+→ ordinary reconsider(B changed scope) reaches the dependent A conclusion
+→ A re-establishes through the returned repository-bound context
+→ required qualification is CURRENT again
+```
+
+The same verification set must prove exact canonical-owner reverse navigation,
+unknown repository/pyramid status rejection, complete mixed candidate findings,
+and architecture guards preventing shell semantic effect coordination or
+optional production Functional Pyramid dependencies. Component tests that
+manually inject Functional Pyramid callbacks do not satisfy this production
+composition requirement.
+
+**2026-11-22 design-detail audit.** The adversarial implementation audit found
+no contradiction requiring a Layer-0–3 product/functional amendment. It found
+that the prior Part-C text was not construction-complete at the installation
+composition, repository-qualified support and multi-repository effect-engine
+seams. The paragraphs above close those Layer-4 mechanism gaps without changing
+the governing Layer-0–3 behavior.
 
 Part C is complete only when the mechanisms above are implemented and the
 functional acceptance matrix passes without adding a product rule below Layer 3.
