@@ -137,11 +137,13 @@ class ReconsiderServiceTest(unittest.TestCase):
         repository_id: str = "repo-1",
         context_id: m.InvestigationContextId = CONTEXT_ID,
         assertion_nature: m.AssertionNature = m.AssertionNature.DESCRIPTIVE,
+        store: LifecycleStore | None = None,
     ) -> None:
         semantic_scope = (
             m.EvidenceScope(paths=(scope_path,)) if scope is None else scope
         )
-        self.store.record_understanding(
+        selected_store = self.store if store is None else store
+        selected_store.record_understanding(
             m.CreateUnderstandingCommand(
                 identity=m.RecordingIdentity(
                     repository_id=repository_id,
@@ -636,13 +638,21 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(affected.support.state, m.SupportState.CURRENT)
         self.assertEqual(result.reestablishment_contexts, ())
 
-    def test_governance_only_change_crosses_repository_boundary(self) -> None:
+    def test_governance_only_change_crosses_physical_repository_boundary(
+        self,
+    ) -> None:
         root_two = pathlib.Path(self._tmp.name) / "repo-two"
         root_two.mkdir()
         (root_two / "src").mkdir()
-        self.store.register_repository("repo-2", str(root_two))
+        store_two = LifecycleStore(
+            pathlib.Path(self._tmp.name) / "repo-two.db",
+            retention=RETENTION,
+            clock=lambda: NOW,
+        )
+        self.addCleanup(store_two.close)
+        store_two.register_repository("repo-2", str(root_two))
         context_two = m.InvestigationContextId("ctx-repo-2")
-        self.store.put_context(
+        store_two.put_context(
             m.InvestigationContext(
                 context_id=context_two,
                 repository_id="repo-2",
@@ -669,6 +679,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             repository_id="repo-2",
             context_id=context_two,
             assertion_nature=m.AssertionNature.NORMATIVE,
+            store=store_two,
         )
         support = mock.Mock()
         support.evaluate_revision.return_value = support_rules.evaluation(
@@ -676,9 +687,23 @@ class ReconsiderServiceTest(unittest.TestCase):
             NOW,
             "governing route changed",
         )
-        effects = DependencyEffectService(
+        runtime_one = mock.Mock(
+            repository_id="repo-1",
+            root=str(self.root),
             store=self.store,
-            support=support,
+            evidence=FilesystemEvidenceSource("repo-1", self.root),
+        )
+        runtime_two = mock.Mock(
+            repository_id="repo-2",
+            root=str(root_two),
+            store=store_two,
+            evidence=FilesystemEvidenceSource("repo-2", root_two),
+        )
+        runtimes = {"repo-1": runtime_one, "repo-2": runtime_two}
+        effects = DependencyEffectService(
+            repository_runtime=lambda repository_id: runtimes[repository_id],
+            registered_repository_ids=lambda: ("repo-1", "repo-2"),
+            support_for_repository=lambda repository_id: support,
             functional_route_impacts=lambda repository_id, paths, surfaces: (
                 (route_id,)
                 if repository_id == "repo-1"
@@ -716,10 +741,11 @@ class ReconsiderServiceTest(unittest.TestCase):
             tuple(context.repository_id for context in result.reestablishment_contexts),
             ("repo-2",),
         )
-        self.assertEqual(
-            result.reestablishment_contexts[0].context_id.value,
-            "ctx-cross-repo",
+        context = store_two.get_context(
+            result.reestablishment_contexts[0].context_id.value
         )
+        self.assertEqual(context.repository_id, "repo-2")
+        self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
 
     def test_unknown_challenge_understanding_is_rejected(self) -> None:
         with self.assertRaises(RecordingValidationError):
