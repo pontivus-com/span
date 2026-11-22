@@ -14,6 +14,9 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from span.core import model as m
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_store.functional_pyramid import (
+    ensure_functional_pyramid_installation_store,
+)
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
 SPAN = pathlib.Path(__file__).resolve().parents[2]
@@ -43,6 +46,11 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         )
         store.register_repository(REPOSITORY_ID, str(self.repo.resolve()))
         store.close()
+        installation = ensure_functional_pyramid_installation_store(
+            self.data,
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        installation.close()
         self.env = {
             **os.environ,
             "PYTHONPATH": str(SPAN / "src"),
