@@ -42,7 +42,7 @@ _FunctionalPyramidOrientation = (
     | m.FunctionalPyramidParticipation
 )
 _FunctionalPyramidOrientationLookup = _typing.Callable[
-    [str, m.SurfaceKey, m.EvidenceScope],
+    [str, m.SurfaceKey, m.EvidenceScope | None],
     _FunctionalPyramidOrientation,
 ]
 
