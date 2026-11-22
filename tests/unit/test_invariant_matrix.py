@@ -226,6 +226,31 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
             "ReconsiderService.effects must be a required capability",
         )
 
+    def test_dependency_effect_service_has_no_local_store_support_mode(self):
+        path = REPO_ROOT / "src/span/service/effects.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        service = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "DependencyEffectService"
+        )
+        init = next(
+            node
+            for node in service.body
+            if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+        )
+        parameters = {argument.arg for argument in init.args.kwonlyargs}
+        self.assertFalse({"store", "support"} & parameters)
+        self.assertTrue(
+            {
+                "repository_runtime",
+                "registered_repository_ids",
+                "support_for_repository",
+                "functional_route_impacts",
+            }
+            <= parameters
+        )
+
     def test_repository_change_cannot_skip_functional_route_impacts(self):
         path = REPO_ROOT / "src/span/service/effects.py"
         source = path.read_text(encoding="utf-8")
