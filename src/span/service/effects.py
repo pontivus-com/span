@@ -496,7 +496,7 @@ class DependencyEffectService:
             for observation in store.source_observation_ids_for_locator(
                 repository_id, path
             )
-            for ref in self._support_dependents("SOURCE", observation)
+            for ref in store.support_dependents("SOURCE", observation)
         ]
         for discovery in store.list_discovery_observations(repository_id):
             if m.evidence_scope_contains(
@@ -504,7 +504,7 @@ class DependencyEffectService:
                 m.EvidenceScope(paths=(path,)),
             ):
                 refs.extend(
-                    self._support_dependents(
+                    store.support_dependents(
                         "DISCOVERY", discovery.observation_id.value
                     )
                 )
@@ -521,11 +521,20 @@ class DependencyEffectService:
         for binding in store.load_authority_bindings(repository_id):
             if not m.evidence_scope_allows(binding.evidence_ref.locator, changed):
                 continue
-            refs.extend(
-                self._support_dependents(
-                    "AUTHORITY", binding.evidence_ref.evidence_id.value
-                )
-            )
+            evidence_id = binding.evidence_ref.evidence_id
+            for ref in self._support_dependents("AUTHORITY", evidence_id.value):
+                revision = self._conclusion_revision(ref)
+                if not isinstance(revision.content, m.SupportedConclusion):
+                    continue
+                if any(
+                    isinstance(dependency, m.AuthoritySupportDependency)
+                    and dependency.authority.evidence_ref.repository_id
+                    == repository_id
+                    and dependency.authority.evidence_ref.evidence_id
+                    == evidence_id
+                    for dependency in revision.content.support
+                ):
+                    refs.append(ref)
         return tuple(dict.fromkeys(refs))
 
     def _route_dependents(
