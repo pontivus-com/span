@@ -16,7 +16,11 @@ import unittest
 from unittest import mock
 
 from span.core import model as m
-from span.shell.context import RepositoryRuntime, compose_context, open_repository_runtime
+from span.shell.context import (
+    RepositoryRuntime,
+    compose_context,
+    open_repository_runtime,
+)
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import TOOL_NAMES, McpAdapter, ServiceContext
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
