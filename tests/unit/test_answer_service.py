@@ -945,21 +945,33 @@ class AnswerServiceTest(unittest.TestCase):
             recovery="declare applicable Functional Context coverage",
         )
 
+        def unresolved(scope: m.EvidenceScope) -> m.FunctionalPyramidView:
+            return m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+                version=m.FunctionalPyramidVersion(1),
+                health=m.FunctionalPyramidHealth.VALID,
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+                status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                semantic_scope=scope,
+                unresolved=(finding,),
+            )
+
+        support = SupportService(
+            store=self.store,
+            evidence=self.evidence,
+            authority=self.store,
+            functional_route_resolver=lambda dependency, _surface: (
+                unresolved(dependency.semantic_scope),
+                None,
+            ),
+        )
         service = AnswerService(
             store=self.store,
-            support=self.support,
+            support=support,
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             functional_pyramid_orientation=lambda _repository_id, _surface, scope: (
-                m.FunctionalPyramidView(
-                    pyramid_id=m.FunctionalPyramidId("fp-mixed"),
-                    version=m.FunctionalPyramidVersion(1),
-                    health=m.FunctionalPyramidHealth.VALID,
-                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
-                    scope_relation=m.FunctionalScopeRelation.UNCOVERED,
-                    status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
-                    semantic_scope=scope,
-                    unresolved=(finding,),
-                )
+                unresolved(scope)
             ),
         )
 
