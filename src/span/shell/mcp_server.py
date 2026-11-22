@@ -19,13 +19,9 @@ import pathlib as _pathlib
 from dataclasses import dataclass as _dataclass
 
 from span.core import model as m
-from span.shell.context import (
-    open_repository_context as _open_context,
-    provision_repository as _provision,
-)
-from span.shell.functional_pyramid import (
-    FunctionalPyramidRepositoryRuntime,
-    open_functional_pyramid_service,
+from span.shell.installation_runtime import (
+    InstallationRuntime,
+    open_installation_runtime,
 )
 from span.shell.mcp import (
     TOOL_DESCRIPTIONS,
@@ -40,7 +36,6 @@ from span.shell.structural import repository_id_from_config
 
 __all__ = [
     "ServerConfig",
-    "provision_repository",
     "open_repository_context",
     "handle_list_tools",
     "handle_call_tool",
@@ -67,20 +62,15 @@ def _policy(config: ServerConfig) -> m.ServiceBoundsPolicy:
     )
 
 
-def provision_repository(
-    config: ServerConfig,
-    request: m.InitializeRepositoryRequest,
-) -> tuple[ServiceContext, m.InitializeRepositoryResult]:
-    """Explicit provisioning bound to this server's data directory."""
-    return _provision(config.data_dir, request, policy=_policy(config))
-
-
 def open_repository_context(
     config: ServerConfig,
     repository_locator: str,
+    *,
+    installation: InstallationRuntime,
 ) -> tuple[str, ServiceContext]:
-    """Open an already-provisioned repository without setup."""
-    return _open_context(config.data_dir, repository_locator, policy=_policy(config))
+    """Open one repository through the already-bound installation runtime."""
+    repository_id = repository_id_from_config(repository_locator)
+    return repository_id, installation.context_for_locator(repository_locator)
 
 
 #: Repository-scoped tools: their descriptions carry registered canonical IDs
@@ -212,10 +202,7 @@ def main(argv: list[str] | None = None) -> None:
         data_dir=_pathlib.Path(args.data_dir),
         response_budget_bytes=args.response_budget_bytes,
     )
-    adapter = McpAdapter(
-        provisioner=lambda request: provision_repository(config, request),
-        context_loader=lambda locator: open_repository_context(config, locator)[1],
-    )
+    adapter = McpAdapter()
     # Startup registration is transport-only: it advertises canonical
     # identity before serving MCP and performs no provider build, store open,
     # or target work. Provisioning remains explicit.
@@ -223,15 +210,22 @@ def main(argv: list[str] | None = None) -> None:
         repository_id = repository_id_from_config(repository_locator)
         adapter.register_repository_locator(repository_id, repository_locator)
 
-    def repository_runtime(repository_id: str) -> FunctionalPyramidRepositoryRuntime:
-        return adapter.repository_context(repository_id)
+    def registered_locator(repository_id: str) -> str:
+        try:
+            return adapter.repository_locators[repository_id]
+        except KeyError as exc:
+            raise ValueError(
+                f"unknown registered repository: {repository_id!r}"
+            ) from exc
 
-    with open_functional_pyramid_service(
+    with open_installation_runtime(
         config.data_dir,
-        repository_runtime=repository_runtime,
+        repository_locator=registered_locator,
         registered_repository_ids=adapter.registered_repository_ids,
-    ) as functional_pyramid:
-        adapter.functional_pyramid = functional_pyramid
+        policy=_policy(config),
+    ) as installation:
+        adapter.context_loader = installation.context_for_locator
+        adapter.functional_pyramid = installation.functional_pyramid
         _asyncio.run(_serve(adapter))
 
 
