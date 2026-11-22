@@ -217,6 +217,32 @@ class LifecycleServiceTest(unittest.TestCase):
         self.store.put_source_observation(_observation())
         self.store.add_context_evidence("ctx-1", "obs-1")
 
+    def _mcp_context(self):
+        from span.ports.structural import StructuralSource
+        from span.shell.context import RepositoryRuntime, compose_context
+
+        runtime = RepositoryRuntime(
+            repository_id="repo-1",
+            root="/repo/one",
+            structural=mock.Mock(spec=StructuralSource),
+            evidence=_CurrentEvidence(),
+            store=self.store,
+        )
+        functional_pyramid = mock.Mock()
+        participation = m.FunctionalPyramidParticipation(
+            m.FunctionalPyramidParticipationState.UNCONFIGURED
+        )
+        functional_pyramid.orientation.return_value = participation
+        functional_pyramid.route.return_value = participation
+        functional_pyramid.support_route.return_value = (participation, None)
+        functional_pyramid.changed_route_identities.return_value = ()
+        functional_pyramid.registered_repository_ids.return_value = ("repo-1",)
+        return compose_context(
+            runtime=runtime,
+            functional_pyramid=functional_pyramid,
+            repository_runtime=lambda _repository_id: runtime,
+        )
+
     def _update(
         self,
         submission: str,
@@ -1166,21 +1192,9 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertIn("src/a.py", context.scope.paths)
 
     def test_unknown_update_understanding_is_rejected_not_unavailable(self) -> None:
-        from span.shell.context import compose_context
         from span.shell.mcp.adapter import McpAdapter
-        from span.ports.structural import StructuralSource
 
-        adapter = McpAdapter(
-            contexts={
-                "repo-1": compose_context(
-                    repository_id="repo-1",
-                    root="/repo/one",
-                    structural=mock.Mock(spec=StructuralSource),
-                    evidence=_CurrentEvidence(),
-                    store=self.store,
-                )
-            }
-        )
+        adapter = McpAdapter(contexts={"repo-1": self._mcp_context()})
         result = adapter.dispatch(
             "record",
             {
@@ -2494,17 +2508,9 @@ class LifecycleServiceTest(unittest.TestCase):
             )
 
     def test_postcommit_store_failures_preserve_acceptance_through_mcp(self):
-        from span.ports.structural import StructuralSource
-        from span.shell.context import compose_context
         from span.shell.mcp.adapter import McpAdapter
 
-        context = compose_context(
-            repository_id="repo-1",
-            root="/repo/one",
-            structural=mock.Mock(spec=StructuralSource),
-            evidence=_CurrentEvidence(),
-            store=self.store,
-        )
+        context = self._mcp_context()
         adapter = McpAdapter(contexts={"repo-1": context})
         for index, error in enumerate(
             (
@@ -2994,7 +3000,14 @@ class LifecycleServiceTest(unittest.TestCase):
             m.Surface(key=service_key, boundary=m.SurfaceBoundary(paths=("src",)))
         )
         answer = AnswerService(
-            store=self.store, support=self.support, evidence=self.evidence_service
+            store=self.store,
+            support=self.support,
+            evidence=self.evidence_service,
+            functional_pyramid_orientation=lambda _repository_id, _surface, _scope: (
+                m.FunctionalPyramidParticipation(
+                    m.FunctionalPyramidParticipationState.UNCONFIGURED
+                )
+            ),
         )
         with mock.patch.object(
             self.evidence_service,
