@@ -165,9 +165,7 @@ class FunctionalAcceptanceMatrixTest(unittest.TestCase):
                 if not locations:
                     unresolved.append(f"{identifier} → {token}")
                 elif len(locations) != 1:
-                    ambiguous.append(
-                        f"{identifier} → {token}: {', '.join(locations)}"
-                    )
+                    ambiguous.append(f"{identifier} → {token}: {', '.join(locations)}")
         self.assertEqual(unnamed, [], "acceptance rows that name no boundary test")
         self.assertEqual(
             unresolved,
