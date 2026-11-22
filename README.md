@@ -46,7 +46,7 @@ an explanation or rule that is no longer applicable.
 
 ## What Span changes
 
-### Start with established understanding, not a blank slate
+### Pick up where the last session left off
 
 The next agent can ask about the code it is working on and reuse the conclusions
 previous investigations established. It does not need the old chat, a saved
@@ -56,7 +56,7 @@ is already known.
 Span keeps each conclusion attached to the evidence that supported it. If that
 support no longer holds, the conclusion is not silently returned as current.
 
-### Know what applies before you change the code
+### Know what governs the code before you touch it
 
 For repositories with declared Functional Pyramid governance, the same lookup
 shows the governing path for the exact code surface: the applicable goals,
@@ -67,7 +67,7 @@ The agent does not have to infer authority from filenames, search relevance, or
 repository layout. Span resolves what the repository has explicitly declared to
 govern that scope.
 
-### Recheck the blast radius, not the whole codebase
+### Recheck only what the change invalidated
 
 After code or governing authority changes, Span identifies the understanding
 that actually depends on what changed. Unrelated conclusions stay current;
@@ -76,7 +76,7 @@ affected conclusions are returned with the reason they need another look.
 That turns reassessment into focused work instead of another full-codebase
 rediscovery pass.
 
-## A maintained context layer for the coding agent you already use
+## Keep using the coding agent you already have
 
 Span does not replace your coding agent, choose a model, edit source, or run your
 tests. It runs locally as an MCP server beside the agent.
