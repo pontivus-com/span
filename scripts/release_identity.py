@@ -11,7 +11,6 @@ import argparse
 import pathlib
 import re
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "src" / "span" / "__init__.py"
 VERSION_LINE = re.compile(r'^__version__ = "([^"]+)"$', re.M)
