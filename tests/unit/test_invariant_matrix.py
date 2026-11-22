@@ -218,9 +218,9 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
             and node.func.id == "DependencyEffectService"
         ]
         self.assertEqual(calls, [])
-        effects_index = [
-            argument.arg for argument in init.args.kwonlyargs
-        ].index("effects")
+        effects_index = [argument.arg for argument in init.args.kwonlyargs].index(
+            "effects"
+        )
         self.assertIsNone(
             init.args.kw_defaults[effects_index],
             "ReconsiderService.effects must be a required capability",
