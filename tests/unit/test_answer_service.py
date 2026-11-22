@@ -36,6 +36,16 @@ def _basis() -> m.SemanticBasis:
     )
 
 
+def _unconfigured_orientation(
+    _repository_id: str,
+    _surface: m.SurfaceKey,
+    _scope: m.EvidenceScope,
+) -> m.FunctionalPyramidParticipation:
+    return m.FunctionalPyramidParticipation(
+        m.FunctionalPyramidParticipationState.UNCONFIGURED
+    )
+
+
 class AnswerServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -75,6 +85,7 @@ class AnswerServiceTest(unittest.TestCase):
             store=self.store,
             support=self.support,
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
         self._observation("obs-a", "src/a.py")
         self._create("u-a", "src/a.py", "What does A do?")
@@ -163,6 +174,7 @@ class AnswerServiceTest(unittest.TestCase):
                 hook_fast_bounds=bounds,
                 max_response_bytes=max_bytes,
             ),
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
 
     def _ask(self, reference: str, question: str | None, request_id: str = "req-ask"):
@@ -1385,6 +1397,7 @@ class AnswerServiceTest(unittest.TestCase):
             support=self.support,
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             policy=policy,
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
         first = service.ask(
             m.AskRequest(
@@ -1484,6 +1497,7 @@ class AnswerServiceTest(unittest.TestCase):
                 max_response_bytes=PAGED_RESPONSE_BUDGET,
             ),
             clock=clock,
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
 
     def _cold_page(self, service):
@@ -1639,6 +1653,7 @@ class AnswerServiceTest(unittest.TestCase):
                 hook_fast_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
                 max_response_bytes=len(huge_line.encode("utf-8")) - 1,
             ),
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
         first = service.ask(
             m.AskRequest(
