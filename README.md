@@ -3,13 +3,13 @@
 </h1>
 
 <p align="center">
-  <strong>Maintain implementation understanding and governing applicability across coding sessions.</strong>
+  <strong>Stop making every coding agent rediscover your codebase.</strong>
 </p>
 
 <p align="center">
-  Span keeps the explanations your coding agent worked out, the evidence
-  behind them, and the declared governance that applies to the same engineering
-  scope — then shows what needs another look when implementation or governance changes.
+  Span is a local MCP server that lets coding agents reuse evidence-backed
+  understanding of what the code does, see the declared rules that govern the
+  code they are changing, and revisit only what a change actually affected.
 </p>
 
 <p align="center">
@@ -23,131 +23,161 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a href="#what-span-changes"><strong>Why Span</strong></a> ·
   <a href="#how-it-works"><strong>How it works</strong></a> ·
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
   <a href="https://github.com/pontivus-com/span/tree/master/docs"><strong>Docs</strong></a>
 </p>
 
-## Keep the understanding your agent worked for
+## Every new session can repeat work you already paid for
 
-A coding agent traces a request across services, checks the tests, finds the
-contract, and explains why the boundary exists. The next session should be
-able to find that explanation and see whether its support still holds.
+A coding agent traces a request across services, reads the tests, finds the
+contract, and works out why the implementation behaves the way it does. A fresh
+session can end up doing the same investigation again.
 
-Span makes that investigation reusable. It is a local MCP server where agents
-record coherent explanations with exact source support, explicit gaps, and
-version history. Later agents can discover the explanation from the current
-surface view, then inspect what is current, disputed, or changed.
+The same problem exists on the other side of the code: the agent also needs to
+know which goals, invariants, contracts, and designs actually apply to the thing
+it is about to change. Those rules may live in another repository, and their
+applicability can change even when the code itself does not.
 
-The coding agent does the thinking. Span keeps the record and checks its
-support.
+Without a maintained link between understanding, evidence, and governance, the
+choice is poor: spend time reconstructing the same context, or risk working from
+an explanation or rule that is no longer applicable.
 
-Three tools — `ask`, `record`, `reconsider` — carry the
-[agent lifecycle](docs/lifecycle-contract.md#required-agent-completion): find
-current understanding, retain a supported conclusion, and re-align after change.
+## What Span changes
 
-## Governed understanding in Version 1 Beta
+### Start with established understanding, not a blank slate
 
-Version 1 adds the **Functional Pyramid**: an explicitly declared, cross-repository
-governance graph evaluated alongside retained implementation understanding. Span
-stores identities, applicability, derivation and support; canonical governing
-prose remains in its owning repository.
+The next agent can ask about the code it is working on and reuse the conclusions
+previous investigations established. It does not need the old chat, a saved
+understanding ID, or a separate hand-written explanation just to discover what
+is already known.
 
-Repository participation is explicit: `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`.
-For an ACTIVE repository, ordinary `ask` resolves governance from the same
-semantic scope as the answer. A NORMATIVE `record` derives the applicable
-Functional Pyramid route and canonical authority dependencies server-side.
-`reconsider` propagates implementation and governance changes through the same
-support/effect model, including cross-repository effects.
+Span keeps each conclusion attached to the evidence that supported it. If that
+support no longer holds, the conclusion is not silently returned as current.
 
-Adoption remains inside the same three public tools:
+### Know what applies before you change the code
 
-```text
-STATUS → DISCOVER/VALIDATE → DECLARE when needed
-→ reconsider/disposition → VALIDATE → ACTIVATE/REVISE
-→ VERIFY → REESTABLISH actionable effects → ACTIVE
-```
+For repositories with declared Functional Pyramid governance, the same lookup
+shows the governing path for the exact code surface: the applicable goals,
+invariants, contracts, functional design, and technical design remain linked to
+their canonical owners.
 
-An accepted participation write is not completion while its returned effects
-remain actionable. See [using Span](docs/usage.md), the
-[lifecycle](docs/lifecycle.md), and the [MCP reference](docs/mcp.md).
+The agent does not have to infer authority from filenames, search relevance, or
+repository layout. Span resolves what the repository has explicitly declared to
+govern that scope.
+
+### Recheck the blast radius, not the whole codebase
+
+After code or governing authority changes, Span identifies the understanding
+that actually depends on what changed. Unrelated conclusions stay current;
+affected conclusions are returned with the reason they need another look.
+
+That turns reassessment into focused work instead of another full-codebase
+rediscovery pass.
+
+## A maintained context layer for the coding agent you already use
+
+Span does not replace your coding agent, choose a model, edit source, or run your
+tests. It runs locally as an MCP server beside the agent.
+
+The agent still does the engineering judgment. Span maintains the reusable
+result of that work: semantic conclusions, their exact support, version history,
+declared governance, and the consequences of change.
+
+Three public tools cover the lifecycle:
+
+- **`ask`** — start from the current understanding and, where declared, the
+  governance that applies to the same scope.
+- **`record`** — retain a conclusion once the agent has established it, with the
+  support it actually used.
+- **`reconsider`** — after a change, identify what really needs reassessment and
+  carry that work forward without losing history.
 
 ## How it works
 
-1. **Start from the surface.** Ask for the current surface view with no question
-   or request identity. Span returns current grouped understanding with status,
-   or a gap with concrete source pointers. Select source bytes explicitly only
-   when the investigation needs them.
-2. **Retain established understanding.** Save one conclusion at a time with the file
-   it rests on, or declare a service/domain surface for a cross-file
-   explanation. Work that started outside Span can be recorded directly; the
-   flat create derives support from the locator you already read.
-3. **Reuse in a fresh session.** Ask for the surface document view without a
-   question, then select the applicable current conclusion.
-4. **Reassess after change.** Check affected dependencies, investigate what
-   changed, then confirm, correct, replace, or withdraw the explanation.
-   Earlier versions remain inspectable.
+1. **Ask before re-deriving.** Start with the file, symbol, service, or domain
+   you are working on. Span returns current retained understanding or an honest
+   gap. In an ACTIVE Functional Pyramid repository, it also returns the declared
+   governing view for that same semantic scope.
+2. **Investigate normally, then keep the useful result.** The agent reads code,
+   searches, edits, and tests with its normal tools. When it establishes a
+   conclusion, `record` stores that conclusion with its evidence and history.
+   NORMATIVE conclusions also receive the applicable declared governance support
+   from Span.
+3. **After change, revisit only what lost support.** `reconsider` maps changed
+   implementation or governance to the affected conclusions. The agent confirms,
+   corrects, replaces, or withdraws only the understanding that actually needs
+   work.
 
-One explanation can span code, tests, CSS, configuration, and contracts. The agent retains supported conclusions as part of the investigation.
+A later session starts at step 1 again — but it is no longer starting from zero.
+
+## Functional Pyramid: see the rules behind the code
+
+Code tells an agent what the implementation does. It does not, by itself, tell
+the agent what the implementation is supposed to satisfy.
+
+The Functional Pyramid connects implementation scope to the repository's
+declared authority chain without copying that authority into Span. Canonical
+goals, invariants, contracts, functional design, and technical design stay in
+the repositories that own them. Span maintains their identities, applicability,
+derivation, and change consequences.
+
+That means an agent can see both sides of a change in one place:
+
+- **what the code is understood to do**, with evidence and currentness; and
+- **what the code is declared to satisfy**, with the governing path back to its
+  canonical sources.
+
+Governance remains explicit. A registered repository is not automatically
+governed: participation is `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`, and
+unresolved relationships stay unresolved rather than being guessed.
+
+## What “current” means
+
+Span does not claim that a saved explanation is true merely because it was
+recorded. It tells the agent whether the support that explanation depends on
+still holds.
+
+| Qualification | What it means |
+| --- | --- |
+| `CURRENT` | The declared support still passes its checks. The agent still owns semantic judgment. |
+| `REASSESSMENT_REQUIRED` | Source, authority, premise, membership, or governance applicability changed. Revisit the affected explanation. |
+| `UNVERIFIABLE` | Required support cannot currently be established. The limitation stays explicit. |
+
+Gaps and disputes remain visible independently of support currency. A passing
+test does not settle a disagreement, and matching source bytes do not make an
+interpretation authoritative.
 
 ## See the lifecycle
 
-Illustrative tool sequence, not literal request JSON. The installed schemas
-and [MCP reference](docs/mcp.md) own the wire grammar.
+Illustrative sequence; the installed schemas and
+[MCP reference](docs/mcp.md) own the exact wire grammar.
 
 ```text
+fresh session
 ask(surface)
-  → current grouped Answer, or Gap with source pointers
+  → current understanding, or an actionable gap
+  → declared governing view for the same scope when Functional Pyramid is ACTIVE
 
-agent selects needed source bytes explicitly when required
-ask(surface, request_id, evidence)
-  → same Answer/Gap classification plus evidence admission/context
+agent investigates with its normal coding tools
 
-agent investigates and records what it established
+record(kind="understanding", conclusion, support)
+  → retained version + current qualification
 
-record(kind="understanding", conclusion, locator|observation_id|support)
-  → compact acceptance with receipt selector, version, and live qualification
+later, implementation or governance changes
 
-fresh session asks the surface
-  → current document view grouped by recorded question
-ask(selector=RecordedQuestionSelector)
-  → exact known recorded-question membership
-ask(selector=UnderstandingSnapshotSelector)
-  → exact recorded explanation, live support, gaps, and challenges
-
-supporting source changes
 reconsider(changed_paths)
-  → every affected surface, with containment, direct, and indirect reasons,
-    per-conclusion support state, and a re-establishment context
+  → affected conclusions only, with the reason and re-establishment context
 
-agent investigates and records a correction against the expected version
-  → version 2; version 1 remains history
+agent investigates the changed support and records the disposition
+  → history preserved; unaffected understanding remains reusable
 ```
 
-Pure reuse names the surface and returns all current membership grouped by
-recorded question. Exact targeted reuse uses `RecordedQuestionSelector` only
-when that recorded question is already known. Wording is never treated as
-semantic equivalence, and a returned conclusion remains a starting point for
-judgment.
+Pure reuse starts from the surface; no previous conversation or saved ID is
+required. Exact historical snapshots and receipts remain available when audit or
+replay detail is needed.
 
-## Know what can be reused
-
-| Qualification | What the agent can conclude |
-| --- | --- |
-| `CURRENT` | The declared support still passes its checks. Applicability and semantic correctness still need judgment. |
-| `REASSESSMENT_REQUIRED` | Source, authority, premise, or recorded membership support changed. Revisit the affected explanation. |
-| `UNVERIFIABLE` | Required support cannot be established. The limitation stays explicit. |
-
-Gaps and challenges remain visible independently of support currency. Matching
-bytes do not settle a dispute, and test existence does not establish a pass.
-Independent verification records the observations or evidence actually tested and preserves
-failures as failures.
-
-Recording is atomic. Ordinary acceptance returns a receipt selector plus the
-accepted coordinates and live qualification; the immutable receipt remains in
-storage and is retrieved explicitly when exact replay/audit detail is needed.
-The caller preserves identity before sending, so retrying the same identity and
-content recovers the retained acceptance after a lost response or restart.
 
 ## Quick start
 
