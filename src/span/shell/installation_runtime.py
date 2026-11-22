@@ -44,9 +44,7 @@ class InstallationRuntime:
     def functional_pyramid(self) -> FunctionalPyramidService | None:
         return self._functional_pyramid
 
-    def bind_functional_pyramid(
-        self, service: FunctionalPyramidService | None
-    ) -> None:
+    def bind_functional_pyramid(self, service: FunctionalPyramidService | None) -> None:
         if self._functional_pyramid is not None:
             raise RuntimeError("Functional Pyramid service is already bound")
         self._functional_pyramid = service
