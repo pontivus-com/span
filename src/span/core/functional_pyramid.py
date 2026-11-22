@@ -1434,6 +1434,39 @@ def _context_projection(
     return tuple(routes), _unique_graph_refs(rule_refs), frozenset(keys)
 
 
+def _canonical_owner_rule_refs(
+    *,
+    surface: SurfaceKey,
+    semantic_scope: EvidenceScope,
+    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+    authority_bindings: _collections.Mapping[tuple[str, str], AuthorityBinding],
+) -> tuple[FunctionalGraphRef, ...]:
+    """Seed FD-88 reverse navigation from an exact canonical owner selection."""
+    exact_locators = set(semantic_scope.paths)
+    exact_locators.update(ref.locator for ref in semantic_scope.evidence_refs)
+    if not exact_locators:
+        return ()
+
+    refs: list[FunctionalGraphRef] = []
+    for (repository_id, rule_id), rule in rules.items():
+        if rule.owner.repository_id != surface.repository_id:
+            continue
+        authority = authority_bindings.get(
+            (rule.owner.repository_id, rule.owner.authority_ref)
+        )
+        if authority is None:
+            continue
+        if authority.evidence_ref.locator not in exact_locators:
+            continue
+        refs.append(
+            FunctionalGraphRef(
+                repository_id=repository_id,
+                identity=rule_id,
+            )
+        )
+    return _unique_graph_refs(refs)
+
+
 def _rule_projection(
     resolved_rules: tuple[FunctionalGraphRef, ...],
     *,
@@ -1635,9 +1668,15 @@ def resolve_functional_pyramid_route(
     context_routes, initial_rules, context_keys = _context_projection(
         resolved_contexts, contexts
     )
+    owner_rules = _canonical_owner_rule_refs(
+        surface=surface,
+        semantic_scope=semantic_scope,
+        rules=rules,
+        authority_bindings=authority_bindings,
+    )
 
     resolved_rules, rule_findings = _resolve_rule_refs(
-        initial_rules,
+        _unique_graph_refs((*initial_rules, *owner_rules)),
         contexts=contexts,
         rules=rules,
         duplicate_rules=duplicate_rules,
