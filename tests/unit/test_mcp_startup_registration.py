@@ -205,7 +205,6 @@ class StartupRegistrationTest(unittest.TestCase):
         self.assertEqual(adapter.contexts, {})
 
     def test_cs07_uninitialized_context_creates_no_store(self):
-        from span.shell import mcp_server
         from span.shell.context import RepositoryNotInitialized
 
         with tempfile.TemporaryDirectory() as tmp:
