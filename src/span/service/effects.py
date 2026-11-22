@@ -15,6 +15,7 @@ from span.core import containment
 from span.core import model as m
 from span.core import support_rules as _support_rules
 from span.core.recording import RecordingValidationError
+from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import ContextBinding, context_binding, issue_context
@@ -30,6 +31,9 @@ _ReestablishmentContextIssuer = _typing.Callable[
     [str, str, ContextBinding, tuple[str, ...], tuple[str, ...]],
     m.InvestigationContextRef,
 ]
+_RepositoryRuntimeLookup = _typing.Callable[[str], FunctionalPyramidRepositoryRuntime]
+_RegisteredRepositoryIds = _typing.Callable[[], tuple[str, ...]]
+_SupportLookup = _typing.Callable[[str], SupportService]
 
 
 class DependencyEffectService:
@@ -38,32 +42,101 @@ class DependencyEffectService:
     def __init__(
         self,
         *,
-        store: LifecycleStorePort,
+        store: LifecycleStorePort | None = None,
         support: SupportService | None = None,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
         functional_route_impacts: _FunctionalRouteImpactLookup | None = None,
         context_issuer: _ReestablishmentContextIssuer | None = None,
+        repository_runtime: _RepositoryRuntimeLookup | None = None,
+        registered_repository_ids: _RegisteredRepositoryIds | None = None,
+        support_for_repository: _SupportLookup | None = None,
     ) -> None:
+        if store is None and repository_runtime is None:
+            raise ValueError(
+                "dependency-effect service requires a store or repository runtime"
+            )
         self._store = store
         self._support = support
         self._policy = policy
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
         self._functional_route_impacts = functional_route_impacts
+        self._repository_runtime = repository_runtime
+        self._registered_repository_ids = registered_repository_ids
+        self._support_for_repository = support_for_repository
         self._context_issuer = context_issuer or self._issue_reestablishment_context
+
+    def _registered_ids(self) -> tuple[str, ...]:
+        if self._registered_repository_ids is not None:
+            return self._registered_repository_ids()
+        if self._store is None:
+            raise RuntimeError("repository registry is not configured")
+        return ()
+
+    def _store_for_repository(self, repository_id: str) -> LifecycleStorePort:
+        if self._repository_runtime is not None:
+            return self._repository_runtime(repository_id).store
+        if self._store is None:
+            raise RuntimeError("repository store is not configured")
+        self._store.require_repository(repository_id)
+        return self._store
+
+    def _repository_for_ref(self, ref: m.ConclusionRevisionRef) -> str:
+        if self._repository_runtime is None:
+            surface = self._surface_of(ref)
+            return surface.repository_id
+        owners = [
+            repository_id
+            for repository_id in self._registered_ids()
+            if self._store_for_repository(repository_id).has_conclusion_revision(
+                ref.understanding_id.value,
+                ref.conclusion_id.value,
+                ref.revision.value,
+            )
+        ]
+        if len(owners) != 1:
+            raise RecordingValidationError(
+                "affected conclusion revision must resolve to exactly one "
+                f"registered repository: {ref.label}"
+            )
+        return owners[0]
+
+    def _store_for_ref(self, ref: m.ConclusionRevisionRef) -> LifecycleStorePort:
+        if self._repository_runtime is None:
+            if self._store is None:
+                raise RuntimeError("repository store is not configured")
+            return self._store
+        return self._store_for_repository(self._repository_for_ref(ref))
+
+    def _support_dependents(
+        self, dependency_kind: str, dependency_ref: str
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        if self._repository_runtime is None:
+            if self._store is None:
+                raise RuntimeError("repository store is not configured")
+            return self._store.support_dependents(dependency_kind, dependency_ref)
+        refs: list[m.ConclusionRevisionRef] = []
+        for repository_id in self._registered_ids():
+            refs.extend(
+                self._store_for_repository(repository_id).support_dependents(
+                    dependency_kind, dependency_ref
+                )
+            )
+        return tuple(dict.fromkeys(refs))
 
     def repository_change(self, request: m.ReconsiderRequest) -> m.Changed:
         """Project one repository changed-scope root through the shared engine."""
         if request.challenge is not None:
             raise ValueError("challenge is not a dependency-effect root")
         repository_id = request.bound_repository_id
-        self._store.require_repository(repository_id)
+        store = self._store_for_repository(repository_id)
+        store.require_repository(repository_id)
 
         reasons: dict[m.SurfaceKey, set[m.ChangeReason]] = {}
         root_scopes = {repository_id: self._repository_root_scopes(request)}
-        surfaces = self._store.list_surfaces(repository_id)
+        surfaces = store.list_surfaces(repository_id)
         changed_paths = self._changed_paths(request)
 
         for path in request.changed_paths:
@@ -114,12 +187,13 @@ class DependencyEffectService:
         for ref in sorted(set(refs), key=lambda value: value.sort_key):
             try:
                 surface = self._surface_of(ref)
-                version = self._store.get_understanding(
+                store = self._store_for_ref(ref)
+                version = store.get_understanding(
                     ref.understanding_id.value
                 ).current_version
             except (OSError, ValueError):
                 continue
-            current = self._store.get_version(ref.understanding_id.value, version.value)
+            current = store.get_version(ref.understanding_id.value, version.value)
             if ref not in current.conclusions:
                 continue
             support = self._support_state(ref)
@@ -361,8 +435,9 @@ class DependencyEffectService:
     ) -> m.UnderstandingVersion:
         understanding_id = ref.understanding_id.value
         if understanding_id not in current_versions:
-            understanding = self._store.get_understanding(understanding_id)
-            current_versions[understanding_id] = self._store.get_version(
+            store = self._store_for_ref(ref)
+            understanding = store.get_understanding(understanding_id)
+            current_versions[understanding_id] = store.get_version(
                 understanding_id, understanding.current_version.value
             )
         return current_versions[understanding_id]
@@ -374,8 +449,9 @@ class DependencyEffectService:
         with_route_support: bool,
     ) -> tuple[m.ConclusionRevisionRef, ...]:
         refs: list[m.ConclusionRevisionRef] = []
-        for understanding in self._store.list_understandings(repository_id):
-            version = self._store.get_version(
+        store = self._store_for_repository(repository_id)
+        for understanding in store.list_understandings(repository_id):
+            version = store.get_version(
                 understanding.understanding_id.value,
                 understanding.current_version.value,
             )
@@ -398,20 +474,21 @@ class DependencyEffectService:
         repository_id: str,
         path: str,
     ) -> tuple[m.ConclusionRevisionRef, ...]:
+        store = self._store_for_repository(repository_id)
         refs = [
             ref
-            for observation in self._store.source_observation_ids_for_locator(
+            for observation in store.source_observation_ids_for_locator(
                 repository_id, path
             )
-            for ref in self._store.support_dependents("SOURCE", observation)
+            for ref in self._support_dependents("SOURCE", observation)
         ]
-        for discovery in self._store.list_discovery_observations(repository_id):
+        for discovery in store.list_discovery_observations(repository_id):
             if m.evidence_scope_contains(
                 discovery.scope,
                 m.EvidenceScope(paths=(path,)),
             ):
                 refs.extend(
-                    self._store.support_dependents(
+                    self._support_dependents(
                         "DISCOVERY", discovery.observation_id.value
                     )
                 )
@@ -424,11 +501,12 @@ class DependencyEffectService:
     ) -> tuple[m.ConclusionRevisionRef, ...]:
         changed = m.EvidenceScope(paths=(path,))
         refs: list[m.ConclusionRevisionRef] = []
-        for binding in self._store.load_authority_bindings(repository_id):
+        store = self._store_for_repository(repository_id)
+        for binding in store.load_authority_bindings(repository_id):
             if not m.evidence_scope_allows(binding.evidence_ref.locator, changed):
                 continue
             refs.extend(
-                self._store.support_dependents(
+                self._support_dependents(
                     "AUTHORITY", binding.evidence_ref.evidence_id.value
                 )
             )
@@ -441,7 +519,7 @@ class DependencyEffectService:
         refs: list[m.ConclusionRevisionRef] = []
         for route_id in route_ids:
             refs.extend(
-                self._store.support_dependents("FUNCTIONAL_ROUTE", route_id.value)
+                self._support_dependents("FUNCTIONAL_ROUTE", route_id.value)
             )
         return tuple(dict.fromkeys(refs))
 
@@ -472,7 +550,9 @@ class DependencyEffectService:
                 if owner is not None:
                     scopes.append(m.EvidenceScope(paths=(owner,)))
                 continue
-            declared = self._store.find_surface(surface)
+            declared = self._store_for_repository(
+                request.bound_repository_id
+            ).find_surface(surface)
             if declared is None:
                 continue
             paths = list(declared.boundary.paths)
@@ -499,6 +579,7 @@ class DependencyEffectService:
 
         contexts: list[m.InvestigationContextRef] = []
         for repository_id in sorted(actionable):
+            store = self._store_for_repository(repository_id)
             scopes = list(root_scopes.get(repository_id, ()))
             source_observations: dict[str, m.SourceObservation] = {}
             discovery_observations: dict[str, m.DiscoveryObservation] = {}
@@ -510,7 +591,7 @@ class DependencyEffectService:
                 scopes.append(revision.content.scope)
                 for dependency in revision.content.support:
                     if isinstance(dependency, m.SourceSupport):
-                        source_observation = self._store.find_source_observation(
+                        source_observation = store.find_source_observation(
                             dependency.observation_id.value
                         )
                         if source_observation is None:
@@ -529,7 +610,7 @@ class DependencyEffectService:
                             source_observation
                         )
                     elif isinstance(dependency, m.DiscoverySupport):
-                        discovery_observation = self._store.find_discovery_observation(
+                        discovery_observation = store.find_discovery_observation(
                             dependency.observation_id.value
                         )
                         if discovery_observation is None:
@@ -586,8 +667,9 @@ class DependencyEffectService:
         def fixed_context_id() -> str:
             return context_id
 
+        store = self._store_for_repository(repository_id)
         context = issue_context(
-            self._store,
+            store,
             binding=binding,
             repository_id=repository_id,
             request_id=m.RequestId(f"effects:{context_id}"),
@@ -595,9 +677,9 @@ class DependencyEffectService:
             new_context_id=fixed_context_id,
         )
         for observation_id in source_observation_ids:
-            self._store.add_context_evidence(context_id, observation_id)
+            store.add_context_evidence(context_id, observation_id)
         for observation_id in discovery_observation_ids:
-            self._store.add_context_discovery_evidence(context_id, observation_id)
+            store.add_context_discovery_evidence(context_id, observation_id)
         return m.InvestigationContextRef(
             repository_id=repository_id,
             context_id=context.context_id,
@@ -614,7 +696,8 @@ class DependencyEffectService:
         self,
         ref: m.ConclusionRevisionRef,
     ) -> m.ConclusionRevision:
-        for revision in self._store.get_conclusions(ref.understanding_id.value):
+        store = self._store_for_ref(ref)
+        for revision in store.get_conclusions(ref.understanding_id.value):
             if (
                 revision.conclusion_id == ref.conclusion_id
                 and revision.revision == ref.revision
@@ -629,17 +712,19 @@ class DependencyEffectService:
         self,
         ref: m.ConclusionRevisionRef,
     ) -> m.SupportEvaluation | m.SupportUnavailable:
-        if self._support is None:
-            return m.SupportUnavailable(
-                "support evaluation is not configured for this reconsideration"
-            )
+        support = self._support
+        if self._support_for_repository is not None:
+            support = self._support_for_repository(self._repository_for_ref(ref))
+        if support is None:
+            raise RuntimeError("support evaluation is not configured")
         try:
-            return self._support.evaluate_revision(ref)
+            return support.evaluate_revision(ref)
         except (OSError, ValueError):
             return m.SupportUnavailable("conclusion support evaluation is unavailable")
 
     def _surface_of(self, ref: m.ConclusionRevisionRef) -> m.SurfaceKey:
-        return self._store.get_understanding(ref.understanding_id.value).surface
+        store = self._store_for_ref(ref)
+        return store.get_understanding(ref.understanding_id.value).surface
 
     def _indirect(
         self,
@@ -653,7 +738,7 @@ class DependencyEffectService:
         truncated = False
         while frontier:
             ref, depth = frontier.pop()
-            dependents = self._store.support_dependents("PREMISE", ref.label)
+            dependents = self._support_dependents("PREMISE", ref.label)
             if max_depth is not None and depth >= max_depth:
                 if dependents:
                     truncated = True
