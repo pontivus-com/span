@@ -164,15 +164,13 @@ def compose_context(
         functional_pyramid_route=functional_pyramid.route,
     )
     effects = DependencyEffectService(
-        store=store,
-        support=support,
-        policy=policy,
-        functional_route_impacts=functional_pyramid.changed_route_identities,
         repository_runtime=repository_runtime,
         registered_repository_ids=lambda: tuple(
             sorted(functional_pyramid.registered_repository_ids())
         ),
         support_for_repository=support_for,
+        functional_route_impacts=functional_pyramid.changed_route_identities,
+        policy=policy,
     )
     reconsider = ReconsiderService(
         store=store,
