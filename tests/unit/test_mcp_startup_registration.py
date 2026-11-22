@@ -16,7 +16,7 @@ import unittest
 from unittest import mock
 
 from span.core import model as m
-from span.shell.context import compose_context
+from span.shell.context import RepositoryRuntime, compose_context, open_repository_runtime
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import TOOL_NAMES, McpAdapter, ServiceContext
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
@@ -38,6 +38,19 @@ FILES = {
 }
 
 
+def _functional_pyramid():
+    service = mock.Mock()
+    participation = m.FunctionalPyramidParticipation(
+        m.FunctionalPyramidParticipationState.UNCONFIGURED
+    )
+    service.orientation.return_value = participation
+    service.route.return_value = participation
+    service.support_route.return_value = (participation, None)
+    service.changed_route_identities.return_value = ()
+    service.registered_repository_ids.return_value = (REPO,)
+    return service
+
+
 def _open(tmp: str) -> tuple[pathlib.Path, ServiceContext]:
     root = pathlib.Path(tmp) / REPO
     root.mkdir()
@@ -54,12 +67,21 @@ def _open(tmp: str) -> tuple[pathlib.Path, ServiceContext]:
         tuple(InMemoryFile(path, body) for path, body in FILES.items()),
         (InMemorySubject("src/tools.py", m.SubjectKind.COMPONENT, "tools"),),
     )
-    context = compose_context(
+    runtime = RepositoryRuntime(
         repository_id=REPO,
         root=str(root.resolve()),
         structural=structural,
         evidence=FilesystemEvidenceSource(REPO, root),
         store=store,
+    )
+    context = compose_context(
+        runtime=runtime,
+        functional_pyramid=_functional_pyramid(),
+        repository_runtime=lambda repository_id: (
+            runtime
+            if repository_id == REPO
+            else (_ for _ in ()).throw(KeyError(repository_id))
+        ),
     )
     return data, context
 
@@ -85,9 +107,8 @@ class StartupRegistrationTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = pathlib.Path(tmp) / "data"
-            with (
-                mock.patch.object(mcp_server, "_serve", side_effect=_fake_serve),
-                mock.patch.object(mcp_server, "provision_repository") as provision,
+            with mock.patch.object(
+                mcp_server, "_serve", side_effect=_fake_serve
             ):
                 mcp_server.main(
                     [
@@ -97,7 +118,6 @@ class StartupRegistrationTest(unittest.TestCase):
                         str(pathlib.Path(tmp) / REPO),
                     ]
                 )
-            provision.assert_not_called()
             adapter = captured["adapter"]
             self.assertEqual(adapter.contexts, {})
             self.assertEqual(adapter.registered_repository_ids(), (REPO,))
@@ -177,19 +197,11 @@ class StartupRegistrationTest(unittest.TestCase):
         adapter = McpAdapter()
         adapter.register_repository_locator(REPO, "/tmp/startup-svc")
         forbidden = AssertionError("tools/list must not touch a repository")
-        with (
-            mock.patch.object(
-                mcp_server, "provision_repository", side_effect=forbidden
-            ) as provision,
-            mock.patch.object(
-                mcp_server, "_open_context", side_effect=forbidden
-            ) as opener,
-        ):
-            listed = mcp_server.handle_list_tools(adapter)
+        adapter.context_loader = mock.Mock(side_effect=forbidden)
+        listed = mcp_server.handle_list_tools(adapter)
 
         self.assertEqual(len(listed), len(TOOL_NAMES))
-        provision.assert_not_called()
-        opener.assert_not_called()
+        adapter.context_loader.assert_not_called()
         self.assertEqual(adapter.contexts, {})
 
     def test_cs07_uninitialized_context_creates_no_store(self):
@@ -202,9 +214,7 @@ class StartupRegistrationTest(unittest.TestCase):
             data_dir = pathlib.Path(tmp) / "data"
             data_dir.mkdir()
             with self.assertRaises(RepositoryNotInitialized):
-                mcp_server.open_repository_context(
-                    mcp_server.ServerConfig(data_dir=data_dir), str(root)
-                )
+                open_repository_runtime(data_dir, str(root))
             self.assertEqual(list(data_dir.iterdir()), [])
             self.assertFalse((data_dir / f"{REPO}.db").exists())
 
