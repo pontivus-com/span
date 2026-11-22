@@ -39,7 +39,7 @@ def _basis() -> m.SemanticBasis:
 def _unconfigured_orientation(
     _repository_id: str,
     _surface: m.SurfaceKey,
-    _scope: m.EvidenceScope,
+    _scope: m.EvidenceScope | None,
 ) -> m.FunctionalPyramidParticipation:
     return m.FunctionalPyramidParticipation(
         m.FunctionalPyramidParticipationState.UNCONFIGURED
