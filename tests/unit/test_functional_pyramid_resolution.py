@@ -1022,6 +1022,89 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             ("ctx-base", "ctx-dependent"),
         )
 
+    def test_exact_canonical_rule_owner_scope_exposes_reverse_graph(self):
+        member = _member(
+            "repo-a",
+            scope=_scope(
+                _selector(m.FunctionalScopeSelectorKind.PREFIX, "src"),
+                _selector(
+                    m.FunctionalScopeSelectorKind.PATH,
+                    "rules/rule-p0.md",
+                ),
+            ),
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-base",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py")
+                    ),
+                    rules=(_graph_ref("repo-a", "rule-p0"),),
+                ),
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-dependent",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/b.py")
+                    ),
+                    inherits=(_graph_ref("repo-a", "ctx-base"),),
+                ),
+            ),
+            rules=(
+                _rule(
+                    "repo-a",
+                    "rule-p0",
+                    m.FunctionalPyramidLayer.P0,
+                    ("ROOT",),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-p1",
+                    m.FunctionalPyramidLayer.P1,
+                    (_graph_ref("repo-a", "rule-p0"),),
+                ),
+            ),
+        )
+        authorities = {
+            ("repo-a", "rules/rule-p0.md"): _authority(
+                "repo-a", "rules/rule-p0.md"
+            ),
+            ("repo-a", "rules/rule-p1.md"): _authority(
+                "repo-a", "rules/rule-p1.md"
+            ),
+        }
+
+        view, _ = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(member,),
+            surface=m.SurfaceKey(
+                "repo-a",
+                m.SurfaceKind.FILE,
+                "rules/rule-p0.md",
+            ),
+            semantic_scope=m.EvidenceScope(paths=("rules/rule-p0.md",)),
+            declarations=(("repo-a", declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings=authorities,
+        )
+
+        rule = next(item for item in view.rules if item.rule_id == "rule-p0")
+        self.assertEqual(rule.downstream_rule_ids, ("rule-p1",))
+        self.assertEqual(
+            rule.downstream_context_ids,
+            ("ctx-base", "ctx-dependent"),
+        )
+        self.assertEqual(
+            view.scope_relation,
+            m.FunctionalScopeRelation.UNCOVERED,
+        )
+        self.assertEqual(
+            view.status,
+            m.FunctionalPyramidRouteStatus.UNRESOLVED,
+        )
+
     def test_surface_kind_prevents_filename_heuristic_scope_inference(self):
         members = (
             _member(
