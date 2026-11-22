@@ -25,12 +25,9 @@ import sys
 
 from span.core import model as m
 from span.core import support_rules as _support_rules
-from span.shell.functional_pyramid import (
-    FunctionalPyramidRepositoryRuntime,
-    open_functional_pyramid_service,
-)
+from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
+from span.shell.functional_pyramid import open_functional_pyramid_service
 from span.shell.install.receipt import read_receipt
-from span.shell.mcp.models import ServiceContext
 from span.shell.policy import HOOK_DIAGNOSTIC_LIMIT
 from span.shell.readiness import probe_store
 
@@ -132,26 +129,27 @@ def _functional_pyramid_status(
     repository_id: str,
 ) -> m.FunctionalPyramidStatus | None:
     """Obtain canonical participation/health and close every opened repository."""
-    from span.shell.context import close_repository_context, open_repository_context
+    from span.shell.context import close_repository_runtime, open_repository_runtime
 
     roots = {_repository_id(root): root for root in mapping}
-    contexts: dict[str, ServiceContext] = {}
+    runtimes: dict[str, FunctionalPyramidRepositoryRuntime] = {}
 
     def repository_runtime(requested: str) -> FunctionalPyramidRepositoryRuntime:
-        context = contexts.get(requested)
-        if context is not None:
-            return context
+        runtime = runtimes.get(requested)
+        if runtime is not None:
+            return runtime
         root = roots.get(requested)
         if root is None:
             raise ValueError(f"repository is not registered: {requested}")
-        observed_id, context = open_repository_context(data_dir, root)
-        if observed_id != requested:
-            close_repository_context(context)
+        runtime = open_repository_runtime(data_dir, root)
+        if runtime.repository_id != requested:
+            close_repository_runtime(runtime)
             raise ValueError(
-                f"repository identity changed: expected {requested}, observed {observed_id}"
+                "repository identity changed: "
+                f"expected {requested}, observed {runtime.repository_id}"
             )
-        contexts[requested] = context
-        return context
+        runtimes[requested] = runtime
+        return runtime
 
     try:
         with open_functional_pyramid_service(
@@ -165,8 +163,8 @@ def _functional_pyramid_status(
                 m.FunctionalPyramidSelector(repository_id=repository_id)
             )
     finally:
-        for context in contexts.values():
-            close_repository_context(context)
+        for runtime in runtimes.values():
+            close_repository_runtime(runtime)
 
 
 def _functional_pyramid_notice(
