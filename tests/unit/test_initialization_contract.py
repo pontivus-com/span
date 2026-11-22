@@ -45,7 +45,8 @@ class InitializationContractTest(unittest.TestCase):
         # admin operation (``def initialize_repository``) is allowed and
         # required by Phase 2.8; what is forbidden is *calling* it — or
         # any auto-init — from query/hook paths. The server provisioning
-        # function (``provision_repository`` in Phase 4.2) is likewise
+        # functions (``provision_repository`` / ``provision_repository_runtime``)
+        # are likewise
         # an explicit admin path: it serves the explicit
         # `initialize_repository` tool and dedicated startup
         # registration, never queries or hooks. Structural scan: guards
@@ -59,10 +60,10 @@ class InitializationContractTest(unittest.TestCase):
             ):
                 stripped = line.strip()
                 if stripped.startswith("def "):
-                    in_provision = relative in {
-                        "src/span/shell/mcp_server.py",
-                        "src/span/shell/context.py",
-                    } and stripped.startswith("def provision_repository(")
+                    in_provision = relative == "src/span/shell/context.py" and (
+                        stripped.startswith("def provision_repository(")
+                        or stripped.startswith("def provision_repository_runtime(")
+                    )
                     if stripped.startswith("def initialize_repository("):
                         continue
                 if in_provision:
