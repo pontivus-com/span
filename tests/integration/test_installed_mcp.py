@@ -337,9 +337,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertEqual(observed["created_qualification"], "CURRENT")
         self.assertFalse(observed["snapshot_before_error"])
         self.assertTrue(observed["snapshot_before_has_route"])
-        self.assertIn(
-            "authority-p0-v1", observed["snapshot_before_authority_ids"]
-        )
+        self.assertIn("authority-p0-v1", observed["snapshot_before_authority_ids"])
 
         self.assertFalse(observed["changed_error"])
         self.assertIn("repo-a", observed["changed_surface_repositories"])
