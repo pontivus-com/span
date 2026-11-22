@@ -7,11 +7,13 @@ transitions and classify support; the shell owns effects.
 ```mermaid
 flowchart LR
   A[Coding agent] --> M[MCP ingress]
-  M --> S[Lifecycle services]
+  M --> I[Installation runtime]
+  I --> S[Repository lifecycle services]
   S --> C[Pure core rules]
   S --> P[Typed ports]
   P --> E[Filesystem and structural evidence]
-  P --> D[Schema-11 SQLite store]
+  P --> D[Repository schema-14 SQLite store]
+  I --> F[Installation Functional Pyramid store]
   S --> M
   M --> A
 ```
@@ -24,16 +26,31 @@ flowchart LR
 | Coding agent | Investigation, interpretation, applicability, edits, external verification. |
 | `core/model` and `core/schema` | Canonical immutable carriers, strict parsing, reference-only recording wire. |
 | `core/identity.py`, `core/recording.py` | Digests, receipt replay decisions, validated version/challenge transitions. |
-| `core/support_rules.py` | Pure source, authority, premise-membership, and discovery support decisions. |
-| `ports/` | Typed evidence, structural, lifecycle-store, and authority boundaries. |
-| `service/` | Gather observations, compose discovery/admission/recording/qualification through ports. |
-| `shell/` | Filesystem, clocks, git, structural provider, SQLite transactions, installation, MCP. |
+| `core/support_rules.py` | Pure support aggregation; Functional Pyramid graph/route rules remain pure core behavior. |
+| `ports/` | Typed evidence, structural, lifecycle-store, authority, declaration and repository-qualified Functional Pyramid boundaries. |
+| `service/` | Semantic composition: evidence/recording/qualification plus Functional Pyramid orientation and the single shared cross-repository effect engine. |
+| `shell/` | Filesystem, clocks, git, structural provider, repository/installation SQLite transactions, installation, MCP transport. |
 
 The functional core imports no filesystem, database, MCP SDK, network, or
 model provider. Services call core rules; adapters do not duplicate semantic
 decisions. One canonical typed carrier crosses each internal boundary.
 Wire projection resolves references once into that contract; it does not
 introduce a second domain representation or compatibility writer.
+
+## Version-1 composition boundary
+
+A raw repository runtime contains only repository identity/root, its lifecycle
+store and exact evidence/structural capabilities. The installation runtime owns
+the registered-repository resolver, installation Functional Pyramid store,
+declaration and repository-qualified authority/evidence access, one
+Functional Pyramid service, and the factory that composes repository
+`ServiceContext` instances.
+
+Production semantic services receive these installation capabilities
+mandatorily. There is no reduced repository-local support/effect mode and no
+shell-side Functional-Pyramid semantic coordinator. Ordinary changed-scope
+`reconsider` and participation writes use the same service-owned,
+repository-qualified dependency-effect engine.
 
 ## Request and persistence path
 
@@ -50,8 +67,10 @@ structural state; explicit setup owns provider currency work.
 
 ## Shared state and recovery
 
-The schema-11 store holds contexts and receipts across process/session
-restarts. The reasoning caller preserves its request identity before
+Repository schema 14 holds repository contexts, semantic/audit history and
+ordinary receipts across process/session restarts. Functional Pyramid
+participation, versions, exclusions and installation receipts live in the
+separate installation store. The reasoning caller preserves its request identity before
 dispatch. Matching receipt replay precedes new-write checks, including checks
 that could fail after context expiry or source changes. Compare-and-set
 versions and challenge revisions reject conflicting concurrent updates.
@@ -63,7 +82,8 @@ archive/export/stage/activate protocol; startup never migrates them.
 ## Currency and limits
 
 Support is checked from declared source observations, authority declarations,
-exact premise revisions, and recorded discovery membership. Changed support
+exact premise revisions, recorded discovery membership, and Functional Pyramid
+route support. Changed support
 requires agent reassessment; deterministic rules do not rewrite the meaning.
 Challenges and gaps remain separate from support currency. A current snapshot
 may be incomplete or disputed.

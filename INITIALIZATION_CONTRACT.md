@@ -10,10 +10,11 @@ re-check, or rebuild.
    performed by the installer (`span-install`).
    It runs in a dedicated setup session, never inside ordinary question,
    record, or hook work.
-2. A repository with no schema-11 store is uninitialized. Initialization binds
-   the canonical root, registers declared authority seeds and bindings, and
-   creates the schema-11 store. It performs no semantic interpretation and
-   creates no understanding.
+2. A repository with no schema-14 lifecycle store is uninitialized.
+   Initialization binds the canonical root, registers declared authority seeds
+   and bindings, and creates the schema-14 repository store. Installer/setup
+   also creates or verifies the separate installation Functional Pyramid store.
+   It performs no semantic interpretation and creates no understanding.
 3. Ordinary lifecycle calls (`ask`, `record`, `reconsider`) never initialize a
    store. They must never start initialization implicitly. An `UNINITIALIZED`
    repository fails with the explicit setup action.
@@ -24,8 +25,13 @@ re-check, or rebuild.
    never initializes, migrates, or invokes a semantic operation.
 6. Automatic hooks deliver event-local lifecycle reminders. They never establish
    freshness, and a missed hook cannot make stale understanding current.
-7. `READY` means the store and provider are operationally available. It is
-   not semantic coverage, correctness, or completeness.
+7. `READY` means the repository store, required installation capabilities and
+   provider are operationally available. It is not semantic coverage,
+   correctness, Functional Pyramid participation, or completeness.
+8. Repository registration and Functional Pyramid participation are separate.
+   A registered ready repository is UNCONFIGURED until explicitly EXCLUDED or
+   ACTIVATED through the ordinary three-tool lifecycle. Runtime open never
+   creates or changes participation.
 
 ## Tests
 

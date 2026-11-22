@@ -12,11 +12,14 @@ grammar; [lifecycle](lifecycle.md) owns the procedure.
 | `skills/span-router/SKILL.md` | Moment → tool; the default-reflex table. Start here. |
 | `skills/span-before-you-read/SKILL.md` | `ask`, exact surface selection, ambiguity, continuation, surface-first reuse, explicit evidence admission, and exact recorded-question lookup. |
 | `skills/span-after-change/SKILL.md` | `reconsider` after editing, then re-establish actual loss. |
-| `skills/span-record/SKILL.md` | Record/update/verify and declare a service/domain boundary. |
+| `skills/span-record/SKILL.md` | Record/update/verify, declare a service/domain boundary, and consume post-record qualification. |
+| `skills/span-functional-pyramid/SKILL.md` | Adopt/initialize Functional Pyramid participation and apply governing orientation inside the ordinary lifecycle. |
 | `docs/agents-snippet.md` | The managed lifecycle block copied into a target's `AGENTS.md`. |
 
-Skills use exactly `ask`, `record`, and `reconsider`. They do not choose a
-record variant, fetch a context id, or treat a gap as a failure. They must keep
+Skills use exactly `ask`, `record`, and `reconsider`. Functional Pyramid status,
+candidate validation, receipts and participation writes are branches inside
+those tools, not another operation. Skills do not fetch a context id or treat a
+gap as a failure. They must keep
 missing authority, failed admission, omissions, disputes, and noncurrent
 support explicit. `reconsider` is described as an after-edit operation;
 "before editing" is `ask`.

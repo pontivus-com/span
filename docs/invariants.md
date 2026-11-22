@@ -9,6 +9,20 @@ fails when a named test disappears, when a row claims no test, or when
 a `Review` row claims test enforcement. Named tests identify enforcement boundaries; they do not certify every
 semantic interpretation or every host. Execution receipts are separate.
 
+## Version-1 Functional Pyramid verification
+
+The invariant table below remains the cross-version architectural matrix.
+Version-1 Functional Pyramid behavior is additionally traced case-by-case in
+`docs/functional-acceptance.md` (FA-01–FA-44), and the invariant test suite
+requires every FA row to name live boundary tests. Static architecture guards
+also reject shell semantic coordination, optional production Functional
+Pyramid dependencies, repository-local effect-engine construction, skipped
+route-impact traversal, external-authority local fallback, and semantic hooks
+that bypass `InstallationRuntime`.
+
+These are executable consequences of the canonical L0–L4 requirements; this
+document does not add a second Functional Pyramid contract.
+
 | ID | Invariant | Verdict | Evidence |
 |---|---|---|---|
 | I-01 | Functional-core purity | Test | `CorePurityTest` (stdlib + `span.core` only, AST scan) |
