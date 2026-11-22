@@ -1,9 +1,30 @@
 # Using Span
 
-Investigate a real engineering question, record the useful result, and let the
-next session find it with its support attached. The coding agent owns the
-reasoning, edits, and test execution. Span owns evidence admission, recording,
-version history, and checks on the dependencies the agent declared.
+Start with the exact file, symbol, service, or domain you are working on. Span
+can give the agent both sides of the working context for that surface: what is
+already understood about the implementation, and the project guidance that
+applies from first principles down to functional and technical design.
+
+The coding agent still owns reasoning, edits, and test execution. Span keeps
+retained conclusions tied to their evidence, resolves the applicable canonical
+guidance for participating repositories, preserves history, and shows when
+either side of the context needs another look.
+
+## Check Functional Pyramid participation
+
+The Functional Pyramid supplies the guiding-document half of Span's working
+context. After installation, a repository is registered but does not
+automatically participate. Use the Functional Pyramid status selector through
+`ask`. UNCONFIGURED and EXCLUDED repositories can still use retained
+implementation understanding. For an ACTIVE repository, the same ordinary
+`ask` also returns the applicable guidance path for the exact software scope.
+
+Adoption/revision stays inside `ask` and `record`: inspect status, validate the
+candidate, repair declaration/governance findings through ordinary
+`reconsider` when needed, validate again, record ACTIVATE or REVISE, verify the
+exact committed status, then re-establish any actionable dependent effects
+returned by the write. Do not call a redundant `reconsider` for the
+participation write itself.
 
 ## Ask a surface
 
@@ -46,7 +67,10 @@ served as current on the strength of its wording.
    exclusive. Scope is supplied or derived independently through `scope_paths`,
    the context, or a surface. Cite what you already hold.
    Distinguish observed behavior from governing intent, and include unresolved
-   questions with their basis as gaps. Use `actions.add`, `confirm`, `correct`,
+   questions with their basis as gaps. In an ACTIVE repository, a NORMATIVE
+   conclusion receives its Functional Pyramid route and applicable canonical
+   authority dependencies from Span; the caller does not enumerate or omit that
+   governance support. Use `actions.add`, `confirm`, `correct`,
    `replace`, or `withdraw` for an update; each action names the conclusion and
    exactly one evidence mode, and Span derives the old revision and unchanged
    content metadata.
@@ -87,9 +111,11 @@ and each conclusion's present support. `surfaces` is the complete containment
 set: a surface with no `conclusions` is containment-only. Act only on
 conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`; a
 `CURRENT` conclusion in the set needs no work. Keep the returned order.
-Changed source bytes, authority, premises, or discovery membership can produce
-actual loss; unrelated changes leave conclusions current when they do not
-affect a declared dependency.
+Changed source bytes, authority, premises, discovery membership, or Functional
+Pyramid applicability can produce actual loss; unrelated changes leave
+conclusions current when they do not affect a declared dependency. A canonical
+governance edit in another repository can therefore return this repository's
+affected normative conclusions when the declared pyramid connects them.
 
 Investigate the changed support, then record the matching update. Updates use an
 expected version and create a new immutable snapshot; omission is not deletion.

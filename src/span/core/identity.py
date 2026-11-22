@@ -20,6 +20,7 @@ from span.core.model.primitives import (
     SourceObservationId,
     UnderstandingId,
 )
+from span.core.model.functional_pyramid import FunctionalPyramidId
 from span.core.model.recording import (
     ContentDigest,
     RecordingIdentity,
@@ -78,6 +79,11 @@ def understanding_identity(identity: RecordingIdentity) -> UnderstandingId:
     re-read by a new process. Updates carry their own understanding identity.
     """
     return UnderstandingId(f"u:{identity.request_id.value}")
+
+
+def functional_pyramid_identity(request_id: RequestId) -> FunctionalPyramidId:
+    """Derive the stable server-owned instance identity of one activation request."""
+    return FunctionalPyramidId(f"fp:{request_id.value}")
 
 
 def challenge_identity(identity: RecordingIdentity) -> ChallengeId:

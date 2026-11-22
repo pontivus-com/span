@@ -8,6 +8,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 from span.core import model as m
 from span.core.schema import record_wire as rw
@@ -15,6 +16,9 @@ from span.shell import hooks
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.install.constants import INSTALL_VERSION
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_store.functional_pyramid import (
+    ensure_functional_pyramid_installation_store,
+)
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 from span.service.evidence import EvidenceService
 from span.service.lifecycle import LifecycleService
@@ -50,6 +54,10 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
     _write_receipt(data, root)
     store = LifecycleStore(data / f"{REPO}.db", retention=DEFAULT_LIFECYCLE_RETENTION)
     store.register_repository(REPO, str(root.resolve()))
+    installation = ensure_functional_pyramid_installation_store(
+        data, retention=DEFAULT_LIFECYCLE_RETENTION
+    )
+    installation.close()
     evidence = FilesystemEvidenceSource(REPO, root)
     evidence_service = EvidenceService(store=store, evidence=evidence)
     support = SupportService(store=store, evidence=evidence, authority=store)
@@ -93,10 +101,12 @@ def _capture(fn, *args) -> str:
 
 
 class LifecycleHooksTest(unittest.TestCase):
-    def test_session_start_is_silent_when_ready(self):
+    def test_session_start_reports_unconfigured_when_ready(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)
-            self.assertEqual(_capture(hooks.cmd_session_start, data, str(root)), "")
+            output = _capture(hooks.cmd_session_start, data, str(root))
+            self.assertIn("Functional Pyramid UNCONFIGURED", output)
+            self.assertIn("span-functional-pyramid", output)
 
     def test_adoption_primer_when_understanding_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -244,6 +254,126 @@ class LifecycleHooksTest(unittest.TestCase):
             root, data = _recorded(tmp)
             output = _capture(hooks.cmd_session_stop, data, str(root))
             self.assertEqual(output, "")
+
+    def test_functional_pyramid_unconfigured_notice_routes_to_skill(self):
+        status = m.FunctionalPyramidStatus(
+            state=m.FunctionalPyramidParticipationState.UNCONFIGURED
+        )
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
+            notice = hooks._functional_pyramid_notice(
+                "/tmp/data",
+                {"/tmp/hooks-repo": "/tmp/hooks-repo"},
+                "/tmp/hooks-repo",
+            )
+        self.assertIsNotNone(notice)
+        assert notice is not None
+        self.assertIn("UNCONFIGURED", notice)
+        self.assertIn("span-functional-pyramid", notice)
+
+    def test_functional_pyramid_excluded_notice_is_silent(self):
+        status = m.FunctionalPyramidStatus(
+            state=m.FunctionalPyramidParticipationState.EXCLUDED
+        )
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
+            notice = hooks._functional_pyramid_notice(
+                "/tmp/data",
+                {"/tmp/hooks-repo": "/tmp/hooks-repo"},
+                "/tmp/hooks-repo",
+            )
+        self.assertIsNone(notice)
+
+    def test_functional_pyramid_active_valid_notice_is_silent(self):
+        status = m.FunctionalPyramidStatus(
+            state=m.FunctionalPyramidParticipationState.ACTIVE,
+            health=m.FunctionalPyramidHealth.VALID,
+            pyramid_id=m.FunctionalPyramidId("fp-hooks"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(
+                m.FunctionalPyramidMemberView(
+                    repository_id=REPO,
+                    declaration_refs=(
+                        m.EvidenceRef(
+                            evidence_id=m.EvidenceId("fp-declaration"),
+                            repository_id=REPO,
+                            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                            locator="docs/functional-pyramid.json",
+                        ),
+                    ),
+                    functional_scope=m.FunctionalScope(
+                        (
+                            m.FunctionalScopeSelector(
+                                m.FunctionalScopeSelectorKind.PREFIX,
+                                path="src",
+                            ),
+                        )
+                    ),
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                ),
+            ),
+        )
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
+            notice = hooks._functional_pyramid_notice(
+                "/tmp/data",
+                {"/tmp/hooks-repo": "/tmp/hooks-repo"},
+                "/tmp/hooks-repo",
+            )
+        self.assertIsNone(notice)
+
+    def test_functional_pyramid_active_degraded_notice_routes_to_lifecycle(self):
+        finding = m.FunctionalPyramidFinding(
+            reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            repository_id=REPO,
+            detail="repository unavailable",
+            recovery="restore repository availability",
+        )
+        status = m.FunctionalPyramidStatus(
+            state=m.FunctionalPyramidParticipationState.ACTIVE,
+            health=m.FunctionalPyramidHealth.DEGRADED,
+            pyramid_id=m.FunctionalPyramidId("fp-hooks"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(
+                m.FunctionalPyramidMemberView(
+                    repository_id=REPO,
+                    declaration_refs=(
+                        m.EvidenceRef(
+                            evidence_id=m.EvidenceId("fp-declaration"),
+                            repository_id=REPO,
+                            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                            locator="docs/functional-pyramid.json",
+                        ),
+                    ),
+                    functional_scope=m.FunctionalScope(
+                        (
+                            m.FunctionalScopeSelector(
+                                m.FunctionalScopeSelectorKind.PREFIX,
+                                path="src",
+                            ),
+                        )
+                    ),
+                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                ),
+            ),
+            findings=(finding,),
+        )
+        with mock.patch.object(
+            hooks, "_functional_pyramid_status", return_value=status
+        ):
+            notice = hooks._functional_pyramid_notice(
+                "/tmp/data",
+                {"/tmp/hooks-repo": "/tmp/hooks-repo"},
+                "/tmp/hooks-repo",
+            )
+        self.assertIsNotNone(notice)
+        assert notice is not None
+        self.assertIn("ACTIVE/DEGRADED", notice)
+        self.assertIn("FunctionalPyramidSelector", notice)
+        self.assertIn("span-functional-pyramid", notice)
 
     def test_hook_source_has_no_semantic_writer_or_builder(self):
         source = pathlib.Path(hooks.__file__).read_text(encoding="utf-8")

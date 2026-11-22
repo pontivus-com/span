@@ -23,6 +23,10 @@ REF = m.ConclusionRevisionRef(
     revision=m.ConclusionRevisionNumber(1),
 )
 
+FP_UNCONFIGURED = m.FunctionalPyramidParticipation(
+    m.FunctionalPyramidParticipationState.UNCONFIGURED
+)
+
 
 def status(surface: m.SurfaceKey = KEY) -> m.SurfaceStatus:
     return m.SurfaceStatus(surface=surface, current=1)
@@ -115,18 +119,21 @@ class AnswerCarrierTest(unittest.TestCase):
             surface=KEY,
             conclusions=(REF,),
             status=status(),
+            functional_pyramid=FP_UNCONFIGURED,
         )
         with self.assertRaises(ValueError):
             m.Answer(
                 surface=KEY,
                 conclusions=(),
                 status=status(),
+                functional_pyramid=FP_UNCONFIGURED,
             )
         with self.assertRaises(ValueError):
             m.Answer(
                 surface=KEY,
                 conclusions=(REF,),
                 status=status(FILE_KEY),
+                functional_pyramid=FP_UNCONFIGURED,
             )
 
     def test_gap_reasons_are_exhaustive(self) -> None:
@@ -137,6 +144,7 @@ class AnswerCarrierTest(unittest.TestCase):
         m.Gap(
             surface=KEY,
             status=status(),
+            functional_pyramid=FP_UNCONFIGURED,
             reason=m.GapReason.UNASSESSED,
             recovery="record supported understanding for this surface",
         )
@@ -144,6 +152,7 @@ class AnswerCarrierTest(unittest.TestCase):
             m.Gap(
                 surface=KEY,
                 status=status(),
+                functional_pyramid=FP_UNCONFIGURED,
                 reason=m.GapReason.UNASSESSED,
                 recovery="",
             )
@@ -230,11 +239,15 @@ class ChangeCarrierTest(unittest.TestCase):
             context_id=m.InvestigationContextId("ctx-1"),
         )
         m.Changed(
-            context=context,
+            reestablishment_contexts=(context,),
             surfaces=(m.ChangedSurface(KEY, (m.ChangeReason.DIRECT,)),),
         )
         with self.assertRaises(ValueError):
-            m.Changed(context=context, truncated=True, unaffected=(FILE_KEY,))
+            m.Changed(
+                reestablishment_contexts=(context,),
+                truncated=True,
+                unaffected=(FILE_KEY,),
+            )
 
     def test_result_unions_are_closed(self) -> None:
         ask = set(typing.get_args(m.AskResult))
@@ -248,7 +261,10 @@ class ChangeCarrierTest(unittest.TestCase):
                 m.AmbiguousSurface,
                 m.RetrievedUnderstanding,
                 m.RetrievedReceipt,
+                m.RetrievedFunctionalPyramidReceipt,
                 m.EvidencePage,
+                m.FunctionalPyramidStatus,
+                m.FunctionalPyramidCandidate,
                 m.Rejected,
                 m.Unavailable,
             },
@@ -259,6 +275,7 @@ class ChangeCarrierTest(unittest.TestCase):
                 m.UnderstandingRecorded,
                 m.VerificationRecorded,
                 m.SurfaceDeclared,
+                m.FunctionalPyramidRecorded,
                 m.Rejected,
                 m.Unavailable,
             },

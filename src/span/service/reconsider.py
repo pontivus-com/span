@@ -12,7 +12,6 @@ import datetime as _datetime
 import typing as _typing
 import uuid as _uuid
 
-from span.core import containment
 from span.core import model as m
 from span.core.identity import record_content_digest
 from span.core.recording import RecordingValidationError
@@ -20,7 +19,7 @@ from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
-from span.service.support import SupportService
+from span.service.effects import DependencyEffectService
 
 __all__ = ["ReconsiderService"]
 
@@ -40,279 +39,25 @@ class ReconsiderService:
         self,
         *,
         store: LifecycleStorePort,
-        support: SupportService | None = None,
+        effects: DependencyEffectService,
         evidence: EvidenceService | None = None,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
     ) -> None:
         self._store = store
-        self._support = support
         self._evidence = evidence
         self._policy = policy
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or (lambda: "ctx-" + _uuid.uuid4().hex)
+        self._effects = effects
 
     def reconsider(self, request: m.ReconsiderRequest) -> m.Changed | m.Challenged:
-        repository_id = request.bound_repository_id
-        self._store.require_repository(repository_id)
         if request.challenge is not None:
+            repository_id = request.bound_repository_id
+            self._store.require_repository(repository_id)
             return self._raise_challenge(repository_id, request.challenge)
-        surfaces = self._store.list_surfaces(repository_id)
-        reasons: dict[m.SurfaceKey, set[m.ChangeReason]] = {}
-        affected: dict[m.SurfaceKey, set[m.ConclusionRevisionRef]] = {}
-        omitted: list[str] = []
-        truncated = False
-        limit = self._policy.default_query_bounds.max_results
-        max_depth = self._policy.default_query_bounds.max_depth
-
-        def record(
-            surface: m.SurfaceKey,
-            reason: m.ChangeReason,
-            ref: m.ConclusionRevisionRef | None = None,
-        ) -> None:
-            reasons.setdefault(surface, set()).add(reason)
-            if ref is not None:
-                affected.setdefault(surface, set()).add(ref)
-
-        for path in request.changed_paths:
-            member = containment.path_surface(repository_id, path)
-            for surface in containment.containing_surfaces(surfaces, member):
-                record(surface, m.ChangeReason.CONTAINMENT)
-            direct = [
-                ref
-                for observation in self._store.source_observation_ids_for_locator(
-                    repository_id, path
-                )
-                for ref in self._store.support_dependents("SOURCE", observation)
-            ]
-            for discovery in self._store.list_discovery_observations(repository_id):
-                if m.evidence_scope_contains(
-                    discovery.scope, m.EvidenceScope(paths=(path,))
-                ):
-                    direct.extend(
-                        self._store.support_dependents(
-                            "DISCOVERY", discovery.observation_id.value
-                        )
-                    )
-            direct = list(dict.fromkeys(direct))
-            if len(direct) > limit:
-                omitted.append(
-                    "direct dependency bound reached before every dependent "
-                    "was examined"
-                )
-                direct = direct[:limit]
-                truncated = True
-            for ref in direct:
-                record(
-                    self._surface_of(ref),
-                    m.ChangeReason.DIRECT,
-                    ref,
-                )
-            indirect, cut = self._indirect(direct, max_depth, limit)
-            if cut:
-                omitted.append(
-                    "premise traversal bound reached before the walk completed"
-                )
-                truncated = True
-            for ref in indirect:
-                record(
-                    self._surface_of(ref),
-                    m.ChangeReason.INDIRECT,
-                    ref,
-                )
-
-        for surface in request.changed_surfaces:
-            record(surface, m.ChangeReason.CONTAINMENT)
-
-        ordered = containment.order_surfaces(reasons)
-        if len(ordered) > limit:
-            omitted.append(f"{len(ordered) - limit} surface(s) beyond the bound")
-            ordered = ordered[:limit]
-            truncated = True
-
-        current_versions: dict[str, m.UnderstandingVersion] = {}
-        changed_surfaces = tuple(
-            m.ChangedSurface(
-                surface=surface,
-                reasons=tuple(sorted(reasons[surface], key=lambda item: item.value)),
-                conclusions=tuple(
-                    conclusion
-                    for conclusion in (
-                        self._changed_conclusion(
-                            ref, reasons[surface], current_versions
-                        )
-                        for ref in sorted(
-                            affected.get(surface, ()),
-                            key=lambda ref: ref.sort_key,
-                        )
-                    )
-                    if conclusion is not None
-                ),
-            )
-            for surface in ordered
-        )
-        return m.Changed(
-            surfaces=changed_surfaces,
-            omitted=tuple(omitted),
-            truncated=truncated,
-            context=self._reconsider_context(repository_id, request, changed_surfaces),
-        )
-
-    def _changed_conclusion(
-        self,
-        ref: m.ConclusionRevisionRef,
-        reasons: set[m.ChangeReason],
-        current_versions: dict[str, m.UnderstandingVersion],
-    ) -> m.ChangedConclusion | None:
-        """Emit only a current-membership ref as an actionable target.
-
-        Dependency traversal still walks historical revisions so a current
-        downstream dependent is not lost; composition filters them out here.
-        """
-        version = self._current_version(ref, current_versions)
-        if ref not in version.conclusions:
-            return None
-        return m.ChangedConclusion(
-            ref=ref,
-            expected_version=version.version,
-            reasons=tuple(sorted(reasons, key=lambda item: item.value)),
-            support=self._support_state(ref),
-        )
-
-    def _current_version(
-        self,
-        ref: m.ConclusionRevisionRef,
-        current_versions: dict[str, m.UnderstandingVersion],
-    ) -> m.UnderstandingVersion:
-        understanding_id = ref.understanding_id.value
-        if understanding_id not in current_versions:
-            understanding = self._store.get_understanding(understanding_id)
-            current_versions[understanding_id] = self._store.get_version(
-                understanding_id, understanding.current_version.value
-            )
-        return current_versions[understanding_id]
-
-    def _reconsider_context(
-        self,
-        repository_id: str,
-        request: m.ReconsiderRequest,
-        surfaces: tuple[m.ChangedSurface, ...],
-    ) -> m.InvestigationContextRef:
-        scopes: list[m.EvidenceScope] = []
-        if request.changed_paths:
-            scopes.append(m.EvidenceScope(paths=tuple(request.changed_paths)))
-        for surface in request.changed_surfaces:
-            if surface.kind is m.SurfaceKind.FILE:
-                scopes.append(m.EvidenceScope(paths=(surface.locator,)))
-                continue
-            if surface.kind is m.SurfaceKind.SYMBOL:
-                containing = containment.surface_file_locator(surface.locator)
-                if containing is not None:
-                    scopes.append(m.EvidenceScope(paths=(containing,)))
-                continue
-            declared = self._store.find_surface(surface)
-            if declared is not None:
-                paths = list(declared.boundary.paths)
-                paths.extend(
-                    containing
-                    for symbol in declared.boundary.symbols
-                    if (containing := containment.surface_file_locator(symbol))
-                    is not None
-                )
-                if paths:
-                    scopes.append(m.EvidenceScope(paths=tuple(paths)))
-        source_observations: dict[str, m.SourceObservation] = {}
-        discovery_observations: dict[str, m.DiscoveryObservation] = {}
-        for changed in surfaces:
-            for item in changed.conclusions:
-                if (
-                    isinstance(item.support, m.SupportEvaluation)
-                    and item.support.state is m.SupportState.CURRENT
-                ):
-                    continue
-                revision = self._conclusion_revision(item.ref)
-                content = revision.content
-                if not isinstance(content, m.SupportedConclusion):
-                    continue
-                scopes.append(content.scope)
-                for dependency in content.support:
-                    if isinstance(dependency, m.SourceSupport):
-                        source_observation = self._store.get_source_observation(
-                            dependency.observation_id.value
-                        )
-                        if source_observation.repository_id != repository_id:
-                            raise RecordingValidationError(
-                                "re-establishment source observation belongs to "
-                                "another repository"
-                            )
-                        scopes.append(
-                            m.EvidenceScope(
-                                evidence_refs=(source_observation.evidence,)
-                            )
-                        )
-                        source_observations[dependency.observation_id.value] = (
-                            source_observation
-                        )
-                    elif isinstance(dependency, m.DiscoverySupport):
-                        discovery_observation = self._store.get_discovery_observation(
-                            dependency.observation_id.value
-                        )
-                        if discovery_observation.repository_id != repository_id:
-                            raise RecordingValidationError(
-                                "re-establishment discovery observation belongs to "
-                                "another repository"
-                            )
-                        scopes.append(discovery_observation.scope)
-                        discovery_observations[dependency.observation_id.value] = (
-                            discovery_observation
-                        )
-        context_id = self._new_context_id()
-        context = issue_context(
-            self._store,
-            binding=context_binding(
-                scope=m.evidence_scope_union(scopes),
-                origin=m.ContextOrigin.CHANGED_SUPPORT,
-            ),
-            repository_id=repository_id,
-            request_id=m.RequestId(f"reconsider:{context_id}"),
-            clock=self._clock,
-            new_context_id=lambda: context_id,
-        )
-        for observation_id in sorted(source_observations):
-            self._store.add_context_evidence(context_id, observation_id)
-        for observation_id in sorted(discovery_observations):
-            self._store.add_context_discovery_evidence(context_id, observation_id)
-        return m.InvestigationContextRef(
-            repository_id=repository_id,
-            context_id=context.context_id,
-        )
-
-    def _conclusion_revision(
-        self, ref: m.ConclusionRevisionRef
-    ) -> m.ConclusionRevision:
-        for revision in self._store.get_conclusions(ref.understanding_id.value):
-            if (
-                revision.conclusion_id == ref.conclusion_id
-                and revision.revision == ref.revision
-            ):
-                return revision
-        raise RecordingValidationError(
-            "affected conclusion revision is missing: "
-            f"{ref.conclusion_id.value}@{ref.revision.value}"
-        )
-
-    def _support_state(
-        self, ref: m.ConclusionRevisionRef
-    ) -> m.SupportEvaluation | m.SupportUnavailable:
-        if self._support is None:
-            return m.SupportUnavailable(
-                "support evaluation is not configured for this reconsideration"
-            )
-        try:
-            return self._support.evaluate_revision(ref)
-        except (OSError, ValueError):
-            return m.SupportUnavailable("conclusion support evaluation is unavailable")
+        return self._effects.repository_change(request)
 
     def _raise_challenge(
         self, repository_id: str, challenge: m.ChallengeRaise
@@ -430,39 +175,3 @@ class ReconsiderService:
                         self._policy.default_query_bounds,
                     )
         return context.context_id
-
-    def _surface_of(self, ref: m.ConclusionRevisionRef) -> m.SurfaceKey:
-        return self._store.get_understanding(ref.understanding_id.value).surface
-
-    def _indirect(
-        self,
-        direct: list[m.ConclusionRevisionRef],
-        max_depth: int,
-        max_nodes: int,
-    ) -> tuple[list[m.ConclusionRevisionRef], bool]:
-        """Walk premise dependents to the policy bound, reporting incompleteness.
-
-        FD-22: the walk itself is bounded, not just its output. A node beyond
-        the depth bound is not expanded; if it still has dependents the result
-        reports the limit and never calls the remainder unaffected.
-        """
-        visited = set(direct)
-        frontier = [(ref, 0) for ref in direct]
-        found: list[m.ConclusionRevisionRef] = []
-        truncated = False
-        while frontier:
-            ref, depth = frontier.pop()
-            dependents = self._store.support_dependents("PREMISE", ref.label)
-            if depth >= max_depth:
-                if dependents:
-                    truncated = True
-                continue
-            for dependent in dependents:
-                if dependent in visited:
-                    continue
-                if len(visited) >= max_nodes:
-                    return found, True
-                visited.add(dependent)
-                found.append(dependent)
-                frontier.append((dependent, depth + 1))
-        return found, truncated

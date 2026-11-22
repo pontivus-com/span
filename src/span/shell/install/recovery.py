@@ -95,7 +95,13 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
     data_dir = Path(data_dir)
     if dry_run or not data_dir.is_dir():
         return None
-    databases = sorted(path for path in data_dir.glob("*.db") if path.is_file())
+    installation_db = data_dir / "installation" / "functional-pyramid.db"
+    databases = sorted(
+        [
+            *(path for path in data_dir.glob("*.db") if path.is_file()),
+            *([installation_db] if installation_db.is_file() else []),
+        ]
+    )
     if not databases:
         return None
     root = _backup_root(data_dir, backup_root)
@@ -108,11 +114,13 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
         artifacts = []
         absent = []
         for db in databases:
-            copied = destination / db.name
+            relative = db.relative_to(data_dir)
+            copied = destination / relative
+            copied.parent.mkdir(parents=True, exist_ok=True)
             copy_database(db, copied)
             artifacts.append(
                 BackupArtifact(
-                    path=db.name,
+                    path=str(relative),
                     sha256=sha256_file(copied),
                     size_bytes=copied.stat().st_size,
                     database=database_facts(copied),
@@ -177,6 +185,22 @@ def _supported_schemas():
             f"{exc}. Recovery verification needs an intact Span source tree."
         )
     return SCHEMA_VERSION, frozenset(SUPPORTED_SOURCE_SCHEMAS)
+
+
+def _database_schema_supported(
+    name: str,
+    version: int,
+    current: int,
+    supported: frozenset[int],
+) -> bool:
+    """Recognize repository lifecycle and installation-store schema identities."""
+    if name == "installation/functional-pyramid.db":
+        from span.shell.sqlite_store.functional_pyramid import (
+            INSTALLATION_SCHEMA_VERSION,
+        )
+
+        return version == INSTALLATION_SCHEMA_VERSION
+    return version == current or version in supported
 
 
 def _load_manifest(backup_dir):
@@ -264,12 +288,8 @@ def verify_backup(backup_dir):
                 version = database.schema_version
                 if version is None:
                     failures.append(f"{name}: no readable meta.schema_version")
-                elif version != current and version not in supported:
-                    failures.append(
-                        f"{name}: schema {version} is neither current ({current}) "
-                        "nor a supported transition source "
-                        f"({sorted(supported)})"
-                    )
+                elif not _database_schema_supported(name, version, current, supported):
+                    failures.append(f"{name}: unsupported database schema {version}")
         results.append(
             VerifiedArtifact(
                 path=name,
@@ -297,7 +317,12 @@ def _assert_quiescent(data_dir):
     from span.shell.sqlite_ownership import StoreHeldError, exclusive_ownership
 
     with ExitStack() as stack:
-        for db in sorted(Path(data_dir).glob("*.db")):
+        installation_db = Path(data_dir) / "installation" / "functional-pyramid.db"
+        databases = [
+            *sorted(Path(data_dir).glob("*.db")),
+            *([installation_db] if installation_db.is_file() else []),
+        ]
+        for db in databases:
             try:
                 stack.enter_context(exclusive_ownership(db))
             except StoreHeldError as exc:
@@ -356,6 +381,8 @@ def restore_backup(backup_dir, data_dir, confirm, backup_root=None, dry_run=Fals
     actions = []
     for artifact in report.artifacts:
         if artifact.database is None:
+            continue
+        if artifact.path == "installation/functional-pyramid.db":
             continue
         repository_id = Path(artifact.path).stem
         if artifact.database.schema_version != current:

@@ -111,6 +111,53 @@ test("the edit-time notice reaches event.system once", async () => {
   }
 });
 
+test("Functional Pyramid session-start notice reaches event.system once", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-fp-start-"));
+  const bin = path.join(root, "fake-span-hooks");
+  fs.writeFileSync(
+    bin,
+    [
+      "#!/bin/sh",
+      'case "$*" in',
+      '  *session-start*) echo "span: repo Functional Pyramid UNCONFIGURED; use the span-functional-pyramid skill." ;;',
+      "esac",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  let release;
+  const ready = new Promise((resolve) => { release = resolve; });
+  let delivered;
+  const done = new Promise((resolve) => { delivered = resolve; });
+  const { ctx, registered } = fakeContext(root);
+  ctx.event.subscribe = async function* () {
+    await ready;
+    yield { type: "session.created", data: { sessionID: "session-fp" } };
+    delivered();
+  };
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    release();
+    await done;
+    const first = { sessionID: "session-fp", system: [] };
+    registered["session:context"](first);
+    assert.equal(first.system.length, 1);
+    assert.match(first.system[0].text, /Functional Pyramid UNCONFIGURED/);
+    assert.match(first.system[0].text, /span-functional-pyramid/);
+
+    const second = { sessionID: "session-fp", system: [] };
+    registered["session:context"](second);
+    assert.equal(second.system.length, 0);
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a missing hook binary leaves the session silent and running", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-hooks-"));
   const previous = process.env.SPAN_HOOKS_BIN;

@@ -4,6 +4,64 @@ The current lifecycle is evaluated at three distinct boundaries: deterministic
 contracts, delivered host behavior, and useful real-task reuse. Passing a
 local suite proves neither host conversion nor comparative product value.
 
+## Version 1 Beta candidate acceptance
+
+The current generic Version-1 acceptance authority is
+[Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance),
+mapped executable-case-by-case in [the FA-01–FA-44 matrix](functional-acceptance.md).
+`tests/unit/test_invariant_matrix.py` requires every FA row exactly once and
+each row to name live, unambiguous boundary tests.
+
+Post-C08 GitHub Actions run `44977899970` on
+`15dc6ab8264d6a4fbeeff75b80eae360eaabb80b` passed build/distribution,
+Ruff/Black, the zero-error typing ratchet, the complete pytest suite
+(`919 passed, 1 skipped, 144 subtests`), standalone plugin-notice delivery and
+coverage upload. That suite includes the non-editable installed MCP lane and
+the physically separate repository-A / repository-B / installation-database
+governance journey required by Technical Design §22.
+
+This establishes the **generic** Version-1 functional/architecture candidate.
+Private first-adopter acceptance also passed on 2026-11-22 using the
+adopter-owned gitignored corpus. Raw adopter evidence remains outside Span Git;
+only this sanitized outcome is published. T11 is therefore closed. By explicit
+release-owner direction, that approved T11 result carries into the assembled
+`1.0.0b1` candidate because the post-T11 diff contains no semantic/runtime
+implementation change; documentation, release identity and tests do not reopen
+the private acceptance gate.
+
+The assembled `1.0.0b1` repository candidate passed exact-head CI run
+`45035881725` on `e3d9e99fc89896373cb6a90f8d16e63d210fea5c`:
+build/distribution, Ruff/Black, zero-error typing, `923 passed, 1 skipped,
+144 subtests`, 85% aggregate coverage, plugin notice delivery, and the complete
+generic acceptance surface.
+
+A temporary T13 repository-validation workflow then passed run `45036708682`
+on `752ba74cb196083a4f9d95725ccc373be2e93ed2`. It built and installed the
+non-editable `1.0.0b1` wheel, verified repository schema 14 and installation
+schema 1, and ran 167 focused transition/backup/recovery, installed-MCP,
+public-boundary, FA/Part-C and architecture tests with 64 subtests. It also
+proved there was no semantic/runtime implementation drift from the T10 accepted
+SHA, re-exercised release-note/version mapping, and passed the release-time MCP
+Registry `server.json` validator. The temporary workflow was removed after the
+receipt was captured.
+
+Version-1 live model delivery through Codex, OpenCode and Claude Code is
+**UNVERIFIED**. No verified managed-host delivery claim is made for Beta 1;
+registration/installer support is not promoted into model-delivery evidence.
+No comparative G5/F8 score is required to publish Beta 1. Product-value
+validation continues through real-world use in the legal project, where cold
+investigation, fresh-session reuse, implementation and governance changes,
+re-establishment, recovery, and ordinary failures can be observed in the actual
+workflow. Findings become inputs to follow-up Beta patch releases. Historical
+0.10/0.11 measurements and the two blocked GitHub Actions calibration attempts
+from 2026-11-22 remain background evidence only and are not a Version-1 release
+verdict.
+
+The current repository lifecycle store is schema 14. Functional Pyramid
+participation/versions/exclusions/receipts are installation-owned in
+`installation/functional-pyramid.db`; repository-portable backups deliberately
+do not claim to carry that installation participation state.
+
 ## Behavioral scenarios
 
 The functional scenario set covers:
@@ -34,11 +92,11 @@ This maps representative coverage; a named test does not certify every clause
 of a scenario or claim a host executed it. Read test assertions and execution
 receipts for the exact demonstrated boundary.
 
-### Remediation scenarios (in progress)
+### Historical 0.11 remediation scenarios
 
-The addendum in
-`.context/plans/2026-11-02-mcp-surface-refactor.md` §17 schedules these. Rows
-marked pending are not current coverage.
+These rows record the completed 0.11 remediation campaign and remain historical
+evidence for that candidate. They are not Version-1 proof; Version-1 acceptance
+is owned by the functional matrix and the T10/T11/T13 gates above.
 
 | ID | Behavior | Status | Evidence |
 | --- | --- | --- | --- |
@@ -53,7 +111,7 @@ marked pending are not current coverage.
 | F-29 | A create without a surface derives it from one scope path or the question context; multiple paths are rejected with the candidates, and a supplied surface must agree with the carried scope. | implemented | `test_create_without_surface_derives_from_one_scope_path`, `test_create_without_surface_uses_the_question_context_scope`, `test_create_without_surface_rejects_multiple_paths`, `test_create_surface_must_agree_with_the_carried_scope`, `five-task/DERIVED-SURFACE.md` |
 | F-30 | A create states one conclusion with dependency evidence from `locator`, `observation_id`, or non-empty `support`; a locator may accompany support as carried scope without adding a dependency, while observation remains exclusive. Span stores explicit support as supplied and derives the basis, new lineage id, and surface. | implemented — source CI verified | `test_create_accepts_locator_with_explicit_support`, `test_create_observation_remains_exclusive`, `test_record_create_through_the_one_request`, `test_record_accepts_every_support_kind`, `five-task/TASK1-FLAT.md`; GitHub Actions `44448034572` |
 
-### 0.11.0 remediation candidate
+### Historical 0.11.0 remediation candidate
 
 The 0.11.0 implementation is verified on source candidate
 `00b4eb358b8e794f855a5de09eeb01efd72cd3c9`. GitHub Actions run
@@ -176,15 +234,17 @@ remain **UNVERIFIED**. Hook wiring is separate from observed arrival.
 
 ## Product value
 
-Compare equivalent real tasks with and without Span. Separate mandatory
-conformance from natural use, cold recording from fresh-session reuse, and
-calibration from a precommitted scored evaluation. Preserve task quality,
-prerequisites, calls, tokens (cached separately), wall time, failures, omissions,
-recording overhead, and useful focused reassessment. A populated store is not
-useful reuse. An ACCEPT requires the frozen decision rule to pass.
+Beta product value is evaluated in real engineering use rather than through a
+synthetic equivalent-task release score. The legal project is the primary
+post-release adopter surface for Version 1. Observe cold investigation,
+fresh-session reuse, implementation and governance changes, focused
+re-establishment, recovery, failures, omissions, and recording overhead as they
+occur in normal work.
 
-Current beta calibration demonstrates recorded reuse but does not establish
-a final comparative ACCEPT or universal time/token saving.
+A populated store alone is not useful reuse, and a successful release does not
+prove universal time or token savings. Any future comparative efficiency claim
+needs evidence scoped to that claim. Real-world defects or friction discovered
+during Beta are corrected through follow-up patch releases.
 
 ### Documentation replacement (G6)
 

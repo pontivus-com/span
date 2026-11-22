@@ -31,6 +31,12 @@ conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
 
 ## Then
 
+Functional Pyramid governance changes use the same affected-surface/conclusion
+projection and may return effects in other member repositories. When those
+effects came directly from an accepted Functional Pyramid participation write,
+do not call `reconsider` again for that write; follow its returned contexts via
+the `span-functional-pyramid` skill.
+
 Use the returned context with `record` or a challenge. Settle a
 challenge through `record` with named `challenge_dispositions`. A resolved
 disposition supplies semantic intent (challenge/revision, reasoning, optional

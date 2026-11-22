@@ -21,7 +21,7 @@ belongs, and why a restatement is a defect. All of these are binding on design,
 contracts, code, tests, prompts, documentation, and releases, and a lower layer
 may not contradict a higher one. Where any plan, ADR, changelog, guide, skill, or
 instruction conflicts with them, they govern; amend them explicitly before
-working around them. Cite the IDs (G1–G6, A1–A9, F1–F10, L1–L11, FD-1–FD-60) in
+working around them. Cite the IDs (G1–G8, A1–A9, F1–F12, L1–L16, FD-1–FD-94) in
 changes and reviews.
 
 ## Layout
@@ -122,14 +122,17 @@ The public MCP operations are exactly three, one per lifecycle moment:
 
 `ask`, `record`, `reconsider`.
 
-`record` carries `kind` (`understanding`, `verification`, or `surface`). An
+`record` carries `kind` (`understanding`, `verification`, `surface`, or
+`functional_pyramid`). An
 understanding create is flat — one `conclusion` with dependency evidence from
 `locator`, `observation_id`, or non-empty `support`; scope is supplied or
 derived independently. A `locator` may accompany explicit `support` solely as
 carried code scope; `support` remains the complete dependency set and
-`observation_id` remains exclusive. `actions` is for updates and `action` for a surface
-declaration. Those are semantic fields, not separate tools. Setup belongs
-to the installer; structural navigation belongs to the host. Any other
+`observation_id` remains exclusive. `actions` is for understanding updates and `action` for surface or Functional
+Pyramid lifecycle writes. Those are semantic fields, not separate tools.
+Operational repository installation/registration belongs to the installer;
+Functional Pyramid participation is governed through the ordinary MCP lifecycle.
+Structural navigation belongs to the host. Any other
 operation name follows the ordinary unknown-tool path. Span carries no
 retired-name map, aliases, compatibility grammar, or replacement routing for
 removed public operations. There are no `semantic_*` names or dual grammar.
@@ -154,7 +157,10 @@ the supported dispositions before completing the work.
 - If a Gap's source pointers need bytes, make an explicit evidence-admission `ask`; follow only the continuation it returns.
 - Treat returned context references as opaque handles; copy them only into declared `context` fields.
 - After editing: `reconsider`; investigate `REASSESSMENT_REQUIRED`/`UNVERIFIABLE` conclusions and record their dispositions.
-- After establishing a conclusion: `record`.
+- After establishing a conclusion: `record`. Acceptance is not task completion when `UnderstandingRecorded.qualification` is non-current; continue investigation/re-establishment until required dispositions are CURRENT or an explicit blocker remains.
+- A conformance judgment is a NORMATIVE conclusion; use `assertion_nature=NORMATIVE`.
+- For ACTIVE Functional Pyramid participation, use the governing projection returned by the same `ask`; do not infer or copy governing prose. Functional Pyramid adoption/revision uses the dedicated selector/record branches inside the same three MCP tools.
+- After accepted Functional Pyramid ACTIVATE/REVISE/DEACTIVATE, inspect returned `dependent_effects` and `reestablishment_contexts`. Dispose actionable effects before calling that lifecycle task complete; do not call `reconsider` again for the participation write itself. Keep its receipt selector until those accepted effect refs are no longer actionable or have been re-established.
 
 Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md),
 [router skill](https://github.com/pontivus-com/span/blob/master/skills/span-router/SKILL.md).

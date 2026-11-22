@@ -1,16 +1,32 @@
 # Questions, retrieval, and bounds
 
-Obtain retained understanding by exact surface. A pure `ask` names either an
-exact `surface={kind, locator}` or an unambiguous `reference`, with no
-question, request identity, context, or evidence. It returns the current surface
-document view grouped by recorded question. A genuinely unassessed surface
-returns a Gap with source pointers; the agent investigates and records what it
-establishes.
+Ask for the exact software surface you are working on. A pure `ask` names
+either an exact `surface={kind, locator}` or an unambiguous `reference`, with
+no question, request identity, context, or evidence. It returns the current
+retained understanding for that surface and, for an ACTIVE Functional Pyramid
+repository, the applicable project guidance for the same scope. A genuinely
+unassessed surface returns a Gap with source pointers; the agent investigates
+and records what it establishes.
 
 When the exact recorded question is already known, use
 `RecordedQuestionSelector`. It is exact surface-scoped equality, not semantic
 search. When source bytes are needed, use explicit evidence admission:
 surface/reference plus non-empty `evidence` and a caller-owned `request_id`.
+
+## Functional Pyramid retrieval
+
+The Functional Pyramid is how Span connects a software surface to the canonical
+goals, rules, contracts, and design documents that guide it. The same `ask`
+tool also carries three exact Functional Pyramid selector branches. Status reads
+current repository/pyramid participation, candidate selection performs
+deterministic ACTIVATE/REVISE validation without writes, and receipt selection
+retrieves one exact installation-scoped participation receipt.
+
+Ordinary Answer/Gap composition includes the repository's Functional Pyramid
+orientation. For an ACTIVE member it is resolved from the same effective
+semantic scope as the semantic result; UNCONFIGURED/EXCLUDED state does not
+pretend there is an empty ACTIVE route. A route may be structurally unresolved
+without converting the semantic answer into operational unavailability.
 
 ## Result paths
 
@@ -32,6 +48,9 @@ surface/reference plus non-empty `evidence` and a caller-owned `request_id`.
   They are never merged into `Answer` and never satisfy current-answer reuse.
 - `EvidencePage`: the next exact selected-evidence deliveries, with an optional
   further continuation.
+- `FunctionalPyramidStatus` / `FunctionalPyramidCandidate` /
+  `RetrievedFunctionalPyramidReceipt`: exact participation, read-only proposal
+  validation, or immutable participation acceptance respectively.
 - `Rejected`: caller-correctable invalid selector/reference/binding state,
   including an unusable continuation.
 - `Unavailable`: genuine operational failure or a response budget too small to

@@ -1,5 +1,6 @@
 """The GitHub Release body is extracted from the canonical changelog."""
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -16,6 +17,62 @@ class ReleaseNotesTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def _identity(self, version, field):
+        return subprocess.run(
+            [
+                sys.executable,
+                "scripts/release_identity.py",
+                "--package-version",
+                version,
+                "--field",
+                field,
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_beta_release_identity_uses_pep440_and_registry_semver(self):
+        expected = {
+            "package_version": "1.0.0b1",
+            "tag": "v1.0.0b1",
+            "registry_version": "1.0.0-beta.1",
+            "release_title": "Span 1.0.0 Beta 1",
+            "prerelease": "true",
+            "development": "false",
+        }
+        for field, value in expected.items():
+            result = self._identity("1.0.0b1", field)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), value)
+
+    def test_rc_and_dev_versions_are_classified_as_prereleases(self):
+        for version, registry, development in (
+            ("1.0.0rc2", "1.0.0-rc.2", "false"),
+            ("1.0.0.dev3", "1.0.0-dev.3", "true"),
+        ):
+            registry_result = self._identity(version, "registry_version")
+            prerelease_result = self._identity(version, "prerelease")
+            development_result = self._identity(version, "development")
+            self.assertEqual(registry_result.stdout.strip(), registry)
+            self.assertEqual(prerelease_result.stdout.strip(), "true")
+            self.assertEqual(development_result.stdout.strip(), development)
+
+    def test_stable_release_identity_is_not_prerelease(self):
+        result = self._identity("1.2.3", "prerelease")
+        registry = self._identity("1.2.3", "registry_version")
+        self.assertEqual(result.stdout.strip(), "false")
+        self.assertEqual(registry.stdout.strip(), "1.2.3")
+
+    def test_checked_in_server_versions_match_the_canonical_package_version(self):
+        from span import __version__
+
+        server = json.loads((REPO_ROOT / "server.json").read_text(encoding="utf-8"))
+        registry = self._identity(__version__, "registry_version")
+        self.assertEqual(registry.returncode, 0, registry.stderr)
+        self.assertEqual(server["version"], registry.stdout.strip())
+        self.assertEqual(server["packages"][0]["version"], __version__)
 
     def test_extracts_the_current_section(self):
         result = self._run("0.7.0")

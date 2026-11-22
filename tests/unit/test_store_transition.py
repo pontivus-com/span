@@ -254,7 +254,7 @@ def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
 def _schema10_store(
     path: pathlib.Path, root: pathlib.Path, *, unresolved: bool = False
 ) -> pathlib.Path:
-    """Build one real schema-13 store, then present its schema-10 shape."""
+    """Build one real current-schema store, then present its schema-10 shape."""
     from span.core.recording import create_challenge
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
@@ -606,6 +606,100 @@ def _schema12_store(
     return path
 
 
+def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
+    """Build schema-14 state, then remove Version-1 projections to reproduce 13."""
+    from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+    from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "src").mkdir(exist_ok=True)
+    (root / "src/a.py").write_text("a\n", encoding="utf-8")
+
+    store = LifecycleStore(
+        path, retention=DEFAULT_LIFECYCLE_RETENTION, clock=lambda: NOW
+    )
+    store.register_repository("demo", str(root))
+    store.put_source_observation(
+        m.SourceObservation(
+            observation_id=m.SourceObservationId("obs-schema13"),
+            repository_id="demo",
+            evidence=m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-schema13"),
+                repository_id="demo",
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/a.py",
+                revision_or_fingerprint="sha256:a",
+            ),
+            content_digest=m.ContentDigest("sha256:a"),
+            captured_at=NOW,
+            total_lines=1,
+            whole_file=True,
+        )
+    )
+    context = m.InvestigationContext(
+        context_id=m.InvestigationContextId("ctx-schema13"),
+        repository_id="demo",
+        request_id=m.RequestId("req-schema13"),
+        binding_digest=m.ContentDigest("sha256:schema13"),
+        origin=m.ContextOrigin.EVIDENCE_ONLY,
+        state=m.ContextState.LIVE,
+        scope=m.EvidenceScope(paths=("src/a.py",)),
+        created_at=NOW,
+        expires_at=NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime,
+    )
+    store.put_context(context)
+    store.add_context_evidence("ctx-schema13", "obs-schema13")
+    store.record_understanding(
+        m.CreateUnderstandingCommand(
+            identity=m.RecordingIdentity(
+                repository_id="demo",
+                request_id=m.RequestId("record-schema13"),
+                context_id=m.InvestigationContextId("ctx-schema13"),
+            ),
+            surface=m.SurfaceKey(
+                repository_id="demo",
+                kind=m.SurfaceKind.FILE,
+                locator="src/a.py",
+            ),
+            target=m.ExplicitTarget(
+                question="What governs A?",
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+            ),
+            conclusions=(
+                m.ProposedConclusion(
+                    conclusion_id=m.ConclusionId("c-pre-route"),
+                    statement="A was normatively assessed before route support existed.",
+                    assertion_nature=m.AssertionNature.NORMATIVE,
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                    support=(
+                        m.SourceSupport(
+                            observation_id=m.SourceObservationId("obs-schema13")
+                        ),
+                    ),
+                    basis=m.SemanticBasis(
+                        derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
+                        summary="pre-route schema13 fixture",
+                        input_refs=(),
+                    ),
+                ),
+            ),
+        ),
+        understanding_id=m.UnderstandingId("u-schema13"),
+    )
+    store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute("DROP TABLE functional_route_dependency_index")
+        connection.execute("UPDATE meta SET value='13' WHERE key='schema_version'")
+        connection.commit()
+    finally:
+        connection.close()
+    return path
+
+
 def _config(
     root: pathlib.Path,
     data: pathlib.Path,
@@ -671,6 +765,95 @@ class InspectTest(unittest.TestCase):
             self.assertIn("explicit installer provisioning", inspection.limitations[0])
 
 
+class Schema13To14Test(unittest.TestCase):
+    def test_schema13_state_is_preserved_without_fabricating_pyramid_state(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            _schema13_store(data / "demo.db", root)
+
+            report = st.apply(_config(root, data))
+
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            connection = sqlite3.connect(data / "demo.db")
+            try:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT value FROM meta WHERE key='schema_version'"
+                    ).fetchone()[0],
+                    "14",
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM understandings"
+                    ).fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM investigation_contexts"
+                    ).fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM record_receipts"
+                    ).fetchone()[0],
+                    1,
+                )
+                functional_tables = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                        " AND name LIKE 'functional_%'"
+                    )
+                }
+                self.assertEqual(
+                    functional_tables,
+                    {"functional_route_dependency_index"},
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM functional_route_dependency_index"
+                    ).fetchone()[0],
+                    0,
+                )
+                route = connection.execute(
+                    "SELECT pyramid_id, repository_id, route_identity"
+                    " FROM functional_route_dependency_index"
+                ).fetchone()
+                self.assertIsNone(route)
+                pre_route_dependencies = connection.execute(
+                    "SELECT dependency_kind, dependency_ref"
+                    " FROM support_dependencies"
+                    " WHERE understanding_id=? AND conclusion_id=? AND revision=?"
+                    " ORDER BY dependency_kind, dependency_ref",
+                    ("u-schema13", "c-pre-route", 1),
+                ).fetchall()
+                self.assertEqual(
+                    pre_route_dependencies,
+                    [("SOURCE", "obs-schema13")],
+                )
+            finally:
+                connection.close()
+
+    def test_schema13_transition_rollback_restores_schema13(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            _schema13_store(data / "demo.db", root)
+            st.apply(_config(root, data))
+
+            report = st.rollback(_config(root, data))
+
+            self.assertEqual(report.state, st.TransitionState.ROLLED_BACK)
+            self.assertEqual(st._read_schema_version_ro(data / "demo.db"), 13)
+
+
 class ApplyTest(unittest.TestCase):
     def _apply(
         self, tmp: str
@@ -694,7 +877,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "13")
+                self.assertEqual(version, "14")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -909,7 +1092,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "13",
+                    "14",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -999,7 +1182,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "13",
+                    "14",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1069,7 +1252,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 13"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 14"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -1358,7 +1541,7 @@ class InstallerCommandTest(unittest.TestCase):
             mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
             self.assertEqual(mapping["counts"]["unresolved"], 0)
             self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
-            self.assertEqual(st._read_schema_version_ro(source), 13)
+            self.assertEqual(st._read_schema_version_ro(source), 14)
             from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 

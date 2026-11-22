@@ -216,17 +216,20 @@ class SurfaceConformanceTest(unittest.TestCase):
         for marker in (
             "CREATE TEMPLATE",
             "UPDATE TEMPLATE",
+            "FUNCTIONAL PYRAMID TEMPLATE",
             "SURFACE TEMPLATE",
             "VERIFICATION TEMPLATE",
         ):
             self.assertIn(marker, text)
 
-    def test_public_metadata_matches_the_package_version(self):
+    def test_public_metadata_matches_the_release_identity(self):
+        from scripts.release_identity import derive
         from span import __version__
 
         server = json.loads((REPO_ROOT / "server.json").read_text(encoding="utf-8"))
-        self.assertEqual(server["version"], __version__)
-        self.assertEqual(server["packages"][0]["version"], __version__)
+        identity = derive(__version__)
+        self.assertEqual(server["version"], identity["registry_version"])
+        self.assertEqual(server["packages"][0]["version"], identity["package_version"])
         self.assertLessEqual(len(server["description"]), 100)
         for name in (
             "README.md",

@@ -24,6 +24,8 @@ RETENTION = m.LifecycleRetention(
     replay_retention=datetime.timedelta(hours=4),
 )
 CONTEXT_ID = m.InvestigationContextId("ctx-1")
+PAGED_SOURCE = "line\n" * 400
+PAGED_RESPONSE_BUDGET = len(PAGED_SOURCE.encode("utf-8")) - 1
 
 
 def _basis() -> m.SemanticBasis:
@@ -31,6 +33,16 @@ def _basis() -> m.SemanticBasis:
         derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
         summary="read",
         input_refs=(),
+    )
+
+
+def _unconfigured_orientation(
+    _repository_id: str,
+    _surface: m.SurfaceKey,
+    _scope: m.EvidenceScope | None,
+) -> m.FunctionalPyramidParticipation:
+    return m.FunctionalPyramidParticipation(
+        m.FunctionalPyramidParticipationState.UNCONFIGURED
     )
 
 
@@ -73,6 +85,7 @@ class AnswerServiceTest(unittest.TestCase):
             store=self.store,
             support=self.support,
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
         self._observation("obs-a", "src/a.py")
         self._create("u-a", "src/a.py", "What does A do?")
@@ -161,6 +174,7 @@ class AnswerServiceTest(unittest.TestCase):
                 hook_fast_bounds=bounds,
                 max_response_bytes=max_bytes,
             ),
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
 
     def _ask(self, reference: str, question: str | None, request_id: str = "req-ask"):
@@ -839,6 +853,239 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Answer)
         self.assertEqual(result.verification, ())
 
+    def test_cold_governed_path_returns_gap_with_governing_view(self) -> None:
+        seen: list[m.EvidenceScope] = []
+
+        def orientation(
+            repository_id: str,
+            surface: m.SurfaceKey,
+            semantic_scope: m.EvidenceScope,
+        ) -> m.FunctionalPyramidView:
+            self.assertEqual(repository_id, "repo-1")
+            self.assertEqual(surface.locator, "src/missing.py")
+            seen.append(semantic_scope)
+            return m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("fp-cold"),
+                version=m.FunctionalPyramidVersion(1),
+                health=m.FunctionalPyramidHealth.VALID,
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                scope_relation=m.FunctionalScopeRelation.COVERED,
+                status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                semantic_scope=semantic_scope,
+            )
+
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=orientation,
+        )
+        before = self.store.list_understandings("repo-1")
+
+        result = service.ask(
+            m.AskRequest(repository_id="repo-1", reference="src/missing.py")
+        )
+
+        self.assertIsInstance(result, m.Gap)
+        assert isinstance(result, m.Gap)
+        self.assertEqual(result.reason, m.GapReason.UNASSESSED)
+        self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
+        self.assertEqual(
+            seen,
+            [m.EvidenceScope(paths=("src/missing.py",))],
+        )
+        self.assertEqual(self.store.list_understandings("repo-1"), before)
+
+    def test_mixed_answer_excludes_noncurrent_normative_conclusion(self) -> None:
+        self.store.record_understanding(
+            m.CreateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-u-normative"),
+                    context_id=CONTEXT_ID,
+                ),
+                surface=m.SurfaceKey(
+                    repository_id="repo-1",
+                    kind=m.SurfaceKind.FILE,
+                    locator="src/a.py",
+                ),
+                target=m.ExplicitTarget(
+                    question="What governs A?",
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                ),
+                conclusions=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-normative"),
+                        statement="A conforms to the governing route.",
+                        assertion_nature=m.AssertionNature.NORMATIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-a")
+                            ),
+                            m.FunctionalRouteSupport(
+                                repository_id="repo-1",
+                                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+                                semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
+                                route_identity=m.FunctionalRouteIdentity(
+                                    "route-unresolved"
+                                ),
+                            ),
+                        ),
+                        basis=_basis(),
+                    ),
+                ),
+            ),
+            understanding_id=m.UnderstandingId("u-normative"),
+        )
+        finding = m.FunctionalPyramidFinding(
+            reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
+            repository_id="repo-1",
+            detail="functional scope is uncovered",
+            recovery="declare applicable Functional Context coverage",
+        )
+
+        def unresolved(scope: m.EvidenceScope) -> m.FunctionalPyramidView:
+            return m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+                version=m.FunctionalPyramidVersion(1),
+                health=m.FunctionalPyramidHealth.VALID,
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+                status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                semantic_scope=scope,
+                unresolved=(finding,),
+            )
+
+        support = SupportService(
+            store=self.store,
+            evidence=self.evidence,
+            authority=self.store,
+            functional_route_resolver=lambda dependency, _surface: (
+                unresolved(dependency.semantic_scope),
+                None,
+            ),
+        )
+        service = AnswerService(
+            store=self.store,
+            support=support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=lambda _repository_id, _surface, scope: (
+                unresolved(scope)
+            ),
+        )
+
+        result = service.ask(m.AskRequest(repository_id="repo-1", reference="src/a.py"))
+
+        self.assertIsInstance(result, m.Answer)
+        assert isinstance(result, m.Answer)
+        statements = tuple(
+            conclusion.statement
+            for group in result.groups
+            for conclusion in group.conclusions
+        )
+        self.assertIn("A does X number 1.", statements)
+        self.assertNotIn("A conforms to the governing route.", statements)
+        self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
+        assert isinstance(result.functional_pyramid, m.FunctionalPyramidView)
+        self.assertEqual(
+            result.functional_pyramid.status,
+            m.FunctionalPyramidRouteStatus.UNRESOLVED,
+        )
+
+    def test_descriptive_answer_survives_unresolved_governing_route(self) -> None:
+        def orientation(
+            repository_id: str,
+            surface: m.SurfaceKey,
+            semantic_scope: m.EvidenceScope,
+        ) -> m.FunctionalPyramidView:
+            self.assertEqual(repository_id, "repo-1")
+            self.assertEqual(surface.locator, "src/a.py")
+            return m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
+                version=m.FunctionalPyramidVersion(1),
+                health=m.FunctionalPyramidHealth.VALID,
+                coverage=m.FunctionalPyramidCoverage.PARTIAL,
+                scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+                status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                semantic_scope=semantic_scope,
+                unresolved=(
+                    m.FunctionalPyramidFinding(
+                        reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
+                        repository_id="repo-1",
+                        detail="functional scope is uncovered",
+                        recovery="declare applicable Functional Context coverage",
+                    ),
+                ),
+            )
+
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=orientation,
+        )
+
+        result = service.ask(m.AskRequest(repository_id="repo-1", reference="src/a.py"))
+
+        self.assertIsInstance(result, m.Answer)
+        assert isinstance(result, m.Answer)
+        self.assertEqual(
+            result.groups[0].conclusions[0].statement, "A does X number 1."
+        )
+        self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
+        assert isinstance(result.functional_pyramid, m.FunctionalPyramidView)
+        self.assertEqual(
+            result.functional_pyramid.status,
+            m.FunctionalPyramidRouteStatus.UNRESOLVED,
+        )
+
+    def test_declared_symbol_boundary_is_exact_functional_pyramid_scope(self) -> None:
+        seen: list[m.EvidenceScope] = []
+
+        def orientation(
+            repository_id: str,
+            surface: m.SurfaceKey,
+            semantic_scope: m.EvidenceScope,
+        ) -> m.FunctionalPyramidParticipation:
+            self.assertEqual(repository_id, "repo-1")
+            self.assertEqual(surface.kind, m.SurfaceKind.SERVICE)
+            seen.append(semantic_scope)
+            return m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.EXCLUDED
+            )
+
+        service_key = m.SurfaceKey(
+            repository_id="repo-1", kind=m.SurfaceKind.SERVICE, locator="symbol-svc"
+        )
+        self.store.put_surface(
+            m.Surface(
+                key=service_key,
+                boundary=m.SurfaceBoundary(symbols=("src/a.py::A",)),
+            )
+        )
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=orientation,
+        )
+
+        result = service.ask(
+            m.AskRequest(
+                repository_id="repo-1",
+                surface=m.SurfaceReference(
+                    kind=m.SurfaceKind.SERVICE, locator="symbol-svc"
+                ),
+            )
+        )
+
+        self.assertIsInstance(result, m.Gap)
+        self.assertEqual(
+            seen,
+            [m.EvidenceScope(paths=("src/a.py::A",))],
+        )
+
     def test_service_wide_run_is_visible_on_service_and_files(self) -> None:
         service_key = m.SurfaceKey(
             repository_id="repo-1", kind=m.SurfaceKind.SERVICE, locator="svc"
@@ -1029,6 +1276,9 @@ class AnswerServiceTest(unittest.TestCase):
         gap = m.Gap(
             surface=status.surface,
             status=status,
+            functional_pyramid=m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.UNCONFIGURED
+            ),
             reason=m.GapReason.INVALIDATED,
             recovery="re-read the cited evidence, then record against the current revision",
             historical=(historical,),
@@ -1062,6 +1312,9 @@ class AnswerServiceTest(unittest.TestCase):
         gap = m.Gap(
             surface=surface,
             status=m.SurfaceStatus(surface=surface),
+            functional_pyramid=m.FunctionalPyramidParticipation(
+                m.FunctionalPyramidParticipationState.UNCONFIGURED
+            ),
             reason=m.GapReason.INVALIDATED,
             recovery="base recovery",
             historical=(historical,),
@@ -1138,7 +1391,7 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertIsInstance(resolved, m.Answer)
 
     def test_gap_continuation_returns_an_evidence_page(self) -> None:
-        (self.root / "src/big.py").write_text("line\n" * 400, encoding="utf-8")
+        (self.root / "src/big.py").write_text(PAGED_SOURCE, encoding="utf-8")
         import dataclasses
 
         bounds = dataclasses.replace(
@@ -1149,13 +1402,14 @@ class AnswerServiceTest(unittest.TestCase):
             default_query_bounds=bounds,
             maximum_query_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
             hook_fast_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
-            max_response_bytes=1500,
+            max_response_bytes=PAGED_RESPONSE_BUDGET,
         )
         service = AnswerService(
             store=self.store,
             support=self.support,
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             policy=policy,
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
         first = service.ask(
             m.AskRequest(
@@ -1252,13 +1506,14 @@ class AnswerServiceTest(unittest.TestCase):
                 default_query_bounds=bounds,
                 maximum_query_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
                 hook_fast_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
-                max_response_bytes=1500,
+                max_response_bytes=PAGED_RESPONSE_BUDGET,
             ),
             clock=clock,
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
 
     def _cold_page(self, service):
-        (self.root / "src/big.py").write_text("line\n" * 400, encoding="utf-8")
+        (self.root / "src/big.py").write_text(PAGED_SOURCE, encoding="utf-8")
         first = service.ask(
             m.AskRequest(
                 repository_id="repo-1",
@@ -1394,7 +1649,8 @@ class AnswerServiceTest(unittest.TestCase):
     def test_one_line_too_large_is_refused(self) -> None:
         import dataclasses
 
-        (self.root / "src/huge.py").write_text("x" * 5000 + "\n", encoding="utf-8")
+        huge_line = "x" * 5000 + "\n"
+        (self.root / "src/huge.py").write_text(huge_line, encoding="utf-8")
         bounds = dataclasses.replace(
             DEFAULT_SERVICE_BOUNDS_POLICY.default_query_bounds,
             max_evidence_bytes=100_000,
@@ -1407,8 +1663,9 @@ class AnswerServiceTest(unittest.TestCase):
                 default_query_bounds=bounds,
                 maximum_query_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
                 hook_fast_bounds=DEFAULT_SERVICE_BOUNDS_POLICY.hook_fast_bounds,
-                max_response_bytes=1500,
+                max_response_bytes=len(huge_line.encode("utf-8")) - 1,
             ),
+            functional_pyramid_orientation=_unconfigured_orientation,
         )
         first = service.ask(
             m.AskRequest(

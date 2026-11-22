@@ -8,12 +8,14 @@ canonical carriers.
 from __future__ import annotations
 
 import datetime as _datetime
+import typing as _typing
 
 from span.core import model as m
 from span.core import support_rules as _rules
 from span.core.recording import RecordingValidationError
 from span.core.rejection import RejectionCauseKind
 from span.ports.evidence import EvidenceSource
+from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
 from span.ports.lifecycle import (
     LifecycleAuthorityResolver,
     LifecycleStorePort,
@@ -38,12 +40,29 @@ class SupportService:
         authority: LifecycleAuthorityResolver,
         clock=None,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
+        functional_route_resolver: (
+            _typing.Callable[
+                [m.FunctionalRouteSupport, m.SurfaceKey],
+                tuple[
+                    m.FunctionalPyramidParticipation
+                    | m.FunctionalPyramidView
+                    | m.FunctionalPyramidUnavailable,
+                    m.FunctionalRouteIdentity | None,
+                ],
+            ]
+            | None
+        ) = None,
+        repository_runtime: (
+            _typing.Callable[[str], FunctionalPyramidRepositoryRuntime] | None
+        ) = None,
     ) -> None:
         self._store = store
         self._evidence = evidence
         self._authority = authority
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._policy = policy
+        self._functional_route_resolver = functional_route_resolver
+        self._repository_runtime = repository_runtime
 
     def evaluate_version(
         self,
@@ -82,8 +101,9 @@ class SupportService:
     ) -> m.SupportEvaluation:
         """Qualify every support dependency declared by a command."""
         dependencies = m.command_support_dependencies(command)
+        surface = self._command_surface(command)
         evaluations = tuple(
-            self._dependency_eval(dependency, frozenset())
+            self._dependency_eval(dependency, frozenset(), surface)
             for dependency in dependencies
         )
         state = _rules.combine_states(tuple(item.state for item in evaluations))
@@ -180,8 +200,16 @@ class SupportService:
                 "conclusion revision was withdrawn",
             )
         dependencies = tuple(revision.content.support)
+        understanding = self._store.get_understanding(ref.understanding_id.value)
         evaluations = tuple(
-            (dependency, self._dependency_eval(dependency, visited | {key}))
+            (
+                dependency,
+                self._dependency_eval(
+                    dependency,
+                    visited | {key},
+                    understanding.surface,
+                ),
+            )
             for dependency in dependencies
         )
         state = _rules.combine_states(
@@ -212,6 +240,7 @@ class SupportService:
         self,
         dependency: m.SupportDependency,
         visited: frozenset[tuple[str, str, int]],
+        surface: m.SurfaceKey | None,
     ) -> m.SupportEvaluation:
         if isinstance(dependency, m.SourceSupport):
             return self._source_eval(dependency.observation_id.value)
@@ -220,8 +249,38 @@ class SupportService:
         if isinstance(dependency, m.PremiseSupport):
             return self._premise_eval(dependency.premise, visited)
         if isinstance(dependency, m.AuthoritySupportDependency):
-            return self._authority_eval(dependency.authority)
+            return self._authority_eval(dependency.authority, surface)
+        if isinstance(dependency, m.FunctionalRouteSupport):
+            return self._functional_route_eval(dependency, surface)
         raise TypeError("unhandled support dependency: " f"{type(dependency).__name__}")
+
+    def _command_surface(self, command: m.RecordCommand) -> m.SurfaceKey | None:
+        if isinstance(command, m.CreateUnderstandingCommand):
+            return command.surface
+        if isinstance(command, m.UpdateUnderstandingCommand):
+            return self._store.get_understanding(command.understanding_id.value).surface
+        return None
+
+    def _functional_route_eval(
+        self,
+        dependency: m.FunctionalRouteSupport,
+        surface: m.SurfaceKey | None,
+    ) -> m.SupportEvaluation:
+        if surface is None:
+            return _rules.evaluation(
+                m.SupportState.UNVERIFIABLE,
+                self._clock(),
+                "functional route support has no semantic owner surface",
+            )
+        if self._functional_route_resolver is None:
+            raise RuntimeError("Functional Pyramid route evaluation is not configured")
+        current, route_identity = self._functional_route_resolver(dependency, surface)
+        return _rules.functional_route_state(
+            recorded=dependency,
+            current=current,
+            current_route_identity=route_identity,
+            observed_at=self._clock(),
+        )
 
     def _source_eval(self, observation_id: str) -> m.SupportEvaluation:
         record = self._store.find_source_observation(observation_id)
@@ -289,17 +348,31 @@ class SupportService:
             observed_at=self._clock(),
         )
 
-    def _authority_eval(self, binding: m.AuthorityBinding) -> m.SupportEvaluation:
+    def _authority_eval(
+        self,
+        binding: m.AuthorityBinding,
+        surface: m.SurfaceKey | None,
+    ) -> m.SupportEvaluation:
         reference = binding.evidence_ref
+        authority: LifecycleAuthorityResolver = self._authority
+        evidence = self._evidence
+        if self._repository_runtime is not None:
+            runtime = self._repository_runtime(reference.repository_id)
+            authority = runtime.store
+            evidence = runtime.evidence
+        elif surface is not None and reference.repository_id != surface.repository_id:
+            raise RuntimeError(
+                "repository-qualified authority evaluation is not configured"
+            )
         try:
-            declared: m.AuthorityBinding | None = self._authority.resolve_authority(
+            declared: m.AuthorityBinding | None = authority.resolve_authority(
                 reference.repository_id, reference.evidence_id.value
             )
         except RecordingValidationError:
             declared = None
         observed: str | None = None
         if declared is not None:
-            _, fingerprints = self._evidence.list_inventory_entries(
+            _, fingerprints = evidence.list_inventory_entries(
                 reference.repository_id,
                 m.EvidenceScope(),
                 (declared.evidence_ref.locator,),

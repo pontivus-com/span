@@ -1,9 +1,11 @@
 # Span documentation
 
-Span answers semantic questions about a code repository, retains those answers
-with their evidence, and restores their validity when the code changes. The
-agent interprets and edits; Span admits evidence, records explicit commands,
-and qualifies later reuse.
+Span gives a coding agent the complete working context for the exact part of
+the software it is working on. It brings together what is already understood
+about that implementation with the applicable path through the project's
+canonical goals, principles, contracts, functional design, and technical
+design. Both sides stay tied to their sources, so Span can show when a code or
+guidance change makes part of that context require another look.
 
 ## Foundations
 
@@ -21,12 +23,19 @@ and qualifies later reuse.
   support evaluation, propagation, response composition, state transitions,
   retention, concurrency, host expectations, and truncation.
 - [Technical design](technical-design.md) — layer 4: the implementation baseline,
-  what is retained from 0.8.3 and the withdrawn internal baseline, and the minimal refactoring set.
+  retained historical mechanisms, and the Version-1 Functional Pyramid mechanisms
+  that realize the layer-0–3 contract.
 - [Method grounding](method-grounding.md) — the evidence that the method rests on
   established, validated practice, and what is not claimed.
 
 ## Implementation
 
+- [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md) —
+  Version-1 Functional Pyramid implementation and release campaign. T00–T12 are
+  complete; T11 private acceptance remains closed. The assembled `1.0.0b1`
+  repository candidate has passed the repository-verifiable T13 gates. The
+  remaining release proof is the Version-1 G5/F8 same-task-class steps/tokens
+  measurement and final evidence append.
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
   low-friction lifecycle work package, ordered tasks, decision gates and
   verification; released 2026-11-14.

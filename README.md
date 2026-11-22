@@ -3,12 +3,14 @@
 </h1>
 
 <p align="center">
-  <strong>Carry useful investigations into the next coding session.</strong>
+  <strong>Give your coding agent the complete context for the code it is working on.</strong>
 </p>
 
 <p align="center">
-  Span keeps the explanations your coding agent worked out, the evidence
-  behind them, and what needs another look when that evidence changes.
+  Span is a local MCP server that gives coding agents both sides of the context
+  for the exact file, symbol, service, or domain they are working on: what that
+  part of the system is understood to do, and the goals, rules, contracts, and
+  design documents that guide it.
 </p>
 
 <p align="center">
@@ -22,105 +24,181 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a href="#what-span-changes"><strong>Why Span</strong></a> ·
   <a href="#how-it-works"><strong>How it works</strong></a> ·
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
   <a href="https://github.com/pontivus-com/span/tree/master/docs"><strong>Docs</strong></a>
 </p>
 
-## Keep the understanding your agent worked for
+## A coding agent needs more than the code
 
-A coding agent traces a request across services, checks the tests, finds the
-contract, and explains why the boundary exists. The next session should be
-able to find that explanation and see whether its support still holds.
+To work safely on part of a software system, an agent needs two kinds of context
+at the same time.
 
-Span makes that investigation reusable. It is a local MCP server where agents
-record coherent explanations with exact source support, explicit gaps, and
-version history. Later agents can discover the explanation from the current
-surface view, then inspect what is current, disputed, or changed.
+It needs to know **what this part of the system does**: the useful understanding
+already established about the implementation, how it fits together, what that
+understanding was based on, and whether it is still current.
 
-The coding agent does the thinking. Span keeps the record and checks its
-support.
+It also needs to know **what guides this part of the system**: the relevant
+goals, principles, contracts, functional design, and technical design, in the
+right order and linked back to the canonical documents that own them.
 
-Three tools — `ask`, `record`, `reconsider` — carry the
-[agent lifecycle](docs/lifecycle-contract.md#required-agent-completion): find
-current understanding, retain a supported conclusion, and re-align after change.
+Without Span, a fresh agent has to reconstruct both sides. It re-reads code,
+searches old conversations and documentation, works out which documents apply,
+and decides which guidance takes priority. The relevant material may span
+several repositories.
+
+Span gives the agent both sides for the exact software surface it is working on.
+
+## What Span changes
+
+### Start with the complete working context
+
+Ask about a file, symbol, service, or domain. Span returns the current
+understanding already established for that surface and, for a participating
+repository, the complete applicable path through the project's guiding
+documentation.
+
+The agent starts knowing what it is looking at, why it exists, what is already
+known about it, and which project rules and designs apply.
+
+### Follow the right guidance from first principles to implementation
+
+Span links the exact software scope to the goals and first principles above it,
+then through the applicable rules and contracts to functional and technical
+design.
+
+The canonical documents stay where their owners put them. Span keeps their
+identity, relationship, applicability, and order explicit, so the agent does not
+have to guess from filenames, search results, repository layout, or document
+prominence.
+
+### Reuse what is already known about the implementation
+
+When an agent establishes a useful conclusion about the code, Span can retain it
+with the evidence that supported it. A later session can find that understanding
+from the software surface itself; it does not need the original conversation or
+a saved internal ID.
+
+If the support no longer holds, Span does not silently return the old conclusion
+as current.
+
+### Recheck only what a change affected
+
+A code change can invalidate what an agent understood about the implementation.
+A change to a goal, contract, design, or its applicability can invalidate what
+the implementation is supposed to satisfy even when the code itself did not
+change.
+
+Span identifies the affected understanding and why it needs another look.
+Unrelated understanding stays reusable.
+
+## Keep using the coding agent you already have
+
+Span does not replace your coding agent, choose a model, edit source, or run your
+tests. It runs locally as an MCP server beside the agent.
+
+The agent still does the engineering judgment. Span maintains the reusable
+result of that work: semantic conclusions, their exact support, version history,
+declared governance, and the consequences of change.
+
+Three public tools cover the lifecycle:
+
+- **`ask`** — start from the current understanding and, where declared, the
+  governance that applies to the same scope.
+- **`record`** — retain a conclusion once the agent has established it, with the
+  support it actually used.
+- **`reconsider`** — after a change, identify what really needs reassessment and
+  carry that work forward without losing history.
 
 ## How it works
 
-1. **Start from the surface.** Ask for the current surface view with no question
-   or request identity. Span returns current grouped understanding with status,
-   or a gap with concrete source pointers. Select source bytes explicitly only
-   when the investigation needs them.
-2. **Retain established understanding.** Save one conclusion at a time with the file
-   it rests on, or declare a service/domain surface for a cross-file
-   explanation. Work that started outside Span can be recorded directly; the
-   flat create derives support from the locator you already read.
-3. **Reuse in a fresh session.** Ask for the surface document view without a
-   question, then select the applicable current conclusion.
-4. **Reassess after change.** Check affected dependencies, investigate what
-   changed, then confirm, correct, replace, or withdraw the explanation.
-   Earlier versions remain inspectable.
+1. **Ask for the exact part of the system you are working on.** Span returns
+   the current retained understanding for that surface and, when the repository
+   participates in the Functional Pyramid, the full applicable guidance path
+   from first principles down to functional and technical design.
+2. **Investigate normally, then keep what you learn.** The agent reads code and
+   canonical documents, searches, edits, and tests with its normal tools. When
+   it establishes a useful conclusion, `record` retains it with the evidence
+   and guidance it depends on.
+3. **After change, revisit only what no longer holds.** `reconsider` maps
+   implementation or guiding-document changes to the affected conclusions. The
+   agent confirms, corrects, replaces, or withdraws only the understanding that
+   actually needs work.
 
-One explanation can span code, tests, CSS, configuration, and contracts. The agent retains supported conclusions as part of the investigation.
+A later session starts at step 1 again — but it is no longer starting from zero.
+
+## Functional Pyramid: the path from first principles to the code
+
+The Functional Pyramid is how Span provides the guiding half of the working
+context.
+
+For the exact software surface an agent is working on, it resolves the declared
+path through the project's canonical goals, principles, contracts, functional
+design, and technical design. It shows which guidance applies, how the layers
+relate, where the canonical documents live, and which higher-level rules govern
+the lower-level design.
+
+Span does not copy those documents or invent missing authority. The original
+documents remain canonical. Span keeps the links, applicability, derivation, and
+change consequences explicit, including when the path crosses repositories.
+
+The same `ask` that orients the agent on a software surface can therefore show
+both:
+
+- **what this part of the system is understood to do**, with its evidence and
+  current status; and
+- **what is supposed to guide it**, from first principles down to the applicable
+  functional and technical design.
+
+If part of that guiding path is missing, conflicted, unavailable, or outside the
+declared scope, Span says so instead of guessing.
+
+## What “current” means
+
+Span does not claim that a saved explanation is true merely because it was
+recorded. It tells the agent whether the support that explanation depends on
+still holds.
+
+| Qualification | What it means |
+| --- | --- |
+| `CURRENT` | The declared support still passes its checks. The agent still owns semantic judgment. |
+| `REASSESSMENT_REQUIRED` | Source, authority, premise, membership, or governance applicability changed. Revisit the affected explanation. |
+| `UNVERIFIABLE` | Required support cannot currently be established. The limitation stays explicit. |
+
+Gaps and disputes remain visible independently of support currency. A passing
+test does not settle a disagreement, and matching source bytes do not make an
+interpretation authoritative.
 
 ## See the lifecycle
 
-Illustrative tool sequence, not literal request JSON. The installed schemas
-and [MCP reference](docs/mcp.md) own the wire grammar.
+Illustrative sequence; the installed schemas and
+[MCP reference](docs/mcp.md) own the exact wire grammar.
 
 ```text
+fresh session
 ask(surface)
-  → current grouped Answer, or Gap with source pointers
+  → current understanding, or an actionable gap
+  → declared governing view for the same scope when Functional Pyramid is ACTIVE
 
-agent selects needed source bytes explicitly when required
-ask(surface, request_id, evidence)
-  → same Answer/Gap classification plus evidence admission/context
+agent investigates with its normal coding tools
 
-agent investigates and records what it established
+record(kind="understanding", conclusion, support)
+  → retained version + current qualification
 
-record(kind="understanding", conclusion, locator|observation_id|support)
-  → compact acceptance with receipt selector, version, and live qualification
+later, implementation or governance changes
 
-fresh session asks the surface
-  → current document view grouped by recorded question
-ask(selector=RecordedQuestionSelector)
-  → exact known recorded-question membership
-ask(selector=UnderstandingSnapshotSelector)
-  → exact recorded explanation, live support, gaps, and challenges
-
-supporting source changes
 reconsider(changed_paths)
-  → every affected surface, with containment, direct, and indirect reasons,
-    per-conclusion support state, and a re-establishment context
+  → affected conclusions only, with the reason and re-establishment context
 
-agent investigates and records a correction against the expected version
-  → version 2; version 1 remains history
+agent investigates the changed support and records the disposition
+  → history preserved; unaffected understanding remains reusable
 ```
 
-Pure reuse names the surface and returns all current membership grouped by
-recorded question. Exact targeted reuse uses `RecordedQuestionSelector` only
-when that recorded question is already known. Wording is never treated as
-semantic equivalence, and a returned conclusion remains a starting point for
-judgment.
+Pure reuse starts from the surface; no previous conversation or saved ID is
+required. Exact historical snapshots and receipts remain available when audit or
+replay detail is needed.
 
-## Know what can be reused
-
-| Qualification | What the agent can conclude |
-| --- | --- |
-| `CURRENT` | The declared support still passes its checks. Applicability and semantic correctness still need judgment. |
-| `REASSESSMENT_REQUIRED` | Source, authority, premise, or recorded membership support changed. Revisit the affected explanation. |
-| `UNVERIFIABLE` | Required support cannot be established. The limitation stays explicit. |
-
-Gaps and challenges remain visible independently of support currency. Matching
-bytes do not settle a dispute, and test existence does not establish a pass.
-Independent verification records the observations or evidence actually tested and preserves
-failures as failures.
-
-Recording is atomic. Ordinary acceptance returns a receipt selector plus the
-accepted coordinates and live qualification; the immutable receipt remains in
-storage and is retrieved explicitly when exact replay/audit detail is needed.
-The caller preserves identity before sending, so retrying the same identity and
-content recovers the retained acceptance after a lost response or restart.
 
 ## Quick start
 
@@ -153,21 +231,23 @@ see [using Span](docs/usage.md).
 
 ## Beta host status
 
-The 0.10.5 repository/installable contract is verified through the built package
-and installed stdio MCP lane. Candidate-specific live model-host conversion was
-not rerun from this execution environment; earlier captures are historical and
-are not reused as 0.10.5 acceptance evidence.
+The Version-1 `1.0.0b1` candidate is verified through the built distribution,
+non-editable installed stdio MCP lane, generic Functional Pyramid acceptance,
+transition/recovery gates and release-registry validation. Live model-host
+delivery is **UNVERIFIED** and is not inferred from registration or historical
+captures. No verified managed-host delivery claim is made for Beta 1.
 
-| Host | 0.10.5 candidate status |
+| Host | Version-1 candidate status |
 | --- | --- |
-| Codex | Integration target retained; candidate-specific live model-delivery **UNVERIFIED**. |
-| OpenCode | Integration target and packaged notice delivery retained; candidate-specific live model-delivery **UNVERIFIED**. |
-| Claude Code | Managed registration/health support retained; authenticated model-delivery remains **UNVERIFIED**. |
-| Other MCP hosts | Manual stdio connection remains available; host-specific model-delivery is **UNVERIFIED**. |
+| Codex | Managed integration target retained; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
+| OpenCode | Managed integration and packaged notice delivery verified; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
+| Claude Code | Managed registration/health support retained; authenticated Version-1 model-delivery **UNVERIFIED** and not claimed as verified. |
+| Other MCP hosts | Manual stdio connection remains available; host-specific delivery is **UNVERIFIED**. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
-Hooks provide lifecycle reminders; retrieval and recording still check support
-when hooks are absent. See [host integration](integrations/hosts/triggers.md).
+Hooks provide lifecycle reminders; retrieval, governance orientation and support
+qualification do not depend on hook delivery. See
+[host integration](integrations/hosts/triggers.md).
 
 ## Fits around your agent
 
@@ -176,22 +256,28 @@ agent uses its own model, tools, edits, and test runner. Span does not invoke a
 model or store provider credentials. Structural search helps investigation;
 recorded conclusions retain the agent's interpretation and declared support.
 
-The intended benefit is continuity between sessions and a focused review of
-changed support. Recording and host delivery have costs. Measured cost is
-class-specific: repeated reuse of a covered surface breaks even at two uses on
-the tested tasks, while single-use implementation is currently more expensive
-than reading. This beta makes no universal time/token-saving claim or completed
-comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
+The intended benefit is complete working context for the exact software surface:
+what is already understood about the implementation, the canonical project
+guidance that applies to it, and a focused view of what needs another look after
+either side changes. Beta product value is validated through real-world adopter
+use rather than a synthetic pre-release score. This release therefore makes no
+universal time/token-saving claim; follow-up Beta patches will address defects
+and friction found in normal use. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.10.5**: evidence is retained as references and
-hashes rather than stored source copies, and each repository can carry a
-deployable Span artifact at `.span/backups/` that loads and rebinds on a fresh
-clone. The public operations remain `ask`, `record`, and `reconsider`; storage is
-schema 12. See [the changelog](CHANGELOG.md) for verification and upgrade
-instructions, and [backup and recovery](docs/recovery.md) for the operator
-policy.
+This checkout is the **Version 1 Beta candidate line**. The implemented storage
+contract is repository schema 14 plus the separate installation Functional
+Pyramid store. Existing schema-13 repositories use the explicit offline
+transition; registration alone leaves them `UNCONFIGURED` until participation is
+declared. The public operations remain exactly `ask`, `record`, and `reconsider`.
+
+T11 private first-adopter acceptance is closed and T12 release assembly is
+complete. The repository-verifiable T13 gates have passed for `1.0.0b1`, and
+the candidate is release-ready. G5/F8 product-value validation continues after
+release through real-world use in the legal project. See
+[the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
+[acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
 - [Install and connect](docs/install.md)
 - [Using Span](docs/usage.md) and [first investigation](docs/onboarding-runbook.md)

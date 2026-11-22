@@ -14,6 +14,9 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from span.core import model as m
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_store.functional_pyramid import (
+    ensure_functional_pyramid_installation_store,
+)
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
 SPAN = pathlib.Path(__file__).resolve().parents[2]
@@ -43,6 +46,11 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         )
         store.register_repository(REPOSITORY_ID, str(self.repo.resolve()))
         store.close()
+        installation = ensure_functional_pyramid_installation_store(
+            self.data,
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        installation.close()
         self.env = {
             **os.environ,
             "PYTHONPATH": str(SPAN / "src"),
@@ -693,7 +701,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result["other"]["verification"]), 1)
 
     async def test_continuation_recovers_omitted_evidence(self) -> None:
-        _write(self.repo, "src/big.py", "line\n" * 500)
+        content = "line\n" * 500
+        _write(self.repo, "src/big.py", content)
+        budget = len(content.encode("utf-8")) - 1
 
         async def journey(session: ClientSession) -> dict:
             first = await self._call(
@@ -716,12 +726,14 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        page = await self._session(journey, budget=1500)
+        page = await self._session(journey, budget=budget)
         self.assertEqual(page["$type"], "EvidencePage")
         self.assertTrue(page["deliveries"])
 
     async def test_continuation_survives_a_fresh_process(self) -> None:
-        _write(self.repo, "src/big.py", "line\n" * 500)
+        content = "line\n" * 500
+        _write(self.repo, "src/big.py", content)
+        budget = len(content.encode("utf-8")) - 1
 
         async def first(session: ClientSession) -> str:
             gap = await self._call(
@@ -738,7 +750,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(gap["admission"].get("continuation"))
             return gap["admission"]["continuation"]
 
-        token = await self._session(first, budget=1500)
+        token = await self._session(first, budget=budget)
 
         async def second(session: ClientSession) -> dict:
             return await self._call(
@@ -749,7 +761,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        page = await self._session(second, budget=1500)
+        page = await self._session(second, budget=budget)
         self.assertEqual(page["$type"], "EvidencePage")
         self.assertTrue(page["deliveries"])
 
@@ -800,7 +812,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "sub-correct-reconsider",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],
@@ -876,7 +888,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "sub-race-correct",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": expected,
@@ -1077,7 +1089,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "svc-correct",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],
@@ -1569,7 +1581,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             for item in affected["conclusions"]
             if item["ref"]["understanding_id"]["value"] == understanding_id
         )
-        context_id = changed["context"]["context_id"]["value"]
+        context_id = changed["reestablishment_contexts"][0]["context_id"]["value"]
 
         store = LifecycleStore(
             self.data / f"{REPOSITORY_ID}.db",
@@ -1586,7 +1598,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 "record",
                 {
                     "request_id": "multi-support-reestablish",
-                    "context": changed["context"],
+                    "context": changed["reestablishment_contexts"][0],
                     "kind": "understanding",
                     "understanding_id": understanding_id,
                     "expected_version": conclusion["expected_version"]["value"],

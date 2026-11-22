@@ -1,12 +1,14 @@
 # Span technical design — layer 4
 
-**Status: stated decisions are binding; unresolved portions remain open.**
-Implementation may proceed only where its applicable inputs are settled;
-activation is blocked by the required open items in §6. This is layer 4. It records the
-implementation baseline, what is retained from the two existing codebases, and
-the proposed refactoring boundary for layers 0–3. It chooses mechanisms; it
-adds no product requirement. Where it conflicts with a higher layer, the higher
-layer governs.
+**Status: stated decisions are binding; historical unresolved items remain
+explicitly scoped. Version-1 Part C mechanisms are implementation-complete
+through T10; T13 owns assembled-candidate release verification. Post-release
+Beta use owns ongoing product-value validation.**
+This is layer 4. It records the implementation baseline, what is retained from
+the historical codebases, and the mechanisms that realize layers 0–3. Historical
+open items in §6 do not override the Version-1 Part C implementation status
+unless Part C explicitly cites them. It chooses mechanisms; it adds no product
+requirement. Where it conflicts with a higher layer, the higher layer governs.
 
 **Historical release identity (2026-11-07).** That capture identified **0.10.0**
 (2026-11-07), a public-grammar and identity-ownership release over 0.9.4. The
@@ -20,20 +22,35 @@ the public release.
 **Review update: 2026-11-01.** Part A (§1–§8) records source assessments;
 Part B (§9–§16) records implementation choices. Authority and migration decisions
 are recorded in §6, §10, §12, and §14 (see §6, resolved 2026-11-01); the
-remaining evidence is delivery and measurement (O-2, O-3, O-6), which the forward
-plan schedules. Part B is **PARTIAL**: no runtime, schema, host configuration, or
+remaining historical evidence items are delivery and measurement (O-2, O-3,
+O-6), which later release plans may supersede or close. Part B is **PARTIAL**: no runtime, schema, host configuration, or
 release is changed by this document.
 
 The [requirements pyramid](requirements-pyramid.md) governs placement and
 precedence. Product and behavioural rules remain in layers 0–3; this document
-cites their IDs instead of defining replacements. Execution ordering and gate
-ownership live in the
-[implementation plan dated 2026-11-01](../.context/plans/2026-11-01-implementation-plan.md).
+cites their IDs instead of defining replacements. Current Version-1 execution ordering and gate ownership live in the
+[1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md).
 
 **0.10.3 target amendment (2026-11-14).** Active mechanism choices below follow
-the amended lifecycle/functional contracts. Runtime implementation, installed
-host delivery and comparative acceptance are pending. Dated delivered captures
-remain historical evidence of their identified candidate, not target conformance.
+the amended lifecycle/functional contracts. Its dated runtime, host-delivery,
+and comparative-acceptance statements are historical evidence for that candidate,
+not current Version-1 release gates.
+
+**Version-1 Functional Pyramid amendment (2026-11-21).** Parts A/B remain the
+historical/current Span mechanism baseline. Part C (§17–§22) is the binding
+Layer-4 mechanism amendment for the Version-1 Functional Pyramid target and
+supersedes any earlier mechanism statement where the new FD-61–FD-94 contract
+changes that boundary. It preserves the existing semantic lifecycle mechanisms
+and adds only the storage, resolution, support and public-projection machinery
+required by Layers 0–3.
+
+**Version-1 implementation update (2026-11-23).** T01–T10 implemented and
+verified the Part-C mechanisms and generic functional acceptance on the
+reconciled release branch. T11 private first-adopter acceptance passed and is
+closed. T13 owns assembled-`1.0.0b1` release verification, candidate-specific
+managed-host qualification where claimed, and the Part-C derivation audit.
+G5/F8 product-value validation continues after release through real adopter use;
+it is not a publication gate.
 
 ## 1. Baseline decision
 
@@ -203,13 +220,14 @@ and reference effects belong in this package, not an unrelated subsystem.
 
 ## 6. Open items
 
-### O-1 — Withdrawn premise (design decision closed; implementation pending)
+### O-1 — Withdrawn premise (resolved and implemented)
 
-FD-13, FD-19, and FD-34 govern. Adapt `support_rules.premise_membership_state`
-and `SupportService._premise_eval` to distinguish withdrawal from supersession;
-the present helper conflates them. The earlier proposal to amend layer 3 to
-preserve existing behaviour is withdrawn. WP-4 changes implementation against
-the existing authority; no higher-layer amendment is assumed.
+FD-13, FD-19, and FD-34 govern. `support_rules.premise_membership_state`
+distinguishes withdrawal from supersession, and `SupportService._premise_eval`
+detects a `WithdrawnConclusion` before evaluating the referenced revision.
+`test_premise_withdrawal_is_unverifiable` verifies the distinction. The
+earlier proposal to amend layer 3 to preserve the old behaviour remains
+withdrawn; no higher-layer amendment was required.
 
 ### O-2 — Retention policy value
 
@@ -414,11 +432,11 @@ not a pass for the proposed contract or a full-suite run. No new host capture,
 scored fitness run, or schema-11 transition was performed. Not every source
 module was read; adaptation cost remains inferred, not an implementation estimate.
 
-Historical host evidence is in the withdrawn beta ledger (internal evidence,
-not published) and the
-[G-0 capture](../.context/evidence/host-contract/2026-10-31/G-0.md). A fixture
-README's `UNVERIFIED` label does not erase those captures, and those captures do
-not establish delivery of a different grammar.
+Historical host evidence is retained as internal working evidence, including
+the withdrawn beta ledger and the 2026-10-31 G-0 capture. Those private captures
+are not public repository links. A fixture README's `UNVERIFIED` label does not
+erase those captures, and those captures do not establish delivery of a
+different grammar.
 
 ## Part B — Implementation mechanisms
 
@@ -1154,32 +1172,23 @@ configuration. See
 wait the first tool list had no Span and the rate was 2/5. Evidence:
 `.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
 
-Retain the
-[2026-10-30 rebuild plan §10.4 comparative protocol](../.context/plans/2026-10-30-span-lifecycle-rebuild-implementation-plan.md#104-comparative-fitness-protocol-and-binding-decision)
-as an evaluation mechanism, with G5/F8 remaining the product authority. The
-[2026-11-01 implementation plan, FP-7](../.context/plans/2026-11-01-implementation-plan.md#fp-7--product-fitness-and-completion)
-owns the new candidate's frozen-manifest and evidence references. Identify the new
-candidate and freeze its workloads and decision rule before scoring. Record cold
-capture, fresh reuse, change/re-establishment, recovery, and failed attempts;
-separate mandated conformance from natural use. No telemetry service or new
-numeric acceptance threshold is introduced. §8's historical calibration is not
-scored evidence for this candidate.
+Retain comparative measurements as optional product research, not as a
+Version-1 release gate. G5/F8 are demonstrated for Beta through real adopter use
+on ordinary engineering work. The pre-release candidate must still pass the
+deterministic contract, packaging, migration, recovery, public-boundary, and
+functional-acceptance gates; Beta publication does not wait for an artificial
+equivalent-task score.
 
-**Core-value and cost (2026-11-02, extended 2026-11-03).** F8/G5 requires both
-halves: retained, current, reusable understanding with exact change isolation,
-*and* a per-class comparative cost result measured in the same unit. The
-scorecard is `.context/evidence/fitness/2026-11-02/CORE-VALUE.md`; the cost
-classes are `five-task/MATRIX.md` and `g5/REUSE.md`. Cost is reported per named
-class, never as a universal ratio; the single-use cross-file class is negative.
+Post-release evaluation should capture the product behavior that matters in
+practice: cold investigation, fresh-session reuse, implementation and governance
+changes, re-establishment, recovery, and failure. Findings from that use are
+inputs to follow-up Beta patches. No telemetry service or numeric acceptance
+threshold is introduced.
 
-**Frozen candidate manifest (2026-11-03).** The scored surface is frozen in
-`.context/fitness/2026-11-03-post-fix-candidate-manifest.json`. The
-2026-11-02 candidate and core-value manifests, the 2026-11-03 pre-fix manifest,
-and the 2026-11-01 manifest are `VOID`: their host scope or request schema no
-longer matches the delivered surface. The post-fix manifest freezes the three
-tools and their request schemas and carries no cost numbers; the measured
-classes attach to the pre-fix surface they were run on. FG-7 stays `OPEN` until
-the F10 adoption receipt exists.
+Historical comparative captures from 2026-11-02/03 remain calibration material
+only. They do not certify Version 1 and they are not required to publish it.
+Any future public time/token/cost claim must be supported by evidence scoped to
+that claim.
 
 ## 16. Verification ownership and completion
 
@@ -1202,9 +1211,863 @@ second declaration of those requirements.
 | FD-54–FD-57 | §13, §15 | `test_answer_service.py`; result fitting, explicit omission, minimum-result refusal | O-3 measured per host and applied as the delivered-wire budget |
 | FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | canonical native/shell guidance, hooks, skills and plugin notice-delivery lane are verified; 0.11 candidate-specific managed-host native/search/shell captures remain T10 external acceptance |
 | F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
-| F8, G5 | §15 | frozen comparative task captures and scorecards | prior measurements remain historical evidence only for their named candidates. The 0.11 T08 deterministic range behavior is verified, but its candidate-specific comparative steps/tokens measurement remains open and no prior score is reused as the 0.11 verdict |
+| F8, G5 | §15 | real adopter use across the ordinary lifecycle; optional scoped comparative research | prior measurements remain historical evidence only for their named candidates. Version 1 validates practical value through post-release Beta use; no synthetic comparative score is required for publication |
+| FD-61–FD-74, FD-86–FD-91 | Part C §17–§18, §20.1 | Functional Pyramid core/service tests plus installed MCP; FunctionalScope algebra, outside/covered/uncovered/mixed projection, overlapping/inherited/cross-repository graph resolution, deterministic provenance, health iff structural findings | implemented; T10 generic acceptance verified on exact-head CI, T13 re-verifies the assembled candidate |
+| FD-75–FD-81 | Part C §18, §20.2–§20.3 | support/record/reconsider tests; FunctionalRouteSupport derivation/evaluation, authority separation, pre-existing normative activation effects, deliberate participation removal vs operational unavailability | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
+| FD-82–FD-85, FD-93 | Part C §19–§20.4 | lifecycle store/service/schema tests; installation-level receipts, activation/revision/deactivation atomicity, participation effects, dependent effects, replay with fresh contexts, pyramid CAS and one-ACTIVE-instance uniqueness | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
+| FD-92, FD-94; L8, L13–L16 | Part C §20–§22 | generated schema, MCP integration, hooks/skills and host capture; exact three tools, candidate/status/receipt selectors, FunctionalPyramidRecorded affected projection, result-driven initialization through DECLARE→reconsider/disposition→VALIDATE→ACTIVATE/REVISE→VERIFY→effect disposition and matching runtime qualification gates | implementation and generic installed-MCP evidence complete; candidate-specific managed-host delivery remains T13 |
+| Functional design §15 cases 32–44 | Part C §18–§22 | generic acceptance plus installed MCP; outside scope, MIXED scope, structural health equivalence, activation of pre-existing normative understanding, participation-write propagation, deactivation/removal route state, replay/context recovery, concurrency, initialization re-alignment, conformance-as-NORMATIVE, accepted-non-current runtime gating and participation-write effect completion | T10 generic acceptance complete; T11 private acceptance passed; T13 reruns the assembled candidate |
 
-Part B is complete only after its executable contracts, reviewed migration
-mappings, authority decisions, and measured deployment inputs are present.
-Implementation/host/fitness passes need their own observed receipts. Writing this
-matrix, or passing the 85 baseline tests in §8, closes neither category.
+The matrix covers both the established Part-B baseline and the Part-C
+Version-1 target. Part-B historical/current mechanism claims remain governed by
+their existing evidence and open measurements. Part C is design-complete because
+its derivation map has no unmapped FD owner or unowned mechanism, and its
+implementation is complete through the T10 generic acceptance evidence recorded
+above. Candidate-specific managed-host delivery remains unverified unless separately
+claimed, and final Part-C derivation re-verification remains release-verification
+work. G5/F8 product-value validation is post-release Beta work and does not
+reopen the implemented mechanism or block publication.
+
+## Part C — Version 1 Functional Pyramid mechanisms
+
+Part C implements the binding Version-1 behavior in lifecycle §4/§7 and
+FD-61–FD-94. It does not redefine those requirements. Parts A/B remain evidence
+and mechanism authority for the pre-existing semantic lifecycle unless a Part-C
+decision explicitly adapts that mechanism.
+
+### Part-C derivation map
+
+This is the canonical Layer-3 → Layer-4 association for Version 1. Layer 3
+remains mechanism-independent; this table points downward from each functional
+owner to its primary technical mechanism and verification owner. Supporting
+sections may contribute plumbing, but they do not create another functional
+owner.
+
+| Functional authority | Primary technical mechanism | Verification owner |
+| --- | --- | --- |
+| FD-61 | §19 participation persistence + §20.1 projection | lifecycle store/service + ask integration |
+| FD-62–FD-69 | §17 FunctionalScope/declaration representation + §18 graph resolver | pure scope/graph tests + ask integration |
+| FD-70–FD-74 | §17 declaration/identity carriers + §18 resolution; FD-74 projection in §20.1 | graph/source-binding + ask integration |
+| FD-75–FD-77 | §18 support evaluation + §20.2 understanding record composition | support + lifecycle record tests |
+| FD-78 | §20.1 ask composition | answer-service/MCP tests |
+| FD-79 | §20.3 shared effect engine + §20.4 participation write composition | reconsider + pyramid-write tests |
+| FD-80 | §17 strict declarations + §18 resolver | graph validation tests |
+| FD-81 | §18 FunctionalRouteSupport evaluation | support-service tests |
+| FD-82 | §19 versioned membership persistence + §20.4 write composition | store/service CAS tests |
+| FD-83 | §18 health evaluator + §20.1 status projection | health/status tests |
+| FD-84 | §17 complete declaration input + §20.1 pure candidate validation | candidate-validation tests |
+| FD-85 | §19 receipt/transaction mechanics + §20.4 accepted/replay projection | store/service replay and atomicity tests |
+| FD-86–FD-87 | §17 scope algebra/member binding + §18 resolver | coverage/reachability tests |
+| FD-88 | §18 reverse graph traversal + §20.3 impact traversal | graph/reconsider tests |
+| FD-89 | §20.3 shared effect engine + §20.4 Functional Pyramid projection | reconsider/pyramid-write tests |
+| FD-90 | §20.1 same-scope ask composition + §20.2 normative derivation | ask/record tests |
+| FD-91 | §18 independent support/health evaluation + §20.1/§20.2 composition | support/ask/record tests |
+| FD-92 | §20.1 lifecycle projection separation + §22 generated wire | MCP schema/integration tests |
+| FD-93 | §20.4 Functional Pyramid record composition | lifecycle service/MCP tests |
+| FD-94 | §22 skill/hook/host delivery | hook/skill/host-contract tests |
+
+Version 1 also adapts established mechanisms whose functional ownership remains
+in FD-1–FD-60:
+
+| Existing functional owner | Version-1 adaptation |
+| --- | --- |
+| FD-2–FD-4 | §19 separates repository-scoped receipt/context identity from installation-scoped Functional Pyramid writes |
+| FD-9–FD-16 | §18 adds FunctionalRouteSupport to the one existing support evaluator |
+| FD-17–FD-22 | §20.3 extends the one reconsider/effect traversal across governance dependencies |
+| FD-23–FD-29 | §20.1 composes Functional Pyramid orientation into existing Answer/Gap behavior |
+| FD-30–FD-37 | §20.2 derives governance support inside the existing understanding writer |
+| FD-38–FD-41 | §20/§22 extend existing closed public result/failure unions without another operation |
+| FD-43–FD-48 | §19/§21 extend retention, replay, CAS and offline transition mechanics |
+| FD-49–FD-58 | §22 extends generated wire, hooks, skills and managed-host delivery |
+
+
+### 17. Canonical carriers, scope algebra and declaration boundary
+
+**Authority:** F1, F6, F7, F11, F12; L7–L8, L12–L14; FD-62–FD-74,
+FD-80, FD-82, FD-84, FD-86–FD-88.
+
+Add one canonical core model module for Functional Pyramid domain carriers and
+export those carriers through the existing `span.core.model` package. Do not
+create setup/runtime DTO variants. The canonical family contains the Layer-2
+identities, member intent/view, participation/effect, status/view/candidate,
+findings, receipt selector/retrieval, rule/context declarations, route identity
+and `FunctionalRouteSupport`. Existing `EvidenceRequest`, `EvidenceRef`,
+`EvidenceScope`, `AuthorityBinding`, `SurfaceKey`,
+`ChangedSurface`/`ChangedConclusion` and `InvestigationContextRef` remain
+their current owners and are reused.
+
+The public route projection uses the exact Layer-2 carriers
+`FunctionalContextRoute`, `FunctionalRuleRoute`,
+`FunctionalRouteProvenance`, `FunctionalPyramidFinding`,
+`FunctionalPyramidValidationFinding`, `FunctionalPyramidView` and
+`FunctionalPyramidUnavailable`; their field sets are not re-decided in the
+wire/shell layer. Declaration carriers remain distinct from resolved route
+carriers: declarations hold repository-owned references, while resolved rule
+routes reuse the existing `AuthorityBinding`.
+
+The new support union gains exactly one branch:
+`FunctionalRouteSupport`. Its canonical payload contains the repository whose
+semantic conclusion owns the dependency, the Functional Pyramid identity that
+governed the revision, the exact persisted semantic `EvidenceScope`, and the
+server-derived route identity. The route identity is a canonical digest/value of
+FD-73 applicability state; canonical rule prose is never part of that digest or
+carrier. Existing authority dependencies continue to carry each applicable
+`AuthorityBinding` separately.
+
+**FunctionalScope representation.** Implement one strict
+`FunctionalScopeSelector` carrier and `FunctionalScope` as a canonical
+non-empty tuple/set of those selectors. The same carrier is used by member
+functional coverage and Functional Context applicability. Version 1 admits
+exactly four selector kinds:
+
+| kind | fields | meaning |
+| --- | --- | --- |
+| `REPOSITORY` | no path/locator | the complete repository functional region |
+| `PATH` | normalized repository-relative `path` | exactly that path and semantic symbols owned by that path |
+| `PREFIX` | normalized repository-relative directory `path` | that directory boundary and all descendant paths/symbols |
+| `SYMBOL` | normalized owning `path` + canonical symbol `locator` | exactly that symbol |
+
+No glob, regex, negation, suffix match or free-form selector exists in Version 1.
+Paths use canonical POSIX-style repository-relative normalization; empty paths,
+absolute paths, `.`/`..` traversal and trailing-separator aliases reject.
+`REPOSITORY` is the only whole-repository representation.
+
+Normalization deduplicates selectors and removes selectors wholly contained by
+another selector in the same scope. The pure algebra is symbolic and never uses
+current file inventory:
+
+- REPOSITORY contains/intersects every selector;
+- PREFIX contains an equal/narrower PREFIX, PATH, or SYMBOL whose owning path is
+  inside the prefix boundary;
+- PATH contains the same PATH and SYMBOLs owned by that path;
+- SYMBOL contains only the same canonical symbol;
+- two selectors intersect iff either contains the other under those rules.
+
+For COMPLETE coverage, a member FunctionalScope is covered iff every normalized
+member selector is contained by at least one normalized selector in the union of
+applicable Functional Context coverage. A collection of narrower child prefixes
+does not prove an open parent prefix or repository region complete; that avoids
+inferring absence from current inventory. Set difference need only return
+empty/non-empty plus the uncovered member selectors/provenance needed by FD-86;
+it does not invent complement globs.
+
+The resolver never converts an `EvidenceScope` into a second public selector
+grammar. One pure adapter consumes the already-fixed semantic `SurfaceKey` and
+`EvidenceScope`: FILE/SYMBOL owner kind supplies exact granularity; for
+SERVICE/DOMAIN, each scope path member is interpreted through the existing
+canonical semantic-containment owner—`containment.surface_file_locator` marks a
+canonical structural symbol locator as an exact SYMBOL member and every other
+path member remains a broad PREFIX boundary. A cold SERVICE/DOMAIN surface
+projection constructs that EvidenceScope from both declared
+`SurfaceBoundary.paths` and `SurfaceBoundary.symbols`. Only an explicitly
+repository-wide semantic selection uses empty EvidenceScope as the whole
+repository; an empty declared surface boundary is invalid/unresolvable rather
+than repository-wide. This adapter evaluates that semantic selection against
+FunctionalScope algebra and produces the FD-62 relation/provenance. It never uses
+extensions, filesystem existence or inventory to decide granularity.
+
+**Declarations and bootstrap.** Add the canonical domain carriers in
+`src/span/core/model/functional_pyramid.py`, the pure resolver/algebra in
+`src/span/core/functional_pyramid.py`, the orchestration service in
+`src/span/service/functional_pyramid.py`, and the external source capability
+in `src/span/ports/functional_pyramid.py`. The existing package exports remain
+the public import boundary.
+
+`FunctionalGraphRef` is the single canonical declaration-edge reference:
+`{ "repository_id": str, "identity": str }`. It is used for both context and
+rule edges; the containing field determines which identity namespace is
+required. The target repository is always explicit, including for a local edge,
+so there is no local shorthand/second grammar. Stable context/rule IDs remain
+unique across the resolved instance; the repository coordinate additionally
+makes FD-70 availability/ownership classification possible without a hidden
+identity index. `ROOT` remains the sole non-reference terminal and is allowed
+only where FD-67 permits it.
+
+For discoverability, a repository may expose exactly one conventional navigation
+bootstrap at `.span/functional-pyramid.json`. This bootstrap is configuration,
+not authority. Its strict JSON shape is:
+
+```text
+{
+  "version": 1,
+  "functional_scope": [FunctionalScopeSelector, ...],
+  "coverage": "PARTIAL" | "COMPLETE",
+  "declaration_sources": [EvidenceRequest, ...]
+}
+```
+
+The initialization skill may use this bootstrap to construct member intent, but
+the public candidate/write still carries the explicit intent and therefore does
+not depend on conversational discovery. Absence of the bootstrap is not inferred
+as exclusion; the agent/user may supply the same explicit member intent directly.
+
+Each named declaration source is strict JSON with one canonical document shape:
+
+```text
+{
+  "version": 1,
+  "contexts": [
+    {
+      "context_id": str,
+      "coverage": [FunctionalScopeSelector, ...],
+      "inherits": [FunctionalGraphRef, ...],
+      "rules": [FunctionalGraphRef, ...]
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": str,
+      "layer": "P0" | "P1" | "P2S" | "P2W" | "P3" | "P4",
+      "owner": {"repository_id": str, "authority_ref": str},
+      "governing_rule_ids": [FunctionalGraphRef | "ROOT", ...]
+    }
+  ]
+}
+```
+
+P0 has exactly `ROOT`; other layers use the FD-67 governing-edge rules.
+Documents may contain contexts, rules or both. A declaration's own context/rule
+identity is owned by the repository containing that declaration source; every
+edge names its target repository through `FunctionalGraphRef`. IDs are stable
+and unique across the entire resolved pyramid instance; duplicate non-identical
+owners are FD-65/FD-71 findings. A graph ref whose repository is not an instance
+member is `INVALID_DECLARATION`; a ref into an unavailable member is
+`REPOSITORY_UNAVAILABLE`; a missing identity in an available named member is
+the corresponding `UNKNOWN_CONTEXT`/`UNKNOWN_RULE`. The document never
+contains canonical rule prose.
+
+The `FunctionalPyramidDeclarationPort` reads only the exact bootstrap/declaration
+sources named by member intent across registered repositories. Version-1
+declaration sources are whole documents: each member
+`EvidenceRequest.ranges` must be empty. A non-empty ranges tuple is rejected as
+`INVALID_DECLARATION_SOURCE` before declaration parsing; the port never treats
+a selected fragment as a complete declaration document.
+
+Its shell implementation resolves repository roots through the existing
+`LifecycleStorePort.require_repository` owner and existing exact source
+capability. Strict whole-document decoding creates the canonical carriers;
+semantic graph validation remains pure core/service behavior. No directory
+scan, similarity search, file-name inference or model call participates.
+
+No persisted graph index is authoritative in the beta. Any in-memory or
+persisted acceleration is a rebuildable projection of current member intent and
+repository-owned declarations and must be discardable without changing a route
+answer.
+
+**Runtime composition boundary.** Version 1 has two construction levels and
+they must not be collapsed.
+
+A repository runtime is the raw registered-repository capability set: canonical
+repository identity/root, its repository-scoped `LifecycleStore`, exact
+filesystem evidence source and structural source. It contains no composed
+`AnswerService`, `LifecycleService`, `SupportService`,
+`ReconsiderService` or `ServiceContext`.
+
+The installation runtime owns the registry/resolver of those raw repository
+runtimes, the installation-scoped Functional Pyramid store, declaration and
+repository-qualified authority/evidence access, one
+`FunctionalPyramidService`, and the factory that composes ordinary repository
+`ServiceContext` instances with those installation capabilities. The
+Functional Pyramid service may depend on raw repository-runtime capabilities;
+it must not obtain repository access through an already-composed
+`ServiceContext`. MCP transport is downstream of this graph and never becomes
+a semantic owner.
+
+This split is required to avoid a composition cycle in which the Functional
+Pyramid service depends on repository services that themselves require
+Functional Pyramid orientation/support. No second repository-runtime DTO family
+is introduced: the shell may use one internal typed capability object/port for
+the raw runtime and the existing `ServiceContext` remains the composed
+operation context.
+
+**Version-1 service-construction contract.** Mandatory installation capabilities
+are constructor invariants for the semantic services used by production
+operations, not optional feature switches. The canonical production
+`ServiceContext` composition supplies all of the following together:
+
+- `AnswerService` receives the installation Functional Pyramid orientation
+  projection;
+- `LifecycleService` receives the installation Functional Pyramid route
+  projection;
+- `SupportService` receives both the Functional Pyramid route evaluator and
+  the repository-runtime resolver used for repository-qualified authority and
+  evidence access;
+- `DependencyEffectService` receives the Functional Pyramid route-impact
+  resolver, repository-runtime resolver, registered-repository resolver and
+  repository-qualified support resolver; and
+- `ReconsiderService` receives that already-composed
+  `DependencyEffectService`.
+
+No production semantic constructor may interpret an omitted capability as a
+valid operating mode. In particular, `ReconsiderService` must not manufacture
+a repository-local effect engine when the installation engine is absent,
+`DependencyEffectService.repository_change` must not skip Functional Pyramid
+route-impact traversal because a callback is absent, and `SupportService` must
+not evaluate a cross-repository authority dependency through its local store
+because the repository-runtime resolver is absent. If a constructor retains an
+optional seam solely for isolated unit testing, invoking semantics that require
+that seam must raise an invariant/programming error before a domain result is
+created. Production composition and installed acceptance must never exercise
+such a partial construction.
+
+Unit tests that do not need a real installation may inject explicit typed
+deterministic capabilities representing the intended participation state. They
+must not obtain legacy behavior by omitting Functional Pyramid dependencies.
+
+### 18. Pure graph resolver, health and support evaluation
+
+**Authority:** G1, G3, G4, G7; F1, F2, F11, F12; L12–L16; FD-9–FD-16,
+FD-62–FD-73, FD-75, FD-79–FD-81, FD-83, FD-86–FD-88, FD-91.
+
+Add one pure Functional Pyramid resolver in `src/span/core/` with service
+orchestration in `src/span/service/`. It accepts:
+
+1. one ACTIVE instance/member view;
+2. the existing semantic owner `SurfaceKey` plus its fixed `EvidenceScope`;
+3. strict-decoded declarations/member availability.
+
+`SurfaceKey` is not copied into FunctionalRouteSupport: a retained conclusion
+already has one owning surface under FD-6, so support re-evaluation recovers that
+canonical owner from the retained understanding and combines it with the
+dependency's persisted semantic EvidenceScope.
+
+It returns the canonical governing projection and route identity. Resolution
+order is exactly FD-62/FD-68: compute the semantic-scope relation to
+`FunctionalScope`, resolve only the functional intersection, compose every
+applicable context, expand inheritance, resolve rule owners/governing edges to
+closure, preserve unresolved branches and provenance, then derive the public
+scope relation:
+
+- `OUTSIDE_FUNCTIONAL_SCOPE` → resolved empty route;
+- `COVERED` → no outside/uncovered portion;
+- `UNCOVERED` → functional portion exists and has no applicable context;
+- `MIXED` → broad scope contains more than one outside/covered/uncovered
+  portion.
+
+A MIXED route is RESOLVED only when every functional portion is covered and no
+other structural unresolved branch exists. Outside portions never create
+`UNCOVERED_PATH`.
+
+The same declaration graph owns reverse navigation. Reverse traversal derives
+dependent rules/contexts from the forward declaration edges; no second impact
+registry is stored.
+
+For FD-88 canonical-owner navigation, exact semantic selection of a
+Functional Rule's canonical `FunctionalRuleOwner.authority_ref` is itself a
+rule-resolution seed even when that selected owner scope is not covered by a
+Functional Context. The resolver maps the exact selected owner reference through
+the already-resolved `AuthorityBinding` set to the owning declared rule, then
+uses the same forward/reverse declaration graph to derive downstream rules and
+contexts. It does not perform semantic similarity, source scanning or maintain a
+second authority-to-rule registry.
+
+**Health.** One health evaluator consumes current ACTIVE member/declaration graph
+state and returns `VALID` when the FD-83 structural finding set is empty,
+otherwise `DEGRADED` with exactly those findings. Do not persist health. Do
+not include authority currency, expected PARTIAL uncovered scope or semantic
+support in health.
+
+**Support.** Extend the existing support evaluator rather than creating a
+Functional-Pyramid evaluator. Its dependency dispatch gains
+`FunctionalRouteSupport`; evaluation re-runs the same resolver for the recorded
+semantic scope/current participation state:
+
+- repository deliberately no longer ACTIVE in the recorded governing instance →
+  `REASSESSMENT_REQUIRED`;
+- ACTIVE but route/member/declaration evaluation operationally unavailable →
+  `UNVERIFIABLE`;
+- resolved route identity changed → `REASSESSMENT_REQUIRED`;
+- current functional route contains unresolved functional branch →
+  `UNVERIFIABLE`;
+- identical complete resolved route → `CURRENT`.
+
+Authority dependencies remain evaluated through the existing authority-support
+branch. FD-15/FD-16 remain the sole combined-state owner.
+
+**Repository-qualified support access.** The existing support evaluator is the
+single evaluator, but its external capabilities are repository-qualified.
+Evaluating an `AuthoritySupportDependency` or evidence reference uses the
+repository id carried by that canonical dependency/reference to obtain the
+registered repository runtime that owns the authority/evidence. A semantic
+revision owned by repository A may therefore be governed by canonical authority
+owned and re-read from repository B without copying B's authority/evidence into
+A. Repository-local stores remain the owners of their own authority bindings and
+observations.
+
+Functional Pyramid route evaluation is likewise a required installation
+capability of the Version-1 runtime. Absence of the production composition is
+not a domain state: a missing route/orientation/effect capability must fail as a
+program/invariant error and must never be converted to UNCONFIGURED, empty
+governance, skipped route propagation or an operational UNVERIFIABLE result.
+Operational unavailability after correct composition remains the explicit
+UNVERIFIABLE/Unavailable behavior defined above. Unit tests may supply typed
+deterministic fakes at these ports; production assembly may not omit them.
+
+### 19. Installation-level persistence, receipts and concurrency
+
+**Authority:** A1–A3; F3, F12; L4, L13–L15; FD-3–FD-4, FD-43–FD-48,
+FD-61, FD-82, FD-85.
+
+The existing `LifecycleStore` is repository-scoped: the shell opens
+`<data_dir>/<repository_id>.db` and ordinary semantic/audit state remains owned
+there. Version 1 must not pretend that one of those files is installation-wide
+or select one member repository as the Functional Pyramid coordinator.
+
+Add one installation-scoped SQLite owner,
+`FunctionalPyramidInstallationStore`, at
+`<data_dir>/installation/functional-pyramid.db`. It is the sole durable owner
+of Functional Pyramid participation, instance versions, exclusions and
+installation-scoped receipts. It stores no ordinary understanding, source
+observation, verification or repository-owned governing prose.
+
+Repository lifecycle schema 14 retains every schema-13 table and adds only the
+repository-local derived route lookup projection:
+
+| repository-store table | key / purpose |
+| --- | --- |
+| `functional_route_dependency_index` | conclusion revision key + `pyramid_id` + owning `repository_id` + route identity; derived lookup projection over canonical FunctionalRouteSupport |
+
+The installation store has its own schema identity, version 1, and owns exactly:
+
+| installation-store table | key / purpose |
+| --- | --- |
+| `functional_pyramids` | `pyramid_id PRIMARY KEY`, current live version; row exists only for a live ACTIVE instance |
+| `functional_pyramid_versions` | `(pyramid_id, version) PRIMARY KEY`; immutable canonical complete member intent + digest/commit time |
+| `functional_pyramid_active_members` | `repository_id PRIMARY KEY`; current `pyramid_id`, version and canonical member intent projection; this key enforces one ACTIVE instance per repository |
+| `functional_pyramid_exclusions` | `repository_id PRIMARY KEY`; explicit EXCLUDED state; absence from both active-members and exclusions means registered repository state UNCONFIGURED |
+| `functional_pyramid_receipts` | `request_id PRIMARY KEY`; digest, action, commit/replay times, pyramid/version, resulting members, participation effects and immutable dependent-effect refs |
+
+Repository registration/root/authority configuration remains owned by each
+repository LifecycleStore and the installed repository routing configuration;
+the installation store does not duplicate that configuration. Candidate/write
+service composition revalidates member registration before committing an
+installation record.
+
+Canonical `FunctionalRouteSupport` remains inside each conclusion's existing
+canonical support dependency set. Repository schema 14 extends the existing
+`support_dependencies` projection with dependency kind `FUNCTIONAL_ROUTE`;
+its `dependency_ref` is the canonical route identity.
+`functional_route_dependency_index` is only a rebuildable repository-local
+lookup projection and never a second support model.
+
+The immutable Functional Pyramid receipt stores the canonical write digest,
+action, committed time, affected pyramid/version, resulting ACTIVE member set,
+actual durable participation changes, and immutable semantic dependent-effect
+coordinates. It does not store live support qualification, health or
+investigation-context liveness. Public
+`RetrievedFunctionalPyramidReceipt` projects this exact acceptance.
+
+Functional Pyramid receipt decision uses the same core replay/conflict algorithm
+as ordinary recording but the installation store owns its distinct request-id
+namespace. Do not coerce the write into `RecordingIdentity`.
+
+**Atomic cross-repository participation writes.** The installation store opens
+its real file as SQLite `main` and ATTACHes the affected repository lifecycle
+databases under generated internal schema aliases. The transaction is permitted
+only when the installation database and every attached repository database use a
+rollback-journal mode that preserves SQLite multi-database atomicity; WAL/OFF/
+MEMORY journal modes or `synchronous=OFF` are explicit operational blockers,
+never silently downgraded at runtime. Installation/provisioning establishes the
+supported rollback-journal configuration.
+
+Use one `BEGIN IMMEDIATE` transaction across `main` plus all affected
+attached repository databases. This acquires the write reservation before
+effect computation, so ordinary repository writers cannot change semantic state
+between the accepted effect decision and commit. The service-owned shared effect
+engine runs while those locks are held; shell SQL does not classify effects.
+
+The transaction boundary and semantic-decision boundary remain distinct. Shell
+persistence acquires/holds the installation plus repository locks and exposes
+repository-qualified transaction capabilities. Service composition evaluates
+the old/new Functional Pyramid delta through the one shared effect engine while
+those locks are held. The transaction writer persists only the resulting
+participation/version state, immutable dependent-effect refs, canonical context
+rows and receipt. Shell code must not compute changed route identities, group
+semantic effect refs by repository, instantiate a semantic support evaluator for
+projection, merge `ChangedSurface` semantics or classify activation/deactivation
+effects. Replay projects only the retained immutable refs through the same
+service-owned support/effect capabilities.
+
+ACTIVATE/REVISE/DEACTIVATE then commit atomically:
+
+1. installation receipt replay/conflict decision;
+2. target pyramid CAS and unique-ACTIVE-member checks;
+3. current dependent-effect calculation against the locked repository stores;
+4. immutable pyramid version/current membership and participation effects;
+5. immutable dependent-effect refs in the installation receipt;
+6. initial repository-bound re-establishment contexts in the affected attached
+   repository stores; and
+7. the installation receipt.
+
+The context row writer is factored from the existing LifecycleStore persistence
+mechanism and reused for both ordinary and attached-database context creation;
+there is no second context format or writer rule. A context-issuance failure
+rolls back the entire multi-database transaction.
+
+EXCLUDE uses the same installation receipt/participation transaction but has no
+active-route semantic effects and therefore need not attach repository stores
+for effect/context writes after registration/state validation.
+
+Replay keeps the immutable accepted effect refs. Service composition re-evaluates
+only those retained refs against current repository support/membership and
+issues fresh repository-bound contexts when they remain actionable; it never
+adds later effects to the accepted receipt.
+
+Concurrent REVISE/DEACTIVATE use pyramid-version CAS. Concurrent
+ACTIVATE/REVISE serialize on the installation store and the unique ACTIVE-member
+key; affected repository databases are locked in deterministic repository-id
+order before effect computation. SQLite ATTACH capacity is an operational
+environment limit: inability to attach the required member set returns
+Unavailable and never changes product semantics or partially commits.
+
+### 20. Operation composition and governance-change propagation
+
+Authority is split by operation below; §20 does not create a second functional
+owner.
+
+**Installation composition.** The shell constructs one installation runtime
+before it composes ordinary repository services. Its repository-runtime resolver
+opens raw registered repository capabilities independently of
+`ServiceContext`. The installation Functional Pyramid service uses those raw
+capabilities for declaration, authority/evidence and state access. The repository
+context factory then supplies that same installation capability set to the
+ordinary support, lifecycle, answer and reconsider/effect services.
+
+Production Functional Pyramid dependencies are mandatory, not optional
+behavioral callbacks. A Version-1 process therefore has one coherent state
+projection: the same repository cannot be ACTIVE through
+`FunctionalPyramidSelector` while an ordinary ask treats it as UNCONFIGURED,
+and an ACTIVE NORMATIVE record cannot silently omit route/authority support
+because a callback was absent.
+
+Every shell consumer that needs semantic services enters through the same
+installation composition root. The MCP server may register repository locators
+without opening repository stores, but the first repository-scoped operation
+must obtain its `ServiceContext` from `InstallationRuntime`. Read-only host
+hooks that evaluate support or changed dependents must likewise open a bounded
+installation runtime for the hook invocation and compose the target repository
+through it. Hooks must not call a repository-context helper that requires
+Functional Pyramid capabilities they do not own, and must not recreate a local
+support/effect graph.
+
+Explicit installer/provisioning code is the only exception because it is not a
+semantic runtime operation: it may create/verify the installation store and
+open the raw repository runtime needed to initialize a repository, but it must
+not fabricate a partially composed `ServiceContext`. Provisioning ownership
+remains in the installer/context setup path; MCP startup registration does not
+restore a public or implicit provisioning path.
+
+#### 20.1 `ask`
+
+**Authority:** F6, F10, F11, F12; L1–L3, L8, L12–L14, L16;
+FD-23–FD-29, FD-61, FD-74, FD-78, FD-83–FD-84, FD-90–FD-92.
+
+Extend the existing `AskRequest` selector union and generated wire from its
+canonical model declaration with:
+
+- `FunctionalPyramidSelector`;
+- `FunctionalPyramidCandidateSelector`;
+- `FunctionalPyramidReceiptSelector`.
+
+Extend the Ask result union with `FunctionalPyramidStatus`,
+`FunctionalPyramidCandidate` and
+`RetrievedFunctionalPyramidReceipt`. Extend ordinary `Answer`/`Gap` with
+the Layer-2 `functional_pyramid` projection. Do not add another tool or a
+second answer composer.
+
+`AnswerService` keeps semantic membership/Answer/Gap composition unchanged.
+The Functional Pyramid projection first resolves exact repository participation.
+UNCONFIGURED/EXCLUDED project participation directly and do not require
+ACTIVE-only semantic-scope conversion. For ACTIVE members, AnswerService supplies
+the exact semantic scope and the Functional Pyramid service invokes the resolver
+from §18 on that scope. If a current semantic surface cannot be converted to the
+required exact Functional Pyramid scope, the ACTIVE overlay projects
+`FunctionalPyramidUnavailable`; it does not widen the surface, invent
+repository-wide scope, or discard otherwise-current descriptive semantic
+content. ACTIVE operational graph failure likewise projects
+`FunctionalPyramidUnavailable`.
+
+Candidate validation is a pure service call over the proposed member intent plus
+current registered/declaration state. It uses the FD-84 reason taxonomy and the
+same graph/coverage validators as activation. It persists nothing.
+
+Status selectors are exact identities. A registered repository absent from both
+active membership and exclusion is UNCONFIGURED; an explicitly excluded
+registered repository is EXCLUDED; an active registered repository is ACTIVE.
+An unknown repository identity is an exact-lookup rejection, never
+UNCONFIGURED. A pyramid-id selector resolves only a known live/current pyramid
+identity; an unknown or non-live pyramid identity follows the existing exact
+public lookup-failure taxonomy and is never coerced into repository
+participation state.
+
+Candidate evaluation accumulates every deterministic finding that can be
+established from the submitted candidate. A lifecycle-invalid member may be
+uninspectable itself, but its finding must not short-circuit declaration,
+coverage, authority or graph validation for the other validly inspectable
+members. The ordered validation/graph finding sets are therefore the complete
+deterministic result available for that candidate.
+
+#### 20.2 understanding `record`
+
+**Authority:** F2, F5, F7, F11; L7, L12, L16; FD-30–FD-37,
+FD-75–FD-77, FD-90–FD-91.
+
+Keep the existing create/update command owners and transaction path. After
+semantic scope and assertion nature are fixed and before a NORMATIVE revision is
+accepted in an ACTIVE repository, service composition resolves the governing
+route and adds one `FunctionalRouteSupport` plus every applicable
+`AuthoritySupportDependency` to the canonical dependency set. A scope wholly
+OUTSIDE_FUNCTIONAL_SCOPE records the resolved empty route dependency and no
+invented Functional Pyramid authority dependency. DESCRIPTIVE recording remains
+unchanged unless the caller explicitly cites authority.
+
+If derived governance is non-current, acceptance still follows the existing
+semantic write path; live qualification is non-current and F2 keeps the revision
+out of CURRENT Answer content. The service does not manufacture a second
+"completed" result: agent lifecycle guidance consumes the returned
+`UnderstandingRecorded.qualification`, and only CURRENT required qualification
+permits successful CONCLUDE/REESTABLISH completion.
+
+#### 20.3 `reconsider` and shared effect engine
+
+**Authority:** G3; F4, F11, F12; L10, L15–L16; FD-17–FD-22,
+FD-79, FD-88–FD-89.
+
+Keep the existing repository-scoped changed-path/surface request grammar.
+Refactor the current reconsider dependency traversal into one service-owned
+effect engine with two internal root types:
+
+- repository changed scope;
+- Functional Pyramid old/new participation/route delta.
+
+Both roots produce the same canonical affected conclusion/surface projection,
+then premise closure, deterministic grouping and one context specification per
+repository with actionable effects. The public `reconsider` operation projects
+that as `Changed`; Functional Pyramid write composition projects the same
+`ChangedSurface` family inside `FunctionalPyramidRecorded`.
+
+The effect engine is genuinely installation-aware while remaining service-owned.
+It receives repository-qualified store/support/context capabilities, not one
+repository `LifecycleStore` treated as if it represented the installation. Its
+constructor has no single-store/single-support operating mode: repository access
+is always through the repository-runtime resolver, support qualification is
+always through the repository-qualified support resolver, and the registered
+repository resolver defines the search boundary. A one-repository unit test uses
+a one-entry resolver/registry; it does not switch the service into another
+architecture.
+
+The engine uses the repository that owns each canonical dependency index to
+discover direct dependents, resolves the semantic owner of each affected
+conclusion, re-evaluates support through the repository-qualified support
+capability, performs premise closure once, groups canonical `ChangedSurface`
+results by owning repository, and produces exactly one context specification for
+each repository with actionable effects. Ordinary reconsider and Functional
+Pyramid writes invoke this same engine. A shell-side loop over per-repository
+semantic effect engines or a second Functional-Pyramid-specific effect
+coordinator is forbidden.
+
+For an ordinary changed-scope root, Functional Pyramid route-impact traversal is
+unconditional. The engine always asks the installation route-impact capability
+for changed route identities, including when the repository is currently
+UNCONFIGURED or EXCLUDED; those states yield the canonical empty impact set.
+Absence of the capability is not equivalent to an empty set and must fail as a
+composition invariant. `ReconsiderService` therefore never has authority to
+construct a reduced repository-local `DependencyEffectService`.
+
+For a repository newly becoming ACTIVE, the Functional Pyramid root additionally
+selects every current NORMATIVE revision in that repository that lacks
+`FunctionalRouteSupport`; those revisions are direct
+`REASSESSMENT_REQUIRED` effects. This is the mechanism for FD-79 and avoids
+fabricating historical support.
+
+Existing authority-source edits continue to use changed-scope reconsider. The
+effect engine re-evaluates canonical route/authority support rather than marking
+conclusions stale merely because a declaration file path matched.
+
+#### 20.4 Functional Pyramid `record`
+
+**Authority:** G3, G8; F4, F6, F7, F12; L4, L8, L14–L15;
+FD-82, FD-84–FD-85, FD-89, FD-93.
+
+Add the Layer-2 `functional_pyramid` branch to the existing record decoder and
+service dispatcher; do not create a fourth MCP operation. It does not use
+`RecordingIdentity` or an evidence investigation context. It uses the
+installation-level request namespace from §19, strict action-aware candidate
+revalidation, the shared effect engine above, and one atomic store transaction.
+
+On first acceptance, the result contains the resulting ACTIVE members, only
+actual durable `FunctionalPyramidParticipationEffect` transitions, the
+canonical dependent `ChangedSurface` projection and one live repository-bound
+context per repository with actionable effects. The receipt stores only the
+immutable dependent `ConclusionRevisionRef` identities. On replay, §19
+re-evaluates only those retained refs to produce the current actionable
+`ChangedSurface` projection and fresh contexts; replay never expands the
+accepted effect identity set. Receipt selectors from accepted participation
+writes remain the durable public handoff across subsequent DEGRADED repair or
+revision loops so earlier accepted effect refs cannot disappear from lifecycle
+completion merely because a later pyramid write occurs.
+
+### 21. Offline transition and compatibility boundary
+
+**Authority:** F2–F4, F12; L4, L12–L15; FD-35–FD-48, FD-73, FD-79,
+FD-81, FD-85.
+
+The first Version-1 Beta release identity is **1.0.0 Beta 1** and its
+lifecycle store identity is schema 14. That one release identity has deterministic
+ecosystem serializations rather than independent version owners:
+
+- Python/PyPI package version and changelog section: `1.0.0b1` (PEP 440);
+- Git tag: `v1.0.0b1`;
+- GitHub Release: title `Span 1.0.0 Beta 1`, explicitly marked prerelease;
+- MCP Registry top-level server version: `1.0.0-beta.1` (SemVer);
+- MCP Registry PyPI package entry version: `1.0.0b1`.
+
+`src/span/__init__.py::__version__` remains the canonical package serialization.
+Release tooling derives the tag, changelog lookup and PyPI package version from
+that value and derives the MCP server SemVer deterministically; `server.json`
+metadata is a generated/validated release projection, not a second version
+authority. Prerelease detection must understand PEP-440 beta/rc/dev forms and
+must not rely on the presence of a hyphen in the package version.
+
+Later beta increments may advance the release/package version without changing
+schema identity when no persisted contract changes; any persisted-contract
+change requires a new explicit schema transition.
+
+Extend the existing explicit offline repository-store transition from schema
+13 to repository schema 14. Runtime open remains exact-version only and never
+migrates in place. The explicit installer/setup path creates or verifies the
+installation Functional Pyramid store at
+`<data_dir>/installation/functional-pyramid.db` with installation schema 1;
+the repository transition command remains repository-scoped, and pure runtime
+`ask` never creates or migrates either store.
+
+The repository schema-13 → schema-14 transition preserves every existing
+semantic/audit row and receipt exactly and adds the empty derived
+`functional_route_dependency_index`. The installation store begins with empty
+pyramid/version/member/exclusion/receipt state. Existing registered repositories
+therefore begin UNCONFIGURED because registration is not participation.
+Historical and current NORMATIVE revisions are **not** backfilled with invented
+FunctionalRouteSupport.
+
+Consequently, transition alone changes no semantic conclusion's support state.
+When a repository is later ACTIVATED, §20.3 selects current pre-activation
+NORMATIVE revisions without route support and returns them as
+REASSESSMENT_REQUIRED dependent effects. This is the only migration path from
+pre-Version-1 normative understanding into governed current understanding.
+
+The transition verifies:
+
+- every pre-existing semantic/audit count and reference under the current
+  schema-13 preservation rules;
+- repository schema-14 route index exists and is empty after transition;
+- installation schema-1 pyramid/member/exclusion/receipt state is empty;
+- no FunctionalRouteSupport is fabricated for existing revisions;
+- installation-store unique ACTIVE-member constraint is present;
+- ordinary repository receipts remain in their original per-repository namespace;
+- installation Functional Pyramid receipts are independently keyed;
+- full data-directory backup/restore includes the installation database, while
+  repository-portable backups continue to contain only that repository's
+  lifecycle store and never claim to carry cross-repository participation state.
+
+Existing archive/stage/verify/activate/rollback ownership remains unchanged.
+
+### 22. Host delivery, skills and Version-1 verification
+
+**Authority:** A4, A8, A9; F6, F8, F10, F12; L8, L12–L16; FD-38–FD-58,
+FD-92–FD-94 and functional acceptance §15.
+
+Generate all new selector/result branches from the canonical model/schema owner.
+The shell MCP adapter remains transport-only and may not classify Functional
+Pyramid semantics from strings, paths or runtime class names. Exactly three
+advertised tools remain `ask`, `record`, `reconsider`.
+
+Update the Functional Pyramid skill and managed notices only after the canonical
+wire is generated. Initialization guidance must consume the Layer-2 result gates,
+not merely call names:
+
+`STATUS → DISCOVER/VALIDATE → DECLARE when needed → reconsider/disposition →
+VALIDATE → ACTIVATE/REVISE → VERIFY → REESTABLISH when accepted write effects
+remain actionable → ACTIVE`.
+
+DEACTIVATE likewise consumes its returned dependent effects before the
+deactivation task is called complete. An accepted participation write is never
+treated as completion solely because it returned a receipt. The skill retains
+the returned Functional Pyramid receipt selector/effect obligation across any
+DEGRADED repair/revision loop and uses replay/live projection when fresh
+re-establishment contexts are required.
+
+Ordinary runtime guidance likewise checks
+`UnderstandingRecorded.qualification`: accepted but non-current NORMATIVE
+content returns to investigation/re-establishment instead of successful
+COMPLETE. Conformance guidance always records that judgment as NORMATIVE.
+Participation/health notices use the canonical status/health evaluator and
+affected projections, never an independent hook computation.
+
+Extend the §16 verification matrix and installed MCP/host lanes to cover every
+functional-design §15 case, specifically:
+
+- OUTSIDE_FUNCTIONAL_SCOPE and broad MIXED scope;
+- VALID/DEGRADED iff structural findings;
+- pre-existing normative revision invalidation on activation;
+- ACTIVATE/REVISE/DEACTIVATE dependent effects and per-repository contexts;
+- removal/deactivation REASSESSMENT_REQUIRED versus ACTIVE operational
+  UNVERIFIABLE;
+- Functional Pyramid receipt replay with fresh expired-context recovery;
+- pyramid CAS and overlapping activation concurrency;
+- initialization declaration-edit reconsideration and post-write effect
+  disposition before successful adoption/revision/deactivation completion;
+- accepted non-current NORMATIVE record results returning to
+  investigation/re-establishment rather than successful COMPLETE;
+- conformance judgments using the NORMATIVE assertion contract;
+- preservation of every pre-Version-1 semantic lifecycle branch and exactly
+  three public MCP tools.
+
+Managed-host captures are candidate-specific delivery evidence only. Historical
+0.10/0.11 captures remain evidence for their named candidates and do not certify
+the Version-1 grammar.
+
+**Production-topology acceptance.** At least one non-editable installed MCP lane
+must exercise physically separate repository-A and repository-B lifecycle
+databases plus the installation Functional Pyramid database. The fixture must
+contain a rule consumed by semantic scope in A whose canonical
+`AuthorityBinding` and authority evidence are owned by B. The lane must prove,
+through the production composition root:
+
+```
+activate A+B
+→ ordinary ask(A scope) returns the governing projection
+→ NORMATIVE record in A derives FunctionalRouteSupport plus B authority support
+→ reuse/ask qualifies CURRENT
+→ B canonical governance source or applicability changes
+→ ordinary reconsider(B changed scope) reaches the dependent A conclusion
+→ A re-establishes through the returned repository-bound context
+→ required qualification is CURRENT again
+```
+
+The same verification set must prove exact canonical-owner reverse navigation,
+unknown repository/pyramid status rejection, complete mixed candidate findings,
+and architecture guards preventing shell semantic effect coordination or
+optional production Functional Pyramid dependencies. Component tests that
+manually inject Functional Pyramid callbacks do not satisfy this production
+composition requirement.
+
+The architecture guard must inspect both composition sites and service behavior:
+the production `ServiceContext` factory supplies every mandatory capability;
+`ReconsiderService` has no local effect-engine fallback;
+`DependencyEffectService` has no single-store/single-support constructor mode;
+ordinary `DependencyEffectService.repository_change` cannot conditionally omit
+route impact traversal; repository-qualified authority evaluation cannot silently
+fall back to the semantic owner's local store for an external authority; and
+semantic hook paths compose through `InstallationRuntime`. A green installed
+journey does not waive any of these static ownership checks.
+
+**2026-11-22 design-detail audit.** The adversarial implementation audit found
+no contradiction requiring a Layer-0–3 product/functional amendment. It found
+that the prior Part-C text was not construction-complete at the installation
+composition, repository-qualified support and multi-repository effect-engine
+seams. The paragraphs above close those Layer-4 mechanism gaps without changing
+the governing Layer-0–3 behavior.
+
+Part C is complete only when the mechanisms above are implemented and the
+functional acceptance matrix passes without adding a product rule below Layer 3.
+

@@ -20,7 +20,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import sys
+import typing as _typing
 
 from span.core import model as m
 from span.core import support_rules as _support_rules
@@ -120,13 +122,92 @@ def _readiness_label(readiness) -> str:
     return "store unbound"
 
 
+def _installation_inputs(
+    mapping: dict[str, str],
+) -> tuple[dict[str, str], _typing.Callable[[str], str]]:
+    """Return the exact registered repository set and locator resolver."""
+    roots = {_repository_id(root): root for root in mapping}
+
+    def repository_locator(repository_id: str) -> str:
+        try:
+            return roots[repository_id]
+        except KeyError as exc:
+            raise ValueError(f"repository is not registered: {repository_id}") from exc
+
+    return roots, repository_locator
+
+
+def _functional_pyramid_status(
+    data_dir: str | pathlib.Path,
+    mapping: dict[str, str],
+    repository_id: str,
+) -> m.FunctionalPyramidStatus | None:
+    """Obtain canonical participation/health through installation composition."""
+    from span.shell.installation_runtime import open_installation_runtime
+
+    roots, repository_locator = _installation_inputs(mapping)
+    with open_installation_runtime(
+        data_dir,
+        repository_locator=repository_locator,
+        registered_repository_ids=lambda: tuple(sorted(roots)),
+    ) as installation:
+        service = installation.functional_pyramid
+        if service is None:
+            return None
+        return service.status(m.FunctionalPyramidSelector(repository_id=repository_id))
+
+
+def _functional_pyramid_notice(
+    data_dir: str | pathlib.Path,
+    mapping: dict[str, str],
+    root: str,
+) -> str | None:
+    """Render FD-94 from canonical status; never derive governance in the hook."""
+    repository_id = _repository_id(root)
+    try:
+        status = _functional_pyramid_status(data_dir, mapping, repository_id)
+    except (OSError, ValueError):
+        return (
+            f"span: {repository_id} Functional Pyramid state is unavailable; "
+            "run installer verification before governance work."
+        )
+
+    if status is None:
+        return (
+            f"span: {repository_id} Functional Pyramid state is unavailable; "
+            "run installer verification before governance work."
+        )
+    if status.state is m.FunctionalPyramidParticipationState.EXCLUDED:
+        return None
+    if status.state is m.FunctionalPyramidParticipationState.UNCONFIGURED:
+        return (
+            f"span: {repository_id} Functional Pyramid UNCONFIGURED; use the "
+            "span-functional-pyramid skill and ask its status/candidate path "
+            "before activation."
+        )
+    if status.health is m.FunctionalPyramidHealth.DEGRADED:
+        return (
+            f"span: {repository_id} Functional Pyramid ACTIVE/DEGRADED; "
+            "governance needs attention. Ask FunctionalPyramidSelector and "
+            "follow the span-functional-pyramid lifecycle before completion."
+        )
+    return None
+
+
 def _affected_for_root(data_dir, root, rel_paths):
     """Bounded dependent lookup for changed repository-relative locators."""
-    from span.shell.context import open_repository_context
+    from span.shell.installation_runtime import open_installation_runtime
 
-    repository_id, context = open_repository_context(data_dir, root)
+    mapping = repo_map(data_dir)
+    roots, repository_locator = _installation_inputs(mapping)
+    repository_id = _repository_id(root)
     affected: dict[str, m.SupportState] = {}
-    try:
+    with open_installation_runtime(
+        data_dir,
+        repository_locator=repository_locator,
+        registered_repository_ids=lambda: tuple(sorted(roots)),
+    ) as installation:
+        context = installation.context_for_locator(root)
         for locator in tuple(rel_paths)[:HOOK_DIAGNOSTIC_LIMIT]:
             for observation_id in context.store.source_observation_ids_for_locator(
                 repository_id, locator
@@ -140,8 +221,6 @@ def _affected_for_root(data_dir, root, rel_paths):
                         )
                     else:
                         affected[key] = evaluation.state
-    finally:
-        context.store.close()
     return repository_id, affected
 
 
@@ -175,13 +254,13 @@ def cmd_adoption_primer(data_dir, repo_root=None):
     if not active:
         return
     root = next(iter(active))
-    from span.shell.context import open_repository_context
+    from span.shell.context import close_repository_runtime, open_repository_runtime
 
     try:
-        repository_id, context = open_repository_context(data_dir, root)
+        runtime = open_repository_runtime(data_dir, root)
     except Exception:  # noqa: BLE001 - a hook never breaks the session
         return
-    context.store.close()
+    close_repository_runtime(runtime)
     print(ADOPTION_PRIMER)
 
 
@@ -195,6 +274,10 @@ def cmd_session_start(data_dir, repo_root=None):
         line = _readiness_notice(data_dir, root)
         if line:
             print(line)
+            continue
+        functional_pyramid = _functional_pyramid_notice(data_dir, mapping, root)
+        if functional_pyramid:
+            print(functional_pyramid)
 
 
 def _stdin_paths():

@@ -17,6 +17,25 @@ assertion nature, exact scope, support, and basis. Record descriptive behavior
 separately from a normative claim about what ought to govern. Include gaps for
 unresolved questions. Shape acceptance does not prove the prose is correct.
 
+## Normative conclusions in an ACTIVE repository
+
+The agent still authors the judgment, statement and empirical evidence. For a
+NORMATIVE conclusion, Span resolves the exact Functional Pyramid route from the
+already-fixed semantic scope and adds `FunctionalRouteSupport` plus every
+applicable canonical authority dependency. The caller does not enumerate the
+governing route and cannot make a normative conclusion current by omitting a
+governance dependency.
+
+Route applicability and canonical authority currency are separate proof planes.
+A complete unchanged route can coexist with changed/superseded authority, and a
+governance topology change can require reassessment even when the rule prose and
+implementation bytes are unchanged. DESCRIPTIVE recording is not automatically
+converted into a normative claim merely because a route exists.
+
+An accepted NORMATIVE write whose derived governance is non-current remains
+accepted but non-current; it must return to investigation/re-establishment
+before the lifecycle task is complete.
+
 ## Create and update
 
 `record(kind="understanding", conclusion, locator|observation_id|support)` creates

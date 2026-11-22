@@ -16,6 +16,17 @@ hook paths do not rebuild structural state. `span-install --verify-only`
 observes readiness without provisioning. There is no refresh operation in
 the current public API.
 
+## Governance declarations are not structural inference
+
+Functional Pyramid declarations are exact configured declaration sources owned
+by participating repositories. They are decoded and validated as declared
+governance; structural indexes, filename similarity and semantic search do not
+invent Functional Contexts, Functional Rules, owners or applicability.
+
+The same separation applies in reverse: an ACTIVE Functional Pyramid does not
+make the structural provider an authority source. Structural evidence remains
+navigation evidence; declared governance remains a separate typed graph.
+
 ## Investigations follow real work
 
 A scoped question first examines a bounded page of saved understanding. It

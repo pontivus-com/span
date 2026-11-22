@@ -29,6 +29,11 @@ from span.core.model.investigation import (
     EvidenceRequest,
     InvestigationContextRef,
 )
+from span.core.model.functional_pyramid import (
+    FunctionalPyramidCandidateSelector,
+    FunctionalPyramidReceiptSelector,
+    FunctionalPyramidSelector,
+)
 from span.core.model.recording import RecordingIdentity
 from span.core.model.support import SupportDependency
 from span.core.model.surfaces import SurfaceKey, SurfaceReference
@@ -42,11 +47,12 @@ from span.core.model.verification import ProposedVerificationRun
 
 
 class RecordKind(_enum.Enum):
-    """The three public record kinds: understanding, verification, surface."""
+    """The four record kinds exposed through the one public record tool."""
 
     UNDERSTANDING = "understanding"
     VERIFICATION = "verification"
     SURFACE = "surface"
+    FUNCTIONAL_PYRAMID = "functional_pyramid"
 
 
 class SurfaceAction(_enum.Enum):
@@ -343,6 +349,9 @@ class AskRequest:
         | CurrentUnderstandingSelector
         | UnderstandingSnapshotSelector
         | ReceiptRetrievalSelector
+        | FunctionalPyramidSelector
+        | FunctionalPyramidCandidateSelector
+        | FunctionalPyramidReceiptSelector
         | None
     ) = None
     evidence: tuple[EvidenceRequest, ...] | None = None

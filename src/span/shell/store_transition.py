@@ -69,8 +69,8 @@ __all__ = [
 ]
 
 
-TARGET_SCHEMA = 13
-SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12})
+TARGET_SCHEMA = 14
+SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12, 13})
 
 #: Every table the schema-7/8/9 runtime could own. A table outside this set is
 #: preserved and reported, never silently omitted.
@@ -434,7 +434,7 @@ def _file_bytes(path: _pathlib.Path) -> int:
 
 
 def _empty_target_bytes() -> int:
-    """Measured size of an empty schema-13 store (not an invented floor)."""
+    """Measured size of an empty schema-14 store (not an invented floor)."""
     connection = _sqlite3.connect(":memory:")
     try:
         from span.shell.sqlite_store.lifecycle import _DDL
@@ -472,7 +472,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
             unknown_tables=(),
             limitations=(
                 f"no store at {source}; explicit installer provisioning creates "
-                "a new schema-13 store instead of a transition",
+                "a new schema-14 store instead of a transition",
             ),
         )
     connection = _connect_read_only(source)
@@ -488,7 +488,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
     file_bytes = _file_bytes(source)
     empty_target = _empty_target_bytes()
     # Archive copy + lossless export (raw rows cannot exceed the logical
-    # database bytes) + one empty schema-13 store.
+    # database bytes) + one empty schema-14 store.
     required = file_bytes + logical + empty_target
     limitations: list[str] = []
     if version is None:
@@ -1062,6 +1062,11 @@ def _stage(
 
         limits, _ = stage_schema12(paths, config, root)
         limitations = limitations + limits
+    elif source_schema == 13:
+        from span.shell.store_transition_schema13 import stage_schema13
+
+        limits, _ = stage_schema13(paths, config, root)
+        limitations = limitations + limits
     _fsync_file(paths.staging)
     _fsync_dir(paths.transition_dir)
     return (), limitations
@@ -1154,6 +1159,16 @@ def _verify_staged(
         return (
             "staged store carries the schema-12 durable copy with operational "
             "contexts drained",
+            "fresh lifecycle smoke test passed on an isolated copy",
+        )
+    if source_schema == 13:
+        from span.shell.store_transition_schema13 import verify_schema13_staging
+
+        verify_schema13_staging(paths, config)
+        _smoke(paths, config)
+        return (
+            "staged store carries the schema-13 state without semantic reinterpretation",
+            "Functional Pyramid state is empty until explicit activation",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
     counts = _semantic_counts(paths.staging)
@@ -1381,8 +1396,8 @@ def _require_transitionable(
     if inspection.schema_version not in SUPPORTED_SOURCE_SCHEMAS:
         raise TransitionError(
             f"unsupported source schema {inspection.schema_version}; "
-            "preserve the file and supply a supported schema 7/8/9/10 store "
-            "or re-record with explicit interpretation"
+            "preserve the file and supply a supported source schema "
+            f"{sorted(SUPPORTED_SOURCE_SCHEMAS)} or re-record with explicit interpretation"
         )
     if inspection.integrity != "ok":
         raise TransitionError(

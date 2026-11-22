@@ -11,7 +11,7 @@ from span.core import model as m
 from span.core.identity import payload_digest
 from span.ports.lifecycle import LifecycleStorePort
 
-__all__ = ["ContextBinding", "context_binding", "issue_context"]
+__all__ = ["ContextBinding", "build_context", "context_binding", "issue_context"]
 
 
 @_dataclass(frozen=True)
@@ -65,6 +65,33 @@ def context_binding(
     )
 
 
+def build_context(
+    *,
+    retention: m.LifecycleRetention,
+    binding: ContextBinding,
+    repository_id: str,
+    request_id: m.RequestId,
+    clock: _typing.Callable[[], _datetime.datetime],
+    new_context_id: _typing.Callable[[], str],
+) -> m.InvestigationContext:
+    """Build the canonical server-owned context without persisting it."""
+    now = clock()
+    return m.InvestigationContext(
+        context_id=m.InvestigationContextId(new_context_id()),
+        repository_id=repository_id,
+        request_id=request_id,
+        binding_digest=payload_digest(binding),
+        origin=binding.origin,
+        state=m.ContextState.LIVE,
+        scope=binding.scope,
+        created_at=now,
+        question=(
+            binding.question if binding.origin is m.ContextOrigin.QUESTION else None
+        ),
+        expires_at=now + retention.context_lifetime,
+    )
+
+
 def issue_context(
     store: LifecycleStorePort,
     *,
@@ -78,20 +105,13 @@ def issue_context(
     digest = payload_digest(binding)
 
     def factory() -> m.InvestigationContext:
-        now = clock()
-        return m.InvestigationContext(
-            context_id=m.InvestigationContextId(new_context_id()),
+        return build_context(
+            retention=store.retention,
+            binding=binding,
             repository_id=repository_id,
             request_id=request_id,
-            binding_digest=digest,
-            origin=binding.origin,
-            state=m.ContextState.LIVE,
-            scope=binding.scope,
-            created_at=now,
-            question=(
-                binding.question if binding.origin is m.ContextOrigin.QUESTION else None
-            ),
-            expires_at=now + store.retention.context_lifetime,
+            clock=clock,
+            new_context_id=new_context_id,
         )
 
     return store.resolve_context(repository_id, request_id, digest, factory)

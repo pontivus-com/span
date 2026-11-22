@@ -1,6 +1,6 @@
-"""Schema-13 lifecycle SQLite definition."""
+"""Schema-14 lifecycle SQLite definition."""
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 DDL = (
     """
@@ -214,6 +214,29 @@ DDL = (
         canonical_json TEXT NOT NULL,
         replay_expires_at TEXT,
         PRIMARY KEY(repository_id, request_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS functional_route_dependency_index(
+        understanding_id TEXT NOT NULL,
+        conclusion_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        pyramid_id TEXT NOT NULL,
+        repository_id TEXT NOT NULL REFERENCES repositories(repository_id),
+        route_identity TEXT NOT NULL,
+        PRIMARY KEY(
+            understanding_id, conclusion_id, revision,
+            pyramid_id, repository_id, route_identity
+        ),
+        FOREIGN KEY(understanding_id, conclusion_id, revision)
+            REFERENCES conclusions(understanding_id, conclusion_id, revision)
+            ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS functional_route_dependency_route
+    ON functional_route_dependency_index(
+        route_identity, pyramid_id, repository_id
     )
     """,
 )

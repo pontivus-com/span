@@ -28,6 +28,20 @@ ignored; unavailable setup or affected support is reported within the
 available event scope. Operational availability and semantic uncertainty are
 kept separate.
 
+## Functional Pyramid notices
+
+Hook semantics use the same installation composition as MCP requests; hooks do
+not construct a repository-local governance evaluator. Participation-aware
+notices distinguish UNCONFIGURED, EXCLUDED, ACTIVE/VALID and
+ACTIVE/DEGRADED. They remain advisory and read-only: an adoption primer may
+route an agent toward Functional Pyramid guidance, but it cannot activate,
+revise, exclude, de-activate, record support, or repair governance.
+
+A changed-path hook may report affected support through the shared
+repository-qualified effect path. It does not replace the required
+`reconsider` lifecycle call, and silence does not establish that cross-
+repository governance is unaffected.
+
 ## Host wiring and evidence
 
 The installer can append Codex hooks to an existing `~/.codex/hooks.json`,
@@ -67,9 +81,10 @@ connection, then injects the FD-58 adoption notice once per session through the
 `context` hook. An edit-time notice is stored when a tool edit runs and is
 delivered once on the next `context` hook, naming the changed paths and the exact
 `reconsider(changed_paths=[...])` call. Lifecycle actions remain required when a notice is missed; support checks remain
-server-owned. A five-run OpenCode
-capture recorded the first `ask` before the first source read in 5/5 runs; see
-`.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
+server-owned. A five-run OpenCode historical capture recorded the first
+`ask` before the first source read in 5/5 runs. The sanitized result is retained
+in [acceptance](acceptance.md); the raw capture remains private working evidence
+rather than a public repository link.
 
 Pending edit notices retain their event paths until delivery. If an idle event
 arrives first, the plugin passes those paths through JSON stdin to `session-stop`

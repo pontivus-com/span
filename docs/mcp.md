@@ -23,7 +23,8 @@ Exactly three core tools ship, one per lifecycle moment:
 The host supplies structural navigation and the installer owns setup. Neither is
 part of the default surface.
 
-`record` carries `kind` (`understanding`, `verification`, or `surface`). An
+`record` carries `kind` (`understanding`, `verification`, `surface`, or
+`functional_pyramid`). An
 understanding create is flat — one `conclusion` with dependency evidence from
 `locator`, `observation_id`, or non-empty `support`; scope is supplied or
 derived independently. A locator may accompany explicit support only as carried
@@ -36,6 +37,23 @@ Every repository-scoped request carries its canonical `repository_id`. Paths are
 never accepted as IDs.
 
 ## `ask`
+
+Functional Pyramid selectors are additional `ask.selector` branches in the
+same tool:
+
+- `FunctionalPyramidSelector` names exactly one `repository_id` or `pyramid_id`
+  and returns exact UNCONFIGURED/EXCLUDED/ACTIVE status.
+- `FunctionalPyramidCandidateSelector` validates an ACTIVATE or REVISE proposal
+  without persisting participation.
+- `FunctionalPyramidReceiptSelector` retrieves the exact installation-scoped
+  acceptance receipt for a Functional Pyramid write.
+
+Ordinary surface/reference `Answer` and `Gap` results also carry the
+`functional_pyramid` projection. Inactive repositories project participation;
+ACTIVE repositories project the governing view for the exact semantic scope or
+an explicit Functional Pyramid unavailability result. Governance is never
+inferred from the question text.
+
 
 Forms (exactly one):
 
@@ -81,8 +99,10 @@ Pure obtain creates no context. A context reference is returned only by explicit
 evidence admission or by `reconsider`; treat it as an opaque
 `InvestigationContextRef` and copy it only into a declared `context` field.
 
-Results: `Answer`, `Gap`, `AmbiguousSurface`, `RetrievedUnderstanding`,
-`RetrievedReceipt`, `EvidencePage`, `Rejected`, or `Unavailable`.
+Results include `Answer`, `Gap`, `AmbiguousSurface`, `RetrievedUnderstanding`,
+`RetrievedReceipt`, `EvidencePage`, `FunctionalPyramidStatus`,
+`FunctionalPyramidCandidate`, `RetrievedFunctionalPyramidReceipt`, `Rejected`,
+or `Unavailable`.
 
 - `Answer` carries current `ConclusionView` content, surface status, recorded
   gaps, applicable `VerificationView` values and explicit truncation state.
@@ -211,6 +231,24 @@ narrow. Admitted evidence references and observation IDs remain context-bound; s
 }
 ```
 
+### Functional Pyramid record branch
+
+`kind="functional_pyramid"` uses the generated Functional Pyramid action wire
+for `activate`, `revise`, `deactivate`, or `exclude`. ACTIVATE/REVISE carry the
+complete member intent; REVISE/DEACTIVATE use the exact pyramid/version
+compare-and-set identity. The request uses the installation-level receipt
+namespace rather than an ordinary understanding `RecordingIdentity`.
+
+Accepted ACTIVATE/REVISE/DEACTIVATE results return only actual durable
+participation changes plus the live canonical affected projection and one
+repository-bound re-establishment context per repository with actionable
+effects. The immutable receipt stores the accepted dependent conclusion refs,
+not live support state or context liveness. Replay preserves those immutable
+refs and re-projects only their currently actionable effects.
+
+EXCLUDE is valid only outside an ACTIVE instance and has no active-route
+dependent effects. Candidate validation belongs to `ask` and writes nothing.
+
 Surface declaration:
 
 ```json
@@ -269,7 +307,7 @@ common path: the agent declares the scope it inspected and Span observes
 membership internally.
 
 Results: `UnderstandingRecorded`, `VerificationRecorded`, `SurfaceDeclared`,
-`Rejected`, or `Unavailable`. A rejection names the offending identity, the
+`FunctionalPyramidRecorded`, `Rejected`, or `Unavailable`. A rejection names the offending identity, the
 stable server-owned public cause text, the required action, and the structured current version or
 current boundary version when one exists; recognized lifecycle request-shape
 failures are also `Rejected` with their public field coordinates. It is a

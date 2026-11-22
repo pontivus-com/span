@@ -24,7 +24,13 @@ model, or decides a semantic claim.
 | Edit a surface | `ask` first; `reconsider` after the edit |
 | Finish an investigation | `record` |
 | Declare or change a service/domain boundary | `record(kind="surface")` |
+| Initialize/revise/deactivate Functional Pyramid participation | Use the `span-functional-pyramid` skill; it stays inside `ask` / `record` / `reconsider` |
 | Dispute a recorded conclusion | `reconsider` with a challenge |
+
+For ACTIVE Functional Pyramid repositories, ordinary `ask` also returns the
+governing projection for the same semantic scope. Use the
+`span-functional-pyramid` skill for participation lifecycle work; do not
+reconstruct that lifecycle here.
 
 Before editing, use `ask` for current understanding. A gap is not a failure.
 It names status, what is missing, recovery, and source pointers without

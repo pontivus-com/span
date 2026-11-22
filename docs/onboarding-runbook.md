@@ -2,10 +2,15 @@
 
 Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
 
-This runbook establishes useful understanding for a chosen engineering task.
-Choose the repository, exact scope, and question before investigating. The
-scope may span implementation, tests, configuration, and governing documents.
-A source inventory identifies evidence for that investigation.
+This runbook establishes the complete working context for a chosen engineering
+task. Start with the exact file, symbol, service, or domain. Span can bring
+together what is already understood about that implementation with the project
+guidance that applies to it, from first principles down to functional and
+technical design.
+
+The task may still require new investigation across implementation, tests,
+configuration, and canonical documents. A source inventory identifies the
+evidence needed for that work.
 
 ## Prepare
 
@@ -17,6 +22,15 @@ Provisioning is owned by the installer. Supply only declared authority seeds
 and bindings; finding a document does not make it governing. Preserve the
 returned canonical repository ID. An older store requires the explicit offline
 transition, not ordinary setup. Operational readiness creates no understanding.
+
+Check Functional Pyramid participation through the public `ask` selector.
+Registration alone yields UNCONFIGURED. If this repository is intended to
+participate, follow the result-driven adoption path: validate the exact member
+intent/declarations, resolve deterministic findings, ACTIVATE or REVISE through
+`record(kind="functional_pyramid")`, verify the exact committed
+pyramid/version/member view, and re-establish any actionable effects before
+calling adoption complete. An intentionally non-participating repository may be
+EXCLUDED explicitly.
 
 ## Investigate the chosen scope
 

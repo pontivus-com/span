@@ -359,11 +359,13 @@ data is unused.
 
 ## Upgrade an existing store
 
-Span 0.11.0 uses schema 13. The runtime never migrates at open; an older store
-fails closed with a transition action.
+Version 1 uses repository schema 14. The runtime never migrates at open; a
+supported older repository store fails closed with the explicit transition
+action. The separate installation Functional Pyramid store is created or
+verified by installer/setup and is not manufactured by repository runtime open.
 
-Stop every process using the store, then run one phase at a time for each
-repository ID:
+Stop every process using the repository stores, then run one phase at a time
+for each repository ID:
 
 ```bash
 span-install --data-dir <DATA_DIR> \
@@ -381,31 +383,31 @@ span-install --data-dir <DATA_DIR> \
 
 `inspect` and `verify` are observational. `apply` requires an explicit root
 whose basename matches the repository ID, holds exclusive store ownership
-through activation, archives a WAL-consistent copy, writes a lossless raw
-export and readable report, stages schema 13, verifies it, and atomically
-activates it. Supported source schemas are 7 through 12. A schema-12 cutover
-also refuses while any operational context is still live under its recorded
-liveness/expiry state; waiting an arbitrary number of days is not evidence of
-eligibility. Refusals (live writer, live schema-12 context, unsupported schema,
-failed integrity, insufficient space, wrong root) change nothing.
+through activation, archives a WAL-consistent copy, writes the lossless export
+and report, stages schema 14, verifies it, and atomically activates it.
+Supported source repository schemas are 7 through 13.
 
-A schema-12 store preserves durable semantic/audit tables, observations and
-retained receipts but does not copy `investigation_contexts`,
-`context_evidence`, or `context_discovery_evidence`: the old request digest
-does not contain enough information to reconstruct the schema-13
-`binding_digest`. Receipt context IDs remain immutable historical coordinates.
-Schema-10 and schema-11 stores use their documented durable mappings into the
-same target. A schema-10 store is mapped, not discarded. Each understanding maps to the path surface named by its
-recorded scope when that scope names exactly one file; wider, empty, or
-directory scopes stay unresolved with a named reason and remain in the archive.
-`mapping.json` records every source and target identity, count, hash, and the
-provenance of each mapping. Premise, source, and discovery references are
-reconciled before activation. Only the repository root binding and declared
-authority seeds are carried from schemas 7–9; their claims, campaigns,
-coverages, and targets remain historical export and are not promoted as current
-understanding.
+The schema-13 → schema-14 mapping preserves the existing durable semantic and
+audit tables without reinterpretation. It adds the repository-local
+`functional_route_dependency_index`, derived only from
+`FunctionalRouteSupport` already present in retained conclusions. It does not
+invent Functional Pyramid participation, installation receipts, route support
+or canonical authority support. After transition, a registered repository is
+therefore still UNCONFIGURED until participation is explicitly recorded.
 
-Roll back before or after activation:
+Earlier source schemas retain their documented preservation/mapping behavior.
+In particular, schema-12 context binding cannot be reconstructed from the old
+request digest, schema-10/11 use their durable mappings, and schemas 7–9 keep
+only the repository binding and declared authority seeds as current state while
+legacy semantic material remains in the transition export.
+
+After repository transition, run normal installer/setup for the current
+candidate so `<DATA_DIR>/installation/functional-pyramid.db` exists with the
+current installation-store schema. That database owns Functional Pyramid
+participation, instance versions, exclusions and installation-scoped receipts;
+it is intentionally separate from every repository lifecycle database.
+
+Roll back a repository transition before or after activation:
 
 ```bash
 span-install --data-dir <DATA_DIR> \
@@ -413,14 +415,15 @@ span-install --data-dir <DATA_DIR> \
 ```
 
 Before activation, rollback discards only owned staging. After activation, it
-preserves any schema-13 writes as `new-format-*.db` and restores the previous
-store. Restart the old binary afterward.
+preserves writes made by the new-format repository store as
+`new-format-*.db` and restores the previous store. Restart the old binary
+after rollback. Functional Pyramid installation state has its own installation
+database and is not smuggled into a repository rollback artifact.
 
-The archive, export, mapping, report, and restart-safe manifest live under
-`<DATA_DIR>/transitions/<repository-id>/`. Do not delete them until the new
-store has been verified and retained according to your own policy.
+The archive, export, mapping, report and restart-safe manifest live under
+`<DATA_DIR>/transitions/<repository-id>/`. Keep them until the new store and
+installation have been verified and retained according to your policy.
 
-Known limitations: an idle old server that holds no SQLite lock is not
-detected, so the operator must stop all old processes; interrupted-transition
-runtime fencing is not yet proven in production. Rehearse on a disposable
-copy before a live upgrade.
+Known limitation: an idle old process holding no SQLite lock cannot be detected,
+so the operator must stop old Span processes before transition. Rehearse on a
+disposable copy before a live upgrade.

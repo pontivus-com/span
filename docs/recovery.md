@@ -29,6 +29,9 @@ re-read when delivery or support evaluation needs them.
 
 - One repository's store only; no `install.json`, `structural/` or
   `transitions/`.
+- Functional Pyramid participation, pyramid versions, exclusions and installation
+  receipts are not repository-portable state; they remain in the installation
+  database and are deliberately excluded from this artifact.
 - `manifest.json` uses `span-repository-backup/1`: repository id, source root,
   created at, running code version, artifact path/hash/size, schema version,
   integrity and highest conclusion revision.
@@ -87,9 +90,10 @@ Rules:
 ### Full data-directory artifact
 
 The full artifact is the disaster-recovery path for the whole installation. It
-contains every top-level `*.db`, `install.json`, `structural-indexer.json`, a
-manifest of sizes, SHA-256 digests and per-database facts, and its digest. It is
-not committed.
+contains every top-level repository `*.db`, the installation Functional Pyramid
+database at `installation/functional-pyramid.db`, `install.json`,
+`structural-indexer.json`, a manifest of sizes, SHA-256 digests and per-database
+facts, and its digest. It is not committed.
 
 ```bash
 span-install --data-dir <DATA_DIR> --backup [--backup-root <DIR>]
@@ -111,9 +115,10 @@ before restoring.
 - The repository and full artifacts verify the manifest digest, every file's
   size and SHA-256, each database's `PRAGMA integrity_check`, its
   `meta.schema_version` and its highest conclusion revision.
-- The current store schema is 12. An artifact holding schema 12 loads directly.
-  Older supported schemas (7–11) are transition sources; after restoring one,
-  run the documented offline transition before use.
+- The current repository lifecycle schema is 14. Repository artifacts must hold
+  schema 14 to load directly; schemas 7–13 are supported offline-transition
+  sources. The installation Functional Pyramid database has its own schema
+  identity and is verified independently from repository lifecycle schemas.
 - The manifest records the installer version, the running Span code version (or
   `null` when the package cannot be imported), and each database's schema
   version.

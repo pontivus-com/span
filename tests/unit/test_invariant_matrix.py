@@ -27,10 +27,12 @@ from span.core import model as m
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 MATRIX = REPO_ROOT / "docs" / "invariants.md"
+FUNCTIONAL_ACCEPTANCE = REPO_ROOT / "docs" / "functional-acceptance.md"
 
 _ROW = re.compile(
     r"^\|\s*(I-\d{2})\s*\|\s*(.+?)\s*\|\s*(Test|Review)\s*\|\s*(.+?)\s*\|\s*$"
 )
+_FA_ROW = re.compile(r"^\|\s*(FA-\d{2})\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$")
 _BACKTICK = re.compile(r"`([^`]+)`")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ANY = re.compile(r"\bAny\b")
@@ -44,6 +46,15 @@ def _rows() -> list[tuple[str, str, str, str]]:
             rows.append(
                 (match.group(1), match.group(2), match.group(3), match.group(4))
             )
+    return rows
+
+
+def _functional_acceptance_rows() -> list[tuple[str, str, str]]:
+    rows = []
+    for line in FUNCTIONAL_ACCEPTANCE.read_text(encoding="utf-8").splitlines():
+        match = _FA_ROW.match(line)
+        if match:
+            rows.append((match.group(1), match.group(2), match.group(3)))
     return rows
 
 
@@ -127,6 +138,173 @@ def _annotations(node: ast.AST):
             yield node.returns
     elif isinstance(node, ast.AnnAssign):
         yield node.annotation
+
+
+class FunctionalAcceptanceMatrixTest(unittest.TestCase):
+    def setUp(self):
+        self.rows = _functional_acceptance_rows()
+        self.index = _live_tests()
+
+    def test_matrix_lists_every_version_one_acceptance_case_once_in_order(self):
+        self.assertEqual(
+            [row[0] for row in self.rows],
+            [f"FA-{number:02d}" for number in range(1, 45)],
+            "the Version-1 acceptance matrix must carry FA-01..FA-44 in order",
+        )
+
+    def test_every_acceptance_case_names_live_boundary_tests(self):
+        unnamed = []
+        unresolved = []
+        ambiguous = []
+        for identifier, _behavior, evidence in self.rows:
+            claimed = _claimed_tests(evidence)
+            if not claimed:
+                unnamed.append(identifier)
+            for token in claimed:
+                locations = self.index.get(token, ())
+                if not locations:
+                    unresolved.append(f"{identifier} → {token}")
+                elif len(locations) != 1:
+                    ambiguous.append(f"{identifier} → {token}: {', '.join(locations)}")
+        self.assertEqual(unnamed, [], "acceptance rows that name no boundary test")
+        self.assertEqual(
+            unresolved,
+            [],
+            "acceptance rows naming a missing boundary test",
+        )
+        self.assertEqual(
+            ambiguous,
+            [],
+            "acceptance rows naming an ambiguous boundary test",
+        )
+
+
+class FunctionalPyramidArchitectureTest(unittest.TestCase):
+    """Version-1 installation composition keeps semantics out of shell adapters."""
+
+    def test_shell_functional_pyramid_has_no_semantic_effect_coordinator(self):
+        path = REPO_ROOT / "src/span/shell/functional_pyramid.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        classes = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
+        imports = {
+            module
+            for module in (
+                node.module for node in tree.body if isinstance(node, ast.ImportFrom)
+            )
+            if module is not None
+        }
+        self.assertNotIn("FunctionalPyramidEffectCoordinator", classes)
+        self.assertNotIn("span.service.effects", imports)
+        self.assertNotIn("span.service.support", imports)
+
+    def test_reconsider_has_no_local_effect_engine_fallback(self):
+        path = REPO_ROOT / "src/span/service/reconsider.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        service = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "ReconsiderService"
+        )
+        init = next(
+            node
+            for node in service.body
+            if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+        )
+        calls = [
+            node
+            for node in ast.walk(init)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "DependencyEffectService"
+        ]
+        self.assertEqual(calls, [])
+        effects_index = [argument.arg for argument in init.args.kwonlyargs].index(
+            "effects"
+        )
+        self.assertIsNone(
+            init.args.kw_defaults[effects_index],
+            "ReconsiderService.effects must be a required capability",
+        )
+
+    def test_dependency_effect_service_has_no_local_store_support_mode(self):
+        path = REPO_ROOT / "src/span/service/effects.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        service = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "DependencyEffectService"
+        )
+        init = next(
+            node
+            for node in service.body
+            if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+        )
+        parameter_names = [argument.arg for argument in init.args.kwonlyargs]
+        parameters = set(parameter_names)
+        required = {
+            "repository_runtime",
+            "registered_repository_ids",
+            "support_for_repository",
+            "functional_route_impacts",
+        }
+        self.assertFalse({"store", "support"} & parameters)
+        self.assertTrue(required <= parameters)
+        for name in required:
+            index = parameter_names.index(name)
+            self.assertIsNone(
+                init.args.kw_defaults[index],
+                f"{name} must be a required effect-engine capability",
+            )
+
+    def test_repository_change_cannot_skip_functional_route_impacts(self):
+        path = REPO_ROOT / "src/span/service/effects.py"
+        source = path.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "if self._functional_route_impacts is not None",
+            source,
+        )
+        self.assertIn("self._functional_route_impacts(", source)
+
+    def test_semantic_hooks_use_installation_runtime(self):
+        path = REPO_ROOT / "src/span/shell/hooks.py"
+        source = path.read_text(encoding="utf-8")
+        self.assertIn("open_installation_runtime", source)
+        self.assertNotIn("open_functional_pyramid_service", source)
+
+    def test_context_composition_wires_all_mandatory_pyramid_capabilities(self):
+        path = REPO_ROOT / "src/span/shell/context.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        calls: dict[str, ast.Call] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            if node.func.id in {
+                "SupportService",
+                "LifecycleService",
+                "DependencyEffectService",
+                "AnswerService",
+            }:
+                calls[node.func.id] = node
+
+        expected = {
+            "SupportService": {"functional_route_resolver", "repository_runtime"},
+            "LifecycleService": {"functional_pyramid_route"},
+            "DependencyEffectService": {
+                "functional_route_impacts",
+                "repository_runtime",
+                "registered_repository_ids",
+                "support_for_repository",
+            },
+            "AnswerService": {"functional_pyramid_orientation"},
+        }
+        self.assertEqual(set(calls), set(expected))
+        for service, required in expected.items():
+            supplied = {keyword.arg for keyword in calls[service].keywords}
+            self.assertTrue(
+                required <= supplied,
+                f"{service} missing mandatory Functional Pyramid wiring: "
+                f"{sorted(required - supplied)}",
+            )
 
 
 class SemanticTypingTest(unittest.TestCase):

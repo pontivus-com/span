@@ -21,6 +21,9 @@ jobs:
       release: ${{ steps.resolve.outputs.release }}
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
+      registry-version: ${{ steps.resolve.outputs.registry-version }}
+      release-title: ${{ steps.resolve.outputs.release-title }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
       sha: ${{ steps.resolve.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
@@ -34,8 +37,12 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          version=$(grep -m1 '__version__' src/span/__init__.py | cut -d'"' -f2)
-          tag="v${version}"
+          version=$(python scripts/release_identity.py --field package_version)
+          tag=$(python scripts/release_identity.py --field tag)
+          registry_version=$(python scripts/release_identity.py --field registry_version)
+          release_title=$(python scripts/release_identity.py --field release_title)
+          prerelease=$(python scripts/release_identity.py --field prerelease)
+          development=$(python scripts/release_identity.py --field development)
           sha=$(git rev-parse HEAD)
           if [[ "${REF_TYPE}" == "tag" ]]; then
             if [[ "${REF_NAME}" != "${tag}" ]]; then
@@ -46,7 +53,7 @@ jobs:
           elif git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             echo "${tag} already exists; no release"
             release=false
-          elif [[ "${version}" == *dev* ]]; then
+          elif [[ "${development}" == "true" ]]; then
             echo "development version ${version}; no release"
             release=false
           else
@@ -56,6 +63,9 @@ jobs:
             echo "release=${release}"
             echo "version=${version}"
             echo "tag=${tag}"
+            echo "registry-version=${registry_version}"
+            echo "release-title=${release_title}"
+            echo "prerelease=${prerelease}"
             echo "sha=${sha}"
           } >> "${GITHUB_OUTPUT}"
 
@@ -166,14 +176,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.resolve.outputs.tag }}
           VERSION: ${{ needs.resolve.outputs.version }}
+          RELEASE_TITLE: ${{ needs.resolve.outputs.release-title }}
+          PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
         run: |
           set -euo pipefail
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "release ${TAG} already exists"
             exit 0
           fi
-          args=(--verify-tag --title "Span ${VERSION}" --notes-file release-notes.md)
-          if [[ "${VERSION}" == *-* ]]; then
+          args=(--verify-tag --title "${RELEASE_TITLE}" --notes-file release-notes.md)
+          if [[ "${PRERELEASE}" == "true" ]]; then
             args+=(--prerelease)
           fi
           gh release create "${TAG}" "${args[@]}"

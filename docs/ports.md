@@ -10,12 +10,31 @@ shell implementations own effects. Public JSON grammar belongs to
 request-bound contexts, source/discovery observations, understanding/version
 reads, conclusion history, challenges, verification runs, and receipt lookup.
 Its recording operations accept canonical commands and commit the transition
-with its receipt atomically. SQLite implements schema 11; semantic decisions
-are made by core rules rather than by SQL or transport.
+with its receipt atomically. SQLite implements repository schema 14; semantic
+decisions are made by core/service rules rather than by SQL or transport.
 
 `LifecycleAuthorityResolver` resolves declared authority references. Source
 selection and filenames never manufacture a binding. Both ports are required
 at composition; there is no optional-manager or legacy-store fallback.
+
+## Functional Pyramid and repository-qualified access
+
+`src/span/ports/functional_pyramid.py` carries the typed declaration/state
+capabilities used by the Version-1 installation runtime. Repository access is
+qualified by repository identity; a conclusion in repository A may therefore
+evaluate canonical authority/evidence owned by repository B without copying B
+state into A.
+
+The installation composition supplies the Functional Pyramid route evaluator,
+route-impact resolver, registered-repository resolver and repository-qualified
+support resolver to the semantic services that need them. Missing production
+composition is an invariant/programming error, not UNCONFIGURED participation,
+an empty route, or an operational support result.
+
+The installation Functional Pyramid store is a distinct persistence owner from
+`LifecycleStorePort`: repository semantic/audit state remains repository-local,
+while participation/version/exclusion/install-receipt state is installation-
+scoped.
 
 ## Evidence source
 

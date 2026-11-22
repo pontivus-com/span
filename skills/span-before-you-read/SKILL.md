@@ -34,7 +34,9 @@ question lookup is optional and never relies on paraphrase or similarity matchin
 ## Read the result
 
 - `Answer` — current conclusions with statement, nature, scope, support, and
-  evidence, plus surface status. `status.stale_refs` names each stale
+  evidence, plus surface status. For ACTIVE Functional Pyramid participation,
+  the same result also carries governing orientation for the selected semantic
+  scope; use `span-functional-pyramid` for status/candidate/participation work. `status.stale_refs` names each stale
   conclusion by exact revision, understanding version, and present state. Reuse current conclusions; investigate stale references
   through their historical content and current evidence.
 - `Gap` — no current conclusion. It carries status, the reason, historical

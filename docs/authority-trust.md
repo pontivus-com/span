@@ -1,9 +1,14 @@
 # Evidence, authority, and interpretation
 
-A source can show what code does. A governing source can establish what a
-project requires when its authority and applicability are declared. The agent
-must distinguish those uses; relevance alone grants neither authority nor
-semantic truth.
+Span gives an agent two different parts of the working context, and they need
+different proof. Source code, tests, configuration, and executions can support
+what the implementation is understood to do. Canonical goals, rules, contracts,
+and design documents can establish what that implementation is supposed to
+follow when their authority and applicability are declared.
+
+Span keeps those two roles separate even though it returns them together for the
+same software scope. Relevance alone makes neither an implementation explanation
+true nor a document authoritative.
 
 ## Evidence and support
 
@@ -14,10 +19,13 @@ cites admitted support rather than resending source bodies or inventing
 fingerprints. CSS and configuration can support investigation even when
 structural parsing is unavailable.
 
-The four support branches are source observations, declared authority bindings,
-exact premise revisions, and recorded discovery membership. Their typed
+The support union covers source observations, declared authority bindings,
+exact premise revisions, recorded discovery membership, and Functional Pyramid
+route support. Route support establishes the exact declared governance
+applicability/topology for a NORMATIVE conclusion; canonical governing content
+remains independently supported through authority bindings. Their typed
 contracts live in `core/model/support.py`; [freshness](freshness.md) explains
-how their present state is evaluated.
+how present state is evaluated.
 
 ## Declared governance
 
@@ -32,6 +40,19 @@ applicability, kind, and recorded content to remain compatible with present
 evidence. Missing authority stays unverifiable; superseded or changed support
 requires reassessment. Precedence must come from an explicit declaration,
 not from a model's preferred interpretation or a ranking score.
+
+## Functional Pyramid governance
+
+Functional Pyramid declarations connect semantic scope to declared Functional
+Contexts and Functional Rules, then to repository-qualified canonical authority
+owners. This graph establishes applicability; it does not grant authority to
+prose merely because the prose is discoverable.
+
+Canonical rule text remains in the repository that owns its accepted
+`AuthorityBinding`. Span carries rule identity, owner reference, graph
+relationships and route identity. Cross-repository governance therefore does
+not require copying another repository's governing source into the semantic
+owner's store.
 
 ## Meaning, currency, and dispute
 

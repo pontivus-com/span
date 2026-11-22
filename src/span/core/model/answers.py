@@ -6,6 +6,7 @@ Part of the canonical domain carrier package. Import through
 
 from __future__ import annotations
 
+import datetime as _datetime
 import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
@@ -14,6 +15,20 @@ from span.core.model.claims import AssertionNature
 from span.core.model.outcomes import (
     UnderstandingRecorded,
     VerificationRecorded,
+)
+from span.core.model.functional_pyramid import (
+    FunctionalPyramidAction,
+    FunctionalPyramidCandidate,
+    FunctionalPyramidId,
+    FunctionalPyramidMemberView,
+    FunctionalPyramidParticipation,
+    FunctionalPyramidParticipationEffect,
+    FunctionalPyramidReceiptSelector,
+    FunctionalPyramidStatus,
+    FunctionalPyramidUnavailable,
+    FunctionalPyramidVersion,
+    FunctionalPyramidView,
+    RetrievedFunctionalPyramidReceipt,
 )
 from span.core.model.investigation import (
     EvidenceAdmissionView,
@@ -118,6 +133,11 @@ class Answer:
 
     surface: SurfaceKey
     status: SurfaceStatus
+    functional_pyramid: (
+        FunctionalPyramidView
+        | FunctionalPyramidUnavailable
+        | FunctionalPyramidParticipation
+    )
     conclusions: tuple[ConclusionView, ...] = ()
     groups: tuple[AnswerGroup, ...] = ()
     gaps: tuple[RecordedQuestionGap, ...] = ()
@@ -166,6 +186,11 @@ class Gap:
 
     surface: SurfaceKey
     status: SurfaceStatus
+    functional_pyramid: (
+        FunctionalPyramidView
+        | FunctionalPyramidUnavailable
+        | FunctionalPyramidParticipation
+    )
     reason: GapReason
     recovery: str
     changed_evidence: tuple[EvidenceRef, ...] = ()
@@ -303,10 +328,40 @@ class ChangedSurface:
 
 
 @_dataclass(frozen=True)
-class Changed:
-    """The bounded reconsideration result (FD-20, FD-21, FD-22)."""
+class FunctionalPyramidRecorded:
+    """Accepted Functional Pyramid write plus its current actionable projection."""
 
-    context: InvestigationContextRef
+    receipt_selector: FunctionalPyramidReceiptSelector
+    committed_at: _datetime.datetime
+    action: FunctionalPyramidAction
+    pyramid_id: FunctionalPyramidId | None
+    version: FunctionalPyramidVersion | None
+    members: tuple[FunctionalPyramidMemberView, ...]
+    participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]
+    dependent_effects: tuple[ChangedSurface, ...] = ()
+    reestablishment_contexts: tuple[InvestigationContextRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
+            raise ValueError("FunctionalPyramidRecorded.committed_at must be aware")
+        repositories = tuple(
+            context.repository_id for context in self.reestablishment_contexts
+        )
+        if repositories != tuple(sorted(repositories)):
+            raise ValueError(
+                "FunctionalPyramidRecorded contexts must be ordered by repository_id"
+            )
+        if len(set(repositories)) != len(repositories):
+            raise ValueError(
+                "FunctionalPyramidRecorded has at most one context per repository"
+            )
+
+
+@_dataclass(frozen=True)
+class Changed:
+    """The bounded reconsideration result (FD-20, FD-21, FD-22, FD-89)."""
+
+    reestablishment_contexts: tuple[InvestigationContextRef, ...] = ()
     surfaces: tuple[ChangedSurface, ...] = ()
     unaffected: tuple[SurfaceKey, ...] = ()
     omitted: tuple[str, ...] = ()
@@ -315,6 +370,18 @@ class Changed:
     def __post_init__(self) -> None:
         if self.truncated and self.unaffected:
             raise ValueError("a truncated walk cannot report surfaces as unaffected")
+        repositories = tuple(
+            context.repository_id for context in self.reestablishment_contexts
+        )
+        if len(set(repositories)) != len(repositories):
+            raise ValueError(
+                "Changed.reestablishment_contexts must contain at most one "
+                "context per repository"
+            )
+        if repositories != tuple(sorted(repositories)):
+            raise ValueError(
+                "Changed.reestablishment_contexts must be ordered by repository_id"
+            )
 
 
 @_dataclass(frozen=True)
@@ -331,7 +398,10 @@ AskResult = _typing.Union[
     AmbiguousSurface,
     RetrievedUnderstanding,
     RetrievedReceipt,
+    RetrievedFunctionalPyramidReceipt,
     EvidencePage,
+    FunctionalPyramidStatus,
+    FunctionalPyramidCandidate,
     Rejected,
     Unavailable,
 ]
@@ -339,6 +409,7 @@ RecordResult = _typing.Union[
     UnderstandingRecorded,
     VerificationRecorded,
     SurfaceDeclared,
+    FunctionalPyramidRecorded,
     Rejected,
     Unavailable,
 ]

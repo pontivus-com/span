@@ -1,19 +1,21 @@
-"""Canonical lifecycle context opener (shell lifecycle).
+"""Repository runtime opening and canonical lifecycle service composition.
 
-One opener serves every repository-scoped path that needs a working context
-without performing setup: the MCP adapter's lazy first call and the lifecycle
-hook runner. Opening constructs the structural source, filesystem evidence,
-the existing schema-11 store and its services. It never builds a structural
-index, never writes to the target repository, and never creates or migrates a
-store. A repository without a store fails closed with the explicit setup
-action; an old schema fails closed with the transition action.
+Raw repository capabilities are opened independently of semantic services.
+Installation-scoped Functional Pyramid composition consumes those raw runtimes;
+only afterwards is a repository ServiceContext composed. This keeps the shell
+as the effects/adapter owner and prevents a ServiceContext -> Functional Pyramid
+-> ServiceContext construction cycle.
 """
 
 from __future__ import annotations
 
 import pathlib as _pathlib
+import typing as _typing
+from dataclasses import dataclass as _dataclass
 
 from span.core import model as m
+from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
+from span.ports.structural import StructuralSource
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import ServiceContext
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
@@ -21,24 +23,34 @@ from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
     LifecycleStoreError,
 )
+from span.shell.sqlite_store.functional_pyramid import (
+    ensure_functional_pyramid_installation_store,
+)
 from span.shell.structural import (
     canonical_root_from_config,
     structural_source_from_config,
 )
 from span.service.administration import initialize_repository
-from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
-from span.service.evidence import EvidenceService
-from span.service.lifecycle import LifecycleService
-from span.service.support import SupportService
 from span.service.answer import AnswerService
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.effects import DependencyEffectService
+from span.service.evidence import EvidenceService
+from span.service.functional_pyramid import FunctionalPyramidService
+from span.service.lifecycle import LifecycleService
 from span.service.reconsider import ReconsiderService
+from span.service.support import SupportService
 from span.service.understand import UnderstandService
 
 __all__ = [
     "RepositoryNotInitialized",
+    "RepositoryRuntime",
+    "close_repository_context",
+    "close_repository_runtime",
     "compose_context",
     "open_repository_context",
+    "open_repository_runtime",
     "provision_repository",
+    "provision_repository_runtime",
 ]
 
 
@@ -46,65 +58,23 @@ class RepositoryNotInitialized(LifecycleStoreError):
     """No compatible store exists for this repository; explicit setup is due."""
 
 
-def compose_context(
+@_dataclass(frozen=True)
+class RepositoryRuntime:
+    """Raw registered-repository capabilities; no semantic services."""
+
+    repository_id: str
+    root: str
+    structural: StructuralSource
+    evidence: FilesystemEvidenceSource
+    store: LifecycleStore
+
+
+def _open_store(
+    data_root: _pathlib.Path,
     *,
     repository_id: str,
     root: str,
-    structural,
-    evidence: FilesystemEvidenceSource,
-    store: LifecycleStore,
-    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
-) -> ServiceContext:
-    """Wire the canonical lifecycle services over one open store."""
-    seeds = store.load_authority_seeds(repository_id)
-    support = SupportService(
-        store=store, evidence=evidence, authority=store, policy=policy
-    )
-    evidence_service = EvidenceService(store=store, evidence=evidence, policy=policy)
-    lifecycle = LifecycleService(
-        store=store,
-        authority=store,
-        support=support,
-        evidence=evidence_service,
-    )
-    reconsider = ReconsiderService(
-        store=store,
-        support=support,
-        evidence=evidence_service,
-        policy=policy,
-    )
-    answer = AnswerService(
-        store=store, support=support, evidence=evidence_service, policy=policy
-    )
-    understand = UnderstandService(store=store, support=support)
-    return ServiceContext(
-        repository_id=repository_id,
-        root=root,
-        structural=structural,
-        evidence=evidence,
-        store=store,
-        lifecycle=lifecycle,
-        evidence_service=evidence_service,
-        understand=understand,
-        support=support,
-        reconsider=reconsider,
-        answer=answer,
-        authority_seeds=seeds,
-    )
-
-
-def open_repository_context(
-    data_dir: str | _pathlib.Path,
-    repository_locator: str,
-    *,
-    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
-) -> tuple[str, ServiceContext]:
-    """Open an already-provisioned repository context without setup."""
-    data_root = _pathlib.Path(data_dir)
-    structural, repository_id = structural_source_from_config(
-        repository_locator, data_dir=data_root
-    )
-    root = canonical_root_from_config(repository_locator)
+) -> LifecycleStore:
     store_path = data_root / f"{repository_id}.db"
     if not store_path.is_file():
         raise RepositoryNotInitialized(
@@ -129,24 +99,145 @@ def open_repository_context(
     except BaseException:
         store.close()
         raise
-    evidence = FilesystemEvidenceSource(repository_id, root)
-    return repository_id, compose_context(
+    return store
+
+
+def open_repository_runtime(
+    data_dir: str | _pathlib.Path,
+    repository_locator: str,
+) -> RepositoryRuntime:
+    """Open raw repository capabilities without composing semantic services."""
+    data_root = _pathlib.Path(data_dir)
+    structural, repository_id = structural_source_from_config(
+        repository_locator, data_dir=data_root
+    )
+    root = canonical_root_from_config(repository_locator)
+    store = _open_store(data_root, repository_id=repository_id, root=root)
+    return RepositoryRuntime(
         repository_id=repository_id,
         root=root,
         structural=structural,
-        evidence=evidence,
+        evidence=FilesystemEvidenceSource(repository_id, root),
         store=store,
-        policy=policy,
     )
 
 
-def provision_repository(
+def close_repository_runtime(runtime: FunctionalPyramidRepositoryRuntime) -> None:
+    """Close a raw runtime when its store is the canonical SQLite implementation."""
+    store = runtime.store
+    if not isinstance(store, LifecycleStore):
+        raise TypeError("repository runtime store is not a LifecycleStore")
+    store.close()
+
+
+def compose_context(
+    *,
+    runtime: RepositoryRuntime,
+    functional_pyramid: FunctionalPyramidService,
+    repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
+) -> ServiceContext:
+    """Compose one repository context from raw + installation capabilities."""
+    repository_id = runtime.repository_id
+    store = runtime.store
+    evidence = runtime.evidence
+    seeds = store.load_authority_seeds(repository_id)
+
+    def support_for(repository: str) -> SupportService:
+        selected = repository_runtime(repository)
+        return SupportService(
+            store=selected.store,
+            evidence=selected.evidence,
+            authority=selected.store,
+            policy=policy,
+            functional_route_resolver=functional_pyramid.support_route,
+            repository_runtime=repository_runtime,
+        )
+
+    support = support_for(repository_id)
+    evidence_service = EvidenceService(store=store, evidence=evidence, policy=policy)
+    lifecycle = LifecycleService(
+        store=store,
+        authority=store,
+        support=support,
+        evidence=evidence_service,
+        functional_pyramid_route=functional_pyramid.route,
+    )
+    effects = DependencyEffectService(
+        repository_runtime=repository_runtime,
+        registered_repository_ids=lambda: tuple(
+            sorted(functional_pyramid.registered_repository_ids())
+        ),
+        support_for_repository=support_for,
+        functional_route_impacts=functional_pyramid.changed_route_identities,
+        policy=policy,
+    )
+    reconsider = ReconsiderService(
+        store=store,
+        effects=effects,
+        evidence=evidence_service,
+        policy=policy,
+    )
+    answer = AnswerService(
+        store=store,
+        support=support,
+        evidence=evidence_service,
+        policy=policy,
+        functional_pyramid_orientation=functional_pyramid.orientation,
+    )
+    understand = UnderstandService(store=store, support=support)
+    return ServiceContext(
+        repository_id=repository_id,
+        root=runtime.root,
+        structural=runtime.structural,
+        evidence=evidence,
+        store=store,
+        lifecycle=lifecycle,
+        evidence_service=evidence_service,
+        understand=understand,
+        support=support,
+        reconsider=reconsider,
+        answer=answer,
+        authority_seeds=seeds,
+    )
+
+
+def open_repository_context(
+    data_dir: str | _pathlib.Path,
+    repository_locator: str,
+    *,
+    functional_pyramid: FunctionalPyramidService,
+    repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
+) -> tuple[str, ServiceContext]:
+    """Open and compose one repository through the installation runtime."""
+    runtime = open_repository_runtime(data_dir, repository_locator)
+    try:
+        context = compose_context(
+            runtime=runtime,
+            functional_pyramid=functional_pyramid,
+            repository_runtime=repository_runtime,
+            policy=policy,
+        )
+    except BaseException:
+        runtime.store.close()
+        raise
+    return runtime.repository_id, context
+
+
+def close_repository_context(context: ServiceContext) -> None:
+    """Close one composed repository context."""
+    store = context.store
+    if not isinstance(store, LifecycleStore):
+        raise TypeError("repository context store is not a LifecycleStore")
+    store.close()
+
+
+def provision_repository_runtime(
     data_dir: str | _pathlib.Path,
     request: m.InitializeRepositoryRequest,
-    *,
-    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
-) -> tuple[ServiceContext, m.InitializeRepositoryResult]:
-    """Explicit setup: bind identity and declared seeds (no interpretation)."""
+) -> tuple[RepositoryRuntime, m.InitializeRepositoryResult]:
+    """Explicit setup, returning raw capabilities rather than partial services."""
     data_root = _pathlib.Path(data_dir)
     structural, repository_id = structural_source_from_config(
         request.repository_locator, data_dir=data_root
@@ -166,6 +257,10 @@ def provision_repository(
             "rerun installation to provision the indexer, then retry setup"
         )
     data_root.mkdir(parents=True, exist_ok=True)
+    installation_store = ensure_functional_pyramid_installation_store(
+        data_root, retention=DEFAULT_LIFECYCLE_RETENTION
+    )
+    installation_store.close()
     store = LifecycleStore(
         data_root / f"{repository_id}.db",
         retention=DEFAULT_LIFECYCLE_RETENTION,
@@ -180,15 +275,37 @@ def provision_repository(
             evidence=evidence,
             structural_status=f"index:{currency.state.value}",
         )
-        context = compose_context(
+        runtime = RepositoryRuntime(
             repository_id=repository_id,
             root=root,
             structural=structural,
             evidence=evidence,
             store=store,
-            policy=policy,
         )
     except BaseException:
         store.close()
+        raise
+    return runtime, result
+
+
+def provision_repository(
+    data_dir: str | _pathlib.Path,
+    request: m.InitializeRepositoryRequest,
+    *,
+    functional_pyramid: FunctionalPyramidService,
+    repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
+) -> tuple[ServiceContext, m.InitializeRepositoryResult]:
+    """Explicit setup followed by canonical installation-aware composition."""
+    runtime, result = provision_repository_runtime(data_dir, request)
+    try:
+        context = compose_context(
+            runtime=runtime,
+            functional_pyramid=functional_pyramid,
+            repository_runtime=repository_runtime,
+            policy=policy,
+        )
+    except BaseException:
+        runtime.store.close()
         raise
     return context, result

@@ -1,4 +1,4 @@
-"""Candidate schema-11 lifecycle store tests."""
+"""Schema-14 lifecycle store tests."""
 
 from __future__ import annotations
 
@@ -274,11 +274,27 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.register_repository("repo-1", "/repo/one")
         self.store.put_source_observation(_observation())
 
-    def test_schema_version_is_thirteen(self) -> None:
+    def test_schema_version_is_fourteen(self) -> None:
         row = self.store._connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        self.assertEqual(row["value"], "13")
+        self.assertEqual(row["value"], "14")
+
+    def test_schema_fourteen_keeps_only_repository_route_projection(self) -> None:
+        tables = {
+            row["name"]
+            for row in self.store._connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+                " AND name LIKE 'functional_%'"
+            )
+        }
+        self.assertEqual(tables, {"functional_route_dependency_index"})
+        self.assertEqual(
+            self.store._connection.execute(
+                "SELECT COUNT(*) FROM functional_route_dependency_index"
+            ).fetchone()[0],
+            0,
+        )
 
     def test_rebind_repository_moves_only_the_root(self) -> None:
         self.store.rebind_repository("repo-1", "/repo/two", expected_root="/repo/one")
@@ -869,6 +885,48 @@ class LifecycleStoreTest(unittest.TestCase):
                     revision=m.ConclusionRevisionNumber(1),
                 ),
             ),
+        )
+        route = m.FunctionalRouteSupport(
+            repository_id="repo-1",
+            pyramid_id=m.FunctionalPyramidId("fp-1"),
+            semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
+            route_identity=m.FunctionalRouteIdentity("route-1"),
+        )
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=_identity("sub-route"),
+                understanding_id=m.UnderstandingId("u-1"),
+                expected_version=m.UnderstandingVersionNumber(3),
+                add=(
+                    m.ProposedConclusion(
+                        conclusion_id=m.ConclusionId("c-5"),
+                        statement="A conforms to the governing route",
+                        assertion_nature=m.AssertionNature.NORMATIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(route,),
+                        basis=_basis(),
+                    ),
+                ),
+            )
+        )
+        route_ref = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-5"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        self.assertEqual(
+            self.store.support_dependents("FUNCTIONAL_ROUTE", "route-1"),
+            (route_ref,),
+        )
+        row = self.store._connection.execute(
+            "SELECT pyramid_id, repository_id, route_identity"
+            " FROM functional_route_dependency_index"
+            " WHERE understanding_id=? AND conclusion_id=? AND revision=?",
+            ("u-1", "c-5", 1),
+        ).fetchone()
+        self.assertEqual(
+            (row["pyramid_id"], row["repository_id"], row["route_identity"]),
+            ("fp-1", "repo-1", "route-1"),
         )
 
     def test_repository_rebind_rejected(self) -> None:

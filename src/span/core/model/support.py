@@ -12,6 +12,7 @@ import typing as _typing
 from dataclasses import dataclass as _dataclass
 
 from span.core.model.verification import VerificationRun
+from span.core.model.functional_pyramid import FunctionalRouteSupport
 from span.core.model.primitives import (
     AuthorityBinding,
     ConclusionRevisionRef,
@@ -64,6 +65,7 @@ SupportDependency = _typing.Union[
     AuthoritySupportDependency,
     PremiseSupport,
     DiscoverySupport,
+    FunctionalRouteSupport,
 ]
 
 

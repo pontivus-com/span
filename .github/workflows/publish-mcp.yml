@@ -17,13 +17,16 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      # One source of truth: the package version, not a second hand edit.
-      - name: Set the registry version from the package
+      # One source of truth: derive both ecosystem serializations from the
+      # canonical PEP-440 package version. The registry server version is SemVer;
+      # the PyPI package coordinate retains the exact package version.
+      - name: Set registry and package versions from the canonical package version
         run: |
-          version=$(grep -m1 '__version__' src/span/__init__.py | cut -d'"' -f2)
-          jq --arg v "$version" '.version = $v' server.json > server.tmp
+          package_version=$(python scripts/release_identity.py --field package_version)
+          registry_version=$(python scripts/release_identity.py --field registry_version)
+          jq --arg v "$registry_version" '.version = $v' server.json > server.tmp
           mv server.tmp server.json
-          jq --arg v "$version" '.packages[0].version = $v' server.json > server.tmp
+          jq --arg v "$package_version" '.packages[0].version = $v' server.json > server.tmp
           mv server.tmp server.json
           grep -E '"version"' server.json
 

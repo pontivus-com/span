@@ -11,6 +11,8 @@ from unittest import mock
 from span.core import model as m
 from span.core.recording import RecordingValidationError
 from span.core import support_rules
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.effects import DependencyEffectService
 from span.service.reconsider import ReconsiderService
 from span.service.support import SupportService
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
@@ -122,7 +124,89 @@ class ReconsiderServiceTest(unittest.TestCase):
             "src/b.py",
             m.PremiseSupport(premise=premise),
         )
-        self.service = ReconsiderService(store=self.store)
+        self.support = SupportService(
+            store=self.store,
+            evidence=FilesystemEvidenceSource("repo-1", self.root),
+            authority=self.store,
+            functional_route_resolver=lambda _dependency, _surface: (
+                m.FunctionalPyramidParticipation(
+                    m.FunctionalPyramidParticipationState.UNCONFIGURED
+                ),
+                None,
+            ),
+            clock=lambda: NOW,
+        )
+        self.service = self._service()
+
+    def _effects(
+        self,
+        *,
+        support=None,
+        policy=None,
+        clock=None,
+        new_context_id=None,
+        functional_route_impacts=None,
+    ) -> DependencyEffectService:
+        selected_support = self.support if support is None else support
+        selected_clock = clock or (lambda: NOW)
+        selected_policy = policy or DEFAULT_SERVICE_BOUNDS_POLICY
+        runtime = mock.Mock(
+            repository_id="repo-1",
+            root=str(self.root),
+            store=self.store,
+            evidence=FilesystemEvidenceSource("repo-1", self.root),
+        )
+
+        def repository_runtime(repository_id):
+            if repository_id != "repo-1":
+                self.fail(f"unexpected repository: {repository_id}")
+            return runtime
+
+        def support_for_repository(repository_id):
+            if repository_id != "repo-1":
+                self.fail(f"unexpected repository: {repository_id}")
+            return selected_support
+
+        return DependencyEffectService(
+            repository_runtime=repository_runtime,
+            registered_repository_ids=lambda: ("repo-1",),
+            support_for_repository=support_for_repository,
+            functional_route_impacts=(
+                functional_route_impacts
+                or (lambda _repository_id, _paths, _surfaces: ())
+            ),
+            policy=selected_policy,
+            clock=selected_clock,
+            new_context_id=new_context_id,
+        )
+
+    def _service(
+        self,
+        *,
+        support=None,
+        evidence=None,
+        policy=None,
+        clock=None,
+        new_context_id=None,
+        effects=None,
+    ) -> ReconsiderService:
+        selected_clock = clock or (lambda: NOW)
+        selected_policy = policy or DEFAULT_SERVICE_BOUNDS_POLICY
+        if effects is None:
+            effects = self._effects(
+                support=support,
+                policy=selected_policy,
+                clock=selected_clock,
+                new_context_id=new_context_id,
+            )
+        return ReconsiderService(
+            store=self.store,
+            evidence=evidence,
+            policy=selected_policy,
+            clock=selected_clock,
+            new_context_id=new_context_id,
+            effects=effects,
+        )
 
     def _create(
         self,
@@ -133,19 +217,24 @@ class ReconsiderServiceTest(unittest.TestCase):
         *,
         scope: m.EvidenceScope | None = None,
         surface_kind: m.SurfaceKind = m.SurfaceKind.FILE,
+        repository_id: str = "repo-1",
+        context_id: m.InvestigationContextId = CONTEXT_ID,
+        assertion_nature: m.AssertionNature = m.AssertionNature.DESCRIPTIVE,
+        store: LifecycleStore | None = None,
     ) -> None:
         semantic_scope = (
             m.EvidenceScope(paths=(scope_path,)) if scope is None else scope
         )
-        self.store.record_understanding(
+        selected_store = self.store if store is None else store
+        selected_store.record_understanding(
             m.CreateUnderstandingCommand(
                 identity=m.RecordingIdentity(
-                    repository_id="repo-1",
+                    repository_id=repository_id,
                     request_id=m.RequestId(f"req-{understanding_id}"),
-                    context_id=CONTEXT_ID,
+                    context_id=context_id,
                 ),
                 surface=m.SurfaceKey(
-                    repository_id="repo-1",
+                    repository_id=repository_id,
                     kind=surface_kind,
                     locator=surface_locator,
                 ),
@@ -157,7 +246,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                     m.ProposedConclusion(
                         conclusion_id=m.ConclusionId("c-1"),
                         statement="It does something.",
-                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        assertion_nature=assertion_nature,
                         scope=semantic_scope,
                         support=(support,),
                         basis=_basis(),
@@ -193,7 +282,9 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(
             by_surface["src/b.py"].conclusions[0].expected_version.value, 1
         )
-        context = self.store.get_context(result.context.context_id.value)
+        context = self.store.get_context(
+            result.reestablishment_contexts[0].context_id.value
+        )
         self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
         self.assertEqual(
             context.scope,
@@ -269,7 +360,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             NOW,
             "",
         )
-        service = ReconsiderService(store=self.store, support=support)
+        service = self._service(support=support)
         (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
         result = service.reconsider(
             m.ReconsiderRequest(
@@ -277,11 +368,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                 changed_paths=("src/a.py",),
             )
         )
-        self.assertFalse(
-            self.store.has_admitted_observation(
-                result.context.context_id.value, "obs-a"
-            )
-        )
+        self.assertEqual(result.reestablishment_contexts, ())
 
     def test_changed_scope_context_admits_existing_source_support(self) -> None:
         result = self.service.reconsider(
@@ -292,7 +379,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertTrue(
             self.store.has_admitted_observation(
-                result.context.context_id.value, "obs-a"
+                result.reestablishment_contexts[0].context_id.value, "obs-a"
             )
         )
 
@@ -308,38 +395,36 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.surfaces[0].conclusions, ())
 
     def test_bound_reports_truncation_not_unaffected(self) -> None:
-        service = ReconsiderService(
-            store=self.store,
-            policy=m.ServiceBoundsPolicy(
-                default_query_bounds=m.QueryBounds(
-                    max_results=1,
-                    max_depth=1,
-                    max_subjects=1,
-                    max_evidence_units=1,
-                    max_evidence_bytes=1_000,
-                    max_candidate_claims=1,
-                    max_candidate_relationships=1,
-                ),
-                maximum_query_bounds=m.QueryBounds(
-                    max_results=1,
-                    max_depth=1,
-                    max_subjects=1,
-                    max_evidence_units=1,
-                    max_evidence_bytes=1_000,
-                    max_candidate_claims=1,
-                    max_candidate_relationships=1,
-                ),
-                hook_fast_bounds=m.QueryBounds(
-                    max_results=1,
-                    max_depth=1,
-                    max_subjects=1,
-                    max_evidence_units=1,
-                    max_evidence_bytes=1_000,
-                    max_candidate_claims=1,
-                    max_candidate_relationships=1,
-                ),
+        policy = m.ServiceBoundsPolicy(
+            default_query_bounds=m.QueryBounds(
+                max_results=1,
+                max_depth=1,
+                max_subjects=1,
+                max_evidence_units=1,
+                max_evidence_bytes=1_000,
+                max_candidate_claims=1,
+                max_candidate_relationships=1,
+            ),
+            maximum_query_bounds=m.QueryBounds(
+                max_results=1,
+                max_depth=1,
+                max_subjects=1,
+                max_evidence_units=1,
+                max_evidence_bytes=1_000,
+                max_candidate_claims=1,
+                max_candidate_relationships=1,
+            ),
+            hook_fast_bounds=m.QueryBounds(
+                max_results=1,
+                max_depth=1,
+                max_subjects=1,
+                max_evidence_units=1,
+                max_evidence_bytes=1_000,
+                max_candidate_claims=1,
+                max_candidate_relationships=1,
             ),
         )
+        service = self._service(policy=policy)
         result = service.reconsider(
             m.ReconsiderRequest(
                 repository_id="repo-1",
@@ -373,14 +458,12 @@ class ReconsiderServiceTest(unittest.TestCase):
             max_candidate_claims=8,
             max_candidate_relationships=8,
         )
-        service = ReconsiderService(
-            store=self.store,
-            policy=m.ServiceBoundsPolicy(
-                default_query_bounds=bounds,
-                maximum_query_bounds=bounds,
-                hook_fast_bounds=bounds,
-            ),
+        policy = m.ServiceBoundsPolicy(
+            default_query_bounds=bounds,
+            maximum_query_bounds=bounds,
+            hook_fast_bounds=bounds,
         )
+        service = self._service(policy=policy)
         result = service.reconsider(
             m.ReconsiderRequest(
                 repository_id="repo-1",
@@ -396,6 +479,386 @@ class ReconsiderServiceTest(unittest.TestCase):
         locators = [item.surface.locator for item in result.surfaces]
         self.assertIn("src/b.py", locators)
         self.assertNotIn("src/c.py", locators)
+
+    def test_installation_effect_engine_uses_repository_runtime(self) -> None:
+        self._create(
+            "u-installation-engine",
+            "src/coordinator.py",
+            "src/coordinator.py",
+            m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+            assertion_nature=m.AssertionNature.NORMATIVE,
+        )
+        runtime = mock.Mock(
+            repository_id="repo-1",
+            root=str(self.root),
+            store=self.store,
+            evidence=FilesystemEvidenceSource("repo-1", str(self.root)),
+        )
+        engine = DependencyEffectService(
+            repository_runtime=lambda repository_id: (
+                runtime
+                if repository_id == "repo-1"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            registered_repository_ids=lambda: ("repo-1",),
+            support_for_repository=lambda repository_id: (
+                self.support
+                if repository_id == "repo-1"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            functional_route_impacts=lambda _repository_id, _paths, _surfaces: (),
+            clock=lambda: NOW,
+            new_context_id=lambda: "ctx-fp-installation-engine",
+        )
+
+        surfaces, contexts, refs = engine.functional_pyramid_change(
+            newly_active_repositories=("repo-1",),
+        )
+
+        affected = next(
+            conclusion
+            for surface in surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-installation-engine"
+        )
+        self.assertIsInstance(affected.support, m.SupportEvaluation)
+        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertEqual(
+            affected.support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertEqual(refs, (affected.ref,))
+        self.assertEqual(
+            tuple(context.repository_id for context in contexts),
+            ("repo-1",),
+        )
+        context = self.store.get_context(contexts[0].context_id.value)
+        self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
+
+    def test_newly_active_repository_reassesses_pre_route_normative_revision(
+        self,
+    ) -> None:
+        self._create(
+            "u-pre-route",
+            "src/pre_route.py",
+            "src/pre_route.py",
+            m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+            assertion_nature=m.AssertionNature.NORMATIVE,
+        )
+        effects = self._effects(
+            new_context_id=lambda: "ctx-fp-activate",
+            clock=lambda: NOW,
+        )
+
+        surfaces, contexts, refs = effects.functional_pyramid_change(
+            newly_active_repositories=("repo-1",)
+        )
+
+        affected = next(
+            conclusion
+            for surface in surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-pre-route"
+        )
+        self.assertIsInstance(affected.support, m.SupportEvaluation)
+        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertEqual(
+            affected.support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertIn(affected.ref, refs)
+        self.assertEqual(
+            tuple(context.repository_id for context in contexts),
+            ("repo-1",),
+        )
+
+    def test_retained_activation_effect_stays_actionable_without_route_support(
+        self,
+    ) -> None:
+        self._create(
+            "u-pre-route-retained",
+            "src/pre_route_retained.py",
+            "src/pre_route_retained.py",
+            m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+            assertion_nature=m.AssertionNature.NORMATIVE,
+        )
+        effects = self._effects(
+            new_context_id=lambda: "ctx-fp-retained",
+            clock=lambda: NOW,
+        )
+        _, _, refs = effects.functional_pyramid_change(
+            newly_active_repositories=("repo-1",)
+        )
+
+        surfaces, contexts = effects.retained_functional_pyramid_effects(refs)
+
+        retained = next(
+            conclusion
+            for surface in surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-pre-route-retained"
+        )
+        self.assertIsInstance(retained.support, m.SupportEvaluation)
+        assert isinstance(retained.support, m.SupportEvaluation)
+        self.assertEqual(
+            retained.support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertIn("FunctionalRouteSupport", retained.support.reason)
+        self.assertEqual(
+            tuple(context.repository_id for context in contexts),
+            ("repo-1",),
+        )
+
+    def test_deliberately_inactive_repository_reassesses_recorded_route(
+        self,
+    ) -> None:
+        self._create(
+            "u-governed",
+            "src/governed.py",
+            "src/governed.py",
+            m.FunctionalRouteSupport(
+                repository_id="repo-1",
+                pyramid_id=m.FunctionalPyramidId("fp-1"),
+                semantic_scope=m.EvidenceScope(paths=("src/governed.py",)),
+                route_identity=m.FunctionalRouteIdentity("route-old"),
+            ),
+            assertion_nature=m.AssertionNature.NORMATIVE,
+        )
+        effects = self._effects(
+            new_context_id=lambda: "ctx-fp-deactivate",
+            clock=lambda: NOW,
+        )
+
+        surfaces, contexts, refs = effects.functional_pyramid_change(
+            deliberately_inactive_repositories=("repo-1",)
+        )
+
+        affected = next(
+            conclusion
+            for surface in surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-governed"
+        )
+        self.assertIsInstance(affected.support, m.SupportEvaluation)
+        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertEqual(
+            affected.support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertIn(affected.ref, refs)
+        self.assertEqual(contexts[0].repository_id, "repo-1")
+
+    def test_authority_source_change_is_considered_not_forced_stale(self) -> None:
+        root_auth = pathlib.Path(self._tmp.name) / "repo-auth"
+        root_auth.mkdir()
+        (root_auth / "rules").mkdir()
+        (root_auth / "rules/governance.md").write_text("governance\n", encoding="utf-8")
+        authority = m.AuthorityBinding(
+            evidence_ref=m.EvidenceRef(
+                evidence_id=m.EvidenceId("authority-1"),
+                repository_id="repo-auth",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator="rules/governance.md",
+                revision_or_fingerprint="sha256:authority",
+            ),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+        store_auth = LifecycleStore(
+            pathlib.Path(self._tmp.name) / "repo-auth.db",
+            retention=RETENTION,
+            clock=lambda: NOW,
+        )
+        self.addCleanup(store_auth.close)
+        store_auth.register_repository(
+            "repo-auth",
+            str(root_auth),
+            authority_bindings=(authority,),
+        )
+        context_auth = m.InvestigationContextId("ctx-repo-auth")
+        store_auth.put_context(
+            m.InvestigationContext(
+                context_id=context_auth,
+                repository_id="repo-auth",
+                request_id=m.RequestId("req-repo-auth"),
+                binding_digest=m.ContentDigest("sha256:repo-auth"),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(),
+                created_at=NOW,
+                expires_at=NOW + RETENTION.context_lifetime,
+            )
+        )
+        self._create(
+            "u-authority",
+            "src/authority_user.py",
+            "src/authority_user.py",
+            m.AuthoritySupportDependency(authority=authority),
+            repository_id="repo-auth",
+            context_id=context_auth,
+            assertion_nature=m.AssertionNature.NORMATIVE,
+            store=store_auth,
+        )
+        support = mock.Mock()
+        support.evaluate_revision.return_value = support_rules.evaluation(
+            m.SupportState.CURRENT,
+            NOW,
+            "",
+        )
+        runtime_auth = mock.Mock(
+            repository_id="repo-auth",
+            root=str(root_auth),
+            store=store_auth,
+            evidence=FilesystemEvidenceSource("repo-auth", root_auth),
+        )
+        effects = DependencyEffectService(
+            repository_runtime=lambda repository_id: (
+                runtime_auth
+                if repository_id == "repo-auth"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            registered_repository_ids=lambda: ("repo-auth",),
+            support_for_repository=lambda repository_id: (
+                support
+                if repository_id == "repo-auth"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            functional_route_impacts=lambda _repository_id, _paths, _surfaces: (),
+            clock=lambda: NOW,
+        )
+        service = ReconsiderService(
+            store=store_auth,
+            effects=effects,
+            clock=lambda: NOW,
+        )
+
+        result = service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-auth",
+                changed_paths=("rules/governance.md",),
+            )
+        )
+
+        affected = next(
+            conclusion
+            for surface in result.surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-authority"
+        )
+        self.assertIn(m.ChangeReason.DIRECT, affected.reasons)
+        self.assertIsInstance(affected.support, m.SupportEvaluation)
+        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertEqual(affected.support.state, m.SupportState.CURRENT)
+        self.assertEqual(result.reestablishment_contexts, ())
+
+    def test_governance_only_change_crosses_physical_repository_boundary(
+        self,
+    ) -> None:
+        root_two = pathlib.Path(self._tmp.name) / "repo-two"
+        root_two.mkdir()
+        (root_two / "src").mkdir()
+        store_two = LifecycleStore(
+            pathlib.Path(self._tmp.name) / "repo-two.db",
+            retention=RETENTION,
+            clock=lambda: NOW,
+        )
+        self.addCleanup(store_two.close)
+        store_two.register_repository("repo-2", str(root_two))
+        context_two = m.InvestigationContextId("ctx-repo-2")
+        store_two.put_context(
+            m.InvestigationContext(
+                context_id=context_two,
+                repository_id="repo-2",
+                request_id=m.RequestId("req-repo-2"),
+                binding_digest=m.ContentDigest("sha256:repo-2"),
+                origin=m.ContextOrigin.EVIDENCE_ONLY,
+                state=m.ContextState.LIVE,
+                scope=m.EvidenceScope(),
+                created_at=NOW,
+                expires_at=NOW + RETENTION.context_lifetime,
+            )
+        )
+        route_id = m.FunctionalRouteIdentity("route-cross-repo")
+        self._create(
+            "u-repo-2",
+            "src/remote.py",
+            "src/remote.py",
+            m.FunctionalRouteSupport(
+                repository_id="repo-2",
+                pyramid_id=m.FunctionalPyramidId("fp-1"),
+                semantic_scope=m.EvidenceScope(paths=("src/remote.py",)),
+                route_identity=route_id,
+            ),
+            repository_id="repo-2",
+            context_id=context_two,
+            assertion_nature=m.AssertionNature.NORMATIVE,
+            store=store_two,
+        )
+        support = mock.Mock()
+        support.evaluate_revision.return_value = support_rules.evaluation(
+            m.SupportState.REASSESSMENT_REQUIRED,
+            NOW,
+            "governing route changed",
+        )
+        runtime_one = mock.Mock(
+            repository_id="repo-1",
+            root=str(self.root),
+            store=self.store,
+            evidence=FilesystemEvidenceSource("repo-1", self.root),
+        )
+        runtime_two = mock.Mock(
+            repository_id="repo-2",
+            root=str(root_two),
+            store=store_two,
+            evidence=FilesystemEvidenceSource("repo-2", root_two),
+        )
+        runtimes = {"repo-1": runtime_one, "repo-2": runtime_two}
+        effects = DependencyEffectService(
+            repository_runtime=lambda repository_id: runtimes[repository_id],
+            registered_repository_ids=lambda: ("repo-1", "repo-2"),
+            support_for_repository=lambda repository_id: support,
+            functional_route_impacts=lambda repository_id, paths, surfaces: (
+                (route_id,)
+                if repository_id == "repo-1"
+                and paths == ("docs/functional-pyramid.json",)
+                and not surfaces
+                else ()
+            ),
+            new_context_id=lambda: "ctx-cross-repo",
+            clock=lambda: NOW,
+        )
+        service = self._service(
+            support=support,
+            effects=effects,
+        )
+
+        result = service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("docs/functional-pyramid.json",),
+            )
+        )
+
+        remote = next(
+            surface
+            for surface in result.surfaces
+            if surface.surface.repository_id == "repo-2"
+        )
+        self.assertEqual(remote.reasons, (m.ChangeReason.DIRECT,))
+        self.assertEqual(
+            remote.conclusions[0].support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertEqual(
+            tuple(context.repository_id for context in result.reestablishment_contexts),
+            ("repo-2",),
+        )
+        context = store_two.get_context(
+            result.reestablishment_contexts[0].context_id.value
+        )
+        self.assertEqual(context.repository_id, "repo-2")
+        self.assertEqual(context.origin, m.ContextOrigin.CHANGED_SUPPORT)
 
     def test_unknown_challenge_understanding_is_rejected(self) -> None:
         with self.assertRaises(RecordingValidationError):
@@ -511,7 +974,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             authority=self.store,
             clock=lambda: NOW,
         )
-        service = ReconsiderService(store=self.store, support=support)
+        service = self._service(support=support)
         (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
         result = service.reconsider(
             m.ReconsiderRequest(
@@ -531,7 +994,9 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertIn(m.ChangeReason.DIRECT, changed.reasons)
         self.assertTrue(
-            self.store.has_admitted_discovery(result.context.context_id.value, "disc-1")
+            self.store.has_admitted_discovery(
+                result.reestablishment_contexts[0].context_id.value, "disc-1"
+            )
         )
 
     def test_refs_only_discovery_tracks_only_the_referenced_changed_path(self):
@@ -571,8 +1036,7 @@ class ReconsiderServiceTest(unittest.TestCase):
     def test_repeated_changed_scope_gets_a_fresh_context_after_expiry(self) -> None:
         now = [NOW]
         issued = iter(("ctx-reconsider-1", "ctx-reconsider-2"))
-        service = ReconsiderService(
-            store=self.store,
+        service = self._service(
             clock=lambda: now[0],
             new_context_id=lambda: next(issued),
         )
@@ -589,8 +1053,12 @@ class ReconsiderServiceTest(unittest.TestCase):
                 changed_paths=("src/a.py",),
             )
         )
-        self.assertNotEqual(second.context, first.context)
-        context = self.store.get_context(second.context.context_id.value)
+        self.assertNotEqual(
+            second.reestablishment_contexts, first.reestablishment_contexts
+        )
+        context = self.store.get_context(
+            second.reestablishment_contexts[0].context_id.value
+        )
         self.assertEqual(context.state, m.ContextState.LIVE)
 
     def test_refs_only_challenge_context_retains_scope_for_symbol_and_declared_owner(

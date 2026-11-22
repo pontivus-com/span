@@ -29,12 +29,25 @@ any substantive conclusion exists or that the investigation was complete.
 - **Discovery:** current membership against the recorded scope fingerprint.
   Additions/removals matter for conclusions that declare this dependency.
   Truncated inventory never supplies a complete membership observation.
+- **Functional route:** re-resolve the exact recorded semantic scope against the
+  current ACTIVE participation/declaration graph. Leaving the recorded active
+  instance or changing the resolved route identity requires reassessment;
+  operational inability to inspect an otherwise correctly composed ACTIVE graph
+  is unverifiable. A resolved unchanged route remains current. Canonical rule
+  content currency is evaluated separately through authority support.
 
 Checks follow declared dependencies. A conclusion citing a whole-file content
 observation can require reassessment after any change to that file, even if
 the meaning still holds. Unrelated files do not invalidate it merely because
 repository HEAD or a timestamp changed. Omitted support cannot be detected
 as a semantic omission by deterministic comparison alone.
+
+Functional Pyramid route changes and authority-content changes remain distinct.
+Changing context coverage, inheritance, rule membership, governing edges or
+material member bindings can change route support without changing source rule
+text. Conversely, an applicable canonical rule can change while the route
+identity remains stable. `reconsider` uses the same shared effect engine for
+ordinary implementation changes and declared governance changes.
 
 ## Reading and recording
 
