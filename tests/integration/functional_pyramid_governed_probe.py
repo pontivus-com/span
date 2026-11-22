@@ -47,9 +47,7 @@ def _dicts(value):
 
 def _has_route_support(value) -> bool:
     return any(
-        "route_identity" in item
-        and "semantic_scope" in item
-        and "pyramid_id" in item
+        "route_identity" in item and "semantic_scope" in item and "pyramid_id" in item
         for item in _dicts(value)
     )
 
