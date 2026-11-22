@@ -475,7 +475,9 @@ class LifecycleService:
     ) -> tuple[m.SupportDependency, ...] | m.Unavailable:
         """Derive the server-owned governance dependency set for one NORMATIVE scope."""
         if self._functional_pyramid_route is None:
-            return ()
+            raise RuntimeError(
+                "Functional Pyramid route composition is not configured"
+            )
         current = self._functional_pyramid_route(repository_id, surface, semantic_scope)
         if isinstance(current, m.FunctionalPyramidParticipation):
             return ()
