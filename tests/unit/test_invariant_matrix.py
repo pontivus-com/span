@@ -197,6 +197,53 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
         self.assertNotIn("span.service.effects", imports)
         self.assertNotIn("span.service.support", imports)
 
+    def test_reconsider_has_no_local_effect_engine_fallback(self):
+        path = REPO_ROOT / "src/span/service/reconsider.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        service = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "ReconsiderService"
+        )
+        init = next(
+            node
+            for node in service.body
+            if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+        )
+        calls = [
+            node
+            for node in ast.walk(init)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "DependencyEffectService"
+        ]
+        self.assertEqual(calls, [])
+        effects_index = [
+            argument.arg for argument in init.args.kwonlyargs
+        ].index("effects")
+        self.assertIsNone(
+            init.args.kw_defaults[effects_index],
+            "ReconsiderService.effects must be a required capability",
+        )
+
+    def test_repository_change_cannot_skip_functional_route_impacts(self):
+        path = REPO_ROOT / "src/span/service/effects.py"
+        source = path.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "if self._functional_route_impacts is not None",
+            source,
+        )
+        self.assertIn(
+            "Functional Pyramid route-impact composition is not configured",
+            source,
+        )
+
+    def test_semantic_hooks_use_installation_runtime(self):
+        path = REPO_ROOT / "src/span/shell/hooks.py"
+        source = path.read_text(encoding="utf-8")
+        self.assertIn("open_installation_runtime", source)
+        self.assertNotIn("open_functional_pyramid_service", source)
+
     def test_context_composition_wires_all_mandatory_pyramid_capabilities(self):
         path = REPO_ROOT / "src/span/shell/context.py"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
