@@ -176,10 +176,9 @@ def compose_context(
     )
     reconsider = ReconsiderService(
         store=store,
-        support=support,
+        effects=effects,
         evidence=evidence_service,
         policy=policy,
-        effects=effects,
     )
     answer = AnswerService(
         store=store,
