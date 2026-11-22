@@ -3,7 +3,7 @@
   "name": "io.github.pontivus-com/span",
   "title": "Span",
   "description": "Maintained codebase understanding and declared governance, qualified on evidence and change.",
-  "version": "0.11.0",
+  "version": "1.0.0-beta.1",
   "repository": {
     "url": "https://github.com/pontivus-com/span",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "span-mcp",
-      "version": "0.11.0",
+      "version": "1.0.0b1",
       "transport": {
         "type": "stdio"
       }

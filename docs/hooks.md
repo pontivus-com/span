@@ -81,9 +81,10 @@ connection, then injects the FD-58 adoption notice once per session through the
 `context` hook. An edit-time notice is stored when a tool edit runs and is
 delivered once on the next `context` hook, naming the changed paths and the exact
 `reconsider(changed_paths=[...])` call. Lifecycle actions remain required when a notice is missed; support checks remain
-server-owned. A five-run OpenCode
-capture recorded the first `ask` before the first source read in 5/5 runs; see
-`.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
+server-owned. A five-run OpenCode historical capture recorded the first
+`ask` before the first source read in 5/5 runs. The sanitized result is retained
+in [acceptance](acceptance.md); the raw capture remains private working evidence
+rather than a public repository link.
 
 Pending edit notices retain their event paths until delivery. If an idle event
 arrives first, the plugin passes those paths through JSON stdin to `session-stop`

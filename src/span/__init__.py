@@ -1,4 +1,4 @@
-"""Span — maintained codebase understanding for coding agents.
+"""Span — maintained codebase understanding and declared governance for coding agents.
 
 Package layout follows plan §14 (core/ports/shell):
 
@@ -9,4 +9,4 @@ Package layout follows plan §14 (core/ports/shell):
 - ``span.service`` — coordinates ports/core; owns no semantic rules.
 """
 
-__version__ = "0.11.0"
+__version__ = "1.0.0b1"

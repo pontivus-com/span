@@ -1,12 +1,13 @@
 # Span technical design — layer 4
 
-**Status: stated decisions are binding; unresolved portions remain open.**
-Implementation may proceed only where its applicable inputs are settled;
-activation is blocked by the required open items in §6. This is layer 4. It records the
-implementation baseline, what is retained from the two existing codebases, and
-the proposed refactoring boundary for layers 0–3. It chooses mechanisms; it
-adds no product requirement. Where it conflicts with a higher layer, the higher
-layer governs.
+**Status: stated decisions are binding; historical unresolved items remain
+explicitly scoped. Version-1 Part C mechanisms are implementation-complete
+through T10; T13 owns assembled-candidate delivery and fitness verification.**
+This is layer 4. It records the implementation baseline, what is retained from
+the historical codebases, and the mechanisms that realize layers 0–3. Historical
+open items in §6 do not override the Version-1 Part C implementation status
+unless Part C explicitly cites them. It chooses mechanisms; it adds no product
+requirement. Where it conflicts with a higher layer, the higher layer governs.
 
 **Historical release identity (2026-11-07).** That capture identified **0.10.0**
 (2026-11-07), a public-grammar and identity-ownership release over 0.9.4. The
@@ -26,9 +27,8 @@ release is changed by this document.
 
 The [requirements pyramid](requirements-pyramid.md) governs placement and
 precedence. Product and behavioural rules remain in layers 0–3; this document
-cites their IDs instead of defining replacements. Execution ordering and gate
-ownership live in the
-[implementation plan dated 2026-11-01](../.context/plans/2026-11-01-implementation-plan.md).
+cites their IDs instead of defining replacements. Current Version-1 execution ordering and gate ownership live in the
+[1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md).
 
 **0.10.3 target amendment (2026-11-14).** Active mechanism choices below follow
 the amended lifecycle/functional contracts. Runtime implementation, installed
@@ -42,6 +42,14 @@ supersedes any earlier mechanism statement where the new FD-61–FD-94 contract
 changes that boundary. It preserves the existing semantic lifecycle mechanisms
 and adds only the storage, resolution, support and public-projection machinery
 required by Layers 0–3.
+
+**Version-1 implementation update (2026-11-22).** T01–T10 implemented and
+verified the Part-C mechanisms and generic functional acceptance on the
+reconciled release branch. T11 private first-adopter acceptance passed and is
+closed. T13 remains the owner of assembled-`1.0.0b1` re-verification,
+candidate-specific managed-host delivery evidence, the Part-C derivation audit
+and the Version-1 G5/F8 measurement; those release gates do not make the Part-C
+implementation itself pending.
 
 ## 1. Baseline decision
 
@@ -211,13 +219,14 @@ and reference effects belong in this package, not an unrelated subsystem.
 
 ## 6. Open items
 
-### O-1 — Withdrawn premise (design decision closed; implementation pending)
+### O-1 — Withdrawn premise (resolved and implemented)
 
-FD-13, FD-19, and FD-34 govern. Adapt `support_rules.premise_membership_state`
-and `SupportService._premise_eval` to distinguish withdrawal from supersession;
-the present helper conflates them. The earlier proposal to amend layer 3 to
-preserve existing behaviour is withdrawn. WP-4 changes implementation against
-the existing authority; no higher-layer amendment is assumed.
+FD-13, FD-19, and FD-34 govern. `support_rules.premise_membership_state`
+distinguishes withdrawal from supersession, and `SupportService._premise_eval`
+detects a `WithdrawnConclusion` before evaluating the referenced revision.
+`test_premise_withdrawal_is_unverifiable` verifies the distinction. The
+earlier proposal to amend layer 3 to preserve the old behaviour remains
+withdrawn; no higher-layer amendment was required.
 
 ### O-2 — Retention policy value
 
@@ -422,11 +431,11 @@ not a pass for the proposed contract or a full-suite run. No new host capture,
 scored fitness run, or schema-11 transition was performed. Not every source
 module was read; adaptation cost remains inferred, not an implementation estimate.
 
-Historical host evidence is in the withdrawn beta ledger (internal evidence,
-not published) and the
-[G-0 capture](../.context/evidence/host-contract/2026-10-31/G-0.md). A fixture
-README's `UNVERIFIED` label does not erase those captures, and those captures do
-not establish delivery of a different grammar.
+Historical host evidence is retained as internal working evidence, including
+the withdrawn beta ledger and the 2026-10-31 G-0 capture. Those private captures
+are not public repository links. A fixture README's `UNVERIFIED` label does not
+erase those captures, and those captures do not establish delivery of a
+different grammar.
 
 ## Part B — Implementation mechanisms
 
@@ -1162,12 +1171,12 @@ configuration. See
 wait the first tool list had no Span and the rate was 2/5. Evidence:
 `.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
 
-Retain the
-[2026-10-30 rebuild plan §10.4 comparative protocol](../.context/plans/2026-10-30-span-lifecycle-rebuild-implementation-plan.md#104-comparative-fitness-protocol-and-binding-decision)
-as an evaluation mechanism, with G5/F8 remaining the product authority. The
-[2026-11-01 implementation plan, FP-7](../.context/plans/2026-11-01-implementation-plan.md#fp-7--product-fitness-and-completion)
-owns the new candidate's frozen-manifest and evidence references. Identify the new
-candidate and freeze its workloads and decision rule before scoring. Record cold
+Retain the established comparative protocol as an evaluation mechanism, with
+G5/F8 remaining the product authority. The current
+[Version-1 implementation plan](implementation-plans/1.0.0-beta.md) T13 owns the
+assembled candidate's frozen workload, evidence references and final measurement.
+Identify the candidate and freeze its workloads and decision rule before
+scoring. Record cold
 capture, fresh reuse, change/re-establishment, recovery, and failed attempts;
 separate mandated conformance from natural use. No telemetry service or new
 numeric acceptance threshold is introduced. §8's historical calibration is not
@@ -1211,19 +1220,20 @@ second declaration of those requirements.
 | FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | canonical native/shell guidance, hooks, skills and plugin notice-delivery lane are verified; 0.11 candidate-specific managed-host native/search/shell captures remain T10 external acceptance |
 | F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
 | F8, G5 | §15 | frozen comparative task captures and scorecards | prior measurements remain historical evidence only for their named candidates. The 0.11 T08 deterministic range behavior is verified, but its candidate-specific comparative steps/tokens measurement remains open and no prior score is reused as the 0.11 verdict |
-| FD-61–FD-74, FD-86–FD-91 | Part C §17–§18, §20.1 | new Functional Pyramid core/service tests plus installed MCP; FunctionalScope algebra, outside/covered/uncovered/mixed projection, overlapping/inherited/cross-repository graph resolution, deterministic provenance, health iff structural findings | Version-1 target; implementation pending |
-| FD-75–FD-81 | Part C §18, §20.2–§20.3 | support/record/reconsider tests; FunctionalRouteSupport derivation/evaluation, authority separation, pre-existing normative activation effects, deliberate participation removal vs operational unavailability | Version-1 target; implementation pending |
-| FD-82–FD-85, FD-93 | Part C §19–§20.4 | lifecycle store/service/schema tests; installation-level receipts, activation/revision/deactivation atomicity, participation effects, dependent effects, replay with fresh contexts, pyramid CAS and one-ACTIVE-instance uniqueness | Version-1 target; implementation pending |
-| FD-92, FD-94; L8, L13–L16 | Part C §20–§22 | generated schema, MCP integration, hooks/skills and host capture; exact three tools, candidate/status/receipt selectors, FunctionalPyramidRecorded affected projection, result-driven initialization through DECLARE→reconsider/disposition→VALIDATE→ACTIVATE/REVISE→VERIFY→effect disposition and matching runtime qualification gates | Version-1 target; implementation pending |
-| Functional design §15 cases 32–44 | Part C §18–§22 | generic acceptance plus installed MCP; outside scope, MIXED scope, structural health equivalence, activation of pre-existing normative understanding, participation-write propagation, deactivation/removal route state, replay/context recovery, concurrency, initialization re-alignment, conformance-as-NORMATIVE, accepted-non-current runtime gating and participation-write effect completion | Version-1 target; implementation pending |
+| FD-61–FD-74, FD-86–FD-91 | Part C §17–§18, §20.1 | Functional Pyramid core/service tests plus installed MCP; FunctionalScope algebra, outside/covered/uncovered/mixed projection, overlapping/inherited/cross-repository graph resolution, deterministic provenance, health iff structural findings | implemented; T10 generic acceptance verified on exact-head CI, T13 re-verifies the assembled candidate |
+| FD-75–FD-81 | Part C §18, §20.2–§20.3 | support/record/reconsider tests; FunctionalRouteSupport derivation/evaluation, authority separation, pre-existing normative activation effects, deliberate participation removal vs operational unavailability | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
+| FD-82–FD-85, FD-93 | Part C §19–§20.4 | lifecycle store/service/schema tests; installation-level receipts, activation/revision/deactivation atomicity, participation effects, dependent effects, replay with fresh contexts, pyramid CAS and one-ACTIVE-instance uniqueness | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
+| FD-92, FD-94; L8, L13–L16 | Part C §20–§22 | generated schema, MCP integration, hooks/skills and host capture; exact three tools, candidate/status/receipt selectors, FunctionalPyramidRecorded affected projection, result-driven initialization through DECLARE→reconsider/disposition→VALIDATE→ACTIVATE/REVISE→VERIFY→effect disposition and matching runtime qualification gates | implementation and generic installed-MCP evidence complete; candidate-specific managed-host delivery remains T13 |
+| Functional design §15 cases 32–44 | Part C §18–§22 | generic acceptance plus installed MCP; outside scope, MIXED scope, structural health equivalence, activation of pre-existing normative understanding, participation-write propagation, deactivation/removal route state, replay/context recovery, concurrency, initialization re-alignment, conformance-as-NORMATIVE, accepted-non-current runtime gating and participation-write effect completion | T10 generic acceptance complete; T11 private acceptance passed; T13 reruns the assembled candidate |
 
 The matrix covers both the established Part-B baseline and the Part-C
 Version-1 target. Part-B historical/current mechanism claims remain governed by
-their existing evidence and open measurements. Part C is design-complete only
-when its derivation map has no unmapped FD owner or unowned mechanism; it becomes
-implementation-complete only after the Version-1 rows above have observed test,
-installed-MCP and host evidence. Writing this matrix or retaining the baseline
-tests closes neither implementation nor delivery verification.
+their existing evidence and open measurements. Part C is design-complete because
+its derivation map has no unmapped FD owner or unowned mechanism, and its
+implementation is complete through the T10 generic acceptance evidence recorded
+above. Candidate-specific managed-host delivery, final Part-C derivation
+re-verification and G5/F8 product measurement remain T13 release-verification
+work; they do not reopen the implemented mechanism.
 
 ## Part C — Version 1 Functional Pyramid mechanisms
 

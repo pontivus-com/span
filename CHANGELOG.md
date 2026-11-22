@@ -1,5 +1,79 @@
 # Changelog
 
+## 1.0.0b1 — 2026-11-22
+
+### Governed maintained understanding
+
+- Add the Version-1 Functional Pyramid alongside maintained empirical
+  understanding. Repository owners continue to own canonical governing sources;
+  Span maintains declared applicability, derivation, support and change
+  consequences without copying governing prose into a second authority.
+- Make participation explicit as `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`.
+  ACTIVE repositories resolve the governing route for the same semantic scope as
+  ordinary retained understanding, including declared cross-repository
+  governance.
+- Keep semantic and governing proof distinct. NORMATIVE conclusions receive
+  server-derived Functional Pyramid route and canonical authority support;
+  current implementation evidence never substitutes for declared authority.
+
+### Lifecycle and public contract
+
+- Preserve exactly three public MCP tools: `ask`, `record`, and
+  `reconsider`. Functional Pyramid status, candidate validation and receipt
+  retrieval are `ask` branches; participation writes are a
+  `record(kind="functional_pyramid")` branch.
+- Add the result-driven adoption/revision lifecycle:
+  STATUS → DISCOVER/VALIDATE → DECLARE when needed → re-align →
+  ACTIVATE/REVISE → VERIFY → re-establish actionable effects.
+- Make accepted participation writes return their actual dependent effects and
+  re-establishment contexts. Acceptance is not task completion while required
+  effects or NORMATIVE conclusions remain non-current.
+- Propagate implementation and governance changes through the same
+  repository-qualified effect model, including declared cross-repository
+  normative dependents.
+
+### Storage, migration and compatibility
+
+- Move the repository lifecycle store to schema 14 and add the separate
+  installation-owned Functional Pyramid store for participation, versions,
+  exclusions and installation-scoped receipts.
+- Keep migration explicit and offline. Existing schema-7–13 stores use the
+  inspect/apply/verify/rollback path; runtime open never performs an implicit
+  migration. Schema-13→14 preserves durable semantic/audit state and does not
+  fabricate historical Functional Pyramid support.
+- Registered or transitioned repositories begin `UNCONFIGURED` until
+  participation is explicitly recorded. Repository-portable backups remain
+  repository-scoped; full-installation recovery also carries Functional Pyramid
+  installation state.
+- Existing hosts must reconnect/refresh their cached tool schemas for the
+  Version-1 public contract. Historical host captures do not prove Version-1
+  model delivery.
+
+### Verification and beta limits
+
+- T10 generic Version-1 acceptance passed on GitHub Actions run
+  `44977899970` at
+  `15dc6ab8264d6a4fbeeff75b80eae360eaabb80b`: build/distribution,
+  Ruff/Black, the zero-error typing ratchet, the complete pytest suite
+  (`919 passed, 1 skipped, 144 subtests`), installed non-editable MCP and the
+  FA-01–FA-44 matrix.
+- T11 private first-adopter acceptance passed on 2026-11-22 using adopter-owned
+  gitignored evidence. Raw adopter topology and captures remain outside Span
+  Git; only the sanitized pass result is published.
+- Candidate-specific Codex, OpenCode and Claude Code model-delivery captures,
+  the final Part-C derivation audit and the Version-1 G5/F8 comparative
+  measurement remain T13 release gates. They are not inferred from historical
+  captures or registration health and are not yet claimed as passed.
+
+### Release identity
+
+- Canonical package/PyPI version: `1.0.0b1`.
+- Git tag: `v1.0.0b1`; GitHub title: `Span 1.0.0 Beta 1`.
+- MCP Registry server SemVer: `1.0.0-beta.1`; registry PyPI package entry:
+  `1.0.0b1`.
+- The release workflow derives these identities from the canonical package
+  version and treats Beta 1 as a prerelease.
+
 ## 0.11.0 — 2026-11-19
 
 ### Maintained lifecycle and schema-13 candidate

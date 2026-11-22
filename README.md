@@ -219,9 +219,10 @@ Pyramid store. Existing schema-13 repositories use the explicit offline
 transition; registration alone leaves them `UNCONFIGURED` until participation is
 declared. The public operations remain exactly `ask`, `record`, and `reconsider`.
 
-The final `1.0.0b1` package/version metadata and release claims are intentionally
-not asserted until the private first-adopter and assembled-release gates pass.
-See [the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
+T11 private first-adopter acceptance passed and is closed. The `1.0.0b1`
+release candidate is assembled during T12; final release claims remain gated on
+T13 assembled-candidate verification and publication checks. See
+[the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
 - [Install and connect](docs/install.md)

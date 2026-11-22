@@ -22,17 +22,18 @@ qualifies later reuse when implementation or governance changes.
   support evaluation, propagation, response composition, state transitions,
   retention, concurrency, host expectations, and truncation.
 - [Technical design](technical-design.md) — layer 4: the implementation baseline,
-  what is retained from 0.8.3 and the withdrawn internal baseline, and the minimal refactoring set.
+  retained historical mechanisms, and the Version-1 Functional Pyramid mechanisms
+  that realize the layer-0–3 contract.
 - [Method grounding](method-grounding.md) — the evidence that the method rests on
   established, validated practice, and what is not claimed.
 
 ## Implementation
 
 - [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md) —
-  Version-1 Functional Pyramid implementation and release campaign. T00–T10 are
-  complete on the reconciled release branch; private first-adopter acceptance
-  (T11) is the next release gate before final documentation/versioning and
-  assembled-candidate closure.
+  Version-1 Functional Pyramid implementation and release campaign. T00–T11 are
+  complete; private first-adopter acceptance passed on 2026-11-22. T12 owns the
+  release documentation/version candidate, and T13 owns assembled-candidate
+  verification and release closure.
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
   low-friction lifecycle work package, ordered tasks, decision gates and
   verification; released 2026-11-14.

@@ -21,8 +21,10 @@ the physically separate repository-A / repository-B / installation-database
 governance journey required by Technical Design §22.
 
 This establishes the **generic** Version-1 functional/architecture candidate.
-It does not establish the private first-adopter gate or final-candidate managed
-host delivery. T11 remains the private adopter acceptance owner; T13 owns live
+Private first-adopter acceptance also passed on 2026-11-22 using the
+adopter-owned gitignored corpus. Raw adopter evidence remains outside Span Git;
+only this sanitized outcome is published. T11 is therefore closed. T13 still
+owns the re-run against the assembled `1.0.0b1` candidate and live
 candidate-specific Codex/Claude Code/OpenCode captures for any host claimed as
 verified at release.
 
@@ -61,11 +63,11 @@ This maps representative coverage; a named test does not certify every clause
 of a scenario or claim a host executed it. Read test assertions and execution
 receipts for the exact demonstrated boundary.
 
-### Remediation scenarios (in progress)
+### Historical 0.11 remediation scenarios
 
-The addendum in
-`.context/plans/2026-11-02-mcp-surface-refactor.md` §17 schedules these. Rows
-marked pending are not current coverage.
+These rows record the completed 0.11 remediation campaign and remain historical
+evidence for that candidate. They are not Version-1 proof; Version-1 acceptance
+is owned by the functional matrix and the T10/T11/T13 gates above.
 
 | ID | Behavior | Status | Evidence |
 | --- | --- | --- | --- |

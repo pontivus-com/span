@@ -7,17 +7,17 @@ declared support independently of hook delivery.
 
 ## Managed integration
 
-| Host | Implemented integration | Delivery qualification |
+| Host | Implemented integration | Version-1 delivery qualification |
 | --- | --- | --- |
-| Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json`. | 0.9.1: three-tool delivery captured (`gpt-5.6-luna`), including closed-union rejection, flat create, verification, replay, and restart. The flat-create re-capture is pending (account quota). Hook arrival is not established. |
-| OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait plus the FD-58 adoption notice. The 0.11.0 primer explicitly covers native read/search and shell source access. | 0.9.1: three tools; flat-create delivery captured including verification and replay; with the plugin the first `ask` precedes the first source read in 5/5 measured runs. The 0.11.0 exact-selector and shell-access candidate still requires fresh live-host capture. |
-| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health observed and installer behavior tested; authenticated model-delivered grammar and caller identity are **UNVERIFIED**. |
+| Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json`. | Managed integration remains supported. Historical 0.9.1 delivery captures do not certify Version 1. Candidate-specific live model delivery is **UNVERIFIED** until T13 captures the assembled `1.0.0b1` candidate. |
+| OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait plus the FD-58 adoption notice. | Managed integration and packaged notice delivery are verified. Historical 0.9.1/0.11 captures remain historical evidence only; candidate-specific live model delivery is **UNVERIFIED** until T13. |
+| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health and installer behavior are verified; authenticated Version-1 model-delivered grammar and caller identity remain **UNVERIFIED** pending T13. |
 
-The supported managed hosts are Codex, OpenCode, and Claude Code. Delivery is
-claimed only where a host has a recorded capture; Claude's authenticated
-model-delivery behavior remains **UNVERIFIED**. Other MCP hosts can connect
-manually; no universal compatibility or model-delivery claim follows from
-stdio compatibility.
+The supported managed hosts are Codex, OpenCode, and Claude Code. Version-1
+delivery is claimed only from an assembled-candidate T13 capture. Historical
+captures remain evidence for their named candidate and are never promoted into
+Version-1 delivery proof. Other MCP hosts can connect manually; no universal
+compatibility or model-delivery claim follows from stdio compatibility.
 
 ## Hook entries
 
@@ -61,8 +61,9 @@ accumulating them. Claude settings are read and modified only within the
 Span-owned registration and hook entries; foreign settings remain untouched.
 
 Wiring and source tests establish merge/registration and notice content, not
-live arrival. The 0.11.0 direct stdio lane exercises exact recorded-question
-selection, but it does not certify host argument preservation. Capture
+live arrival. The historical 0.11.0 direct stdio lane exercises exact
+recorded-question selection, but it does not certify Version-1 host argument
+preservation. Capture
 configured, invoked, scoped, submitted arguments, server-received JSON and
 delivered observations separately. A quiet
 hook proves neither complete coverage nor global currency.
