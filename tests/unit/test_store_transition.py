@@ -254,7 +254,7 @@ def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
 def _schema10_store(
     path: pathlib.Path, root: pathlib.Path, *, unresolved: bool = False
 ) -> pathlib.Path:
-    """Build one real schema-13 store, then present its schema-10 shape."""
+    """Build one real current-schema store, then present its schema-10 shape."""
     from span.core.recording import create_challenge
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
