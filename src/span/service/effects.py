@@ -534,9 +534,7 @@ class DependencyEffectService:
     ) -> tuple[m.ConclusionRevisionRef, ...]:
         refs: list[m.ConclusionRevisionRef] = []
         for route_id in route_ids:
-            refs.extend(
-                self._support_dependents("FUNCTIONAL_ROUTE", route_id.value)
-            )
+            refs.extend(self._support_dependents("FUNCTIONAL_ROUTE", route_id.value))
         return tuple(dict.fromkeys(refs))
 
     def _changed_paths(self, request: m.ReconsiderRequest) -> tuple[str, ...]:
