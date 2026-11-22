@@ -470,6 +470,30 @@ class SupportServiceTest(unittest.TestCase):
             m.SupportState.REASSESSMENT_REQUIRED,
         )
 
+    def test_external_authority_without_repository_runtime_fails_closed(self) -> None:
+        binding = m.AuthorityBinding(
+            evidence_ref=m.EvidenceRef(
+                evidence_id=m.EvidenceId("auth-external"),
+                repository_id="repo-b",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator="docs/rule.md",
+                revision_or_fingerprint="sha256:external",
+            ),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+        self._create(
+            "u-external-authority-missing-runtime",
+            "sub-external-authority-missing-runtime",
+            (m.AuthoritySupportDependency(authority=binding),),
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "repository-qualified authority evaluation is not configured",
+        ):
+            self.service.evaluate_version("u-external-authority-missing-runtime")
+
     def test_premise_withdrawal_is_unverifiable(self) -> None:
         observation = self._put_observation("obs-1", "src/app.py")
         self._create(
