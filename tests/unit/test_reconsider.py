@@ -357,34 +357,34 @@ class ReconsiderServiceTest(unittest.TestCase):
 
     def test_bound_reports_truncation_not_unaffected(self) -> None:
         policy = m.ServiceBoundsPolicy(
-                default_query_bounds=m.QueryBounds(
-                    max_results=1,
-                    max_depth=1,
-                    max_subjects=1,
-                    max_evidence_units=1,
-                    max_evidence_bytes=1_000,
-                    max_candidate_claims=1,
-                    max_candidate_relationships=1,
-                ),
-                maximum_query_bounds=m.QueryBounds(
-                    max_results=1,
-                    max_depth=1,
-                    max_subjects=1,
-                    max_evidence_units=1,
-                    max_evidence_bytes=1_000,
-                    max_candidate_claims=1,
-                    max_candidate_relationships=1,
-                ),
-                hook_fast_bounds=m.QueryBounds(
-                    max_results=1,
-                    max_depth=1,
-                    max_subjects=1,
-                    max_evidence_units=1,
-                    max_evidence_bytes=1_000,
-                    max_candidate_claims=1,
-                    max_candidate_relationships=1,
-                ),
-            )
+            default_query_bounds=m.QueryBounds(
+                max_results=1,
+                max_depth=1,
+                max_subjects=1,
+                max_evidence_units=1,
+                max_evidence_bytes=1_000,
+                max_candidate_claims=1,
+                max_candidate_relationships=1,
+            ),
+            maximum_query_bounds=m.QueryBounds(
+                max_results=1,
+                max_depth=1,
+                max_subjects=1,
+                max_evidence_units=1,
+                max_evidence_bytes=1_000,
+                max_candidate_claims=1,
+                max_candidate_relationships=1,
+            ),
+            hook_fast_bounds=m.QueryBounds(
+                max_results=1,
+                max_depth=1,
+                max_subjects=1,
+                max_evidence_units=1,
+                max_evidence_bytes=1_000,
+                max_candidate_claims=1,
+                max_candidate_relationships=1,
+            ),
+        )
         service = self._service(policy=policy)
         result = service.reconsider(
             m.ReconsiderRequest(
