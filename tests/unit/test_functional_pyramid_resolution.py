@@ -1067,12 +1067,8 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
             ),
         )
         authorities = {
-            ("repo-a", "rules/rule-p0.md"): _authority(
-                "repo-a", "rules/rule-p0.md"
-            ),
-            ("repo-a", "rules/rule-p1.md"): _authority(
-                "repo-a", "rules/rule-p1.md"
-            ),
+            ("repo-a", "rules/rule-p0.md"): _authority("repo-a", "rules/rule-p0.md"),
+            ("repo-a", "rules/rule-p1.md"): _authority("repo-a", "rules/rule-p1.md"),
         }
 
         view, _ = fp.resolve_functional_pyramid_route(
