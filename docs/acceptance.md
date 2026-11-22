@@ -48,13 +48,14 @@ receipt was captured.
 Version-1 live model delivery through Codex, OpenCode and Claude Code is
 **UNVERIFIED**. No verified managed-host delivery claim is made for Beta 1;
 registration/installer support is not promoted into model-delivery evidence.
-The remaining release proof is the G5/F8 named-task-class comparative
-measurement in agent steps and tokens. Historical 0.10/0.11 measurements are
-not reused as the Version-1 verdict. Two GitHub Actions calibration attempts on
-2026-11-22 reached Copilot CLI but were denied before model invocation by the
-organization's Copilot policy; no repository `COPILOT_GITHUB_TOKEN` was
-configured. Those failed harness runs are operational evidence only and produce
-no scored G5/F8 result.
+No comparative G5/F8 score is required to publish Beta 1. Product-value
+validation continues through real-world use in the legal project, where cold
+investigation, fresh-session reuse, implementation and governance changes,
+re-establishment, recovery, and ordinary failures can be observed in the actual
+workflow. Findings become inputs to follow-up Beta patch releases. Historical
+0.10/0.11 measurements and the two blocked GitHub Actions calibration attempts
+from 2026-11-22 remain background evidence only and are not a Version-1 release
+verdict.
 
 The current repository lifecycle store is schema 14. Functional Pyramid
 participation/versions/exclusions/receipts are installation-owned in
@@ -233,15 +234,17 @@ remain **UNVERIFIED**. Hook wiring is separate from observed arrival.
 
 ## Product value
 
-Compare equivalent real tasks with and without Span. Separate mandatory
-conformance from natural use, cold recording from fresh-session reuse, and
-calibration from a precommitted scored evaluation. Preserve task quality,
-prerequisites, calls, tokens (cached separately), wall time, failures, omissions,
-recording overhead, and useful focused reassessment. A populated store is not
-useful reuse. An ACCEPT requires the frozen decision rule to pass.
+Beta product value is evaluated in real engineering use rather than through a
+synthetic equivalent-task release score. The legal project is the primary
+post-release adopter surface for Version 1. Observe cold investigation,
+fresh-session reuse, implementation and governance changes, focused
+re-establishment, recovery, failures, omissions, and recording overhead as they
+occur in normal work.
 
-Current beta calibration demonstrates recorded reuse but does not establish
-a final comparative ACCEPT or universal time/token saving.
+A populated store alone is not useful reuse, and a successful release does not
+prove universal time or token savings. Any future comparative efficiency claim
+needs evidence scoped to that claim. Real-world defects or friction discovered
+during Beta are corrected through follow-up patch releases.
 
 ### Documentation replacement (G6)
 

@@ -225,24 +225,26 @@ required within the investigation that produces the understanding.
 *Demonstration:* recording a conclusion needs no internal identity lookup,
 source-body re-submission or separate evidence-admission step.
 
-### F8 — Reuse must beat re-derivation
+### F8 — Reuse must justify its overhead in real work
 
-Span is justified only where reusing retained understanding is cheaper than
-maintaining parallel documentation or acting on understanding that has gone
-stale. This is a comparative measurement, never a fixed threshold.
+Span adds lifecycle work: obtaining context, retaining useful conclusions, and
+re-aligning them after change. That overhead is justified only when the resulting
+working context is useful enough to improve real engineering work over time.
 
-```text
-value(surface) = cost_maintaining_parallel_explanation(surface)
-               + cost_rederiving_governing_applicability(surface)
-               + cost_acting_on_stale_understanding(surface)
-               − [ cost_capture + cost_query + cost_re_align ]
-```
+Beta evaluates that product value through sustained adopter use on real tasks,
+including cold investigation, fresh-session reuse, implementation changes,
+governance changes, recovery, and ordinary failure. Friction, omissions, and
+incorrect assumptions found in that use become product defects or follow-up
+improvements and are corrected in Beta patch releases.
 
-All terms are measured in the same unit for the same task class — agent steps
-and tokens. F7 protects the capture term, F2 and F4 protect the re-align term,
-F3 protects the query term.
-*Demonstration:* a measured task class shows positive value, or Span has no
-claim over it.
+Synthetic equivalent-task scoring is not a release gate. Time, token, or cost
+comparisons may still be measured when useful, but Span makes no universal
+saving claim without evidence for that specific claim.
+
+*Demonstration:* an adopter can use Span as part of normal software work, the
+working context remains usable across the lifecycle, and real-world defects can
+be identified and corrected without weakening F1–F7 or the rest of the product
+contract.
 
 ### F9 — Scope is a surface, and status is reported at its granularity
 

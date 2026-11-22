@@ -259,10 +259,10 @@ recorded conclusions retain the agent's interpretation and declared support.
 The intended benefit is complete working context for the exact software surface:
 what is already understood about the implementation, the canonical project
 guidance that applies to it, and a focused view of what needs another look after
-either side changes. Recording and host delivery still have costs, and the
-Version-1 same-task-class G5/F8 measurement is not yet complete. This beta
-therefore makes no universal time/token-saving or comparative product-fitness
-ACCEPT claim. See [acceptance](docs/acceptance.md).
+either side changes. Beta product value is validated through real-world adopter
+use rather than a synthetic pre-release score. This release therefore makes no
+universal time/token-saving claim; follow-up Beta patches will address defects
+and friction found in normal use. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
@@ -273,9 +273,9 @@ transition; registration alone leaves them `UNCONFIGURED` until participation is
 declared. The public operations remain exactly `ask`, `record`, and `reconsider`.
 
 T11 private first-adopter acceptance is closed and T12 release assembly is
-complete. The repository-verifiable T13 gates have passed for `1.0.0b1`.
-Publication remains gated on the Version-1 G5/F8 same-task-class comparative
-measurement and its final evidence append. See
+complete. The repository-verifiable T13 gates have passed for `1.0.0b1`, and
+the candidate is release-ready. G5/F8 product-value validation continues after
+release through real-world use in the legal project. See
 [the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 

@@ -73,9 +73,11 @@
 - Version-1 live model delivery through Codex, OpenCode and Claude Code remains
   **UNVERIFIED** and is not advertised as verified Beta-1 delivery. Historical
   host captures and registration health are not promoted into Version-1 proof.
-- The Version-1 G5/F8 same-task-class comparative measurement in agent steps
-  and tokens remains the final release proof before publication; historical
-  measurements are not reused as the Beta-1 verdict.
+- Beta 1 does not require a synthetic G5/F8 comparative score before
+  publication. Product-value validation continues through real-world use in the
+  legal project, with follow-up Beta patch releases used to correct defects and
+  workflow friction found in practice. Universal time/token-saving claims remain
+  out of scope without separate evidence.
 
 ### Release identity
 

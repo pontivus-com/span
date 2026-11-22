@@ -1171,32 +1171,23 @@ configuration. See
 wait the first tool list had no Span and the rate was 2/5. Evidence:
 `.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
 
-Retain the established comparative protocol as an evaluation mechanism, with
-G5/F8 remaining the product authority. The current
-[Version-1 implementation plan](implementation-plans/1.0.0-beta.md) T13 owns the
-assembled candidate's frozen workload, evidence references and final measurement.
-Identify the candidate and freeze its workloads and decision rule before
-scoring. Record cold
-capture, fresh reuse, change/re-establishment, recovery, and failed attempts;
-separate mandated conformance from natural use. No telemetry service or new
-numeric acceptance threshold is introduced. §8's historical calibration is not
-scored evidence for this candidate.
+Retain comparative measurements as optional product research, not as a
+Version-1 release gate. G5/F8 are demonstrated for Beta through real adopter use
+on ordinary engineering work. The pre-release candidate must still pass the
+deterministic contract, packaging, migration, recovery, public-boundary, and
+functional-acceptance gates; Beta publication does not wait for an artificial
+equivalent-task score.
 
-**Core-value and cost (2026-11-02, extended 2026-11-03).** F8/G5 requires both
-halves: retained, current, reusable understanding with exact change isolation,
-*and* a per-class comparative cost result measured in the same unit. The
-scorecard is `.context/evidence/fitness/2026-11-02/CORE-VALUE.md`; the cost
-classes are `five-task/MATRIX.md` and `g5/REUSE.md`. Cost is reported per named
-class, never as a universal ratio; the single-use cross-file class is negative.
+Post-release evaluation should capture the product behavior that matters in
+practice: cold investigation, fresh-session reuse, implementation and governance
+changes, re-establishment, recovery, and failure. Findings from that use are
+inputs to follow-up Beta patches. No telemetry service or numeric acceptance
+threshold is introduced.
 
-**Frozen candidate manifest (2026-11-03).** The scored surface is frozen in
-`.context/fitness/2026-11-03-post-fix-candidate-manifest.json`. The
-2026-11-02 candidate and core-value manifests, the 2026-11-03 pre-fix manifest,
-and the 2026-11-01 manifest are `VOID`: their host scope or request schema no
-longer matches the delivered surface. The post-fix manifest freezes the three
-tools and their request schemas and carries no cost numbers; the measured
-classes attach to the pre-fix surface they were run on. FG-7 stays `OPEN` until
-the F10 adoption receipt exists.
+Historical comparative captures from 2026-11-02/03 remain calibration material
+only. They do not certify Version 1 and they are not required to publish it.
+Any future public time/token/cost claim must be supported by evidence scoped to
+that claim.
 
 ## 16. Verification ownership and completion
 

@@ -96,7 +96,7 @@ authority chains.
 | **G2** | **Retain established understanding for reuse** | Understanding established during work is retained through Span and reused without the conversation that produced it. | F3, F7 |
 | **G3** | **Never outlive declared support silently** | When source evidence, governing authority, applicable functional context, discovery membership or a semantic premise changes, dependent understanding stops being usable without reassessment and the cause is named. | F2, F4, F11, L2, L10, L12 |
 | **G4** | **Audit semantic scope and governing scope independently** | A file, service and domain report semantic status at their own granularity, while a participating path also reports the complete declared Functional Pyramid route that governs it. Neither hierarchy is substituted for the other. | F9, F11, L9, L12 |
-| **G5** | **Cost less than the alternative** | Using Span must beat repeatedly re-deriving implementation meaning and governing applicability or maintaining unchecked parallel explanation, or it has no claim over the task. | F8 |
+| **G5** | **Earn its place in real software work** | Span must provide enough practical value in real engineering work to justify the lifecycle overhead it adds. Beta validates that value through sustained adopter use and follow-up correction, not through a synthetic pre-release cost score. | F8 |
 | **G6** | **Replace unchecked explanation, preserve canonical authority** | Surface-bound explanatory content lives as checked understanding where it can be tied to support. Canonical governing sources remain authoritative artifacts and are referenced, not copied into a competing Span owner. | F1, F2, F4, F11, L11 |
 | **G7** | **Make the governing path from first principles to implementation explicit** | Before interpreting or changing a participating surface, the agent can obtain the declared functional contexts, applicable authority rules, derivation path, provenance and unresolved relationships without inferring them from file names, topology or prose relevance. | F6, F10, F11, L8, L12 |
 | **G8** | **Make declared governance adoptable without inventing it** | One or more registered repositories can be explicitly brought into, revised within, excluded from, and recovered as a Functional Pyramid without copying canonical rule content or manufacturing missing authority. Incomplete coverage and unresolved relationships are visible before they can be mistaken for a complete governing model. | F11, F12, L13–L16 |
@@ -146,8 +146,13 @@ implementation edit.
 A conformance conclusion is reusable only while both the empirical support it
 cites and the governing route it depended on remain usable. Canonical governing
 sources remain single owners rather than being copied into Span. Explanatory
-documentation for covered surfaces shrinks. The complete exchange costs less
-than reconstructing those relationships manually.
+documentation for covered surfaces shrinks.
+
+For Beta, practical product value is established through real adopter use: the
+tool must be useful enough to remain in the engineering workflow, and observed
+friction or defects are corrected in follow-up Beta releases. Comparative
+time/token claims require their own evidence, but a synthetic equivalent-task
+score is not a pre-release success condition.
 
 ## 6. The pyramid
 
