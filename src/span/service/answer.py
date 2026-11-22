@@ -314,11 +314,12 @@ class AnswerService:
     ) -> _FunctionalPyramidOrientation:
         if self._functional_pyramid_orientation is None:
             raise RuntimeError("Functional Pyramid orientation is not configured")
-        selected_scope = (
-            self._surface_semantic_scope(surface)
-            if semantic_scope is None
-            else semantic_scope
-        )
+        selected_scope = semantic_scope
+        if selected_scope is None:
+            try:
+                selected_scope = self._surface_semantic_scope(surface)
+            except RecordingValidationError:
+                selected_scope = None
         return self._functional_pyramid_orientation(
             repository_id,
             surface,
