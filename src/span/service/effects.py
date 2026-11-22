@@ -196,7 +196,23 @@ class DependencyEffectService:
             current = store.get_version(ref.understanding_id.value, version.value)
             if ref not in current.conclusions:
                 continue
-            support = self._support_state(ref)
+            revision = self._conclusion_revision(ref)
+            missing_required_route = (
+                isinstance(revision.content, m.SupportedConclusion)
+                and revision.content.assertion_nature is m.AssertionNature.NORMATIVE
+                and not any(
+                    isinstance(dependency, m.FunctionalRouteSupport)
+                    for dependency in revision.content.support
+                )
+            )
+            support = (
+                self._forced_reassessment(
+                    ref,
+                    "ACTIVE normative revision predates required FunctionalRouteSupport",
+                )
+                if missing_required_route
+                else self._support_state(ref)
+            )
             if (
                 isinstance(support, m.SupportEvaluation)
                 and support.state is m.SupportState.CURRENT
