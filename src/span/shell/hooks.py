@@ -22,6 +22,7 @@ import json
 import os
 import pathlib
 import sys
+import typing as _typing
 
 from span.core import model as m
 from span.core import support_rules as _support_rules
@@ -121,7 +122,9 @@ def _readiness_label(readiness) -> str:
     return "store unbound"
 
 
-def _installation_inputs(mapping: dict[str, str]):
+def _installation_inputs(
+    mapping: dict[str, str],
+) -> tuple[dict[str, str], _typing.Callable[[str], str]]:
     """Return the exact registered repository set and locator resolver."""
     roots = {_repository_id(root): root for root in mapping}
 
