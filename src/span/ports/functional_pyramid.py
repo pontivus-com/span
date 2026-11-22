@@ -6,6 +6,8 @@ import datetime as _datetime
 import typing as _typing
 
 from span.core import model as m
+from span.ports.evidence import EvidenceSource
+from span.ports.lifecycle import LifecycleStorePort
 
 
 class FunctionalPyramidDeclarationInvalid(ValueError):
@@ -14,6 +16,22 @@ class FunctionalPyramidDeclarationInvalid(ValueError):
 
 class FunctionalPyramidRepositoryUnavailable(OSError):
     """A declared Functional Pyramid member cannot currently be read."""
+
+
+class FunctionalPyramidRepositoryRuntime(_typing.Protocol):
+    """Raw registered-repository capabilities used by installation services."""
+
+    @property
+    def repository_id(self) -> str: ...
+
+    @property
+    def root(self) -> str: ...
+
+    @property
+    def store(self) -> LifecycleStorePort: ...
+
+    @property
+    def evidence(self) -> EvidenceSource: ...
 
 
 class FunctionalPyramidDeclarationPort(_typing.Protocol):
