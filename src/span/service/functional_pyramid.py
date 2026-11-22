@@ -213,7 +213,9 @@ class FunctionalPyramidService:
     ):
         """Resolve the current repository route through the installation state."""
         try:
-            status = self.status(m.FunctionalPyramidSelector(repository_id=repository_id))
+            status = self.status(
+                m.FunctionalPyramidSelector(repository_id=repository_id)
+            )
             if status.state is not m.FunctionalPyramidParticipationState.ACTIVE:
                 return m.FunctionalPyramidParticipation(status.state)
             assert status.pyramid_id is not None
