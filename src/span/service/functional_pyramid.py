@@ -139,7 +139,9 @@ class FunctionalPyramidService:
 
     def _runtime(self, repository_id: str) -> FunctionalPyramidRepositoryRuntime:
         if self._repository_runtime is None:
-            raise RuntimeError("Functional Pyramid repository runtime is not configured")
+            raise RuntimeError(
+                "Functional Pyramid repository runtime is not configured"
+            )
         return self._repository_runtime(repository_id)
 
     def _support_for_repository(self, repository_id: str) -> SupportService:
@@ -978,9 +980,9 @@ class FunctionalPyramidService:
         old_members: tuple[m.FunctionalPyramidMemberView, ...],
         new_members: tuple[m.FunctionalPyramidMemberView, ...],
     ) -> tuple[m.FunctionalRouteIdentity, ...]:
-        retained = {
-            member.repository_id for member in old_members
-        } & {member.repository_id for member in new_members}
+        retained = {member.repository_id for member in old_members} & {
+            member.repository_id for member in new_members
+        }
         changed: set[m.FunctionalRouteIdentity] = set()
         for repository_id in sorted(retained):
             store = self._runtime(repository_id).store
@@ -1019,8 +1021,7 @@ class FunctionalPyramidService:
                             changed.add(dependency.route_identity)
                             continue
                         if (
-                            view.status
-                            is not m.FunctionalPyramidRouteStatus.RESOLVED
+                            view.status is not m.FunctionalPyramidRouteStatus.RESOLVED
                             or identity != dependency.route_identity
                         ):
                             changed.add(dependency.route_identity)
