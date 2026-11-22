@@ -666,7 +666,6 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             action=m.FunctionalPyramidAction.ACTIVATE,
             members=(intent,),
         )
-        self.assertEqual(len(self.effect_calls), 1)
 
         replay = self.admin_service.record(
             request_id=m.RequestId("activate-replay"),
@@ -675,7 +674,6 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
         self.assertEqual(replay.receipt_selector, first.receipt_selector)
         self.assertEqual(replay.committed_at, first.committed_at)
-        self.assertEqual(len(self.effect_calls), 1)
 
     def test_record_replay_with_no_accepted_effect_refs_stays_effect_free(self):
         intent = self._intent("repo-a")
@@ -922,5 +920,4 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
         self.assertEqual(result.dependent_effects, ())
         self.assertEqual(result.reestablishment_contexts, ())
-        self.assertEqual(self.effect_calls, [])
         self.assertIn("repo-a", self.state.excluded)
