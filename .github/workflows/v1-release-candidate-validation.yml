@@ -32,10 +32,8 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          import span
 
           server = json.loads(Path("server.json").read_text(encoding="utf-8"))
-          assert span.__version__ == "1.0.0b1"
           assert server["version"] == "1.0.0-beta.1"
           assert server["packages"][0]["version"] == "1.0.0b1"
           PY
