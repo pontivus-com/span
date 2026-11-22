@@ -1,9 +1,10 @@
 # Span documentation
 
-Span answers semantic questions about a code repository, retains those answers
-with their evidence, and restores their validity when the code changes. The
-agent interprets and edits; Span admits evidence, records explicit commands,
-and qualifies later reuse.
+Span retains an agent's implementation understanding with exact support and,
+for participating repositories, resolves the declared Functional Pyramid that
+governs the same semantic scope. The agent interprets and edits; Span admits
+evidence, records explicit commands, derives declared governance support, and
+qualifies later reuse when implementation or governance changes.
 
 ## Foundations
 
@@ -28,9 +29,10 @@ and qualifies later reuse.
 ## Implementation
 
 - [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md) —
-  Version-1 Functional Pyramid implementation, migration, generic acceptance,
-  and private first-adopter acceptance gate. Runtime work is blocked until the
-  Version-1 technical design closes the Layer-4 choices.
+  Version-1 Functional Pyramid implementation and release campaign. T00–T10 are
+  complete on the reconciled release branch; private first-adopter acceptance
+  (T11) is the next release gate before final documentation/versioning and
+  assembled-candidate closure.
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
   low-friction lifecycle work package, ordered tasks, decision gates and
   verification; released 2026-11-14.

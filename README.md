@@ -3,12 +3,13 @@
 </h1>
 
 <p align="center">
-  <strong>Carry useful investigations into the next coding session.</strong>
+  <strong>Maintain implementation understanding and governing applicability across coding sessions.</strong>
 </p>
 
 <p align="center">
   Span keeps the explanations your coding agent worked out, the evidence
-  behind them, and what needs another look when that evidence changes.
+  behind them, and the declared governance that applies to the same engineering
+  scope — then shows what needs another look when implementation or governance changes.
 </p>
 
 <p align="center">
@@ -44,6 +45,32 @@ support.
 Three tools — `ask`, `record`, `reconsider` — carry the
 [agent lifecycle](docs/lifecycle-contract.md#required-agent-completion): find
 current understanding, retain a supported conclusion, and re-align after change.
+
+## Governed understanding in Version 1 Beta
+
+Version 1 adds the **Functional Pyramid**: an explicitly declared, cross-repository
+governance graph evaluated alongside retained implementation understanding. Span
+stores identities, applicability, derivation and support; canonical governing
+prose remains in its owning repository.
+
+Repository participation is explicit: `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`.
+For an ACTIVE repository, ordinary `ask` resolves governance from the same
+semantic scope as the answer. A NORMATIVE `record` derives the applicable
+Functional Pyramid route and canonical authority dependencies server-side.
+`reconsider` propagates implementation and governance changes through the same
+support/effect model, including cross-repository effects.
+
+Adoption remains inside the same three public tools:
+
+```text
+STATUS → DISCOVER/VALIDATE → DECLARE when needed
+→ reconsider/disposition → VALIDATE → ACTIVATE/REVISE
+→ VERIFY → REESTABLISH actionable effects → ACTIVE
+```
+
+An accepted participation write is not completion while its returned effects
+remain actionable. See [using Span](docs/usage.md), the
+[lifecycle](docs/lifecycle.md), and the [MCP reference](docs/mcp.md).
 
 ## How it works
 
@@ -153,21 +180,22 @@ see [using Span](docs/usage.md).
 
 ## Beta host status
 
-The 0.10.5 repository/installable contract is verified through the built package
-and installed stdio MCP lane. Candidate-specific live model-host conversion was
-not rerun from this execution environment; earlier captures are historical and
-are not reused as 0.10.5 acceptance evidence.
+The Version-1 source candidate is verified through the built distribution,
+non-editable installed stdio MCP lane, and the generic Functional Pyramid
+acceptance matrix. Candidate-specific live model-host captures remain a T13
+release gate and are **not** inferred from registration or historical captures.
 
-| Host | 0.10.5 candidate status |
+| Host | Version-1 candidate status |
 | --- | --- |
-| Codex | Integration target retained; candidate-specific live model-delivery **UNVERIFIED**. |
-| OpenCode | Integration target and packaged notice delivery retained; candidate-specific live model-delivery **UNVERIFIED**. |
-| Claude Code | Managed registration/health support retained; authenticated model-delivery remains **UNVERIFIED**. |
-| Other MCP hosts | Manual stdio connection remains available; host-specific model-delivery is **UNVERIFIED**. |
+| Codex | Managed integration target retained; candidate-specific live model-delivery **UNVERIFIED** pending T13. |
+| OpenCode | Managed integration and packaged notice delivery verified; candidate-specific live model-delivery **UNVERIFIED** pending T13. |
+| Claude Code | Managed registration/health support retained; authenticated model-delivery **UNVERIFIED** pending T13. |
+| Other MCP hosts | Manual stdio connection remains available; host-specific delivery is **UNVERIFIED**. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
-Hooks provide lifecycle reminders; retrieval and recording still check support
-when hooks are absent. See [host integration](integrations/hosts/triggers.md).
+Hooks provide lifecycle reminders; retrieval, governance orientation and support
+qualification do not depend on hook delivery. See
+[host integration](integrations/hosts/triggers.md).
 
 ## Fits around your agent
 
@@ -185,13 +213,16 @@ comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout describes **0.10.5**: evidence is retained as references and
-hashes rather than stored source copies, and each repository can carry a
-deployable Span artifact at `.span/backups/` that loads and rebinds on a fresh
-clone. The public operations remain `ask`, `record`, and `reconsider`; storage is
-schema 12. See [the changelog](CHANGELOG.md) for verification and upgrade
-instructions, and [backup and recovery](docs/recovery.md) for the operator
-policy.
+This checkout is the **Version 1 Beta candidate line**. The implemented storage
+contract is repository schema 14 plus the separate installation Functional
+Pyramid store. Existing schema-13 repositories use the explicit offline
+transition; registration alone leaves them `UNCONFIGURED` until participation is
+declared. The public operations remain exactly `ask`, `record`, and `reconsider`.
+
+The final `1.0.0b1` package/version metadata and release claims are intentionally
+not asserted until the private first-adopter and assembled-release gates pass.
+See [the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
+[acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
 - [Install and connect](docs/install.md)
 - [Using Span](docs/usage.md) and [first investigation](docs/onboarding-runbook.md)

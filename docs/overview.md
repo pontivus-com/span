@@ -1,9 +1,11 @@
 # Repository overview
 
-Span is a local MCP server for keeping useful codebase investigations reusable.
-The agent investigates and records conclusions; Span stores exact support,
-preserves revisions and disputes, and qualifies reuse against present evidence.
-The agent owns the model and all repository edits and test execution.
+Span is a local MCP server for keeping useful codebase investigations reusable
+and aligning them with explicitly declared governance. The agent investigates
+and records conclusions; Span stores exact support, preserves revisions and
+disputes, resolves Functional Pyramid applicability for participating
+repositories, and qualifies reuse against present evidence and governance. The
+agent owns the model and all repository edits and test execution.
 
 ## Layout
 
@@ -22,9 +24,18 @@ scripts/            packaging, asset synchronization, quality checks
 ## Follow a request
 
 ```text
-MCP request → strict ingress → lifecycle service → typed ports and pure rules
+MCP request → strict ingress → installation/repository composition
+            → lifecycle service → typed ports and pure rules
+            → repository-qualified support / Functional Pyramid orientation
             → atomic store operation when requested → canonical result → MCP
 ```
+
+For Version 1, the installation runtime owns registered-repository resolution,
+the installation-scoped Functional Pyramid state and the single shared
+cross-repository effect capability. Repository `ServiceContext` instances are
+composed from that installation runtime; shell transport never becomes a second
+semantic owner. ACTIVE governance therefore cannot disagree between a status
+selector and an ordinary repository operation.
 
 `ask` is surface-first. Pure surface/reference obtain returns the current
 document view grouped by recorded question, with status and applicable
