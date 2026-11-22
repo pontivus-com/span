@@ -151,13 +151,16 @@ class DependencyEffectService:
             direct.extend(self._source_and_discovery_dependents(repository_id, path))
             direct.extend(self._authority_dependents(repository_id, path))
 
-        if self._functional_route_impacts is not None:
-            route_ids = self._functional_route_impacts(
-                repository_id,
-                request.changed_paths,
-                request.changed_surfaces,
+        if self._functional_route_impacts is None:
+            raise RuntimeError(
+                "Functional Pyramid route-impact composition is not configured"
             )
-            direct.extend(self._route_dependents(route_ids))
+        route_ids = self._functional_route_impacts(
+            repository_id,
+            request.changed_paths,
+            request.changed_surfaces,
+        )
+        direct.extend(self._route_dependents(route_ids))
 
         projected = self._project(
             reasons=reasons,
