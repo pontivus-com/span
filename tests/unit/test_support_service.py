@@ -8,6 +8,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 from span.core import model as m
 from span.service.support import SupportService
@@ -402,6 +403,71 @@ class SupportServiceTest(unittest.TestCase):
         self.assertEqual(
             self.service.evaluate_version("u-a").state,
             m.SupportState.UNVERIFIABLE,
+        )
+
+    def test_cross_repository_authority_uses_canonical_owner_runtime(self) -> None:
+        base = pathlib.Path(self._tmp.name)
+        root_b = base / "repo-b"
+        root_b.mkdir()
+        _write(root_b, "docs/rule.md", "external rule\n")
+        digest = hashlib.sha256((root_b / "docs/rule.md").read_bytes()).hexdigest()
+        binding = m.AuthorityBinding(
+            evidence_ref=m.EvidenceRef(
+                evidence_id=m.EvidenceId("auth-b"),
+                repository_id="repo-b",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator="docs/rule.md",
+                revision_or_fingerprint=f"sha256:{digest}",
+            ),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+        store_b = LifecycleStore(
+            base / "repo-b.db",
+            retention=RETENTION,
+            clock=lambda: NOW,
+        )
+        self.addCleanup(store_b.close)
+        store_b.register_repository(
+            "repo-b",
+            str(root_b),
+            authority_bindings=(binding,),
+        )
+        runtime_a = SimpleNamespace(
+            repository_id="repo-1",
+            root=str(self.root),
+            store=self.store,
+            evidence=self.evidence,
+        )
+        runtime_b = SimpleNamespace(
+            repository_id="repo-b",
+            root=str(root_b),
+            store=store_b,
+            evidence=FilesystemEvidenceSource("repo-b", root_b),
+        )
+        runtimes = {"repo-1": runtime_a, "repo-b": runtime_b}
+        service = SupportService(
+            store=self.store,
+            evidence=self.evidence,
+            authority=self.store,
+            repository_runtime=lambda repository_id: runtimes[repository_id],
+            clock=lambda: NOW,
+        )
+        self._create(
+            "u-cross-authority",
+            "sub-cross-authority",
+            (m.AuthoritySupportDependency(authority=binding),),
+        )
+
+        self.assertEqual(
+            service.evaluate_version("u-cross-authority").state,
+            m.SupportState.CURRENT,
+        )
+
+        _write(root_b, "docs/rule.md", "changed external rule\n")
+        self.assertEqual(
+            service.evaluate_version("u-cross-authority").state,
+            m.SupportState.REASSESSMENT_REQUIRED,
         )
 
     def test_premise_withdrawal_is_unverifiable(self) -> None:
