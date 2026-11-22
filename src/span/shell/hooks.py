@@ -129,9 +129,7 @@ def _installation_inputs(mapping: dict[str, str]):
         try:
             return roots[repository_id]
         except KeyError as exc:
-            raise ValueError(
-                f"repository is not registered: {repository_id}"
-            ) from exc
+            raise ValueError(f"repository is not registered: {repository_id}") from exc
 
     return roots, repository_locator
 
