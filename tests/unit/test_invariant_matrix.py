@@ -179,6 +179,64 @@ class FunctionalAcceptanceMatrixTest(unittest.TestCase):
         )
 
 
+class FunctionalPyramidArchitectureTest(unittest.TestCase):
+    """Version-1 installation composition keeps semantics out of shell adapters."""
+
+    def test_shell_functional_pyramid_has_no_semantic_effect_coordinator(self):
+        path = REPO_ROOT / "src/span/shell/functional_pyramid.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        classes = {
+            node.name for node in tree.body if isinstance(node, ast.ClassDef)
+        }
+        imports = {
+            module
+            for module in (
+                node.module
+                for node in tree.body
+                if isinstance(node, ast.ImportFrom)
+            )
+            if module is not None
+        }
+        self.assertNotIn("FunctionalPyramidEffectCoordinator", classes)
+        self.assertNotIn("span.service.effects", imports)
+        self.assertNotIn("span.service.support", imports)
+
+    def test_context_composition_wires_all_mandatory_pyramid_capabilities(self):
+        path = REPO_ROOT / "src/span/shell/context.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        calls: dict[str, ast.Call] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            if node.func.id in {
+                "SupportService",
+                "LifecycleService",
+                "DependencyEffectService",
+                "AnswerService",
+            }:
+                calls[node.func.id] = node
+
+        expected = {
+            "SupportService": {"functional_route_resolver", "repository_runtime"},
+            "LifecycleService": {"functional_pyramid_route"},
+            "DependencyEffectService": {
+                "functional_route_impacts",
+                "repository_runtime",
+                "registered_repository_ids",
+                "support_for_repository",
+            },
+            "AnswerService": {"functional_pyramid_orientation"},
+        }
+        self.assertEqual(set(calls), set(expected))
+        for service, required in expected.items():
+            supplied = {keyword.arg for keyword in calls[service].keywords}
+            self.assertTrue(
+                required <= supplied,
+                f"{service} missing mandatory Functional Pyramid wiring: "
+                f"{sorted(required - supplied)}",
+            )
+
+
 class SemanticTypingTest(unittest.TestCase):
     """I-18: the semantic layers annotate no `Any`, and decode refuses it."""
 
