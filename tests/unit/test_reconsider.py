@@ -123,7 +123,19 @@ class ReconsiderServiceTest(unittest.TestCase):
             "src/b.py",
             m.PremiseSupport(premise=premise),
         )
-        self.service = ReconsiderService(store=self.store)
+        self.support = SupportService(
+            store=self.store,
+            evidence=FilesystemEvidenceSource("repo-1", self.root),
+            authority=self.store,
+            functional_route_resolver=lambda _dependency, _surface: (
+                m.FunctionalPyramidParticipation(
+                    m.FunctionalPyramidParticipationState.UNCONFIGURED
+                ),
+                None,
+            ),
+            clock=lambda: NOW,
+        )
+        self.service = ReconsiderService(store=self.store, support=self.support)
 
     def _create(
         self,
@@ -314,6 +326,7 @@ class ReconsiderServiceTest(unittest.TestCase):
     def test_bound_reports_truncation_not_unaffected(self) -> None:
         service = ReconsiderService(
             store=self.store,
+            support=self.support,
             policy=m.ServiceBoundsPolicy(
                 default_query_bounds=m.QueryBounds(
                     max_results=1,
@@ -925,6 +938,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         issued = iter(("ctx-reconsider-1", "ctx-reconsider-2"))
         service = ReconsiderService(
             store=self.store,
+            support=self.support,
             clock=lambda: now[0],
             new_context_id=lambda: next(issued),
         )
