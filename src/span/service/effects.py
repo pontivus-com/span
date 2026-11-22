@@ -42,51 +42,31 @@ class DependencyEffectService:
     def __init__(
         self,
         *,
-        store: LifecycleStorePort | None = None,
-        support: SupportService | None = None,
+        repository_runtime: _RepositoryRuntimeLookup,
+        registered_repository_ids: _RegisteredRepositoryIds,
+        support_for_repository: _SupportLookup,
+        functional_route_impacts: _FunctionalRouteImpactLookup,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
-        functional_route_impacts: _FunctionalRouteImpactLookup | None = None,
         context_issuer: _ReestablishmentContextIssuer | None = None,
-        repository_runtime: _RepositoryRuntimeLookup | None = None,
-        registered_repository_ids: _RegisteredRepositoryIds | None = None,
-        support_for_repository: _SupportLookup | None = None,
     ) -> None:
-        if store is None and repository_runtime is None:
-            raise ValueError(
-                "dependency-effect service requires a store or repository runtime"
-            )
-        self._store = store
-        self._support = support
-        self._policy = policy
-        self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
-        self._new_context_id = new_context_id or server_context_id
-        self._functional_route_impacts = functional_route_impacts
         self._repository_runtime = repository_runtime
         self._registered_repository_ids = registered_repository_ids
         self._support_for_repository = support_for_repository
+        self._functional_route_impacts = functional_route_impacts
+        self._policy = policy
+        self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
+        self._new_context_id = new_context_id or server_context_id
         self._context_issuer = context_issuer or self._issue_reestablishment_context
 
     def _registered_ids(self) -> tuple[str, ...]:
-        if self._registered_repository_ids is not None:
-            return self._registered_repository_ids()
-        if self._store is None:
-            raise RuntimeError("repository registry is not configured")
-        return ()
+        return self._registered_repository_ids()
 
     def _store_for_repository(self, repository_id: str) -> LifecycleStorePort:
-        if self._repository_runtime is not None:
-            return self._repository_runtime(repository_id).store
-        if self._store is None:
-            raise RuntimeError("repository store is not configured")
-        self._store.require_repository(repository_id)
-        return self._store
+        return self._repository_runtime(repository_id).store
 
     def _repository_for_ref(self, ref: m.ConclusionRevisionRef) -> str:
-        if self._repository_runtime is None:
-            surface = self._surface_of(ref)
-            return surface.repository_id
         owners = [
             repository_id
             for repository_id in self._registered_ids()
@@ -104,19 +84,11 @@ class DependencyEffectService:
         return owners[0]
 
     def _store_for_ref(self, ref: m.ConclusionRevisionRef) -> LifecycleStorePort:
-        if self._repository_runtime is None:
-            if self._store is None:
-                raise RuntimeError("repository store is not configured")
-            return self._store
         return self._store_for_repository(self._repository_for_ref(ref))
 
     def _support_dependents(
         self, dependency_kind: str, dependency_ref: str
     ) -> tuple[m.ConclusionRevisionRef, ...]:
-        if self._repository_runtime is None:
-            if self._store is None:
-                raise RuntimeError("repository store is not configured")
-            return self._store.support_dependents(dependency_kind, dependency_ref)
         refs: list[m.ConclusionRevisionRef] = []
         for repository_id in self._registered_ids():
             refs.extend(
@@ -151,10 +123,6 @@ class DependencyEffectService:
             direct.extend(self._source_and_discovery_dependents(repository_id, path))
             direct.extend(self._authority_dependents(repository_id, path))
 
-        if self._functional_route_impacts is None:
-            raise RuntimeError(
-                "Functional Pyramid route-impact composition is not configured"
-            )
         route_ids = self._functional_route_impacts(
             repository_id,
             request.changed_paths,
@@ -736,11 +704,7 @@ class DependencyEffectService:
         self,
         ref: m.ConclusionRevisionRef,
     ) -> m.SupportEvaluation | m.SupportUnavailable:
-        support = self._support
-        if self._support_for_repository is not None:
-            support = self._support_for_repository(self._repository_for_ref(ref))
-        if support is None:
-            raise RuntimeError("support evaluation is not configured")
+        support = self._support_for_repository(self._repository_for_ref(ref))
         try:
             return support.evaluate_revision(ref)
         except (OSError, ValueError):
