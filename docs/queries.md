@@ -12,6 +12,19 @@ When the exact recorded question is already known, use
 search. When source bytes are needed, use explicit evidence admission:
 surface/reference plus non-empty `evidence` and a caller-owned `request_id`.
 
+## Functional Pyramid retrieval
+
+The same `ask` tool carries three exact Functional Pyramid selector branches.
+Status reads current repository/pyramid participation, candidate selection
+performs deterministic ACTIVATE/REVISE validation without writes, and receipt
+selection retrieves one exact installation-scoped participation receipt.
+
+Ordinary Answer/Gap composition includes the repository's Functional Pyramid
+orientation. For an ACTIVE member it is resolved from the same effective
+semantic scope as the semantic result; UNCONFIGURED/EXCLUDED state does not
+pretend there is an empty ACTIVE route. A route may be structurally unresolved
+without converting the semantic answer into operational unavailability.
+
 ## Result paths
 
 - `Answer`: current supported content, grouped by recorded question for the
@@ -32,6 +45,9 @@ surface/reference plus non-empty `evidence` and a caller-owned `request_id`.
   They are never merged into `Answer` and never satisfy current-answer reuse.
 - `EvidencePage`: the next exact selected-evidence deliveries, with an optional
   further continuation.
+- `FunctionalPyramidStatus` / `FunctionalPyramidCandidate` /
+  `RetrievedFunctionalPyramidReceipt`: exact participation, read-only proposal
+  validation, or immutable participation acceptance respectively.
 - `Rejected`: caller-correctable invalid selector/reference/binding state,
   including an unusable continuation.
 - `Unavailable`: genuine operational failure or a response budget too small to
