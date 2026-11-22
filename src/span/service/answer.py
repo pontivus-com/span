@@ -313,9 +313,7 @@ class AnswerService:
         semantic_scope: m.EvidenceScope | None = None,
     ) -> _FunctionalPyramidOrientation:
         if self._functional_pyramid_orientation is None:
-            raise RuntimeError(
-                "Functional Pyramid orientation is not configured"
-            )
+            raise RuntimeError("Functional Pyramid orientation is not configured")
         selected_scope = (
             self._surface_semantic_scope(surface)
             if semantic_scope is None
