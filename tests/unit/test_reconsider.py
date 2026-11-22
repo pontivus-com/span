@@ -11,6 +11,7 @@ from unittest import mock
 from span.core import model as m
 from span.core.recording import RecordingValidationError
 from span.core import support_rules
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.effects import DependencyEffectService
 from span.service.reconsider import ReconsiderService
 from span.service.support import SupportService
@@ -135,7 +136,38 @@ class ReconsiderServiceTest(unittest.TestCase):
             ),
             clock=lambda: NOW,
         )
-        self.service = ReconsiderService(store=self.store, support=self.support)
+        self.service = self._service()
+
+    def _service(
+        self,
+        *,
+        support=None,
+        evidence=None,
+        policy=None,
+        clock=None,
+        new_context_id=None,
+        effects=None,
+    ) -> ReconsiderService:
+        selected_support = self.support if support is None else support
+        selected_clock = clock or (lambda: NOW)
+        selected_policy = policy or DEFAULT_SERVICE_BOUNDS_POLICY
+        if effects is None:
+            effects = DependencyEffectService(
+                store=self.store,
+                support=selected_support,
+                policy=selected_policy,
+                clock=selected_clock,
+                new_context_id=new_context_id,
+                functional_route_impacts=lambda _repository_id, _paths, _surfaces: (),
+            )
+        return ReconsiderService(
+            store=self.store,
+            evidence=evidence,
+            policy=selected_policy,
+            clock=selected_clock,
+            new_context_id=new_context_id,
+            effects=effects,
+        )
 
     def _create(
         self,
@@ -289,7 +321,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             NOW,
             "",
         )
-        service = ReconsiderService(store=self.store, support=support)
+        service = self._service(support=support)
         (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
         result = service.reconsider(
             m.ReconsiderRequest(
@@ -324,10 +356,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.surfaces[0].conclusions, ())
 
     def test_bound_reports_truncation_not_unaffected(self) -> None:
-        service = ReconsiderService(
-            store=self.store,
-            support=self.support,
-            policy=m.ServiceBoundsPolicy(
+        policy = m.ServiceBoundsPolicy(
                 default_query_bounds=m.QueryBounds(
                     max_results=1,
                     max_depth=1,
@@ -355,8 +384,8 @@ class ReconsiderServiceTest(unittest.TestCase):
                     max_candidate_claims=1,
                     max_candidate_relationships=1,
                 ),
-            ),
-        )
+            )
+        service = self._service(policy=policy)
         result = service.reconsider(
             m.ReconsiderRequest(
                 repository_id="repo-1",
@@ -390,14 +419,12 @@ class ReconsiderServiceTest(unittest.TestCase):
             max_candidate_claims=8,
             max_candidate_relationships=8,
         )
-        service = ReconsiderService(
-            store=self.store,
-            policy=m.ServiceBoundsPolicy(
-                default_query_bounds=bounds,
-                maximum_query_bounds=bounds,
-                hook_fast_bounds=bounds,
-            ),
+        policy = m.ServiceBoundsPolicy(
+            default_query_bounds=bounds,
+            maximum_query_bounds=bounds,
+            hook_fast_bounds=bounds,
         )
+        service = self._service(policy=policy)
         result = service.reconsider(
             m.ReconsiderRequest(
                 repository_id="repo-1",
@@ -630,7 +657,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             NOW,
             "",
         )
-        service = ReconsiderService(store=self.store, support=support)
+        service = self._service(support=support)
 
         result = service.reconsider(
             m.ReconsiderRequest(
@@ -727,8 +754,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             new_context_id=lambda: "ctx-cross-repo",
             clock=lambda: NOW,
         )
-        service = ReconsiderService(
-            store=self.store,
+        service = self._service(
             support=support,
             effects=effects,
         )
@@ -874,7 +900,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             authority=self.store,
             clock=lambda: NOW,
         )
-        service = ReconsiderService(store=self.store, support=support)
+        service = self._service(support=support)
         (self.root / "src/new-member.py").write_text("new\n", encoding="utf-8")
         result = service.reconsider(
             m.ReconsiderRequest(
@@ -936,9 +962,7 @@ class ReconsiderServiceTest(unittest.TestCase):
     def test_repeated_changed_scope_gets_a_fresh_context_after_expiry(self) -> None:
         now = [NOW]
         issued = iter(("ctx-reconsider-1", "ctx-reconsider-2"))
-        service = ReconsiderService(
-            store=self.store,
-            support=self.support,
+        service = self._service(
             clock=lambda: now[0],
             new_context_id=lambda: next(issued),
         )
