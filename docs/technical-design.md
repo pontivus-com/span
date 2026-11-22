@@ -2,7 +2,8 @@
 
 **Status: stated decisions are binding; historical unresolved items remain
 explicitly scoped. Version-1 Part C mechanisms are implementation-complete
-through T10; T13 owns assembled-candidate delivery and fitness verification.**
+through T10; T13 owns assembled-candidate release verification. Post-release
+Beta use owns ongoing product-value validation.**
 This is layer 4. It records the implementation baseline, what is retained from
 the historical codebases, and the mechanisms that realize layers 0–3. Historical
 open items in §6 do not override the Version-1 Part C implementation status
@@ -21,8 +22,8 @@ the public release.
 **Review update: 2026-11-01.** Part A (§1–§8) records source assessments;
 Part B (§9–§16) records implementation choices. Authority and migration decisions
 are recorded in §6, §10, §12, and §14 (see §6, resolved 2026-11-01); the
-remaining evidence is delivery and measurement (O-2, O-3, O-6), which the forward
-plan schedules. Part B is **PARTIAL**: no runtime, schema, host configuration, or
+remaining historical evidence items are delivery and measurement (O-2, O-3,
+O-6), which later release plans may supersede or close. Part B is **PARTIAL**: no runtime, schema, host configuration, or
 release is changed by this document.
 
 The [requirements pyramid](requirements-pyramid.md) governs placement and
@@ -31,9 +32,9 @@ cites their IDs instead of defining replacements. Current Version-1 execution or
 [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md).
 
 **0.10.3 target amendment (2026-11-14).** Active mechanism choices below follow
-the amended lifecycle/functional contracts. Runtime implementation, installed
-host delivery and comparative acceptance are pending. Dated delivered captures
-remain historical evidence of their identified candidate, not target conformance.
+the amended lifecycle/functional contracts. Its dated runtime, host-delivery,
+and comparative-acceptance statements are historical evidence for that candidate,
+not current Version-1 release gates.
 
 **Version-1 Functional Pyramid amendment (2026-11-21).** Parts A/B remain the
 historical/current Span mechanism baseline. Part C (§17–§22) is the binding
@@ -43,13 +44,13 @@ changes that boundary. It preserves the existing semantic lifecycle mechanisms
 and adds only the storage, resolution, support and public-projection machinery
 required by Layers 0–3.
 
-**Version-1 implementation update (2026-11-22).** T01–T10 implemented and
+**Version-1 implementation update (2026-11-23).** T01–T10 implemented and
 verified the Part-C mechanisms and generic functional acceptance on the
 reconciled release branch. T11 private first-adopter acceptance passed and is
-closed. T13 remains the owner of assembled-`1.0.0b1` re-verification,
-candidate-specific managed-host delivery evidence, the Part-C derivation audit
-and the Version-1 G5/F8 measurement; those release gates do not make the Part-C
-implementation itself pending.
+closed. T13 owns assembled-`1.0.0b1` release verification, candidate-specific
+managed-host qualification where claimed, and the Part-C derivation audit.
+G5/F8 product-value validation continues after release through real adopter use;
+it is not a publication gate.
 
 ## 1. Baseline decision
 
@@ -1210,7 +1211,7 @@ second declaration of those requirements.
 | FD-54–FD-57 | §13, §15 | `test_answer_service.py`; result fitting, explicit omission, minimum-result refusal | O-3 measured per host and applied as the delivered-wire budget |
 | FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | canonical native/shell guidance, hooks, skills and plugin notice-delivery lane are verified; 0.11 candidate-specific managed-host native/search/shell captures remain T10 external acceptance |
 | F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
-| F8, G5 | §15 | frozen comparative task captures and scorecards | prior measurements remain historical evidence only for their named candidates. The 0.11 T08 deterministic range behavior is verified, but its candidate-specific comparative steps/tokens measurement remains open and no prior score is reused as the 0.11 verdict |
+| F8, G5 | §15 | real adopter use across the ordinary lifecycle; optional scoped comparative research | prior measurements remain historical evidence only for their named candidates. Version 1 validates practical value through post-release Beta use; no synthetic comparative score is required for publication |
 | FD-61–FD-74, FD-86–FD-91 | Part C §17–§18, §20.1 | Functional Pyramid core/service tests plus installed MCP; FunctionalScope algebra, outside/covered/uncovered/mixed projection, overlapping/inherited/cross-repository graph resolution, deterministic provenance, health iff structural findings | implemented; T10 generic acceptance verified on exact-head CI, T13 re-verifies the assembled candidate |
 | FD-75–FD-81 | Part C §18, §20.2–§20.3 | support/record/reconsider tests; FunctionalRouteSupport derivation/evaluation, authority separation, pre-existing normative activation effects, deliberate participation removal vs operational unavailability | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
 | FD-82–FD-85, FD-93 | Part C §19–§20.4 | lifecycle store/service/schema tests; installation-level receipts, activation/revision/deactivation atomicity, participation effects, dependent effects, replay with fresh contexts, pyramid CAS and one-ACTIVE-instance uniqueness | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
@@ -1222,9 +1223,10 @@ Version-1 target. Part-B historical/current mechanism claims remain governed by
 their existing evidence and open measurements. Part C is design-complete because
 its derivation map has no unmapped FD owner or unowned mechanism, and its
 implementation is complete through the T10 generic acceptance evidence recorded
-above. Candidate-specific managed-host delivery, final Part-C derivation
-re-verification and G5/F8 product measurement remain T13 release-verification
-work; they do not reopen the implemented mechanism.
+above. Candidate-specific managed-host delivery remains unverified unless separately
+claimed, and final Part-C derivation re-verification remains release-verification
+work. G5/F8 product-value validation is post-release Beta work and does not
+reopen the implemented mechanism or block publication.
 
 ## Part C — Version 1 Functional Pyramid mechanisms
 
