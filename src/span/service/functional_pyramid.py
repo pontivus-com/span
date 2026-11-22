@@ -133,6 +133,10 @@ class FunctionalPyramidService:
             raise ValueError("Functional Pyramid repository registry is not configured")
         return frozenset(self._registered_repository_ids())
 
+    def registered_repository_ids(self) -> tuple[str, ...]:
+        """Return the exact installation registry used by Functional Pyramid state."""
+        return tuple(sorted(self._registered()))
+
     def _runtime(self, repository_id: str) -> FunctionalPyramidRepositoryRuntime:
         if self._repository_runtime is None:
             raise RuntimeError("Functional Pyramid repository runtime is not configured")
