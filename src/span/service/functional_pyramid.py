@@ -237,17 +237,37 @@ class FunctionalPyramidService:
         self,
         repository_id: str,
         surface: m.SurfaceKey,
-        semantic_scope: m.EvidenceScope,
+        semantic_scope: m.EvidenceScope | None,
     ) -> (
         m.FunctionalPyramidParticipation
         | m.FunctionalPyramidView
         | m.FunctionalPyramidUnavailable
     ):
-        """Project ordinary ask orientation from the same route owner."""
-        current = self.route(repository_id, surface, semantic_scope)
-        if isinstance(current, tuple):
-            return current[0]
-        return current
+        """Project ordinary ask orientation without requiring ACTIVE-only scope early."""
+        status = self.status(m.FunctionalPyramidSelector(repository_id=repository_id))
+        if status.state is not m.FunctionalPyramidParticipationState.ACTIVE:
+            return m.FunctionalPyramidParticipation(status.state)
+        if semantic_scope is None:
+            return m.FunctionalPyramidUnavailable(
+                failure="Functional Pyramid semantic scope cannot be resolved",
+                recovery="select a canonical file, symbol, service, or domain surface",
+            )
+        assert status.pyramid_id is not None
+        assert status.version is not None
+        try:
+            view, _ = self.resolve(
+                pyramid_id=status.pyramid_id,
+                version=status.version,
+                members=status.members,
+                surface=surface,
+                semantic_scope=semantic_scope,
+            )
+            return view
+        except (OSError, FunctionalPyramidRepositoryUnavailable):
+            return m.FunctionalPyramidUnavailable(
+                failure="Functional Pyramid governance cannot be evaluated",
+                recovery="restore the registered member repository and retry",
+            )
 
     def support_route(
         self,
