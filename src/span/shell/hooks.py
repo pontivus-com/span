@@ -151,9 +151,7 @@ def _functional_pyramid_status(
         service = installation.functional_pyramid
         if service is None:
             return None
-        return service.status(
-            m.FunctionalPyramidSelector(repository_id=repository_id)
-        )
+        return service.status(m.FunctionalPyramidSelector(repository_id=repository_id))
 
 
 def _functional_pyramid_notice(
