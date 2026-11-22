@@ -60,10 +60,17 @@
 - T11 private first-adopter acceptance passed on 2026-11-22 using adopter-owned
   gitignored evidence. Raw adopter topology and captures remain outside Span
   Git; only the sanitized pass result is published.
-- Candidate-specific Codex, OpenCode and Claude Code model-delivery captures,
-  the final Part-C derivation audit and the Version-1 G5/F8 comparative
-  measurement remain T13 release gates. They are not inferred from historical
-  captures or registration health and are not yet claimed as passed.
+- The assembled `1.0.0b1` candidate passed the repository-verifiable T13
+  closure gates: non-editable package install, schema-14/installation-schema-1
+  identity, transition/backup/recovery, installed MCP, public-boundary leakage
+  checks, the FA/Part-C architecture matrix, post-T10 semantic-drift audit,
+  release-note generation and MCP Registry metadata validation.
+- Version-1 live model delivery through Codex, OpenCode and Claude Code remains
+  **UNVERIFIED** and is not advertised as verified Beta-1 delivery. Historical
+  host captures and registration health are not promoted into Version-1 proof.
+- The Version-1 G5/F8 same-task-class comparative measurement in agent steps
+  and tokens remains the final release proof before publication; historical
+  measurements are not reused as the Beta-1 verdict.
 
 ### Release identity
 

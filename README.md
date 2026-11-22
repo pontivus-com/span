@@ -180,16 +180,17 @@ see [using Span](docs/usage.md).
 
 ## Beta host status
 
-The Version-1 source candidate is verified through the built distribution,
-non-editable installed stdio MCP lane, and the generic Functional Pyramid
-acceptance matrix. Candidate-specific live model-host captures remain a T13
-release gate and are **not** inferred from registration or historical captures.
+The Version-1 `1.0.0b1` candidate is verified through the built distribution,
+non-editable installed stdio MCP lane, generic Functional Pyramid acceptance,
+transition/recovery gates and release-registry validation. Live model-host
+delivery is **UNVERIFIED** and is not inferred from registration or historical
+captures. No verified managed-host delivery claim is made for Beta 1.
 
 | Host | Version-1 candidate status |
 | --- | --- |
-| Codex | Managed integration target retained; candidate-specific live model-delivery **UNVERIFIED** pending T13. |
-| OpenCode | Managed integration and packaged notice delivery verified; candidate-specific live model-delivery **UNVERIFIED** pending T13. |
-| Claude Code | Managed registration/health support retained; authenticated model-delivery **UNVERIFIED** pending T13. |
+| Codex | Managed integration target retained; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
+| OpenCode | Managed integration and packaged notice delivery verified; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
+| Claude Code | Managed registration/health support retained; authenticated Version-1 model-delivery **UNVERIFIED** and not claimed as verified. |
 | Other MCP hosts | Manual stdio connection remains available; host-specific delivery is **UNVERIFIED**. |
 
 Registration, hook configuration, and model-delivered behavior are distinct.
@@ -219,9 +220,10 @@ Pyramid store. Existing schema-13 repositories use the explicit offline
 transition; registration alone leaves them `UNCONFIGURED` until participation is
 declared. The public operations remain exactly `ask`, `record`, and `reconsider`.
 
-T11 private first-adopter acceptance passed and is closed. The `1.0.0b1`
-release candidate is assembled during T12; final release claims remain gated on
-T13 assembled-candidate verification and publication checks. See
+T11 private first-adopter acceptance is closed and T12 release assembly is
+complete. The repository-verifiable T13 gates have passed for `1.0.0b1`.
+Publication remains gated on the Version-1 G5/F8 same-task-class comparative
+measurement and its final evidence append. See
 [the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 

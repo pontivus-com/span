@@ -23,10 +23,34 @@ governance journey required by Technical Design §22.
 This establishes the **generic** Version-1 functional/architecture candidate.
 Private first-adopter acceptance also passed on 2026-11-22 using the
 adopter-owned gitignored corpus. Raw adopter evidence remains outside Span Git;
-only this sanitized outcome is published. T11 is therefore closed. T13 still
-owns the re-run against the assembled `1.0.0b1` candidate and live
-candidate-specific Codex/Claude Code/OpenCode captures for any host claimed as
-verified at release.
+only this sanitized outcome is published. T11 is therefore closed. By explicit
+release-owner direction, that approved T11 result carries into the assembled
+`1.0.0b1` candidate because the post-T11 diff contains no semantic/runtime
+implementation change; documentation, release identity and tests do not reopen
+the private acceptance gate.
+
+The assembled `1.0.0b1` repository candidate passed exact-head CI run
+`45035881725` on `e3d9e99fc89896373cb6a90f8d16e63d210fea5c`:
+build/distribution, Ruff/Black, zero-error typing, `923 passed, 1 skipped,
+144 subtests`, 85% aggregate coverage, plugin notice delivery, and the complete
+generic acceptance surface.
+
+A temporary T13 repository-validation workflow then passed run `45036708682`
+on `752ba74cb196083a4f9d95725ccc373be2e93ed2`. It built and installed the
+non-editable `1.0.0b1` wheel, verified repository schema 14 and installation
+schema 1, and ran 167 focused transition/backup/recovery, installed-MCP,
+public-boundary, FA/Part-C and architecture tests with 64 subtests. It also
+proved there was no semantic/runtime implementation drift from the T10 accepted
+SHA, re-exercised release-note/version mapping, and passed the release-time MCP
+Registry `server.json` validator. The temporary workflow was removed after the
+receipt was captured.
+
+Version-1 live model delivery through Codex, OpenCode and Claude Code is
+**UNVERIFIED**. No verified managed-host delivery claim is made for Beta 1;
+registration/installer support is not promoted into model-delivery evidence.
+The remaining release proof is the G5/F8 named-task-class comparative
+measurement in agent steps and tokens. Historical 0.10/0.11 measurements are
+not reused as the Version-1 verdict.
 
 The current repository lifecycle store is schema 14. Functional Pyramid
 participation/versions/exclusions/receipts are installation-owned in

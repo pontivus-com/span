@@ -30,10 +30,11 @@ qualifies later reuse when implementation or governance changes.
 ## Implementation
 
 - [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md) —
-  Version-1 Functional Pyramid implementation and release campaign. T00–T11 are
-  complete; private first-adopter acceptance passed on 2026-11-22. T12 owns the
-  release documentation/version candidate, and T13 owns assembled-candidate
-  verification and release closure.
+  Version-1 Functional Pyramid implementation and release campaign. T00–T12 are
+  complete; T11 private acceptance remains closed. The assembled `1.0.0b1`
+  repository candidate has passed the repository-verifiable T13 gates. The
+  remaining release proof is the Version-1 G5/F8 same-task-class steps/tokens
+  measurement and final evidence append.
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
   low-friction lifecycle work package, ordered tasks, decision gates and
   verification; released 2026-11-14.
