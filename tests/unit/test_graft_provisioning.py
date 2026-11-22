@@ -223,10 +223,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             repo.mkdir()
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             data = pathlib.Path(tmp) / "data"
-            from span.shell.mcp_server import (
-                ServerConfig,
-                provision_repository,
-            )
+            from span.shell.context import provision_repository_runtime
 
             # An explicit override outranks PATH lookup, so the
             # no-indexer path is only reachable with the override absent.
@@ -234,8 +231,8 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 g._os.environ.pop(g.INDEXER_BINARY_ENV_VAR, None)
                 with mock.patch.object(g._shutil, "which", return_value=None):
                     with self.assertRaises(ValueError) as ctx:
-                        provision_repository(
-                            ServerConfig(data_dir=data),
+                        provision_repository_runtime(
+                            data,
                             m.InitializeRepositoryRequest(
                                 repository_locator=str(repo),
                                 authority_seeds=(),
@@ -473,31 +470,29 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             repo.mkdir()
             (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
             data = pathlib.Path(tmp) / "data"
-            from span.shell.mcp_server import (
-                ServerConfig,
-                provision_repository,
-            )
+            from span.shell.context import provision_repository_runtime
 
             def fake_build(repo_path, artifact_dir=None):
                 _write_wiring(g.wiring_path_for(artifact_dir))
                 return True, "rebuilt"
 
             with mock.patch.object(g, "_run_index_build", side_effect=fake_build):
-                context, result = provision_repository(
-                    ServerConfig(data_dir=data),
+                runtime, result = provision_repository_runtime(
+                    data,
                     m.InitializeRepositoryRequest(
                         repository_locator=str(repo),
                         authority_seeds=(),
                     ),
                 )
+            self.addCleanup(runtime.store.close)
             self.assertTrue(result.store_ready)
             self.assertEqual(result.schema_version, 14)
-            self.assertTrue(context.structural.has_index())
+            self.assertTrue(runtime.structural.has_index())
             # A provider-prefixed locator is not part of the public
             # surface: provisioning rejects it instead of interpreting it.
             with self.assertRaises(ValueError):
-                provision_repository(
-                    ServerConfig(data_dir=data),
+                provision_repository_runtime(
+                    data,
                     m.InitializeRepositoryRequest(
                         repository_locator=f"graft:{repo}",
                         authority_seeds=(),
@@ -573,10 +568,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             self.assertNotIn("graft", _buf.getvalue().lower())
         # User-facing setup failure must not name the indexer: trigger
         # a real provisioning failure with no binary anywhere.
-        from span.shell.mcp_server import (
-            ServerConfig as _ServerConfig,
-            provision_repository as _provision,
-        )
+        from span.shell.context import provision_repository_runtime as _provision
 
         with _tempfile.TemporaryDirectory() as _tmp:
             _repo = _pl.Path(_tmp) / "repo"
@@ -585,7 +577,7 @@ class ProvisioningLifecycleTest(unittest.TestCase):
             with mock.patch.object(g, "resolve_indexer_binary", return_value=None):
                 with self.assertRaises(ValueError) as _ctx:
                     _provision(
-                        _ServerConfig(data_dir=_pl.Path(_tmp) / "data"),
+                        _pl.Path(_tmp) / "data",
                         m.InitializeRepositoryRequest(
                             repository_locator=str(_repo),
                             authority_seeds=(),
