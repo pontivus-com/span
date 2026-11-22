@@ -249,7 +249,7 @@ class DependencyEffectService:
         }
 
         for repository_id in sorted(set(newly_active_repositories)):
-            self._store.require_repository(repository_id)
+            self._store_for_repository(repository_id).require_repository(repository_id)
             for ref in self._current_normative_refs(
                 repository_id, with_route_support=False
             ):
@@ -260,7 +260,7 @@ class DependencyEffectService:
                 )
 
         for repository_id in sorted(set(deliberately_inactive_repositories)):
-            self._store.require_repository(repository_id)
+            self._store_for_repository(repository_id).require_repository(repository_id)
             for ref in self._current_normative_refs(
                 repository_id, with_route_support=True
             ):
