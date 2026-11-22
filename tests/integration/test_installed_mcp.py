@@ -313,9 +313,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertEqual(observed["unknown_repository_kind"], "Rejected")
         self.assertEqual(observed["unknown_pyramid_kind"], "Rejected")
         self.assertFalse(observed["mixed_candidate_error"])
-        self.assertIn(
-            "UNREGISTERED_MEMBER", observed["mixed_validation_reasons"]
-        )
+        self.assertIn("UNREGISTERED_MEMBER", observed["mixed_validation_reasons"])
         self.assertIn(
             "INVALID_DECLARATION_SOURCE", observed["mixed_validation_reasons"]
         )
