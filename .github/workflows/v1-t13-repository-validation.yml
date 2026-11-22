@@ -1,0 +1,84 @@
+name: Version-1 T13 Repository Validation
+
+on:
+  push:
+    branches:
+      - design/1.0-beta-functional-pyramid
+
+permissions:
+  contents: read
+
+jobs:
+  t13-repository:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Build and verify the non-editable candidate
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip build
+          python scripts/build_identity.py
+          python -m build
+          python -m venv /tmp/span-v1
+          /tmp/span-v1/bin/pip install dist/*.whl
+          test "$(/tmp/span-v1/bin/python -c 'import span; print(span.__version__)')" = "1.0.0b1"
+          /tmp/span-v1/bin/span-mcp --help >/dev/null
+          /tmp/span-v1/bin/python - <<'PY'
+          from span.shell.sqlite_store.schema import SCHEMA_VERSION
+          from span.shell.sqlite_store.functional_pyramid import INSTALLATION_SCHEMA_VERSION
+          assert SCHEMA_VERSION == 14
+          assert INSTALLATION_SCHEMA_VERSION == 1
+          PY
+
+      - name: Install repository test dependencies
+        run: pip install -e '.[test,dev]'
+
+      - name: Provision the managed structural indexer
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 'STRUCTURAL_INDEXER_VERSION = ' src/span/shell/install/constants.py | cut -d'"' -f2)
+          package=$(grep -m1 'STRUCTURAL_INDEXER_PACKAGE = ' src/span/shell/install/constants.py | cut -d'"' -f2)
+          npm install --prefix "$RUNNER_TEMP/span-tools" --no-audit --no-fund "$package@$version"
+          echo "SPAN_GRAFT_BIN=$RUNNER_TEMP/span-tools/node_modules/.bin/graft" >> "$GITHUB_ENV"
+
+      - name: Run T13 transition, recovery, installed MCP, public-boundary and Part-C gates
+        run: |
+          pytest -q             tests/integration/test_installed_mcp.py             tests/unit/test_store_transition.py             tests/unit/test_recovery.py             tests/unit/test_surface_conformance.py             tests/unit/test_invariant_matrix.py             tests/unit/test_lifecycle_surface.py             tests/unit/test_record_wire.py
+
+      - name: Verify no post-T10 semantic implementation drift
+        run: |
+          set -euo pipefail
+          base=15dc6ab8264d6a4fbeeff75b80eae360eaabb80b
+          git cat-file -e "$base^{commit}"
+          changed=$(git diff --name-only "$base"...HEAD --             'src/span/core/**' 'src/span/service/**' 'src/span/ports/**' 'src/span/shell/**' || true)
+          if [[ -n "$changed" ]]; then
+            echo "Unexpected semantic/runtime implementation changes after T10:"
+            echo "$changed"
+            exit 1
+          fi
+
+      - name: Verify release identity, notes and registry metadata
+        run: |
+          set -euo pipefail
+          test "$(python scripts/release_identity.py --field package_version)" = "1.0.0b1"
+          test "$(python scripts/release_identity.py --field tag)" = "v1.0.0b1"
+          test "$(python scripts/release_identity.py --field registry_version)" = "1.0.0-beta.1"
+          test "$(python scripts/release_identity.py --field prerelease)" = "true"
+          python scripts/release_notes.py 1.0.0b1 >/tmp/release-notes.md
+          grep -q '^## 1.0.0b1 — 2026-11-22$' /tmp/release-notes.md
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher validate
