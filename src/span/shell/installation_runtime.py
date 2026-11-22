@@ -7,7 +7,6 @@ import pathlib as _pathlib
 import typing as _typing
 
 from span.core import model as m
-from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
 from span.shell.context import (
     RepositoryRuntime,
     close_repository_runtime,
