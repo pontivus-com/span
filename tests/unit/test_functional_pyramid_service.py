@@ -512,6 +512,10 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             functional_scope=_scope(),
             coverage=m.FunctionalPyramidCoverage.PARTIAL,
         )
+        self.declarations.results[("repo-a", "decl.json")] = (
+            _ref("repo-a", "decl.json"),
+            _declaration(),
+        )
         unknown = self.admin_service.candidate(
             m.FunctionalPyramidCandidateSelector(
                 action=m.FunctionalPyramidAction.REVISE,
@@ -528,10 +532,6 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         pyramid_id = m.FunctionalPyramidId("fp-1")
         self.state.versions[pyramid_id] = m.FunctionalPyramidVersion(2)
         self.state.active["repo-a"] = pyramid_id
-        self.declarations.results[("repo-a", "decl.json")] = (
-            _ref("repo-a", "decl.json"),
-            _declaration(),
-        )
         stale = self.admin_service.candidate(
             m.FunctionalPyramidCandidateSelector(
                 action=m.FunctionalPyramidAction.REVISE,
