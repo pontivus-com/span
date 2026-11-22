@@ -1773,11 +1773,16 @@ the Layer-2 `functional_pyramid` projection. Do not add another tool or a
 second answer composer.
 
 `AnswerService` keeps semantic membership/Answer/Gap composition unchanged.
-After the semantic scope is fixed, one Functional Pyramid service projection
-looks up participation and, for ACTIVE members, invokes the resolver from §18 on
-that exact scope. UNCONFIGURED/EXCLUDED project participation directly. ACTIVE
-operational graph failure projects `FunctionalPyramidUnavailable` without
-discarding otherwise-current descriptive semantic content.
+The Functional Pyramid projection first resolves exact repository participation.
+UNCONFIGURED/EXCLUDED project participation directly and do not require
+ACTIVE-only semantic-scope conversion. For ACTIVE members, AnswerService supplies
+the exact semantic scope and the Functional Pyramid service invokes the resolver
+from §18 on that scope. If a current semantic surface cannot be converted to the
+required exact Functional Pyramid scope, the ACTIVE overlay projects
+`FunctionalPyramidUnavailable`; it does not widen the surface, invent
+repository-wide scope, or discard otherwise-current descriptive semantic
+content. ACTIVE operational graph failure likewise projects
+`FunctionalPyramidUnavailable`.
 
 Candidate validation is a pure service call over the proposed member intent plus
 current registered/declaration state. It uses the FD-84 reason taxonomy and the
