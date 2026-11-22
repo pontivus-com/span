@@ -1477,6 +1477,40 @@ is introduced: the shell may use one internal typed capability object/port for
 the raw runtime and the existing `ServiceContext` remains the composed
 operation context.
 
+**Version-1 service-construction contract.** Mandatory installation capabilities
+are constructor invariants for the semantic services used by production
+operations, not optional feature switches. The canonical production
+`ServiceContext` composition supplies all of the following together:
+
+- `AnswerService` receives the installation Functional Pyramid orientation
+  projection;
+- `LifecycleService` receives the installation Functional Pyramid route
+  projection;
+- `SupportService` receives both the Functional Pyramid route evaluator and
+  the repository-runtime resolver used for repository-qualified authority and
+  evidence access;
+- `DependencyEffectService` receives the Functional Pyramid route-impact
+  resolver, repository-runtime resolver, registered-repository resolver and
+  repository-qualified support resolver; and
+- `ReconsiderService` receives that already-composed
+  `DependencyEffectService`.
+
+No production semantic constructor may interpret an omitted capability as a
+valid operating mode. In particular, `ReconsiderService` must not manufacture
+a repository-local effect engine when the installation engine is absent,
+`DependencyEffectService.repository_change` must not skip Functional Pyramid
+route-impact traversal because a callback is absent, and `SupportService` must
+not evaluate a cross-repository authority dependency through its local store
+because the repository-runtime resolver is absent. If a constructor retains an
+optional seam solely for isolated unit testing, invoking semantics that require
+that seam must raise an invariant/programming error before a domain result is
+created. Production composition and installed acceptance must never exercise
+such a partial construction.
+
+Unit tests that do not need a real installation may inject explicit typed
+deterministic capabilities representing the intended participation state. They
+must not obtain legacy behavior by omitting Functional Pyramid dependencies.
+
 ### 18. Pure graph resolver, health and support evaluation
 
 **Authority:** G1, G3, G4, G7; F1, F2, F11, F12; L12–L16; FD-9–FD-16,
@@ -1703,6 +1737,23 @@ projection: the same repository cannot be ACTIVE through
 and an ACTIVE NORMATIVE record cannot silently omit route/authority support
 because a callback was absent.
 
+Every shell consumer that needs semantic services enters through the same
+installation composition root. The MCP server may register repository locators
+without opening repository stores, but the first repository-scoped operation
+must obtain its `ServiceContext` from `InstallationRuntime`. Read-only host
+hooks that evaluate support or changed dependents must likewise open a bounded
+installation runtime for the hook invocation and compose the target repository
+through it. Hooks must not call a repository-context helper that requires
+Functional Pyramid capabilities they do not own, and must not recreate a local
+support/effect graph.
+
+Explicit installer/provisioning code is the only exception because it is not a
+semantic runtime operation: it may create/verify the installation store and
+open the raw repository runtime needed to initialize a repository, but it must
+not fabricate a partially composed `ServiceContext`. Provisioning ownership
+remains in the installer/context setup path; MCP startup registration does not
+restore a public or implicit provisioning path.
+
 #### 20.1 `ask`
 
 **Authority:** F6, F10, F11, F12; L1–L3, L8, L12–L14, L16;
@@ -1798,6 +1849,14 @@ and produces exactly one context specification for each repository with
 actionable effects. Ordinary reconsider and Functional Pyramid writes invoke
 this same engine. A shell-side loop over per-repository semantic effect engines
 or a second Functional-Pyramid-specific effect coordinator is forbidden.
+
+For an ordinary changed-scope root, Functional Pyramid route-impact traversal is
+unconditional. The engine always asks the installation route-impact capability
+for changed route identities, including when the repository is currently
+UNCONFIGURED or EXCLUDED; those states yield the canonical empty impact set.
+Absence of the capability is not equivalent to an empty set and must fail as a
+composition invariant. `ReconsiderService` therefore never has authority to
+construct a reduced repository-local `DependencyEffectService`.
 
 For a repository newly becoming ACTIVE, the Functional Pyramid root additionally
 selects every current NORMATIVE revision in that repository that lacks
@@ -1975,6 +2034,15 @@ and architecture guards preventing shell semantic effect coordination or
 optional production Functional Pyramid dependencies. Component tests that
 manually inject Functional Pyramid callbacks do not satisfy this production
 composition requirement.
+
+The architecture guard must inspect both composition sites and service behavior:
+the production `ServiceContext` factory supplies every mandatory capability;
+`ReconsiderService` has no local effect-engine fallback; ordinary
+`DependencyEffectService.repository_change` cannot conditionally omit route
+impact traversal; repository-qualified authority evaluation cannot silently fall
+back to the semantic owner's local store for an external authority; and
+semantic hook paths compose through `InstallationRuntime`. A green installed
+journey does not waive any of these static ownership checks.
 
 **2026-11-22 design-detail audit.** The adversarial implementation audit found
 no contradiction requiring a Layer-0–3 product/functional amendment. It found
