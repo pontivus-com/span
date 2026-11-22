@@ -528,10 +528,8 @@ class DependencyEffectService:
                     continue
                 if any(
                     isinstance(dependency, m.AuthoritySupportDependency)
-                    and dependency.authority.evidence_ref.repository_id
-                    == repository_id
-                    and dependency.authority.evidence_ref.evidence_id
-                    == evidence_id
+                    and dependency.authority.evidence_ref.repository_id == repository_id
+                    and dependency.authority.evidence_ref.evidence_id == evidence_id
                     for dependency in revision.content.support
                 ):
                     refs.append(ref)
