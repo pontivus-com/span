@@ -138,6 +138,48 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.service = self._service()
 
+    def _effects(
+        self,
+        *,
+        support=None,
+        policy=None,
+        clock=None,
+        new_context_id=None,
+        functional_route_impacts=None,
+    ) -> DependencyEffectService:
+        selected_support = self.support if support is None else support
+        selected_clock = clock or (lambda: NOW)
+        selected_policy = policy or DEFAULT_SERVICE_BOUNDS_POLICY
+        runtime = mock.Mock(
+            repository_id="repo-1",
+            root=str(self.root),
+            store=self.store,
+            evidence=FilesystemEvidenceSource("repo-1", self.root),
+        )
+
+        def repository_runtime(repository_id):
+            if repository_id != "repo-1":
+                self.fail(f"unexpected repository: {repository_id}")
+            return runtime
+
+        def support_for_repository(repository_id):
+            if repository_id != "repo-1":
+                self.fail(f"unexpected repository: {repository_id}")
+            return selected_support
+
+        return DependencyEffectService(
+            repository_runtime=repository_runtime,
+            registered_repository_ids=lambda: ("repo-1",),
+            support_for_repository=support_for_repository,
+            functional_route_impacts=(
+                functional_route_impacts
+                or (lambda _repository_id, _paths, _surfaces: ())
+            ),
+            policy=selected_policy,
+            clock=selected_clock,
+            new_context_id=new_context_id,
+        )
+
     def _service(
         self,
         *,
@@ -148,17 +190,14 @@ class ReconsiderServiceTest(unittest.TestCase):
         new_context_id=None,
         effects=None,
     ) -> ReconsiderService:
-        selected_support = self.support if support is None else support
         selected_clock = clock or (lambda: NOW)
         selected_policy = policy or DEFAULT_SERVICE_BOUNDS_POLICY
         if effects is None:
-            effects = DependencyEffectService(
-                store=self.store,
-                support=selected_support,
+            effects = self._effects(
+                support=support,
                 policy=selected_policy,
                 clock=selected_clock,
                 new_context_id=new_context_id,
-                functional_route_impacts=lambda _repository_id, _paths, _surfaces: (),
             )
         return ReconsiderService(
             store=self.store,
@@ -462,6 +501,12 @@ class ReconsiderServiceTest(unittest.TestCase):
                 else self.fail(f"unexpected repository: {repository_id}")
             ),
             registered_repository_ids=lambda: ("repo-1",),
+            support_for_repository=lambda repository_id: (
+                self.support
+                if repository_id == "repo-1"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            functional_route_impacts=lambda _repository_id, _paths, _surfaces: (),
             clock=lambda: NOW,
             new_context_id=lambda: "ctx-fp-installation-engine",
         )
@@ -500,8 +545,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
             assertion_nature=m.AssertionNature.NORMATIVE,
         )
-        effects = DependencyEffectService(
-            store=self.store,
+        effects = self._effects(
             new_context_id=lambda: "ctx-fp-activate",
             clock=lambda: NOW,
         )
@@ -538,8 +582,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
             assertion_nature=m.AssertionNature.NORMATIVE,
         )
-        effects = DependencyEffectService(
-            store=self.store,
+        effects = self._effects(
             new_context_id=lambda: "ctx-fp-retained",
             clock=lambda: NOW,
         )
@@ -582,8 +625,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             ),
             assertion_nature=m.AssertionNature.NORMATIVE,
         )
-        effects = DependencyEffectService(
-            store=self.store,
+        effects = self._effects(
             new_context_id=lambda: "ctx-fp-deactivate",
             clock=lambda: NOW,
         )
