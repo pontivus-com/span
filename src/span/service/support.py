@@ -273,9 +273,7 @@ class SupportService:
                 "functional route support has no semantic owner surface",
             )
         if self._functional_route_resolver is None:
-            raise RuntimeError(
-                "Functional Pyramid route evaluation is not configured"
-            )
+            raise RuntimeError("Functional Pyramid route evaluation is not configured")
         current, route_identity = self._functional_route_resolver(dependency, surface)
         return _rules.functional_route_state(
             recorded=dependency,
