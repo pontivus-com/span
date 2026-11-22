@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.pontivus-com/span",
   "title": "Span",
-  "description": "Reusable codebase understanding and applicable rules for coding agents, with focused reassessment after change.",
+  "description": "Reusable codebase understanding and applicable rules for coding agents, with focused change review.",
   "version": "1.0.0-beta.1",
   "repository": {
     "url": "https://github.com/pontivus-com/span",
