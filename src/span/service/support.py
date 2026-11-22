@@ -15,6 +15,7 @@ from span.core import support_rules as _rules
 from span.core.recording import RecordingValidationError
 from span.core.rejection import RejectionCauseKind
 from span.ports.evidence import EvidenceSource
+from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
 from span.ports.lifecycle import (
     LifecycleAuthorityResolver,
     LifecycleStorePort,
@@ -51,6 +52,9 @@ class SupportService:
             ]
             | None
         ) = None,
+        repository_runtime: (
+            _typing.Callable[[str], FunctionalPyramidRepositoryRuntime] | None
+        ) = None,
     ) -> None:
         self._store = store
         self._evidence = evidence
@@ -58,6 +62,7 @@ class SupportService:
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._policy = policy
         self._functional_route_resolver = functional_route_resolver
+        self._repository_runtime = repository_runtime
 
     def evaluate_version(
         self,
@@ -268,10 +273,8 @@ class SupportService:
                 "functional route support has no semantic owner surface",
             )
         if self._functional_route_resolver is None:
-            return _rules.evaluation(
-                m.SupportState.UNVERIFIABLE,
-                self._clock(),
-                "functional route evaluation is unavailable",
+            raise RuntimeError(
+                "Functional Pyramid route evaluation is not configured"
             )
         current, route_identity = self._functional_route_resolver(dependency, surface)
         return _rules.functional_route_state(
@@ -349,15 +352,21 @@ class SupportService:
 
     def _authority_eval(self, binding: m.AuthorityBinding) -> m.SupportEvaluation:
         reference = binding.evidence_ref
+        authority: LifecycleAuthorityResolver = self._authority
+        evidence = self._evidence
+        if self._repository_runtime is not None:
+            runtime = self._repository_runtime(reference.repository_id)
+            authority = runtime.store
+            evidence = runtime.evidence
         try:
-            declared: m.AuthorityBinding | None = self._authority.resolve_authority(
+            declared: m.AuthorityBinding | None = authority.resolve_authority(
                 reference.repository_id, reference.evidence_id.value
             )
         except RecordingValidationError:
             declared = None
         observed: str | None = None
         if declared is not None:
-            _, fingerprints = self._evidence.list_inventory_entries(
+            _, fingerprints = evidence.list_inventory_entries(
                 reference.repository_id,
                 m.EvidenceScope(),
                 (declared.evidence_ref.locator,),
