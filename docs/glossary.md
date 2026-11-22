@@ -77,8 +77,34 @@ conclusion, or verification run. Unexamined and truncated scope stays explicit.
 **Observation** — Immutable admitted source reference, content hash and delivered
 ranges, or a recorded discovery-membership fingerprint. See [authority](authority-trust.md).
 
+**Functional Pyramid** — The installation-scoped declared governance graph over
+registered repositories. It carries repository participation, Functional
+Scopes, Functional Contexts, Functional Rules, owner references and governing
+edges; it carries no copied canonical rule prose.
+
+**Functional Pyramid participation** — Exact repository state: `UNCONFIGURED`,
+`EXCLUDED`, or `ACTIVE`. Registration is not participation. One repository may
+belong to at most one ACTIVE pyramid.
+
+**Functional Scope** — The explicitly declared portion of an ACTIVE repository
+to which Functional Pyramid governance may apply. Scope relation is
+`OUTSIDE_FUNCTIONAL_SCOPE`, `COVERED`, `UNCOVERED`, or `MIXED`.
+
+**Functional Context** — A declared governance context whose explicit coverage
+and inheritance determine applicability for semantic scope. Matching contexts
+compose; there is no most-specific-wins rule.
+
+**Functional Rule** — A stable rule identity in the declared pyramid graph.
+Canonical governing content remains with its `FunctionalRuleOwner` authority
+reference; Span retains identity, relationships and applicability, not prose.
+
+**Functional route support** — Server-derived support for the exact Functional
+Pyramid route that governed a NORMATIVE conclusion when recorded. Route
+identity tracks applicability/topology separately from canonical authority
+currency.
+
 **Support** — A declared dependency on a source observation, authority binding,
-exact premise revision, or discovery observation.
+exact premise revision, discovery observation, or Functional Pyramid route.
 
 **CURRENT** — Declared support passed its present checks. This is neither
 semantic truth nor proof of complete investigation.

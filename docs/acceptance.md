@@ -4,6 +4,33 @@ The current lifecycle is evaluated at three distinct boundaries: deterministic
 contracts, delivered host behavior, and useful real-task reuse. Passing a
 local suite proves neither host conversion nor comparative product value.
 
+## Version 1 Beta candidate acceptance
+
+The current generic Version-1 acceptance authority is
+[Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance),
+mapped executable-case-by-case in [the FA-01–FA-44 matrix](functional-acceptance.md).
+`tests/unit/test_invariant_matrix.py` requires every FA row exactly once and
+each row to name live, unambiguous boundary tests.
+
+Post-C08 GitHub Actions run `44977899970` on
+`15dc6ab8264d6a4fbeeff75b80eae360eaabb80b` passed build/distribution,
+Ruff/Black, the zero-error typing ratchet, the complete pytest suite
+(`919 passed, 1 skipped, 144 subtests`), standalone plugin-notice delivery and
+coverage upload. That suite includes the non-editable installed MCP lane and
+the physically separate repository-A / repository-B / installation-database
+governance journey required by Technical Design §22.
+
+This establishes the **generic** Version-1 functional/architecture candidate.
+It does not establish the private first-adopter gate or final-candidate managed
+host delivery. T11 remains the private adopter acceptance owner; T13 owns live
+candidate-specific Codex/Claude Code/OpenCode captures for any host claimed as
+verified at release.
+
+The current repository lifecycle store is schema 14. Functional Pyramid
+participation/versions/exclusions/receipts are installation-owned in
+`installation/functional-pyramid.db`; repository-portable backups deliberately
+do not claim to carry that installation participation state.
+
 ## Behavioral scenarios
 
 The functional scenario set covers:
@@ -53,7 +80,7 @@ marked pending are not current coverage.
 | F-29 | A create without a surface derives it from one scope path or the question context; multiple paths are rejected with the candidates, and a supplied surface must agree with the carried scope. | implemented | `test_create_without_surface_derives_from_one_scope_path`, `test_create_without_surface_uses_the_question_context_scope`, `test_create_without_surface_rejects_multiple_paths`, `test_create_surface_must_agree_with_the_carried_scope`, `five-task/DERIVED-SURFACE.md` |
 | F-30 | A create states one conclusion with dependency evidence from `locator`, `observation_id`, or non-empty `support`; a locator may accompany support as carried scope without adding a dependency, while observation remains exclusive. Span stores explicit support as supplied and derives the basis, new lineage id, and surface. | implemented — source CI verified | `test_create_accepts_locator_with_explicit_support`, `test_create_observation_remains_exclusive`, `test_record_create_through_the_one_request`, `test_record_accepts_every_support_kind`, `five-task/TASK1-FLAT.md`; GitHub Actions `44448034572` |
 
-### 0.11.0 remediation candidate
+### Historical 0.11.0 remediation candidate
 
 The 0.11.0 implementation is verified on source candidate
 `00b4eb358b8e794f855a5de09eeb01efd72cd3c9`. GitHub Actions run
