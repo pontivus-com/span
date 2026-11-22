@@ -486,6 +486,45 @@ class ReconsiderServiceTest(unittest.TestCase):
             ("repo-1",),
         )
 
+    def test_retained_activation_effect_stays_actionable_without_route_support(
+        self,
+    ) -> None:
+        self._create(
+            "u-pre-route-retained",
+            "src/pre_route_retained.py",
+            "src/pre_route_retained.py",
+            m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+            assertion_nature=m.AssertionNature.NORMATIVE,
+        )
+        effects = DependencyEffectService(
+            store=self.store,
+            new_context_id=lambda: "ctx-fp-retained",
+            clock=lambda: NOW,
+        )
+        _, _, refs = effects.functional_pyramid_change(
+            newly_active_repositories=("repo-1",)
+        )
+
+        surfaces, contexts = effects.retained_functional_pyramid_effects(refs)
+
+        retained = next(
+            conclusion
+            for surface in surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-pre-route-retained"
+        )
+        self.assertIsInstance(retained.support, m.SupportEvaluation)
+        assert isinstance(retained.support, m.SupportEvaluation)
+        self.assertEqual(
+            retained.support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+        self.assertIn("FunctionalRouteSupport", retained.support.reason)
+        self.assertEqual(
+            tuple(context.repository_id for context in contexts),
+            ("repo-1",),
+        )
+
     def test_deliberately_inactive_repository_reassesses_recorded_route(
         self,
     ) -> None:
