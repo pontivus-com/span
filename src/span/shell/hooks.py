@@ -206,11 +206,27 @@ def _functional_pyramid_notice(
 
 def _affected_for_root(data_dir, root, rel_paths):
     """Bounded dependent lookup for changed repository-relative locators."""
-    from span.shell.context import open_repository_context
+    from span.shell.installation_runtime import open_installation_runtime
 
-    repository_id, context = open_repository_context(data_dir, root)
+    mapping = repo_map(data_dir)
+    roots = {_repository_id(value): value for value in mapping}
+
+    def repository_locator(repository_id: str) -> str:
+        try:
+            return roots[repository_id]
+        except KeyError as exc:
+            raise ValueError(
+                f"repository is not registered: {repository_id}"
+            ) from exc
+
+    repository_id = _repository_id(root)
     affected: dict[str, m.SupportState] = {}
-    try:
+    with open_installation_runtime(
+        data_dir,
+        repository_locator=repository_locator,
+        registered_repository_ids=lambda: tuple(sorted(roots)),
+    ) as installation:
+        context = installation.context_for_locator(root)
         for locator in tuple(rel_paths)[:HOOK_DIAGNOSTIC_LIMIT]:
             for observation_id in context.store.source_observation_ids_for_locator(
                 repository_id, locator
@@ -224,8 +240,6 @@ def _affected_for_root(data_dir, root, rel_paths):
                         )
                     else:
                         affected[key] = evaluation.state
-    finally:
-        context.store.close()
     return repository_id, affected
 
 
@@ -259,13 +273,13 @@ def cmd_adoption_primer(data_dir, repo_root=None):
     if not active:
         return
     root = next(iter(active))
-    from span.shell.context import open_repository_context
+    from span.shell.context import close_repository_runtime, open_repository_runtime
 
     try:
-        repository_id, context = open_repository_context(data_dir, root)
+        runtime = open_repository_runtime(data_dir, root)
     except Exception:  # noqa: BLE001 - a hook never breaks the session
         return
-    context.store.close()
+    close_repository_runtime(runtime)
     print(ADOPTION_PRIMER)
 
 
