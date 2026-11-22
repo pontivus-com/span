@@ -360,10 +360,7 @@ class SupportService:
             runtime = self._repository_runtime(reference.repository_id)
             authority = runtime.store
             evidence = runtime.evidence
-        elif (
-            surface is not None
-            and reference.repository_id != surface.repository_id
-        ):
+        elif surface is not None and reference.repository_id != surface.repository_id:
             raise RuntimeError(
                 "repository-qualified authority evaluation is not configured"
             )
