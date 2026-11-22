@@ -5,47 +5,34 @@ from __future__ import annotations
 import datetime as _datetime
 import typing as _typing
 
+from span.core import containment
 from span.core import functional_pyramid as _fp
 from span.core import model as m
+from span.core import support_rules as _support_rules
 from span.core.identity import functional_pyramid_identity, payload_digest
-from span.core.recording import RecordingConflict, receipt_content_decision
+from span.core.recording import (
+    RecordingConflict,
+    RecordingValidationError,
+    receipt_content_decision,
+)
 from span.core.rejection import RejectionCauseKind
 from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidDeclarationPort,
+    FunctionalPyramidRepositoryRuntime,
     FunctionalPyramidRepositoryUnavailable,
     FunctionalPyramidStatePort,
     FunctionalPyramidStateTransaction,
 )
 from span.ports.lifecycle import LifecycleAuthorityResolver
+from span.service.contexts import ContextBinding, build_context
+from span.service.effects import DependencyEffectService
+from span.service.ids import server_context_id
+from span.service.support import SupportService
 
 _DeclarationEntry = tuple[str, m.FunctionalPyramidDeclaration]
 _AuthorityMap = dict[tuple[str, str], m.AuthorityBinding]
 
-_EffectProjection = _typing.Callable[
-    [
-        FunctionalPyramidStateTransaction,
-        m.FunctionalPyramidAction,
-        m.FunctionalPyramidId,
-        tuple[m.FunctionalPyramidMemberView, ...],
-        tuple[m.FunctionalPyramidMemberView, ...],
-    ],
-    tuple[
-        tuple[m.ChangedSurface, ...],
-        tuple[m.InvestigationContextRef, ...],
-        tuple[m.ConclusionRevisionRef, ...],
-    ],
-]
-_RetainedEffectProjection = _typing.Callable[
-    [
-        FunctionalPyramidStateTransaction,
-        tuple[m.ConclusionRevisionRef, ...],
-    ],
-    tuple[
-        tuple[m.ChangedSurface, ...],
-        tuple[m.InvestigationContextRef, ...],
-    ],
-]
 _RepositoryPaths = _typing.Callable[
     [tuple[str, ...]],
     tuple[tuple[str, str], ...],
@@ -121,18 +108,20 @@ class FunctionalPyramidService:
         state: FunctionalPyramidStatePort | None = None,
         registered_repository_ids: _typing.Callable[[], tuple[str, ...]] | None = None,
         repository_paths: _RepositoryPaths | None = None,
-        effect_projection: _EffectProjection | None = None,
-        retained_effect_projection: _RetainedEffectProjection | None = None,
+        repository_runtime: (
+            _typing.Callable[[str], FunctionalPyramidRepositoryRuntime] | None
+        ) = None,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
+        new_context_id: _typing.Callable[[], str] | None = None,
     ) -> None:
         self._declarations = declarations
         self._authority = authority
         self._state = state
         self._registered_repository_ids = registered_repository_ids
         self._repository_paths = repository_paths
-        self._effect_projection = effect_projection
-        self._retained_effect_projection = retained_effect_projection
+        self._repository_runtime = repository_runtime
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
+        self._new_context_id = new_context_id or server_context_id
 
     def _require_state(self) -> FunctionalPyramidStatePort:
         if self._state is None:
@@ -144,6 +133,21 @@ class FunctionalPyramidService:
             raise ValueError("Functional Pyramid repository registry is not configured")
         return frozenset(self._registered_repository_ids())
 
+    def _runtime(self, repository_id: str) -> FunctionalPyramidRepositoryRuntime:
+        if self._repository_runtime is None:
+            raise RuntimeError("Functional Pyramid repository runtime is not configured")
+        return self._repository_runtime(repository_id)
+
+    def _support_for_repository(self, repository_id: str) -> SupportService:
+        runtime = self._runtime(repository_id)
+        return SupportService(
+            store=runtime.store,
+            evidence=runtime.evidence,
+            authority=runtime.store,
+            functional_route_resolver=self.support_route,
+            repository_runtime=self._runtime,
+        )
+
     def status(
         self, selector: m.FunctionalPyramidSelector
     ) -> m.FunctionalPyramidStatus:
@@ -151,11 +155,20 @@ class FunctionalPyramidService:
         state = self._require_state()
         pyramid_id = selector.pyramid_id
         if selector.repository_id is not None:
-            pyramid_id = state.active_pyramid_id(selector.repository_id)
+            repository_id = selector.repository_id
+            if repository_id not in self._registered():
+                raise RecordingValidationError(
+                    f"unknown repository: {repository_id!r}",
+                    public_identity=repository_id,
+                    public_cause=(
+                        f"the exact repository {repository_id!r} is not registered"
+                    ),
+                )
+            pyramid_id = state.active_pyramid_id(repository_id)
             if pyramid_id is None:
                 participation = (
                     m.FunctionalPyramidParticipationState.EXCLUDED
-                    if state.is_excluded(selector.repository_id)
+                    if state.is_excluded(repository_id)
                     else m.FunctionalPyramidParticipationState.UNCONFIGURED
                 )
                 return m.FunctionalPyramidStatus(state=participation)
@@ -163,8 +176,13 @@ class FunctionalPyramidService:
         assert pyramid_id is not None
         version = state.pyramid_version(pyramid_id)
         if version is None:
-            return m.FunctionalPyramidStatus(
-                state=m.FunctionalPyramidParticipationState.UNCONFIGURED
+            identity = pyramid_id.value
+            raise RecordingValidationError(
+                f"unknown Functional Pyramid: {identity!r}",
+                public_identity=identity,
+                public_cause=(
+                    f"the exact Functional Pyramid {identity!r} is not ACTIVE"
+                ),
             )
         members = state.pyramid_members(pyramid_id, version)
         health, findings = self.health(members)
@@ -176,6 +194,144 @@ class FunctionalPyramidService:
             members=members,
             findings=findings,
         )
+
+    def route(
+        self,
+        repository_id: str,
+        surface: m.SurfaceKey,
+        semantic_scope: m.EvidenceScope,
+    ) -> (
+        m.FunctionalPyramidParticipation
+        | m.FunctionalPyramidUnavailable
+        | tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]
+    ):
+        """Resolve the current repository route through the installation state."""
+        try:
+            status = self.status(m.FunctionalPyramidSelector(repository_id=repository_id))
+            if status.state is not m.FunctionalPyramidParticipationState.ACTIVE:
+                return m.FunctionalPyramidParticipation(status.state)
+            assert status.pyramid_id is not None
+            assert status.version is not None
+            return self.resolve(
+                pyramid_id=status.pyramid_id,
+                version=status.version,
+                members=status.members,
+                surface=surface,
+                semantic_scope=semantic_scope,
+            )
+        except (OSError, FunctionalPyramidRepositoryUnavailable) as exc:
+            return m.FunctionalPyramidUnavailable(
+                failure="Functional Pyramid governance cannot be evaluated",
+                recovery="restore the registered member repository and retry",
+            )
+
+    def orientation(
+        self,
+        repository_id: str,
+        surface: m.SurfaceKey,
+        semantic_scope: m.EvidenceScope,
+    ) -> (
+        m.FunctionalPyramidParticipation
+        | m.FunctionalPyramidView
+        | m.FunctionalPyramidUnavailable
+    ):
+        """Project ordinary ask orientation from the same route owner."""
+        current = self.route(repository_id, surface, semantic_scope)
+        if isinstance(current, tuple):
+            return current[0]
+        return current
+
+    def support_route(
+        self,
+        dependency: m.FunctionalRouteSupport,
+        surface: m.SurfaceKey,
+    ) -> tuple[
+        m.FunctionalPyramidParticipation
+        | m.FunctionalPyramidView
+        | m.FunctionalPyramidUnavailable,
+        m.FunctionalRouteIdentity | None,
+    ]:
+        """Resolve one retained FunctionalRouteSupport against current state."""
+        current = self.route(
+            dependency.repository_id,
+            surface,
+            dependency.semantic_scope,
+        )
+        if isinstance(current, tuple):
+            view, route_identity = current
+            return view, route_identity
+        return current, None
+
+    def changed_route_identities(
+        self,
+        repository_id: str,
+        changed_paths: tuple[str, ...],
+        changed_surfaces: tuple[m.SurfaceKey, ...],
+    ) -> tuple[m.FunctionalRouteIdentity, ...]:
+        """Return recorded routes whose governing declaration change is now non-current."""
+        changed = list(changed_paths)
+        for surface in changed_surfaces:
+            if surface.kind is m.SurfaceKind.FILE:
+                changed.append(surface.locator)
+            elif surface.kind is m.SurfaceKind.SYMBOL:
+                owner = containment.surface_file_locator(surface.locator)
+                if owner is not None:
+                    changed.append(owner)
+        changed_scope = m.EvidenceScope(paths=tuple(dict.fromkeys(changed)))
+        if not changed_scope.paths:
+            return ()
+
+        impacted: set[m.FunctionalRouteIdentity] = set()
+        for owner_repository_id in sorted(self._registered()):
+            store = self._runtime(owner_repository_id).store
+            for understanding in store.list_understandings(owner_repository_id):
+                version = store.get_version(
+                    understanding.understanding_id.value,
+                    understanding.current_version.value,
+                )
+                revisions = {
+                    (revision.conclusion_id, revision.revision): revision
+                    for revision in store.get_conclusions(
+                        understanding.understanding_id.value
+                    )
+                }
+                for ref in version.conclusions:
+                    revision = revisions.get((ref.conclusion_id, ref.revision))
+                    if revision is None or not isinstance(
+                        revision.content, m.SupportedConclusion
+                    ):
+                        continue
+                    for dependency in revision.content.support:
+                        if not isinstance(dependency, m.FunctionalRouteSupport):
+                            continue
+                        members = self._require_state().pyramid_members(
+                            dependency.pyramid_id
+                        )
+                        changed_member = next(
+                            (
+                                member
+                                for member in members
+                                if member.repository_id == repository_id
+                            ),
+                            None,
+                        )
+                        if changed_member is None or not any(
+                            m.evidence_scope_allows(ref.locator, changed_scope)
+                            for ref in changed_member.declaration_refs
+                        ):
+                            continue
+                        current, route_identity = self.support_route(
+                            dependency, understanding.surface
+                        )
+                        evaluation = _support_rules.functional_route_state(
+                            recorded=dependency,
+                            current=current,
+                            current_route_identity=route_identity,
+                            observed_at=self._clock(),
+                        )
+                        if evaluation.state is not m.SupportState.CURRENT:
+                            impacted.add(dependency.route_identity)
+        return tuple(sorted(impacted, key=lambda item: item.value))
 
     def candidate(
         self, selector: m.FunctionalPyramidCandidateSelector
@@ -194,7 +350,7 @@ class FunctionalPyramidService:
             eligible,
             validation,
         ) = self._candidate_lifecycle(selector, state)
-        if validation:
+        if not eligible:
             return m.FunctionalPyramidCandidate(
                 action=selector.action,
                 pyramid_id=target_id,
@@ -758,6 +914,46 @@ class FunctionalPyramidService:
         with self._require_state().transaction(paths) as transaction:
             return self._project_receipt(transaction, receipt)
 
+    def _effect_service(
+        self,
+        transaction: FunctionalPyramidStateTransaction,
+    ) -> DependencyEffectService:
+        def issue(
+            repository_id: str,
+            context_id: str,
+            binding: ContextBinding,
+            source_observation_ids: tuple[str, ...],
+            discovery_observation_ids: tuple[str, ...],
+        ) -> m.InvestigationContextRef:
+            runtime = self._runtime(repository_id)
+            context = build_context(
+                retention=runtime.store.retention,
+                binding=binding,
+                repository_id=repository_id,
+                request_id=m.RequestId(f"effects:{context_id}"),
+                clock=self._clock,
+                new_context_id=lambda: context_id,
+            )
+            transaction.write_reestablishment_context(
+                context,
+                source_observation_ids=source_observation_ids,
+                discovery_observation_ids=discovery_observation_ids,
+            )
+            return m.InvestigationContextRef(
+                repository_id=repository_id,
+                context_id=context.context_id,
+            )
+
+        return DependencyEffectService(
+            repository_runtime=self._runtime,
+            registered_repository_ids=lambda: tuple(sorted(self._registered())),
+            support_for_repository=self._support_for_repository,
+            functional_route_impacts=self.changed_route_identities,
+            clock=self._clock,
+            new_context_id=self._new_context_id,
+            context_issuer=issue,
+        )
+
     def _project_receipt(
         self,
         transaction: FunctionalPyramidStateTransaction,
@@ -765,15 +961,66 @@ class FunctionalPyramidService:
     ) -> m.FunctionalPyramidRecorded:
         if not receipt.dependent_effect_refs:
             return self._recorded(receipt, (), ())
-        if self._retained_effect_projection is None:
-            raise ValueError(
-                "Functional Pyramid retained effect projection is not configured"
-            )
-        surfaces, contexts = self._retained_effect_projection(
-            transaction,
-            receipt.dependent_effect_refs,
-        )
+        surfaces, contexts = self._effect_service(
+            transaction
+        ).retained_functional_pyramid_effects(receipt.dependent_effect_refs)
         return self._recorded(receipt, surfaces, contexts)
+
+    def _proposed_changed_route_identities(
+        self,
+        *,
+        pyramid_id: m.FunctionalPyramidId,
+        proposed_version: m.FunctionalPyramidVersion,
+        old_members: tuple[m.FunctionalPyramidMemberView, ...],
+        new_members: tuple[m.FunctionalPyramidMemberView, ...],
+    ) -> tuple[m.FunctionalRouteIdentity, ...]:
+        retained = {
+            member.repository_id for member in old_members
+        } & {member.repository_id for member in new_members}
+        changed: set[m.FunctionalRouteIdentity] = set()
+        for repository_id in sorted(retained):
+            store = self._runtime(repository_id).store
+            for understanding in store.list_understandings(repository_id):
+                version = store.get_version(
+                    understanding.understanding_id.value,
+                    understanding.current_version.value,
+                )
+                revisions = {
+                    (revision.conclusion_id, revision.revision): revision
+                    for revision in store.get_conclusions(
+                        understanding.understanding_id.value
+                    )
+                }
+                for ref in version.conclusions:
+                    revision = revisions.get((ref.conclusion_id, ref.revision))
+                    if revision is None or not isinstance(
+                        revision.content, m.SupportedConclusion
+                    ):
+                        continue
+                    for dependency in revision.content.support:
+                        if (
+                            not isinstance(dependency, m.FunctionalRouteSupport)
+                            or dependency.pyramid_id != pyramid_id
+                        ):
+                            continue
+                        try:
+                            view, identity = self.resolve(
+                                pyramid_id=pyramid_id,
+                                version=proposed_version,
+                                members=new_members,
+                                surface=understanding.surface,
+                                semantic_scope=dependency.semantic_scope,
+                            )
+                        except (OSError, ValueError):
+                            changed.add(dependency.route_identity)
+                            continue
+                        if (
+                            view.status
+                            is not m.FunctionalPyramidRouteStatus.RESOLVED
+                            or identity != dependency.route_identity
+                        ):
+                            changed.add(dependency.route_identity)
+        return tuple(sorted(changed, key=lambda item: item.value))
 
     def _change_effects(
         self,
@@ -787,14 +1034,23 @@ class FunctionalPyramidService:
         tuple[m.InvestigationContextRef, ...],
         tuple[m.ConclusionRevisionRef, ...],
     ]:
-        if self._effect_projection is None:
-            raise ValueError("Functional Pyramid effect projection is not configured")
-        return self._effect_projection(
-            transaction,
-            action,
-            pyramid_id,
-            old_members,
-            new_members,
+        old = {member.repository_id for member in old_members}
+        new = {member.repository_id for member in new_members}
+        route_ids: tuple[m.FunctionalRouteIdentity, ...] = ()
+        if action is m.FunctionalPyramidAction.REVISE:
+            current = transaction.pyramid_version(pyramid_id)
+            if current is None:
+                raise ValueError("Functional Pyramid version is unavailable")
+            route_ids = self._proposed_changed_route_identities(
+                pyramid_id=pyramid_id,
+                proposed_version=m.FunctionalPyramidVersion(current.value + 1),
+                old_members=old_members,
+                new_members=new_members,
+            )
+        return self._effect_service(transaction).functional_pyramid_change(
+            changed_route_identities=route_ids,
+            newly_active_repositories=tuple(sorted(new - old)),
+            deliberately_inactive_repositories=tuple(sorted(old - new)),
         )
 
     @staticmethod
