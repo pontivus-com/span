@@ -1,4 +1,4 @@
-"""Installed MCP-process acceptance lane (0.9.0 lifecycle surface).
+"""Installed MCP-process acceptance lane for the current lifecycle surface.
 
 Builds an isolated virtualenv with a non-editable install of the current
 source tree (plus a generated packaging-time ``BUILD_IDENTITY``) and drives
