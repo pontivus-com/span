@@ -323,6 +323,25 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertTrue(observed["candidate_ready"])
         self.assertFalse(observed["activated_error"])
         self.assertEqual(observed["activated_kind"], "FunctionalPyramidRecorded")
+        self.assertFalse(observed["pre_created_error"])
+        self.assertEqual(observed["pre_created_qualification"], "CURRENT")
+        self.assertIn("repo-a", observed["activation_effect_repositories"])
+        self.assertFalse(observed["activation_receipt_before_error"])
+        self.assertEqual(len(observed["activation_receipt_before_refs"]), 1)
+        self.assertFalse(observed["activation_replay_before_error"])
+        self.assertIn(
+            "repo-a", observed["activation_replay_before_effect_repositories"]
+        )
+        self.assertFalse(observed["pre_reestablished_error"])
+        self.assertEqual(observed["pre_reestablished_qualification"], "CURRENT")
+        self.assertFalse(observed["activation_receipt_after_error"])
+        self.assertEqual(
+            observed["activation_receipt_after_refs"],
+            observed["activation_receipt_before_refs"],
+        )
+        self.assertFalse(observed["activation_replay_after_error"])
+        self.assertEqual(observed["activation_replay_after_effect_count"], 0)
+        self.assertEqual(observed["activation_replay_after_context_count"], 0)
 
         self.assertFalse(observed["ask_a_error"])
         self.assertEqual(observed["ask_a_route_status"], "RESOLVED")
