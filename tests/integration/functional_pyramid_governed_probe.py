@@ -221,7 +221,94 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                     }
                 },
             )
+            pre_created, pre_created_error = await _call(
+                session,
+                "record",
+                {
+                    "repository_id": repo_a_id,
+                    "request_id": "preactivation-normative-create",
+                    "kind": "understanding",
+                    "question": "What constrains alpha before adoption?",
+                    "scope_paths": ["src/alpha.py"],
+                    "conclusion": "Alpha has a normative pre-adoption constraint.",
+                    "locator": "src/alpha.py",
+                    "assertion_nature": "NORMATIVE",
+                    "provenance": "installed preactivation probe",
+                },
+            )
+            pre_understanding_id = _value(pre_created.get("understanding_id"))
+            pre_version = _value(pre_created.get("version"))
+            pre_affected = pre_created.get("affected_revisions", [])
+            pre_conclusion_id = (
+                _value(pre_affected[0].get("conclusion_id"))
+                if pre_affected
+                else None
+            )
+
             activated, activated_error = await _call(
+                session,
+                "record",
+                {
+                    "request_id": "governed-activate",
+                    "kind": "functional_pyramid",
+                    "action": "activate",
+                    "members": members,
+                },
+            )
+
+            activation_receipt_before, activation_receipt_before_error = (
+                await _call(
+                    session,
+                    "ask",
+                    {
+                        "selector": {
+                            "$type": "FunctionalPyramidReceiptSelector",
+                            "request_id": {"value": "governed-activate"},
+                        }
+                    },
+                )
+            )
+            activation_replay_before, activation_replay_before_error = await _call(
+                session,
+                "record",
+                {
+                    "request_id": "governed-activate",
+                    "kind": "functional_pyramid",
+                    "action": "activate",
+                    "members": members,
+                },
+            )
+            activation_context_a = _context_for(activated, repo_a_id)
+            pre_reestablished, pre_reestablished_error = await _call(
+                session,
+                "record",
+                {
+                    "request_id": "preactivation-normative-reestablish",
+                    "context": activation_context_a,
+                    "kind": "understanding",
+                    "understanding_id": pre_understanding_id,
+                    "expected_version": pre_version,
+                    "actions": {
+                        "confirm": [
+                            {
+                                "conclusion_id": pre_conclusion_id,
+                                "locator": "src/alpha.py",
+                            }
+                        ]
+                    },
+                },
+            )
+            activation_receipt_after, activation_receipt_after_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidReceiptSelector",
+                        "request_id": {"value": "governed-activate"},
+                    }
+                },
+            )
+            activation_replay_after, activation_replay_after_error = await _call(
                 session,
                 "record",
                 {
@@ -360,6 +447,40 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "candidate_ready": candidate.get("activation_ready"),
                 "activated_error": activated_error,
                 "activated_kind": activated.get("$type"),
+                "pre_created_error": pre_created_error,
+                "pre_created_qualification": pre_created.get(
+                    "qualification", {}
+                ).get("state"),
+                "activation_effect_repositories": _surface_repositories(
+                    {"surfaces": activated.get("dependent_effects", [])}
+                ),
+                "activation_receipt_before_error": activation_receipt_before_error,
+                "activation_receipt_before_refs": activation_receipt_before.get(
+                    "dependent_effect_refs", []
+                ),
+                "activation_replay_before_error": activation_replay_before_error,
+                "activation_replay_before_effect_repositories": _surface_repositories(
+                    {
+                        "surfaces": activation_replay_before.get(
+                            "dependent_effects", []
+                        )
+                    }
+                ),
+                "pre_reestablished_error": pre_reestablished_error,
+                "pre_reestablished_qualification": pre_reestablished.get(
+                    "qualification", {}
+                ).get("state"),
+                "activation_receipt_after_error": activation_receipt_after_error,
+                "activation_receipt_after_refs": activation_receipt_after.get(
+                    "dependent_effect_refs", []
+                ),
+                "activation_replay_after_error": activation_replay_after_error,
+                "activation_replay_after_effect_count": len(
+                    activation_replay_after.get("dependent_effects", [])
+                ),
+                "activation_replay_after_context_count": len(
+                    activation_replay_after.get("reestablishment_contexts", [])
+                ),
                 "ask_a_error": ask_a_error,
                 "ask_a_route_status": fp_a.get("status"),
                 "ask_a_rule_authority_ids": _authority_ids(fp_a, repo_b_id),
