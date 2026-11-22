@@ -665,13 +665,19 @@ class ReconsiderServiceTest(unittest.TestCase):
             authority_kind=m.AuthorityKind.REPOSITORY_RULE,
             status=m.AuthorityStatus.ACCEPTED,
         )
-        self.store.register_repository(
+        store_auth = LifecycleStore(
+            pathlib.Path(self._tmp.name) / "repo-auth.db",
+            retention=RETENTION,
+            clock=lambda: NOW,
+        )
+        self.addCleanup(store_auth.close)
+        store_auth.register_repository(
             "repo-auth",
             str(root_auth),
             authority_bindings=(authority,),
         )
         context_auth = m.InvestigationContextId("ctx-repo-auth")
-        self.store.put_context(
+        store_auth.put_context(
             m.InvestigationContext(
                 context_id=context_auth,
                 repository_id="repo-auth",
@@ -692,6 +698,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             repository_id="repo-auth",
             context_id=context_auth,
             assertion_nature=m.AssertionNature.NORMATIVE,
+            store=store_auth,
         )
         support = mock.Mock()
         support.evaluate_revision.return_value = support_rules.evaluation(
@@ -699,7 +706,32 @@ class ReconsiderServiceTest(unittest.TestCase):
             NOW,
             "",
         )
-        service = self._service(support=support)
+        runtime_auth = mock.Mock(
+            repository_id="repo-auth",
+            root=str(root_auth),
+            store=store_auth,
+            evidence=FilesystemEvidenceSource("repo-auth", root_auth),
+        )
+        effects = DependencyEffectService(
+            repository_runtime=lambda repository_id: (
+                runtime_auth
+                if repository_id == "repo-auth"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            registered_repository_ids=lambda: ("repo-auth",),
+            support_for_repository=lambda repository_id: (
+                support
+                if repository_id == "repo-auth"
+                else self.fail(f"unexpected repository: {repository_id}")
+            ),
+            functional_route_impacts=lambda _repository_id, _paths, _surfaces: (),
+            clock=lambda: NOW,
+        )
+        service = ReconsiderService(
+            store=store_auth,
+            effects=effects,
+            clock=lambda: NOW,
+        )
 
         result = service.reconsider(
             m.ReconsiderRequest(
