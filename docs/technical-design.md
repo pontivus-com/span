@@ -1840,15 +1840,23 @@ that as `Changed`; Functional Pyramid write composition projects the same
 
 The effect engine is genuinely installation-aware while remaining service-owned.
 It receives repository-qualified store/support/context capabilities, not one
-repository `LifecycleStore` treated as if it represented the installation. It
-uses the repository that owns each canonical dependency index to discover direct
-dependents, resolves the semantic owner of each affected conclusion, re-evaluates
-support through the repository-qualified support capability, performs premise
-closure once, groups canonical `ChangedSurface` results by owning repository,
-and produces exactly one context specification for each repository with
-actionable effects. Ordinary reconsider and Functional Pyramid writes invoke
-this same engine. A shell-side loop over per-repository semantic effect engines
-or a second Functional-Pyramid-specific effect coordinator is forbidden.
+repository `LifecycleStore` treated as if it represented the installation. Its
+constructor has no single-store/single-support operating mode: repository access
+is always through the repository-runtime resolver, support qualification is
+always through the repository-qualified support resolver, and the registered
+repository resolver defines the search boundary. A one-repository unit test uses
+a one-entry resolver/registry; it does not switch the service into another
+architecture.
+
+The engine uses the repository that owns each canonical dependency index to
+discover direct dependents, resolves the semantic owner of each affected
+conclusion, re-evaluates support through the repository-qualified support
+capability, performs premise closure once, groups canonical `ChangedSurface`
+results by owning repository, and produces exactly one context specification for
+each repository with actionable effects. Ordinary reconsider and Functional
+Pyramid writes invoke this same engine. A shell-side loop over per-repository
+semantic effect engines or a second Functional-Pyramid-specific effect
+coordinator is forbidden.
 
 For an ordinary changed-scope root, Functional Pyramid route-impact traversal is
 unconditional. The engine always asks the installation route-impact capability
@@ -2037,10 +2045,11 @@ composition requirement.
 
 The architecture guard must inspect both composition sites and service behavior:
 the production `ServiceContext` factory supplies every mandatory capability;
-`ReconsiderService` has no local effect-engine fallback; ordinary
-`DependencyEffectService.repository_change` cannot conditionally omit route
-impact traversal; repository-qualified authority evaluation cannot silently fall
-back to the semantic owner's local store for an external authority; and
+`ReconsiderService` has no local effect-engine fallback;
+`DependencyEffectService` has no single-store/single-support constructor mode;
+ordinary `DependencyEffectService.repository_change` cannot conditionally omit
+route impact traversal; repository-qualified authority evaluation cannot silently
+fall back to the semantic owner's local store for an external authority; and
 semantic hook paths compose through `InstallationRuntime`. A green installed
 journey does not waive any of these static ownership checks.
 
