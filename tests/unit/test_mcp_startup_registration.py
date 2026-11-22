@@ -111,9 +111,7 @@ class StartupRegistrationTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = pathlib.Path(tmp) / "data"
-            with mock.patch.object(
-                mcp_server, "_serve", side_effect=_fake_serve
-            ):
+            with mock.patch.object(mcp_server, "_serve", side_effect=_fake_serve):
                 mcp_server.main(
                     [
                         "--data-dir",
