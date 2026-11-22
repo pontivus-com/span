@@ -223,7 +223,7 @@ class FunctionalPyramidService:
                 surface=surface,
                 semantic_scope=semantic_scope,
             )
-        except (OSError, FunctionalPyramidRepositoryUnavailable) as exc:
+        except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
                 recovery="restore the registered member repository and retry",
