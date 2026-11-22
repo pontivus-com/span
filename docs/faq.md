@@ -2,12 +2,15 @@
 
 ## What does an agent actually do with Span?
 
-Ask for the relevant surface view, inspect current retained understanding and
-status, select exact source evidence only when needed, investigate material gaps,
-and record supported conclusions when established. A later session can ask the
-same surface without knowing a saved ID or question, then select applicable
-current understanding. Exact recorded-question lookup is optional and exact.
-After changes, the agent reconsiders affected explanations and updates actual loss.
+Ask for the file, symbol, service, or domain the agent is working on. Span
+returns the current understanding already retained for that surface and, for an
+ACTIVE Functional Pyramid repository, the project guidance that applies to the
+same scope from first principles down to functional and technical design.
+
+The agent investigates any gaps with its normal tools and records useful
+conclusions when established. A later session can ask the same surface without
+the old conversation or a saved internal ID. After code or guidance changes,
+`reconsider` identifies the understanding that actually needs another look.
 See [usage](usage.md).
 
 ## Does installation explain the whole repository?
@@ -18,11 +21,15 @@ successful call does not prove repository completeness.
 
 ## What is the Functional Pyramid?
 
-It is an explicitly declared graph of repository participation, Functional
-Scopes, Functional Contexts, Functional Rules and canonical authority owners.
-Span resolves that graph for the exact semantic scope being worked on; it does
-not infer governance from filenames, semantic similarity or document genre, and
-it does not copy governing prose into Span.
+The Functional Pyramid is how Span knows which project guidance applies to the
+exact part of the software an agent is working on. It links that scope to the
+relevant goals and first principles, then through the applicable rules and
+contracts to functional and technical design.
+
+Those documents remain in their canonical locations, including other
+repositories. Span keeps their relationships, applicability, and order
+explicit. It does not guess from filenames, search relevance, or document type,
+and it does not copy the governing documents into Span.
 
 ## Do I have to activate a repository before using Span?
 
@@ -33,10 +40,10 @@ derives its applicable route and authority support automatically.
 
 ## What happens when governance changes in another repository?
 
-The same support/effect engine used for ordinary source changes follows the
-declared cross-repository Functional Pyramid dependencies. `reconsider` can
-therefore return affected conclusions and repository-bound re-establishment
-contexts outside the repository where the governing edit occurred.
+Span follows the declared guidance chain across repositories. If a goal,
+contract, design, or its applicability changes in one repository, `reconsider`
+can identify understanding in another repository that depended on it and now
+needs another look.
 
 ## Must every file be documented first?
 

@@ -2,10 +2,15 @@
 
 Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
 
-This runbook establishes useful understanding for a chosen engineering task.
-Choose the repository, exact scope, and question before investigating. The
-scope may span implementation, tests, configuration, and governing documents.
-A source inventory identifies evidence for that investigation.
+This runbook establishes the complete working context for a chosen engineering
+task. Start with the exact file, symbol, service, or domain. Span can bring
+together what is already understood about that implementation with the project
+guidance that applies to it, from first principles down to functional and
+technical design.
+
+The task may still require new investigation across implementation, tests,
+configuration, and canonical documents. A source inventory identifies the
+evidence needed for that work.
 
 ## Prepare
 

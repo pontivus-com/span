@@ -2,19 +2,24 @@
 
 ## 1.0.0b1 — 2026-11-22
 
-### Governed maintained understanding
+### Complete working context
 
-- Add the Version-1 Functional Pyramid alongside maintained empirical
-  understanding. Repository owners continue to own canonical governing sources;
-  Span maintains declared applicability, derivation, support and change
-  consequences without copying governing prose into a second authority.
+- Version 1 gives an agent both sides of the context for the exact software
+  surface it is working on: retained understanding of what the implementation
+  does, and the applicable project guidance that tells it what that
+  implementation is supposed to follow.
+- Add the Functional Pyramid to connect that same scope to the declared path
+  from goals and first principles through rules, contracts, functional design,
+  and technical design. Canonical documents remain with their owners, including
+  across repositories; Span keeps their identity, applicability, relationships,
+  and change consequences explicit.
+- Keep implementation evidence and governing authority as separate proof.
+  NORMATIVE conclusions receive server-derived Functional Pyramid route and
+  canonical authority support; current implementation evidence never substitutes
+  for declared authority.
 - Make participation explicit as `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`.
-  ACTIVE repositories resolve the governing route for the same semantic scope as
-  ordinary retained understanding, including declared cross-repository
-  governance.
-- Keep semantic and governing proof distinct. NORMATIVE conclusions receive
-  server-derived Functional Pyramid route and canonical authority support;
-  current implementation evidence never substitutes for declared authority.
+  ACTIVE repositories return the applicable guiding path alongside ordinary
+  retained understanding for the same software scope.
 
 ### Lifecycle and public contract
 

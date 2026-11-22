@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "span-mcp"
 dynamic = ["version"]
-description = "Span — a local MCP server that helps coding agents reuse codebase understanding, see what governs it, and reassess what changed."
+description = "Span — complete working context for coding agents: what the code does, what guides it, and what changed."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"

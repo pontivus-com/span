@@ -1,11 +1,12 @@
 # Questions, retrieval, and bounds
 
-Obtain retained understanding by exact surface. A pure `ask` names either an
-exact `surface={kind, locator}` or an unambiguous `reference`, with no
-question, request identity, context, or evidence. It returns the current surface
-document view grouped by recorded question. A genuinely unassessed surface
-returns a Gap with source pointers; the agent investigates and records what it
-establishes.
+Ask for the exact software surface you are working on. A pure `ask` names
+either an exact `surface={kind, locator}` or an unambiguous `reference`, with
+no question, request identity, context, or evidence. It returns the current
+retained understanding for that surface and, for an ACTIVE Functional Pyramid
+repository, the applicable project guidance for the same scope. A genuinely
+unassessed surface returns a Gap with source pointers; the agent investigates
+and records what it establishes.
 
 When the exact recorded question is already known, use
 `RecordedQuestionSelector`. It is exact surface-scoped equality, not semantic
@@ -14,10 +15,12 @@ surface/reference plus non-empty `evidence` and a caller-owned `request_id`.
 
 ## Functional Pyramid retrieval
 
-The same `ask` tool carries three exact Functional Pyramid selector branches.
-Status reads current repository/pyramid participation, candidate selection
-performs deterministic ACTIVATE/REVISE validation without writes, and receipt
-selection retrieves one exact installation-scoped participation receipt.
+The Functional Pyramid is how Span connects a software surface to the canonical
+goals, rules, contracts, and design documents that guide it. The same `ask`
+tool also carries three exact Functional Pyramid selector branches. Status reads
+current repository/pyramid participation, candidate selection performs
+deterministic ACTIVATE/REVISE validation without writes, and receipt selection
+retrieves one exact installation-scoped participation receipt.
 
 Ordinary Answer/Gap composition includes the repository's Functional Pyramid
 orientation. For an ACTIVE member it is resolved from the same effective

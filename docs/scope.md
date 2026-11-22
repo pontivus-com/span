@@ -1,9 +1,10 @@
 # Scope and product boundaries
 
-Span carries an agent's useful investigation into later work: the explanation,
-the evidence it cites, the premises it relies on, and the reasons it needs
-another look. The task determines investigation scope; established semantic understanding
-is retained through the required lifecycle.
+Span gives an agent working context for the exact software scope it is dealing
+with. That context can include retained understanding of the implementation and,
+for participating repositories, the project guidance that applies to the same
+scope. The task determines the scope; Span keeps established understanding,
+support, and later change effects attached to it through the required lifecycle.
 
 ## The unit is an explanation
 
@@ -41,12 +42,12 @@ saving or a comparative product-fitness ACCEPT result.
 
 ## Declared governance is scoped, not inferred
 
-Functional Pyramid participation is installation-level state over registered
-repositories. An ACTIVE member declares its Functional Scope and governance
-graph explicitly. Ordinary `ask` resolves governance from the same semantic
-scope used for retained understanding; a scope outside the declared Functional
-Scope receives a resolved empty governing projection, while covered, uncovered
-and mixed scopes remain distinct.
+The Functional Pyramid connects the exact software scope to the project
+guidance that applies to it. An ACTIVE member declares its Functional Scope and
+governing graph explicitly. Ordinary `ask` resolves that guidance from the same
+scope used for retained implementation understanding. A scope outside the
+declared Functional Scope receives a resolved empty governing projection, while
+covered, uncovered, and mixed scopes remain distinct.
 
 For NORMATIVE recording in an ACTIVE repository, Span derives one functional
 route dependency plus every applicable canonical authority dependency. The

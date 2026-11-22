@@ -1,17 +1,23 @@
 # Using Span
 
-Investigate a real engineering question, record the useful result, and let the
-next session find it with its support attached. The coding agent owns the
-reasoning, edits, and test execution. Span owns evidence admission, recording,
-version history, and checks on the dependencies the agent declared.
+Start with the exact file, symbol, service, or domain you are working on. Span
+can give the agent both sides of the working context for that surface: what is
+already understood about the implementation, and the project guidance that
+applies from first principles down to functional and technical design.
+
+The coding agent still owns reasoning, edits, and test execution. Span keeps
+retained conclusions tied to their evidence, resolves the applicable canonical
+guidance for participating repositories, preserves history, and shows when
+either side of the context needs another look.
 
 ## Check Functional Pyramid participation
 
-After installation, a repository is registered but not automatically governed.
-Use the Functional Pyramid status selector through `ask`. UNCONFIGURED and
-EXCLUDED repositories remain usable for the ordinary descriptive lifecycle.
-For an ACTIVE repository, the same ordinary `ask` also projects the governing
-route for the exact semantic scope.
+The Functional Pyramid supplies the guiding-document half of Span's working
+context. After installation, a repository is registered but does not
+automatically participate. Use the Functional Pyramid status selector through
+`ask`. UNCONFIGURED and EXCLUDED repositories can still use retained
+implementation understanding. For an ACTIVE repository, the same ordinary
+`ask` also returns the applicable guidance path for the exact software scope.
 
 Adoption/revision stays inside `ask` and `record`: inspect status, validate the
 candidate, repair declaration/governance findings through ordinary

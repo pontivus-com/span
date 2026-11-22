@@ -1,9 +1,14 @@
 # Evidence, authority, and interpretation
 
-A source can show what code does. A governing source can establish what a
-project requires when its authority and applicability are declared. The agent
-must distinguish those uses; relevance alone grants neither authority nor
-semantic truth.
+Span gives an agent two different parts of the working context, and they need
+different proof. Source code, tests, configuration, and executions can support
+what the implementation is understood to do. Canonical goals, rules, contracts,
+and design documents can establish what that implementation is supposed to
+follow when their authority and applicability are declared.
+
+Span keeps those two roles separate even though it returns them together for the
+same software scope. Relevance alone makes neither an implementation explanation
+true nor a document authoritative.
 
 ## Evidence and support
 

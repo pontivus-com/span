@@ -1,11 +1,12 @@
 # Repository overview
 
-Span is a local MCP server for keeping useful codebase investigations reusable
-and aligning them with explicitly declared governance. The agent investigates
-and records conclusions; Span stores exact support, preserves revisions and
-disputes, resolves Functional Pyramid applicability for participating
-repositories, and qualifies reuse against present evidence and governance. The
-agent owns the model and all repository edits and test execution.
+Span is a local MCP server that gives a coding agent the complete working
+context for the exact part of the software it is working on. It combines
+retained understanding of the implementation with the applicable chain of
+project guidance from goals and principles through contracts, functional
+design, and technical design. The agent still owns interpretation, edits, and
+test execution; Span keeps the supporting evidence, canonical guidance links,
+history, and change effects explicit.
 
 ## Layout
 

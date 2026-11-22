@@ -1,9 +1,12 @@
 # Agent lifecycle
 
-The agent follows [the required lifecycle](lifecycle-contract.md#required-agent-completion):
-consult retained understanding, investigate, record supported conclusions and
-re-align affected understanding after edits. See [usage](usage.md) for the
-procedure and [MCP reference](mcp.md) for the three-tool grammar.
+The agent follows [the required lifecycle](lifecycle-contract.md#required-agent-completion)
+to keep its working context current. For the exact software surface being worked
+on, Span can provide both retained implementation understanding and the
+applicable chain of project guidance. The agent investigates gaps, records
+supported conclusions, and re-aligns affected understanding after implementation
+or guidance changes. See [usage](usage.md) for the procedure and
+[MCP reference](mcp.md) for the three-tool grammar.
 
 ```
 SETUP (installer)
@@ -28,11 +31,13 @@ ORDINARY SESSION
 
 ## Functional Pyramid participation
 
-Participation is explicit and installation-scoped. A registered repository is
-`UNCONFIGURED` unless it is explicitly `EXCLUDED` or belongs to one ACTIVE
-pyramid. Candidate validation is read-only. ACTIVATE/REVISE/DEACTIVATE writes
-use the installation receipt namespace and return only actual participation
-changes plus the live dependent-effect projection.
+Functional Pyramid participation controls whether Span can provide the
+guiding-document half of the working context. Participation is explicit and
+installation-scoped. A registered repository is `UNCONFIGURED` unless it is
+explicitly `EXCLUDED` or belongs to one ACTIVE pyramid. Candidate validation
+is read-only. ACTIVATE/REVISE/DEACTIVATE writes use the installation receipt
+namespace and return only actual participation changes plus the live
+dependent-effect projection.
 
 For ACTIVE repositories, ordinary `ask` carries the governing projection for
 the exact semantic scope. NORMATIVE `record` derives route and canonical

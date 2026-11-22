@@ -3,13 +3,14 @@
 </h1>
 
 <p align="center">
-  <strong>Stop making every coding agent rediscover your codebase.</strong>
+  <strong>Give your coding agent the complete context for the code it is working on.</strong>
 </p>
 
 <p align="center">
-  Span is a local MCP server that lets coding agents reuse evidence-backed
-  understanding of what the code does, see the declared rules that govern the
-  code they are changing, and revisit only what a change actually affected.
+  Span is a local MCP server that gives coding agents both sides of the context
+  for the exact file, symbol, service, or domain they are working on: what that
+  part of the system is understood to do, and the goals, rules, contracts, and
+  design documents that guide it.
 </p>
 
 <p align="center">
@@ -29,52 +30,68 @@
   <a href="https://github.com/pontivus-com/span/tree/master/docs"><strong>Docs</strong></a>
 </p>
 
-## Every new session can repeat work you already paid for
+## A coding agent needs more than the code
 
-A coding agent traces a request across services, reads the tests, finds the
-contract, and works out why the implementation behaves the way it does. A fresh
-session can end up doing the same investigation again.
+To work safely on part of a software system, an agent needs two kinds of context
+at the same time.
 
-The same problem exists on the other side of the code: the agent also needs to
-know which goals, invariants, contracts, and designs actually apply to the thing
-it is about to change. Those rules may live in another repository, and their
-applicability can change even when the code itself does not.
+It needs to know **what this part of the system does**: the useful understanding
+already established about the implementation, how it fits together, what that
+understanding was based on, and whether it is still current.
 
-Without a maintained link between understanding, evidence, and governance, the
-choice is poor: spend time reconstructing the same context, or risk working from
-an explanation or rule that is no longer applicable.
+It also needs to know **what guides this part of the system**: the relevant
+goals, principles, contracts, functional design, and technical design, in the
+right order and linked back to the canonical documents that own them.
+
+Without Span, a fresh agent has to reconstruct both sides. It re-reads code,
+searches old conversations and documentation, works out which documents apply,
+and decides which guidance takes priority. The relevant material may span
+several repositories.
+
+Span gives the agent both sides for the exact software surface it is working on.
 
 ## What Span changes
 
-### Pick up where the last session left off
+### Start with the complete working context
 
-The next agent can ask about the code it is working on and reuse the conclusions
-previous investigations established. It does not need the old chat, a saved
-understanding ID, or a separate hand-written explanation just to discover what
-is already known.
+Ask about a file, symbol, service, or domain. Span returns the current
+understanding already established for that surface and, for a participating
+repository, the complete applicable path through the project's guiding
+documentation.
 
-Span keeps each conclusion attached to the evidence that supported it. If that
-support no longer holds, the conclusion is not silently returned as current.
+The agent starts knowing what it is looking at, why it exists, what is already
+known about it, and which project rules and designs apply.
 
-### Know what governs the code before you touch it
+### Follow the right guidance from first principles to implementation
 
-For repositories with declared Functional Pyramid governance, the same lookup
-shows the governing path for the exact code surface: the applicable goals,
-invariants, contracts, functional design, and technical design remain linked to
-their canonical owners.
+Span links the exact software scope to the goals and first principles above it,
+then through the applicable rules and contracts to functional and technical
+design.
 
-The agent does not have to infer authority from filenames, search relevance, or
-repository layout. Span resolves what the repository has explicitly declared to
-govern that scope.
+The canonical documents stay where their owners put them. Span keeps their
+identity, relationship, applicability, and order explicit, so the agent does not
+have to guess from filenames, search results, repository layout, or document
+prominence.
 
-### Recheck only what the change invalidated
+### Reuse what is already known about the implementation
 
-After code or governing authority changes, Span identifies the understanding
-that actually depends on what changed. Unrelated conclusions stay current;
-affected conclusions are returned with the reason they need another look.
+When an agent establishes a useful conclusion about the code, Span can retain it
+with the evidence that supported it. A later session can find that understanding
+from the software surface itself; it does not need the original conversation or
+a saved internal ID.
 
-That turns reassessment into focused work instead of another full-codebase
-rediscovery pass.
+If the support no longer holds, Span does not silently return the old conclusion
+as current.
+
+### Recheck only what a change affected
+
+A code change can invalidate what an agent understood about the implementation.
+A change to a goal, contract, design, or its applicability can invalidate what
+the implementation is supposed to satisfy even when the code itself did not
+change.
+
+Span identifies the affected understanding and why it needs another look.
+Unrelated understanding stays reusable.
 
 ## Keep using the coding agent you already have
 
@@ -96,42 +113,46 @@ Three public tools cover the lifecycle:
 
 ## How it works
 
-1. **Ask before re-deriving.** Start with the file, symbol, service, or domain
-   you are working on. Span returns current retained understanding or an honest
-   gap. In an ACTIVE Functional Pyramid repository, it also returns the declared
-   governing view for that same semantic scope.
-2. **Investigate normally, then keep the useful result.** The agent reads code,
-   searches, edits, and tests with its normal tools. When it establishes a
-   conclusion, `record` stores that conclusion with its evidence and history.
-   NORMATIVE conclusions also receive the applicable declared governance support
-   from Span.
-3. **After change, revisit only what lost support.** `reconsider` maps changed
-   implementation or governance to the affected conclusions. The agent confirms,
-   corrects, replaces, or withdraws only the understanding that actually needs
-   work.
+1. **Ask for the exact part of the system you are working on.** Span returns
+   the current retained understanding for that surface and, when the repository
+   participates in the Functional Pyramid, the full applicable guidance path
+   from first principles down to functional and technical design.
+2. **Investigate normally, then keep what you learn.** The agent reads code and
+   canonical documents, searches, edits, and tests with its normal tools. When
+   it establishes a useful conclusion, `record` retains it with the evidence
+   and guidance it depends on.
+3. **After change, revisit only what no longer holds.** `reconsider` maps
+   implementation or guiding-document changes to the affected conclusions. The
+   agent confirms, corrects, replaces, or withdraws only the understanding that
+   actually needs work.
 
 A later session starts at step 1 again — but it is no longer starting from zero.
 
-## Functional Pyramid: see the rules behind the code
+## Functional Pyramid: the path from first principles to the code
 
-Code tells an agent what the implementation does. It does not, by itself, tell
-the agent what the implementation is supposed to satisfy.
+The Functional Pyramid is how Span provides the guiding half of the working
+context.
 
-The Functional Pyramid connects implementation scope to the repository's
-declared authority chain without copying that authority into Span. Canonical
-goals, invariants, contracts, functional design, and technical design stay in
-the repositories that own them. Span maintains their identities, applicability,
-derivation, and change consequences.
+For the exact software surface an agent is working on, it resolves the declared
+path through the project's canonical goals, principles, contracts, functional
+design, and technical design. It shows which guidance applies, how the layers
+relate, where the canonical documents live, and which higher-level rules govern
+the lower-level design.
 
-That means an agent can see both sides of a change in one place:
+Span does not copy those documents or invent missing authority. The original
+documents remain canonical. Span keeps the links, applicability, derivation, and
+change consequences explicit, including when the path crosses repositories.
 
-- **what the code is understood to do**, with evidence and currentness; and
-- **what the code is declared to satisfy**, with the governing path back to its
-  canonical sources.
+The same `ask` that orients the agent on a software surface can therefore show
+both:
 
-Governance remains explicit. A registered repository is not automatically
-governed: participation is `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`, and
-unresolved relationships stay unresolved rather than being guessed.
+- **what this part of the system is understood to do**, with its evidence and
+  current status; and
+- **what is supposed to guide it**, from first principles down to the applicable
+  functional and technical design.
+
+If part of that guiding path is missing, conflicted, unavailable, or outside the
+declared scope, Span says so instead of guessing.
 
 ## What “current” means
 

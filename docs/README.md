@@ -1,10 +1,11 @@
 # Span documentation
 
-Span retains an agent's implementation understanding with exact support and,
-for participating repositories, resolves the declared Functional Pyramid that
-governs the same semantic scope. The agent interprets and edits; Span admits
-evidence, records explicit commands, derives declared governance support, and
-qualifies later reuse when implementation or governance changes.
+Span gives a coding agent the complete working context for the exact part of
+the software it is working on. It brings together what is already understood
+about that implementation with the applicable path through the project's
+canonical goals, principles, contracts, functional design, and technical
+design. Both sides stay tied to their sources, so Span can show when a code or
+guidance change makes part of that context require another look.
 
 ## Foundations
 
