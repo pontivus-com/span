@@ -20,7 +20,6 @@ from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
 from span.service.effects import DependencyEffectService
-from span.service.support import SupportService
 
 __all__ = ["ReconsiderService"]
 
@@ -40,25 +39,18 @@ class ReconsiderService:
         self,
         *,
         store: LifecycleStorePort,
-        support: SupportService | None = None,
+        effects: DependencyEffectService,
         evidence: EvidenceService | None = None,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
-        effects: DependencyEffectService | None = None,
     ) -> None:
         self._store = store
         self._evidence = evidence
         self._policy = policy
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or (lambda: "ctx-" + _uuid.uuid4().hex)
-        self._effects = effects or DependencyEffectService(
-            store=store,
-            support=support,
-            policy=policy,
-            clock=self._clock,
-            new_context_id=self._new_context_id,
-        )
+        self._effects = effects
 
     def reconsider(self, request: m.ReconsiderRequest) -> m.Changed | m.Challenged:
         if request.challenge is not None:
