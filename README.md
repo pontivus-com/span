@@ -235,12 +235,11 @@ agent uses its own model, tools, edits, and test runner. Span does not invoke a
 model or store provider credentials. Structural search helps investigation;
 recorded conclusions retain the agent's interpretation and declared support.
 
-The intended benefit is continuity between sessions and a focused review of
-changed support. Recording and host delivery have costs. Measured cost is
-class-specific: repeated reuse of a covered surface breaks even at two uses on
-the tested tasks, while single-use implementation is currently more expensive
-than reading. This beta makes no universal time/token-saving claim or completed
-comparative product-fitness ACCEPT claim. See [acceptance](docs/acceptance.md).
+The intended benefit is continuity between sessions and focused review after
+change. Recording and host delivery still have costs, and the Version-1
+same-task-class G5/F8 measurement is not yet complete. This beta therefore makes
+no universal time/token-saving or comparative product-fitness ACCEPT claim. See
+[acceptance](docs/acceptance.md).
 
 ## Status and documentation
 

@@ -50,7 +50,11 @@ Version-1 live model delivery through Codex, OpenCode and Claude Code is
 registration/installer support is not promoted into model-delivery evidence.
 The remaining release proof is the G5/F8 named-task-class comparative
 measurement in agent steps and tokens. Historical 0.10/0.11 measurements are
-not reused as the Version-1 verdict.
+not reused as the Version-1 verdict. Two GitHub Actions calibration attempts on
+2026-11-22 reached Copilot CLI but were denied before model invocation by the
+organization's Copilot policy; no repository `COPILOT_GITHUB_TOKEN` was
+configured. Those failed harness runs are operational evidence only and produce
+no scored G5/F8 result.
 
 The current repository lifecycle store is schema 14. Functional Pyramid
 participation/versions/exclusions/receipts are installation-owned in
