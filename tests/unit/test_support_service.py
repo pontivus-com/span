@@ -778,9 +778,7 @@ class SupportServiceTest(unittest.TestCase):
                 )
                 self.assertEqual(service.evaluate_revision(ref).state, expected)
 
-        with self.assertRaisesRegex(
-            RuntimeError, "route evaluation is not configured"
-        ):
+        with self.assertRaisesRegex(RuntimeError, "route evaluation is not configured"):
             self.service.evaluate_revision(ref)
 
     def test_functional_route_support_propagates_through_premises(self) -> None:
