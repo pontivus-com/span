@@ -185,15 +185,11 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
     def test_shell_functional_pyramid_has_no_semantic_effect_coordinator(self):
         path = REPO_ROOT / "src/span/shell/functional_pyramid.py"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        classes = {
-            node.name for node in tree.body if isinstance(node, ast.ClassDef)
-        }
+        classes = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
         imports = {
             module
             for module in (
-                node.module
-                for node in tree.body
-                if isinstance(node, ast.ImportFrom)
+                node.module for node in tree.body if isinstance(node, ast.ImportFrom)
             )
             if module is not None
         }
