@@ -7,8 +7,14 @@ procedure and [MCP reference](mcp.md) for the three-tool grammar.
 
 ```
 SETUP (installer)
-  bind repository, declared authority seeds/bindings, schema 13
-  → no understanding is created
+  bind repository, declared authority seeds/bindings, repository schema 14
+  create/verify installation Functional Pyramid store
+  → registered repositories begin UNCONFIGURED; no understanding is created
+
+GOVERNANCE ADOPTION (same three MCP tools)
+  STATUS → DISCOVER/VALIDATE → DECLARE when needed
+  → reconsider/disposition → VALIDATE → ACTIVATE/REVISE
+  → VERIFY → REESTABLISH actionable effects → ACTIVE
 
 ORDINARY SESSION
   ask
@@ -19,6 +25,22 @@ ORDINARY SESSION
   reconsider
     → every surface a change affects, with per-conclusion support state
 ```
+
+## Functional Pyramid participation
+
+Participation is explicit and installation-scoped. A registered repository is
+`UNCONFIGURED` unless it is explicitly `EXCLUDED` or belongs to one ACTIVE
+pyramid. Candidate validation is read-only. ACTIVATE/REVISE/DEACTIVATE writes
+use the installation receipt namespace and return only actual participation
+changes plus the live dependent-effect projection.
+
+For ACTIVE repositories, ordinary `ask` carries the governing projection for
+the exact semantic scope. NORMATIVE `record` derives route and canonical
+authority support server-side. Ordinary `reconsider` and participation writes
+share one repository-qualified effect engine, so governance changes can produce
+re-establishment work in another repository. An accepted participation write is
+not lifecycle completion while its retained effect references remain
+actionable.
 
 ## Contexts
 
@@ -114,12 +136,14 @@ correctness is evaluated by the lifecycle operations.
 
 ## Store transition
 
-The runtime never migrates at open. Older stores use the offline
-inspect/apply/verify/rollback commands in [install](install.md). Schema 13 is the
-0.11.0 runtime format. A schema-12 store first drains live operational contexts;
-the transition preserves durable semantic/audit history, observations and
-receipts, and deliberately does not reactivate schema-12 contexts or their
-membership because their old whole-request digest cannot be reconstructed as
-the new canonical context binding. Schema 10/11 use their documented mappings
-into the current target. Schemas 7–9 retain only repository binding and declared
-seeds; their legacy semantic content remains historical export.
+The runtime never migrates at open. Repository schema 14 is the Version-1
+runtime format. Existing schema-7–13 stores use the explicit offline
+inspect/apply/verify/rollback path in [install](install.md). The schema-13→14
+mapping copies durable semantic/audit state without reinterpretation, derives
+the repository-local route index only from already-retained
+FunctionalRouteSupport, and fabricates no participation or governance support.
+
+Functional Pyramid participation/receipts are owned by the separate installation
+store, not by a selected repository database. Transitioning repositories alone
+therefore leaves them UNCONFIGURED. Installation setup creates or verifies that
+store explicitly; full-installation backup/recovery includes it.

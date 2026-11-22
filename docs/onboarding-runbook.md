@@ -18,6 +18,15 @@ and bindings; finding a document does not make it governing. Preserve the
 returned canonical repository ID. An older store requires the explicit offline
 transition, not ordinary setup. Operational readiness creates no understanding.
 
+Check Functional Pyramid participation through the public `ask` selector.
+Registration alone yields UNCONFIGURED. If this repository is intended to
+participate, follow the result-driven adoption path: validate the exact member
+intent/declarations, resolve deterministic findings, ACTIVATE or REVISE through
+`record(kind="functional_pyramid")`, verify the exact committed
+pyramid/version/member view, and re-establish any actionable effects before
+calling adoption complete. An intentionally non-participating repository may be
+EXCLUDED explicitly.
+
 ## Investigate the chosen scope
 
 Start with a pure surface/reference `ask`: no question, request identity, or

@@ -39,6 +39,21 @@ of affected explanations. Net time/token savings depend on the task, recording
 effort, reuse, and host delivery. The beta does not claim a measured universal
 saving or a comparative product-fitness ACCEPT result.
 
+## Declared governance is scoped, not inferred
+
+Functional Pyramid participation is installation-level state over registered
+repositories. An ACTIVE member declares its Functional Scope and governance
+graph explicitly. Ordinary `ask` resolves governance from the same semantic
+scope used for retained understanding; a scope outside the declared Functional
+Scope receives a resolved empty governing projection, while covered, uncovered
+and mixed scopes remain distinct.
+
+For NORMATIVE recording in an ACTIVE repository, Span derives one functional
+route dependency plus every applicable canonical authority dependency. The
+agent cannot make a normative conclusion current by omitting governance.
+DESCRIPTIVE understanding remains independent unless it explicitly cites
+authority.
+
 ## Agent and server responsibilities
 
 The agent owns semantic judgment, source investigation, applicability, edits,
@@ -68,9 +83,11 @@ service-wide run applies to the files it covers.
 
 ## Local storage and operational effects
 
-The runtime uses schema 11 in an external data directory. Recoverable contexts
-and observation admission are operational state; recording creates semantic
-history. Context expiry does not erase accepted conclusions, challenges,
+Repository runtime state uses schema 14 in the external data directory.
+Installation-level Functional Pyramid participation and receipts use the
+separate installation database under `<DATA_DIR>/installation/`. Recoverable
+contexts and observation admission are operational state; recording creates
+semantic history. Context expiry does not erase accepted conclusions, challenges,
 verification runs, or retained receipts. Receipt expiry ends that replay
 window, not the existence of the recorded understanding.
 
@@ -81,19 +98,20 @@ it. Runtime operation does not write target source or provider artifacts into
 the target repository. Installation may write a managed `AGENTS.md` block and
 host configuration as described in [install](install.md).
 
-Existing schema-7/8/9/10 stores use the separately invoked offline
-inspect/apply/verify/rollback protocol. Their semantic content is archived and
-exported as history, not promoted as current understanding. See the
+Existing schema-7–13 repository stores use the separately invoked offline
+inspect/apply/verify/rollback protocol into schema 14. The schema-13 transition
+preserves its durable semantic/audit rows and derives only the route lookup
+projection from already-retained FunctionalRouteSupport; it does not invent
+participation, authority support or historical routes. Earlier schemas keep the
+documented preservation/mapping boundary. See the
 [transition procedure](install.md#upgrade-an-existing-store).
 
 ## Beta delivery boundary
 
-Codex and OpenCode are the supported live delivery targets, with
-candidate-specific captures of the declared grammar, request identity, and
-recovery behavior. Claude Code is also a supported managed host for
-registration, health inspection, installer behavior, skills, and lifecycle hooks; its authenticated model-delivery grammar and caller identity
-remain **UNVERIFIED**. Implemented registration, configured hooks, and observed
-model behavior remain separate facts. Hooks deliver lifecycle reminders; ordinary
-retrieval and recording still check support when hooks are disabled.
+Generic Version-1 behavior is verified through the full functional acceptance
+matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code remain
+managed integration targets, but final-candidate live model delivery is not
+claimed until T13 captures it. Registration, configured hooks and observed
+model behavior remain separate facts.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).
