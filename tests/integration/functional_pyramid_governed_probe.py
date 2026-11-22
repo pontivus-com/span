@@ -240,9 +240,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
             pre_version = _value(pre_created.get("version"))
             pre_affected = pre_created.get("affected_revisions", [])
             pre_conclusion_id = (
-                _value(pre_affected[0].get("conclusion_id"))
-                if pre_affected
-                else None
+                _value(pre_affected[0].get("conclusion_id")) if pre_affected else None
             )
 
             activated, activated_error = await _call(
@@ -256,17 +254,15 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
 
-            activation_receipt_before, activation_receipt_before_error = (
-                await _call(
-                    session,
-                    "ask",
-                    {
-                        "selector": {
-                            "$type": "FunctionalPyramidReceiptSelector",
-                            "request_id": {"value": "governed-activate"},
-                        }
-                    },
-                )
+            activation_receipt_before, activation_receipt_before_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidReceiptSelector",
+                        "request_id": {"value": "governed-activate"},
+                    }
+                },
             )
             activation_replay_before, activation_replay_before_error = await _call(
                 session,
@@ -448,9 +444,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "activated_error": activated_error,
                 "activated_kind": activated.get("$type"),
                 "pre_created_error": pre_created_error,
-                "pre_created_qualification": pre_created.get(
-                    "qualification", {}
-                ).get("state"),
+                "pre_created_qualification": pre_created.get("qualification", {}).get(
+                    "state"
+                ),
                 "activation_effect_repositories": _surface_repositories(
                     {"surfaces": activated.get("dependent_effects", [])}
                 ),
@@ -460,11 +456,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 ),
                 "activation_replay_before_error": activation_replay_before_error,
                 "activation_replay_before_effect_repositories": _surface_repositories(
-                    {
-                        "surfaces": activation_replay_before.get(
-                            "dependent_effects", []
-                        )
-                    }
+                    {"surfaces": activation_replay_before.get("dependent_effects", [])}
                 ),
                 "pre_reestablished_error": pre_reestablished_error,
                 "pre_reestablished_qualification": pre_reestablished.get(
