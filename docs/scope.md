@@ -35,10 +35,12 @@ membership boundary can require reassessment. Unsupported or missing evidence
 remains explicit. Changes outside a declared dependency boundary do not make
 all saved understanding noncurrent.
 
-The intended benefit is continuity between investigations and focused review
-of affected explanations. Net time/token savings depend on the task, recording
-effort, reuse, and host delivery. The beta does not claim a measured universal
-saving or a comparative product-fitness ACCEPT result.
+The intended benefit is complete working context for the exact software scope:
+retained implementation understanding, the applicable canonical project
+guidance, and focused review when either side changes. Net time/token savings
+depend on the task, recording effort, reuse, and host delivery. The beta does
+not claim a measured universal saving or a comparative product-fitness ACCEPT
+result.
 
 ## Declared governance is scoped, not inferred
 
