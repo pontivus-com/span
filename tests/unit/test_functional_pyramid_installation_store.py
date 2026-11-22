@@ -271,7 +271,15 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
             self.addCleanup(stores[1].close)
             member = m.FunctionalPyramidMemberView(
                 repository_id="repo",
-                declaration_refs=(),
+                declaration_refs=(
+                    m.EvidenceRef(
+                        evidence_id=m.EvidenceId("decl-concurrent"),
+                        repository_id="repo",
+                        source_kind=m.EvidenceSourceKind.CONFIGURATION,
+                        locator="docs/functional-pyramid.json",
+                        revision_or_fingerprint="sha256:decl-concurrent",
+                    ),
+                ),
                 functional_scope=m.FunctionalScope(
                     (
                         m.FunctionalScopeSelector(
