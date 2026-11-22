@@ -249,7 +249,7 @@ class SupportService:
         if isinstance(dependency, m.PremiseSupport):
             return self._premise_eval(dependency.premise, visited)
         if isinstance(dependency, m.AuthoritySupportDependency):
-            return self._authority_eval(dependency.authority)
+            return self._authority_eval(dependency.authority, surface)
         if isinstance(dependency, m.FunctionalRouteSupport):
             return self._functional_route_eval(dependency, surface)
         raise TypeError("unhandled support dependency: " f"{type(dependency).__name__}")
@@ -348,7 +348,11 @@ class SupportService:
             observed_at=self._clock(),
         )
 
-    def _authority_eval(self, binding: m.AuthorityBinding) -> m.SupportEvaluation:
+    def _authority_eval(
+        self,
+        binding: m.AuthorityBinding,
+        surface: m.SurfaceKey | None,
+    ) -> m.SupportEvaluation:
         reference = binding.evidence_ref
         authority: LifecycleAuthorityResolver = self._authority
         evidence = self._evidence
@@ -356,6 +360,13 @@ class SupportService:
             runtime = self._repository_runtime(reference.repository_id)
             authority = runtime.store
             evidence = runtime.evidence
+        elif (
+            surface is not None
+            and reference.repository_id != surface.repository_id
+        ):
+            raise RuntimeError(
+                "repository-qualified authority evaluation is not configured"
+            )
         try:
             declared: m.AuthorityBinding | None = authority.resolve_authority(
                 reference.repository_id, reference.evidence_id.value
