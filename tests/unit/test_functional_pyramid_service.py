@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 from span.core import model as m
-from span.core.recording import RecordingConflict
+from span.core.recording import RecordingConflict, RecordingValidationError
 from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidRepositoryUnavailable,
@@ -423,6 +423,18 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(status.pyramid_id, pyramid_id)
         self.assertEqual(status.version, version)
 
+    def test_status_rejects_unknown_exact_repository_and_pyramid(self):
+        with self.assertRaises(RecordingValidationError):
+            self.admin_service.status(
+                m.FunctionalPyramidSelector(repository_id="repo-unknown")
+            )
+        with self.assertRaises(RecordingValidationError):
+            self.admin_service.status(
+                m.FunctionalPyramidSelector(
+                    pyramid_id=m.FunctionalPyramidId("fp-unknown")
+                )
+            )
+
     def test_candidate_reports_duplicate_unregistered_and_other_active_members(self):
         request = m.EvidenceRequest("decl.json")
         intent_a = m.FunctionalPyramidMemberIntent(
@@ -454,6 +466,44 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             },
         )
         self.assertEqual(candidate.members, ())
+
+    def test_candidate_accumulates_lifecycle_and_inspectable_source_findings(self):
+        request = m.EvidenceRequest("invalid.json")
+        self.declarations.results[("repo-a", "invalid.json")] = (
+            FunctionalPyramidDeclarationInvalid("invalid declaration")
+        )
+        validly_inspectable = m.FunctionalPyramidMemberIntent(
+            repository_id="repo-a",
+            declaration_sources=(request,),
+            functional_scope=_scope(),
+            coverage=m.FunctionalPyramidCoverage.PARTIAL,
+        )
+        unregistered = m.FunctionalPyramidMemberIntent(
+            repository_id="repo-x",
+            declaration_sources=(m.EvidenceRequest("decl.json"),),
+            functional_scope=_scope(),
+            coverage=m.FunctionalPyramidCoverage.PARTIAL,
+        )
+
+        candidate = self.admin_service.candidate(
+            m.FunctionalPyramidCandidateSelector(
+                action=m.FunctionalPyramidAction.ACTIVATE,
+                members=(validly_inspectable, unregistered),
+            )
+        )
+
+        self.assertFalse(candidate.activation_ready)
+        self.assertEqual(
+            {item.reason for item in candidate.validation_findings},
+            {
+                m.FunctionalPyramidValidationReason.UNREGISTERED_MEMBER,
+                m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
+            },
+        )
+        self.assertEqual(
+            {item.reason for item in candidate.graph_findings},
+            {m.FunctionalPyramidFindingReason.INVALID_DECLARATION},
+        )
 
     def test_revision_candidate_reports_unknown_and_stale_target(self):
         intent = m.FunctionalPyramidMemberIntent(
