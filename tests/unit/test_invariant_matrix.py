@@ -239,17 +239,22 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
             for node in service.body
             if isinstance(node, ast.FunctionDef) and node.name == "__init__"
         )
-        parameters = {argument.arg for argument in init.args.kwonlyargs}
+        parameter_names = [argument.arg for argument in init.args.kwonlyargs]
+        parameters = set(parameter_names)
+        required = {
+            "repository_runtime",
+            "registered_repository_ids",
+            "support_for_repository",
+            "functional_route_impacts",
+        }
         self.assertFalse({"store", "support"} & parameters)
-        self.assertTrue(
-            {
-                "repository_runtime",
-                "registered_repository_ids",
-                "support_for_repository",
-                "functional_route_impacts",
-            }
-            <= parameters
-        )
+        self.assertTrue(required <= parameters)
+        for name in required:
+            index = parameter_names.index(name)
+            self.assertIsNone(
+                init.args.kw_defaults[index],
+                f"{name} must be a required effect-engine capability",
+            )
 
     def test_repository_change_cannot_skip_functional_route_impacts(self):
         path = REPO_ROOT / "src/span/service/effects.py"
@@ -258,10 +263,7 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
             "if self._functional_route_impacts is not None",
             source,
         )
-        self.assertIn(
-            "Functional Pyramid route-impact composition is not configured",
-            source,
-        )
+        self.assertIn("self._functional_route_impacts(", source)
 
     def test_semantic_hooks_use_installation_runtime(self):
         path = REPO_ROOT / "src/span/shell/hooks.py"
