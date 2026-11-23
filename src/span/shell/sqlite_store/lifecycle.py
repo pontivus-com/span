@@ -1331,6 +1331,43 @@ class LifecycleStore:
         ).fetchone()
         return row is not None
 
+    def _curation_from_row(self, row: _sqlite3.Row) -> m.CurationDisposition:
+        try:
+            disposition = m.from_canonical(
+                m.CurationDisposition,
+                _json.loads(row["canonical_json"]),
+            )
+        except (TypeError, ValueError) as exc:
+            raise LifecycleStoreDataError(
+                f"curation disposition is not canonical: {exc}"
+            ) from None
+        inherited_revision = (
+            None
+            if disposition.inherited_from is None
+            else disposition.inherited_from.revision.value
+        )
+        observed = (
+            row["understanding_id"],
+            row["conclusion_id"],
+            int(row["revision"]),
+            int(row["accepted_in_version"]),
+            row["origin"],
+            row["inherited_from_revision"],
+        )
+        canonical = (
+            disposition.ref.understanding_id.value,
+            disposition.ref.conclusion_id.value,
+            disposition.ref.revision.value,
+            disposition.accepted_in_version.value,
+            disposition.origin.value,
+            inherited_revision,
+        )
+        if observed != canonical:
+            raise LifecycleStoreDataError(
+                "curation structural columns disagree with canonical payload"
+            )
+        return disposition
+
     def find_curation(
         self,
         ref: m.ConclusionRevisionRef,
@@ -1339,7 +1376,9 @@ class LifecycleStore:
     ) -> m.CurationDisposition | None:
         """Return exact-revision curation effective at the requested version."""
         statement = (
-            "SELECT canonical_json FROM conclusion_curations"
+            "SELECT understanding_id, conclusion_id, revision,"
+            " accepted_in_version, origin, inherited_from_revision, canonical_json"
+            " FROM conclusion_curations"
             " WHERE understanding_id=? AND conclusion_id=? AND revision=?"
         )
         parameters: list[object] = [
@@ -1353,10 +1392,7 @@ class LifecycleStore:
         row = self._connection.execute(statement, tuple(parameters)).fetchone()
         if row is None:
             return None
-        return m.from_canonical(
-            m.CurationDisposition,
-            _json.loads(row["canonical_json"]),
-        )
+        return self._curation_from_row(row)
 
     def get_curations(
         self,
@@ -1366,8 +1402,9 @@ class LifecycleStore:
     ) -> tuple[m.CurationDisposition, ...]:
         """Return immutable curation history, optionally as of one version."""
         statement = (
-            "SELECT canonical_json FROM conclusion_curations"
-            " WHERE understanding_id=?"
+            "SELECT understanding_id, conclusion_id, revision,"
+            " accepted_in_version, origin, inherited_from_revision, canonical_json"
+            " FROM conclusion_curations WHERE understanding_id=?"
         )
         parameters: list[object] = [understanding_id]
         if as_of_version is not None:
@@ -1375,13 +1412,7 @@ class LifecycleStore:
             parameters.append(as_of_version.value)
         statement += " ORDER BY conclusion_id, revision"
         rows = self._connection.execute(statement, tuple(parameters)).fetchall()
-        return tuple(
-            m.from_canonical(
-                m.CurationDisposition,
-                _json.loads(row["canonical_json"]),
-            )
-            for row in rows
-        )
+        return tuple(self._curation_from_row(row) for row in rows)
 
     def pending_curation_candidates(
         self,
