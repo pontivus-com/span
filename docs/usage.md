@@ -1,16 +1,17 @@
 # Using Span
 
 Start with the exact file, symbol, service, or domain you are working on. Span
-maintains reusable knowledge for that surface: what is already understood about
-the implementation and, for participating repositories, the project guidance
-that applies from first principles down to functional and technical design.
-That maintained knowledge becomes working context for the task in front of the
-agent.
+returns shared knowledge for that surface only when the exact semantic revision
+has been curated and its support is current. It also returns, for participating
+repositories, the project guidance that applies from first principles down to
+functional and technical design. Pending captured knowledge remains explicit
+rather than being served as ordinary working context.
 
-The coding agent still owns reasoning, edits, and test execution. Span keeps
-retained conclusions tied to their evidence, resolves the applicable canonical
-guidance for participating repositories, preserves history, and shows when
-either side of that maintained understanding needs another look.
+The coding agent still owns reasoning, edits, test execution and evidence-near
+semantic capture. A separate reviewer/curator role decides which stable captured
+revisions become shared reusable knowledge. Span keeps conclusions tied to their
+evidence, records curation history, resolves applicable canonical guidance,
+preserves history, and shows when support or governance needs another look.
 
 ## Check Functional Pyramid participation
 
@@ -54,6 +55,20 @@ bound context reference, and a continuation when selected evidence is deferred.
 
 Currentness is checked against present support. A saved conclusion is never
 served as current on the strength of its wording.
+
+## Curate captured knowledge
+
+Curation is a separate semantic-review act over an already retained revision.
+Use the pending-curation selector to find current captured revisions, retrieve
+and review the exact owning understanding, and investigate broader retained
+knowledge or governing sources as needed. If the meaning is wrong, incomplete,
+duplicated or wrongly scoped, use the existing challenge/correct/replace/withdraw
+lifecycle first. Curate only the resulting stable revision through the existing
+understanding `record` update.
+
+Curation does not change evidence support or Functional Pyramid authority, and
+it does not certify semantic truth. It only makes that exact revision eligible
+for shared reuse while its support remains current.
 
 ## Investigate and record
 
