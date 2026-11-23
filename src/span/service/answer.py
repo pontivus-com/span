@@ -748,6 +748,8 @@ class AnswerService:
         while items and _encoded_size(result) > response_limit:
             items.pop()
             truncated = True
+            if not items:
+                break
             result = build()
         if items:
             return result
