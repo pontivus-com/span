@@ -592,6 +592,11 @@ class UpdateUnderstandingCommand:
     provenance: str = ""
 
     def __post_init__(self) -> None:
+        if self.curate:
+            _require_non_empty(
+                "UpdateUnderstandingCommand.provenance",
+                self.provenance,
+            )
         actions = (
             *self.confirm,
             *self.correct,
