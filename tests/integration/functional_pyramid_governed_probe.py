@@ -146,6 +146,17 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
 
+            pre_status, pre_status_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidSelector",
+                        "repository_id": repo_a_id,
+                    }
+                },
+            )
+
             mixed_candidate, mixed_candidate_error = await _call(
                 session,
                 "ask",
@@ -353,6 +364,33 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
             conclusion_id = (
                 _value(affected[0].get("conclusion_id")) if affected else None
             )
+            captured_ask, captured_ask_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "CurrentUnderstandingSelector",
+                        "repository_id": repo_a_id,
+                        "understanding_id": understanding_id,
+                    }
+                },
+            )
+            pending, pending_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "PendingCurationSelector",
+                        "repository_id": repo_a_id,
+                    }
+                },
+            )
+            pending_contains_created = any(
+                _value(item.get("ref", {}).get("understanding_id")) == understanding_id
+                and _value(item.get("ref", {}).get("conclusion_id")) == conclusion_id
+                for item in pending.get("items", [])
+            )
+
             curated, curated_error = await _call(
                 session,
                 "record",
@@ -376,6 +414,20 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
             version = _value(curated.get("version"))
+            async with stdio_client(params) as (fresh_read, fresh_write):
+                async with ClientSession(fresh_read, fresh_write) as fresh_session:
+                    await fresh_session.initialize()
+                    fresh_reuse, fresh_reuse_error = await _call(
+                        fresh_session,
+                        "ask",
+                        {
+                            "selector": {
+                                "$type": "CurrentUnderstandingSelector",
+                                "repository_id": repo_a_id,
+                                "understanding_id": understanding_id,
+                            }
+                        },
+                    )
             snapshot_before, snapshot_before_error = await _call(
                 session,
                 "ask",
@@ -444,6 +496,97 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
 
+            version = _value(reestablished.get("version"))
+            corrected, corrected_error = await _call(
+                session,
+                "record",
+                {
+                    "repository_id": repo_a_id,
+                    "request_id": "governed-normative-correct",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": version,
+                    "actions": {
+                        "correct": [
+                            {
+                                "conclusion_id": conclusion_id,
+                                "conclusion": (
+                                    "Alpha is governed by the corrected cross-repository "
+                                    "P0 rule."
+                                ),
+                                "locator": "src/alpha.py",
+                            }
+                        ]
+                    },
+                    "provenance": "installed governed correction",
+                },
+            )
+            corrected_version = _value(corrected.get("version"))
+            corrected_affected = corrected.get("affected_revisions", [])
+            corrected_conclusion_id = (
+                _value(corrected_affected[0].get("conclusion_id"))
+                if corrected_affected
+                else conclusion_id
+            )
+            corrected_ask, corrected_ask_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "CurrentUnderstandingSelector",
+                        "repository_id": repo_a_id,
+                        "understanding_id": understanding_id,
+                    }
+                },
+            )
+            corrected_pending, corrected_pending_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "PendingCurationSelector",
+                        "repository_id": repo_a_id,
+                    }
+                },
+            )
+            corrected_pending_contains_target = any(
+                _value(item.get("ref", {}).get("understanding_id")) == understanding_id
+                and _value(item.get("ref", {}).get("conclusion_id"))
+                == corrected_conclusion_id
+                for item in corrected_pending.get("items", [])
+            )
+            recurated, recurated_error = await _call(
+                session,
+                "record",
+                {
+                    "repository_id": repo_a_id,
+                    "request_id": "governed-normative-recurate",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": corrected_version,
+                    "actions": {
+                        "curate": [
+                            {
+                                "conclusion_id": corrected_conclusion_id,
+                                "reasoning": "reviewed corrected governed meaning",
+                            }
+                        ]
+                    },
+                    "provenance": "installed governed reviewer",
+                },
+            )
+            final_ask, final_ask_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "CurrentUnderstandingSelector",
+                        "repository_id": repo_a_id,
+                        "understanding_id": understanding_id,
+                    }
+                },
+            )
+
             fp_a = ask_a.get("functional_pyramid", {})
             owner_fp = owner_ask.get("functional_pyramid", {})
             owner_rules = owner_fp.get("rules", [])
@@ -459,6 +602,8 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "unknown_repository_kind": unknown_repository.get("$type"),
                 "unknown_pyramid_error": unknown_pyramid_error,
                 "unknown_pyramid_kind": unknown_pyramid.get("$type"),
+                "pre_status_error": pre_status_error,
+                "pre_status_state": pre_status.get("state"),
                 "mixed_candidate_error": mixed_candidate_error,
                 "mixed_validation_reasons": _validation_reasons(mixed_candidate),
                 "mixed_graph_reasons": _graph_reasons(mixed_candidate),
@@ -505,8 +650,16 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "owner_downstream_contexts": downstream_contexts,
                 "created_error": created_error,
                 "created_qualification": created.get("qualification", {}).get("state"),
+                "captured_ask_error": captured_ask_error,
+                "captured_ask_kind": captured_ask.get("$type"),
+                "captured_gap_reason": captured_ask.get("reason"),
+                "pending_error": pending_error,
+                "pending_kind": pending.get("$type"),
+                "pending_contains_created": pending_contains_created,
                 "curated_error": curated_error,
                 "curated_kind": curated.get("$type"),
+                "fresh_reuse_error": fresh_reuse_error,
+                "fresh_reuse_kind": fresh_reuse.get("$type"),
                 "snapshot_before_error": snapshot_before_error,
                 "snapshot_before_has_route": _has_route_support(snapshot_before),
                 "snapshot_before_authority_ids": _authority_ids(
@@ -526,6 +679,17 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 ),
                 "ask_after_error": ask_after_error,
                 "ask_after_kind": ask_after.get("$type"),
+                "corrected_error": corrected_error,
+                "corrected_kind": corrected.get("$type"),
+                "corrected_ask_error": corrected_ask_error,
+                "corrected_ask_kind": corrected_ask.get("$type"),
+                "corrected_gap_reason": corrected_ask.get("reason"),
+                "corrected_pending_error": corrected_pending_error,
+                "corrected_pending_contains_target": corrected_pending_contains_target,
+                "recurated_error": recurated_error,
+                "recurated_kind": recurated.get("$type"),
+                "final_ask_error": final_ask_error,
+                "final_ask_kind": final_ask.get("$type"),
             }
 
 
