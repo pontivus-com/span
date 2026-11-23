@@ -486,6 +486,12 @@ class ProvisioningLifecycleTest(unittest.TestCase):
                 )
             self.addCleanup(runtime.store.close)
             self.assertTrue(result.store_ready)
+            self.assertEqual(result.repository_id, repo.name)
+            self.assertEqual(result.canonical_root, str(repo.resolve()))
+            self.assertEqual(
+                runtime.store.require_repository(repo.name),
+                str(repo.resolve()),
+            )
             self.assertEqual(result.schema_version, 14)
             self.assertTrue(runtime.structural.has_index())
             # A provider-prefixed locator is not part of the public
