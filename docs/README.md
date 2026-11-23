@@ -32,12 +32,14 @@ guidance change makes part of that understanding require another look.
 
 ## Implementation
 
-- [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md) —
-  Version-1 Functional Pyramid implementation and release campaign. T00–T12 are
-  complete; T11 private acceptance remains closed. The assembled `1.0.0b1`
-  repository candidate has passed the repository-verifiable T13 gates. The
-  remaining release proof is the Version-1 G5/F8 same-task-class steps/tokens
-  measurement and final evidence append.
+- [1.0.0 Beta 2 implementation plan](implementation-plans/1.0.0-beta2.md) —
+  capture/curation lifecycle correction, repository schema 15, Functional
+  Pyramid-preserving implementation tasks, public narrative alignment and
+  release gates. The canonical product behavior is owned by the layer-0–4
+  documents above; the plan derives from them.
+- [1.0.0 Beta 1 implementation plan](implementation-plans/1.0.0-beta.md) —
+  historical Version-1 Functional Pyramid implementation and Beta-1 release
+  campaign.
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
   low-friction lifecycle work package, ordered tasks, decision gates and
   verification; released 2026-11-14.
