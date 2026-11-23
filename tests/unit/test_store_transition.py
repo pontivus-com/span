@@ -1440,7 +1440,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 14"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 15"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -1729,7 +1729,7 @@ class InstallerCommandTest(unittest.TestCase):
             mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
             self.assertEqual(mapping["counts"]["unresolved"], 0)
             self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
-            self.assertEqual(st._read_schema_version_ro(source), 14)
+            self.assertEqual(st._read_schema_version_ro(source), 15)
             from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 
