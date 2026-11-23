@@ -55,6 +55,11 @@ def gap_recovery(reason: m.GapReason) -> str:
     """
     if reason is m.GapReason.UNASSESSED:
         return "read the cited evidence, then record the conclusion"
+    if reason is m.GapReason.PENDING_CURATION:
+        return (
+            "review the captured exact revision and record actions.curate "
+            "when the meaning is stable for shared reuse"
+        )
     return "re-read the cited evidence, then record against the current revision"
 
 
@@ -102,6 +107,8 @@ class AnswerService:
             (m.UnderstandingSnapshotSelector, m.ReceiptRetrievalSelector),
         ):
             return self._exact_reference(request.selector)
+        if isinstance(request.selector, m.PendingCurationSelector):
+            return self._pending_curation(request.selector)
         if isinstance(request.selector, m.RecordedQuestionSelector):
             repository_id = request.selector.repository_id
             selected_question = request.selector.question
@@ -209,6 +216,7 @@ class AnswerService:
         historical: list[m.HistoricalConclusion] = []
         gaps: list[m.RecordedQuestionGap] = []
         states: list[m.SupportState] = []
+        pending = False
         for understanding in matched:
             support = self._support.evaluate_version(
                 understanding.understanding_id.value
@@ -227,7 +235,14 @@ class AnswerService:
             }
             for item in support.conclusions:
                 if item.evaluation.state is m.SupportState.CURRENT:
-                    current.append(self._view(item, revisions))
+                    curated = self._store.find_curation(
+                        item.ref,
+                        as_of_version=understanding.current_version,
+                    )
+                    if curated is not None:
+                        current.append(self._view(item, revisions))
+                    else:
+                        pending = True
                 else:
                     historical.extend(
                         self._historical(item, revisions, understanding.current_version)
@@ -247,9 +262,13 @@ class AnswerService:
 
         combined = support_rules.combine_states(tuple(states))
         reason = (
-            m.GapReason.INVALIDATED
-            if combined is m.SupportState.REASSESSMENT_REQUIRED
-            else m.GapReason.UNVERIFIABLE
+            m.GapReason.PENDING_CURATION
+            if pending
+            else (
+                m.GapReason.INVALIDATED
+                if combined is m.SupportState.REASSESSMENT_REQUIRED
+                else m.GapReason.UNVERIFIABLE
+            )
         )
         result = m.Gap(
             surface=surface,
@@ -655,6 +674,10 @@ class AnswerService:
                 ),
                 support=support,
                 challenges=self._store.get_challenges(selector.understanding_id),
+                curations=self._store.get_curations(
+                    selector.understanding_id,
+                    as_of_version=m.UnderstandingVersionNumber(version_number),
+                ),
             )
         key = m.RecordingKey(
             repository_id=selector.repository_id,
@@ -682,6 +705,62 @@ class AnswerService:
         return m.RetrievedReceipt(
             receipt=receipt,
             verification_runs=verification_runs,
+        )
+
+    def _pending_curation(
+        self,
+        selector: m.PendingCurationSelector,
+    ) -> m.AskResult:
+        """Return one deterministic repository-local page of CURRENT captures."""
+        self._store.require_repository(selector.repository_id)
+        eligible = tuple(
+            item
+            for item in self._store.pending_curation_candidates(
+                selector.repository_id,
+                after=selector.after,
+            )
+            if self._support.evaluate_revision(item.ref).state
+            is m.SupportState.CURRENT
+        )
+        if not eligible:
+            return m.PendingCuration(repository_id=selector.repository_id, items=())
+
+        count_limit = self._policy.default_query_bounds.max_results
+        items = list(eligible[:count_limit])
+        truncated = len(items) < len(eligible)
+        response_limit = self._policy.max_response_bytes
+
+        def build() -> m.PendingCuration:
+            omitted_count = len(eligible) - len(items)
+            return m.PendingCuration(
+                repository_id=selector.repository_id,
+                items=tuple(items),
+                next_after=items[-1].ref if truncated else None,
+                omitted=(
+                    (f"{omitted_count} additional pending curation items",)
+                    if truncated and omitted_count
+                    else ()
+                ),
+                truncated=truncated,
+            )
+
+        result = build()
+        while items and _encoded_size(result) > response_limit:
+            items.pop()
+            truncated = True
+            result = build()
+        if items:
+            return result
+        return m.Unavailable(
+            operation="ask",
+            failure=(
+                "one pending-curation item plus the response envelope exceeds "
+                f"the {response_limit}-byte budget"
+            ),
+            recovery=(
+                "use a server configuration with a response budget large enough "
+                "to carry one exact pending-curation reference"
+            ),
         )
 
     def _evidence_page(self, request: m.AskRequest) -> m.AskResult:
@@ -878,6 +957,11 @@ class AnswerService:
                 self._view(item, revisions)
                 for item in support.conclusions
                 if item.evaluation.state is m.SupportState.CURRENT
+                and self._store.find_curation(
+                    item.ref,
+                    as_of_version=understanding.current_version,
+                )
+                is not None
             ]
             historical.extend(
                 content
@@ -894,9 +978,13 @@ class AnswerService:
                 m.GapReason.UNASSESSED
                 if not understandings
                 else (
-                    m.GapReason.INVALIDATED
-                    if status.stale
-                    else m.GapReason.UNVERIFIABLE
+                    m.GapReason.PENDING_CURATION
+                    if status.pending
+                    else (
+                        m.GapReason.INVALIDATED
+                        if status.stale
+                        else m.GapReason.UNVERIFIABLE
+                    )
                 )
             )
             return m.Gap(
