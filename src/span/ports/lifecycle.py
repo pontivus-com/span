@@ -194,6 +194,33 @@ class LifecycleStorePort(_typing.Protocol):
         """Return observations captured from one repository locator."""
         ...
 
+    def find_curation(
+        self,
+        ref: m.ConclusionRevisionRef,
+        *,
+        as_of_version: m.UnderstandingVersionNumber | None = None,
+    ) -> m.CurationDisposition | None:
+        """Return exact-revision curation effective at one optional version."""
+        ...
+
+    def get_curations(
+        self,
+        understanding_id: str,
+        *,
+        as_of_version: m.UnderstandingVersionNumber | None = None,
+    ) -> tuple[m.CurationDisposition, ...]:
+        """Return immutable curation history, optionally as of one version."""
+        ...
+
+    def pending_curation_candidates(
+        self,
+        repository_id: str,
+        *,
+        after: m.ConclusionRevisionRef | None = None,
+    ) -> tuple[m.PendingCurationItem, ...]:
+        """Return current-membership uncurated candidates in exact key order."""
+        ...
+
     def support_dependents(
         self, dependency_kind: str, dependency_ref: str
     ) -> tuple[m.ConclusionRevisionRef, ...]:
