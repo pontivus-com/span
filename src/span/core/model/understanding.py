@@ -139,9 +139,7 @@ class CurationDisposition:
                 )
             return
         if self.inherited_from is None:
-            raise ValueError(
-                "inherited confirmation curation requires inherited_from"
-            )
+            raise ValueError("inherited confirmation curation requires inherited_from")
         if (
             self.inherited_from.understanding_id != self.ref.understanding_id
             or self.inherited_from.conclusion_id != self.ref.conclusion_id
@@ -418,9 +416,7 @@ class PendingCuration:
                     "the last returned revision"
                 )
         elif self.next_after is not None:
-            raise ValueError(
-                "non-truncated pending curation cannot carry next_after"
-            )
+            raise ValueError("non-truncated pending curation cannot carry next_after")
 
 
 @_dataclass(frozen=True)
