@@ -581,6 +581,186 @@ class AnswerServiceTest(unittest.TestCase):
         )
         self.assertEqual(result.status.current, 1)
 
+    def test_current_capture_is_pending_until_curated(self) -> None:
+        path = self.root / "src/pending.py"
+        path.write_text("pending\n", encoding="utf-8")
+        self._observation("obs-pending", "src/pending.py")
+        self._create(
+            "u-pending",
+            "src/pending.py",
+            "What does pending do?",
+            curate=False,
+            observation_id="obs-pending",
+        )
+        selector = m.CurrentUnderstandingSelector(
+            repository_id="repo-1",
+            understanding_id="u-pending",
+        )
+
+        captured = self.service.ask(m.AskRequest(selector=selector))
+        self.assertIsInstance(captured, m.Gap)
+        assert isinstance(captured, m.Gap)
+        self.assertIs(captured.reason, m.GapReason.PENDING_CURATION)
+        self.assertEqual(captured.status.current, 0)
+        self.assertEqual(captured.status.pending, 1)
+        self.assertEqual(
+            captured.status.pending_refs[0].ref.understanding_id.value,
+            "u-pending",
+        )
+
+        self._curate("u-pending")
+        curated = self.service.ask(m.AskRequest(selector=selector))
+        self.assertIsInstance(curated, m.Answer)
+        assert isinstance(curated, m.Answer)
+        self.assertEqual(curated.status.current, 1)
+        self.assertEqual(curated.status.pending, 0)
+        self.assertEqual(len(curated.conclusions), 1)
+
+    def test_mixed_curated_and_captured_surface_exposes_only_curated_answer(
+        self,
+    ) -> None:
+        path = self.root / "src/mixed.py"
+        path.write_text("mixed\n", encoding="utf-8")
+        self._observation("obs-mixed", "src/mixed.py")
+        self._create(
+            "u-mixed-curated",
+            "src/mixed.py",
+            "What is stable?",
+            observation_id="obs-mixed",
+        )
+        self._create(
+            "u-mixed-pending",
+            "src/mixed.py",
+            "What still needs review?",
+            curate=False,
+            observation_id="obs-mixed",
+        )
+
+        result = self.service.ask(
+            m.AskRequest(repository_id="repo-1", reference="src/mixed.py")
+        )
+        self.assertIsInstance(result, m.Answer)
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.status.current, 1)
+        self.assertEqual(result.status.pending, 1)
+        self.assertEqual(
+            tuple(group.question for group in result.groups),
+            ("What is stable?",),
+        )
+
+    def test_noncurrent_capture_is_stale_not_pending(self) -> None:
+        path = self.root / "src/stale-capture.py"
+        path.write_text("before\n", encoding="utf-8")
+        self._observation("obs-stale-capture", "src/stale-capture.py")
+        self._create(
+            "u-stale-capture",
+            "src/stale-capture.py",
+            "What did this file do?",
+            curate=False,
+            observation_id="obs-stale-capture",
+        )
+        path.write_text("after\n", encoding="utf-8")
+
+        result = self.service.ask(
+            m.AskRequest(
+                selector=m.CurrentUnderstandingSelector(
+                    repository_id="repo-1",
+                    understanding_id="u-stale-capture",
+                )
+            )
+        )
+        self.assertIsInstance(result, m.Gap)
+        assert isinstance(result, m.Gap)
+        self.assertIs(result.reason, m.GapReason.INVALIDATED)
+        self.assertEqual(result.status.pending, 0)
+        self.assertEqual(result.status.stale, 1)
+        self.assertEqual(len(result.status.stale_refs), 1)
+
+    def test_snapshot_curation_projection_is_version_aware(self) -> None:
+        path = self.root / "src/audit.py"
+        path.write_text("audit\n", encoding="utf-8")
+        self._observation("obs-audit", "src/audit.py")
+        self._create(
+            "u-audit",
+            "src/audit.py",
+            "What does audit do?",
+            curate=False,
+            observation_id="obs-audit",
+        )
+        self._curate("u-audit")
+
+        before = self.service.ask(
+            m.AskRequest(
+                selector=m.UnderstandingSnapshotSelector(
+                    repository_id="repo-1",
+                    understanding_id="u-audit",
+                    version=1,
+                )
+            )
+        )
+        after = self.service.ask(
+            m.AskRequest(
+                selector=m.UnderstandingSnapshotSelector(
+                    repository_id="repo-1",
+                    understanding_id="u-audit",
+                    version=2,
+                )
+            )
+        )
+        self.assertIsInstance(before, m.RetrievedUnderstanding)
+        self.assertIsInstance(after, m.RetrievedUnderstanding)
+        assert isinstance(before, m.RetrievedUnderstanding)
+        assert isinstance(after, m.RetrievedUnderstanding)
+        self.assertEqual(before.curations, ())
+        self.assertEqual(len(after.curations), 1)
+        self.assertEqual(after.curations[0].ref.revision.value, 1)
+        self.assertEqual(after.curations[0].accepted_in_version.value, 2)
+
+    def test_pending_curation_keyset_paging_has_no_skip_or_duplicate(self) -> None:
+        for suffix in ("a", "b"):
+            locator = f"src/page-{suffix}.py"
+            (self.root / locator).write_text(f"{suffix}\n", encoding="utf-8")
+            observation_id = f"obs-page-{suffix}"
+            self._observation(observation_id, locator)
+            self._create(
+                f"u-page-{suffix}",
+                locator,
+                f"What does page {suffix} do?",
+                curate=False,
+                observation_id=observation_id,
+            )
+        service = self._service(51_133, max_results=1)
+
+        first = service.ask(
+            m.AskRequest(
+                selector=m.PendingCurationSelector(repository_id="repo-1")
+            )
+        )
+        self.assertIsInstance(first, m.PendingCuration)
+        assert isinstance(first, m.PendingCuration)
+        self.assertTrue(first.truncated)
+        self.assertEqual(len(first.items), 1)
+        self.assertEqual(first.next_after, first.items[0].ref)
+
+        second = service.ask(
+            m.AskRequest(
+                selector=m.PendingCurationSelector(
+                    repository_id="repo-1",
+                    after=first.next_after,
+                )
+            )
+        )
+        self.assertIsInstance(second, m.PendingCuration)
+        assert isinstance(second, m.PendingCuration)
+        self.assertFalse(second.truncated)
+        self.assertIsNone(second.next_after)
+        self.assertEqual(len(second.items), 1)
+        self.assertNotEqual(first.items[0].ref, second.items[0].ref)
+        self.assertEqual(
+            {first.items[0].ref.understanding_id.value, second.items[0].ref.understanding_id.value},
+            {"u-page-a", "u-page-b"},
+        )
+
     def test_changed_source_is_an_invalidated_gap(self) -> None:
         (self.root / "src/a.py").write_text("changed\n", encoding="utf-8")
         result = self._ask("src/a.py", "What does A do?")
