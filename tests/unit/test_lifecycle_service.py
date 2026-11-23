@@ -251,6 +251,7 @@ class LifecycleServiceTest(unittest.TestCase):
         *,
         understanding_id: str = "u:sub-create",
         context_id: str | None = "ctx-1",
+        provenance: str = "",
     ) -> m.UnderstandingRecorded:
         binding: dict[str, object] = (
             {"repository_id": "repo-1"}
@@ -264,11 +265,136 @@ class LifecycleServiceTest(unittest.TestCase):
                 understanding_id=understanding_id,
                 expected_version=expected,
                 actions=actions,
+                provenance=provenance,
                 **binding,
             )
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
         return result
+
+    def test_curate_accepts_exact_current_revision_and_replays(self) -> None:
+        self.service.record(_create_wire())
+        conclusion_id = self._version_conclusion_id("u:sub-create", 1)
+
+        result = self._update(
+            "sub-curate",
+            w.RecordActionsWire(
+                curate=(
+                    w.CurateConclusionWire(
+                        conclusion_id=conclusion_id,
+                        reasoning="stable for shared reuse",
+                    ),
+                )
+            ),
+            1,
+            provenance="reviewer-session",
+        )
+
+        self.assertEqual(result.version.value, 2)
+        self.assertEqual(len(result.affected_revisions), 1)
+        self.assertEqual(result.affected_revisions[0].conclusion_id.value, conclusion_id)
+        self.assertEqual(result.affected_revisions[0].revision.value, 1)
+        self.assertEqual(len(self.store.get_conclusions("u:sub-create")), 1)
+        disposition = self.store.find_curation(result.affected_revisions[0])
+        self.assertIsNotNone(disposition)
+        assert disposition is not None
+        self.assertIs(disposition.origin, m.CurationOrigin.EXPLICIT)
+        self.assertEqual(disposition.accepted_in_version.value, 2)
+        self.assertEqual(disposition.provenance, "reviewer-session")
+
+        replay = self._update(
+            "sub-curate",
+            w.RecordActionsWire(
+                curate=(
+                    w.CurateConclusionWire(
+                        conclusion_id=conclusion_id,
+                        reasoning="stable for shared reuse",
+                    ),
+                )
+            ),
+            1,
+            provenance="reviewer-session",
+        )
+        self.assertEqual(replay.version, result.version)
+        self.assertEqual(replay.committed_at, result.committed_at)
+        self.assertEqual(replay.affected_revisions, result.affected_revisions)
+        self.assertEqual(self.store.get_understanding("u:sub-create").current_version.value, 2)
+        self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
+
+    def test_curate_rejects_non_current_target_before_mutation(self) -> None:
+        self.service.record(_create_wire())
+        conclusion_id = self._version_conclusion_id("u:sub-create", 1)
+        non_current = m.SupportEvaluation(
+            state=m.SupportState.REASSESSMENT_REQUIRED,
+            dependencies=(),
+            reason="source changed",
+            observed_at=NOW,
+        )
+        with mock.patch.object(
+            self.support,
+            "evaluate_revision",
+            return_value=non_current,
+        ):
+            with self.assertRaises(RecordingValidationError) as raised:
+                self._update(
+                    "sub-curate-stale",
+                    w.RecordActionsWire(
+                        curate=(
+                            w.CurateConclusionWire(
+                                conclusion_id=conclusion_id,
+                                reasoning="reviewed",
+                            ),
+                        )
+                    ),
+                    1,
+                    provenance="reviewer-session",
+                )
+
+        self.assertIs(
+            raised.exception.cause_kind,
+            m.RejectionCauseKind.SOURCE_DRIFT,
+        )
+        self.assertEqual(
+            self.store.get_understanding("u:sub-create").current_version.value,
+            1,
+        )
+        self.assertEqual(self.store.get_curations("u:sub-create"), ())
+
+    def test_curate_same_request_different_reasoning_is_replay_conflict(self) -> None:
+        self.service.record(_create_wire())
+        conclusion_id = self._version_conclusion_id("u:sub-create", 1)
+        self._update(
+            "sub-curate-conflict",
+            w.RecordActionsWire(
+                curate=(
+                    w.CurateConclusionWire(
+                        conclusion_id=conclusion_id,
+                        reasoning="first review",
+                    ),
+                )
+            ),
+            1,
+            provenance="reviewer-session",
+        )
+        with self.assertRaises(RecordingConflict) as raised:
+            self._update(
+                "sub-curate-conflict",
+                w.RecordActionsWire(
+                    curate=(
+                        w.CurateConclusionWire(
+                            conclusion_id=conclusion_id,
+                            reasoning="different review",
+                        ),
+                    )
+                ),
+                1,
+                provenance="reviewer-session",
+            )
+        self.assertIs(
+            raised.exception.cause_kind,
+            m.RejectionCauseKind.REPLAY_CONFLICT,
+        )
+        self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
 
     def _record_add(self, expected: int, submission: str) -> m.RecordReceipt:
         return _receipt(
