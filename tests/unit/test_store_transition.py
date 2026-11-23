@@ -607,7 +607,7 @@ def _schema12_store(
 
 
 def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
-    """Build schema-14 state, then remove Version-1 projections to reproduce 13."""
+    """Build current state, then remove Version-1 projections to reproduce 13."""
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
 
@@ -692,8 +692,108 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
     connection = sqlite3.connect(path)
     try:
         connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute("DROP TABLE conclusion_curations")
         connection.execute("DROP TABLE functional_route_dependency_index")
         connection.execute("UPDATE meta SET value='13' WHERE key='schema_version'")
+        connection.commit()
+    finally:
+        connection.close()
+    return path
+
+
+def _schema14_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
+    """Build schema-15 state, then remove only curation storage to reproduce 14."""
+    from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+    from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "src").mkdir(exist_ok=True)
+    (root / "src/a.py").write_text("a\n", encoding="utf-8")
+
+    store = LifecycleStore(
+        path, retention=DEFAULT_LIFECYCLE_RETENTION, clock=lambda: NOW
+    )
+    store.register_repository("demo", str(root), authority_seeds=(_seed(),))
+    store.put_source_observation(
+        m.SourceObservation(
+            observation_id=m.SourceObservationId("obs-schema14"),
+            repository_id="demo",
+            evidence=m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-schema14"),
+                repository_id="demo",
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/a.py",
+                revision_or_fingerprint="sha256:a",
+            ),
+            content_digest=m.ContentDigest("sha256:a"),
+            captured_at=NOW,
+            total_lines=1,
+            whole_file=True,
+        )
+    )
+    context = m.InvestigationContext(
+        context_id=m.InvestigationContextId("ctx-schema14"),
+        repository_id="demo",
+        request_id=m.RequestId("req-schema14"),
+        binding_digest=m.ContentDigest("sha256:schema14"),
+        origin=m.ContextOrigin.EVIDENCE_ONLY,
+        state=m.ContextState.LIVE,
+        scope=m.EvidenceScope(paths=("src/a.py",)),
+        created_at=NOW,
+        expires_at=NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime,
+    )
+    store.put_context(context)
+    store.add_context_evidence("ctx-schema14", "obs-schema14")
+    store.record_understanding(
+        m.CreateUnderstandingCommand(
+            identity=m.RecordingIdentity(
+                repository_id="demo",
+                request_id=m.RequestId("record-schema14"),
+                context_id=m.InvestigationContextId("ctx-schema14"),
+            ),
+            surface=m.SurfaceKey(
+                repository_id="demo",
+                kind=m.SurfaceKind.FILE,
+                locator="src/a.py",
+            ),
+            target=m.ExplicitTarget(
+                question="What does A do?",
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+            ),
+            conclusions=(
+                m.ProposedConclusion(
+                    conclusion_id=m.ConclusionId("c-schema14"),
+                    statement="A has retained schema-14 meaning.",
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                    support=(
+                        m.SourceSupport(
+                            observation_id=m.SourceObservationId("obs-schema14")
+                        ),
+                    ),
+                    basis=m.SemanticBasis(
+                        derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
+                        summary="schema14 preservation fixture",
+                    ),
+                ),
+            ),
+        ),
+        understanding_id=m.UnderstandingId("u-schema14"),
+    )
+    store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute(
+            "INSERT INTO functional_route_dependency_index"
+            "(understanding_id, conclusion_id, revision, pyramid_id,"
+            " repository_id, route_identity) VALUES(?,?,?,?,?,?)",
+            ("u-schema14", "c-schema14", 1, "p-1", "demo", "route-1"),
+        )
+        connection.execute("DROP TABLE conclusion_curations")
+        connection.execute("UPDATE meta SET value='14' WHERE key='schema_version'")
         connection.commit()
     finally:
         connection.close()
@@ -765,7 +865,7 @@ class InspectTest(unittest.TestCase):
             self.assertIn("explicit installer provisioning", inspection.limitations[0])
 
 
-class Schema13To14Test(unittest.TestCase):
+class Schema13To15Test(unittest.TestCase):
     def test_schema13_state_is_preserved_without_fabricating_pyramid_state(
         self,
     ) -> None:
@@ -784,7 +884,7 @@ class Schema13To14Test(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "14",
+                    "15",
                 )
                 self.assertEqual(
                     connection.execute(
