@@ -2096,29 +2096,94 @@ reuse.
 **Authority:** G2; A10; F2, F3, F5, F7, F13; L4, L7, L17;
 FD-95–FD-102.
 
-Add the minimum canonical model vocabulary required by Layer 2:
+Use the existing canonical model modules rather than creating a curation DTO
+family:
 
-- `CurationState = CAPTURED | CURATED`;
-- one curation action input carrying an existing conclusion lineage identity and
-  non-empty reviewer reasoning;
-- `PendingCurationSelector{repository_id}`;
-- one pending-curation result/item family carrying exact existing semantic
-  coordinates needed to retrieve and review the owning revision.
+- `src/span/core/model/commands.py` owns
+  `CurateConclusion{conclusion_id: ConclusionId, reasoning: str}` and adds
+  `curate: tuple[CurateConclusion, ...]` to `UpdateUnderstandingCommand`;
+- `src/span/core/model/understanding.py` owns
+  `CurationState = CAPTURED | CURATED`,
+  `CurationOrigin = EXPLICIT | INHERITED_CONFIRMATION`,
+  `CurationDisposition`,
+  `PendingCurationSelector`,
+  `PendingCurationItem`, and `PendingCuration`;
+- `src/span/core/model/surfaces.py` owns
+  `PendingConclusionRef{ref, understanding_version}` beside
+  `StaleConclusionRef` and extends `SurfaceStatus` with
+  `pending`/`pending_refs`;
+- `src/span/core/model/answers.py` adds `PENDING_CURATION` to `GapReason`
+  and `PendingCuration` to `AskResult`;
+- `RetrievedUnderstanding` gains
+  `curations: tuple[CurationDisposition, ...]` for exact historical/current
+  audit projection.
+
+The exact public carriers are those fixed by lifecycle §4.1. In particular,
+`PendingCurationSelector.after` is an optional exact
+`ConclusionRevisionRef` keyset cursor and `PendingCuration.next_after` is
+the exact last returned ref when truncation requires another page. No opaque
+second continuation grammar is introduced.
+
+`CurationDisposition` has exactly:
+
+```text
+ref: ConclusionRevisionRef
+accepted_in_version: UnderstandingVersionNumber
+reasoning: str
+provenance: str
+recorded_at: datetime
+origin: EXPLICIT | INHERITED_CONFIRMATION
+inherited_from: ConclusionRevisionRef | None
+```
+
+`origin=EXPLICIT` requires `inherited_from=None`.
+`origin=INHERITED_CONFIRMATION` requires `inherited_from` to name the
+immediate confirmed predecessor in the same understanding/conclusion lineage.
+The inherited record preserves the predecessor's reviewer reasoning/provenance
+as historical facts but records the confirmation transaction time/version and
+the inherited origin explicitly; it never pretends another reviewer acted.
 
 Do not add a mutable `curated` boolean to `SupportedConclusion` and do not
-copy semantic content into a second approval record.
+copy semantic content into a second approval record. Current `CurationState`
+is derived from exact-revision disposition existence.
 
-Persist one immutable curation disposition keyed by exact
-`ConclusionRevisionRef`. The persisted fact records the understanding version
-that accepted the disposition, reviewer reasoning, ordinary provenance,
-timestamp and an implementation-owned origin distinguishing an explicit review
-from curation inherited through semantic-preserving confirmation. Current
-`CurationState` is derived from the existence of that exact-revision
-disposition.
+Schema 15 adds exactly one repository table:
+
+```sql
+CREATE TABLE conclusion_curations(
+    understanding_id TEXT NOT NULL,
+    conclusion_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    accepted_in_version INTEGER NOT NULL,
+    origin TEXT NOT NULL
+        CHECK(origin IN ('EXPLICIT', 'INHERITED_CONFIRMATION')),
+    inherited_from_revision INTEGER,
+    canonical_json TEXT NOT NULL,
+    PRIMARY KEY(understanding_id, conclusion_id, revision),
+    FOREIGN KEY(understanding_id, conclusion_id, revision)
+        REFERENCES conclusions(understanding_id, conclusion_id, revision),
+    FOREIGN KEY(understanding_id, accepted_in_version)
+        REFERENCES understanding_versions(understanding_id, version),
+    FOREIGN KEY(understanding_id, conclusion_id, inherited_from_revision)
+        REFERENCES conclusions(understanding_id, conclusion_id, revision),
+    CHECK(
+        (origin='EXPLICIT' AND inherited_from_revision IS NULL)
+        OR
+        (origin='INHERITED_CONFIRMATION'
+         AND inherited_from_revision IS NOT NULL)
+    )
+)
+```
+
+`canonical_json` is the canonical serialization of
+`CurationDisposition`; the indexed structural columns must agree with that
+carrier on write/read. No second curation table or approval column is allowed.
+The primary key is sufficient for exact-revision lookup and the pending query's
+left join; add no speculative index without measured query evidence.
 
 Historical projection is version-aware: a snapshot at understanding version V
-considers a revision curated only if its disposition was accepted at or before V.
-This preserves the observable sequence capture → later curation without
+considers a revision curated only when its disposition has
+`accepted_in_version <= V`. This preserves capture → later curation without
 rewriting prior snapshots.
 
 ### 24. Ask, record and re-alignment composition
@@ -2129,43 +2194,67 @@ FD-95–FD-102.
 #### 24.1 `ask`
 
 Extend the existing canonical selector/result union with
-`PendingCurationSelector` and its generated result. Repository-local pending
-membership is the current understanding membership whose semantic revision has
-no curation disposition. Ordering and pagination reuse the existing deterministic
-bounds; no similarity, importance score or model ranking is permitted.
+`PendingCurationSelector` and `PendingCuration`. The repository-local queue
+is the current understanding membership whose exact revision has no curation
+disposition **and** whose existing support evaluator returns CURRENT.
+Non-current CAPTURED revisions remain stale/re-establishment work and are not
+also pending.
+
+The query order is exactly ascending
+`(understanding_id, conclusion_id, revision)`. When
+`selector.after` is present, resume strictly after that exact tuple. Apply the
+existing response budget to whole `PendingCurationItem` values. If truncated,
+return `next_after` equal to the last emitted item's exact ref; if not
+truncated, `next_after=None`. The item's statement is not copied: the reviewer
+uses its exact snapshot coordinates to retrieve content.
 
 The one AnswerService composes semantic support and curation state. A conclusion
 is Answer-eligible only when its existing support evaluator returns CURRENT and
-the exact revision is CURATED. Current CAPTURED revisions project only through
-pending status/references. If no eligible conclusion exists but current CAPTURED
+the exact revision has a curation disposition effective in the current
+understanding version. CURRENT + CAPTURED revisions project only through pending
+status/references; any non-current revision projects only through the existing
+stale/historical path. If no eligible conclusion exists but CURRENT captured
 membership does, the existing Gap composer returns
 `reason=pending_curation`.
 
-Do not create a curation-specific answer composer.
+Do not create a curation-specific answer composer or support evaluator.
 
 #### 24.2 understanding `record`
 
-Extend the existing understanding-update command/action owner with `curate`.
-The action resolves the supplied lineage against `expected_version`, derives
-the exact current revision, and writes its curation disposition inside the same
-understanding CAS/receipt transaction.
+Extend the existing `UpdateUnderstandingCommand`/understanding-writer owner
+with `curate`. The action resolves every supplied lineage against
+`expected_version`, derives each exact current revision, then runs the existing
+support evaluator before mutation. Every target must be CURRENT at that moment;
+otherwise reject the whole update with the existing typed
+`Rejected/validation` path and a public recovery instructing the reviewer to
+re-establish support first.
 
-A curation update:
+On acceptance the one existing understanding CAS transaction:
+1. creates version `expected_version + 1` with unchanged conclusion membership;
+2. inserts one EXPLICIT `conclusion_curations` row per target, with
+   `accepted_in_version` equal to that new version;
+3. writes the ordinary recording receipt; and
+4. composes the ordinary `UnderstandingRecorded` result/status from committed
+   state.
+
+The curation action:
 - changes no semantic conclusion content or support;
 - creates no conclusion revision;
-- advances the immutable understanding version;
 - cannot contain add/confirm/correct/replace/withdraw actions;
-- uses the existing repository-scoped request identity, replay and conflict
-  semantics.
+- uses the existing repository-scoped request identity, content digest, replay
+  and conflict semantics;
+- reports the curated exact refs through the existing
+  `UnderstandingRecorded.affected_revisions`.
 
 Semantic create/add/correct/replace commit without a curation disposition for
 their new revisions. Withdrawal remains non-reusable.
 
 Confirm keeps its existing semantic identity rule. If the predecessor revision
-is CURATED, the confirmation transaction creates the new revision's inherited
-curation disposition from that exact predecessor. If the predecessor is
-CAPTURED, no disposition is created. This is a mechanical carry-forward of an
-existing publication decision, not a new reviewer judgment.
+is CURATED, the same confirmation transaction creates the new revision and one
+INHERITED_CONFIRMATION curation row that points to the exact predecessor; both
+belong to the new understanding version. If the predecessor is CAPTURED, no
+curation row is created. This is a mechanical carry-forward of an existing
+publication decision, not a new reviewer judgment.
 
 #### 24.3 reconsider and Functional Pyramid composition
 
@@ -2191,22 +2280,39 @@ lifecycle store:
 - Beta-2 repository schema: **15**;
 - installation Functional Pyramid schema remains **1**.
 
-The explicit offline 14 → 15 transition preserves every existing semantic and
-audit row, conclusion revision, support dependency, challenge, verification run,
-receipt and FunctionalRouteSupport. It adds the curation persistence/indexes
-required by §23 and creates **zero** curation dispositions for pre-existing
-revisions.
+The canonical transition owner remains `src/span/shell/store_transition.py`.
+Set its target to schema 15, add schema 14 to the supported source set, and add
+one mapping module `src/span/shell/store_transition_schema14.py`. Do not create
+another transition command or runtime migration path.
+
+The schema-14 mapping copies every existing repository table and relationship
+into a fresh schema-15 staging store under the same preservation/reconciliation
+rules used by the current transition architecture. In particular it preserves
+repositories (including authority seeds/bindings), surfaces/boundary versions,
+source/discovery observations, contexts and memberships, understandings and
+versions, conclusions, support dependencies, challenges, verification state,
+ordinary receipts, and `functional_route_dependency_index`. The new
+`conclusion_curations` table remains empty.
 
 Consequently every migrated Beta-1 semantic revision begins CAPTURED under the
-Beta-2 reuse contract. Current revisions are discoverable through pending
-curation but are not ordinary Answer content until explicitly curated. Migration
-must not invent an independent review that never occurred.
+Beta-2 reuse contract. A migrated revision enters the pending queue only when it
+is current membership and its existing support evaluates CURRENT; non-current
+captures remain stale until re-established. No migration step may invent an
+independent review that never occurred.
 
 Runtime open remains exact-version only; no in-place implicit migration exists.
 Archive/stage/verify/activate/rollback ownership remains the existing transition
-path. Transition verification proves preserved counts/references, empty curation
-state after migration and unchanged installation schema-1 Functional Pyramid
-state.
+path. Transition verification proves:
+- source semantic/audit counts and canonical identities are preserved;
+- source schema-14 `functional_route_dependency_index` rows are preserved;
+- `conclusion_curations` exists and has zero rows;
+- ordinary exact/historical retrieval still resolves;
+- installation schema-1 Functional Pyramid state is unchanged;
+- rollback restores the exact archived schema-14 store.
+
+The transition smoke lane then curates one migrated CURRENT capture in the
+staged schema-15 store and proves it becomes reusable without rewriting the
+migrated conclusion revision.
 
 Beta-2 release identity is:
 
