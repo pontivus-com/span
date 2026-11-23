@@ -152,23 +152,23 @@ def load_authority_files(
     seeds: dict[str, tuple[m.EvidenceRef, ...]] = {}
     for repository_id, path in seed_paths.items():
         decoded_seeds = _evidence_refs(path, dry_run=dry_run)
-        for item in decoded_seeds:
-            if item.repository_id != repository_id:
+        for seed in decoded_seeds:
+            if seed.repository_id != repository_id:
                 raise SystemExit(
                     "authority seeds repository mismatch: "
-                    f"mapping={repository_id!r}, item={item.repository_id!r}"
+                    f"mapping={repository_id!r}, item={seed.repository_id!r}"
                 )
         seeds[repository_id] = decoded_seeds
 
     bindings: dict[str, tuple[m.AuthorityBinding, ...]] = {}
     for repository_id, path in binding_paths.items():
         decoded_bindings = _authority_bindings(path, dry_run=dry_run)
-        for item in decoded_bindings:
-            item_repository_id = item.evidence_ref.repository_id
-            if item_repository_id != repository_id:
+        for binding in decoded_bindings:
+            binding_repository_id = binding.evidence_ref.repository_id
+            if binding_repository_id != repository_id:
                 raise SystemExit(
                     "authority bindings repository mismatch: "
-                    f"mapping={repository_id!r}, item={item_repository_id!r}"
+                    f"mapping={repository_id!r}, item={binding_repository_id!r}"
                 )
         bindings[repository_id] = decoded_bindings
 
