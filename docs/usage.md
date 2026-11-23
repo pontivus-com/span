@@ -1,14 +1,16 @@
 # Using Span
 
 Start with the exact file, symbol, service, or domain you are working on. Span
-can give the agent both sides of the working context for that surface: what is
-already understood about the implementation, and the project guidance that
-applies from first principles down to functional and technical design.
+maintains reusable knowledge for that surface: what is already understood about
+the implementation and, for participating repositories, the project guidance
+that applies from first principles down to functional and technical design.
+That maintained knowledge becomes working context for the task in front of the
+agent.
 
 The coding agent still owns reasoning, edits, and test execution. Span keeps
 retained conclusions tied to their evidence, resolves the applicable canonical
 guidance for participating repositories, preserves history, and shows when
-either side of the context needs another look.
+either side of that maintained understanding needs another look.
 
 ## Check Functional Pyramid participation
 
