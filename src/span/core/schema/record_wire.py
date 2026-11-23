@@ -339,7 +339,6 @@ RecordActionWire = _typing.Union[
     CorrectConclusionWire,
     ReplaceActionWire,
     WithdrawActionWire,
-    CurateConclusionWire,
 ]
 
 
