@@ -293,6 +293,18 @@ class WithdrawActionWire:
 
 
 @_dataclass(frozen=True)
+class CurateConclusionWire:
+    """One exact-lineage curation act; no semantic content is rewritten."""
+
+    conclusion_id: str
+    reasoning: str
+
+    def __post_init__(self) -> None:
+        _require_action_field("curate", "conclusion_id", self.conclusion_id)
+        _require_action_field("curate", "reasoning", self.reasoning)
+
+
+@_dataclass(frozen=True)
 class ConclusionRefWire:
     understanding_id: str
     conclusion_id: str
@@ -425,16 +437,37 @@ class VerificationRunWire:
 
 @_dataclass(frozen=True)
 class RecordActionsWire:
-    """The explicit semantic actions one record request states.
+    """The explicit understanding actions one record request states."""
 
-    Keys are actions, not tool variants. Multiple keys are applied atomically.
-    """
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(
+                _constraints.PresenceField("add", non_empty=True),
+                _constraints.PresenceField("confirm", non_empty=True),
+                _constraints.PresenceField("correct", non_empty=True),
+                _constraints.PresenceField("replace", non_empty=True),
+                _constraints.PresenceField("withdraw", non_empty=True),
+            ),
+            minimum=0,
+            maximum=0,
+            when=(
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("curate", non_empty=True), True
+                ),
+            ),
+            label="curation is separate from semantic mutation",
+        ),
+    )
 
     add: tuple[AddConclusionWire, ...] = ()
     confirm: tuple[ConfirmConclusionWire, ...] = ()
     correct: tuple[CorrectConclusionWire, ...] = ()
     replace: tuple[ReplaceActionWire, ...] = ()
     withdraw: tuple[WithdrawActionWire, ...] = ()
+    curate: tuple[CurateConclusionWire, ...] = ()
+
+    def __post_init__(self) -> None:
+        _constraints.validate_structural_rules(self)
 
 
 @_dataclass(frozen=True)
@@ -778,11 +811,12 @@ class RecordRequestWire:
                 _constraints.PresenceField("actions.correct", non_empty=True),
                 _constraints.PresenceField("actions.replace", non_empty=True),
                 _constraints.PresenceField("actions.withdraw", non_empty=True),
+                _constraints.PresenceField("actions.curate", non_empty=True),
                 _constraints.PresenceField("gaps"),
                 _constraints.PresenceField("challenge_dispositions", non_empty=True),
             ),
             minimum=1,
-            maximum=7,
+            maximum=8,
             when=(
                 _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
                 _constraints.PresenceCondition(
@@ -790,6 +824,18 @@ class RecordRequestWire:
                 ),
             ),
             label="understanding update effect",
+        ),
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("provenance", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("actions.curate", non_empty=True), True
+                ),
+            ),
+            label="curation reviewer provenance",
         ),
         _constraints.PresenceRule(
             fields=(
@@ -1528,6 +1574,13 @@ def record_command(
             ),
             withdraw=tuple(
                 _withdraw_action(item, resolver) for item in actions.withdraw
+            ),
+            curate=tuple(
+                _c.CurateConclusion(
+                    conclusion_id=_p.ConclusionId(item.conclusion_id),
+                    reasoning=item.reasoning,
+                )
+                for item in actions.curate
             ),
             gaps=(
                 None if value.gaps is None else tuple(_gap(item) for item in value.gaps)

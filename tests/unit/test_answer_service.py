@@ -118,6 +118,8 @@ class AnswerServiceTest(unittest.TestCase):
         question: str,
         *,
         conclusions: int = 1,
+        curate: bool = True,
+        observation_id: str = "obs-a",
     ) -> None:
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
@@ -143,7 +145,7 @@ class AnswerServiceTest(unittest.TestCase):
                         scope=m.EvidenceScope(paths=(locator,)),
                         support=(
                             m.SourceSupport(
-                                observation_id=m.SourceObservationId("obs-a")
+                                observation_id=m.SourceObservationId(observation_id)
                             ),
                         ),
                         basis=_basis(),
@@ -153,10 +155,50 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId(understanding_id),
         )
+        if curate:
+            self._curate(understanding_id)
 
-    def _service(self, max_bytes: int) -> AnswerService:
+    def _curate(self, understanding_id: str, *, request_id: str | None = None) -> None:
+        understanding = self.store.get_understanding(understanding_id)
+        version = self.store.get_version(
+            understanding_id,
+            understanding.current_version.value,
+        )
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId(
+                        request_id
+                        or f"curate-{understanding_id}-{version.version.value}"
+                    ),
+                    context_id=CONTEXT_ID,
+                ),
+                understanding_id=m.UnderstandingId(understanding_id),
+                expected_version=version.version,
+                curate=tuple(
+                    m.CurateConclusion(
+                        conclusion_id=ref.conclusion_id,
+                        reasoning="reviewed for shared reuse",
+                    )
+                    for ref in version.conclusions
+                ),
+                provenance="test-reviewer",
+            )
+        )
+
+    def _service(
+        self,
+        max_bytes: int,
+        *,
+        max_results: int = 50,
+        store: LifecycleStore | None = None,
+        support: SupportService | None = None,
+    ) -> AnswerService:
+        selected_store = self.store if store is None else store
+        selected_support = self.support if support is None else support
         bounds = m.QueryBounds(
-            max_results=50,
+            max_results=max_results,
             max_depth=2,
             max_subjects=8,
             max_evidence_units=24,
@@ -165,9 +207,9 @@ class AnswerServiceTest(unittest.TestCase):
             max_candidate_relationships=64,
         )
         return AnswerService(
-            store=self.store,
-            support=self.support,
-            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            store=selected_store,
+            support=selected_support,
+            evidence=EvidenceService(store=selected_store, evidence=self.evidence),
             policy=m.ServiceBoundsPolicy(
                 default_query_bounds=bounds,
                 maximum_query_bounds=bounds,
@@ -226,6 +268,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-svc"),
         )
+        self._curate("u-svc")
         result = self._ask("svc", "What does the service do?")
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
@@ -286,6 +329,7 @@ class AnswerServiceTest(unittest.TestCase):
                 ),
                 understanding_id=m.UnderstandingId(understanding_id),
             )
+            self._curate(understanding_id)
         result = self._ask("domain", "What does domain do?")
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
@@ -355,6 +399,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-child-stale"),
         )
+        self._curate("u-child-stale")
         (self.root / "src/b.py").write_text("changed\n", encoding="utf-8")
         result = self._ask("domain", "What does domain do?")
         assert isinstance(result, m.Answer)
@@ -411,6 +456,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-range"),
         )
+        self._curate("u-range")
         first = self._ask("src/a.py", "What are the first two lines?")
         self.assertIsInstance(first, m.Answer)
         (self.root / "src/a.py").write_text("one\ntwo\nchanged\n", encoding="utf-8")
@@ -467,6 +513,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-unbound"),
         )
+        self._curate("u-unbound")
         # The range can no longer bind; the whole file still matches.
         (self.root / "src/a.py").write_text("one\ntwo\n", encoding="utf-8")
         unbound = self._ask("src/a.py", "What are the last two lines?")
@@ -533,6 +580,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-legacy"),
         )
+        self._curate("u-legacy")
         path.write_text("one\ntwo\nchanged\n", encoding="utf-8")
         result = self._ask("src/a.py", "What are the first two lines?")
         self.assertIsInstance(result, m.Gap)
@@ -549,6 +597,251 @@ class AnswerServiceTest(unittest.TestCase):
         )
         self.assertEqual(result.status.current, 1)
 
+    def test_current_capture_is_pending_until_curated(self) -> None:
+        path = self.root / "src/pending.py"
+        path.write_text("pending\n", encoding="utf-8")
+        self._observation("obs-pending", "src/pending.py")
+        self._create(
+            "u-pending",
+            "src/pending.py",
+            "What does pending do?",
+            curate=False,
+            observation_id="obs-pending",
+        )
+        selector = m.CurrentUnderstandingSelector(
+            repository_id="repo-1",
+            understanding_id="u-pending",
+        )
+
+        captured = self.service.ask(m.AskRequest(selector=selector))
+        self.assertIsInstance(captured, m.Gap)
+        assert isinstance(captured, m.Gap)
+        self.assertIs(captured.reason, m.GapReason.PENDING_CURATION)
+        self.assertEqual(captured.status.current, 0)
+        self.assertEqual(captured.status.pending, 1)
+        self.assertEqual(
+            captured.status.pending_refs[0].ref.understanding_id.value,
+            "u-pending",
+        )
+
+        self._curate("u-pending")
+        curated = self.service.ask(m.AskRequest(selector=selector))
+        self.assertIsInstance(curated, m.Answer)
+        assert isinstance(curated, m.Answer)
+        self.assertEqual(curated.status.current, 1)
+        self.assertEqual(curated.status.pending, 0)
+        self.assertEqual(len(curated.conclusions), 1)
+
+    def test_mixed_curated_and_captured_surface_exposes_only_curated_answer(
+        self,
+    ) -> None:
+        path = self.root / "src/mixed.py"
+        path.write_text("mixed\n", encoding="utf-8")
+        self._observation("obs-mixed", "src/mixed.py")
+        self._create(
+            "u-mixed-curated",
+            "src/mixed.py",
+            "What is stable?",
+            observation_id="obs-mixed",
+        )
+        self._create(
+            "u-mixed-pending",
+            "src/mixed.py",
+            "What still needs review?",
+            curate=False,
+            observation_id="obs-mixed",
+        )
+
+        result = self.service.ask(
+            m.AskRequest(repository_id="repo-1", reference="src/mixed.py")
+        )
+        self.assertIsInstance(result, m.Answer)
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.status.current, 1)
+        self.assertEqual(result.status.pending, 1)
+        self.assertEqual(
+            tuple(group.question for group in result.groups),
+            ("What is stable?",),
+        )
+
+    def test_noncurrent_capture_is_stale_not_pending(self) -> None:
+        path = self.root / "src/stale-capture.py"
+        path.write_text("before\n", encoding="utf-8")
+        self._observation("obs-stale-capture", "src/stale-capture.py")
+        self._create(
+            "u-stale-capture",
+            "src/stale-capture.py",
+            "What did this file do?",
+            curate=False,
+            observation_id="obs-stale-capture",
+        )
+        path.write_text("after\n", encoding="utf-8")
+
+        result = self.service.ask(
+            m.AskRequest(
+                selector=m.CurrentUnderstandingSelector(
+                    repository_id="repo-1",
+                    understanding_id="u-stale-capture",
+                )
+            )
+        )
+        self.assertIsInstance(result, m.Gap)
+        assert isinstance(result, m.Gap)
+        self.assertIs(result.reason, m.GapReason.INVALIDATED)
+        self.assertEqual(result.status.pending, 0)
+        self.assertEqual(result.status.stale, 1)
+        self.assertEqual(len(result.status.stale_refs), 1)
+
+    def test_snapshot_curation_projection_is_version_aware(self) -> None:
+        path = self.root / "src/audit.py"
+        path.write_text("audit\n", encoding="utf-8")
+        self._observation("obs-audit", "src/audit.py")
+        self._create(
+            "u-audit",
+            "src/audit.py",
+            "What does audit do?",
+            curate=False,
+            observation_id="obs-audit",
+        )
+        self._curate("u-audit")
+
+        before = self.service.ask(
+            m.AskRequest(
+                selector=m.UnderstandingSnapshotSelector(
+                    repository_id="repo-1",
+                    understanding_id="u-audit",
+                    version=1,
+                )
+            )
+        )
+        after = self.service.ask(
+            m.AskRequest(
+                selector=m.UnderstandingSnapshotSelector(
+                    repository_id="repo-1",
+                    understanding_id="u-audit",
+                    version=2,
+                )
+            )
+        )
+        self.assertIsInstance(before, m.RetrievedUnderstanding)
+        self.assertIsInstance(after, m.RetrievedUnderstanding)
+        assert isinstance(before, m.RetrievedUnderstanding)
+        assert isinstance(after, m.RetrievedUnderstanding)
+        self.assertEqual(before.curations, ())
+        self.assertEqual(len(after.curations), 1)
+        self.assertEqual(after.curations[0].ref.revision.value, 1)
+        self.assertEqual(after.curations[0].accepted_in_version.value, 2)
+
+    def test_pending_curation_keyset_paging_has_no_skip_or_duplicate(self) -> None:
+        for suffix in ("a", "b"):
+            locator = f"src/page-{suffix}.py"
+            (self.root / locator).write_text(f"{suffix}\n", encoding="utf-8")
+            observation_id = f"obs-page-{suffix}"
+            self._observation(observation_id, locator)
+            self._create(
+                f"u-page-{suffix}",
+                locator,
+                f"What does page {suffix} do?",
+                curate=False,
+                observation_id=observation_id,
+            )
+        service = self._service(51_133, max_results=1)
+
+        first = service.ask(
+            m.AskRequest(selector=m.PendingCurationSelector(repository_id="repo-1"))
+        )
+        self.assertIsInstance(first, m.PendingCuration)
+        assert isinstance(first, m.PendingCuration)
+        self.assertTrue(first.truncated)
+        self.assertEqual(len(first.items), 1)
+        self.assertEqual(first.next_after, first.items[0].ref)
+
+        second = service.ask(
+            m.AskRequest(
+                selector=m.PendingCurationSelector(
+                    repository_id="repo-1",
+                    after=first.next_after,
+                )
+            )
+        )
+        self.assertIsInstance(second, m.PendingCuration)
+        assert isinstance(second, m.PendingCuration)
+        self.assertFalse(second.truncated)
+        self.assertIsNone(second.next_after)
+        self.assertEqual(len(second.items), 1)
+        self.assertNotEqual(first.items[0].ref, second.items[0].ref)
+        self.assertEqual(
+            {
+                first.items[0].ref.understanding_id.value,
+                second.items[0].ref.understanding_id.value,
+            },
+            {"u-page-a", "u-page-b"},
+        )
+
+    def test_pending_curation_keyset_paging_resumes_after_restart(self) -> None:
+        for suffix in ("restart-a", "restart-b"):
+            locator = f"src/{suffix}.py"
+            (self.root / locator).write_text(f"{suffix}\n", encoding="utf-8")
+            observation_id = f"obs-{suffix}"
+            self._observation(observation_id, locator)
+            self._create(
+                f"u-{suffix}",
+                locator,
+                f"What does {suffix} do?",
+                curate=False,
+                observation_id=observation_id,
+            )
+
+        first = self._service(51_133, max_results=1).ask(
+            m.AskRequest(selector=m.PendingCurationSelector(repository_id="repo-1"))
+        )
+        self.assertIsInstance(first, m.PendingCuration)
+        assert isinstance(first, m.PendingCuration)
+        self.assertTrue(first.truncated)
+        self.assertEqual(len(first.items), 1)
+        cursor = first.next_after
+        self.assertIsNotNone(cursor)
+
+        self.store.close()
+        reopened = LifecycleStore(
+            pathlib.Path(self._tmp.name) / "lifecycle.db",
+            retention=RETENTION,
+            clock=lambda: NOW,
+        )
+        self.addCleanup(reopened.close)
+        reopened_support = SupportService(
+            store=reopened,
+            evidence=self.evidence,
+            authority=reopened,
+            clock=lambda: NOW,
+        )
+        second = self._service(
+            51_133,
+            max_results=1,
+            store=reopened,
+            support=reopened_support,
+        ).ask(
+            m.AskRequest(
+                selector=m.PendingCurationSelector(
+                    repository_id="repo-1",
+                    after=cursor,
+                )
+            )
+        )
+        self.assertIsInstance(second, m.PendingCuration)
+        assert isinstance(second, m.PendingCuration)
+        self.assertFalse(second.truncated)
+        self.assertIsNone(second.next_after)
+        self.assertEqual(len(second.items), 1)
+        self.assertNotEqual(first.items[0].ref, second.items[0].ref)
+        self.assertEqual(
+            {
+                first.items[0].ref.understanding_id.value,
+                second.items[0].ref.understanding_id.value,
+            },
+            {"u-restart-a", "u-restart-b"},
+        )
+
     def test_changed_source_is_an_invalidated_gap(self) -> None:
         (self.root / "src/a.py").write_text("changed\n", encoding="utf-8")
         result = self._ask("src/a.py", "What does A do?")
@@ -558,8 +851,15 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(len(result.historical), 1)
         historical = result.historical[0]
         self.assertEqual(historical.statement, "A does X number 1.")
-        self.assertEqual(historical.understanding_version.value, 1)
+        self.assertEqual(historical.understanding_version.value, 2)
         self.assertIs(historical.state, m.SupportState.REASSESSMENT_REQUIRED)
+        version = self.store.get_version("u-a", 2)
+        self.assertIsNotNone(
+            self.store.find_curation(
+                version.conclusions[0],
+                as_of_version=version.version,
+            )
+        )
         self.assertEqual(
             [item.evidence_id.value for item in historical.evidence],
             ["ev-src/a.py"],
@@ -613,6 +913,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-sibling"),
         )
+        self._curate("u-sibling")
         (self.root / "src/b.py").write_text("changed\n", encoding="utf-8")
         result = self._ask("src/a.py", "What else does A do?", "req-sibling-ask")
         assert isinstance(result, m.Answer)
@@ -621,7 +922,7 @@ class AnswerServiceTest(unittest.TestCase):
         stale = result.status.stale_refs[0]
         self.assertEqual(stale.ref.conclusion_id.value, "c-2")
         self.assertEqual(stale.ref.understanding_id.value, "u-sibling")
-        self.assertEqual(stale.understanding_version.value, 1)
+        self.assertEqual(stale.understanding_version.value, 2)
         self.assertIs(stale.state, m.SupportState.REASSESSMENT_REQUIRED)
         self.assertEqual(
             sum(len(group.conclusions) for group in result.groups),
@@ -791,6 +1092,7 @@ class AnswerServiceTest(unittest.TestCase):
         question: str,
         *,
         conclusion_id: str = "c-1",
+        curate: bool = True,
     ) -> None:
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
@@ -821,6 +1123,8 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId(understanding_id),
         )
+        if curate:
+            self._curate(understanding_id)
 
     def test_multi_file_run_is_visible_on_each_file(self) -> None:
         (self.root / "src/b.py").write_text("b\n", encoding="utf-8")
@@ -1221,6 +1525,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-wide"),
         )
+        self._curate("u-wide")
         result = self._service(3_000).ask(
             m.AskRequest(
                 repository_id="repo-1",

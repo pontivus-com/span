@@ -1,11 +1,18 @@
 # Span documentation
 
-Span gives a coding agent the complete working context for the exact part of
-the software it is working on. It brings together what is already understood
-about that implementation with the applicable path through the project's
-canonical goals, principles, contracts, functional design, and technical
-design. Both sides stay tied to their sources, so Span can show when a code or
-guidance change makes part of that context require another look.
+Span is the evidence-backed knowledge layer for coding agents working on a
+software system. It retains supported understanding captured during engineering
+work, records which exact revisions have been curated for shared reuse, and
+maintains the applicable path through the project's canonical goals, principles,
+contracts, functional design, and technical design. At task time, supported and
+curated knowledge becomes working context for the exact software surface the
+agent is handling. Empirical support, curation and governing relationships remain
+distinct, so Span can show what is reusable, what is pending review, and what a
+code or guidance change makes require another look. Span is this software
+knowledge layer inside a broader knowledge-factory topology; it is not a claim
+to own the organization's complete knowledge system.
+
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
 ## Foundations
 
@@ -30,12 +37,16 @@ guidance change makes part of that context require another look.
 
 ## Implementation
 
-- [1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md) —
-  Version-1 Functional Pyramid implementation and release campaign. T00–T12 are
-  complete; T11 private acceptance remains closed. The assembled `1.0.0b1`
-  repository candidate has passed the repository-verifiable T13 gates. The
-  remaining release proof is the Version-1 G5/F8 same-task-class steps/tokens
-  measurement and final evidence append.
+- [1.0.0 Beta 2 implementation plan](implementation-plans/1.0.0-beta2.md) —
+  one reconciled campaign covering capture/curation, repository schema 15,
+  B2-D01/B2-D02 installer and production-topology remediation, Functional
+  Pyramid-preserving implementation, first-adopter revalidation, public
+  knowledge-factory narrative alignment and release gates. The canonical
+  behavior/mechanisms are owned by the layer-0–4 documents above; the plan
+  derives from them.
+- [1.0.0 Beta 1 implementation plan](implementation-plans/1.0.0-beta.md) —
+  historical Version-1 Functional Pyramid implementation and Beta-1 release
+  campaign.
 - [0.10.3 implementation plan](implementation-plans/0.10.3.md) —
   low-friction lifecycle work package, ordered tasks, decision gates and
   verification; released 2026-11-14.

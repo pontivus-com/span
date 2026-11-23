@@ -151,6 +151,30 @@ def _add_repository_recovery_arguments(parser) -> None:
     )
 
 
+def _add_authority_arguments(parser) -> None:
+    """Repository-qualified canonical authority configuration ingress."""
+    parser.add_argument(
+        "--authority-seeds-file",
+        action="append",
+        nargs=2,
+        default=[],
+        metavar=("REPOSITORY_ID", "PATH"),
+        help="Repository-qualified JSON list of canonical EvidenceRef items "
+        "(repeatable). Omitted for a repository preserves configured seeds; "
+        "an explicit empty list clears them.",
+    )
+    parser.add_argument(
+        "--authority-bindings-file",
+        action="append",
+        nargs=2,
+        default=[],
+        metavar=("REPOSITORY_ID", "PATH"),
+        help="Repository-qualified JSON list of canonical AuthorityBinding items "
+        "(repeatable). Omitted for a repository preserves configured bindings; "
+        "an explicit empty list clears them.",
+    )
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="span-install",
@@ -232,12 +256,7 @@ def parse_args(argv=None):
         action="store_true",
         help="Skip skill deployment even when hosts are detected.",
     )
-    parser.add_argument(
-        "--authority-seeds-file",
-        default=None,
-        help="JSON file with canonical EvidenceRef items for init. "
-        "Absent means no seeds; seeds are never invented.",
-    )
+    _add_authority_arguments(parser)
     parser.add_argument(
         "--dry-run",
         action="store_true",

@@ -111,6 +111,37 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             for conclusion in group["conclusions"]
         ]
 
+    async def _curate_recorded(
+        self,
+        session: ClientSession,
+        recorded: dict,
+        request: str,
+        *,
+        conclusion_ids: set[str] | None = None,
+    ) -> dict:
+        selected = conclusion_ids or self._qualification_ids(recorded)
+        return await self._call(
+            session,
+            "record",
+            {
+                "repository_id": REPOSITORY_ID,
+                "request_id": request,
+                "kind": "understanding",
+                "understanding_id": recorded["understanding_id"]["value"],
+                "expected_version": recorded["version"]["value"],
+                "actions": {
+                    "curate": [
+                        {
+                            "conclusion_id": conclusion_id,
+                            "reasoning": "reviewed for shared reuse",
+                        }
+                        for conclusion_id in sorted(selected)
+                    ]
+                },
+                "provenance": "integration-reviewer",
+            },
+        )
+
     async def _record_create(self, session: ClientSession, request: str) -> dict:
         return await self._call(
             session,
@@ -152,6 +183,10 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(recorded["$type"], "UnderstandingRecorded")
             self.assertEqual(recorded["qualification"]["state"], "CURRENT")
+            curated = await self._curate_recorded(
+                session, recorded, "large-range-curate"
+            )
+            self.assertEqual(curated["$type"], "UnderstandingRecorded")
 
         async def reuse(session):
             answer = await self._call(
@@ -262,6 +297,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
             created = await self._record_create(session, "sub-create-1")
             self.assertEqual(created["$type"], "UnderstandingRecorded")
+            await self._curate_recorded(session, created, "sub-create-1-curate")
 
             warm = await self._call(
                 session,
@@ -300,6 +336,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         async def journey(session: ClientSession) -> dict:
             created = await self._record_create(session, "sub-exact-selector")
             self.assertEqual(created["$type"], "UnderstandingRecorded")
+            await self._curate_recorded(session, created, "sub-exact-selector-curate")
             exact = await self._call(
                 session,
                 "ask",
@@ -399,7 +436,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_exact_surface_resolves_ambiguity(self) -> None:
         async def journey(session: ClientSession) -> dict:
-            await self._record_create(session, "sub-create-1")
+            created = await self._record_create(session, "sub-create-1")
+            await self._curate_recorded(session, created, "surface-ambiguity-curate")
             declared = await self._call(
                 session,
                 "record",
@@ -488,7 +526,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_verification_run_is_returned_with_qualification(self) -> None:
         async def journey(session: ClientSession) -> dict:
-            await self._record_create(session, "sub-create-1")
+            created = await self._record_create(session, "sub-create-1")
+            await self._curate_recorded(session, created, "verify-answer-curate")
             recorded = await self._call(
                 session,
                 "record",
@@ -612,6 +651,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(added["$type"], "UnderstandingRecorded", added)
             added_id = (self._qualification_ids(added) - existing_ids).pop()
+            await self._curate_recorded(session, added, "sub-status-curate")
             _write(self.repo, "styles/site.css", "body { color: blue; }\n")
             answer = await self._call(
                 session,
@@ -629,12 +669,13 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"]["stale"], 1)
         stale = result["status"]["stale_refs"][0]
         self.assertEqual(stale["ref"]["conclusion_id"]["value"], outcome["added_id"])
-        self.assertEqual(stale["understanding_version"]["value"], 2)
+        self.assertEqual(stale["understanding_version"]["value"], 3)
         self.assertEqual(stale["state"], "REASSESSMENT_REQUIRED")
 
     async def test_multi_file_verification_run_is_visible_on_each_file(self) -> None:
         async def journey(session: ClientSession) -> dict:
-            await self._record_create(session, "sub-multi-app")
+            app_created = await self._record_create(session, "sub-multi-app")
+            await self._curate_recorded(session, app_created, "sub-multi-app-curate")
             _write(self.repo, "src/other.py", "other\n")
             other = await self._call(
                 session,
@@ -651,6 +692,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(other["$type"], "UnderstandingRecorded")
+            await self._curate_recorded(session, other, "sub-multi-other-curate")
             verified = await self._call(
                 session,
                 "record",
@@ -828,6 +870,12 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(updated["$type"], "UnderstandingRecorded", updated)
+            await self._curate_recorded(
+                session,
+                updated,
+                "sub-correct-reconsider-curate",
+                conclusion_ids={target_id},
+            )
             return await self._call(
                 session,
                 "ask",
@@ -969,6 +1017,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(created["$type"], "UnderstandingRecorded", created)
             understanding_id = created["understanding_id"]["value"]
+            await self._curate_recorded(session, created, "svc-ctx-curate")
             answer = await self._call(
                 session,
                 "ask",
@@ -1054,6 +1103,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(created["$type"], "UnderstandingRecorded", created)
             understanding_id = created["understanding_id"]["value"]
             target_id = self._created_conclusion_id(created)
+            await self._curate_recorded(session, created, "svc-create-curate")
             before = await self._call(
                 session,
                 "ask",
@@ -1113,6 +1163,12 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(updated["$type"], "UnderstandingRecorded", updated)
+            await self._curate_recorded(
+                session,
+                updated,
+                "svc-correct-curate",
+                conclusion_ids={target_id},
+            )
             return await self._call(
                 session,
                 "ask",

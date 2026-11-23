@@ -1,6 +1,6 @@
-"""Schema-14 lifecycle SQLite definition."""
+"""Schema-15 lifecycle SQLite definition."""
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 DDL = (
     """
@@ -143,6 +143,31 @@ DDL = (
         revision INTEGER NOT NULL,
         canonical_json TEXT NOT NULL,
         PRIMARY KEY(understanding_id, conclusion_id, revision)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS conclusion_curations(
+        understanding_id TEXT NOT NULL,
+        conclusion_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        accepted_in_version INTEGER NOT NULL,
+        origin TEXT NOT NULL
+            CHECK(origin IN ('EXPLICIT', 'INHERITED_CONFIRMATION')),
+        inherited_from_revision INTEGER,
+        canonical_json TEXT NOT NULL,
+        PRIMARY KEY(understanding_id, conclusion_id, revision),
+        FOREIGN KEY(understanding_id, conclusion_id, revision)
+            REFERENCES conclusions(understanding_id, conclusion_id, revision),
+        FOREIGN KEY(understanding_id, accepted_in_version)
+            REFERENCES understanding_versions(understanding_id, version),
+        FOREIGN KEY(understanding_id, conclusion_id, inherited_from_revision)
+            REFERENCES conclusions(understanding_id, conclusion_id, revision),
+        CHECK(
+            (origin='EXPLICIT' AND inherited_from_revision IS NULL)
+            OR
+            (origin='INHERITED_CONFIRMATION'
+             AND inherited_from_revision IS NOT NULL)
+        )
     )
     """,
     """

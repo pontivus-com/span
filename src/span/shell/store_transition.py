@@ -69,8 +69,8 @@ __all__ = [
 ]
 
 
-TARGET_SCHEMA = 14
-SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12, 13})
+TARGET_SCHEMA = 15
+SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12, 13, 14})
 
 #: Every table the schema-7/8/9 runtime could own. A table outside this set is
 #: preserved and reported, never silently omitted.
@@ -1067,6 +1067,11 @@ def _stage(
 
         limits, _ = stage_schema13(paths, config, root)
         limitations = limitations + limits
+    elif source_schema == 14:
+        from span.shell.store_transition_schema14 import stage_schema14
+
+        limits, _ = stage_schema14(paths, config, root)
+        limitations = limitations + limits
     _fsync_file(paths.staging)
     _fsync_dir(paths.transition_dir)
     return (), limitations
@@ -1169,6 +1174,16 @@ def _verify_staged(
         return (
             "staged store carries the schema-13 state without semantic reinterpretation",
             "Functional Pyramid state is empty until explicit activation",
+            "fresh lifecycle smoke test passed on an isolated copy",
+        )
+    if source_schema == 14:
+        from span.shell.store_transition_schema14 import verify_schema14_staging
+
+        verify_schema14_staging(paths, config)
+        _smoke(paths, config)
+        return (
+            "staged store carries schema-14 state without semantic reinterpretation",
+            "schema-15 curation storage begins empty",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
     counts = _semantic_counts(paths.staging)

@@ -420,6 +420,128 @@ class SerializationRoundTripTest(unittest.TestCase):
             m.Freshness(m.FreshnessState.CURRENT, "rev-9", "verified"),
         )
 
+    def test_curation_carriers_round_trip(self):
+        ref1 = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        ref2 = m.ConclusionRevisionRef(
+            understanding_id=ref1.understanding_id,
+            conclusion_id=ref1.conclusion_id,
+            revision=m.ConclusionRevisionNumber(2),
+        )
+        explicit = m.CurationDisposition(
+            ref=ref1,
+            accepted_in_version=m.UnderstandingVersionNumber(2),
+            reasoning="stable shared explanation",
+            provenance="reviewer-session",
+            recorded_at=datetime.datetime(
+                2026, 11, 23, 9, 0, tzinfo=datetime.timezone.utc
+            ),
+            origin=m.CurationOrigin.EXPLICIT,
+        )
+        inherited = m.CurationDisposition(
+            ref=ref2,
+            accepted_in_version=m.UnderstandingVersionNumber(3),
+            reasoning=explicit.reasoning,
+            provenance=explicit.provenance,
+            recorded_at=datetime.datetime(
+                2026, 11, 23, 9, 5, tzinfo=datetime.timezone.utc
+            ),
+            origin=m.CurationOrigin.INHERITED_CONFIRMATION,
+            inherited_from=ref1,
+        )
+        self._round_trip(m.CurationDisposition, explicit)
+        self._round_trip(m.CurationDisposition, inherited)
+        self._round_trip(
+            m.PendingCurationSelector,
+            m.PendingCurationSelector(repository_id="repo-1", after=ref1),
+        )
+        item = m.PendingCurationItem(
+            ref=ref2,
+            understanding_version=m.UnderstandingVersionNumber(3),
+            surface=m.SurfaceKey(
+                repository_id="repo-1",
+                kind=m.SurfaceKind.FILE,
+                locator="src/example.py",
+            ),
+            question="What does this component do?",
+        )
+        self._round_trip(
+            m.PendingCuration,
+            m.PendingCuration(
+                repository_id="repo-1",
+                items=(item,),
+                next_after=ref2,
+                truncated=True,
+            ),
+        )
+
+    def test_curation_origin_and_pending_page_invariants(self):
+        ref1 = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        ref2 = m.ConclusionRevisionRef(
+            understanding_id=ref1.understanding_id,
+            conclusion_id=ref1.conclusion_id,
+            revision=m.ConclusionRevisionNumber(2),
+        )
+        now = datetime.datetime(2026, 11, 23, 9, 0, tzinfo=datetime.timezone.utc)
+        with self.assertRaises(ValueError):
+            m.CurationDisposition(
+                ref=ref2,
+                accepted_in_version=m.UnderstandingVersionNumber(2),
+                reasoning="reviewed",
+                provenance="reviewer",
+                recorded_at=now,
+                origin=m.CurationOrigin.EXPLICIT,
+                inherited_from=ref1,
+            )
+        with self.assertRaises(ValueError):
+            m.CurationDisposition(
+                ref=ref2,
+                accepted_in_version=m.UnderstandingVersionNumber(2),
+                reasoning="reviewed",
+                provenance="reviewer",
+                recorded_at=now,
+                origin=m.CurationOrigin.INHERITED_CONFIRMATION,
+            )
+        with self.assertRaises(ValueError):
+            m.CurationDisposition(
+                ref=ref2,
+                accepted_in_version=m.UnderstandingVersionNumber(2),
+                reasoning="",
+                provenance="reviewer",
+                recorded_at=now,
+                origin=m.CurationOrigin.EXPLICIT,
+            )
+        item = m.PendingCurationItem(
+            ref=ref2,
+            understanding_version=m.UnderstandingVersionNumber(2),
+            surface=m.SurfaceKey(
+                repository_id="repo-1",
+                kind=m.SurfaceKind.FILE,
+                locator="src/example.py",
+            ),
+            question="What does this component do?",
+        )
+        with self.assertRaises(ValueError):
+            m.PendingCuration(
+                repository_id="repo-1",
+                items=(item,),
+                truncated=True,
+            )
+        with self.assertRaises(ValueError):
+            m.PendingCuration(
+                repository_id="repo-1",
+                items=(item,),
+                next_after=ref2,
+                truncated=False,
+            )
+
     def test_decode_rejects_unknown_tags_and_values(self):
         with self.assertRaises(m.CanonicalDecodeError):
             m.from_canonical(m.AskResult, {"$type": "Nope"})

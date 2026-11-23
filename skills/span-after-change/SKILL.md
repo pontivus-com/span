@@ -23,11 +23,14 @@ The result is `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 - `DIRECT` — a conclusion cites source or discovery evidence that changed;
 - `INDIRECT` — a premise dependent, walked to a fixed point.
 
-Each conclusion carries its own support state. `CURRENT` means the surface was
-considered but the conclusion still holds. `REASSESSMENT_REQUIRED` or
-`UNVERIFIABLE` means actual loss: investigate and re-establish it. A surface
-with no `conclusions` is containment-only. Keep the returned order; re-establish returned
-conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
+Each conclusion carries its own support state. Reconsider traverses retained
+CAPTURED and CURATED revisions; it does not change curation. `CURRENT` means
+the surface was considered but the conclusion still holds.
+`REASSESSMENT_REQUIRED` or `UNVERIFIABLE` means actual support loss:
+investigate and re-establish it. A CURATED revision with non-current support is
+not shared Answer content but keeps its curation history. A surface with no
+`conclusions` is containment-only. Keep the returned order; re-establish
+returned conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
 
 ## Then
 
@@ -37,8 +40,11 @@ effects came directly from an accepted Functional Pyramid participation write,
 do not call `reconsider` again for that write; follow its returned contexts via
 the `span-functional-pyramid` skill.
 
-Use the returned context with `record` or a challenge. Settle a
-challenge through `record` with named `challenge_dispositions`. A resolved
+Use the returned context with `record` or a challenge. A semantic-preserving
+confirm can re-establish support while preserving inherited curation; a semantic
+correction/replacement becomes CAPTURED and requires separate curation for
+shared reuse. Settle a challenge through `record` with named
+`challenge_dispositions`. A resolved
 disposition supplies semantic intent (challenge/revision, reasoning, optional
 target lineage IDs and context-bound evidence refs); Span derives the resulting
 version/revision coordinates. Record new supported conclusions established

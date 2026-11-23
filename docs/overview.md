@@ -1,12 +1,18 @@
 # Repository overview
 
-Span is a local MCP server that gives a coding agent the complete working
-context for the exact part of the software it is working on. It combines
-retained understanding of the implementation with the applicable chain of
-project guidance from goals and principles through contracts, functional
-design, and technical design. The agent still owns interpretation, edits, and
-test execution; Span keeps the supporting evidence, canonical guidance links,
-history, and change effects explicit.
+Span is a local MCP server that acts as an evidence-backed knowledge layer
+for coding agents. It retains supported understanding established during
+engineering work and separately records which exact semantic revisions have
+been curated for shared reuse. It also maintains the applicable chain of project
+guidance from goals and principles through contracts, functional design, and
+technical design. At task time, supported and curated knowledge becomes working
+context for the exact software surface the agent is handling. The agent still owns interpretation, edits, and test
+execution; Span keeps the supporting evidence, canonical guidance links,
+history, and change effects explicit. Span is the software knowledge layer of
+a broader knowledge-factory topology, not the complete organizational knowledge
+system.
+
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
 ## Layout
 
@@ -39,16 +45,18 @@ semantic owner. ACTIVE governance therefore cannot disagree between a status
 selector and an ordinary repository operation.
 
 `ask` is surface-first. Pure surface/reference obtain returns the current
-document view grouped by recorded question, with status and applicable
-verification; a genuinely unassessed surface returns a Gap with source pointers,
-not unsolicited source bodies. The surface status names stale conclusions as
-`stale_refs`; historical content and stale references are never current-answer
-content. Exact targeted reuse uses `RecordedQuestionSelector` and exact
+shared document view from CURRENT + CURATED conclusions, grouped by recorded
+question, with pending/stale status and applicable verification; a genuinely
+unassessed surface returns a Gap with source pointers, not unsolicited source
+bodies. CURRENT + CAPTURED revisions remain pending rather than Answer content,
+and non-current revisions remain historical/stale. Exact targeted reuse uses `RecordedQuestionSelector` and exact
 surface-scoped equality; unmatched selection is `Gap/unassessed`. Source bytes
 are delivered only by explicit evidence admission.
-`record` accepts supported understanding, a declared service/domain boundary, or
-an independent verification run. `reconsider` maps a changed scope to every
-surface that must be re-examined, with per-conclusion support state. Exact
+`record` captures supported understanding and, as a separate reviewer act,
+curates exact stable semantic revisions for shared reuse; it also handles
+declared service/domain boundaries and independent verification runs.
+`reconsider` maps a changed scope to every surface that must be re-examined,
+with per-conclusion support state. Exact
 snapshots and receipts are retrieved through `ask`'s selector form; they are
 historical and never current-answer content. The host supplies structural navigation.
 

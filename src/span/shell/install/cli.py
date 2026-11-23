@@ -12,8 +12,12 @@ import datetime
 import json
 import shutil
 import sys
+import typing as _typing
 from dataclasses import dataclass as _dataclass
 from pathlib import Path
+
+if _typing.TYPE_CHECKING:
+    from span.core import model as m
 
 from span.shell.install.arguments import parse_args
 from span.shell.install.backup import (
@@ -57,7 +61,7 @@ from span.shell.install.paths import (
     opencode_plugin_path,
     platform_paths,
 )
-from span.shell.install.preflight import load_seeds, preflight_facts
+from span.shell.install.preflight import load_authority_files, preflight_facts
 from span.shell.install.receipt import read_receipt, write_receipt
 from span.shell.install.recovery import (
     create_backup,
@@ -104,7 +108,7 @@ class _RuntimeState:
     """What provisioning produced, carried into the receipt."""
 
     target_census: dict[str, object]
-    seeds: list[object]
+    initializations: tuple[m.InitializeRepositoryResult, ...]
     preflight: dict[str, object]
     venv_python: Path
     indexer_pointer: dict[str, object] | None
@@ -308,28 +312,49 @@ def _run_one_shot(env: _Environment) -> bool:
     return False
 
 
-def _provision_runtime(env: _Environment) -> _RuntimeState:
-    """Install or reuse the runtime, then verify it before recording anything."""
-    args = env.args
-    check_prereqs()
-    target_census: dict[str, object] = {
-        str(target): target_artifact_snapshot(target) for target in env.targets
-    }
-    # Early seed-shape validation before any mutation, plus read-only
-    # non-gating preflight facts. Shape failure closes before mutation;
-    # locator resolution stays at provisioning.
-    seeds = load_seeds(args.authority_seeds_file, dry_run=env.dry)
-    preflight = preflight_facts(env.targets, args.authority_seeds_file)
-    print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
-    venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
-    indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
-    indexer_pointer = write_indexer_pointer(
-        env.data_dir, indexer_binary, dry_run=env.dry
+def _initialize_repositories(
+    env: _Environment,
+    authority_seeds: dict[str, tuple[m.EvidenceRef, ...]],
+    authority_bindings: dict[str, tuple[m.AuthorityBinding, ...]],
+) -> tuple[m.InitializeRepositoryResult, ...]:
+    """Initialize selected repositories through the canonical setup owner."""
+    if env.dry:
+        return ()
+
+    from span.core import model as m
+    from span.shell.context import (
+        close_repository_runtime,
+        provision_repository_runtime,
     )
-    # Tier-1 verify-fast-path: skip reinstall when the venv already matches
-    # the install source, with proof. The check is read-only and runs on
-    # dry-run too; backup precedes mutation only. A distribution install
-    # proves version equality because it has no source tree to hash.
+    from span.shell.structural import repository_id_from_config
+    from span.shell.structural.graft import GraftUnavailableError
+
+    results: list[m.InitializeRepositoryResult] = []
+    for target in env.targets:
+        repository_id = repository_id_from_config(str(target))
+        request = m.InitializeRepositoryRequest(
+            repository_locator=str(target),
+            authority_seeds=authority_seeds.get(repository_id),
+            authority_bindings=authority_bindings.get(repository_id),
+        )
+        try:
+            runtime, result = provision_repository_runtime(env.data_dir, request)
+        except (OSError, ValueError, GraftUnavailableError) as exc:
+            raise SystemExit(
+                f"repository initialization failed for {repository_id!r}: {exc}"
+            ) from None
+        try:
+            results.append(result)
+        finally:
+            close_repository_runtime(runtime)
+    return tuple(results)
+
+
+def _sync_runtime_distribution(
+    env: _Environment,
+    venv_python: Path,
+) -> tuple[dict[str, object], str | None, str | None]:
+    """Bring the installed runtime in sync without touching repository state."""
     mode = install_mode(env.span_repo)
     if mode == "checkout":
         in_sync, files_checked, extra_files = source_venv_in_sync(
@@ -339,6 +364,7 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
     else:
         in_sync, files_checked, extra_files = distribution_venv_in_sync(venv_python)
         match_detail = f"span-mcp {distribution_version()}"
+
     data_backup = None
     post_install_verified = None
     if in_sync:
@@ -347,9 +373,6 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
     else:
         data_backup = backup_data_dir(env.data_dir, dry_run=env.dry)
         if mode == "checkout":
-            # Build staging only exists for a source build; cleaning it in a
-            # distribution install would touch whatever `build/` happens to
-            # sit in the caller's working directory.
             _clean_build_staging(env.span_repo, dry_run=env.dry)
         pip_install(venv_python, env.span_repo, dry_run=env.dry)
         reinstalled = not env.dry
@@ -363,6 +386,7 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
                 )
             print(f"installed runtime verified: {detail}.")
             post_install_verified = detail
+
     if extra_files:
         print(
             "warning: stale files in venv pip reinstall never removes: "
@@ -375,18 +399,49 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
         "extra_venv_files": list(extra_files),
         "reinstalled": bool(reinstalled),
     }
+    return source_venv_sync, data_backup, post_install_verified
+
+
+def _provision_runtime(env: _Environment) -> _RuntimeState:
+    """Install/reuse runtime, then execute explicit repository initialization."""
+    args = env.args
+    check_prereqs()
+    target_census: dict[str, object] = {
+        str(target): target_artifact_snapshot(target) for target in env.targets
+    }
+
+    # T02: validate all authority configuration before installer mutation.
+    authority_seeds, authority_bindings = load_authority_files(
+        env.targets,
+        args.authority_seeds_file,
+        args.authority_bindings_file,
+        dry_run=env.dry,
+    )
+    preflight = preflight_facts(env.targets)
+    print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
+
+    venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
+    indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
+    indexer_pointer = write_indexer_pointer(
+        env.data_dir, indexer_binary, dry_run=env.dry
+    )
+    source_venv_sync, data_backup, post_install_verified = _sync_runtime_distribution(
+        env, venv_python
+    )
     expose_binary(env.venv_dir, env.bin_dir, dry_run=env.dry)
-    if seeds:
-        # Verification provisions without seeds; the installer writes the
-        # declared authority seeds into the repository binding.
-        print(
-            f"loaded {len(seeds)} authority seeds "
-            "(installer provisioning binds them; verification "
-            "provisions without seeds)"
-        )
+
+    # Protect existing installation state before the first repository mutation.
+    if not env.dry and env.targets and data_backup is None:
+        data_backup = backup_data_dir(env.data_dir, dry_run=False)
+
+    initializations = _initialize_repositories(
+        env,
+        authority_seeds,
+        authority_bindings,
+    )
     return _RuntimeState(
         target_census=target_census,
-        seeds=seeds,
+        initializations=initializations,
         preflight=preflight,
         venv_python=venv_python,
         indexer_pointer=indexer_pointer,
@@ -788,9 +843,19 @@ def _build_receipt(
         "source_venv_sync": state.source_venv_sync,
         "post_install_verified": state.post_install_verified,
         "data_backup": state.data_backup,
-        "seeds_file_supplied_and_readable": bool(state.seeds),
-        "seeds_shape_valid": bool(state.seeds),
-        "seeds_resolved_and_active": False,
+        "repository_initialization": [
+            {
+                "repository_id": result.repository_id,
+                "canonical_root": result.canonical_root,
+                "schema_version": result.schema_version,
+                "store_ready": result.store_ready,
+                "structural_status": result.structural_status,
+                "authority_seed_count": len(result.authority_seeds),
+                "authority_binding_count": len(result.authority_bindings),
+                "warnings": list(result.warnings),
+            }
+            for result in state.initializations
+        ],
         "preflight_facts": state.preflight,
         # Deterministic installer performs no host exchange (A1 only).
         "a2": "not_run",

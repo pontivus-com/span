@@ -408,6 +408,7 @@ class LifecycleService:
         )
         scope = self._create_scope(wire, supplied_context) if create else None
         current_revisions: tuple[m.ConclusionRevision, ...] = ()
+        expected_snapshot: m.UnderstandingVersion | None = None
         update_scope: m.EvidenceScope | None = None
         if not create:
             expected_snapshot, current_revisions = self._update_snapshot(wire)
@@ -447,6 +448,9 @@ class LifecycleService:
             )
             return self.qualify_understanding(receipt)
         if isinstance(command, m.UpdateUnderstandingCommand):
+            if expected_snapshot is None:
+                raise RuntimeError("update command has no expected snapshot")
+            self._require_curatable(command, expected_snapshot)
             self._require_admitted_support(command)
             self._support.assert_current(command)
             governed = self._derive_normative_governance(command)
@@ -644,6 +648,53 @@ class LifecycleService:
             self._store.get_version_conclusions(understanding_id, expected),
         )
 
+    def _require_curatable(
+        self,
+        command: m.UpdateUnderstandingCommand,
+        expected_snapshot: m.UnderstandingVersion,
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        """Resolve exact curation targets and require CURRENT support (FD-97)."""
+        if not command.curate:
+            return ()
+        current = {ref.conclusion_id: ref for ref in expected_snapshot.conclusions}
+        targets: list[m.ConclusionRevisionRef] = []
+        for action in command.curate:
+            ref = current.get(action.conclusion_id)
+            if ref is None:
+                raise RecordingValidationError(
+                    "curation target is not in the expected understanding version: "
+                    f"{action.conclusion_id.value}",
+                    public_identity=action.conclusion_id.value,
+                )
+            if (
+                self._store.find_curation(
+                    ref,
+                    as_of_version=expected_snapshot.version,
+                )
+                is not None
+            ):
+                raise RecordingValidationError(
+                    "curation target is already curated: "
+                    f"{action.conclusion_id.value}@{ref.revision.value}",
+                    public_identity=action.conclusion_id.value,
+                )
+            evaluation = self._support.evaluate_revision(ref)
+            if evaluation.state is not m.SupportState.CURRENT:
+                reason = f": {evaluation.reason}" if evaluation.reason else ""
+                raise RecordingValidationError(
+                    "curation target support is not current: "
+                    f"{action.conclusion_id.value}@{ref.revision.value}: "
+                    f"{evaluation.state.value}{reason}",
+                    cause_kind=RejectionCauseKind.SOURCE_DRIFT,
+                    public_identity=action.conclusion_id.value,
+                    public_cause=(
+                        "the exact curation target must have CURRENT support "
+                        "before it can be accepted for shared reuse"
+                    ),
+                )
+            targets.append(ref)
+        return tuple(targets)
+
     def _record_verification_request(
         self, wire: _rw.RecordRequestWire
     ) -> m.RecordResult:
@@ -804,6 +855,28 @@ class LifecycleService:
                 reason="surface status evaluation is unavailable", surface=owner
             )
         snapshot = self._store.get_version(understanding_id, version)
+        accepted_curations = tuple(
+            disposition.ref
+            for disposition in self._store.get_curations(
+                understanding_id,
+                as_of_version=m.UnderstandingVersionNumber(version),
+            )
+            if disposition.accepted_in_version.value == version
+        )
+        semantic_effects = tuple(
+            m.ConclusionRevisionRef(
+                understanding_id=revision.understanding_id,
+                conclusion_id=revision.conclusion_id,
+                revision=revision.revision,
+            )
+            for revision in self._store.get_conclusions(understanding_id)
+            if revision.originating_version.value == version
+        )
+        affected_revisions = (
+            accepted_curations
+            if accepted_curations and not semantic_effects
+            else snapshot.conclusions
+        )
         compact_qualification = (
             m.compact_understanding(qualification)
             if isinstance(qualification, m.UnderstandingSupport)
@@ -817,7 +890,7 @@ class LifecycleService:
             committed_at=receipt.committed_at,
             understanding_id=m.UnderstandingId(understanding_id),
             version=m.UnderstandingVersionNumber(version),
-            affected_revisions=snapshot.conclusions,
+            affected_revisions=affected_revisions,
             dependent_effects=receipt.dependent_effects,
             qualification=compact_qualification,
             status=status,

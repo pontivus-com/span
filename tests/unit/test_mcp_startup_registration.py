@@ -157,6 +157,28 @@ class StartupRegistrationTest(unittest.TestCase):
             loader.assert_called_once_with("/tmp/startup-svc")
             self.assertIs(adapter.contexts[REPO], context)
 
+    def test_pending_curation_selector_routes_repository_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, context = _open(tmp)
+            self.addCleanup(context.store.close)
+            loader = mock.Mock(return_value=context)
+            adapter = McpAdapter(context_loader=loader)
+            adapter.register_repository_locator(REPO, "/tmp/startup-svc")
+
+            result = adapter.dispatch(
+                "ask",
+                {
+                    "selector": {
+                        "$type": "PendingCurationSelector",
+                        "repository_id": REPO,
+                    }
+                },
+            )
+
+            self.assertFalse(result.is_error, result.content)
+            self.assertEqual(json.loads(result.content)["$type"], "PendingCuration")
+            loader.assert_called_once_with("/tmp/startup-svc")
+
     def test_cs04_initialize_repository_is_not_public(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, context = _open(tmp)

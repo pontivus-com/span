@@ -103,6 +103,57 @@ class ConclusionRevision:
             raise ValueError("originating_version must be positive")
 
 
+class CurationState(_enum.Enum):
+    """Derived reuse maturity for one exact semantic revision."""
+
+    CAPTURED = "CAPTURED"
+    CURATED = "CURATED"
+
+
+class CurationOrigin(_enum.Enum):
+    """How an immutable curation disposition was established."""
+
+    EXPLICIT = "EXPLICIT"
+    INHERITED_CONFIRMATION = "INHERITED_CONFIRMATION"
+
+
+@_dataclass(frozen=True)
+class CurationDisposition:
+    """Immutable shared-reuse qualification for one exact revision."""
+
+    ref: ConclusionRevisionRef
+    accepted_in_version: UnderstandingVersionNumber
+    reasoning: str
+    provenance: str
+    recorded_at: _datetime.datetime
+    origin: CurationOrigin
+    inherited_from: ConclusionRevisionRef | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("CurationDisposition.reasoning", self.reasoning)
+        _require_non_empty("CurationDisposition.provenance", self.provenance)
+        _require_aware("CurationDisposition.recorded_at", self.recorded_at)
+        if self.origin is CurationOrigin.EXPLICIT:
+            if self.inherited_from is not None:
+                raise ValueError(
+                    "explicit curation cannot carry an inherited predecessor"
+                )
+            return
+        if self.inherited_from is None:
+            raise ValueError("inherited confirmation curation requires inherited_from")
+        if (
+            self.inherited_from.understanding_id != self.ref.understanding_id
+            or self.inherited_from.conclusion_id != self.ref.conclusion_id
+        ):
+            raise ValueError(
+                "inherited curation predecessor must share the conclusion lineage"
+            )
+        if self.inherited_from.revision.value + 1 != self.ref.revision.value:
+            raise ValueError(
+                "inherited curation predecessor must be the immediate revision"
+            )
+
+
 @_dataclass(frozen=True)
 class Understanding:
     """Stable understanding identity plus its compare-and-set version pointer."""
@@ -253,6 +304,7 @@ class RetrievedUnderstanding:
     conclusions: tuple[ConclusionRevision, ...]
     support: UnderstandingSupport | SupportUnavailable
     challenges: tuple[Challenge, ...] = ()
+    curations: tuple[CurationDisposition, ...] = ()
 
 
 @_dataclass(frozen=True)
@@ -306,6 +358,66 @@ class CurrentUnderstandingSelector:
 
     def __post_init__(self) -> None:
         _constraints.validate_structural_rules(self)
+
+
+@_dataclass(frozen=True)
+class PendingCurationSelector:
+    """Select the repository-local deterministic pending-curation queue."""
+
+    __structural_rules__: _typing.ClassVar[tuple[_constraints.PresenceRule, ...]] = (
+        _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("repository_id", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            label="pending-curation repository",
+        ),
+    )
+
+    repository_id: str
+    after: ConclusionRevisionRef | None = None
+
+    def __post_init__(self) -> None:
+        _constraints.validate_structural_rules(self)
+
+
+@_dataclass(frozen=True)
+class PendingCurationItem:
+    """One exact current-membership capture awaiting semantic review."""
+
+    ref: ConclusionRevisionRef
+    understanding_version: UnderstandingVersionNumber
+    surface: SurfaceKey
+    question: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("PendingCurationItem.question", self.question)
+
+
+@_dataclass(frozen=True)
+class PendingCuration:
+    """One bounded deterministic page of pending-curation references."""
+
+    repository_id: str
+    items: tuple[PendingCurationItem, ...]
+    next_after: ConclusionRevisionRef | None = None
+    omitted: tuple[str, ...] = ()
+    truncated: bool = False
+
+    def __post_init__(self) -> None:
+        _require_non_empty("PendingCuration.repository_id", self.repository_id)
+        for item in self.items:
+            if item.surface.repository_id != self.repository_id:
+                raise ValueError(
+                    "pending curation items must share the result repository"
+                )
+        if self.truncated:
+            if not self.items or self.next_after != self.items[-1].ref:
+                raise ValueError(
+                    "truncated pending curation requires next_after equal to "
+                    "the last returned revision"
+                )
+        elif self.next_after is not None:
+            raise ValueError("non-truncated pending curation cannot carry next_after")
 
 
 @_dataclass(frozen=True)

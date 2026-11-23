@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.0.0b2 — 2026-11-24
+
+### Qualified reuse and explicit curation
+
+- Separate evidence-near semantic capture from shared-reuse qualification.
+  New or semantically changed conclusions begin `CAPTURED`; ordinary shared
+  Answer content requires the exact revision to remain support-`CURRENT` and
+  be explicitly `CURATED`.
+- Add deterministic pending-curation discovery and exact-revision curation
+  through the existing `ask` and `record` lifecycle. Semantic corrections
+  reset curation; semantic-preserving confirmation may inherit it.
+- Keep failed review on the existing semantic lifecycle: correct, replace or
+  withdraw the meaning first. Span does not add a rejected-curation state,
+  infer semantic truth, or run a built-in/background curator model.
+- Preserve exactly three public MCP tools: `ask`, `record`, and
+  `reconsider`.
+
+### Installer, governance and first-adopter correction
+
+- Fix B2-D01 at the owning setup seam: `span-install` now accepts
+  repository-qualified authority seed/binding files and invokes the existing
+  canonical repository-initialization owner once per selected repository.
+- Fix B2-D02 at the acceptance seam: installed cold-start coverage now proves
+  repository initialization instead of manufacturing lifecycle/binding state
+  behind the installer.
+- Keep Functional Pyramid participation separate from repository
+  initialization. Curation cannot create or alter governance participation,
+  authority, applicability, routes or health.
+- Revalidate the private first adopter from committed root-correct authority
+  inputs: cold installation, Functional Pyramid activation/projection,
+  CAPTURED/pending behavior, explicit curation and fresh-process shared reuse
+  all passed. Raw adopter evidence remains private.
+
+### Storage, migration and product boundary
+
+- Move the repository lifecycle store to schema **15** with one immutable
+  `conclusion_curations` owner. The explicit schema-14→15 transition retains
+  Beta-1 semantic history but creates **zero automatic curation** dispositions.
+- Keep the installation Functional Pyramid store at schema **1**.
+- Position Span as the evidence-backed software knowledge layer in a broader
+  knowledge-factory operating model: working agents capture, reviewers curate,
+  and Span maintains support/currentness/governance lifecycle state. Span does
+  not claim to implement an organization's entire knowledge factory.
+- Live authenticated model delivery through supported managed hosts remains
+  unverified; installer/registration support is not promoted into that claim.
+
 ## 1.0.0b1 — 2026-11-22
 
 ### Complete working context

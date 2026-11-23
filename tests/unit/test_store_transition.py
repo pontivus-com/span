@@ -607,7 +607,7 @@ def _schema12_store(
 
 
 def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
-    """Build schema-14 state, then remove Version-1 projections to reproduce 13."""
+    """Build current state, then remove Version-1 projections to reproduce 13."""
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
 
@@ -692,8 +692,110 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
     connection = sqlite3.connect(path)
     try:
         connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute("DROP TABLE conclusion_curations")
         connection.execute("DROP TABLE functional_route_dependency_index")
         connection.execute("UPDATE meta SET value='13' WHERE key='schema_version'")
+        connection.commit()
+    finally:
+        connection.close()
+    return path
+
+
+def _schema14_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
+    """Build schema-15 state, then remove only curation storage to reproduce 14."""
+    from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+    from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "src").mkdir(exist_ok=True)
+    source_path = root / "src/a.py"
+    source_path.write_text("a\n", encoding="utf-8")
+    source_fingerprint = hashlib.sha256(source_path.read_bytes()).hexdigest()
+
+    store = LifecycleStore(
+        path, retention=DEFAULT_LIFECYCLE_RETENTION, clock=lambda: NOW
+    )
+    store.register_repository("demo", str(root), authority_seeds=(_seed(),))
+    store.put_source_observation(
+        m.SourceObservation(
+            observation_id=m.SourceObservationId("obs-schema14"),
+            repository_id="demo",
+            evidence=m.EvidenceRef(
+                evidence_id=m.EvidenceId("ev-schema14"),
+                repository_id="demo",
+                source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+                locator="src/a.py",
+                revision_or_fingerprint=source_fingerprint,
+            ),
+            content_digest=m.ContentDigest(f"sha256:{source_fingerprint}"),
+            captured_at=NOW,
+            total_lines=1,
+            whole_file=True,
+        )
+    )
+    context = m.InvestigationContext(
+        context_id=m.InvestigationContextId("ctx-schema14"),
+        repository_id="demo",
+        request_id=m.RequestId("req-schema14"),
+        binding_digest=m.ContentDigest("sha256:schema14"),
+        origin=m.ContextOrigin.EVIDENCE_ONLY,
+        state=m.ContextState.LIVE,
+        scope=m.EvidenceScope(paths=("src/a.py",)),
+        created_at=NOW,
+        expires_at=NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime,
+    )
+    store.put_context(context)
+    store.add_context_evidence("ctx-schema14", "obs-schema14")
+    store.record_understanding(
+        m.CreateUnderstandingCommand(
+            identity=m.RecordingIdentity(
+                repository_id="demo",
+                request_id=m.RequestId("record-schema14"),
+                context_id=m.InvestigationContextId("ctx-schema14"),
+            ),
+            surface=m.SurfaceKey(
+                repository_id="demo",
+                kind=m.SurfaceKind.FILE,
+                locator="src/a.py",
+            ),
+            target=m.ExplicitTarget(
+                question="What does A do?",
+                scope=m.EvidenceScope(paths=("src/a.py",)),
+            ),
+            conclusions=(
+                m.ProposedConclusion(
+                    conclusion_id=m.ConclusionId("c-schema14"),
+                    statement="A has retained schema-14 meaning.",
+                    assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                    scope=m.EvidenceScope(paths=("src/a.py",)),
+                    support=(
+                        m.SourceSupport(
+                            observation_id=m.SourceObservationId("obs-schema14")
+                        ),
+                    ),
+                    basis=m.SemanticBasis(
+                        derivation=m.DerivationKind.EXPLICIT_EVIDENCE,
+                        summary="schema14 preservation fixture",
+                    ),
+                ),
+            ),
+        ),
+        understanding_id=m.UnderstandingId("u-schema14"),
+    )
+    store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute(
+            "INSERT INTO functional_route_dependency_index"
+            "(understanding_id, conclusion_id, revision, pyramid_id,"
+            " repository_id, route_identity) VALUES(?,?,?,?,?,?)",
+            ("u-schema14", "c-schema14", 1, "p-1", "demo", "route-1"),
+        )
+        connection.execute("DROP TABLE conclusion_curations")
+        connection.execute("UPDATE meta SET value='14' WHERE key='schema_version'")
         connection.commit()
     finally:
         connection.close()
@@ -765,7 +867,7 @@ class InspectTest(unittest.TestCase):
             self.assertIn("explicit installer provisioning", inspection.limitations[0])
 
 
-class Schema13To14Test(unittest.TestCase):
+class Schema13To15Test(unittest.TestCase):
     def test_schema13_state_is_preserved_without_fabricating_pyramid_state(
         self,
     ) -> None:
@@ -784,7 +886,7 @@ class Schema13To14Test(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "14",
+                    "15",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -840,6 +942,81 @@ class Schema13To14Test(unittest.TestCase):
             finally:
                 connection.close()
 
+    def test_schema14_current_revision_migrates_as_pending_capture(self) -> None:
+        from span.service.answer import AnswerService
+        from span.service.evidence import EvidenceService
+        from span.service.support import SupportService
+        from span.shell.filesystem_evidence import FilesystemEvidenceSource
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            _schema14_store(data / "demo.db", root)
+
+            report = st.apply(_config(root, data))
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+
+            store = LifecycleStore(
+                data / "demo.db",
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
+            )
+            self.addCleanup(store.close)
+            evidence = FilesystemEvidenceSource("demo", root)
+            support = SupportService(
+                store=store,
+                evidence=evidence,
+                authority=store,
+                clock=lambda: NOW,
+            )
+            answer = AnswerService(
+                store=store,
+                support=support,
+                evidence=EvidenceService(
+                    store=store,
+                    evidence=evidence,
+                    clock=lambda: NOW,
+                ),
+                clock=lambda: NOW,
+                functional_pyramid_orientation=lambda _repository_id, _surface, _scope: (
+                    m.FunctionalPyramidParticipation(
+                        m.FunctionalPyramidParticipationState.UNCONFIGURED
+                    )
+                ),
+            )
+
+            snapshot = store.get_version("u-schema14", 1)
+            ref = snapshot.conclusions[0]
+            self.assertIs(
+                support.evaluate_revision(ref).state,
+                m.SupportState.CURRENT,
+            )
+            self.assertIsNone(store.find_curation(ref))
+            candidates = store.pending_curation_candidates("demo")
+            self.assertEqual(tuple(item.ref for item in candidates), (ref,))
+
+            captured = answer.ask(
+                m.AskRequest(
+                    selector=m.CurrentUnderstandingSelector(
+                        repository_id="demo",
+                        understanding_id="u-schema14",
+                    )
+                )
+            )
+            self.assertIsInstance(captured, m.Gap)
+            assert isinstance(captured, m.Gap)
+            self.assertIs(captured.reason, m.GapReason.PENDING_CURATION)
+
+            pending = answer.ask(
+                m.AskRequest(selector=m.PendingCurationSelector(repository_id="demo"))
+            )
+            self.assertIsInstance(pending, m.PendingCuration)
+            assert isinstance(pending, m.PendingCuration)
+            self.assertEqual(tuple(item.ref for item in pending.items), (ref,))
+
     def test_schema13_transition_rollback_restores_schema13(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "demo"
@@ -852,6 +1029,94 @@ class Schema13To14Test(unittest.TestCase):
 
             self.assertEqual(report.state, st.TransitionState.ROLLED_BACK)
             self.assertEqual(st._read_schema_version_ro(data / "demo.db"), 13)
+
+
+class Schema14To15Test(unittest.TestCase):
+    def test_schema14_state_is_preserved_and_curation_starts_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            source = _schema14_store(data / "demo.db", root)
+            before = hashlib.sha256(source.read_bytes()).hexdigest()
+
+            installation = data / "installation"
+            installation.mkdir()
+            fp_store = installation / "functional-pyramid.db"
+            fp = sqlite3.connect(fp_store)
+            try:
+                fp.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)")
+                fp.execute("INSERT INTO meta VALUES('schema_version', '1')")
+                fp.execute("INSERT INTO meta VALUES('sentinel', 'unchanged')")
+                fp.commit()
+            finally:
+                fp.close()
+            fp_before = hashlib.sha256(fp_store.read_bytes()).hexdigest()
+
+            report = st.apply(_config(root, data))
+
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            connection = sqlite3.connect(data / "demo.db")
+            try:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT value FROM meta WHERE key='schema_version'"
+                    ).fetchone()[0],
+                    "15",
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM conclusion_curations"
+                    ).fetchone()[0],
+                    0,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT understanding_id, conclusion_id, revision,"
+                        " pyramid_id, repository_id, route_identity"
+                        " FROM functional_route_dependency_index"
+                    ).fetchall(),
+                    [
+                        (
+                            "u-schema14",
+                            "c-schema14",
+                            1,
+                            "p-1",
+                            "demo",
+                            "route-1",
+                        )
+                    ],
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM understandings"
+                    ).fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM record_receipts"
+                    ).fetchone()[0],
+                    1,
+                )
+            finally:
+                connection.close()
+            self.assertEqual(
+                hashlib.sha256(fp_store.read_bytes()).hexdigest(),
+                fp_before,
+            )
+
+            rollback = st.rollback(_config(root, data))
+            self.assertEqual(rollback.state, st.TransitionState.ROLLED_BACK)
+            self.assertEqual(st._read_schema_version_ro(data / "demo.db"), 14)
+            self.assertEqual(
+                hashlib.sha256((data / "demo.db").read_bytes()).hexdigest(),
+                before,
+            )
+            self.assertEqual(
+                hashlib.sha256(fp_store.read_bytes()).hexdigest(),
+                fp_before,
+            )
 
 
 class ApplyTest(unittest.TestCase):
@@ -877,7 +1142,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "14")
+                self.assertEqual(version, "15")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -1092,7 +1357,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "14",
+                    "15",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1182,7 +1447,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "14",
+                    "15",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1252,7 +1517,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 14"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 15"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -1541,7 +1806,7 @@ class InstallerCommandTest(unittest.TestCase):
             mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
             self.assertEqual(mapping["counts"]["unresolved"], 0)
             self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
-            self.assertEqual(st._read_schema_version_ro(source), 14)
+            self.assertEqual(st._read_schema_version_ro(source), 15)
             from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 

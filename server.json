@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.pontivus-com/span",
   "title": "Span",
-  "description": "Complete working context for coding agents: code understanding and applicable project guidance.",
-  "version": "1.0.0-beta.1",
+  "description": "Software knowledge layer for coding agents: capture, curation, governance, reassessment.",
+  "version": "1.0.0-beta.2",
   "repository": {
     "url": "https://github.com/pontivus-com/span",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "span-mcp",
-      "version": "1.0.0b1",
+      "version": "1.0.0b2",
       "transport": {
         "type": "stdio"
       }

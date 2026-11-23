@@ -45,9 +45,10 @@ Functional Pyramid resolution, support qualification, retention, retrieval and
 re-alignment. Repository owners supply authority. The agent or human investigator
 owns semantic and conformance judgment.
 
-Surface-bound understanding is retained, reusable and checked. Canonical
-governing sources remain canonical sources rather than becoming copied Span
-conclusions.
+Surface-bound understanding is retained and checked. A captured semantic
+revision becomes ordinary shared reusable knowledge only after explicit
+curation; canonical governing sources remain canonical sources rather than
+becoming copied Span conclusions.
 
 ## 2. Axioms about the agent
 
@@ -72,8 +73,10 @@ conclusion is silently overwritten.
 **A4 — The agent does not remember to do bookkeeping.** A rule that depends on
 the agent calling the right tool at the right time will be violated.
 *Therefore* the server owns every invariant that keeps returned understanding
-safe. Returned support is checked automatically. Required capture and re-alignment
-are integrated into the agent's ordinary work (F3, F7, F10).
+safe. Returned support and reuse eligibility are checked automatically.
+Required capture and re-alignment are integrated into ordinary work, and
+forgetting a later curation step cannot cause captured-only content to be served
+as shared knowledge (F2, F3, F7, F10, F13).
 
 **A5 — The agent's account of its own work is unreliable.** It misremembers
 what it read and paraphrases inaccurately; the file does not.
@@ -101,6 +104,14 @@ and competing procedures lead to omitted or incorrect lifecycle actions.
 *Therefore* delivered guidance must state the required action at its moment of
 use and derive it from the same governing contract.
 
+**A10 — The task agent's objective is narrower than shared knowledge maintenance.**
+A working agent is primarily optimizing for the task it is performing. It may
+establish a locally supported conclusion without establishing that the same
+statement is the right abstraction, granularity or durable shared knowledge for
+future agents. *Therefore* evidence-near capture and shared-reuse qualification
+are distinct acts. Span must not infer curation from support currency, task
+completion, confidence or authorship.
+
 ## 3. Principles of the system
 
 Each principle is a requirement, not an aspiration, and each serves one or more
@@ -126,38 +137,45 @@ governing route, and an unchanged governing rule can coexist with changed source
 Span reports those states independently and never promotes one to proof of the
 other.
 
-### F2 — Only supported understanding is an answer
+### F2 — Only supported and curated understanding is an answer
 
-An answer may be returned only while every dependency required by its support
-contract remains usable. Source, discovery, authority, Functional Pyramid route
-and premise dependencies are evaluated by their own rules. Otherwise the result
-is a gap that names what changed or could not be established. Stale content may
-be retained as history; it is never served as current.
+A conclusion may be returned as ordinary shared Answer content only while its
+exact semantic revision has been explicitly curated and every dependency
+required by its support contract remains usable. Source, discovery, authority,
+Functional Pyramid route and premise dependencies are evaluated by their own
+rules. Captured-only and non-current content may be retained and audited; neither
+is served as shared Answer content.
 
 ```text
-servable(answer, t)  ⇔  ∀ d ∈ deps_required(answer):
-                        state(d, t) = CURRENT
+servable(conclusion, t)
+    ⇔ curation(conclusion.revision) = CURATED
+    ∧ ∀ d ∈ deps_required(conclusion):
+          state(d, t) = CURRENT
 ```
 
-**Supported means that every dependency required for the conclusion currently
-passes its owning check.** It does not mean the interpretation is correct. For
-ordinary descriptive conclusions, completeness of explicitly supplied empirical
-support remains the investigator's responsibility. For normative conclusions in
-an ACTIVE Functional Pyramid repository, the applicable governing route and its
-authority dependencies are server-derived and cannot be omitted by the caller.
+**Supported** means that every required dependency currently passes its owning
+check. **Curated** means only that an explicit external reviewer accepted that
+exact semantic revision for shared reuse. Neither means the interpretation is
+intrinsically correct. For ordinary descriptive conclusions, completeness of
+explicitly supplied empirical support remains the investigator's responsibility.
+For normative conclusions in an ACTIVE Functional Pyramid repository, the
+applicable governing route and its authority dependencies are server-derived and
+cannot be omitted by the caller.
 
-*Demonstration:* changing a cited byte makes the answer non-servable. Changing an
-uncited file does not; the contract states that limit instead of implying a
-completeness it cannot check.
+*Demonstration:* a newly recorded CURRENT conclusion remains non-servable until
+curated; changing a cited byte makes a curated conclusion non-servable; changing
+an uncited file does not.
 
 ### F3 — Established understanding is retained and addressable
 
 Supported semantic understanding established during work is retained through
-Span as part of that work. Answers survive the session, are versioned, and are reachable by surface,
-question, or reference. Reuse never requires the conversation that produced
-them.
-*Demonstration:* an agent retains a conclusion during its investigation; a fresh
-session with no memory finds and uses it.
+Span as part of that work, whether or not it is yet curated for shared reuse.
+Understandings survive the session, are versioned, and are reachable by surface,
+question or reference without the originating conversation. Ordinary reuse is
+governed by F2.
+*Demonstration:* an agent retains a captured conclusion during its investigation;
+a later reviewer can retrieve it without the transcript, curate the exact
+revision, and a fresh session can then reuse it.
 
 ### F4 — Change is an obligation, not a notification
 
@@ -191,14 +209,15 @@ unsupported even though its own cited file is unchanged.
 ### F5 — Span composes; the agent means
 
 Span never originates semantic or governing judgment. It validates, stores,
-qualifies, retrieves, resolves declared applicability and re-aligns. Semantic conclusions, including normative conformance judgments, are authored
-by the agent or human investigator;
-governing meaning is authored by the repository's declared authority owner.
-Span assembles retained conclusions with live evidence and declared governance
-and states exactly what is missing.
-*Demonstration:* no semantic answer exists without an investigator-recorded
-conclusion, and no governing rule exists merely because Span found relevant
-prose.
+qualifies, retrieves, resolves declared applicability and re-aligns. Semantic
+conclusions, including normative conformance judgments, are authored by an agent
+or human investigator; curation decisions are authored by an external agent or
+human reviewer; governing meaning is authored by the repository's declared
+authority owner. Span records the curation act but does not decide that a
+semantic statement is good enough to publish.
+*Demonstration:* no semantic answer exists without an investigator-recorded,
+curated conclusion, and no governing rule exists merely because Span found
+relevant prose.
 
 ### F6 — The lifecycle is the API
 
@@ -220,16 +239,23 @@ moment it concluded.
 
 The agent records its conclusion when established, using the evidence it
 already holds; Span derives identity, context and qualification. Capture is
-required within the investigation that produces the understanding.
+required within the investigation that produces the understanding. Capture does
+not itself publish the conclusion as shared knowledge: a semantic create or
+change begins captured and requires a separate curation act before ordinary
+reuse. Curation cannot be bundled into the same semantic write that creates or
+changes meaning.
 
 *Demonstration:* recording a conclusion needs no internal identity lookup,
-source-body re-submission or separate evidence-admission step.
+source-body re-submission or separate evidence-admission step, and a newly
+accepted CURRENT capture remains absent from ordinary Answer content until
+curated.
 
 ### F8 — Reuse must justify its overhead in real work
 
-Span adds lifecycle work: obtaining context, retaining useful conclusions, and
-re-aligning them after change. That overhead is justified only when the resulting
-working context is useful enough to improve real engineering work over time.
+Span adds lifecycle work: obtaining context, capturing and curating useful
+conclusions, and re-aligning them after change. That overhead is justified only
+when the resulting working context is useful enough to improve real engineering
+work over time.
 
 Beta evaluates that product value through sustained adopter use on real tasks,
 including cold investigation, fresh-session reuse, implementation changes,
@@ -364,12 +390,31 @@ understanding requires reassessment; rejoining requires another accepted
 participation write.
 
 
+### F13 — Capture and curation are distinct, revision-bound facts
+
+Every supported semantic conclusion revision projects exactly one reuse-maturity
+state: `CAPTURED` or `CURATED`. CAPTURED means the revision is retained but
+has no accepted curation disposition; CURATED means an explicit curation
+disposition exists for that exact revision.
+
+Create, add, correct and replace produce CAPTURED semantic revisions. Withdrawal
+produces no reusable semantic content. A substantive support-only confirmation
+may preserve prior curation only because the statement, assertion nature and
+semantic scope remain unchanged; curation never transfers across a semantic
+content change. Curation never substitutes for evidence, authority, support
+currency or challenge settlement.
+
+*Demonstration:* a correction to a curated conclusion is retained as a new
+CAPTURED revision and cannot be served as shared Answer content until separately
+curated; a support-only confirmation of unchanged curated meaning can become
+servable again without manufacturing another semantic review.
+
 ## 4. Lifecycle responsibilities
 
 The agent's required actions and task-completion boundary are owned by
 [lifecycle contract §7](lifecycle-contract.md#required-agent-completion),
-derived from F3, F7, F10, F11 and F12. The contract owns the procedure; these
-principles govern it.
+derived from F3, F7, F10–F13. The contract owns the procedure; these principles
+govern it.
 
 ## 5. Non-goals
 

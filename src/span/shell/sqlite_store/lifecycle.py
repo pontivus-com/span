@@ -1,4 +1,4 @@
-"""Schema-14 lifecycle store.
+"""Schema-15 lifecycle store.
 
 This is the replacement store boundary for the 0.10 lifecycle: canonical
 contexts, understanding versions, conclusion revisions, challenges,
@@ -36,6 +36,7 @@ from span.core.recording import (
     receipt_decision,
 )
 from span.core.rejection import RejectionCauseKind, SurfaceConflict
+from span.shell.sqlite_store import curation as _curation
 from span.shell.sqlite_store import dependents as _dependents
 from span.shell.sqlite_store.contexts import (
     add_context_discovery_row as _add_context_discovery_row,
@@ -1068,6 +1069,16 @@ class LifecycleStore:
                     understanding.current_version.value,
                 )
                 conclusions = self._get_conclusions_in(connection, selected.value)
+                try:
+                    existing_curations = _curation.get_curations(
+                        connection,
+                        selected.value,
+                        as_of_version=version.version,
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise LifecycleStoreDataError(
+                        f"curation disposition is not canonical: {exc}"
+                    ) from None
                 transition = apply_update(
                     understanding,
                     version,
@@ -1078,8 +1089,11 @@ class LifecycleStore:
                     existing_challenges=self._get_challenges_in(
                         connection, selected.value
                     ),
+                    existing_curations=existing_curations,
                 )
             self._write_transition(connection, transition)
+            for disposition in transition.curations:
+                self._insert_curation_in(connection, disposition)
             self._write_challenge_effects(connection, transition.challenge_effects)
             dependents: tuple[m.ConclusionRevisionRef, ...] = ()
             if not isinstance(command, m.CreateUnderstandingCommand):
@@ -1330,6 +1344,103 @@ class LifecycleStore:
             (understanding_id, conclusion_id, revision),
         ).fetchone()
         return row is not None
+
+    def find_curation(
+        self,
+        ref: m.ConclusionRevisionRef,
+        *,
+        as_of_version: m.UnderstandingVersionNumber | None = None,
+    ) -> m.CurationDisposition | None:
+        """Return exact-revision curation effective at the requested version."""
+        try:
+            return _curation.find_curation(
+                self._connection,
+                ref,
+                as_of_version=as_of_version,
+            )
+        except (TypeError, ValueError) as exc:
+            raise LifecycleStoreDataError(
+                f"curation disposition is not canonical: {exc}"
+            ) from None
+
+    def get_curations(
+        self,
+        understanding_id: str,
+        *,
+        as_of_version: m.UnderstandingVersionNumber | None = None,
+    ) -> tuple[m.CurationDisposition, ...]:
+        """Return immutable curation history, optionally as of one version."""
+        try:
+            return _curation.get_curations(
+                self._connection,
+                understanding_id,
+                as_of_version=as_of_version,
+            )
+        except (TypeError, ValueError) as exc:
+            raise LifecycleStoreDataError(
+                f"curation disposition is not canonical: {exc}"
+            ) from None
+
+    def pending_curation_candidates(
+        self,
+        repository_id: str,
+        *,
+        after: m.ConclusionRevisionRef | None = None,
+    ) -> tuple[m.PendingCurationItem, ...]:
+        """Return storage candidates; service support-qualifies public pending."""
+        return _curation.pending_curation_candidates(
+            self._connection,
+            repository_id,
+            after=after,
+        )
+
+    def _insert_curation_in(
+        self,
+        connection: _sqlite3.Connection,
+        disposition: m.CurationDisposition,
+    ) -> None:
+        """Insert one immutable exact-revision curation inside an owner txn."""
+        ref = disposition.ref
+        if not self._has_conclusion_revision_in(
+            connection,
+            ref.understanding_id.value,
+            ref.conclusion_id.value,
+            ref.revision.value,
+        ):
+            raise RecordingValidationError(
+                "curation target revision does not exist: "
+                f"{ref.conclusion_id.value}@{ref.revision.value}"
+            )
+        self._get_version_in(
+            connection,
+            ref.understanding_id.value,
+            disposition.accepted_in_version.value,
+        )
+        inherited_revision = (
+            None
+            if disposition.inherited_from is None
+            else disposition.inherited_from.revision.value
+        )
+        try:
+            connection.execute(
+                "INSERT INTO conclusion_curations"
+                "(understanding_id, conclusion_id, revision,"
+                " accepted_in_version, origin, inherited_from_revision,"
+                " canonical_json) VALUES(?,?,?,?,?,?,?)",
+                (
+                    ref.understanding_id.value,
+                    ref.conclusion_id.value,
+                    ref.revision.value,
+                    disposition.accepted_in_version.value,
+                    disposition.origin.value,
+                    inherited_revision,
+                    _json.dumps(m.to_canonical(disposition), sort_keys=True),
+                ),
+            )
+        except _sqlite3.IntegrityError as exc:
+            raise LifecycleStoreInvariantError(
+                "curation disposition violates exact-revision persistence: " f"{exc}"
+            ) from None
 
     def support_dependents(
         self, dependency_kind: str, dependency_ref: str

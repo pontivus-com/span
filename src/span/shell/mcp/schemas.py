@@ -37,14 +37,19 @@ class ToolSpec:
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "ask",
-        "Call this before reading or grepping source to reuse retained understanding. "
+        "Call this before reading or grepping source to reuse maintained knowledge. "
         "Ordinary obtain is surface-first: supply repository_id plus surface or "
-        "reference, with no question, request_id, or context. It returns the current "
-        "surface document view grouped by recorded question, plus status and "
-        "applicable verification. For one exact recorded question, use "
+        "reference, with no question, request_id, or context. It returns CURRENT + "
+        "CURATED shared Answer content grouped by recorded question, plus pending/"
+        "stale status and applicable verification. CURRENT captured-only meaning is "
+        "pending knowledge, not ordinary Answer content. For reviewer discovery, use "
+        "PendingCurationSelector with repository_id; it returns deterministic CURRENT "
+        "captured exact revisions. For one exact recorded question, use "
         "RecordedQuestionSelector; matching is exact and surface-scoped, never "
         "semantic or paraphrase matching. For a known understanding, use "
-        "CurrentUnderstandingSelector. A genuinely unassessed surface returns a "
+        "CurrentUnderstandingSelector. Exact selectors, including "
+        "PendingCurationSelector, carry their own repository identity. A genuinely "
+        "unassessed surface returns a "
         "small Gap with source_pointers; to fetch source bytes, repeat the "
         "surface/reference form with non-empty evidence and a request_id. "
         "Continuation and exact selectors carry their own namespace and therefore "
@@ -58,8 +63,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "record",
-        "Required when you establish a supported semantic conclusion from source or "
-        "tests. After edits, call reconsider before revising affected conclusions; "
+        "Required when you establish supported semantic meaning from source or "
+        "tests. Semantic create/change records CAPTURED meaning; it is not shared "
+        "publication. A separate reviewer uses actions.curate on an exact stable "
+        "CURRENT revision to qualify it for shared reuse. After edits, call "
+        "reconsider before revising affected conclusions; "
         "use its returned identities/version for the update. Creates, updates, or "
         "verifies understanding, or declares a "
         "service/domain surface and its boundary. `kind` selects what is "
@@ -99,14 +107,23 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         '"expected_version":1,"actions":{"correct":[{"conclusion_id":"<returned id>",'
         '"conclusion":"<updated statement>","locator":"<path>"}]}} '
         "actions is an object whose values are lists. Omit top-level action, "
-        "question, scope_paths and conclusion on updates. Span derives new lineage identities, old "
+        "question, scope_paths and conclusion on updates. Curate is a separate review "
+        "action and cannot share an update with semantic add/confirm/correct/replace/"
+        "withdraw mutation. Span derives new lineage identities, old "
         "revisions, unchanged content, and the mechanical basis. Each action "
         "names exactly one evidence mode: locator, observation_id, or support. "
         "add takes conclusion; confirm, correct, replace, and withdraw name the "
         "existing conclusion_id returned by Span; replace takes conclusion and "
         "reason; withdraw takes reason and optional evidence; confirm preserves "
         "the current content. Do not send conclusion_id on add or "
-        "new_conclusion_id on replace. Challenge settlement may be included atomically "
+        "new_conclusion_id on replace. CURATION TEMPLATE (copy and fill): "
+        '{"repository_id":"<id>","request_id":"<new id>",'
+        '"kind":"understanding","understanding_id":"<returned id>",'
+        '"expected_version":2,"actions":{"curate":[{"conclusion_id":"<returned id>",'
+        '"reasoning":"<review reasoning>"}]},"provenance":"<reviewer>"} '
+        "Curation requires CURRENT support, changes no semantic content/support or "
+        "Functional Pyramid authority, and does not certify semantic truth. Challenge "
+        "settlement may be included atomically "
         "in challenge_dispositions: a resolved disposition supplies challenge_id, "
         "expected_challenge_revision, reasoning, optional target_conclusion_ids, "
         "and optional context-bound evidence_refs. Span derives resulting "
@@ -188,6 +205,12 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
                 "repository_id": "repo-1",
                 "surface": {"kind": "FILE", "locator": "src/a.py"},
                 "question": "What does A do?",
+            }
+        },
+        {
+            "selector": {
+                "$type": "PendingCurationSelector",
+                "repository_id": "repo-1",
             }
         },
         {
@@ -290,6 +313,22 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
                     }
                 ]
             },
+        },
+        {
+            "repository_id": "repo-1",
+            "request_id": "curate-1",
+            "kind": "understanding",
+            "understanding_id": "u:rec-1",
+            "expected_version": 2,
+            "actions": {
+                "curate": [
+                    {
+                        "conclusion_id": "<id returned by Span>",
+                        "reasoning": "Reviewed for shared reuse.",
+                    }
+                ]
+            },
+            "provenance": "reviewer-session",
         },
         {
             "repository_id": "repo-1",

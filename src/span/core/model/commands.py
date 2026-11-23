@@ -39,6 +39,7 @@ from span.core.model.support import SupportDependency
 from span.core.model.surfaces import SurfaceKey, SurfaceReference
 from span.core.model.understanding import (
     CurrentUnderstandingSelector,
+    PendingCurationSelector,
     ReceiptRetrievalSelector,
     RecordedQuestionSelector,
     UnderstandingSnapshotSelector,
@@ -148,10 +149,24 @@ class WithdrawConclusion:
         _require_non_empty("WithdrawConclusion.basis.summary", self.basis.summary)
 
 
+@_dataclass(frozen=True)
+class CurateConclusion:
+    """Accept one exact current conclusion lineage for shared reuse."""
+
+    conclusion_id: ConclusionId
+    reasoning: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("CurateConclusion.reasoning", self.reasoning)
+
+
 def _action_conclusion_ids(action: object) -> tuple[ConclusionId, ...]:
     if isinstance(action, ReplaceConclusion):
         return (action.old.conclusion_id, action.new_conclusion_id)
-    if isinstance(action, (ConfirmConclusion, CorrectConclusion, WithdrawConclusion)):
+    if isinstance(
+        action,
+        (ConfirmConclusion, CorrectConclusion, WithdrawConclusion, CurateConclusion),
+    ):
         return (action.conclusion_id,)
     raise TypeError(f"unhandled conclusion action: {type(action).__name__}")
 
@@ -347,6 +362,7 @@ class AskRequest:
     selector: (
         RecordedQuestionSelector
         | CurrentUnderstandingSelector
+        | PendingCurationSelector
         | UnderstandingSnapshotSelector
         | ReceiptRetrievalSelector
         | FunctionalPyramidSelector
@@ -570,19 +586,33 @@ class UpdateUnderstandingCommand:
     correct: tuple[CorrectConclusion, ...] = ()
     replace: tuple[ReplaceConclusion, ...] = ()
     withdraw: tuple[WithdrawConclusion, ...] = ()
+    curate: tuple[CurateConclusion, ...] = ()
     gaps: tuple[GapDraft, ...] | None = None
     challenge_dispositions: tuple[ChallengeDisposition, ...] = ()
     provenance: str = ""
 
     def __post_init__(self) -> None:
+        if self.curate:
+            _require_non_empty(
+                "UpdateUnderstandingCommand.provenance",
+                self.provenance,
+            )
         actions = (
             *self.confirm,
             *self.correct,
             *self.replace,
             *self.withdraw,
         )
+        if self.curate and (self.add or actions):
+            raise ValueError(
+                "curation cannot be combined with semantic conclusion mutation"
+            )
         if not (
-            self.add or actions or self.challenge_dispositions or self.gaps is not None
+            self.add
+            or actions
+            or self.curate
+            or self.challenge_dispositions
+            or self.gaps is not None
         ):
             raise ValueError("an understanding update must have an effect")
         touched: set[ConclusionId] = set()
@@ -593,7 +623,7 @@ class UpdateUnderstandingCommand:
                     f"{proposed.conclusion_id.value}"
                 )
             touched.add(proposed.conclusion_id)
-        for action in actions:
+        for action in (*actions, *self.curate):
             for conclusion_id in _action_conclusion_ids(action):
                 if conclusion_id in touched:
                     raise ValueError(

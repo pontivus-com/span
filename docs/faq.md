@@ -3,15 +3,54 @@
 ## What does an agent actually do with Span?
 
 Ask for the file, symbol, service, or domain the agent is working on. Span
-returns the current understanding already retained for that surface and, for an
-ACTIVE Functional Pyramid repository, the project guidance that applies to the
-same scope from first principles down to functional and technical design.
+returns current curated shared knowledge for that surface, explicit pending or
+stale status, and, for an ACTIVE Functional Pyramid repository, the project
+guidance that applies to the same scope from first principles down to functional
+and technical design.
 
-The agent investigates any gaps with its normal tools and records useful
-conclusions when established. A later session can ask the same surface without
-the old conversation or a saved internal ID. After code or guidance changes,
-`reconsider` identifies the understanding that actually needs another look.
+The working agent investigates gaps and captures supported conclusions when
+established. A separate reviewer curates stable exact revisions for shared reuse.
+A later session can ask the same surface without the old conversation or a saved
+internal ID. After code or guidance changes, `reconsider` identifies the
+understanding that actually needs another look.
 See [usage](usage.md).
+
+## Is Span a knowledge factory?
+
+A software knowledge factory is the broader loop in which engineering work
+produces candidate understanding, shared knowledge is curated for future reuse,
+and changes feed back into maintenance. Span is the evidence-backed knowledge
+layer in that loop: it retains agent-established software understanding with its
+declared support, records which exact revisions have been curated for shared
+reuse, resolves applicable governing guidance, and identifies what needs
+reassessment after change.
+
+The working coding agent or engineer remains the semantic author at capture
+time. Curation is a separate reviewer role that may be another agent session, a
+dedicated curator agent, a human reviewer, or a team workflow. Span records and
+enforces that lifecycle but does not run a background curator model or
+autonomously decide semantic quality.
+
+This is deliberately narrower than the organizational topology described in
+LangChain's [knowledge-factory article](https://www.langchain.com/blog/knowledge-factory).
+That article separates task agents from a curator agent that can run in the
+background over broader raw sources and traces. Span separates evidence-near
+capture from explicit review for software understanding, while deterministic
+support/currentness and declared governance stay inside the Span server. Span
+does not claim that curation certifies truth, that curation must be autonomous,
+or that a separate curator/reviewer role is unnecessary.
+
+## How is Span different from a context engine or agent memory?
+
+A context engine primarily helps an agent retrieve the source and organizational
+material relevant to the task in front of it. Agent memory can preserve facts,
+interactions, preferences, or other information across tasks.
+
+Span focuses on the interpretation layer produced by software work: what an
+agent established about an exact software surface, what supported that
+conclusion, which governing guidance applied, whether those dependencies still
+hold, and what must be reconsidered after change. These capabilities can be
+complementary rather than mutually exclusive.
 
 ## Does installation explain the whole repository?
 
@@ -57,11 +96,13 @@ evidence, then creates understanding with an explicit question and scope, or
 records an independent verification run. This direct-create capability preserves imported work; agents consult Span
 before deriving understanding under [the required lifecycle](lifecycle-contract.md#required-agent-completion).
 
-## Does CURRENT mean the explanation is true?
+## Do CURRENT or CURATED mean the explanation is true?
 
-It means declared support still passes its checks. The original interpretation
-may still be incomplete or wrong. Gaps and challenges remain visible; the
-agent judges applicability and semantic correctness.
+No. `CURRENT` means the revision's required support still passes its owning
+checks. `CURATED` means an explicit reviewer accepted that exact semantic
+revision for shared reuse. Neither is a truth certificate: the interpretation
+may still be incomplete or wrong, and semantic judgment remains with the
+investigator/reviewer.
 
 ## What happens when code changes?
 
@@ -98,13 +139,14 @@ prove the original commit failed.
 
 ## Which clients are verified for this beta?
 
-The generic Version-1 product is verified through source CI, the non-editable
-installed stdio MCP lane, and the FA-01–FA-44 functional acceptance matrix.
-Managed registration/integration exists for Codex, OpenCode and Claude Code,
-but candidate-specific live model-host delivery is a separate T13 gate. Until
-those captures exist for the final candidate, live Version-1 model delivery is
-reported as **UNVERIFIED**, not inferred from registration health or historical
-captures.
+The Beta-2 product is verified through source CI, the non-editable installed
+stdio MCP lane, and the FA-01–FA-64 functional acceptance matrix, including the
+combined installer + Functional Pyramid + capture/curation topology. Managed
+registration/integration exists for Codex, OpenCode and Claude Code, but live
+model-host delivery for the current Beta-2 candidate remains **UNVERIFIED** and
+is not inferred from registration health, configured hooks, or historical
+captures. Private first-adopter cold-install revalidation is also not claimed as
+passed while its repository-controlled configuration blocker remains open.
 
 ## Does Span save time or tokens?
 
@@ -114,17 +156,17 @@ The beta does not claim a universal saving or a completed comparative ACCEPT.
 
 ## Where is state stored, and how do upgrades work?
 
-Repository semantic/audit state uses schema 14 in the external data directory.
-Functional Pyramid participation, versions, exclusions and installation-scoped
-receipts live in the separate installation database at
-`<DATA_DIR>/installation/functional-pyramid.db`.
+Beta 2 repository semantic/audit state uses schema 15 in the external data
+directory. Functional Pyramid participation, versions, exclusions and
+installation-scoped receipts remain in the separate installation database at
+`<DATA_DIR>/installation/functional-pyramid.db` with installation schema 1.
 
-The runtime never migrates a store at open. Existing schema-13 repositories use
-the explicit offline transition to schema 14; the transition preserves their
-semantic/audit state and does not fabricate historical Functional Pyramid
-support or participation. Registered repositories begin `UNCONFIGURED` until
-participation is explicitly recorded. Full-installation recovery includes the
-installation database; a repository-portable backup deliberately does not.
+The runtime never migrates a store at open. Existing schema-14 repositories use
+the explicit offline transition to schema 15; that transition preserves
+Beta-1 semantic/audit/governance state and creates zero curation approvals.
+Migrated semantic revisions therefore begin CAPTURED under the Beta-2 reuse
+contract. Registered repositories remain `UNCONFIGURED` until Functional
+Pyramid participation is explicitly recorded.
 
 A bare package upgrade does not migrate host configuration. Rerun
 `span-install`, complete any required offline transition, verify the

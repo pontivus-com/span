@@ -102,8 +102,8 @@ class InvariantMatrixTest(unittest.TestCase):
     def test_matrix_lists_every_invariant_once_in_order(self):
         self.assertEqual(
             [row[0] for row in self.rows],
-            [f"I-{number:02d}" for number in range(1, 40)],
-            "the matrix must carry I-01..I-39 in order, one row each",
+            [f"I-{number:02d}" for number in range(1, 48)],
+            "the matrix must carry I-01..I-47 in order, one row each",
         )
 
     def test_every_test_row_names_a_live_boundary_test(self):
@@ -148,8 +148,8 @@ class FunctionalAcceptanceMatrixTest(unittest.TestCase):
     def test_matrix_lists_every_version_one_acceptance_case_once_in_order(self):
         self.assertEqual(
             [row[0] for row in self.rows],
-            [f"FA-{number:02d}" for number in range(1, 45)],
-            "the Version-1 acceptance matrix must carry FA-01..FA-44 in order",
+            [f"FA-{number:02d}" for number in range(1, 65)],
+            "the Version-1 acceptance matrix must carry FA-01..FA-64 in order",
         )
 
     def test_every_acceptance_case_names_live_boundary_tests(self):
@@ -305,6 +305,85 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
                 f"{service} missing mandatory Functional Pyramid wiring: "
                 f"{sorted(required - supplied)}",
             )
+
+
+class Beta2CurationArchitectureTest(unittest.TestCase):
+    """Beta-2 keeps curation inside the existing semantic architecture."""
+
+    def _class_locations(self, name: str) -> list[str]:
+        locations: list[str] = []
+        for path in sorted((REPO_ROOT / "src" / "span").rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name == name:
+                    locations.append(str(path.relative_to(REPO_ROOT)))
+        return locations
+
+    def test_curation_carriers_have_one_canonical_definition(self):
+        expected = {
+            "CurateConclusion": "src/span/core/model/commands.py",
+            "CurationDisposition": "src/span/core/model/understanding.py",
+            "PendingCurationSelector": "src/span/core/model/understanding.py",
+            "PendingCurationItem": "src/span/core/model/understanding.py",
+            "PendingCuration": "src/span/core/model/understanding.py",
+        }
+        for name, owner in expected.items():
+            self.assertEqual(self._class_locations(name), [owner], name)
+
+    def test_curation_persistence_has_one_writer(self):
+        writers = []
+        for path in sorted((REPO_ROOT / "src" / "span").rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if "INSERT INTO conclusion_curations" in source:
+                writers.append(str(path.relative_to(REPO_ROOT)))
+        self.assertEqual(writers, ["src/span/shell/sqlite_store/lifecycle.py"])
+
+    def test_pending_reuse_has_one_answer_composer(self):
+        composers = []
+        for path in sorted((REPO_ROOT / "src" / "span").rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if "GapReason.PENDING_CURATION" in source:
+                composers.append(str(path.relative_to(REPO_ROOT)))
+        self.assertEqual(composers, ["src/span/service/answer.py"])
+
+    def test_curation_reuses_the_single_support_evaluator(self):
+        self.assertEqual(
+            self._class_locations("SupportService"),
+            ["src/span/service/support.py"],
+        )
+        answer = (REPO_ROOT / "src/span/service/answer.py").read_text(encoding="utf-8")
+        lifecycle = (REPO_ROOT / "src/span/service/lifecycle.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("self._support.evaluate_revision", answer)
+        self.assertIn("self._support.evaluate_revision", lifecycle)
+
+    def test_shell_has_no_curation_semantic_decision(self):
+        shell = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((REPO_ROOT / "src/span/shell").rglob("*.py"))
+        )
+        self.assertNotIn("GapReason.PENDING_CURATION", shell)
+        self.assertNotIn("CurationState.CURATED", shell)
+
+    def test_missing_curation_never_defaults_to_approval(self):
+        answer = (REPO_ROOT / "src/span/service/answer.py").read_text(encoding="utf-8")
+        self.assertIn("and self._store.find_curation(", answer)
+        self.assertIn("is not None", answer)
+        transition = (
+            REPO_ROOT / "src/span/shell/store_transition_schema14.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('curation_rows": 0', transition)
+
+    def test_no_parallel_curate_operation_or_rejected_state(self):
+        from span.shell.mcp.schemas import TOOL_NAMES
+
+        self.assertEqual(TOOL_NAMES, ("ask", "record", "reconsider"))
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((REPO_ROOT / "src/span").rglob("*.py"))
+        )
+        self.assertNotIn("rejected_curation", source)
 
 
 class SemanticTypingTest(unittest.TestCase):

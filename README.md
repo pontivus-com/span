@@ -3,14 +3,16 @@
 </h1>
 
 <p align="center">
-  <strong>Give your coding agent the complete context for the code it is working on.</strong>
+  <strong>Build a knowledge factory for your codebase.</strong>
 </p>
 
 <p align="center">
-  Span is a local MCP server that gives coding agents both sides of the context
-  for the exact file, symbol, service, or domain they are working on: what that
-  part of the system is understood to do, and the goals, rules, contracts, and
-  design documents that guide it.
+  Span is the evidence-backed software knowledge layer for coding agents, not
+  the entire organizational knowledge-factory topology. Working agents capture
+  what they establish while the evidence is fresh; a separate curation step
+  decides what becomes shared reusable knowledge. Span keeps that knowledge tied
+  to the evidence and governing guidance it depends on and shows what needs
+  another look when either changes.
 </p>
 
 <p align="center">
@@ -30,37 +32,62 @@
   <a href="https://github.com/pontivus-com/span/tree/master/docs"><strong>Docs</strong></a>
 </p>
 
-## A coding agent needs more than the code
+## Context is temporary. Knowledge should compound
 
-To work safely on part of a software system, an agent needs two kinds of context
-at the same time.
+A coding agent needs context for the task in front of it: source, tests,
+configuration, design, requirements, and the current conversation. But useful
+understanding established while doing the work should not disappear with the
+session.
 
-It needs to know **what this part of the system does**: the useful understanding
-already established about the implementation, how it fits together, what that
-understanding was based on, and whether it is still current.
+Span turns that work into maintained software knowledge without equating one
+task agent's conclusion with shared truth. The working agent retains what it
+established about an exact file, symbol, service, or domain with the support it
+actually used. A separate reviewer/curator accepts the exact stable revision for
+shared reuse; later sessions receive it only while that support still holds.
 
-It also needs to know **what guides this part of the system**: the relevant
-goals, principles, contracts, functional design, and technical design, in the
-right order and linked back to the canonical documents that own them.
+LangChain's [knowledge-factory article](https://www.langchain.com/blog/knowledge-factory)
+describes task agents surfacing knowledge gaps and a curator agent running in
+the background to maintain a broader organizational knowledge store. Span uses
+the same important separation between task-time work and curation, but at a
+narrower software boundary: working agents capture evidence-near semantic
+conclusions, reviewers explicitly curate exact revisions, and deterministic
+support/currentness plus declared governance remain server-owned. Span does not
+run a background curator, claim semantic correctness, or claim that a separate
+reviewer/curator role is unnecessary.
 
-Without Span, a fresh agent has to reconstruct both sides. It re-reads code,
-searches old conversations and documentation, works out which documents apply,
-and decides which guidance takes priority. The relevant material may span
-several repositories.
+Software makes this harder than ordinary memory. The thing being understood
+keeps changing. A source edit can invalidate an explanation. A change to a
+goal, contract, design, or its applicability can invalidate what the
+implementation is supposed to satisfy even when the code itself did not change.
 
-Span gives the agent both sides for the exact software surface it is working on.
+Span therefore keeps two kinds of software knowledge distinct:
+
+- **what the implementation is understood to do** — useful empirical
+  understanding tied to source, tests, configuration, executions, premises,
+  and other declared support; and
+- **what is supposed to guide it** — applicable goals, principles, contracts,
+  functional design, and technical design linked back to their canonical
+  owners.
+
+Span does not confuse evidence with authority, and it does not silently serve
+noncurrent or uncurated understanding as shared knowledge. Together, these
+capabilities provide the maintained software-knowledge layer of a software
+knowledge factory: real engineering work can leave future agents better informed
+without treating one task agent's conclusion as shared truth.
 
 ## What Span changes
 
-### Start with the complete working context
+### Start with maintained knowledge, not a blank session
 
-Ask about a file, symbol, service, or domain. Span returns the current
-understanding already established for that surface and, for a participating
+Ask about a file, symbol, service, or domain. Span returns the current curated
+understanding eligible for shared reuse on that surface and, for a participating
 repository, the complete applicable path through the project's guiding
-documentation.
+documentation. Current captured-but-uncurated understanding remains explicit
+pending knowledge rather than ordinary Answer content.
 
-The agent starts knowing what it is looking at, why it exists, what is already
-known about it, and which project rules and designs apply.
+The agent starts from maintained knowledge rather than reconstructing the same
+understanding from raw evidence every session. That maintained knowledge becomes
+part of the working context for the task in front of it.
 
 ### Follow the right guidance from first principles to implementation
 
@@ -75,13 +102,14 @@ prominence.
 
 ### Reuse what is already known about the implementation
 
-When an agent establishes a useful conclusion about the code, Span can retain it
-with the evidence that supported it. A later session can find that understanding
-from the software surface itself; it does not need the original conversation or
+When an agent establishes a useful conclusion about the code, Span retains that
+capture with the evidence that supported it. A separate reviewer can then curate
+the exact stable revision for shared reuse. A later session can find curated
+knowledge from the software surface itself without the original conversation or
 a saved internal ID.
 
-If the support no longer holds, Span does not silently return the old conclusion
-as current.
+If the support no longer holds—or the revision has not yet been curated—Span
+does not silently return it as shared current knowledge.
 
 ### Recheck only what a change affected
 
@@ -98,35 +126,43 @@ Unrelated understanding stays reusable.
 Span does not replace your coding agent, choose a model, edit source, or run your
 tests. It runs locally as an MCP server beside the agent.
 
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
+
 The agent still does the engineering judgment. Span maintains the reusable
 result of that work: semantic conclusions, their exact support, version history,
 declared governance, and the consequences of change.
 
 Three public tools cover the lifecycle:
 
-- **`ask`** — start from the current understanding and, where declared, the
-  governance that applies to the same scope.
-- **`record`** — retain a conclusion once the agent has established it, with the
-  support it actually used.
+- **`ask`** — start from current curated shared knowledge, pending/stale status,
+  and, where declared, the governance that applies to the same scope.
+- **`record`** — capture supported conclusions and, in a separate reviewer act,
+  curate exact stable revisions for shared reuse.
 - **`reconsider`** — after a change, identify what really needs reassessment and
   carry that work forward without losing history.
 
 ## How it works
 
 1. **Ask for the exact part of the system you are working on.** Span returns
-   the current retained understanding for that surface and, when the repository
-   participates in the Functional Pyramid, the full applicable guidance path
-   from first principles down to functional and technical design.
-2. **Investigate normally, then keep what you learn.** The agent reads code and
-   canonical documents, searches, edits, and tests with its normal tools. When
-   it establishes a useful conclusion, `record` retains it with the evidence
-   and guidance it depends on.
-3. **After change, revisit only what no longer holds.** `reconsider` maps
-   implementation or guiding-document changes to the affected conclusions. The
+   current curated shared knowledge for that surface, pending/stale status, and,
+   when the repository participates in the Functional Pyramid, the applicable
+   guidance path from first principles down to functional and technical design.
+2. **Investigate normally, then capture what you establish.** The working agent
+   reads code and canonical documents, searches, edits, and tests with its normal
+   tools. When it establishes a supported conclusion, `record` retains that
+   exact revision as captured knowledge.
+3. **Curate stable captures for shared reuse.** A separate reviewer—another
+   agent session, a dedicated curator workflow, or a human—reviews the exact
+   capture and uses the same `record` lifecycle to curate it only when it is
+   suitable for future shared reuse.
+4. **After change, revisit only what no longer holds.** `reconsider` maps
+   implementation or guiding-document changes to affected conclusions. The
    agent confirms, corrects, replaces, or withdraws only the understanding that
-   actually needs work.
+   actually needs work; semantic changes return to captured state and require
+   curation again.
 
-A later session starts at step 1 again — but it is no longer starting from zero.
+A later session starts at step 1 with reusable knowledge that is both curated
+and still supported.
 
 ## Functional Pyramid: the path from first principles to the code
 
@@ -184,7 +220,14 @@ ask(surface)
 agent investigates with its normal coding tools
 
 record(kind="understanding", conclusion, support)
-  → retained version + current qualification
+  → retained CAPTURED revision + current support qualification
+
+ask(PendingCurationSelector)
+  → exact CURRENT captures awaiting review
+
+reviewer record(actions.curate)
+  → exact revision becomes CURATED
+  → ordinary shared Answer content requires CURRENT + CURATED
 
 later, implementation or governance changes
 
@@ -229,15 +272,18 @@ span-install --verify-only
 Setup creates no understanding. Begin with the relevant surface from your actual task;
 see [using Span](docs/usage.md).
 
-## Beta host status
+## Beta 2 host status
 
-The Version-1 `1.0.0b1` candidate is verified through the built distribution,
-non-editable installed stdio MCP lane, generic Functional Pyramid acceptance,
-transition/recovery gates and release-registry validation. Live model-host
-delivery is **UNVERIFIED** and is not inferred from registration or historical
-captures. No verified managed-host delivery claim is made for Beta 1.
+The Beta-2 execution candidate is verified through source CI, the built
+distribution, non-editable installed stdio MCP coverage, the FA-01–FA-64
+functional acceptance surface, and the combined installer + Functional Pyramid
++ capture/curation production-topology lane. Live model-host delivery for this
+candidate is still **UNVERIFIED** and is not inferred from registration,
+configured hooks, or historical captures. The private first-adopter cold-install
+gate is separately blocked by adopter-controlled configuration and is not
+presented as a successful delivery capture.
 
-| Host | Version-1 candidate status |
+| Host | Beta-2 candidate status |
 | --- | --- |
 | Codex | Managed integration target retained; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
 | OpenCode | Managed integration and packaged notice delivery verified; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
@@ -256,27 +302,30 @@ agent uses its own model, tools, edits, and test runner. Span does not invoke a
 model or store provider credentials. Structural search helps investigation;
 recorded conclusions retain the agent's interpretation and declared support.
 
-The intended benefit is complete working context for the exact software surface:
-what is already understood about the implementation, the canonical project
-guidance that applies to it, and a focused view of what needs another look after
-either side changes. Beta product value is validated through real-world adopter
+The intended benefit is maintained software knowledge that can become complete
+working context for the exact software surface: what is already understood about
+the implementation, the canonical project guidance that applies to it, and a
+focused view of what needs another look after either side changes. Beta product value is validated through real-world adopter
 use rather than a synthetic pre-release score. This release therefore makes no
 universal time/token-saving claim; follow-up Beta patches will address defects
 and friction found in normal use. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout is the **Version 1 Beta candidate line**. The implemented storage
-contract is repository schema 14 plus the separate installation Functional
-Pyramid store. Existing schema-13 repositories use the explicit offline
-transition; registration alone leaves them `UNCONFIGURED` until participation is
-declared. The public operations remain exactly `ask`, `record`, and `reconsider`.
+This checkout is the **Version 1 Beta-2 execution line**. The implemented
+repository storage contract is schema 15 plus the separate installation
+Functional Pyramid store at installation schema 1. Existing schema-7–14
+repositories use the explicit offline transition; registration alone leaves
+them `UNCONFIGURED` until participation is declared. The public operations
+remain exactly `ask`, `record`, and `reconsider`.
 
-T11 private first-adopter acceptance is closed and T12 release assembly is
-complete. The repository-verifiable T13 gates have passed for `1.0.0b1`, and
-the candidate is release-ready. G5/F8 product-value validation continues after
-release through real-world use in the legal project. See
-[the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
+Beta-2 repository, installer, Functional Pyramid, capture/curation and installed
+production-topology acceptance are green. Private first-adopter revalidation is
+not currently claimed as passed: repository-controlled adopter configuration
+still blocks the required cold-install + governing-projection lane. The release
+therefore is **not release-ready** until that adopter-owned blocker is cleared
+and the final T14 candidate gates pass. See
+[the Beta-2 implementation plan](docs/implementation-plans/1.0.0-beta2.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
 - [Install and connect](docs/install.md)

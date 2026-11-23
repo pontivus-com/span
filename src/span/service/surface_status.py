@@ -49,6 +49,8 @@ def _status(
             if item.parent is not None:
                 children.setdefault(item.parent, []).append(item.key)
     current = 0
+    pending = 0
+    pending_refs: list[m.PendingConclusionRef] = []
     stale = 0
     stale_refs: list[m.StaleConclusionRef] = []
     unassessed = 0
@@ -58,7 +60,20 @@ def _status(
             unassessed += 1
         for conclusion in qualification.conclusions:
             if conclusion.evaluation.state is m.SupportState.CURRENT:
-                current += 1
+                disposition = store.find_curation(
+                    conclusion.ref,
+                    as_of_version=understanding.current_version,
+                )
+                if disposition is not None:
+                    current += 1
+                else:
+                    pending += 1
+                    pending_refs.append(
+                        m.PendingConclusionRef(
+                            ref=conclusion.ref,
+                            understanding_version=understanding.current_version,
+                        )
+                    )
             else:
                 stale += 1
                 stale_refs.append(
@@ -93,6 +108,8 @@ def _status(
     return m.SurfaceStatus(
         surface=surface,
         current=current,
+        pending=pending,
+        pending_refs=tuple(pending_refs),
         stale=stale,
         stale_refs=tuple(stale_refs),
         unassessed=unassessed,

@@ -150,6 +150,7 @@ def _embedded_repository(request: object) -> str | None:
             (
                 m.RecordedQuestionSelector,
                 m.CurrentUnderstandingSelector,
+                m.PendingCurationSelector,
                 m.UnderstandingSnapshotSelector,
                 m.ReceiptRetrievalSelector,
             ),

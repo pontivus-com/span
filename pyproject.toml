@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "span-mcp"
 dynamic = ["version"]
-description = "Span — complete working context for coding agents: what the code does, what guides it, and what changed."
+description = "Span — software knowledge layer for coding agents: evidence-backed capture, curation, governance, and reassessment."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -18,6 +18,9 @@ keywords = [
   "model-context-protocol",
   "coding-agents",
   "codebase-understanding",
+  "knowledge-factory",
+  "knowledge-layer",
+  "context-engineering",
   "governance",
   "semantic-memory",
   "developer-tools",

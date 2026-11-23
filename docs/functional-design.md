@@ -697,15 +697,15 @@ walk that cannot complete reports the limit; it does not report "unaffected".
 ## 7. Response composition
 
 **FD-23 — The Answer/Gap threshold is defined.**
-`ask` returns `Answer` when at least one matched conclusion is `CURRENT`.
-Functional Pyramid orientation does not itself turn a semantic Gap into an
-Answer and an unresolved pyramid does not by itself discard a current
-descriptive conclusion. It
-returns `Gap` when no matched conclusion is current. `Answer` contains only
-current conclusions; stale conclusions appear as references in the surface
-status, never as answer content. A supported conclusion is never withheld because
-another matched conclusion is stale: that would discard usable understanding
-(A9) and force re-derivation (F8). See §14. *(F2, L2)*
+`ask` returns `Answer` when at least one matched conclusion is both
+`CURRENT` and `CURATED`. Functional Pyramid orientation does not itself turn
+a semantic Gap into an Answer and an unresolved pyramid does not by itself
+discard an otherwise eligible descriptive conclusion. It returns `Gap` when
+no matched conclusion is eligible for shared reuse. `Answer` contains only
+CURRENT + CURATED conclusions; current CAPTURED and non-current conclusions
+appear as references/status, never as answer content. One eligible conclusion is
+not withheld because a sibling is pending curation or stale. See §14.
+*(F2, F13, L2, L17)*
 
 The historical view is assembled at read time from the stored revisions. Each
 `Gap.historical` entry carries the exact revision, the understanding version
@@ -718,24 +718,27 @@ references. Neither view auto-withdraws or rewrites history; recovery is an
 explicit `record` action. *(FD-20, FD-21, FD-23, FD-35, FD-36)*
 
 **FD-24 — Partial answers are usable.**
-An `Answer` may therefore contain current conclusions while the surface status
-reports stale and unassessed items, and while recorded gaps are returned. The
-agent can act on the current part and see exactly what is missing. *(A9, L3)*
+An `Answer` may therefore contain CURRENT + CURATED conclusions while the
+surface status reports pending, stale and unassessed items, and while recorded
+gaps are returned. The agent can act on the reusable part and see exactly what
+is missing. *(A9, F13, L3)*
 
 **FD-25 — Gap reasons are exhaustive.**
 For surface/current-identity/exact-recorded-question membership selected under
-lifecycle §4.1, no current conclusion yields one reason from combined support:
-REASSESSMENT_REQUIRED becomes `invalidated`, UNVERIFIABLE becomes
-`unverifiable`, and no retained usable understanding becomes `unassessed`.
-The ordinary free `question` lookup branch and its `no_match` production path
-are retired. `RecordedQuestionSelector` performs exact equality only within its
-supplied surface. An empty matched set for the exact question maps to
-`unassessed`; matched membership with lost support still follows the ordinary
+lifecycle §4.1, no Answer-eligible conclusion yields one reason from current
+membership. If at least one matched revision is CURRENT but CAPTURED, the reason
+is `pending_curation`. Otherwise REASSESSMENT_REQUIRED becomes
+`invalidated`, UNVERIFIABLE becomes `unverifiable`, and no retained usable
+understanding becomes `unassessed`. The ordinary free `question` lookup
+branch and its `no_match` production path are retired.
+`RecordedQuestionSelector` performs exact equality only within its supplied
+surface. An empty matched set for the exact question maps to `unassessed`;
+matched membership with lost support still follows the ordinary
 `invalidated`/`unverifiable` mapping. The selector does not reintroduce
 natural-language or similarity matching. Stored question metadata/history is not
 rewritten. An unknown exact identity is a lookup rejection, not a newly invented
 Gap. Context binding/admission failures never become semantic absence.
-*(F3, F4, A8, L3)*
+*(F2–F4, F13, A8, L3, L17)*
 
 **FD-26 — Ambiguity is a separate result.**
 When a surface reference resolves to more than one granularity, the result is
@@ -767,14 +770,16 @@ public corrective action; absence alone does not establish expiry or reaping.
 Stateful validation stays with its canonical owner. *(FD-39, FD-41, L3, L5)*
 
 **FD-28 — The surface document view is assembled, never stored.**
-The semantic surface view is composed on read from current conclusions; no stored
-copy exists. This assembled explanatory view is distinct from canonical governing
+The semantic surface view is composed on read from CURRENT + CURATED
+conclusions; no stored copy exists. This assembled explanatory view is distinct from canonical governing
 documents. Functional Pyramid rules remain at their canonical owners and are
 referenced by the accompanying pyramid view rather than copied into the surface
 document view. Its contents are fixed in `lifecycle-contract` §4.1.
 *(G6, F11, L11, L12)*
 
-Pure surface obtain groups all current membership by recorded question metadata.
+Pure surface obtain groups all Answer-eligible membership by recorded question
+metadata and reports current CAPTURED membership separately as pending
+curation.
 `RecordedQuestionSelector` restricts membership to one exact recorded question
 on one exact surface; current identity selectors restrict membership to one
 returned understanding identity. All three reuse forms use the same composition,
@@ -825,7 +830,10 @@ the current version rather than creating a new one. Unchanged wording alone is
 never a confirmation. A confirm names the conclusion and the reassessed
 evidence; Span preserves the current statement, assertion nature, and scope,
 re-derives required Functional Pyramid support when normative, and derives a
-non-empty mechanical basis. *(F2, A6, F8, F11, L4)*
+non-empty mechanical basis. When the predecessor revision is CURATED, the
+confirmed revision inherits that curation because confirm is semantically
+identity-preserving; a CAPTURED predecessor remains CAPTURED.
+*(F2, F13, A6, F8, F11, L4, L17)*
 
 **FD-32 — correct.** A conclusion's content changes and a new revision is
 created. Dependents on the previous revision become `REASSESSMENT_REQUIRED`.
@@ -993,8 +1001,9 @@ A host that truncates must say so. A truncated result is not a smaller correct
 result. *(A8)*
 
 **FD-52 — Answer safety is independent of host notices.**
-Support checks occur within the operations returning understanding, regardless
-of notice delivery. The agent lifecycle remains required by layer 2 §7. *(A4)*
+Support and curation-eligibility checks occur within the operations returning
+understanding, regardless of notice delivery. The agent lifecycle remains
+required by layer 2 §7. *(A4, F2, F13)*
 
 **FD-53 — Live delivery is unverified until captured.**
 A host contract is established only by a recorded capture observed or failed.
@@ -1056,24 +1065,91 @@ After commitment, compose current status for the understanding's canonical owner
 Operational status failure preserves acceptance and reports explicit status
 unavailability. Status is never persisted in the receipt. *(F9, L4)*
 
+### Beta 2 capture and curation
+
+**FD-95 — Answer eligibility composes support and curation.**
+For every current semantic revision,
+`eligible_for_answer(ref, t)` is true exactly when support is CURRENT and
+curation state is CURATED. Support and curation remain independent projections.
+*(G2, F2, F13, L17)*
+
+**FD-96 — Semantic creation and change begin captured.**
+Create, add, correct and replace produce CAPTURED revisions. No semantic write
+may create a curation disposition as a side effect. Withdrawal produces no
+reusable semantic content. *(A10, F7, F13, L17)*
+
+**FD-97 — Curation is an immutable exact-revision disposition.**
+A curation action resolves each target lineage against the expected current
+understanding version, derives the exact revision, requires non-empty reviewer
+reasoning, and evaluates the target's required support at acceptance time. Only
+a `CURRENT` target may be curated; non-current support is a typed validation
+rejection requiring re-establishment first. Acceptance records one immutable
+curation disposition per exact revision and advances the understanding version
+without creating or changing a semantic conclusion revision. Compare-and-set and
+receipt/replay rules remain the existing ones.
+*(A2, A3, F2, F5, F13, L4, L17)*
+
+**FD-98 — Semantic change resets curation; semantic-preserving confirmation
+preserves it.**
+Correct and replace create new CAPTURED revisions; add creates a new CAPTURED
+lineage. Confirm inherits curation only from a CURATED predecessor because the
+existing confirm transition preserves statement, assertion nature and semantic
+scope. Confirm of a CAPTURED predecessor remains CAPTURED.
+*(F2, F4, F13, L17)*
+
+**FD-99 — Pending curation is deterministic, not semantic search.**
+Pending-curation obtain returns current-membership semantic revisions that both
+lack a curation disposition and presently evaluate `CURRENT` under their
+required support. CAPTURED non-current revisions remain in the ordinary
+stale/re-establishment path until support is restored. Queue order is the
+ascending exact key `(understanding_id, conclusion_id, revision)`; an optional
+exact `ConclusionRevisionRef` keyset cursor resumes strictly after that key.
+Membership and ordering never depend on similarity, inferred importance,
+confidence or a model-generated score. Bounds/truncation remain server-owned and
+explicit.
+*(A6, A8, F2, F13, L17)*
+
+**FD-100 — Curation never alters Functional Pyramid authority.**
+Curation never changes participation, health, applicability, route identity or
+authority support. CURATED normative content with non-current governing support
+is not Answer content, and a resolved governing route cannot make CAPTURED
+content reusable. *(F1, F11–F13, L12, L17)*
+
+**FD-101 — Surface composition exposes pending knowledge safely.**
+CURRENT + CURATED conclusions form Answer content. CURRENT + CAPTURED revisions
+form pending references/status. Any non-current revision, whether CAPTURED or
+CURATED, follows the existing historical/stale path and is not simultaneously
+counted as pending. If no eligible conclusion exists but pending current capture
+exists, the result is `Gap/pending_curation`. Each current semantic revision
+therefore belongs to exactly one Answer or pending population.
+*(A7, F2, F9, F13, L2, L3, L17)*
+
+**FD-102 — Failed curation review uses the existing semantic lifecycle.**
+A reviewer who finds captured meaning wrong, incomplete, duplicated or wrongly
+scoped uses challenge, correct, replace or withdraw as appropriate. No
+`rejected_curation` semantic state or second writer exists. Only a stable exact
+semantic revision can be curated. *(F5, F13, L17)*
+
 ## 14. Why these choices follow
 
 The choices below that resemble judgement calls are derivations, not preferences.
 
 ### The Answer/Gap threshold (FD-23, FD-25)
 
-F2 forbids presenting unsupported content as an answer. L2 and L3 require
-unsupported content to appear as history or references instead. F2 preserves the current part, and F8 penalises discarding usable understanding.
+F2 forbids presenting unsupported or uncurated content as shared Answer
+knowledge. L2/L3/L17 require non-eligible content to remain explicit as history,
+stale references or pending-curation references. F8 penalises discarding usable
+eligible understanding.
 
-Therefore: if at least one matched conclusion is current, the result is an
-`Answer` containing only current conclusions, with the rest reported as status
-references. If none is current, the result is a `Gap`. The Gap reason follows the
-combined state under FD-25; membership is selected by surface, current identity,
-or the explicit exact recorded-question selector, never by an ordinary supplied
-question string or semantic similarity.
+Therefore: if at least one matched conclusion is CURRENT + CURATED, the result
+is an `Answer` containing those eligible conclusions, with pending/stale state
+reported separately. If none is eligible, the result is a `Gap`; FD-25 derives
+whether the blocker is pending curation, invalidation, unverifiability or
+unassessed membership. Membership is selected by surface, current identity or
+the exact recorded-question selector, never semantic similarity.
 
-Withholding a supported conclusion because a sibling is stale would satisfy no
-principle and violate two.
+Withholding one eligible conclusion because a sibling is pending or stale would
+satisfy no principle and force unnecessary re-derivation.
 
 ### The state precedence (FD-15)
 
@@ -1309,6 +1385,58 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     initialization/revision/deactivation procedure must dispose those effects
     before successful completion, without calling reconsider again for the
     participation write itself.
+45. **New capture is not shared reuse.** A newly recorded supported conclusion is
+    CAPTURED and absent from ordinary Answer content even when support is CURRENT.
+46. **Pending-capture gap.** A surface with CURRENT captured knowledge but no
+    CURRENT + CURATED conclusion returns `Gap/pending_curation` and exact
+    pending revision references.
+47. **Pending-curation discovery.** Repository pending-curation obtain returns
+    exactly the deterministic CURRENT-support, current-membership revision set
+    lacking curation and resumes by the exact revision keyset cursor.
+48. **Curation does not rewrite or bypass support.** Curation accepts only a
+    CURRENT exact revision, advances understanding history, and records an
+    immutable disposition without creating a conclusion revision or changing
+    semantic content/support; a non-current target is rejected for
+    re-establishment first.
+49. **Curated reuse.** The exact CURRENT revision becomes ordinary Answer content
+    after accepted curation.
+50. **Curation cannot override later support loss.** A previously CURATED
+    revision that becomes REASSESSMENT_REQUIRED/UNVERIFIABLE is not Answer
+    content and does not lose its curation history.
+51. **Correction resets curation.** Correcting curated meaning creates a new
+    CAPTURED revision.
+52. **Replacement resets curation.** Replacing curated meaning creates a new
+    CAPTURED lineage/revision.
+53. **Addition begins captured.** Adding a new lineage to an understanding does
+    not inherit sibling curation.
+54. **Confirm preserves curated meaning.** A semantically unchanged support-only
+    confirm of a CURATED predecessor inherits curation with explicit inherited
+    provenance.
+55. **Confirm does not invent curation.** Confirm of a CAPTURED predecessor remains
+    CAPTURED.
+56. **Withdrawal is never reusable.** Withdrawal remains explicit history and
+    cannot acquire curation.
+57. **Curation is a separate act.** A curation action cannot be combined atomically
+    with create/add/confirm/correct/replace/withdraw semantic mutation.
+58. **Curation is not governance.** Curation changes no Functional Pyramid
+    participation, health, applicability, route or authority support.
+59. **Normative reuse requires both planes.** A normative revision is Answer
+    content only when CURRENT under its empirical/governing support and CURATED.
+60. **Failed review repairs meaning first.** Challenge/correct/replace/withdraw
+    can resolve a curation review finding without creating a rejected-curation
+    state; only the resulting stable revision is curated.
+61. **Schema-14 migration fabricates no curation.** Transition preserves every
+    retained semantic/audit row while historical/current Beta-1 revisions begin
+    CAPTURED under the new reuse contract.
+62. **Migrated current knowledge is pending.** A migrated CURRENT revision is
+    discoverable for curation but absent from ordinary Answer until curated.
+63. **Three-tool host surface remains exact.** Capture, curation, reuse and
+    re-alignment are all reachable through `ask`, `record` and
+    `reconsider`; no curate tool exists.
+64. **Installed lifecycle closes the loop.** A non-editable installed MCP journey
+    demonstrates capture → pending discovery → curation → fresh-session reuse →
+    change → reconsider → semantic-preserving confirm/reuse, and a semantic
+    correction path that requires re-curation.
 
 
 ## 16. What this layer does not define

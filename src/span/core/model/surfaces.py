@@ -127,6 +127,14 @@ class Surface:
 
 
 @_dataclass(frozen=True)
+class PendingConclusionRef:
+    """One CURRENT-support captured conclusion awaiting curation."""
+
+    ref: ConclusionRevisionRef
+    understanding_version: UnderstandingVersionNumber
+
+
+@_dataclass(frozen=True)
 class StaleConclusionRef:
     """One non-current conclusion addressed by the surface status (L2, L9).
 
@@ -154,6 +162,8 @@ class SurfaceStatus:
 
     surface: SurfaceKey
     current: int = 0
+    pending: int = 0
+    pending_refs: tuple[PendingConclusionRef, ...] = ()
     stale: int = 0
     stale_refs: tuple[StaleConclusionRef, ...] = ()
     unassessed: int = 0
@@ -164,12 +174,17 @@ class SurfaceStatus:
     def __post_init__(self) -> None:
         for name, value in (
             ("current", self.current),
+            ("pending", self.pending),
             ("stale", self.stale),
             ("unassessed", self.unassessed),
             ("unexamined", self.unexamined),
         ):
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"SurfaceStatus.{name} must be a non-negative int")
+        if len(self.pending_refs) != self.pending:
+            raise ValueError(
+                "SurfaceStatus.pending_refs must name every and only pending conclusion"
+            )
         if len(self.stale_refs) != self.stale:
             raise ValueError(
                 "SurfaceStatus.stale_refs must name every and only stale conclusion"

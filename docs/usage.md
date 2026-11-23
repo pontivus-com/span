@@ -1,23 +1,33 @@
 # Using Span
 
 Start with the exact file, symbol, service, or domain you are working on. Span
-can give the agent both sides of the working context for that surface: what is
-already understood about the implementation, and the project guidance that
-applies from first principles down to functional and technical design.
+returns shared knowledge for that surface only when the exact semantic revision
+has been curated and its support is current. It also returns, for participating
+repositories, the project guidance that applies from first principles down to
+functional and technical design. Pending captured knowledge remains explicit
+rather than being served as ordinary working context.
 
-The coding agent still owns reasoning, edits, and test execution. Span keeps
-retained conclusions tied to their evidence, resolves the applicable canonical
-guidance for participating repositories, preserves history, and shows when
-either side of the context needs another look.
+The coding agent still owns reasoning, edits, test execution and evidence-near
+semantic capture. A separate reviewer/curator role decides which stable captured
+revisions become shared reusable knowledge. Span keeps conclusions tied to their
+evidence, records curation history, resolves applicable canonical guidance,
+preserves history, and shows when support or governance needs another look.
+
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
+
+Span does not schedule or run the reviewer. Review may be performed by another
+agent session, a dedicated curator workflow, or a human; semantic correctness
+remains a reviewer judgment rather than a server-generated score.
 
 ## Check Functional Pyramid participation
 
 The Functional Pyramid supplies the guiding-document half of Span's working
 context. After installation, a repository is registered but does not
 automatically participate. Use the Functional Pyramid status selector through
-`ask`. UNCONFIGURED and EXCLUDED repositories can still use retained
-implementation understanding. For an ACTIVE repository, the same ordinary
-`ask` also returns the applicable guidance path for the exact software scope.
+`ask`. UNCONFIGURED and EXCLUDED repositories can still use the ordinary
+descriptive capture/curation lifecycle. For an ACTIVE repository, the same
+ordinary `ask` also returns the applicable guidance path for the exact software
+scope.
 
 Adoption/revision stays inside `ask` and `record`: inspect status, validate the
 candidate, repair declaration/governance findings through ordinary
@@ -37,9 +47,10 @@ or request identity:
 ```
 
 Use `reference` only when the path or declared name resolves unambiguously. A
-pure obtain returns the current surface document view grouped by recorded
-question, or an honest `Gap` with status, historical content where applicable,
-and concrete source pointers. It creates no investigation context and delivers no
+pure obtain returns the current shared surface document view from
+CURRENT + CURATED conclusions, with pending/stale status grouped by recorded
+question, or an honest `Gap` with historical content where applicable and
+concrete source pointers. It creates no investigation context and delivers no
 source body automatically.
 
 When the exact recorded question is already known, use
@@ -50,8 +61,23 @@ reference, a new `request_id`, and non-empty `evidence`. That call returns the
 same Answer/Gap classification plus admission outcomes, exact deliveries, a
 bound context reference, and a continuation when selected evidence is deferred.
 
-Currentness is checked against present support. A saved conclusion is never
-served as current on the strength of its wording.
+Currentness is checked against present support, and shared reuse additionally
+requires curation of the exact semantic revision. A saved conclusion is never
+served as shared current knowledge on the strength of its wording alone.
+
+## Curate captured knowledge
+
+Curation is a separate semantic-review act over an already retained revision.
+Use the pending-curation selector to find current captured revisions, retrieve
+and review the exact owning understanding, and investigate broader retained
+knowledge or governing sources as needed. If the meaning is wrong, incomplete,
+duplicated or wrongly scoped, use the existing challenge/correct/replace/withdraw
+lifecycle first. Curate only the resulting stable revision through the existing
+understanding `record` update.
+
+Curation does not change evidence support or Functional Pyramid authority, and
+it does not certify semantic truth. It only makes that exact revision eligible
+for shared reuse while its support remains current.
 
 ## Investigate and record
 

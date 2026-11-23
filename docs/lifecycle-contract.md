@@ -35,6 +35,8 @@ direction of derivation are defined in the [requirements pyramid model](requirem
 | **Understanding** | The retained, versioned unit: one question over one surface, with supported conclusions. |
 | **Answer** | What `ask` returns when usable understanding exists for the surface. |
 | **Conclusion** | One supported statement inside an understanding. |
+| **Curation state** | Reuse maturity of one exact semantic revision: `CAPTURED` until an explicit curation disposition exists for that revision, then `CURATED`. It is independent of support currency and governing authority. |
+| **Curation disposition** | An immutable reviewer-authored acceptance of one exact conclusion revision for shared reuse, with non-empty reasoning and provenance. It does not change semantic content or governing authority. |
 | **Evidence** | Exact source content — locator, range, content identity. |
 | **Support** | The typed dependency of a conclusion on evidence, a discovery boundary, an authority, or another conclusion. |
 | **Surface status** | The distribution over a surface's own conclusions and its boundary: current, stale, unassessed, and unexamined, with descendant status reported separately. |
@@ -51,8 +53,8 @@ direction of derivation are defined in the [requirements pyramid model](requirem
 | **Functional Pyramid view** | The governing projection for the selected semantic scope: resolved contexts, rule identities/layers, canonical owner references, governing relationships, provenance, downstream dependency information where the selected scope owns rules, and unresolved relationships. It is orientation/governance state, not an agent-authored conclusion and not a copy or summary of canonical rule content. |
 | **Route support** | Server-derived support binding a normative conclusion to the exact Functional Pyramid route that applied when the conclusion was established. |
 
-An understanding may be unsupported. An **answer never is** — that asymmetry is
-the point of the whole system.
+An understanding may be unsupported or captured-but-uncurated. An **Answer is
+neither**: ordinary shared Answer content is both supported and curated.
 
 ## 3. The three public lifecycle operations
 
@@ -96,8 +98,11 @@ into the three lifecycle operations.
 
 State this before the operations, because everything else depends on it.
 
-- Span answers from **retained understanding scoped to a surface**. It does not
-  synthesise an answer from first principles.
+- Span answers from **retained, curated understanding scoped to a surface**. It
+  does not synthesise an answer from first principles.
+- A supported `CAPTURED` revision remains retained and auditable but is not
+  ordinary Answer content. Pending curation is explicit state, never a warning
+  attached to content the agent is expected to ignore.
 - A first-contact question on an unassessed surface returns a **gap**, not a
   generated answer.
 - When code changes, Span **marks containment and enumerates support loss, direct
@@ -121,7 +126,8 @@ Exactly one form is supplied:
 | Surface obtain | `repository_id` and exactly one of `surface` / `reference` | Read current grouped understanding and status; no request ID or context |
 | Exact recorded-question obtain | `selector=RecordedQuestionSelector{repository_id, surface, question}` | Read current membership for that exact recorded question on that exact surface; no similarity matching, request ID or context |
 | Explicit source admission | Surface obtain inputs, non-empty `evidence` selection and `request_id` | Admit selected sources/ranges into a recoverable evidence-only context |
-| Exact current obtain | `selector=CurrentUnderstandingSelector{repository_id, understanding_id}` | Read that understanding's current membership with live support/status |
+| Exact current obtain | `selector=CurrentUnderstandingSelector{repository_id, understanding_id}` | Read that understanding's current membership with live support, curation and status |
+| Pending curation | `selector=PendingCurationSelector{repository_id}` | Read a deterministic bounded set of current-membership semantic revision references that have no accepted curation disposition; no semantic ranking or mutation |
 | Historical/audit obtain | `selector=UnderstandingSnapshotSelector{repository_id, understanding_id, version?}`, `ReceiptRetrievalSelector{repository_id, request_id}`, or `FunctionalPyramidReceiptSelector{request_id}` | Retrieve the exact snapshot or receipt in its owning namespace; never current-answer content |
 | Functional Pyramid state | `selector=FunctionalPyramidSelector{repository_id? , pyramid_id?}`, exactly one identity | Read durable participation/instance state, current version/members and live health; no semantic conclusion is generated |
 | Functional Pyramid candidate validation | `selector=FunctionalPyramidCandidateSelector{action="activate", members}` or `FunctionalPyramidCandidateSelector{action="revise", pyramid_id, expected_version, members}` | Purely validate the exact intended activation/revision against current registered repositories and repository-owned declarations; return complete findings without mutation |
@@ -172,9 +178,11 @@ governing content. The same candidate may be submitted later through `record`;
 recording revalidates present source state rather than trusting an earlier
 validation result.
 
-**Pure obtain.** Surface/reference obtain returns all CURRENT conclusions on
-that surface, grouped by recorded question, with status, gaps, verification,
-limitations and explicit omissions. For an ACTIVE Functional Pyramid repository, the same obtain resolves the
+**Pure obtain.** Surface/reference obtain returns all conclusions on that
+surface that are both `CURRENT` and `CURATED`, grouped by recorded question,
+with status, gaps, verification, limitations and explicit omissions. Current
+CAPTURED revisions remain outside Answer content and are exposed through pending
+status/references. For an ACTIVE Functional Pyramid repository, the same obtain resolves the
 selected scope's declared Functional Pyramid and returns it as orientation state. An exact recorded-question selector first
 restricts membership by surface and exact recorded question; a current selector
 restricts membership to its returned understanding identity. Both then use the
@@ -242,8 +250,9 @@ replay against the same live context returns the same page across restart.
 
 | Result | Meaning |
 | --- | --- |
-| `Answer` | Current supported understanding for the selected membership |
-| `Gap` | No current conclusion for the selected membership, with status and recovery |
+| `Answer` | Current supported and curated understanding for the selected membership |
+| `Gap` | No conclusion eligible for shared reuse for the selected membership, with status and recovery |
+| `PendingCuration` | Deterministic references to current-membership semantic revisions awaiting curation |
 | `AmbiguousSurface` | A reference resolves to more than one exact surface |
 | `RetrievedUnderstanding` | Exact historical/audit understanding retrieval |
 | `RetrievedReceipt` | Exact immutable repository-scoped ordinary receipt retrieval |
@@ -389,6 +398,39 @@ parallel setup DTOs.
   DEACTIVATE/EXCLUDE it is empty. The effects tuple records every repository
   whose durable participation changed.
 
+**Beta-2 curation carriers.** The public curation grammar is exact:
+
+- `CurationState = CAPTURED | CURATED` is a derived reuse-maturity projection;
+  it is never a substitute for `SupportState`.
+- `CurateConclusion` carries exactly
+  `conclusion_id: ConclusionId` and non-empty `reasoning: str`.
+- `PendingCurationSelector` carries
+  `repository_id: str` and optional
+  `after: ConclusionRevisionRef | None`. Pending order is the ascending tuple
+  `(understanding_id, conclusion_id, revision)`; `after` is an exact
+  keyset cursor, not an opaque semantic ranking token.
+- `PendingCurationItem` carries exactly
+  `ref: ConclusionRevisionRef`,
+  `understanding_version: UnderstandingVersionNumber`,
+  `surface: SurfaceKey`, and
+  `question: str`. It never copies the conclusion statement.
+- `PendingCuration` carries
+  `repository_id: str`,
+  `items: tuple[PendingCurationItem, ...]`,
+  `next_after: ConclusionRevisionRef | None`,
+  `omitted: tuple[str, ...]`, and
+  `truncated: bool`. When truncated, `next_after` is the last returned
+  item's exact revision ref; otherwise it is absent.
+- historical/current exact understanding retrieval carries the immutable
+  curation dispositions applicable to that snapshot so audit can distinguish
+  capture from later curation without reading storage internals.
+
+`PendingCuration` is an `AskResult`; it is pure/read-only and has no request
+identity or investigation context. The selector admits only current-membership
+CAPTURED revisions whose live required support is `CURRENT`. Captured revisions
+with non-current support follow the existing stale/re-establishment path and
+become pending only after support is re-established. *(F2, F13, L2, L17)*
+
 Malformed selector structure is `Rejected`, not a validation finding.
 `MEMBER_ALREADY_ACTIVE` means ACTIVE in a different pyramid; a retained member
 of the target REVISE pyramid is valid. Operational inability to evaluate an
@@ -406,10 +448,11 @@ repository coordinate because activation/revision can atomically own several
 repositories. Candidate validation returns no reusable authority or commit token;
 a later record revalidates current declaration source state.
 
-Answer carries only CURRENT statements, nature, scope, per-conclusion support,
-evidence references, surface status and applicable verification. Gap carries
-status, cause (invalidated/unverifiable/unassessed), changed evidence, historical
-content, missing items and actionable recovery. `Answer.admission` and
+Answer carries only CURRENT + CURATED statements, nature, scope,
+per-conclusion support, evidence references, surface status and applicable
+verification. Gap carries status, cause
+(invalidated/unverifiable/unassessed/pending_curation), changed evidence,
+historical content, pending references, missing items and actionable recovery. `Answer.admission` and
 `Gap.admission` are absent unless explicit evidence admission ran; when present
 they contain the one shared `EvidenceAdmissionView` above. All bounded results
 preserve omission and recovery. Historical retrieval includes live support
@@ -429,7 +472,8 @@ omitted and the snapshot retrieval path (FD-54–FD-57). *(L2, L3)*
 
 | Component | Meaning |
 | --- | --- |
-| `current` | conclusions in this surface that are supported by present code |
+| `current` | conclusions in this surface that are both CURATED and supported by present dependencies |
+| `pending` | CURRENT-support, current-membership CAPTURED conclusions; counted and returned as `pending_refs`, never as answer content |
 | `stale` | conclusions whose support no longer holds, directly or through a premise; counted and returned as `stale_refs`, never as answer content |
 | `unassessed` | recorded gaps or declared questions with no supported conclusion |
 | `unexamined` | boundary members with no understanding at all; computed from the boundary and reported with explicit enumeration limits (F9) |
@@ -439,11 +483,15 @@ A parent surface's own conclusions are its own; descendant status is reported
 alongside and never merged into the parent answer. That is what makes a domain
 honestly reportable while it still holds both current and stale understanding.
 
-`stale_refs` names each stale conclusion by its exact revision identity, the
-understanding version that holds it, and its present non-current support state
-(`REASSESSMENT_REQUIRED` or `UNVERIFIABLE`). The count and the references
-describe the same set: no stale conclusion is counted without a reference, and
-no reference is returned for a current conclusion. Descendant statuses carry
+`pending_refs` names each CURRENT-support, current-membership CAPTURED
+conclusion by exact revision identity and owning understanding version.
+CAPTURED conclusions with non-current support are stale, not simultaneously
+pending. `stale_refs` names each non-current conclusion by exact revision
+identity, the understanding version
+that holds it, and its present non-current support state
+(`REASSESSMENT_REQUIRED` or `UNVERIFIABLE`). Each count and reference set
+describes the same population; pending or stale references are never Answer
+content. Descendant statuses carry
 their own references; they are never merged into the parent. A reference is not
 answer content: to read the statement, `ask` with
 `UnderstandingSnapshotSelector{understanding_id, version}`. The status never
@@ -467,8 +515,10 @@ record(kind="functional_pyramid", request_id, action="exclude", repository_id)
 
 `kind` selects the record kind. It is not a tool variant. For understanding,
 a first version is the flat create above. An update carries `actions`, an object
-whose keys are `add`, `confirm`, `correct`, `replace`, `withdraw`. Multiple keys
-are applied atomically. The agent never selects a separate record tool, and
+whose keys are `add`, `confirm`, `correct`, `replace`, `withdraw`, `curate`.
+Semantic mutation keys may be combined under their existing atomic rules;
+`curate` is a separate reuse-qualification act and may not be combined with
+`add`, `confirm`, `correct`, `replace` or `withdraw` in the same update. The agent never selects a separate record tool, and
 `create` is not an action: the flat create form is the only first-version path.
 
 **Functional Pyramid recording.** This record kind changes only Span's
@@ -675,8 +725,9 @@ and immutable history retrieval are different promises.
 | `correct` | a conclusion's content changes; a new revision is created |
 | `replace` | one conclusion is superseded by another |
 | `withdraw` | a conclusion is retracted, with its basis |
+| `curate` | accept the exact current semantic revision for shared reuse, with non-empty reviewer reasoning; semantic content and support are unchanged |
 
-Update actions are compact semantic deltas, not full conclusion snapshots.
+Update actions are compact deltas, not full conclusion snapshots.
 The caller supplies semantic intent and evidence it already holds; Span derives
 new conclusion lineage identities and all mechanical bookkeeping. `add` carries
 `conclusion`; `confirm`, `correct`, `replace`, and `withdraw` carry the existing
@@ -687,7 +738,27 @@ action accepts a caller-created new lineage identity, and `replace` has no
 evidence mode: `locator`, `observation_id`, or non-empty `support`; `withdraw`
 may supply one or none. Span derives the old revision identity, any unchanged
 assertion nature or scope, the mechanical basis, and the submission digest.
-`expected_version` stays mandatory and compare-and-set. *(F5, F7, L4, L7)*
+`expected_version` stays mandatory and compare-and-set. *(F5, F7, F13, L4, L7)*
+
+**Curation.** A `curate` action supplies one or more
+`CurateConclusion{conclusion_id, reasoning}` values. Span resolves each exact
+current revision from the expected understanding version, evaluates its required
+support, and accepts curation only when that support is presently `CURRENT`.
+A non-current target is a typed `Rejected/validation` requiring
+re-establishment before review can be accepted. Span then records one immutable
+curation disposition per exact revision. The action does not change statement,
+assertion nature, semantic scope, support or Functional Pyramid state. It
+advances the understanding version so history shows when each exact semantic
+revision became eligible for shared reuse.
+
+Create, add, correct and replace produce CAPTURED semantic revisions. A
+support-only confirm of semantically unchanged meaning preserves prior curation
+when the confirmed predecessor was CURATED; confirm of a CAPTURED revision
+remains CAPTURED. Withdrawal is never reusable. If curation review finds the
+meaning wrong, incomplete, duplicated or wrongly scoped, the reviewer uses the
+existing challenge/correct/replace/withdraw lifecycle first and curates only the
+resulting stable revision. Curation is reviewer judgment, not support evidence,
+authority or semantic truth certification. *(A10, F2, F5, F13)*
 
 **Challenge dispositions.** An understanding update may settle a named challenge
 in the same atomic `record`. An unresolved disposition carries exactly
@@ -821,7 +892,10 @@ Operational inability to qualify is SupportUnavailable, never a manufactured
 support verdict or time.
 
 For current Answer content, ConclusionView owns one ref and its
-`support: SupportQualification`; it does not nest a second copy of that ref.
+`support: SupportQualification`; Answer eligibility itself proves that exact
+revision is CURATED, so the view does not repeat a constant curation flag.
+Pending-curation projections use exact revision references and never masquerade
+as ConclusionView Answer content.
 VerificationView owns the existing canonical `run: VerificationRun` once and
 `qualification: VerificationQualification | SupportUnavailable`. Thus both
 current answers and ordinary acceptances use the same compact qualification
@@ -1002,21 +1076,22 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | Law | Statement | From |
 | --- | --- | --- |
 | **L1** | Every `Answer` carries per-conclusion support, evidence, and the surface status. | F1, F2, F9 |
-| **L2** | Unsupported content is never in `conclusions`; it appears as historical content in a `Gap`, or as references and counts in the surface status. | F2, A7 |
+| **L2** | Unsupported or uncurated content is never in Answer `conclusions`; non-current content appears as history/stale references and current CAPTURED content appears as pending-curation references/status. | F2, F13, A7 |
 | **L3** | Every `Gap` carries cause, status, changed evidence, missing items and public recovery; explicit evidence admission also carries its bound context and source outcomes. | F4, A8 |
 | **L4** | Every write is atomic, receipted, retry-safe, and compare-and-set on update. | A2, A3 |
 | **L5** | An operation accepts its declared inputs without an unrelated API preflight; this does not waive the agent lifecycle in §7. | F7, A8 |
 | **L6** | Evidence identity is computed by Span from source, never accepted from a description. | A5 |
-| **L7** | The agent supplies intent; Span derives identity, context, and qualification. | F7 |
+| **L7** | The agent supplies semantic or curation intent; Span derives identity, context and mechanical support qualification. Span never infers the curation judgment. | F5, F7, F13 |
 | **L8** | The public operations are exactly `ask`, `record`, and `reconsider`. | F6 |
 | **L9** | A surface's status is always reported as a distribution, never a single stamp. | F9 |
 | **L10** | `reconsider` returns every containing surface for a changed path, reports direct and premise-dependent support loss separately, and supplies the bounded re-establishment context F4 requires. | F4, F9 |
-| **L11** | A surface's current conclusions are readable as that surface's documentation; there is no separate document artifact to maintain. | G6, F3 |
+| **L11** | A surface's supported and curated current conclusions are readable as that surface's shared documentation; captured-only revisions remain retained pending knowledge, not a second document artifact. | G2, G6, F2, F3, F13 |
 | **L12** | For an ACTIVE repository, current surface obtain returns the declared Functional Pyramid route or explicit operational unavailability; normative understanding automatically depends on that route and its applicable authorities. A semantically valid normative record whose derived governance support is non-current may be retained but is qualified non-current and never served as CURRENT Answer content. No separate authority operation exists. | G1, G3, G7, F2, F6, F7, F11 |
 | **L13** | Functional Pyramid participation is explicit and versioned: registration alone means UNCONFIGURED; EXCLUDED is an explicit decision; ACTIVE belongs to exactly one Functional Pyramid instance at a time. Each member declares one functional coverage scope plus PARTIAL or COMPLETE coverage. ACTIVE health is computed as VALID or DEGRADED from present graph/member state and is not a durable participation transition. Membership never implies applicability. | G1, G4, G8, F11, F12 |
 | **L14** | Functional Pyramid candidate validation is pure and action-aware: activation validates a proposed member set; revision additionally validates target pyramid/version and removals. Activation/revision/deactivation/exclusion are atomic installation-scoped receipted `record` writes that revalidate repository-owned declarations, never use a member repository as an artificial receipt owner, and never copy canonical rule content. Accepted activation/revision/deactivation writes also return the semantic dependent effects caused by their participation/route change through the same affected-conclusion projection used by `reconsider`. | G3, G6, G8, A2, A3, F1, F4, F7, F12 |
 | **L15** | Governance change analysis crosses repository boundaries within the affected Functional Pyramid instance and returns every directly or indirectly affected retained conclusion without requiring the caller to predict dependent repositories. Every repository with actionable affected conclusions receives its own existing repository-bound re-establishment context; no cross-repository context carrier is invented. | G3, F4, F11, F12 |
 | **L16** | Governed software work uses the same effective semantic scope for retained understanding and Functional Pyramid orientation; completion of work that makes a normative claim, including a conformance judgment, requires all affected governance/support dispositions to be current or an explicit named blocker. | G1, G3, G7, F2, F4, F11 |
+| **L17** | Capture and curation are distinct. Semantic create/add/correct/replace retain CAPTURED revisions; only a separate accepted curation disposition makes an exact CURRENT revision eligible for shared Answer reuse. Curation never changes support or Functional Pyramid authority and never shares an atomic write with semantic mutation. | G2, A10, F2, F5, F7, F13 |
 
 ## 7. Lifecycle mapping
 
@@ -1142,11 +1217,14 @@ effects, but it does
 not own a second Functional Pyramid definition and it does not bypass the
 ordinary Span lifecycle while interpreting repository sources.
 
-### 7.2 Span runtime lifecycle with Functional Pyramid integration
+### 7.2 Span runtime and curation lifecycle with Functional Pyramid integration
 
-The runtime lifecycle below is the existing Span lifecycle. Functional Pyramid
-behavior is additive at the existing moments; no `READY_TO_CHANGE`,
-`CLASSIFY_CHANGE`, `VERIFY` or other new public lifecycle state is introduced.
+The working-agent runtime remains obtain/retain/re-align. Functional Pyramid
+behavior is additive at those moments. Curation is a separate semantic-review
+lane over retained captures, not another MCP operation and not a requirement
+that the task-performing agent self-publish its own conclusion. No
+`READY_TO_CHANGE`, `CLASSIFY_CHANGE`, `CURATE` tool or other new public
+operation is introduced.
 
 ```mermaid
 stateDiagram-v2
@@ -1162,7 +1240,7 @@ stateDiagram-v2
     INVESTIGATE --> REESTABLISH: investigation resolves returned non-current understanding
     INVESTIGATE --> EDIT: investigation supports external edit
 
-    CONCLUDE --> COMPLETE: accepted + required qualification CURRENT
+    CONCLUDE --> COMPLETE: supported capture accepted + required qualification CURRENT
     CONCLUDE --> INVESTIGATE: accepted but required qualification non-current
     REUSE --> COMPLETE
 
@@ -1183,14 +1261,22 @@ stateDiagram-v2
 | --- | --- | --- |
 | Orient | `ask` returns current semantic Answer/Gap and surface status | for ACTIVE participation, the same call resolves the governing projection for the exact same effective semantic scope; UNCONFIGURED/EXCLUDED remain explicit participation results |
 | Investigate | explicit evidence admission + source reading establishes empirical understanding | follow returned canonical owner references only when governing meaning is needed; governing prose stays at its source and is not copied into Span |
-| Conclude | `record(kind="understanding")` retains agent-authored meaning | DESCRIPTIVE behavior is unchanged; a conformance judgment is NORMATIVE, and every NORMATIVE conclusion in an ACTIVE repository automatically receives route support and every applicable authority dependency; acceptance with non-current qualification is retained but does not complete the task |
-| Reuse | `ask(surface/reference)` or exact recorded-question/current selectors reuse retained understanding | governing applicability is re-resolved on read so semantic currency and governing currency remain independently current |
+| Conclude | `record(kind="understanding")` retains agent-authored meaning as CAPTURED when semantic meaning is created or changed | a conformance judgment is NORMATIVE, and every NORMATIVE conclusion in an ACTIVE repository automatically receives route support and every applicable authority dependency; capture does not itself publish shared knowledge |
+| Reuse | `ask(surface/reference)` or exact recorded-question/current selectors reuse retained understanding only when the exact revision is CURATED and support is CURRENT | governing applicability is re-resolved on read so curation, semantic currency and governing currency remain independent |
 | Edit | the agent edits externally; Span never predicts or authors the change; after edit use `reconsider(changed_scope)` | before an authority-source edit, ordinary `ask` can expose current declared downstream dependencies; after edit the same reconsider call evaluates authority/route effects |
 | Re-align | `reconsider` preserves containment/direct/indirect semantics and returns bounded re-establishment context | direct support evaluation additionally includes authority and Functional Pyramid route support; dependency traversal may cross member repositories while returned surfaces remain repository-owned |
-| Re-establish | existing `confirm/correct/replace/withdraw/add` recording and history/CAS/replay semantics | refreshed normative revisions receive freshly server-derived route/authority support; no new re-establishment action is added |
+| Re-establish | existing `confirm/correct/replace/withdraw/add` recording and history/CAS/replay semantics | refreshed normative revisions receive freshly server-derived route/authority support; support-only confirm may preserve prior curation, while semantic correction/replacement becomes CAPTURED and requires later curation for shared reuse |
 | Dispute | `reconsider(challenge)` then `record` disposition | normative challenged conclusions retain the same governing-support rules; no Functional-Pyramid-specific dispute operation exists |
 | Start / resume / compact | `ask` when semantic work begins or resumes | ACTIVE repositories regain the current governing projection without conversation memory |
 | Complete | applicable records and re-establishment are accepted; current reuse requires no duplicate record | governed work may not silently leave an affected required route/authority disposition unresolved; an operational blocker is reported as a blocker, not converted into a successful governance conclusion |
+
+**Curation lane.** A reviewer or curator obtains
+`PendingCurationSelector{repository_id}`, retrieves the exact semantic revision
+and relevant existing knowledge/governance, and either repairs the meaning
+through the ordinary challenge/correct/replace/withdraw lifecycle or records
+`actions.curate` for the stable exact revision. Curation may run at task
+completion, review time or asynchronously. Span stores the pending state and
+accepted disposition but does not schedule or run a curator model.
 
 **Runtime I/O gating.** The lifecycle transition is determined from the returned
 public result, not merely from whether a call was accepted.
@@ -1199,7 +1285,7 @@ public result, not merely from whether a call was accepted.
 | --- | --- | --- | --- |
 | ORIENT / REUSE | pure `ask(surface|reference|exact selector)` | semantic membership/support/status and, for ACTIVE participation, governing projection for the same effective scope | current `Answer` sufficient for task → REUSE/EDIT/DISPUTE; `Gap` or required non-current state → INVESTIGATE; a descriptive Answer may coexist with unresolved/unavailable governing orientation, but normative interpretation cannot treat that governance as current |
 | INVESTIGATE | explicit-evidence `ask` plus source reads, including canonical owner refs when governing meaning is needed | source observations/evidence context; no semantic or conformance verdict | sufficient evidence → CONCLUDE or REESTABLISH; more evidence → remain INVESTIGATE; `Rejected` corrects request; `Unavailable` is a blocker |
-| CONCLUDE | `record(kind="understanding", ...)` with `assertion_nature=DESCRIPTIVE|NORMATIVE`; conformance uses NORMATIVE | semantic scope/owner, caller support and, for ACTIVE NORMATIVE content, server-derived route/authority support | `UnderstandingRecorded` with required qualification CURRENT → COMPLETE; accepted but REASSESSMENT_REQUIRED/UNVERIFIABLE → INVESTIGATE/REESTABLISH; post-commit `SupportUnavailable` requires recovery and is not COMPLETE; `Rejected` fixes request/CAS |
+| CONCLUDE | `record(kind="understanding", ...)` with `assertion_nature=DESCRIPTIVE|NORMATIVE`; conformance uses NORMATIVE | semantic scope/owner, caller support and, for ACTIVE NORMATIVE content, server-derived route/authority support; new/changed meaning is CAPTURED | `UnderstandingRecorded` with required support qualification CURRENT → working-task COMPLETE with pending curation; accepted but REASSESSMENT_REQUIRED/UNVERIFIABLE → INVESTIGATE/REESTABLISH; post-commit `SupportUnavailable` requires recovery and is not COMPLETE; `Rejected` fixes request/CAS |
 | EDIT / REALIGN | external edit then repository-scoped `reconsider(changed_scope)` for each directly edited repository | containment, direct source/discovery/authority/route effects, cross-member dependents, premise closure and per-repository contexts | `Changed` with no actionable non-current conclusions → COMPLETE; actionable effects → REESTABLISH or INVESTIGATE; `Rejected` fixes request; `Unavailable` blocks |
 | REESTABLISH | returned `expected_version` + owning repository context/direct evidence + `record` confirm/correct/replace/withdraw/add | CAS, updated semantic content/support and freshly derived NORMATIVE governance support | accepted with all required affected dispositions CURRENT → COMPLETE; accepted but still non-current → INVESTIGATE; stale CAS → ORIENT/REALIGN; operational inability blocks |
 | DISPUTE | `reconsider(challenge,...)` then `record` named disposition | challenge context/history plus ordinary support evaluation | `Challenged` → REESTABLISH; disposition acceptance completes only when its required resulting support/dispositions are current; otherwise INVESTIGATE |
@@ -1251,8 +1337,11 @@ verification as applicable.
 
 Complete the applicable lifecycle before claiming the work complete. An accepted
 write is not sufficient when its returned qualification or dependent-effect
-projection still contains a required non-current disposition. Reusing a current
-applicable conclusion requires no duplicate record. Preserve genuine
+projection still contains a required non-current disposition. Engineering-task
+completion does not imply that a newly captured conclusion has been curated;
+that separate review remains visible as pending knowledge. Reusing an applicable
+conclusion requires both CURRENT support and CURATED reuse state and needs no
+duplicate record. Preserve genuine
 uncertainty and disputes; report a named operational blocker when the lifecycle
 cannot complete. A rejected call is not retained understanding. Acceptance with
 unavailable qualification preserves its receipt and requires explicit recovery.

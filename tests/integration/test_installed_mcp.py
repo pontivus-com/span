@@ -216,30 +216,29 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         )
         self.assertEqual(created.returncode, 0, created.stderr[-2000:])
 
-    def _create_governed_stores(
+    def _install_governed_runtime(
         self,
         repo_a: _pathlib.Path,
         repo_b: _pathlib.Path,
         data_dir: _pathlib.Path,
-    ) -> None:
-        data_dir.mkdir(parents=True, exist_ok=True)
+    ) -> str:
+        """Initialize the governed candidate through the installed production path."""
+        self.assertFalse(data_dir.exists())
+        runtime_root = self.tmp / "governed-runtime"
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        bindings_path = runtime_root / "repo-b-authority-bindings.json"
         code = (
-            "import hashlib\n"
+            "import hashlib, json\n"
             "from pathlib import Path\n"
             "from span.core import model as m\n"
-            "from span.shell.sqlite_store.lifecycle import LifecycleStore\n"
-            "from span.shell.sqlite_store.functional_pyramid import "
-            "ensure_functional_pyramid_installation_store\n"
-            "from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION\n"
-            f"repo_a = Path({str(repo_a.resolve())!r})\n"
-            f"repo_b = Path({str(repo_b.resolve())!r})\n"
-            f"data_dir = Path({str(data_dir)!r})\n"
-            "def authority(evidence_id, locator):\n"
-            "    digest = hashlib.sha256((repo_b / locator).read_bytes()).hexdigest()\n"
+            f"repo = Path({str(repo_b.resolve())!r})\n"
+            f"out = Path({str(bindings_path)!r})\n"
+            "def binding(evidence_id, locator):\n"
+            "    digest = hashlib.sha256((repo / locator).read_bytes()).hexdigest()\n"
             "    return m.AuthorityBinding(\n"
             "        evidence_ref=m.EvidenceRef(\n"
             "            evidence_id=m.EvidenceId(evidence_id),\n"
-            "            repository_id=repo_b.name,\n"
+            "            repository_id=repo.name,\n"
             "            source_kind=m.EvidenceSourceKind.DOCUMENTATION,\n"
             "            locator=locator,\n"
             "            revision_or_fingerprint=f'sha256:{digest}',\n"
@@ -247,34 +246,72 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             "        authority_kind=m.AuthorityKind.REPOSITORY_RULE,\n"
             "        status=m.AuthorityStatus.ACCEPTED,\n"
             "    )\n"
-            "store_a = LifecycleStore(data_dir / f'{repo_a.name}.db', "
-            "retention=DEFAULT_LIFECYCLE_RETENTION)\n"
-            "store_a.register_repository(repo_a.name, str(repo_a))\n"
-            "store_a.close()\n"
-            "store_b = LifecycleStore(data_dir / f'{repo_b.name}.db', "
-            "retention=DEFAULT_LIFECYCLE_RETENTION)\n"
-            "store_b.register_repository(\n"
-            "    repo_b.name, str(repo_b),\n"
-            "    authority_bindings=(\n"
-            "        authority('authority-p0-v1', 'rules/p0-v1.md'),\n"
-            "        authority('authority-p0-v2', 'rules/p0-v2.md'),\n"
-            "    ),\n"
-            ")\n"
-            "store_b.close()\n"
-            "fp = ensure_functional_pyramid_installation_store(\n"
-            "    data_dir, retention=DEFAULT_LIFECYCLE_RETENTION\n"
-            ")\n"
-            "fp.close()\n"
+            "items = [\n"
+            "    binding('authority-p0-v1', 'rules/p0-v1.md'),\n"
+            "    binding('authority-p0-v2', 'rules/p0-v2.md'),\n"
+            "]\n"
+            "out.write_text(json.dumps([m.to_canonical(item) for item in items]), "
+            "encoding='utf-8')\n"
         )
-        created = _subprocess.run(
+        generated = _subprocess.run(
             [self.isolated_python, "-c", code],
             cwd=str(self.tmp),
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=120,
             env=self._env(),
         )
-        self.assertEqual(created.returncode, 0, created.stderr[-4000:])
+        self.assertEqual(generated.returncode, 0, generated.stderr[-4000:])
+
+        install_exe = _pathlib.Path(self.exe).with_name("span-install")
+        repo_root = _pathlib.Path(__file__).resolve().parents[2]
+        venv_dir = runtime_root / "venv"
+        bin_dir = runtime_root / "bin"
+        isolated_home = runtime_root / "home"
+        isolated_home.mkdir()
+        env = self._env()
+        env["HOME"] = str(isolated_home)
+        env["XDG_CONFIG_HOME"] = str(runtime_root / "config")
+
+        installed = _subprocess.run(
+            [
+                str(install_exe),
+                "--repo",
+                str(repo_a),
+                "--repo",
+                str(repo_b),
+                "--authority-bindings-file",
+                repo_b.name,
+                str(bindings_path),
+                "--data-dir",
+                str(data_dir),
+                "--venv-dir",
+                str(venv_dir),
+                "--bin-dir",
+                str(bin_dir),
+                "--span-repo",
+                str(repo_root),
+                "--no-codex",
+                "--no-claude",
+                "--no-hooks",
+                "--no-skills",
+            ],
+            cwd=str(self.tmp),
+            capture_output=True,
+            text=True,
+            timeout=900,
+            env=env,
+        )
+        self.assertEqual(
+            installed.returncode,
+            0,
+            (installed.stderr or installed.stdout)[-12000:],
+        )
+        runtime_exe = venv_dir / "bin" / "span-mcp"
+        self.assertTrue(runtime_exe.is_file())
+        self.assertTrue((data_dir / f"{repo_a.name}.db").is_file())
+        self.assertTrue((data_dir / f"{repo_b.name}.db").is_file())
+        return str(runtime_exe)
 
     def test_installed_cross_repository_governance_journey(self):
         root = self.tmp / "governed"
@@ -285,7 +322,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         _write_files(repo_a, _GOVERNED_A_FILES)
         _write_files(repo_b, _GOVERNED_B_FILES)
         data_dir = self.tmp / "governed-data"
-        self._create_governed_stores(repo_a, repo_b, data_dir)
+        runtime_exe = self._install_governed_runtime(repo_a, repo_b, data_dir)
 
         probe = _pathlib.Path(__file__).with_name(
             "functional_pyramid_governed_probe.py"
@@ -294,7 +331,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             [
                 self.isolated_python,
                 str(probe),
-                str(self.exe),
+                runtime_exe,
                 str(repo_a),
                 str(repo_b),
                 str(data_dir),
@@ -319,6 +356,8 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         )
         self.assertIn("INVALID_DECLARATION", observed["mixed_graph_reasons"])
 
+        self.assertFalse(observed["pre_status_error"])
+        self.assertEqual(observed["pre_status_state"], "UNCONFIGURED")
         self.assertFalse(observed["candidate_error"])
         self.assertTrue(observed["candidate_ready"])
         self.assertFalse(observed["activated_error"])
@@ -354,6 +393,16 @@ class InstalledMcpDriverTest(_unittest.TestCase):
 
         self.assertFalse(observed["created_error"])
         self.assertEqual(observed["created_qualification"], "CURRENT")
+        self.assertFalse(observed["captured_ask_error"])
+        self.assertEqual(observed["captured_ask_kind"], "Gap")
+        self.assertEqual(observed["captured_gap_reason"], "pending_curation")
+        self.assertFalse(observed["pending_error"])
+        self.assertEqual(observed["pending_kind"], "PendingCuration")
+        self.assertTrue(observed["pending_contains_created"])
+        self.assertFalse(observed["curated_error"])
+        self.assertEqual(observed["curated_kind"], "UnderstandingRecorded")
+        self.assertFalse(observed["fresh_reuse_error"])
+        self.assertEqual(observed["fresh_reuse_kind"], "Answer")
         self.assertFalse(observed["snapshot_before_error"])
         self.assertTrue(observed["snapshot_before_has_route"])
         self.assertIn("authority-p0-v1", observed["snapshot_before_authority_ids"])
@@ -369,6 +418,17 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertIn("authority-p0-v2", observed["snapshot_after_authority_ids"])
         self.assertFalse(observed["ask_after_error"])
         self.assertEqual(observed["ask_after_kind"], "Answer")
+        self.assertFalse(observed["corrected_error"])
+        self.assertEqual(observed["corrected_kind"], "UnderstandingRecorded")
+        self.assertFalse(observed["corrected_ask_error"])
+        self.assertEqual(observed["corrected_ask_kind"], "Gap")
+        self.assertEqual(observed["corrected_gap_reason"], "pending_curation")
+        self.assertFalse(observed["corrected_pending_error"])
+        self.assertTrue(observed["corrected_pending_contains_target"])
+        self.assertFalse(observed["recurated_error"])
+        self.assertEqual(observed["recurated_kind"], "UnderstandingRecorded")
+        self.assertFalse(observed["final_ask_error"])
+        self.assertEqual(observed["final_ask_kind"], "Answer")
 
     def test_installed_lifecycle_over_stdio(self):
         work = self.tmp / "synth"
@@ -403,6 +463,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         for key in (
             "cold_error",
             "created_error",
+            "curated_error",
             "warm_error",
             "retrieved_error",
         ):
@@ -411,7 +472,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertEqual(observed["cold_kind"], "Gap")
         self.assertEqual(observed["found_kind"], "Answer")
         self.assertEqual(observed["statement"], "Alpha declares VALUE = 1.")
-        self.assertEqual(observed["version"], 1)
+        self.assertEqual(observed["version"], 2)
         self.assertFalse(observed["fp_status_before_error"])
         self.assertEqual(observed["fp_status_before_kind"], "FunctionalPyramidStatus")
         self.assertEqual(observed["fp_status_before_state"], "UNCONFIGURED")

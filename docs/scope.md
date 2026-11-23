@@ -1,10 +1,12 @@
 # Scope and product boundaries
 
-Span gives an agent working context for the exact software scope it is dealing
-with. That context can include retained understanding of the implementation and,
-for participating repositories, the project guidance that applies to the same
-scope. The task determines the scope; Span keeps established understanding,
-support, and later change effects attached to it through the required lifecycle.
+Span retains software understanding for the exact scope an agent is dealing
+with and separately qualifies exact semantic revisions for shared reuse. At task
+time, supported and curated knowledge becomes working context: retained
+understanding of the implementation and, for participating repositories, the
+project guidance that applies to the same scope. The task determines the scope;
+Span keeps captured meaning, curation state, support, governing relationships and
+later change effects attached to it through the required lifecycle.
 
 ## The unit is an explanation
 
@@ -35,12 +37,13 @@ membership boundary can require reassessment. Unsupported or missing evidence
 remains explicit. Changes outside a declared dependency boundary do not make
 all saved understanding noncurrent.
 
-The intended benefit is complete working context for the exact software scope:
-retained implementation understanding, the applicable canonical project
-guidance, and focused review when either side changes. Net time/token savings
-depend on the task, recording effort, reuse, and host delivery. The beta does
-not claim a measured universal saving or a comparative product-fitness ACCEPT
-result.
+The intended benefit is maintained software knowledge that can be projected as
+complete working context for the exact software scope once the semantic revision
+is both curated and supported: retained implementation understanding, the
+applicable canonical project guidance, and focused review when either side
+changes. Net time/token savings depend on the task, recording
+effort, reuse, and host delivery. The beta does not claim a measured universal
+saving or a comparative product-fitness ACCEPT result.
 
 ## Declared governance is scoped, not inferred
 
@@ -86,11 +89,12 @@ service-wide run applies to the files it covers.
 
 ## Local storage and operational effects
 
-Repository runtime state uses schema 14 in the external data directory.
-Installation-level Functional Pyramid participation and receipts use the
-separate installation database under `<DATA_DIR>/installation/`. Recoverable
-contexts and observation admission are operational state; recording creates
-semantic history. Context expiry does not erase accepted conclusions, challenges,
+Beta 2 repository runtime state uses schema 15 in the external data directory.
+Installation-level Functional Pyramid participation and receipts remain in the
+separate installation database under `<DATA_DIR>/installation/` at installation
+schema 1. Recoverable contexts and observation admission are operational state;
+recording creates semantic history and curation dispositions qualify exact
+semantic revisions for shared reuse. Context expiry does not erase accepted conclusions, challenges,
 verification runs, or retained receipts. Receipt expiry ends that replay
 window, not the existence of the recorded understanding.
 
@@ -101,20 +105,22 @@ it. Runtime operation does not write target source or provider artifacts into
 the target repository. Installation may write a managed `AGENTS.md` block and
 host configuration as described in [install](install.md).
 
-Existing schema-7–13 repository stores use the separately invoked offline
-inspect/apply/verify/rollback protocol into schema 14. The schema-13 transition
-preserves its durable semantic/audit rows and derives only the route lookup
-projection from already-retained FunctionalRouteSupport; it does not invent
-participation, authority support or historical routes. Earlier schemas keep the
-documented preservation/mapping boundary. See the
+Existing schema-7–14 repository stores use the separately invoked offline
+inspect/apply/verify/rollback protocol into schema 15. The Beta-2 schema-14→15
+mapping preserves durable semantic/audit/governance state and the existing route
+lookup projection while creating zero curation dispositions. Earlier schemas
+retain their documented preservation/mapping boundaries before the final
+schema-15 transition. See the
 [transition procedure](install.md#upgrade-an-existing-store).
 
 ## Beta delivery boundary
 
-Generic Version-1 behavior is verified through the full functional acceptance
-matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code remain
-managed integration targets, but final-candidate live model delivery is not
-claimed until T13 captures it. Registration, configured hooks and observed
-model behavior remain separate facts.
+Generic Beta-2 behavior is verified through the full FA-01–FA-64 functional
+acceptance matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code
+remain managed integration targets, but live model delivery for the current
+Beta-2 candidate is **UNVERIFIED**. Registration, configured hooks and observed
+model behavior remain separate facts. Private first-adopter cold-install
+revalidation is also not claimed as passed while its adopter-controlled
+configuration blocker remains open.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).

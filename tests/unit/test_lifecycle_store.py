@@ -1,4 +1,4 @@
-"""Schema-14 lifecycle store tests."""
+"""Schema-15 lifecycle store tests."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from span.core.recording import (
 )
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
+    LifecycleStoreDataError,
     LifecycleStoreError,
     SchemaVersionError,
     SourceObservationRecord,
@@ -163,6 +164,45 @@ def _update_command(
     )
 
 
+def _curate_command(
+    *,
+    expected: int,
+    submission: str,
+    reasoning: str = "stable for shared reuse",
+) -> m.UpdateUnderstandingCommand:
+    return m.UpdateUnderstandingCommand(
+        identity=_identity(submission),
+        understanding_id=m.UnderstandingId("u-1"),
+        expected_version=m.UnderstandingVersionNumber(expected),
+        curate=(
+            m.CurateConclusion(
+                conclusion_id=m.ConclusionId("c-1"),
+                reasoning=reasoning,
+            ),
+        ),
+        provenance="reviewer-session",
+    )
+
+
+def _same_confirm_command(
+    *,
+    expected: int,
+    submission: str,
+) -> m.UpdateUnderstandingCommand:
+    return m.UpdateUnderstandingCommand(
+        identity=_identity(submission),
+        understanding_id=m.UnderstandingId("u-1"),
+        expected_version=m.UnderstandingVersionNumber(expected),
+        confirm=(
+            m.ConfirmConclusion(
+                conclusion_id=m.ConclusionId("c-1"),
+                **_content("A does X"),
+            ),
+        ),
+        provenance="engineering-session",
+    )
+
+
 def _verification_command(submission: str = "sub-v") -> m.RecordVerificationCommand:
     return m.RecordVerificationCommand(
         identity=_identity(submission),
@@ -274,13 +314,13 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.register_repository("repo-1", "/repo/one")
         self.store.put_source_observation(_observation())
 
-    def test_schema_version_is_fourteen(self) -> None:
+    def test_schema_version_is_fifteen(self) -> None:
         row = self.store._connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        self.assertEqual(row["value"], "14")
+        self.assertEqual(row["value"], "15")
 
-    def test_schema_fourteen_keeps_only_repository_route_projection(self) -> None:
+    def test_schema_fifteen_adds_only_curation_to_repository_lifecycle(self) -> None:
         tables = {
             row["name"]
             for row in self.store._connection.execute(
@@ -289,9 +329,23 @@ class LifecycleStoreTest(unittest.TestCase):
             )
         }
         self.assertEqual(tables, {"functional_route_dependency_index"})
+        curation_tables = {
+            row["name"]
+            for row in self.store._connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+                " AND name LIKE '%curation%'"
+            )
+        }
+        self.assertEqual(curation_tables, {"conclusion_curations"})
         self.assertEqual(
             self.store._connection.execute(
                 "SELECT COUNT(*) FROM functional_route_dependency_index"
+            ).fetchone()[0],
+            0,
+        )
+        self.assertEqual(
+            self.store._connection.execute(
+                "SELECT COUNT(*) FROM conclusion_curations"
             ).fetchone()[0],
             0,
         )
@@ -356,6 +410,267 @@ class LifecycleStoreTest(unittest.TestCase):
                 understanding_id=m.UnderstandingId("u-1"),
             )
         self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+
+    def test_curate_update_is_atomic_versioned_and_replay_safe(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        command = _curate_command(expected=1, submission="sub-curate")
+
+        receipt = self.store.record_understanding(command)
+
+        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_conclusions("u-1")), 1)
+        version = self.store.get_version("u-1", 2)
+        self.assertEqual(version.conclusions[0].revision.value, 1)
+        disposition = self.store.find_curation(version.conclusions[0])
+        self.assertIsNotNone(disposition)
+        assert disposition is not None
+        self.assertIs(disposition.origin, m.CurationOrigin.EXPLICIT)
+        self.assertEqual(disposition.accepted_in_version.value, 2)
+        self.assertEqual(disposition.reasoning, "stable for shared reuse")
+        self.assertEqual(disposition.provenance, "reviewer-session")
+
+        replay = self.store.record_understanding(command)
+        self.assertEqual(replay, receipt)
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_curations("u-1")), 1)
+
+        with self.assertRaises(RecordingConflict):
+            self.store.record_understanding(
+                _curate_command(
+                    expected=1,
+                    submission="sub-curate",
+                    reasoning="different review",
+                )
+            )
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_curations("u-1")), 1)
+
+    def test_curate_stale_expected_version_is_atomic_conflict(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        self.store.record_understanding(
+            _curate_command(expected=1, submission="sub-curate")
+        )
+
+        with self.assertRaises(RecordingConflict):
+            self.store.record_understanding(
+                _curate_command(expected=1, submission="sub-curate-stale")
+            )
+
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_curations("u-1")), 1)
+
+    def test_confirm_inherits_curation_but_semantic_change_does_not(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        self.store.record_understanding(
+            _curate_command(expected=1, submission="sub-curate")
+        )
+
+        confirm_receipt = self.store.record_understanding(
+            _same_confirm_command(expected=2, submission="sub-confirm")
+        )
+        self.assertEqual(confirm_receipt.accepted_understanding_versions[0].value, 3)
+        confirmed_ref = self.store.get_version("u-1", 3).conclusions[0]
+        self.assertEqual(confirmed_ref.revision.value, 2)
+        inherited = self.store.find_curation(confirmed_ref)
+        self.assertIsNotNone(inherited)
+        assert inherited is not None
+        self.assertIs(
+            inherited.origin,
+            m.CurationOrigin.INHERITED_CONFIRMATION,
+        )
+        self.assertEqual(inherited.inherited_from.revision.value, 1)
+        self.assertEqual(inherited.reasoning, "stable for shared reuse")
+        self.assertEqual(inherited.provenance, "reviewer-session")
+
+        correct = m.UpdateUnderstandingCommand(
+            identity=_identity("sub-correct-after-curate"),
+            understanding_id=m.UnderstandingId("u-1"),
+            expected_version=m.UnderstandingVersionNumber(3),
+            correct=(
+                m.CorrectConclusion(
+                    conclusion_id=m.ConclusionId("c-1"),
+                    **_content("A does Y"),
+                ),
+            ),
+            provenance="engineering-session",
+        )
+        self.store.record_understanding(correct)
+        corrected_ref = self.store.get_version("u-1", 4).conclusions[0]
+        self.assertEqual(corrected_ref.revision.value, 3)
+        self.assertIsNone(self.store.find_curation(corrected_ref))
+        self.assertEqual(len(self.store.get_curations("u-1")), 2)
+
+    def test_confirm_of_captured_predecessor_remains_uncurated(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+
+        self.store.record_understanding(
+            _same_confirm_command(expected=1, submission="sub-confirm-captured")
+        )
+
+        confirmed_ref = self.store.get_version("u-1", 2).conclusions[0]
+        self.assertEqual(confirmed_ref.revision.value, 2)
+        self.assertIsNone(self.store.find_curation(confirmed_ref))
+        self.assertEqual(self.store.get_curations("u-1"), ())
+
+    def test_curation_storage_is_exact_version_aware_and_immutable(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        self.store.record_understanding(
+            _update_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        ref2 = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(2),
+        )
+        explicit = m.CurationDisposition(
+            ref=ref2,
+            accepted_in_version=m.UnderstandingVersionNumber(2),
+            reasoning="stable for shared reuse",
+            provenance="reviewer",
+            recorded_at=NOW,
+            origin=m.CurationOrigin.EXPLICIT,
+        )
+
+        self.assertIsNone(self.store.find_curation(ref2))
+        self.assertEqual(
+            self.store.pending_curation_candidates("repo-1"),
+            (
+                m.PendingCurationItem(
+                    ref=ref2,
+                    understanding_version=m.UnderstandingVersionNumber(2),
+                    surface=m.SurfaceKey(
+                        repository_id="repo-1",
+                        kind=m.SurfaceKind.FILE,
+                        locator="src/a.py",
+                    ),
+                    question="What does A do?",
+                ),
+            ),
+        )
+        with self.store._connection:
+            self.store._insert_curation_in(self.store._connection, explicit)
+
+        self.assertIsNone(
+            self.store.find_curation(
+                ref2, as_of_version=m.UnderstandingVersionNumber(1)
+            )
+        )
+        self.assertEqual(
+            self.store.find_curation(
+                ref2, as_of_version=m.UnderstandingVersionNumber(2)
+            ),
+            explicit,
+        )
+        self.assertEqual(
+            self.store.get_curations(
+                "u-1", as_of_version=m.UnderstandingVersionNumber(1)
+            ),
+            (),
+        )
+        self.assertEqual(self.store.get_curations("u-1"), (explicit,))
+        self.assertEqual(self.store.pending_curation_candidates("repo-1"), ())
+
+        with self.assertRaises(LifecycleStoreError):
+            with self.store._connection:
+                self.store._insert_curation_in(self.store._connection, explicit)
+
+    def test_curation_read_fails_closed_on_structural_drift(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        ref = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        disposition = m.CurationDisposition(
+            ref=ref,
+            accepted_in_version=m.UnderstandingVersionNumber(1),
+            reasoning="reviewed",
+            provenance="reviewer",
+            recorded_at=NOW,
+            origin=m.CurationOrigin.EXPLICIT,
+        )
+        with self.store._connection:
+            self.store._insert_curation_in(self.store._connection, disposition)
+            self.store._connection.execute(
+                "UPDATE conclusion_curations SET origin='INHERITED_CONFIRMATION',"
+                " inherited_from_revision=1"
+                " WHERE understanding_id='u-1' AND conclusion_id='c-1'"
+                " AND revision=1"
+            )
+
+        with self.assertRaises(LifecycleStoreDataError):
+            self.store.find_curation(ref)
+        with self.assertRaises(LifecycleStoreDataError):
+            self.store.get_curations("u-1")
+
+    def test_inherited_curation_and_candidate_keyset_are_exact(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        self.store.record_understanding(
+            _update_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        ref2 = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(2),
+        )
+        explicit = m.CurationDisposition(
+            ref=ref2,
+            accepted_in_version=m.UnderstandingVersionNumber(2),
+            reasoning="reviewed once",
+            provenance="reviewer",
+            recorded_at=NOW,
+            origin=m.CurationOrigin.EXPLICIT,
+        )
+        with self.store._connection:
+            self.store._insert_curation_in(self.store._connection, explicit)
+
+        self.store.record_understanding(
+            _update_command(expected=2, submission="sub-3"),
+            understanding_id=m.UnderstandingId("u-1"),
+        )
+        ref3 = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(3),
+        )
+        self.assertEqual(self.store.pending_curation_candidates("repo-1"), ())
+        inherited = self.store.find_curation(ref3)
+        self.assertIsNotNone(inherited)
+        assert inherited is not None
+        self.assertIs(
+            inherited.origin,
+            m.CurationOrigin.INHERITED_CONFIRMATION,
+        )
+        self.assertEqual(inherited.inherited_from, ref2)
+        self.assertEqual(inherited.reasoning, explicit.reasoning)
+        self.assertEqual(inherited.provenance, explicit.provenance)
+        self.assertEqual(inherited.accepted_in_version.value, 3)
+        self.assertEqual(
+            self.store.get_curations("u-1"),
+            (explicit, inherited),
+        )
 
     def test_verification_run(self) -> None:
         self.store.put_context(_context())

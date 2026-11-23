@@ -294,6 +294,45 @@ class ReconsiderServiceTest(unittest.TestCase):
             ),
         )
 
+    def test_curated_revision_reconsiders_without_mutating_curation(self) -> None:
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("req-u-a-curate"),
+                    context_id=CONTEXT_ID,
+                ),
+                understanding_id=m.UnderstandingId("u-a"),
+                expected_version=m.UnderstandingVersionNumber(1),
+                curate=(
+                    m.CurateConclusion(
+                        conclusion_id=m.ConclusionId("c-1"),
+                        reasoning="reviewed for shared reuse",
+                    ),
+                ),
+                provenance="reviewer-session",
+            )
+        )
+        before = self.store.get_curations("u-a")
+        self.assertEqual(len(before), 1)
+
+        result = self.service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+
+        affected = next(
+            conclusion
+            for surface in result.surfaces
+            for conclusion in surface.conclusions
+            if conclusion.ref.understanding_id.value == "u-a"
+        )
+        self.assertEqual(affected.ref.revision.value, 1)
+        self.assertEqual(affected.expected_version.value, 2)
+        self.assertEqual(self.store.get_curations("u-a"), before)
+
     def test_historical_revision_is_not_an_actionable_change_target(self) -> None:
         self.store.record_understanding(
             m.UpdateUnderstandingCommand(

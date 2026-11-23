@@ -58,6 +58,7 @@ from span.core.model.surfaces import (
 )
 from span.core.model.understanding import (
     Challenge,
+    PendingCuration,
     RecordedQuestionGap,
     RetrievedReceipt,
     RetrievedUnderstanding,
@@ -71,6 +72,7 @@ class GapReason(_enum.Enum):
 
     INVALIDATED = "invalidated"
     UNVERIFIABLE = "unverifiable"
+    PENDING_CURATION = "pending_curation"
     UNASSESSED = "unassessed"
 
 
@@ -402,6 +404,7 @@ AskResult = _typing.Union[
     EvidencePage,
     FunctionalPyramidStatus,
     FunctionalPyramidCandidate,
+    PendingCuration,
     Rejected,
     Unavailable,
 ]

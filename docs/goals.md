@@ -11,6 +11,12 @@ model that covers both maintained empirical understanding and maintained
 governing understanding. Beta describes delivery maturity, not an incomplete
 product boundary.
 
+**Beta 2 product amendment, 23 November 2026.** Investigation-time capture and
+shared reuse are distinct outcomes. Understanding established during engineering
+work is retained immediately, but a fresh agent receives it as ordinary shared
+knowledge only after that exact semantic revision has been explicitly curated.
+This qualification is independent of evidence currency and governing authority.
+
 ## 1. The problem
 
 Software work depends on two different classes of knowledge that drift in
@@ -62,8 +68,8 @@ the exact evidence used to establish it. When the declared support changes, the
 understanding stops being served as current.
 
 Surface-bound explanatory documentation can therefore move into retained,
-checked understanding instead of accumulating as an unchecked parallel
-description.
+curated and checked understanding instead of accumulating as an unchecked
+parallel description.
 
 ### Why canonical governing documents remain
 
@@ -93,11 +99,11 @@ authority chains.
 | ID | Goal | Meaning | Enforced by |
 | --- | --- | --- | --- |
 | **G1** | **Never present unsupported or unresolved understanding as current** | A reader who asks must learn what is usable, what is not, and why. No answer, authority route, summary or status may blur current support, unresolved applicability or operational inability. | F2, F9, F11, L1–L3, L9, L12 |
-| **G2** | **Retain established understanding for reuse** | Understanding established during work is retained through Span and reused without the conversation that produced it. | F3, F7 |
+| **G2** | **Retain established understanding for qualified reuse** | Understanding established during work is retained through Span without the conversation that produced it. Capture is immediate; ordinary shared reuse begins only after the exact semantic revision has been explicitly curated. Retention, support currency and reuse qualification remain distinguishable. | F3, F7, F13 |
 | **G3** | **Never outlive declared support silently** | When source evidence, governing authority, applicable functional context, discovery membership or a semantic premise changes, dependent understanding stops being usable without reassessment and the cause is named. | F2, F4, F11, L2, L10, L12 |
 | **G4** | **Audit semantic scope and governing scope independently** | A file, service and domain report semantic status at their own granularity, while a participating path also reports the complete declared Functional Pyramid route that governs it. Neither hierarchy is substituted for the other. | F9, F11, L9, L12 |
 | **G5** | **Earn its place in real software work** | Span must provide enough practical value in real engineering work to justify the lifecycle overhead it adds. Beta validates that value through sustained adopter use and follow-up correction, not through a synthetic pre-release cost score. | F8 |
-| **G6** | **Replace unchecked explanation, preserve canonical authority** | Surface-bound explanatory content lives as checked understanding where it can be tied to support. Canonical governing sources remain authoritative artifacts and are referenced, not copied into a competing Span owner. | F1, F2, F4, F11, L11 |
+| **G6** | **Replace unchecked explanation, preserve canonical authority** | Surface-bound explanatory content intended for shared reuse lives as curated, checked understanding tied to support. Canonical governing sources remain authoritative artifacts and are referenced, not copied into a competing Span owner. | F1, F2, F4, F11, F13, L11 |
 | **G7** | **Make the governing path from first principles to implementation explicit** | Before interpreting or changing a participating surface, the agent can obtain the declared functional contexts, applicable authority rules, derivation path, provenance and unresolved relationships without inferring them from file names, topology or prose relevance. | F6, F10, F11, L8, L12 |
 | **G8** | **Make declared governance adoptable without inventing it** | One or more registered repositories can be explicitly brought into, revised within, excluded from, and recovered as a Functional Pyramid without copying canonical rule content or manufacturing missing authority. Incomplete coverage and unresolved relationships are visible before they can be mistaken for a complete governing model. | F11, F12, L13–L16 |
 
@@ -132,10 +138,12 @@ membership does not imply rule applicability, and a partial migration remains
 explicitly partial rather than being represented as complete governance.
 
 A fresh agent with no conversation memory asks about a surface and receives, in
-one lifecycle interaction, the current retained semantic understanding or an
-actionable gap, its support status, and—when the repository is ACTIVE in the
-Functional Pyramid—the declared governing route from applicable first
-principles to implementation.
+one lifecycle interaction, supported and curated retained semantic understanding
+or an actionable gap/status when no shared knowledge is eligible for reuse.
+Pending captured understanding remains explicit non-Answer state. When the
+repository is ACTIVE in the Functional Pyramid, the same interaction also
+returns the declared governing route from applicable first principles to
+implementation.
 
 After implementation evidence changes, dependent semantic understanding is
 identified for reassessment. After a functional-context declaration, authority

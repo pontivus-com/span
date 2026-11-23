@@ -102,6 +102,6 @@ class SurfaceStoreTest(unittest.TestCase):
     def test_surface_and_history_survive_reopen(self) -> None:
         self.store.put_surface(_surface())
         reopened = LifecycleStore(self.path, retention=RETENTION, clock=lambda: NOW)
-        self.assertEqual(reopened.schema_version(), 14)
+        self.assertEqual(reopened.schema_version(), 15)
         self.assertEqual(reopened.get_surface(_key()).boundary.paths, ("src/billing",))
         self.assertEqual(reopened.surface_boundaries(_key())[0].boundary_version, 1)

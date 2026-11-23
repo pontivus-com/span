@@ -145,4 +145,9 @@ An accepted NORMATIVE record with non-current qualification is retained but does
 not complete the task. Continue investigation/re-establishment until required
 dispositions are CURRENT or report the named operational blocker.
 
+Semantic curation is independent of Functional Pyramid authority. Curating a
+CURRENT NORMATIVE revision does not change participation, health, applicability,
+route identity, or authority support; later governance/support loss still makes
+that curated revision non-servable until support is re-established.
+
 Detail: [lifecycle](https://github.com/pontivus-com/span/blob/master/docs/lifecycle.md), [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md).

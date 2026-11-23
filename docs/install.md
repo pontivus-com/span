@@ -48,7 +48,41 @@ span-install \
   --data-dir <DATA_DIR>
 ```
 
-`--repo` may be repeated for multiple target repositories.
+`--repo` may be repeated for multiple target repositories. The canonical
+repository ID is the selected repository root's basename.
+
+### Repository-qualified authority configuration
+
+Authority setup is explicit and repository-qualified. Repeat either option for
+each selected repository that needs declared authority configuration:
+
+```bash
+span-install \
+  --repo /work/repo-a \
+  --repo /work/repo-b \
+  --authority-seeds-file repo-a /config/repo-a-seeds.json \
+  --authority-bindings-file repo-b /config/repo-b-bindings.json \
+  --data-dir <DATA_DIR>
+```
+
+Each seeds file is a strict JSON list of canonical `EvidenceRef` values; each
+bindings file is a strict JSON list of canonical `AuthorityBinding` values.
+The repository ID in every item must match the repository-qualified CLI mapping,
+and every locator must resolve inside that selected repository root. Duplicate
+mappings, unselected repository IDs, malformed canonical content, identity
+mismatches, or unknown locators are rejected rather than guessed.
+
+For each repository and each authority family:
+
+- no mapping preserves the configured value;
+- a mapped `[]` clears it;
+- a mapped non-empty list replaces it exactly.
+
+All deterministic file decoding and routing validation completes before the
+first repository-store mutation. Normal installation then invokes the canonical
+repository provisioning owner once for each selected repository, producing the
+schema-15 repository store while leaving Functional Pyramid participation
+separate and `UNCONFIGURED`.
 
 If `--data-dir` is omitted, Span uses the platform default.
 
@@ -359,10 +393,11 @@ data is unused.
 
 ## Upgrade an existing store
 
-Version 1 uses repository schema 14. The runtime never migrates at open; a
+Beta 2 uses repository schema 15. The runtime never migrates at open; a
 supported older repository store fails closed with the explicit transition
-action. The separate installation Functional Pyramid store is created or
-verified by installer/setup and is not manufactured by repository runtime open.
+action. The separate installation Functional Pyramid store remains at
+installation schema 1; installer/setup creates or verifies it, and repository
+runtime open never manufactures it.
 
 Stop every process using the repository stores, then run one phase at a time
 for each repository ID:
@@ -384,22 +419,30 @@ span-install --data-dir <DATA_DIR> \
 `inspect` and `verify` are observational. `apply` requires an explicit root
 whose basename matches the repository ID, holds exclusive store ownership
 through activation, archives a WAL-consistent copy, writes the lossless export
-and report, stages schema 14, verifies it, and atomically activates it.
-Supported source repository schemas are 7 through 13.
+and report, stages schema 15, verifies it, and atomically activates it.
+Supported source repository schemas are 7 through 14.
 
-The schema-13 → schema-14 mapping preserves the existing durable semantic and
-audit tables without reinterpretation. It adds the repository-local
-`functional_route_dependency_index`, derived only from
-`FunctionalRouteSupport` already present in retained conclusions. It does not
-invent Functional Pyramid participation, installation receipts, route support
-or canonical authority support. After transition, a registered repository is
-therefore still UNCONFIGURED until participation is explicitly recorded.
+For schema 14, the Beta-2 transition copies every retained semantic, audit and
+governance table without reinterpretation, including the existing
+`functional_route_dependency_index`, and initializes
+`conclusion_curations` with zero dispositions. A migrated revision that is
+still CURRENT therefore begins CAPTURED and is discoverable as pending rather
+than being silently approved for shared reuse.
 
-Earlier source schemas retain their documented preservation/mapping behavior.
-In particular, schema-12 context binding cannot be reconstructed from the old
-request digest, schema-10/11 use their durable mappings, and schemas 7–9 keep
-only the repository binding and declared authority seeds as current state while
-legacy semantic material remains in the transition export.
+For schema 13, the existing durable semantic/audit rows are copied into the
+schema-15 target and the repository-local `functional_route_dependency_index`
+is derived only from `FunctionalRouteSupport` already present in retained
+conclusions. No Functional Pyramid participation, installation receipt, route
+support, canonical authority support, or curation approval is invented.
+After transition, a registered repository is therefore still UNCONFIGURED until
+participation is explicitly recorded.
+
+Earlier source schemas retain their documented preservation/mapping behavior
+while targeting the current schema-15 store. In particular, schema-12 context
+binding cannot be reconstructed from the old request digest, schema-10/11 use
+their durable mappings, and schemas 7–9 keep only the repository binding and
+declared authority seeds as current state while legacy semantic material remains
+in the transition export.
 
 After repository transition, run normal installer/setup for the current
 candidate so `<DATA_DIR>/installation/functional-pyramid.db` exists with the

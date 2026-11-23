@@ -4,7 +4,7 @@ This matrix is the executable traceability surface for
 [Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance).
 It does not redefine the acceptance cases. Each row names the live boundary tests
 that demonstrate the corresponding behavior. The test suite validates that FA-01
-through FA-44 are present exactly once and that every named test still exists.
+through FA-64 are present exactly once and that every named test still exists.
 
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
@@ -52,6 +52,26 @@ through FA-44 are present exactly once and that every named test still exists.
 | FA-42 | Conformance uses the normative input contract | `test_conformance_uses_existing_normative_assertion_contract`; `test_normative_create_derives_route_and_all_applicable_authorities` |
 | FA-43 | Acceptance is not runtime completion | `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_owner_read_failure_reports_unavailable_without_rejecting_acceptance`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
 | FA-44 | Participation-write acceptance is not initialization completion | `test_retained_activation_effect_stays_actionable_without_route_support`; `test_installed_cross_repository_governance_journey`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
+| FA-45 | New capture is not shared reuse | `test_current_capture_is_pending_until_curated` |
+| FA-46 | Pending-capture gap | `test_current_capture_is_pending_until_curated`; `test_noncurrent_capture_is_stale_not_pending` |
+| FA-47 | Pending-curation discovery | `test_pending_curation_keyset_paging_has_no_skip_or_duplicate`; `test_pending_curation_keyset_paging_resumes_after_restart` |
+| FA-48 | Curation does not rewrite or bypass support | `test_curate_accepts_exact_current_revision_and_replays`; `test_curate_rejects_non_current_target_before_mutation`; `test_curation_storage_is_exact_version_aware_and_immutable` |
+| FA-49 | Curated reuse | `test_current_capture_is_pending_until_curated` |
+| FA-50 | Curation cannot override later support loss | `test_changed_source_is_an_invalidated_gap` |
+| FA-51 | Correction resets curation | `test_confirm_inherits_curation_but_semantic_change_does_not` |
+| FA-52 | Replacement resets curation | `test_replace_after_curation_starts_replacement_captured` |
+| FA-53 | Addition begins captured | `test_add_after_curation_starts_new_lineage_captured` |
+| FA-54 | Confirm preserves curated meaning | `test_normative_confirm_reestablishes_changed_server_route_support`; `test_confirm_inherits_curation_but_semantic_change_does_not` |
+| FA-55 | Confirm does not invent curation | `test_confirm_of_captured_predecessor_remains_uncurated` |
+| FA-56 | Withdrawal is never reusable | `test_withdrawn_curated_lineage_is_not_reusable` |
+| FA-57 | Curation is a separate act | `test_curate_cannot_share_actions_with_semantic_mutation` |
+| FA-58 | Curation is not governance | `test_normative_confirm_reestablishes_changed_server_route_support`; `test_curated_revision_reconsiders_without_mutating_curation` |
+| FA-59 | Normative reuse requires both planes | `test_installed_cross_repository_governance_journey`; `test_mixed_answer_excludes_noncurrent_normative_conclusion` |
+| FA-60 | Failed review repairs meaning first | `test_installed_cross_repository_governance_journey` |
+| FA-61 | Schema-14 migration fabricates no curation | `test_schema14_state_is_preserved_and_curation_starts_empty` |
+| FA-62 | Migrated current knowledge is pending | `test_schema14_current_revision_migrates_as_pending_capture` |
+| FA-63 | Three-tool host surface remains exact | `test_only_the_three_core_tools_are_registered` |
+| FA-64 | Installed lifecycle closes the loop | `test_installed_cross_repository_governance_journey` |
 
 The matrix names enforcement boundaries; the CI execution receipt remains the
 evidence that those tests passed for a particular candidate.
