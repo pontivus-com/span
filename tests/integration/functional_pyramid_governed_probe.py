@@ -353,6 +353,29 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
             conclusion_id = (
                 _value(affected[0].get("conclusion_id")) if affected else None
             )
+            curated, curated_error = await _call(
+                session,
+                "record",
+                {
+                    "repository_id": repo_a_id,
+                    "request_id": "governed-normative-curate",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": version,
+                    "actions": {
+                        "curate": [
+                            {
+                                "conclusion_id": conclusion_id,
+                                "reasoning": (
+                                    "reviewed cross-repository normative conclusion"
+                                ),
+                            }
+                        ]
+                    },
+                    "provenance": "installed governed reviewer",
+                },
+            )
+            version = _value(curated.get("version"))
             snapshot_before, snapshot_before_error = await _call(
                 session,
                 "ask",
@@ -482,6 +505,8 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "owner_downstream_contexts": downstream_contexts,
                 "created_error": created_error,
                 "created_qualification": created.get("qualification", {}).get("state"),
+                "curated_error": curated_error,
+                "curated_kind": curated.get("$type"),
                 "snapshot_before_error": snapshot_before_error,
                 "snapshot_before_has_route": _has_route_support(snapshot_before),
                 "snapshot_before_authority_ids": _authority_ids(
