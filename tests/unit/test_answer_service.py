@@ -118,6 +118,7 @@ class AnswerServiceTest(unittest.TestCase):
         question: str,
         *,
         conclusions: int = 1,
+        curate: bool = True,
     ) -> None:
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
@@ -153,10 +154,40 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId(understanding_id),
         )
+        if curate:
+            self._curate(understanding_id)
 
-    def _service(self, max_bytes: int) -> AnswerService:
+    def _curate(self, understanding_id: str, *, request_id: str | None = None) -> None:
+        understanding = self.store.get_understanding(understanding_id)
+        version = self.store.get_version(
+            understanding_id,
+            understanding.current_version.value,
+        )
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId(
+                        request_id or f"curate-{understanding_id}-{version.version.value}"
+                    ),
+                    context_id=CONTEXT_ID,
+                ),
+                understanding_id=m.UnderstandingId(understanding_id),
+                expected_version=version.version,
+                curate=tuple(
+                    m.CurateConclusion(
+                        conclusion_id=ref.conclusion_id,
+                        reasoning="reviewed for shared reuse",
+                    )
+                    for ref in version.conclusions
+                ),
+                provenance="test-reviewer",
+            )
+        )
+
+    def _service(self, max_bytes: int, *, max_results: int = 50) -> AnswerService:
         bounds = m.QueryBounds(
-            max_results=50,
+            max_results=max_results,
             max_depth=2,
             max_subjects=8,
             max_evidence_units=24,
@@ -791,6 +822,7 @@ class AnswerServiceTest(unittest.TestCase):
         question: str,
         *,
         conclusion_id: str = "c-1",
+        curate: bool = True,
     ) -> None:
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
@@ -821,6 +853,8 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId(understanding_id),
         )
+        if curate:
+            self._curate(understanding_id)
 
     def test_multi_file_run_is_visible_on_each_file(self) -> None:
         (self.root / "src/b.py").write_text("b\n", encoding="utf-8")
