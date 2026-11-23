@@ -1011,9 +1011,7 @@ class Schema13To15Test(unittest.TestCase):
             self.assertIs(captured.reason, m.GapReason.PENDING_CURATION)
 
             pending = answer.ask(
-                m.AskRequest(
-                    selector=m.PendingCurationSelector(repository_id="demo")
-                )
+                m.AskRequest(selector=m.PendingCurationSelector(repository_id="demo"))
             )
             self.assertIsInstance(pending, m.PendingCuration)
             assert isinstance(pending, m.PendingCuration)

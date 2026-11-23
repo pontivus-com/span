@@ -373,7 +373,7 @@ class Beta2CurationArchitectureTest(unittest.TestCase):
         transition = (
             REPO_ROOT / "src/span/shell/store_transition_schema14.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("curation_rows\": 0", transition)
+        self.assertIn('curation_rows": 0', transition)
 
     def test_no_parallel_curate_operation_or_rejected_state(self):
         from span.shell.mcp.schemas import TOOL_NAMES
@@ -384,6 +384,7 @@ class Beta2CurationArchitectureTest(unittest.TestCase):
             for path in sorted((REPO_ROOT / "src/span").rglob("*.py"))
         )
         self.assertNotIn("rejected_curation", source)
+
 
 class SemanticTypingTest(unittest.TestCase):
     """I-18: the semantic layers annotate no `Any`, and decode refuses it."""

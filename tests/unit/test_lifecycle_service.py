@@ -433,10 +433,14 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertEqual(added.version.value, 3)
         version = self.store.get_version("u:sub-create", 3)
         original = next(
-            ref for ref in version.conclusions if ref.conclusion_id.value == conclusion_id
+            ref
+            for ref in version.conclusions
+            if ref.conclusion_id.value == conclusion_id
         )
         added_ref = next(
-            ref for ref in version.conclusions if ref.conclusion_id.value != conclusion_id
+            ref
+            for ref in version.conclusions
+            if ref.conclusion_id.value != conclusion_id
         )
         self.assertIsNotNone(
             self.store.find_curation(
