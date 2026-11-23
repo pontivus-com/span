@@ -3115,7 +3115,7 @@ class LifecycleServiceTest(unittest.TestCase):
                 scope=m.EvidenceScope(evidence_refs=(_evidence(),)),
             )
         )
-        self.service.record(
+        created = self.service.record(
             w.RecordRequestWire(
                 request_id="coverage-ref-create",
                 context=_context_ref(context.context_id.value),
@@ -3123,6 +3123,26 @@ class LifecycleServiceTest(unittest.TestCase):
                 surface=w.SurfaceWire(kind=m.SurfaceKind.FILE, locator="src/a.py"),
                 conclusion="A does X",
                 locator="src/a.py",
+            )
+        )
+        assert isinstance(created, m.UnderstandingRecorded)
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=m.RecordingIdentity(
+                    repository_id="repo-1",
+                    request_id=m.RequestId("coverage-ref-curate"),
+                    context_id=context.context_id,
+                ),
+                understanding_id=created.understanding_id,
+                expected_version=created.version,
+                curate=tuple(
+                    m.CurateConclusion(
+                        conclusion_id=ref.conclusion_id,
+                        reasoning="reviewed for shared reuse",
+                    )
+                    for ref in created.affected_revisions
+                ),
+                provenance="test-reviewer",
             )
         )
         service_key = m.SurfaceKey("repo-1", m.SurfaceKind.SERVICE, "coverage-service")
