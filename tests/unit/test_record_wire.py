@@ -151,6 +151,7 @@ def _update_request(
     request_id: str = "sub-update",
     understanding_id: str = "u-1",
     expected_version: int = 1,
+    provenance: str = "",
 ) -> w.RecordRequestWire:
     return w.RecordRequestWire(
         request_id=request_id,
@@ -159,6 +160,7 @@ def _update_request(
         understanding_id=understanding_id,
         expected_version=expected_version,
         actions=actions,
+        provenance=provenance,
     )
 
 
@@ -175,6 +177,7 @@ class CurationWireTest(unittest.TestCase):
                     )
                 ),
                 request_id="sub-curate",
+                provenance="reviewer-session",
             ),
             _resolver(),
         )
@@ -189,6 +192,19 @@ class CurationWireTest(unittest.TestCase):
         )
         self.assertEqual(command.add, ())
         self.assertEqual(command.correct, ())
+
+    def test_curate_requires_record_level_reviewer_provenance(self):
+        with self.assertRaises(ValueError):
+            _update_request(
+                w.RecordActionsWire(
+                    curate=(
+                        w.CurateConclusionWire(
+                            conclusion_id="c-1",
+                            reasoning="reviewed",
+                        ),
+                    )
+                )
+            )
 
     def test_curate_wire_has_only_exact_public_fields(self):
         schema = schema_for_request(w.CurateConclusionWire)
