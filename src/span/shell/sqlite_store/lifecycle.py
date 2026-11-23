@@ -1493,8 +1493,7 @@ class LifecycleStore:
             )
         except _sqlite3.IntegrityError as exc:
             raise LifecycleStoreInvariantError(
-                "curation disposition violates exact-revision persistence: "
-                f"{exc}"
+                "curation disposition violates exact-revision persistence: " f"{exc}"
             ) from None
 
     def support_dependents(
