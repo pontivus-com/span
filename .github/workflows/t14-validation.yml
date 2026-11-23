@@ -1,0 +1,62 @@
+name: Beta 2 T14 release validation
+
+on:
+  push:
+    branches:
+      - positioning/knowledge-factory-2026-11-23
+    paths:
+      - .github/workflows/t14-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Validate canonical release identity and notes
+        run: |
+          set -euo pipefail
+          test "$(python scripts/release_identity.py --field package_version)" = "1.0.0b2"
+          test "$(python scripts/release_identity.py --field tag)" = "v1.0.0b2"
+          test "$(python scripts/release_identity.py --field registry_version)" = "1.0.0-beta.2"
+          test "$(python scripts/release_identity.py --field release_title)" = "Span 1.0.0 Beta 2"
+          test "$(python scripts/release_identity.py --field prerelease)" = "true"
+          test "$(python scripts/release_identity.py --field development)" = "false"
+          python scripts/release_notes.py 1.0.0b2 > /tmp/release-notes.md
+          grep -F "Qualified reuse and explicit curation" /tmp/release-notes.md
+          grep -F "exactly three public MCP tools" /tmp/release-notes.md
+          grep -F "schema **15**" /tmp/release-notes.md
+          grep -F "zero automatic curation" /tmp/release-notes.md
+          grep -F "Functional Pyramid store at schema **1**" /tmp/release-notes.md
+          grep -F "built-in/background curator model" /tmp/release-notes.md
+
+      - name: Validate committed registry projection
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.version' server.json)" = "1.0.0-beta.2"
+          test "$(jq -r '.packages[0].identifier' server.json)" = "span-mcp"
+          test "$(jq -r '.packages[0].version' server.json)" = "1.0.0b2"
+
+      - name: Build and install exact candidate wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python scripts/build_identity.py
+          python -m build
+          python -m pip install dist/*.whl
+          test "$(python -c 'import span; print(span.__version__)')" = "1.0.0b2"
+          span-mcp --help >/dev/null
+
+      - name: Validate MCP Registry document without publishing
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher validate
