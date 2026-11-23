@@ -111,6 +111,37 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             for conclusion in group["conclusions"]
         ]
 
+    async def _curate_recorded(
+        self,
+        session: ClientSession,
+        recorded: dict,
+        request: str,
+        *,
+        conclusion_ids: set[str] | None = None,
+    ) -> dict:
+        selected = conclusion_ids or self._qualification_ids(recorded)
+        return await self._call(
+            session,
+            "record",
+            {
+                "repository_id": REPOSITORY_ID,
+                "request_id": request,
+                "kind": "understanding",
+                "understanding_id": recorded["understanding_id"]["value"],
+                "expected_version": recorded["version"]["value"],
+                "actions": {
+                    "curate": [
+                        {
+                            "conclusion_id": conclusion_id,
+                            "reasoning": "reviewed for shared reuse",
+                        }
+                        for conclusion_id in sorted(selected)
+                    ]
+                },
+                "provenance": "integration-reviewer",
+            },
+        )
+
     async def _record_create(self, session: ClientSession, request: str) -> dict:
         return await self._call(
             session,
