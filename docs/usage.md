@@ -18,9 +18,10 @@ preserves history, and shows when support or governance needs another look.
 The Functional Pyramid supplies the guiding-document half of Span's working
 context. After installation, a repository is registered but does not
 automatically participate. Use the Functional Pyramid status selector through
-`ask`. UNCONFIGURED and EXCLUDED repositories can still use retained
-implementation understanding. For an ACTIVE repository, the same ordinary
-`ask` also returns the applicable guidance path for the exact software scope.
+`ask`. UNCONFIGURED and EXCLUDED repositories can still use the ordinary
+descriptive capture/curation lifecycle. For an ACTIVE repository, the same
+ordinary `ask` also returns the applicable guidance path for the exact software
+scope.
 
 Adoption/revision stays inside `ask` and `record`: inspect status, validate the
 candidate, repair declaration/governance findings through ordinary
@@ -40,9 +41,10 @@ or request identity:
 ```
 
 Use `reference` only when the path or declared name resolves unambiguously. A
-pure obtain returns the current surface document view grouped by recorded
-question, or an honest `Gap` with status, historical content where applicable,
-and concrete source pointers. It creates no investigation context and delivers no
+pure obtain returns the current shared surface document view from
+CURRENT + CURATED conclusions, with pending/stale status grouped by recorded
+question, or an honest `Gap` with historical content where applicable and
+concrete source pointers. It creates no investigation context and delivers no
 source body automatically.
 
 When the exact recorded question is already known, use
@@ -53,8 +55,9 @@ reference, a new `request_id`, and non-empty `evidence`. That call returns the
 same Answer/Gap classification plus admission outcomes, exact deliveries, a
 bound context reference, and a continuation when selected evidence is deferred.
 
-Currentness is checked against present support. A saved conclusion is never
-served as current on the strength of its wording.
+Currentness is checked against present support, and shared reuse additionally
+requires curation of the exact semantic revision. A saved conclusion is never
+served as shared current knowledge on the strength of its wording alone.
 
 ## Curate captured knowledge
 
