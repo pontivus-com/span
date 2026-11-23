@@ -41,16 +41,18 @@ semantic owner. ACTIVE governance therefore cannot disagree between a status
 selector and an ordinary repository operation.
 
 `ask` is surface-first. Pure surface/reference obtain returns the current
-document view grouped by recorded question, with status and applicable
-verification; a genuinely unassessed surface returns a Gap with source pointers,
-not unsolicited source bodies. The surface status names stale conclusions as
-`stale_refs`; historical content and stale references are never current-answer
-content. Exact targeted reuse uses `RecordedQuestionSelector` and exact
+shared document view from CURRENT + CURATED conclusions, grouped by recorded
+question, with pending/stale status and applicable verification; a genuinely
+unassessed surface returns a Gap with source pointers, not unsolicited source
+bodies. CURRENT + CAPTURED revisions remain pending rather than Answer content,
+and non-current revisions remain historical/stale. Exact targeted reuse uses `RecordedQuestionSelector` and exact
 surface-scoped equality; unmatched selection is `Gap/unassessed`. Source bytes
 are delivered only by explicit evidence admission.
-`record` accepts supported understanding, a declared service/domain boundary, or
-an independent verification run. `reconsider` maps a changed scope to every
-surface that must be re-examined, with per-conclusion support state. Exact
+`record` captures supported understanding and, as a separate reviewer act,
+curates exact stable semantic revisions for shared reuse; it also handles
+declared service/domain boundaries and independent verification runs.
+`reconsider` maps a changed scope to every surface that must be re-examined,
+with per-conclusion support state. Exact
 snapshots and receipts are retrieved through `ask`'s selector form; they are
 historical and never current-answer content. The host supplies structural navigation.
 
