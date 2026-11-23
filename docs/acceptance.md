@@ -4,7 +4,56 @@ The current lifecycle is evaluated at three distinct boundaries: deterministic
 contracts, delivered host behavior, and useful real-task reuse. Passing a
 local suite proves neither host conversion nor comparative product value.
 
-## Version 1 Beta candidate acceptance
+## Version 1 Beta 2 candidate acceptance
+
+Beta 2 extends the generic Version-1 functional-acceptance authority through
+FA-64 in
+[Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance),
+mapped case-by-case in [the FA-01–FA-64 matrix](functional-acceptance.md).
+The architecture guard requires each acceptance row exactly once and keeps
+curation on the existing lifecycle writer/support/Answer paths.
+
+The completed Beta-2 implementation head
+`b80fd8a154d8f7785e37fbbc6e74deb017ba6e60` passed exact-head GitHub
+Actions CI run `45177585406`: build/distribution, Ruff/Black, the zero-error
+typing ratchet, `977 passed, 1 skipped, 148 subtests`, 85% aggregate coverage,
+standalone plugin-notice delivery and the installed production-topology
+acceptance surface.
+
+Private first-adopter revalidation passed on 2026-11-24 against the committed
+Legal product revision
+`d4e4e45189041de3e960e1d2d0904c7c5f63adfb` and root-correct
+repository-qualified seed/binding configuration. From an empty Span data
+directory, `span-install` created repository schema 15 and the separate
+installation Functional Pyramid schema 1 through the canonical provisioning
+path. The public server exposed exactly `ask`, `record`, and `reconsider`.
+The adopter Functional Pyramid candidate was activation-ready with no
+validation or graph findings; the real Clause Workbench kickoff surface
+returned a RESOLVED governing path through its accepted P1/P0 authority chain.
+A representative NORMATIVE conclusion was support-CURRENT but withheld as
+`pending_curation`, appeared in pending discovery, became reusable only after
+an explicit exact-revision curation disposition, and returned as an Answer from
+a fresh MCP process with the same RESOLVED governing projection.
+
+The first-adopter result is intentionally sanitized. Raw transcripts, receipts,
+local data stores and manifests remain outside Span Git. Exact-byte validation
+also caught incorrect initial adopter content fingerprints before the passing
+run; the configuration was corrected rather than weakening support/currentness
+evaluation.
+
+The assembled Beta-2 release identity is package `1.0.0b2`, registry
+`1.0.0-beta.2`, repository lifecycle schema 15, and installation Functional
+Pyramid schema 1. Schema-14 migration does not fabricate curation for retained
+Beta-1 conclusions. Span has no built-in curator model and does not treat
+curation as semantic truth or Functional Pyramid authority.
+
+Live authenticated model delivery through supported managed hosts remains
+**UNVERIFIED**. Registration, installer and hook support are not promoted into
+a model-delivery claim. Final exact-head T14 CI and publication receipts are
+recorded on the Beta-2 execution PR/release surfaces so recording them does not
+mutate the candidate after its gate.
+
+## Historical Version 1 Beta 1 candidate acceptance
 
 The current generic Version-1 acceptance authority is
 [Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance),

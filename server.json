@@ -3,7 +3,7 @@
   "name": "io.github.pontivus-com/span",
   "title": "Span",
   "description": "Software knowledge layer for coding agents: capture, curation, governance, reassessment.",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "repository": {
     "url": "https://github.com/pontivus-com/span",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "span-mcp",
-      "version": "1.0.0b1",
+      "version": "1.0.0b2",
       "transport": {
         "type": "stdio"
       }
