@@ -1,11 +1,12 @@
 # Repository overview
 
-Span is a local MCP server that gives a coding agent the complete working
-context for the exact part of the software it is working on. It combines
-retained understanding of the implementation with the applicable chain of
-project guidance from goals and principles through contracts, functional
-design, and technical design. The agent still owns interpretation, edits, and
-test execution; Span keeps the supporting evidence, canonical guidance links,
+Span is a local MCP server that acts as an evidence-backed knowledge layer
+for coding agents. It maintains reusable understanding of the implementation
+and the applicable chain of project guidance from goals and principles through
+contracts, functional design, and technical design. At task time, that
+maintained knowledge becomes working context for the exact software surface the
+agent is handling. The agent still owns interpretation, edits, and test
+execution; Span keeps the supporting evidence, canonical guidance links,
 history, and change effects explicit.
 
 ## Layout
