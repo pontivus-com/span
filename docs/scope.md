@@ -1,12 +1,12 @@
 # Scope and product boundaries
 
-Span maintains reusable software understanding for the exact scope an agent is
-dealing with. At task time, that maintained knowledge becomes working context:
-retained understanding of the implementation and, for participating
-repositories, the project guidance that applies to the same scope. The task
-determines the scope; Span keeps established understanding, support, governing
-relationships, and later change effects attached to it through the required
-lifecycle.
+Span retains software understanding for the exact scope an agent is dealing
+with and separately qualifies exact semantic revisions for shared reuse. At task
+time, supported and curated knowledge becomes working context: retained
+understanding of the implementation and, for participating repositories, the
+project guidance that applies to the same scope. The task determines the scope;
+Span keeps captured meaning, curation state, support, governing relationships and
+later change effects attached to it through the required lifecycle.
 
 ## The unit is an explanation
 
@@ -38,9 +38,10 @@ remains explicit. Changes outside a declared dependency boundary do not make
 all saved understanding noncurrent.
 
 The intended benefit is maintained software knowledge that can be projected as
-complete working context for the exact software scope: retained implementation
-understanding, the applicable canonical project guidance, and focused review
-when either side changes. Net time/token savings depend on the task, recording
+complete working context for the exact software scope once the semantic revision
+is both curated and supported: retained implementation understanding, the
+applicable canonical project guidance, and focused review when either side
+changes. Net time/token savings depend on the task, recording
 effort, reuse, and host delivery. The beta does not claim a measured universal
 saving or a comparative product-fitness ACCEPT result.
 
