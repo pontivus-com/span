@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
 import typing as _typing
@@ -182,6 +183,13 @@ def load_seeds(
     """Legacy internal helper retained for direct seed-decoder tests."""
     if path is None:
         return []
+    try:
+        importlib.import_module("span.core.model")
+    except ImportError as exc:
+        raise SystemExit(
+            "cannot validate authority seeds: canonical decoder unavailable "
+            f"({exc}); refusing to install unchecked governance"
+        ) from None
     return list(_evidence_refs(path, dry_run=dry_run))
 
 
