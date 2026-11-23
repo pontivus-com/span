@@ -1757,6 +1757,71 @@ not fabricate a partially composed `ServiceContext`. Provisioning ownership
 remains in the installer/context setup path; MCP startup registration does not
 restore a public or implicit provisioning path.
 
+**Beta-2 administrative initialization correction (B2-D01/B2-D02).** Beta-1
+first-adopter use exposed a composition defect, not a missing Functional Pyramid
+product rule. The released `span-install` never invokes the already-owned
+`provision_repository_runtime(InitializeRepositoryRequest)` path, and its
+installed production-topology fixture manufactures repository/binding state
+directly. Beta 2 therefore repairs the shell/setup seam and the acceptance seam
+without introducing another authority model, setup DTO, semantic writer, MCP
+operation or Functional Pyramid lifecycle.
+
+The initialization correction is schema-neutral in itself. In Beta 1 the
+omission affected schema 14. In the complete Beta-2 release the same canonical
+provisioning path creates/opens the **current Beta-2 repository schema 15**
+defined by Part D; installation Functional Pyramid schema 1 remains unchanged.
+
+The exact mechanism is:
+
+1. `span-install` remains the sole mutating administrative entry point.
+   Runtime `ask`/`record`/`reconsider`, host startup registration,
+   `--dry-run` and `--verify-only` remain non-initializing.
+2. Repository authority configuration is explicit and repository-qualified:
+   repeatable
+   `--authority-seeds-file REPOSITORY_ID PATH` and
+   `--authority-bindings-file REPOSITORY_ID PATH`. Each file is a strict JSON
+   list of the existing canonical `EvidenceRef` or `AuthorityBinding`
+   carrier respectively; there is no setup-specific wrapper/domain carrier.
+3. The repository-id argument is shell routing metadata only. Every decoded
+   item must carry the same repository identity. Duplicate mappings, a mapping
+   for an unselected repository, malformed canonical content, or repository-id
+   disagreement reject before the first repository-store mutation.
+4. The shell preserves `InitializeRepositoryRequest` tri-state semantics for
+   both families: missing mapping = `None`/preserve; mapped `[]` =
+   `()`/clear; mapped non-empty list = replace with that exact tuple.
+5. All deterministic configuration decoding/validation completes before
+   repository-state mutation. The existing data-directory backup is taken
+   before initialization mutates an existing installation.
+6. After runtime/indexer preparation, the installer invokes
+   `provision_repository_runtime` exactly once for each selected repository
+   with one canonical `InitializeRepositoryRequest`, retains the returned
+   `InitializeRepositoryResult`, closes the raw runtime, and only then
+   performs host registration and observational verification.
+7. `provision_repository_runtime` remains the sole owner of structural
+   `ensure_current`, installation-store creation/verification,
+   repository-store creation/open, evidence-locator validation and
+   `initialize_repository` dispatch. The installer does not reproduce those
+   mechanics or fabricate a partial `ServiceContext`.
+8. Initialization remains repository-local administration, not Functional
+   Pyramid participation. It may establish the authority state required by
+   candidate validation but never ACTIVATEs/REVISEs/DEACTIVATEs/EXCLUDEs a
+   pyramid and creates no cross-repository setup transaction.
+9. The install receipt reports observed `InitializeRepositoryResult`
+   projections for each successfully initialized repository (repository id,
+   canonical root, current repository schema, structural/store readiness and
+   resulting seed/binding counts). Input presence is not success evidence.
+10. A later operational failure names the repository that failed and preserves
+    the pre-mutation backup. It does not silently continue or claim all-or-nothing
+    cross-repository setup.
+
+**Acceptance escape-hatch correction.** At least one non-editable installed
+production-topology lane must begin with target repositories plus an empty data
+directory and establish both repository lifecycle stores and declared authority
+state through the installed `span-install`. That lane may not call
+`LifecycleStore.register_repository` or inject `AuthorityBinding` directly
+for setup. Lower-level store/service tests may still construct state directly
+when that lower layer is the subject under test.
+
 #### 20.1 `ask`
 
 **Authority:** F6, F10, F11, F12; L1–L3, L8, L12–L14, L16;
