@@ -1,11 +1,12 @@
 # Repository overview
 
 Span is a local MCP server that acts as an evidence-backed knowledge layer
-for coding agents. It maintains reusable understanding of the implementation
-and the applicable chain of project guidance from goals and principles through
-contracts, functional design, and technical design. At task time, that
-maintained knowledge becomes working context for the exact software surface the
-agent is handling. The agent still owns interpretation, edits, and test
+for coding agents. It retains supported understanding established during
+engineering work and separately records which exact semantic revisions have
+been curated for shared reuse. It also maintains the applicable chain of project
+guidance from goals and principles through contracts, functional design, and
+technical design. At task time, supported and curated knowledge becomes working
+context for the exact software surface the agent is handling. The agent still owns interpretation, edits, and test
 execution; Span keeps the supporting evidence, canonical guidance links,
 history, and change effects explicit.
 
