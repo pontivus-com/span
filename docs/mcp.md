@@ -23,6 +23,15 @@ Exactly three core tools ship, one per lifecycle moment:
 The host supplies structural navigation and the installer owns setup. Neither is
 part of the default surface.
 
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
+Understanding create/change retains semantic meaning as CAPTURED; ordinary
+shared Answer content requires the exact revision to be both CURRENT under the
+canonical support evaluator and CURATED by an explicit reviewer act.
+`ask(PendingCurationSelector)` discovers current captures awaiting review, and
+`record(actions.curate)` records the immutable disposition without changing
+semantic content, support, or Functional Pyramid authority. Span runs no
+background curator and exposes no fourth curation tool.
+
 `record` carries `kind` (`understanding`, `verification`, `surface`, or
 `functional_pyramid`). An
 understanding create is flat — one `conclusion` with dependency evidence from

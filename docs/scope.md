@@ -115,10 +115,12 @@ schema-15 transition. See the
 
 ## Beta delivery boundary
 
-Generic Version-1 behavior is verified through the full functional acceptance
-matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code remain
-managed integration targets, but final-candidate live model delivery is not
-claimed until T13 captures it. Registration, configured hooks and observed
-model behavior remain separate facts.
+Generic Beta-2 behavior is verified through the full FA-01–FA-64 functional
+acceptance matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code
+remain managed integration targets, but live model delivery for the current
+Beta-2 candidate is **UNVERIFIED**. Registration, configured hooks and observed
+model behavior remain separate facts. Private first-adopter cold-install
+revalidation is also not claimed as passed while its adopter-controlled
+configuration blocker remains open.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).

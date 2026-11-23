@@ -31,6 +31,15 @@ dedicated curator agent, a human reviewer, or a team workflow. Span records and
 enforces that lifecycle but does not run a background curator model or
 autonomously decide semantic quality.
 
+This is deliberately narrower than the organizational topology described in
+LangChain's [knowledge-factory article](https://www.langchain.com/blog/knowledge-factory).
+That article separates task agents from a curator agent that can run in the
+background over broader raw sources and traces. Span separates evidence-near
+capture from explicit review for software understanding, while deterministic
+support/currentness and declared governance stay inside the Span server. Span
+does not claim that curation certifies truth, that curation must be autonomous,
+or that a separate curator/reviewer role is unnecessary.
+
 ## How is Span different from a context engine or agent memory?
 
 A context engine primarily helps an agent retrieve the source and organizational
@@ -130,13 +139,14 @@ prove the original commit failed.
 
 ## Which clients are verified for this beta?
 
-The generic Version-1 product is verified through source CI, the non-editable
-installed stdio MCP lane, and the FA-01–FA-44 functional acceptance matrix.
-Managed registration/integration exists for Codex, OpenCode and Claude Code,
-but candidate-specific live model-host delivery is a separate T13 gate. Until
-those captures exist for the final candidate, live Version-1 model delivery is
-reported as **UNVERIFIED**, not inferred from registration health or historical
-captures.
+The Beta-2 product is verified through source CI, the non-editable installed
+stdio MCP lane, and the FA-01–FA-64 functional acceptance matrix, including the
+combined installer + Functional Pyramid + capture/curation topology. Managed
+registration/integration exists for Codex, OpenCode and Claude Code, but live
+model-host delivery for the current Beta-2 candidate remains **UNVERIFIED** and
+is not inferred from registration health, configured hooks, or historical
+captures. Private first-adopter cold-install revalidation is also not claimed as
+passed while its repository-controlled configuration blocker remains open.
 
 ## Does Span save time or tokens?
 

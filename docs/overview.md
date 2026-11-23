@@ -8,7 +8,11 @@ guidance from goals and principles through contracts, functional design, and
 technical design. At task time, supported and curated knowledge becomes working
 context for the exact software surface the agent is handling. The agent still owns interpretation, edits, and test
 execution; Span keeps the supporting evidence, canonical guidance links,
-history, and change effects explicit.
+history, and change effects explicit. Span is the software knowledge layer of
+a broader knowledge-factory topology, not the complete organizational knowledge
+system.
+
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
 ## Layout
 

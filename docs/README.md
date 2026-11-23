@@ -8,7 +8,11 @@ contracts, functional design, and technical design. At task time, supported and
 curated knowledge becomes working context for the exact software surface the
 agent is handling. Empirical support, curation and governing relationships remain
 distinct, so Span can show what is reusable, what is pending review, and what a
-code or guidance change makes require another look.
+code or guidance change makes require another look. Span is this software
+knowledge layer inside a broader knowledge-factory topology; it is not a claim
+to own the organization's complete knowledge system.
+
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
 ## Foundations
 

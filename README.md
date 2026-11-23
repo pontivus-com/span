@@ -7,10 +7,11 @@
 </p>
 
 <p align="center">
-  Span is an evidence-backed knowledge layer for coding agents. Working agents
-  capture what they establish while the evidence is fresh; a separate curation
-  step decides what becomes shared reusable knowledge. Span keeps that knowledge
-  tied to the evidence and governing guidance it depends on and shows what needs
+  Span is the evidence-backed software knowledge layer for coding agents, not
+  the entire organizational knowledge-factory topology. Working agents capture
+  what they establish while the evidence is fresh; a separate curation step
+  decides what becomes shared reusable knowledge. Span keeps that knowledge tied
+  to the evidence and governing guidance it depends on and shows what needs
   another look when either changes.
 </p>
 
@@ -43,6 +44,16 @@ task agent's conclusion with shared truth. The working agent retains what it
 established about an exact file, symbol, service, or domain with the support it
 actually used. A separate reviewer/curator accepts the exact stable revision for
 shared reuse; later sessions receive it only while that support still holds.
+
+LangChain's [knowledge-factory article](https://www.langchain.com/blog/knowledge-factory)
+describes task agents surfacing knowledge gaps and a curator agent running in
+the background to maintain a broader organizational knowledge store. Span uses
+the same important separation between task-time work and curation, but at a
+narrower software boundary: working agents capture evidence-near semantic
+conclusions, reviewers explicitly curate exact revisions, and deterministic
+support/currentness plus declared governance remain server-owned. Span does not
+run a background curator, claim semantic correctness, or claim that a separate
+reviewer/curator role is unnecessary.
 
 Software makes this harder than ordinary memory. The thing being understood
 keeps changing. A source edit can invalidate an explanation. A change to a
@@ -209,7 +220,14 @@ ask(surface)
 agent investigates with its normal coding tools
 
 record(kind="understanding", conclusion, support)
-  → retained version + current qualification
+  → retained CAPTURED revision + current support qualification
+
+ask(PendingCurationSelector)
+  → exact CURRENT captures awaiting review
+
+reviewer record(actions.curate)
+  → exact revision becomes CURATED
+  → ordinary shared Answer content requires CURRENT + CURATED
 
 later, implementation or governance changes
 
@@ -254,15 +272,18 @@ span-install --verify-only
 Setup creates no understanding. Begin with the relevant surface from your actual task;
 see [using Span](docs/usage.md).
 
-## Beta host status
+## Beta 2 host status
 
-The Version-1 `1.0.0b1` candidate is verified through the built distribution,
-non-editable installed stdio MCP lane, generic Functional Pyramid acceptance,
-transition/recovery gates and release-registry validation. Live model-host
-delivery is **UNVERIFIED** and is not inferred from registration or historical
-captures. No verified managed-host delivery claim is made for Beta 1.
+The Beta-2 execution candidate is verified through source CI, the built
+distribution, non-editable installed stdio MCP coverage, the FA-01–FA-64
+functional acceptance surface, and the combined installer + Functional Pyramid
++ capture/curation production-topology lane. Live model-host delivery for this
+candidate is still **UNVERIFIED** and is not inferred from registration,
+configured hooks, or historical captures. The private first-adopter cold-install
+gate is separately blocked by adopter-controlled configuration and is not
+presented as a successful delivery capture.
 
-| Host | Version-1 candidate status |
+| Host | Beta-2 candidate status |
 | --- | --- |
 | Codex | Managed integration target retained; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
 | OpenCode | Managed integration and packaged notice delivery verified; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
@@ -291,17 +312,20 @@ and friction found in normal use. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout is the **Version 1 Beta candidate line**. The implemented storage
-contract is repository schema 14 plus the separate installation Functional
-Pyramid store. Existing schema-13 repositories use the explicit offline
-transition; registration alone leaves them `UNCONFIGURED` until participation is
-declared. The public operations remain exactly `ask`, `record`, and `reconsider`.
+This checkout is the **Version 1 Beta-2 execution line**. The implemented
+repository storage contract is schema 15 plus the separate installation
+Functional Pyramid store at installation schema 1. Existing schema-7–14
+repositories use the explicit offline transition; registration alone leaves
+them `UNCONFIGURED` until participation is declared. The public operations
+remain exactly `ask`, `record`, and `reconsider`.
 
-T11 private first-adopter acceptance is closed and T12 release assembly is
-complete. The repository-verifiable T13 gates have passed for `1.0.0b1`, and
-the candidate is release-ready. G5/F8 product-value validation continues after
-release through real-world use in the legal project. See
-[the Version-1 plan](docs/implementation-plans/1.0.0-beta.md),
+Beta-2 repository, installer, Functional Pyramid, capture/curation and installed
+production-topology acceptance are green. Private first-adopter revalidation is
+not currently claimed as passed: repository-controlled adopter configuration
+still blocks the required cold-install + governing-projection lane. The release
+therefore is **not release-ready** until that adopter-owned blocker is cleared
+and the final T14 candidate gates pass. See
+[the Beta-2 implementation plan](docs/implementation-plans/1.0.0-beta2.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
 - [Install and connect](docs/install.md)

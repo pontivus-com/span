@@ -13,6 +13,12 @@ revisions become shared reusable knowledge. Span keeps conclusions tied to their
 evidence, records curation history, resolves applicable canonical guidance,
 preserves history, and shows when support or governance needs another look.
 
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
+
+Span does not schedule or run the reviewer. Review may be performed by another
+agent session, a dedicated curator workflow, or a human; semantic correctness
+remains a reviewer judgment rather than a server-generated score.
+
 ## Check Functional Pyramid participation
 
 The Functional Pyramid supplies the guiding-document half of Span's working
