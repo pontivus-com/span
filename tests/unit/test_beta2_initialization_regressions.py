@@ -221,9 +221,7 @@ class Beta2InitializationRegressionTest(unittest.TestCase):
             with (
                 mock.patch.object(cli, "check_prereqs"),
                 mock.patch.object(cli, "target_artifact_snapshot", return_value={}),
-                mock.patch.object(
-                    cli, "load_authority_files", return_value=({}, {})
-                ),
+                mock.patch.object(cli, "load_authority_files", return_value=({}, {})),
                 mock.patch.object(cli, "preflight_facts", return_value={}),
                 mock.patch.object(
                     cli, "ensure_venv", return_value=venv_dir / "bin" / "python"
@@ -493,9 +491,7 @@ class Beta2InitializationRegressionTest(unittest.TestCase):
             with (
                 mock.patch.object(cli, "check_prereqs"),
                 mock.patch.object(cli, "target_artifact_snapshot", return_value={}),
-                mock.patch.object(
-                    cli, "load_authority_files", return_value=({}, {})
-                ),
+                mock.patch.object(cli, "load_authority_files", return_value=({}, {})),
                 mock.patch.object(cli, "preflight_facts", return_value={}),
                 mock.patch.object(
                     cli, "ensure_venv", return_value=venv_dir / "bin" / "python"
@@ -552,9 +548,7 @@ class Beta2InitializationRegressionTest(unittest.TestCase):
             with (
                 mock.patch.object(cli, "check_prereqs"),
                 mock.patch.object(cli, "target_artifact_snapshot", return_value={}),
-                mock.patch.object(
-                    cli, "load_authority_files", return_value=({}, {})
-                ),
+                mock.patch.object(cli, "load_authority_files", return_value=({}, {})),
                 mock.patch.object(cli, "preflight_facts", return_value={}),
                 mock.patch.object(
                     cli,
