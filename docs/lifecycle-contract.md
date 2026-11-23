@@ -398,6 +398,39 @@ parallel setup DTOs.
   DEACTIVATE/EXCLUDE it is empty. The effects tuple records every repository
   whose durable participation changed.
 
+**Beta-2 curation carriers.** The public curation grammar is exact:
+
+- `CurationState = CAPTURED | CURATED` is a derived reuse-maturity projection;
+  it is never a substitute for `SupportState`.
+- `CurateConclusion` carries exactly
+  `conclusion_id: ConclusionId` and non-empty `reasoning: str`.
+- `PendingCurationSelector` carries
+  `repository_id: str` and optional
+  `after: ConclusionRevisionRef | None`. Pending order is the ascending tuple
+  `(understanding_id, conclusion_id, revision)`; `after` is an exact
+  keyset cursor, not an opaque semantic ranking token.
+- `PendingCurationItem` carries exactly
+  `ref: ConclusionRevisionRef`,
+  `understanding_version: UnderstandingVersionNumber`,
+  `surface: SurfaceKey`, and
+  `question: str`. It never copies the conclusion statement.
+- `PendingCuration` carries
+  `repository_id: str`,
+  `items: tuple[PendingCurationItem, ...]`,
+  `next_after: ConclusionRevisionRef | None`,
+  `omitted: tuple[str, ...]`, and
+  `truncated: bool`. When truncated, `next_after` is the last returned
+  item's exact revision ref; otherwise it is absent.
+- historical/current exact understanding retrieval carries the immutable
+  curation dispositions applicable to that snapshot so audit can distinguish
+  capture from later curation without reading storage internals.
+
+`PendingCuration` is an `AskResult`; it is pure/read-only and has no request
+identity or investigation context. The selector admits only current-membership
+CAPTURED revisions whose live required support is `CURRENT`. Captured revisions
+with non-current support follow the existing stale/re-establishment path and
+become pending only after support is re-established. *(F2, F13, L2, L17)*
+
 Malformed selector structure is `Rejected`, not a validation finding.
 `MEMBER_ALREADY_ACTIVE` means ACTIVE in a different pyramid; a retained member
 of the target REVISE pyramid is valid. Operational inability to evaluate an
@@ -440,7 +473,7 @@ omitted and the snapshot retrieval path (FD-54–FD-57). *(L2, L3)*
 | Component | Meaning |
 | --- | --- |
 | `current` | conclusions in this surface that are both CURATED and supported by present dependencies |
-| `pending` | current-membership CAPTURED conclusions; counted and returned as `pending_refs`, never as answer content |
+| `pending` | CURRENT-support, current-membership CAPTURED conclusions; counted and returned as `pending_refs`, never as answer content |
 | `stale` | conclusions whose support no longer holds, directly or through a premise; counted and returned as `stale_refs`, never as answer content |
 | `unassessed` | recorded gaps or declared questions with no supported conclusion |
 | `unexamined` | boundary members with no understanding at all; computed from the boundary and reported with explicit enumeration limits (F9) |
@@ -450,9 +483,11 @@ A parent surface's own conclusions are its own; descendant status is reported
 alongside and never merged into the parent answer. That is what makes a domain
 honestly reportable while it still holds both current and stale understanding.
 
-`pending_refs` names each current-membership CAPTURED conclusion by exact
-revision identity and owning understanding version. `stale_refs` names each
-non-current conclusion by exact revision identity, the understanding version
+`pending_refs` names each CURRENT-support, current-membership CAPTURED
+conclusion by exact revision identity and owning understanding version.
+CAPTURED conclusions with non-current support are stale, not simultaneously
+pending. `stale_refs` names each non-current conclusion by exact revision
+identity, the understanding version
 that holds it, and its present non-current support state
 (`REASSESSMENT_REQUIRED` or `UNVERIFIABLE`). Each count and reference set
 describes the same population; pending or stale references are never Answer
@@ -705,12 +740,16 @@ may supply one or none. Span derives the old revision identity, any unchanged
 assertion nature or scope, the mechanical basis, and the submission digest.
 `expected_version` stays mandatory and compare-and-set. *(F5, F7, F13, L4, L7)*
 
-**Curation.** A `curate` action supplies an existing `conclusion_id` and
-non-empty `reasoning`. Span resolves the exact current revision from the
-expected understanding version and records one immutable curation disposition.
-The action does not change statement, assertion nature, semantic scope, support
-or Functional Pyramid state. It advances the understanding version so history
-shows when the exact semantic revision became eligible for shared reuse.
+**Curation.** A `curate` action supplies one or more
+`CurateConclusion{conclusion_id, reasoning}` values. Span resolves each exact
+current revision from the expected understanding version, evaluates its required
+support, and accepts curation only when that support is presently `CURRENT`.
+A non-current target is a typed `Rejected/validation` requiring
+re-establishment before review can be accepted. Span then records one immutable
+curation disposition per exact revision. The action does not change statement,
+assertion nature, semantic scope, support or Functional Pyramid state. It
+advances the understanding version so history shows when each exact semantic
+revision became eligible for shared reuse.
 
 Create, add, correct and replace produce CAPTURED semantic revisions. A
 support-only confirm of semantically unchanged meaning preserves prior curation
