@@ -1,4 +1,4 @@
-"""Authority-seed shape and read-only preflight facts (stdlib only)."""
+"""Authority-configuration shape and read-only preflight facts (stdlib only)."""
 
 from __future__ import annotations
 
@@ -8,62 +8,154 @@ import subprocess
 from pathlib import Path
 
 
-def load_seeds(path, dry_run=False):
-    if path is None:
-        return []
-    print(f"+ read authority seeds: {path}")
+def _canonical_model():
+    try:
+        return importlib.import_module("span.core.model")
+    except ImportError as exc:
+        raise SystemExit(
+            "cannot validate authority configuration: canonical decoder "
+            f"unavailable ({exc}); refusing to install unchecked governance"
+        ) from None
+
+
+def _canonical_list(path, *, model_name, item_name, dry_run=False):
+    print(f"+ read {item_name} file: {path}")
     if dry_run:
-        return []
+        return ()
     try:
         data = json.loads(Path(path).read_text())
     except (OSError, ValueError) as exc:
-        raise SystemExit(f"cannot read seeds file {path}: {exc}")
+        raise SystemExit(f"cannot read {item_name} file {path}: {exc}") from None
     if not isinstance(data, list):
-        raise SystemExit(f"seeds file must hold a JSON list: {path}")
-    # [design note G](docs/design-references.md#g) §4.6: early seed-shape validation via the canonical
-    # decoder, before any mutation. The bootstrap shim
-    # (scripts/install-span.py) puts `src/` on `sys.path`, and the
-    # installed `span-install` entry point has Span installed, so the
-    # canonical decoder is always obtainable in supported paths. Shape
-    # only; no locator resolution against the store and no structural
-    # provider contact. Unknown locators stay rejected at
-    # installer provisioning, the authoritative boundary.
-    # A missing decoder is a broken checkout or install and fails
-    # closed here; validation is never skipped.
-    try:
-        _m = importlib.import_module("span.core.model")
-    except ImportError as exc:
-        raise SystemExit(
-            f"cannot validate seeds file {path}: canonical decoder "
-            f"unavailable ({exc}); refusing to install with unchecked "
-            f"authority seeds"
-        ) from None
-    validated: list[object] = []
+        raise SystemExit(f"{item_name} file must hold a JSON list: {path}")
+    model = _canonical_model()
+    target = getattr(model, model_name)
+    validated = []
     for index, item in enumerate(data):
         if not isinstance(item, dict):
             raise SystemExit(
-                f"seeds file {path}: seeds[{index}]: expected object, "
+                f"{item_name} file {path}: {item_name}[{index}]: expected object, "
                 f"got {type(item).__name__}"
             )
         payload = dict(item)
-        payload.setdefault("$type", "EvidenceRef")
+        payload.setdefault("$type", model_name)
         try:
-            validated.append(_m.from_canonical(_m.EvidenceRef, payload))
-        except _m.CanonicalDecodeError as exc:
+            validated.append(model.from_canonical(target, payload))
+        except model.CanonicalDecodeError as exc:
             raise SystemExit(
-                f"seeds file {path}: seeds[{index}]: invalid "
-                f"EvidenceRef arguments: {exc}"
+                f"{item_name} file {path}: {item_name}[{index}]: invalid "
+                f"{model_name} arguments: {exc}"
             ) from None
-    return data
+    return tuple(validated)
+
+
+def _repository_mapping(entries, *, selected_repository_ids, label):
+    mapped = {}
+    for repository_id, path in entries or ():
+        if repository_id in mapped:
+            raise SystemExit(
+                f"duplicate {label} mapping for repository {repository_id!r}"
+            )
+        if repository_id not in selected_repository_ids:
+            raise SystemExit(
+                f"{label} mapping names unselected repository {repository_id!r}"
+            )
+        mapped[repository_id] = path
+    return mapped
+
+
+def load_authority_files(
+    targets,
+    seed_files,
+    binding_files,
+    *,
+    dry_run=False,
+):
+    """Decode repository-qualified canonical authority configuration.
+
+    Missing repository mappings are absent from the returned dictionaries so
+    callers preserve the InitializeRepositoryRequest None tri-state. Explicit
+    empty JSON lists decode to () and therefore mean clear; non-empty files
+    decode to tuples of the existing canonical carriers.
+    """
+    try:
+        structural = importlib.import_module("span.shell.structural")
+    except ImportError as exc:
+        raise SystemExit(
+            f"cannot resolve repository identity for authority configuration: {exc}"
+        ) from None
+
+    selected_repository_ids = {
+        structural.repository_id_from_config(str(target)) for target in targets
+    }
+    seed_paths = _repository_mapping(
+        seed_files,
+        selected_repository_ids=selected_repository_ids,
+        label="authority seeds",
+    )
+    binding_paths = _repository_mapping(
+        binding_files,
+        selected_repository_ids=selected_repository_ids,
+        label="authority bindings",
+    )
+
+    seeds = {}
+    for repository_id, path in seed_paths.items():
+        decoded = _canonical_list(
+            path,
+            model_name="EvidenceRef",
+            item_name="authority seeds",
+            dry_run=dry_run,
+        )
+        for item in decoded:
+            if item.repository_id != repository_id:
+                raise SystemExit(
+                    "authority seeds repository mismatch: "
+                    f"mapping={repository_id!r}, item={item.repository_id!r}"
+                )
+        seeds[repository_id] = decoded
+
+    bindings = {}
+    for repository_id, path in binding_paths.items():
+        decoded = _canonical_list(
+            path,
+            model_name="AuthorityBinding",
+            item_name="authority bindings",
+            dry_run=dry_run,
+        )
+        for item in decoded:
+            item_repository_id = item.evidence_ref.repository_id
+            if item_repository_id != repository_id:
+                raise SystemExit(
+                    "authority bindings repository mismatch: "
+                    f"mapping={repository_id!r}, item={item_repository_id!r}"
+                )
+        bindings[repository_id] = decoded
+
+    return seeds, bindings
+
+
+def load_seeds(path, dry_run=False):
+    """Legacy internal helper retained for direct seed-decoder tests."""
+    if path is None:
+        return []
+    decoded = _canonical_list(
+        path,
+        model_name="EvidenceRef",
+        item_name="seeds",
+        dry_run=dry_run,
+    )
+    if dry_run:
+        return []
+    return [item for item in decoded]
 
 
 def preflight_facts(targets, seeds_path=None):
-    """Read-only non-gating preflight facts ([design note G](docs/design-references.md#g) §4.6).
+    """Read-only non-gating preflight facts.
 
-    Reports git dirty/HEAD where available and seed-file facts. Never
-    gates installation: provisioning triggers the single bounded
-    provider build when the cache is missing or stale. Stdlib and git
-    CLI only; no store, no provider writes.
+    The optional seeds_path remains only for the existing direct helper
+    contract. Beta-2 repository-qualified authority configuration is validated
+    separately by load_authority_files.
     """
     facts: dict = {}
     for target in targets:
@@ -105,8 +197,8 @@ def preflight_facts(targets, seeds_path=None):
         facts[str(target)] = entry
     if seeds_path is not None:
         try:
-            text = Path(seeds_path).read_text()
-            parsed = json.loads(text)
+            text_value = Path(seeds_path).read_text()
+            parsed = json.loads(text_value)
             facts["seeds_file"] = {
                 "supplied": True,
                 "readable": True,
