@@ -8,59 +8,65 @@ import subprocess
 from pathlib import Path
 
 
-def load_seeds(path, dry_run=False):
+def _load_canonical_list(path, *, dry_run, label, model_name):
     if path is None:
         return []
-    print(f"+ read authority seeds: {path}")
+    print(f"+ read authority {label}: {path}")
     if dry_run:
         return []
     try:
         data = json.loads(Path(path).read_text())
     except (OSError, ValueError) as exc:
-        raise SystemExit(f"cannot read seeds file {path}: {exc}")
+        raise SystemExit(f"cannot read {label} file {path}: {exc}")
     if not isinstance(data, list):
-        raise SystemExit(f"seeds file must hold a JSON list: {path}")
-    # [design note G](docs/design-references.md#g) §4.6: early seed-shape validation via the canonical
-    # decoder, before any mutation. The bootstrap shim
-    # (scripts/install-span.py) puts `src/` on `sys.path`, and the
-    # installed `span-install` entry point has Span installed, so the
-    # canonical decoder is always obtainable in supported paths. Shape
-    # only; no locator resolution against the store and no structural
-    # provider contact. Unknown locators stay rejected at
-    # installer provisioning, the authoritative boundary.
-    # A missing decoder is a broken checkout or install and fails
-    # closed here; validation is never skipped.
+        raise SystemExit(f"{label} file must hold a JSON list: {path}")
+    # Validate with Span's canonical domain decoder before any mutation.
+    # Locator/currentness validation remains at repository provisioning,
+    # which owns evidence access and root binding.
     try:
         _m = importlib.import_module("span.core.model")
     except ImportError as exc:
         raise SystemExit(
-            f"cannot validate seeds file {path}: canonical decoder "
+            f"cannot validate {label} file {path}: canonical decoder "
             f"unavailable ({exc}); refusing to install with unchecked "
-            f"authority seeds"
+            f"authority {label}"
         ) from None
+    model = getattr(_m, model_name)
     validated: list[object] = []
     for index, item in enumerate(data):
         if not isinstance(item, dict):
             raise SystemExit(
-                f"seeds file {path}: seeds[{index}]: expected object, "
+                f"{label} file {path}: {label}[{index}]: expected object, "
                 f"got {type(item).__name__}"
             )
         payload = dict(item)
-        payload.setdefault("$type", "EvidenceRef")
+        payload.setdefault("$type", model_name)
         try:
-            validated.append(_m.from_canonical(_m.EvidenceRef, payload))
+            validated.append(_m.from_canonical(model, payload))
         except _m.CanonicalDecodeError as exc:
             raise SystemExit(
-                f"seeds file {path}: seeds[{index}]: invalid "
-                f"EvidenceRef arguments: {exc}"
+                f"{label} file {path}: {label}[{index}]: invalid "
+                f"{model_name} arguments: {exc}"
             ) from None
-    return data
+    return validated
 
 
-def preflight_facts(targets, seeds_path=None):
+def load_seeds(path, dry_run=False):
+    return _load_canonical_list(
+        path, dry_run=dry_run, label="seeds", model_name="EvidenceRef"
+    )
+
+
+def load_bindings(path, dry_run=False):
+    return _load_canonical_list(
+        path, dry_run=dry_run, label="bindings", model_name="AuthorityBinding"
+    )
+
+
+def preflight_facts(targets, seeds_path=None, bindings_path=None):
     """Read-only non-gating preflight facts ([design note G](docs/design-references.md#g) §4.6).
 
-    Reports git dirty/HEAD where available and seed-file facts. Never
+    Reports git dirty/HEAD where available and authority-file facts. Never
     gates installation: provisioning triggers the single bounded
     provider build when the cache is missing or stale. Stdlib and git
     CLI only; no store, no provider writes.
@@ -103,28 +109,31 @@ def preflight_facts(targets, seeds_path=None):
             entry["git_dirty"] = None
             entry["git_head_time"] = None
         facts[str(target)] = entry
-    if seeds_path is not None:
+
+    def file_fact(path):
+        if path is None:
+            return {
+                "supplied": False,
+                "readable": False,
+                "shape_valid": False,
+                "item_count": 0,
+            }
         try:
-            text = Path(seeds_path).read_text()
-            parsed = json.loads(text)
-            facts["seeds_file"] = {
+            parsed = json.loads(Path(path).read_text())
+            return {
                 "supplied": True,
                 "readable": True,
                 "shape_valid": isinstance(parsed, list),
                 "item_count": (len(parsed) if isinstance(parsed, list) else None),
             }
         except (OSError, ValueError):
-            facts["seeds_file"] = {
+            return {
                 "supplied": True,
                 "readable": False,
                 "shape_valid": False,
                 "item_count": None,
             }
-    else:
-        facts["seeds_file"] = {
-            "supplied": False,
-            "readable": False,
-            "shape_valid": False,
-            "item_count": 0,
-        }
+
+    facts["seeds_file"] = file_fact(seeds_path)
+    facts["bindings_file"] = file_fact(bindings_path)
     return facts

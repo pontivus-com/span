@@ -1927,6 +1927,145 @@ class Tier1MechanismTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 install.load_seeds(path, dry_run=False)
 
+    def test_load_bindings_round_trip_and_failure(self):
+        import json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(pathlib.Path(tmp) / "bindings.json")
+            self.assertEqual(install.load_bindings(None, dry_run=False), [])
+            pathlib.Path(path).write_text(json.dumps([]))
+            self.assertEqual(install.load_bindings(path, dry_run=False), [])
+            pathlib.Path(path).write_text(
+                json.dumps(
+                    [
+                        {
+                            "$type": "AuthorityBinding",
+                            "evidence_ref": {
+                                "$type": "EvidenceRef",
+                                "evidence_id": {
+                                    "$type": "EvidenceId",
+                                    "value": "authority-a",
+                                },
+                                "repository_id": "r",
+                                "source_kind": "DOCUMENTATION",
+                                "locator": "docs/a.md",
+                            },
+                            "authority_kind": "REPOSITORY_RULE",
+                            "status": "ACCEPTED",
+                        }
+                    ]
+                )
+            )
+            bindings = install.load_bindings(path, dry_run=False)
+            self.assertEqual(len(bindings), 1)
+            self.assertEqual(bindings[0].evidence_ref.evidence_id.value, "authority-a")
+
+    def test_initialize_targets_partitions_authority_by_repository(self):
+        import tempfile
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        from span.core import model as m
+        from span.shell.install.cli import _initialize_targets
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo_a = root / "repo-a"
+            repo_b = root / "repo-b"
+            repo_a.mkdir()
+            repo_b.mkdir()
+            args = SimpleNamespace(
+                authority_seeds_file=None,
+                authority_bindings_file="bindings.json",
+            )
+            env = SimpleNamespace(
+                dry=False,
+                args=args,
+                targets=(repo_a, repo_b),
+                data_dir=root / "data",
+            )
+            binding_a = m.AuthorityBinding(
+                evidence_ref=m.EvidenceRef(
+                    evidence_id=m.EvidenceId("authority-a"),
+                    repository_id="repo-a",
+                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                    locator="docs/a.md",
+                ),
+                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+                status=m.AuthorityStatus.ACCEPTED,
+            )
+            binding_b = m.AuthorityBinding(
+                evidence_ref=m.EvidenceRef(
+                    evidence_id=m.EvidenceId("authority-b"),
+                    repository_id="repo-b",
+                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                    locator="docs/b.md",
+                ),
+                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+                status=m.AuthorityStatus.ACCEPTED,
+            )
+
+            def provision(_data_dir, request):
+                repository_id = pathlib.Path(request.repository_locator).name
+                expected = binding_a if repository_id == "repo-a" else binding_b
+                self.assertEqual(request.authority_bindings, (expected,))
+                runtime = SimpleNamespace(store=Mock())
+                result = m.InitializeRepositoryResult(
+                    repository_id=repository_id,
+                    canonical_root=request.repository_locator,
+                    schema_version=14,
+                    store_ready=True,
+                    structural_status="index:CURRENT",
+                    authority_bindings=(expected,),
+                )
+                return runtime, result
+
+            with patch(
+                "span.shell.context.provision_repository_runtime",
+                side_effect=provision,
+            ):
+                result = _initialize_targets(env, [], [binding_a, binding_b])
+
+            self.assertEqual(result["repo-a"]["authority_binding_count"], 1)
+            self.assertEqual(result["repo-b"]["authority_binding_count"], 1)
+
+    def test_initialize_targets_rejects_unselected_authority_before_write(self):
+        import tempfile
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from span.core import model as m
+        from span.shell.install.cli import _initialize_targets
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo_a = root / "repo-a"
+            repo_a.mkdir()
+            env = SimpleNamespace(
+                dry=False,
+                args=SimpleNamespace(
+                    authority_seeds_file=None,
+                    authority_bindings_file="bindings.json",
+                ),
+                targets=(repo_a,),
+                data_dir=root / "data",
+            )
+            foreign = m.AuthorityBinding(
+                evidence_ref=m.EvidenceRef(
+                    evidence_id=m.EvidenceId("authority-b"),
+                    repository_id="repo-b",
+                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                    locator="docs/b.md",
+                ),
+                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+                status=m.AuthorityStatus.ACCEPTED,
+            )
+            with patch("span.shell.context.provision_repository_runtime") as provision:
+                with self.assertRaises(SystemExit):
+                    _initialize_targets(env, [], [foreign])
+                provision.assert_not_called()
+
     def test_load_seeds_shape_failure_names_item_index(self):
         import json
         import tempfile

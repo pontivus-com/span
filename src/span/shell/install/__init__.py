@@ -86,6 +86,7 @@ from span.shell.install.paths import (  # noqa: F401
     expected_span_command,
 )
 from span.shell.install.preflight import (  # noqa: F401
+    load_bindings,
     load_seeds,
     preflight_facts,
 )
@@ -198,6 +199,7 @@ __all__ = [
     "agents_snippet_path",
     "git_rev",
     "expected_span_command",
+    "load_bindings",
     "load_seeds",
     "preflight_facts",
     "write_receipt",

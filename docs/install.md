@@ -84,6 +84,25 @@ lifecycle snippet bundled in the package instead of the repository copies.
 
 Installation establishes operational readiness only.
 
+Repository setup is explicit and is performed by the installer. Existing
+authority configuration is preserved when no authority file is supplied. To
+declare canonical authority during setup, pass canonical JSON lists using
+`--authority-seeds-file` and/or `--authority-bindings-file`:
+
+```bash
+span-install \
+  --repo <TARGET_REPO> \
+  --authority-bindings-file <BINDINGS_JSON>
+```
+
+A bindings file is a JSON list of canonical `AuthorityBinding` values. For a
+multi-repository install, items are partitioned by
+`evidence_ref.repository_id`; every named repository must also be selected by
+`--repo`. The installer validates each binding's exact source locator through
+the canonical repository evidence boundary before registering it. Supplying an
+empty list explicitly clears bindings for the selected repositories; omitting
+the flag preserves the existing bindings.
+
 It does **not** mean Span already understands your repository.
 
 ---

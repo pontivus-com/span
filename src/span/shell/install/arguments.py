@@ -236,7 +236,14 @@ def parse_args(argv=None):
         "--authority-seeds-file",
         default=None,
         help="JSON file with canonical EvidenceRef items for init. "
-        "Absent means no seeds; seeds are never invented.",
+        "When omitted, existing configured seeds are preserved.",
+    )
+    parser.add_argument(
+        "--authority-bindings-file",
+        default=None,
+        help="JSON file with canonical AuthorityBinding items for init. "
+        "Items are partitioned by evidence_ref.repository_id across selected "
+        "--repo targets. When omitted, existing bindings are preserved.",
     )
     parser.add_argument(
         "--dry-run",

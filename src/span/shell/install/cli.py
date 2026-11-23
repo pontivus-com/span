@@ -57,7 +57,7 @@ from span.shell.install.paths import (
     opencode_plugin_path,
     platform_paths,
 )
-from span.shell.install.preflight import load_seeds, preflight_facts
+from span.shell.install.preflight import load_bindings, load_seeds, preflight_facts
 from span.shell.install.receipt import read_receipt, write_receipt
 from span.shell.install.recovery import (
     create_backup,
@@ -105,6 +105,8 @@ class _RuntimeState:
 
     target_census: dict[str, object]
     seeds: list[object]
+    bindings: list[object]
+    initialization: dict[str, object]
     preflight: dict[str, object]
     venv_python: Path
     indexer_pointer: dict[str, object] | None
@@ -308,6 +310,86 @@ def _run_one_shot(env: _Environment) -> bool:
     return False
 
 
+def _initialize_targets(
+    env: _Environment,
+    seeds: list[object],
+    bindings: list[object],
+) -> dict[str, object]:
+    """Run the explicit repository initialization contract for selected targets."""
+    if env.dry:
+        return {}
+
+    # Semantic imports remain lazy: source-checkout bootstrap must import the
+    # stdlib-only installer before Span has been installed into its managed venv.
+    from span.core import model as m
+    from span.shell.context import provision_repository_runtime
+    from span.shell.structural import repository_id_from_config
+
+    targets = tuple(
+        (target, repository_id_from_config(str(target))) for target in env.targets
+    )
+    selected_ids = [repository_id for _, repository_id in targets]
+    if len(set(selected_ids)) != len(selected_ids):
+        raise SystemExit(
+            "selected --repo targets resolve to duplicate repository ids; "
+            "refusing partial initialization"
+        )
+
+    configured_ids = {
+        item.repository_id for item in seeds if isinstance(item, m.EvidenceRef)
+    } | {
+        item.evidence_ref.repository_id
+        for item in bindings
+        if isinstance(item, m.AuthorityBinding)
+    }
+    unknown = sorted(configured_ids - set(selected_ids))
+    if unknown:
+        raise SystemExit(
+            "authority configuration names repositories not selected by --repo: "
+            + ", ".join(unknown)
+        )
+
+    by_seed: dict[str, list[m.EvidenceRef]] = {}
+    for item in seeds:
+        if not isinstance(item, m.EvidenceRef):
+            raise TypeError("installer seed loader returned a non-EvidenceRef")
+        by_seed.setdefault(item.repository_id, []).append(item)
+
+    by_binding: dict[str, list[m.AuthorityBinding]] = {}
+    for item in bindings:
+        if not isinstance(item, m.AuthorityBinding):
+            raise TypeError("installer binding loader returned a non-AuthorityBinding")
+        by_binding.setdefault(item.evidence_ref.repository_id, []).append(item)
+
+    initialized: dict[str, object] = {}
+    for target, repository_id in targets:
+        request = m.InitializeRepositoryRequest(
+            repository_locator=str(target),
+            authority_seeds=(
+                tuple(by_seed.get(repository_id, ()))
+                if env.args.authority_seeds_file is not None
+                else None
+            ),
+            authority_bindings=(
+                tuple(by_binding.get(repository_id, ()))
+                if env.args.authority_bindings_file is not None
+                else None
+            ),
+        )
+        runtime, result = provision_repository_runtime(env.data_dir, request)
+        try:
+            initialized[repository_id] = {
+                "schema_version": result.schema_version,
+                "store_ready": result.store_ready,
+                "structural_status": result.structural_status,
+                "authority_seed_count": len(result.authority_seeds),
+                "authority_binding_count": len(result.authority_bindings),
+            }
+        finally:
+            runtime.store.close()
+    return initialized
+
+
 def _provision_runtime(env: _Environment) -> _RuntimeState:
     """Install or reuse the runtime, then verify it before recording anything."""
     args = env.args
@@ -319,7 +401,10 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
     # non-gating preflight facts. Shape failure closes before mutation;
     # locator resolution stays at provisioning.
     seeds = load_seeds(args.authority_seeds_file, dry_run=env.dry)
-    preflight = preflight_facts(env.targets, args.authority_seeds_file)
+    bindings = load_bindings(args.authority_bindings_file, dry_run=env.dry)
+    preflight = preflight_facts(
+        env.targets, args.authority_seeds_file, args.authority_bindings_file
+    )
     print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
     venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
     indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
@@ -376,6 +461,9 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
         "reinstalled": bool(reinstalled),
     }
     expose_binary(env.venv_dir, env.bin_dir, dry_run=env.dry)
+    if env.targets and not env.dry and data_backup is None:
+        data_backup = backup_data_dir(env.data_dir, dry_run=False)
+    initialization = _initialize_targets(env, seeds, bindings)
     if seeds:
         # Verification provisions without seeds; the installer writes the
         # declared authority seeds into the repository binding.
@@ -384,9 +472,16 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
             "(installer provisioning binds them; verification "
             "provisions without seeds)"
         )
+    if bindings:
+        print(
+            f"loaded {len(bindings)} authority bindings "
+            "(installer initialization validates and registers them)"
+        )
     return _RuntimeState(
         target_census=target_census,
         seeds=seeds,
+        bindings=bindings,
+        initialization=initialization,
         preflight=preflight,
         venv_python=venv_python,
         indexer_pointer=indexer_pointer,
@@ -769,6 +864,10 @@ def _build_receipt(
     host_registration: dict[str, object],
     report: dict[str, object],
 ) -> dict[str, object]:
+    seeds_file = state.preflight["seeds_file"]
+    bindings_file = state.preflight["bindings_file"]
+    if not isinstance(seeds_file, dict) or not isinstance(bindings_file, dict):
+        raise TypeError("installer preflight authority-file facts are malformed")
     return {
         "install_version": INSTALL_VERSION,
         "span_repo": str(env.span_repo),
@@ -788,9 +887,21 @@ def _build_receipt(
         "source_venv_sync": state.source_venv_sync,
         "post_install_verified": state.post_install_verified,
         "data_backup": state.data_backup,
-        "seeds_file_supplied_and_readable": bool(state.seeds),
-        "seeds_shape_valid": bool(state.seeds),
-        "seeds_resolved_and_active": False,
+        "seeds_file_supplied_and_readable": bool(
+            seeds_file["supplied"] and seeds_file["readable"]
+        ),
+        "seeds_shape_valid": bool(seeds_file["shape_valid"]),
+        "seeds_resolved_and_active": bool(
+            env.args.authority_seeds_file is not None and state.initialization
+        ),
+        "bindings_file_supplied_and_readable": bool(
+            bindings_file["supplied"] and bindings_file["readable"]
+        ),
+        "bindings_shape_valid": bool(bindings_file["shape_valid"]),
+        "bindings_resolved_and_active": bool(
+            env.args.authority_bindings_file is not None and state.initialization
+        ),
+        "repository_initialization": state.initialization,
         "preflight_facts": state.preflight,
         # Deterministic installer performs no host exchange (A1 only).
         "a2": "not_run",
