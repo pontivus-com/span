@@ -164,6 +164,45 @@ def _update_command(
     )
 
 
+def _curate_command(
+    *,
+    expected: int,
+    submission: str,
+    reasoning: str = "stable for shared reuse",
+) -> m.UpdateUnderstandingCommand:
+    return m.UpdateUnderstandingCommand(
+        identity=_identity(submission),
+        understanding_id=m.UnderstandingId("u-1"),
+        expected_version=m.UnderstandingVersionNumber(expected),
+        curate=(
+            m.CurateConclusion(
+                conclusion_id=m.ConclusionId("c-1"),
+                reasoning=reasoning,
+            ),
+        ),
+        provenance="reviewer-session",
+    )
+
+
+def _same_confirm_command(
+    *,
+    expected: int,
+    submission: str,
+) -> m.UpdateUnderstandingCommand:
+    return m.UpdateUnderstandingCommand(
+        identity=_identity(submission),
+        understanding_id=m.UnderstandingId("u-1"),
+        expected_version=m.UnderstandingVersionNumber(expected),
+        confirm=(
+            m.ConfirmConclusion(
+                conclusion_id=m.ConclusionId("c-1"),
+                **_content("A does X"),
+            ),
+        ),
+        provenance="engineering-session",
+    )
+
+
 def _verification_command(submission: str = "sub-v") -> m.RecordVerificationCommand:
     return m.RecordVerificationCommand(
         identity=_identity(submission),
@@ -371,6 +410,120 @@ class LifecycleStoreTest(unittest.TestCase):
                 understanding_id=m.UnderstandingId("u-1"),
             )
         self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+
+    def test_curate_update_is_atomic_versioned_and_replay_safe(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        command = _curate_command(expected=1, submission="sub-curate")
+
+        receipt = self.store.record_understanding(command)
+
+        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_conclusions("u-1")), 1)
+        version = self.store.get_version("u-1", 2)
+        self.assertEqual(version.conclusions[0].revision.value, 1)
+        disposition = self.store.find_curation(version.conclusions[0])
+        self.assertIsNotNone(disposition)
+        assert disposition is not None
+        self.assertIs(disposition.origin, m.CurationOrigin.EXPLICIT)
+        self.assertEqual(disposition.accepted_in_version.value, 2)
+        self.assertEqual(disposition.reasoning, "stable for shared reuse")
+        self.assertEqual(disposition.provenance, "reviewer-session")
+
+        replay = self.store.record_understanding(command)
+        self.assertEqual(replay, receipt)
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_curations("u-1")), 1)
+
+        with self.assertRaises(RecordingConflict):
+            self.store.record_understanding(
+                _curate_command(
+                    expected=1,
+                    submission="sub-curate",
+                    reasoning="different review",
+                )
+            )
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_curations("u-1")), 1)
+
+    def test_curate_stale_expected_version_is_atomic_conflict(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        self.store.record_understanding(
+            _curate_command(expected=1, submission="sub-curate")
+        )
+
+        with self.assertRaises(RecordingConflict):
+            self.store.record_understanding(
+                _curate_command(expected=1, submission="sub-curate-stale")
+            )
+
+        self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
+        self.assertEqual(len(self.store.get_curations("u-1")), 1)
+
+    def test_confirm_inherits_curation_but_semantic_change_does_not(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        self.store.record_understanding(
+            _curate_command(expected=1, submission="sub-curate")
+        )
+
+        confirm_receipt = self.store.record_understanding(
+            _same_confirm_command(expected=2, submission="sub-confirm")
+        )
+        self.assertEqual(confirm_receipt.accepted_understanding_versions[0].value, 3)
+        confirmed_ref = self.store.get_version("u-1", 3).conclusions[0]
+        self.assertEqual(confirmed_ref.revision.value, 2)
+        inherited = self.store.find_curation(confirmed_ref)
+        self.assertIsNotNone(inherited)
+        assert inherited is not None
+        self.assertIs(
+            inherited.origin,
+            m.CurationOrigin.INHERITED_CONFIRMATION,
+        )
+        self.assertEqual(inherited.inherited_from.revision.value, 1)
+        self.assertEqual(inherited.reasoning, "stable for shared reuse")
+        self.assertEqual(inherited.provenance, "reviewer-session")
+
+        correct = m.UpdateUnderstandingCommand(
+            identity=_identity("sub-correct-after-curate"),
+            understanding_id=m.UnderstandingId("u-1"),
+            expected_version=m.UnderstandingVersionNumber(3),
+            correct=(
+                m.CorrectConclusion(
+                    conclusion_id=m.ConclusionId("c-1"),
+                    **_content("A does Y"),
+                ),
+            ),
+            provenance="engineering-session",
+        )
+        self.store.record_understanding(correct)
+        corrected_ref = self.store.get_version("u-1", 4).conclusions[0]
+        self.assertEqual(corrected_ref.revision.value, 3)
+        self.assertIsNone(self.store.find_curation(corrected_ref))
+        self.assertEqual(len(self.store.get_curations("u-1")), 2)
+
+    def test_confirm_of_captured_predecessor_remains_uncurated(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+
+        self.store.record_understanding(
+            _same_confirm_command(expected=1, submission="sub-confirm-captured")
+        )
+
+        confirmed_ref = self.store.get_version("u-1", 2).conclusions[0]
+        self.assertEqual(confirmed_ref.revision.value, 2)
+        self.assertIsNone(self.store.find_curation(confirmed_ref))
+        self.assertEqual(self.store.get_curations("u-1"), ())
 
     def test_curation_storage_is_exact_version_aware_and_immutable(self) -> None:
         self.store.put_context(_context())
