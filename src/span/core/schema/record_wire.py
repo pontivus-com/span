@@ -826,6 +826,18 @@ class RecordRequestWire:
             label="understanding update effect",
         ),
         _constraints.PresenceRule(
+            fields=(_constraints.PresenceField("provenance", non_empty=True),),
+            minimum=1,
+            maximum=1,
+            when=(
+                _constraints.EqualsCondition("kind", _c.RecordKind.UNDERSTANDING),
+                _constraints.PresenceCondition(
+                    _constraints.PresenceField("actions.curate", non_empty=True), True
+                ),
+            ),
+            label="curation reviewer provenance",
+        ),
+        _constraints.PresenceRule(
             fields=(
                 _constraints.PresenceField("surface"),
                 _constraints.PresenceField("question"),
