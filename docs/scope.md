@@ -89,11 +89,12 @@ service-wide run applies to the files it covers.
 
 ## Local storage and operational effects
 
-Repository runtime state uses schema 14 in the external data directory.
-Installation-level Functional Pyramid participation and receipts use the
-separate installation database under `<DATA_DIR>/installation/`. Recoverable
-contexts and observation admission are operational state; recording creates
-semantic history. Context expiry does not erase accepted conclusions, challenges,
+Beta 2 repository runtime state uses schema 15 in the external data directory.
+Installation-level Functional Pyramid participation and receipts remain in the
+separate installation database under `<DATA_DIR>/installation/` at installation
+schema 1. Recoverable contexts and observation admission are operational state;
+recording creates semantic history and curation dispositions qualify exact
+semantic revisions for shared reuse. Context expiry does not erase accepted conclusions, challenges,
 verification runs, or retained receipts. Receipt expiry ends that replay
 window, not the existence of the recorded understanding.
 
@@ -104,12 +105,12 @@ it. Runtime operation does not write target source or provider artifacts into
 the target repository. Installation may write a managed `AGENTS.md` block and
 host configuration as described in [install](install.md).
 
-Existing schema-7–13 repository stores use the separately invoked offline
-inspect/apply/verify/rollback protocol into schema 14. The schema-13 transition
-preserves its durable semantic/audit rows and derives only the route lookup
-projection from already-retained FunctionalRouteSupport; it does not invent
-participation, authority support or historical routes. Earlier schemas keep the
-documented preservation/mapping boundary. See the
+Existing schema-7–14 repository stores use the separately invoked offline
+inspect/apply/verify/rollback protocol into schema 15. The Beta-2 schema-14→15
+mapping preserves durable semantic/audit/governance state and the existing route
+lookup projection while creating zero curation dispositions. Earlier schemas
+retain their documented preservation/mapping boundaries before the final
+schema-15 transition. See the
 [transition procedure](install.md#upgrade-an-existing-store).
 
 ## Beta delivery boundary
