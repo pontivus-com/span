@@ -400,6 +400,150 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
 
+    def test_add_after_curation_starts_new_lineage_captured(self) -> None:
+        self.service.record(_create_wire())
+        conclusion_id = self._version_conclusion_id("u:sub-create", 1)
+        curated = self._update(
+            "sub-curate-before-add",
+            w.RecordActionsWire(
+                curate=(
+                    w.CurateConclusionWire(
+                        conclusion_id=conclusion_id,
+                        reasoning="stable for shared reuse",
+                    ),
+                )
+            ),
+            1,
+            provenance="reviewer-session",
+        )
+        self.assertEqual(curated.version.value, 2)
+
+        added = self._update(
+            "sub-add-after-curate",
+            w.RecordActionsWire(
+                add=(
+                    w.AddConclusionWire(
+                        conclusion="A has an additional behavior.",
+                        locator="src/a.py",
+                    ),
+                )
+            ),
+            2,
+        )
+        self.assertEqual(added.version.value, 3)
+        version = self.store.get_version("u:sub-create", 3)
+        original = next(
+            ref for ref in version.conclusions if ref.conclusion_id.value == conclusion_id
+        )
+        added_ref = next(
+            ref for ref in version.conclusions if ref.conclusion_id.value != conclusion_id
+        )
+        self.assertIsNotNone(
+            self.store.find_curation(
+                original,
+                as_of_version=m.UnderstandingVersionNumber(3),
+            )
+        )
+        self.assertIsNone(
+            self.store.find_curation(
+                added_ref,
+                as_of_version=m.UnderstandingVersionNumber(3),
+            )
+        )
+
+    def test_replace_after_curation_starts_replacement_captured(self) -> None:
+        self.service.record(_create_wire())
+        conclusion_id = self._version_conclusion_id("u:sub-create", 1)
+        self._update(
+            "sub-curate-before-replace",
+            w.RecordActionsWire(
+                curate=(
+                    w.CurateConclusionWire(
+                        conclusion_id=conclusion_id,
+                        reasoning="stable for shared reuse",
+                    ),
+                )
+            ),
+            1,
+            provenance="reviewer-session",
+        )
+
+        replaced = self._update(
+            "sub-replace-after-curate",
+            w.RecordActionsWire(
+                replace=(
+                    w.ReplaceActionWire(
+                        conclusion_id=conclusion_id,
+                        conclusion="A is now described by replacement behavior.",
+                        reason="the prior behavior was superseded",
+                        locator="src/a.py",
+                    ),
+                )
+            ),
+            2,
+        )
+        self.assertEqual(replaced.version.value, 3)
+        version = self.store.get_version("u:sub-create", 3)
+        self.assertEqual(len(version.conclusions), 1)
+        replacement = version.conclusions[0]
+        self.assertNotEqual(replacement.conclusion_id.value, conclusion_id)
+        self.assertIsNone(
+            self.store.find_curation(
+                replacement,
+                as_of_version=m.UnderstandingVersionNumber(3),
+            )
+        )
+        self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
+
+    def test_withdrawn_curated_lineage_is_not_current_or_pending(self) -> None:
+        self.service.record(_create_wire())
+        conclusion_id = self._version_conclusion_id("u:sub-create", 1)
+        self._update(
+            "sub-curate-before-withdraw",
+            w.RecordActionsWire(
+                curate=(
+                    w.CurateConclusionWire(
+                        conclusion_id=conclusion_id,
+                        reasoning="stable for shared reuse",
+                    ),
+                )
+            ),
+            1,
+            provenance="reviewer-session",
+        )
+
+        withdrawn = self._update(
+            "sub-withdraw-after-curate",
+            w.RecordActionsWire(
+                withdraw=(
+                    w.WithdrawActionWire(
+                        conclusion_id=conclusion_id,
+                        reason="withdrawn after reviewer re-check",
+                    ),
+                )
+            ),
+            2,
+        )
+        self.assertEqual(withdrawn.version.value, 3)
+        version = self.store.get_version("u:sub-create", 3)
+        self.assertEqual(len(version.conclusions), 1)
+        withdrawn_ref = version.conclusions[0]
+        revision = next(
+            item
+            for item in self.store.get_conclusions("u:sub-create")
+            if item.conclusion_id == withdrawn_ref.conclusion_id
+            and item.revision == withdrawn_ref.revision
+        )
+        self.assertIsInstance(revision.content, m.WithdrawnConclusion)
+        self.assertIsNone(
+            self.store.find_curation(
+                withdrawn_ref,
+                as_of_version=m.UnderstandingVersionNumber(3),
+            )
+        )
+        self.assertEqual(self.store.pending_curation_candidates("repo-1"), ())
+        self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
+
     def _record_add(self, expected: int, submission: str) -> m.RecordReceipt:
         return _receipt(
             self.store,

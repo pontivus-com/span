@@ -709,7 +709,9 @@ def _schema14_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     root.mkdir(parents=True, exist_ok=True)
     (root / "src").mkdir(exist_ok=True)
-    (root / "src/a.py").write_text("a\n", encoding="utf-8")
+    source_path = root / "src/a.py"
+    source_path.write_text("a\n", encoding="utf-8")
+    source_fingerprint = hashlib.sha256(source_path.read_bytes()).hexdigest()
 
     store = LifecycleStore(
         path, retention=DEFAULT_LIFECYCLE_RETENTION, clock=lambda: NOW
@@ -724,9 +726,9 @@ def _schema14_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
                 repository_id="demo",
                 source_kind=m.EvidenceSourceKind.SOURCE_CODE,
                 locator="src/a.py",
-                revision_or_fingerprint="sha256:a",
+                revision_or_fingerprint=source_fingerprint,
             ),
-            content_digest=m.ContentDigest("sha256:a"),
+            content_digest=m.ContentDigest(f"sha256:{source_fingerprint}"),
             captured_at=NOW,
             total_lines=1,
             whole_file=True,
@@ -939,6 +941,83 @@ class Schema13To15Test(unittest.TestCase):
                 )
             finally:
                 connection.close()
+
+    def test_schema14_current_revision_migrates_as_pending_capture(self) -> None:
+        from span.service.answer import AnswerService
+        from span.service.evidence import EvidenceService
+        from span.service.support import SupportService
+        from span.shell.filesystem_evidence import FilesystemEvidenceSource
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            _schema14_store(data / "demo.db", root)
+
+            report = st.apply(_config(root, data))
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+
+            store = LifecycleStore(
+                data / "demo.db",
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
+            )
+            self.addCleanup(store.close)
+            evidence = FilesystemEvidenceSource("demo", root)
+            support = SupportService(
+                store=store,
+                evidence=evidence,
+                authority=store,
+                clock=lambda: NOW,
+            )
+            answer = AnswerService(
+                store=store,
+                support=support,
+                evidence=EvidenceService(
+                    store=store,
+                    evidence=evidence,
+                    clock=lambda: NOW,
+                ),
+                clock=lambda: NOW,
+                functional_pyramid_orientation=lambda _repository_id, _surface, _scope: (
+                    m.FunctionalPyramidParticipation(
+                        m.FunctionalPyramidParticipationState.UNCONFIGURED
+                    )
+                ),
+            )
+
+            snapshot = store.get_version("u-schema14", 1)
+            ref = snapshot.conclusions[0]
+            self.assertIs(
+                support.evaluate_revision(ref).state,
+                m.SupportState.CURRENT,
+            )
+            self.assertIsNone(store.find_curation(ref))
+            candidates = store.pending_curation_candidates("demo")
+            self.assertEqual(tuple(item.ref for item in candidates), (ref,))
+
+            captured = answer.ask(
+                m.AskRequest(
+                    selector=m.CurrentUnderstandingSelector(
+                        repository_id="demo",
+                        understanding_id="u-schema14",
+                    )
+                )
+            )
+            self.assertIsInstance(captured, m.Gap)
+            assert isinstance(captured, m.Gap)
+            self.assertIs(captured.reason, m.GapReason.PENDING_CURATION)
+
+            pending = answer.ask(
+                m.AskRequest(
+                    selector=m.PendingCurationSelector(repository_id="demo")
+                )
+            )
+            self.assertIsInstance(pending, m.PendingCuration)
+            assert isinstance(pending, m.PendingCuration)
+            self.assertEqual(tuple(item.ref for item in pending.items), (ref,))
 
     def test_schema13_transition_rollback_restores_schema13(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

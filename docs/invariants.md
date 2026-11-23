@@ -13,7 +13,7 @@ semantic interpretation or every host. Execution receipts are separate.
 
 The invariant table below remains the cross-version architectural matrix.
 Version-1 Functional Pyramid behavior is additionally traced case-by-case in
-`docs/functional-acceptance.md` (FA-01–FA-44), and the invariant test suite
+`docs/functional-acceptance.md` (FA-01–FA-64), and the invariant test suite
 requires every FA row to name live boundary tests. Static architecture guards
 also reject shell semantic coordination, optional production Functional
 Pyramid dependencies, repository-local effect-engine construction, skipped
@@ -64,6 +64,13 @@ document does not add a second Functional Pyramid contract.
 | I-37 | Explicit withdrawal and supersession | Test | `LifecycleStoreTest`; `test_withdraw_creates_explicit_withdrawal_revision` |
 | I-38 | Changed-support investigation stays pre-change | Test | `UnderstandServiceTest` (reconsideration prepares, recording accepts) |
 | I-39 | Cursor routing and stable request binding | Test | `PageTokenTest` |
+| I-40 | Canonical curation carrier singularity | Test | `test_curation_carriers_have_one_canonical_definition` |
+| I-41 | One curation persistence writer | Test | `test_curation_persistence_has_one_writer` |
+| I-42 | One pending/reuse Answer composer | Test | `test_pending_reuse_has_one_answer_composer` |
+| I-43 | Curation reuses the canonical support evaluator | Test | `test_curation_reuses_the_single_support_evaluator` |
+| I-44 | Shell does not decide curation semantics | Test | `test_shell_has_no_curation_semantic_decision` |
+| I-45 | Missing curation never means approval | Test | `test_missing_curation_never_defaults_to_approval` |
+| I-46 | No parallel curate operation or rejected-curation state | Test | `test_no_parallel_curate_operation_or_rejected_state` |
 
 Downstream-compensation check (no silent repairs, no salvage, no
 fallback parsing): validation rejects whole units; strict decode has
