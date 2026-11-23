@@ -350,31 +350,11 @@ def _initialize_repositories(
     return tuple(results)
 
 
-def _provision_runtime(env: _Environment) -> _RuntimeState:
-    """Install/reuse runtime, then execute explicit repository initialization."""
-    args = env.args
-    check_prereqs()
-    target_census: dict[str, object] = {
-        str(target): target_artifact_snapshot(target) for target in env.targets
-    }
-
-    # T02: all deterministic authority configuration validation happens before
-    # any installer mutation. Missing mappings stay absent to preserve the
-    # InitializeRepositoryRequest None/preserve contract.
-    authority_seeds, authority_bindings = load_authority_files(
-        env.targets,
-        args.authority_seeds_file,
-        args.authority_bindings_file,
-        dry_run=env.dry,
-    )
-    preflight = preflight_facts(env.targets)
-    print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
-
-    venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
-    indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
-    indexer_pointer = write_indexer_pointer(
-        env.data_dir, indexer_binary, dry_run=env.dry
-    )
+def _sync_runtime_distribution(
+    env: _Environment,
+    venv_python: Path,
+) -> tuple[dict[str, object], str | None, str | None]:
+    """Bring the installed runtime in sync without touching repository state."""
     mode = install_mode(env.span_repo)
     if mode == "checkout":
         in_sync, files_checked, extra_files = source_venv_in_sync(
@@ -419,11 +399,38 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
         "extra_venv_files": list(extra_files),
         "reinstalled": bool(reinstalled),
     }
+    return source_venv_sync, data_backup, post_install_verified
 
+
+def _provision_runtime(env: _Environment) -> _RuntimeState:
+    """Install/reuse runtime, then execute explicit repository initialization."""
+    args = env.args
+    check_prereqs()
+    target_census: dict[str, object] = {
+        str(target): target_artifact_snapshot(target) for target in env.targets
+    }
+
+    # T02: validate all authority configuration before installer mutation.
+    authority_seeds, authority_bindings = load_authority_files(
+        env.targets,
+        args.authority_seeds_file,
+        args.authority_bindings_file,
+        dry_run=env.dry,
+    )
+    preflight = preflight_facts(env.targets)
+    print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
+
+    venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
+    indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
+    indexer_pointer = write_indexer_pointer(
+        env.data_dir, indexer_binary, dry_run=env.dry
+    )
+    source_venv_sync, data_backup, post_install_verified = (
+        _sync_runtime_distribution(env, venv_python)
+    )
     expose_binary(env.venv_dir, env.bin_dir, dry_run=env.dry)
 
-    # Existing installation state is protected before the first repository
-    # mutation even when the runtime itself did not need reinstalling.
+    # Protect existing installation state before the first repository mutation.
     if not env.dry and env.targets and data_backup is None:
         data_backup = backup_data_dir(env.data_dir, dry_run=False)
 
