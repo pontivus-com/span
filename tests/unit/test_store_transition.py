@@ -954,6 +954,94 @@ class Schema13To15Test(unittest.TestCase):
             self.assertEqual(st._read_schema_version_ro(data / "demo.db"), 13)
 
 
+class Schema14To15Test(unittest.TestCase):
+    def test_schema14_state_is_preserved_and_curation_starts_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            source = _schema14_store(data / "demo.db", root)
+            before = hashlib.sha256(source.read_bytes()).hexdigest()
+
+            installation = data / "installation"
+            installation.mkdir()
+            fp_store = installation / "functional-pyramid.db"
+            fp = sqlite3.connect(fp_store)
+            try:
+                fp.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)")
+                fp.execute("INSERT INTO meta VALUES('schema_version', '1')")
+                fp.execute("INSERT INTO meta VALUES('sentinel', 'unchanged')")
+                fp.commit()
+            finally:
+                fp.close()
+            fp_before = hashlib.sha256(fp_store.read_bytes()).hexdigest()
+
+            report = st.apply(_config(root, data))
+
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            connection = sqlite3.connect(data / "demo.db")
+            try:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT value FROM meta WHERE key='schema_version'"
+                    ).fetchone()[0],
+                    "15",
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM conclusion_curations"
+                    ).fetchone()[0],
+                    0,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT understanding_id, conclusion_id, revision,"
+                        " pyramid_id, repository_id, route_identity"
+                        " FROM functional_route_dependency_index"
+                    ).fetchall(),
+                    [
+                        (
+                            "u-schema14",
+                            "c-schema14",
+                            1,
+                            "p-1",
+                            "demo",
+                            "route-1",
+                        )
+                    ],
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM understandings"
+                    ).fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM record_receipts"
+                    ).fetchone()[0],
+                    1,
+                )
+            finally:
+                connection.close()
+            self.assertEqual(
+                hashlib.sha256(fp_store.read_bytes()).hexdigest(),
+                fp_before,
+            )
+
+            rollback = st.rollback(_config(root, data))
+            self.assertEqual(rollback.state, st.TransitionState.ROLLED_BACK)
+            self.assertEqual(st._read_schema_version_ro(data / "demo.db"), 14)
+            self.assertEqual(
+                hashlib.sha256((data / "demo.db").read_bytes()).hexdigest(),
+                before,
+            )
+            self.assertEqual(
+                hashlib.sha256(fp_store.read_bytes()).hexdigest(),
+                fp_before,
+            )
+
+
 class ApplyTest(unittest.TestCase):
     def _apply(
         self, tmp: str
@@ -977,7 +1065,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "14")
+                self.assertEqual(version, "15")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -1192,7 +1280,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "14",
+                    "15",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1282,7 +1370,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "14",
+                    "15",
                 )
                 self.assertEqual(
                     connection.execute(
