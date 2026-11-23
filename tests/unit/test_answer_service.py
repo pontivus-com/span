@@ -169,7 +169,8 @@ class AnswerServiceTest(unittest.TestCase):
                 identity=m.RecordingIdentity(
                     repository_id="repo-1",
                     request_id=m.RequestId(
-                        request_id or f"curate-{understanding_id}-{version.version.value}"
+                        request_id
+                        or f"curate-{understanding_id}-{version.version.value}"
                     ),
                     context_id=CONTEXT_ID,
                 ),
@@ -738,9 +739,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = self._service(51_133, max_results=1)
 
         first = service.ask(
-            m.AskRequest(
-                selector=m.PendingCurationSelector(repository_id="repo-1")
-            )
+            m.AskRequest(selector=m.PendingCurationSelector(repository_id="repo-1"))
         )
         self.assertIsInstance(first, m.PendingCuration)
         assert isinstance(first, m.PendingCuration)
@@ -763,7 +762,10 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(len(second.items), 1)
         self.assertNotEqual(first.items[0].ref, second.items[0].ref)
         self.assertEqual(
-            {first.items[0].ref.understanding_id.value, second.items[0].ref.understanding_id.value},
+            {
+                first.items[0].ref.understanding_id.value,
+                second.items[0].ref.understanding_id.value,
+            },
             {"u-page-a", "u-page-b"},
         )
 
