@@ -1,4 +1,4 @@
-"""Schema-14 lifecycle store.
+"""Schema-15 lifecycle store.
 
 This is the replacement store boundary for the 0.10 lifecycle: canonical
 contexts, understanding versions, conclusion revisions, challenges,
@@ -1330,6 +1330,172 @@ class LifecycleStore:
             (understanding_id, conclusion_id, revision),
         ).fetchone()
         return row is not None
+
+    def find_curation(
+        self,
+        ref: m.ConclusionRevisionRef,
+        *,
+        as_of_version: m.UnderstandingVersionNumber | None = None,
+    ) -> m.CurationDisposition | None:
+        """Return exact-revision curation effective at the requested version."""
+        statement = (
+            "SELECT canonical_json FROM conclusion_curations"
+            " WHERE understanding_id=? AND conclusion_id=? AND revision=?"
+        )
+        parameters: list[object] = [
+            ref.understanding_id.value,
+            ref.conclusion_id.value,
+            ref.revision.value,
+        ]
+        if as_of_version is not None:
+            statement += " AND accepted_in_version<=?"
+            parameters.append(as_of_version.value)
+        row = self._connection.execute(statement, tuple(parameters)).fetchone()
+        if row is None:
+            return None
+        return m.from_canonical(
+            m.CurationDisposition,
+            _json.loads(row["canonical_json"]),
+        )
+
+    def get_curations(
+        self,
+        understanding_id: str,
+        *,
+        as_of_version: m.UnderstandingVersionNumber | None = None,
+    ) -> tuple[m.CurationDisposition, ...]:
+        """Return immutable curation history, optionally as of one version."""
+        statement = (
+            "SELECT canonical_json FROM conclusion_curations"
+            " WHERE understanding_id=?"
+        )
+        parameters: list[object] = [understanding_id]
+        if as_of_version is not None:
+            statement += " AND accepted_in_version<=?"
+            parameters.append(as_of_version.value)
+        statement += " ORDER BY conclusion_id, revision"
+        rows = self._connection.execute(statement, tuple(parameters)).fetchall()
+        return tuple(
+            m.from_canonical(
+                m.CurationDisposition,
+                _json.loads(row["canonical_json"]),
+            )
+            for row in rows
+        )
+
+    def pending_curation_candidates(
+        self,
+        repository_id: str,
+        *,
+        after: m.ConclusionRevisionRef | None = None,
+    ) -> tuple[m.PendingCurationItem, ...]:
+        """Return current-membership revisions lacking curation disposition.
+
+        This is a storage candidate set only. The service applies the existing
+        support evaluator before any item becomes a public pending-curation
+        result.
+        """
+        statement = (
+            "SELECT u.understanding_id, u.current_version, u.surface_kind,"
+            " u.surface_locator, u.question, m.conclusion_id, m.revision"
+            " FROM understandings u"
+            " JOIN understanding_membership m"
+            " ON m.understanding_id=u.understanding_id"
+            " AND m.version=u.current_version"
+            " LEFT JOIN conclusion_curations cc"
+            " ON cc.understanding_id=m.understanding_id"
+            " AND cc.conclusion_id=m.conclusion_id"
+            " AND cc.revision=m.revision"
+            " WHERE u.repository_id=? AND cc.understanding_id IS NULL"
+        )
+        parameters: list[object] = [repository_id]
+        if after is not None:
+            statement += (
+                " AND (m.understanding_id>?"
+                " OR (m.understanding_id=? AND m.conclusion_id>?)"
+                " OR (m.understanding_id=? AND m.conclusion_id=?"
+                " AND m.revision>?))"
+            )
+            parameters.extend(
+                (
+                    after.understanding_id.value,
+                    after.understanding_id.value,
+                    after.conclusion_id.value,
+                    after.understanding_id.value,
+                    after.conclusion_id.value,
+                    after.revision.value,
+                )
+            )
+        statement += " ORDER BY m.understanding_id, m.conclusion_id, m.revision"
+        rows = self._connection.execute(statement, tuple(parameters)).fetchall()
+        return tuple(
+            m.PendingCurationItem(
+                ref=m.ConclusionRevisionRef(
+                    understanding_id=m.UnderstandingId(row["understanding_id"]),
+                    conclusion_id=m.ConclusionId(row["conclusion_id"]),
+                    revision=m.ConclusionRevisionNumber(row["revision"]),
+                ),
+                understanding_version=m.UnderstandingVersionNumber(
+                    row["current_version"]
+                ),
+                surface=m.SurfaceKey(
+                    repository_id=repository_id,
+                    kind=m.SurfaceKind(row["surface_kind"]),
+                    locator=row["surface_locator"],
+                ),
+                question=row["question"],
+            )
+            for row in rows
+        )
+
+    def _insert_curation_in(
+        self,
+        connection: _sqlite3.Connection,
+        disposition: m.CurationDisposition,
+    ) -> None:
+        """Insert one immutable exact-revision curation inside an owner txn."""
+        ref = disposition.ref
+        if not self._has_conclusion_revision_in(
+            connection,
+            ref.understanding_id.value,
+            ref.conclusion_id.value,
+            ref.revision.value,
+        ):
+            raise RecordingValidationError(
+                "curation target revision does not exist: "
+                f"{ref.conclusion_id.value}@{ref.revision.value}"
+            )
+        self._get_version_in(
+            connection,
+            ref.understanding_id.value,
+            disposition.accepted_in_version.value,
+        )
+        inherited_revision = (
+            None
+            if disposition.inherited_from is None
+            else disposition.inherited_from.revision.value
+        )
+        try:
+            connection.execute(
+                "INSERT INTO conclusion_curations"
+                "(understanding_id, conclusion_id, revision,"
+                " accepted_in_version, origin, inherited_from_revision,"
+                " canonical_json) VALUES(?,?,?,?,?,?,?)",
+                (
+                    ref.understanding_id.value,
+                    ref.conclusion_id.value,
+                    ref.revision.value,
+                    disposition.accepted_in_version.value,
+                    disposition.origin.value,
+                    inherited_revision,
+                    _json.dumps(m.to_canonical(disposition), sort_keys=True),
+                ),
+            )
+        except _sqlite3.IntegrityError as exc:
+            raise LifecycleStoreInvariantError(
+                "curation disposition violates exact-revision persistence: "
+                f"{exc}"
+            ) from None
 
     def support_dependents(
         self, dependency_kind: str, dependency_ref: str
