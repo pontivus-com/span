@@ -151,7 +151,8 @@ def _add_repository_recovery_arguments(parser) -> None:
     )
 
 
-def _add_authority_arguments(parser):
+def _add_authority_arguments(parser) -> None:
+    """Repository-qualified canonical authority configuration ingress."""
     _add_authority_arguments(parser)
 
 
