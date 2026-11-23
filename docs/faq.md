@@ -16,14 +16,18 @@ See [usage](usage.md).
 ## Is Span a knowledge factory?
 
 A software knowledge factory is the broader loop in which engineering work
-produces reusable knowledge, future agents consume that knowledge, and changes
-feed back into maintenance. Span is the evidence-backed knowledge layer in that
-loop: it retains agent-established software understanding with its declared
-support, resolves applicable governing guidance, and identifies what needs
+produces candidate understanding, shared knowledge is curated for future reuse,
+and changes feed back into maintenance. Span is the evidence-backed knowledge
+layer in that loop: it retains agent-established software understanding with its
+declared support, records which exact revisions have been curated for shared
+reuse, resolves applicable governing guidance, and identifies what needs
 reassessment after change.
 
-The coding agent or engineer remains the semantic actor. Span does not run a
-background curator model or autonomously reinterpret the repository.
+The working coding agent or engineer remains the semantic author at capture
+time. Curation is a separate reviewer role that may be another agent session, a
+dedicated curator agent, a human reviewer, or a team workflow. Span records and
+enforces that lifecycle but does not run a background curator model or
+autonomously decide semantic quality.
 
 ## How is Span different from a context engine or agent memory?
 
