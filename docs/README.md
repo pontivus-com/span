@@ -1,13 +1,14 @@
 # Span documentation
 
 Span is the evidence-backed knowledge layer for coding agents working on a
-software system. It maintains what is already understood about an
-implementation together with the applicable path through the project's
-canonical goals, principles, contracts, functional design, and technical
-design. At task time that maintained knowledge becomes working context for the
-exact software surface the agent is handling. Both empirical support and
-governing relationships remain explicit, so Span can show when a code or
-guidance change makes part of that understanding require another look.
+software system. It retains supported understanding captured during engineering
+work, records which exact revisions have been curated for shared reuse, and
+maintains the applicable path through the project's canonical goals, principles,
+contracts, functional design, and technical design. At task time, supported and
+curated knowledge becomes working context for the exact software surface the
+agent is handling. Empirical support, curation and governing relationships remain
+distinct, so Span can show what is reusable, what is pending review, and what a
+code or guidance change makes require another look.
 
 ## Foundations
 
