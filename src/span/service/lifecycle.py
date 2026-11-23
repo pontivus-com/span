@@ -859,6 +859,28 @@ class LifecycleService:
                 reason="surface status evaluation is unavailable", surface=owner
             )
         snapshot = self._store.get_version(understanding_id, version)
+        accepted_curations = tuple(
+            disposition.ref
+            for disposition in self._store.get_curations(
+                understanding_id,
+                as_of_version=m.UnderstandingVersionNumber(version),
+            )
+            if disposition.accepted_in_version.value == version
+        )
+        semantic_effects = tuple(
+            m.ConclusionRevisionRef(
+                understanding_id=revision.understanding_id,
+                conclusion_id=revision.conclusion_id,
+                revision=revision.revision,
+            )
+            for revision in self._store.get_conclusions(understanding_id)
+            if revision.originating_version.value == version
+        )
+        affected_revisions = (
+            accepted_curations
+            if accepted_curations and not semantic_effects
+            else snapshot.conclusions
+        )
         compact_qualification = (
             m.compact_understanding(qualification)
             if isinstance(qualification, m.UnderstandingSupport)
@@ -872,7 +894,7 @@ class LifecycleService:
             committed_at=receipt.committed_at,
             understanding_id=m.UnderstandingId(understanding_id),
             version=m.UnderstandingVersionNumber(version),
-            affected_revisions=snapshot.conclusions,
+            affected_revisions=affected_revisions,
             dependent_effects=receipt.dependent_effects,
             qualification=compact_qualification,
             status=status,
