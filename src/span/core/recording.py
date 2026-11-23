@@ -578,40 +578,40 @@ def _curation_effects(
     curated = {item.ref: item for item in existing_curations}
     effects: list[CurationDisposition] = []
 
-    for action in command.curate:
-        ref = prior_by_lineage.get(action.conclusion_id)
+    for curate_action in command.curate:
+        ref = prior_by_lineage.get(curate_action.conclusion_id)
         if ref is None:
             raise RecordingValidationError(
                 "curation target is not in the current understanding version: "
-                f"{action.conclusion_id.value}"
+                f"{curate_action.conclusion_id.value}"
             )
         if ref in curated:
             raise RecordingValidationError(
                 "curation target is already curated: "
-                f"{action.conclusion_id.value}@{ref.revision.value}"
+                f"{curate_action.conclusion_id.value}@{ref.revision.value}"
             )
         effects.append(
             CurationDisposition(
                 ref=ref,
                 accepted_in_version=new_version.version,
-                reasoning=action.reasoning,
+                reasoning=curate_action.reasoning,
                 provenance=command.provenance,
                 recorded_at=now,
                 origin=CurationOrigin.EXPLICIT,
             )
         )
 
-    for action in command.confirm:
-        predecessor = prior_by_lineage.get(action.conclusion_id)
+    for confirm_action in command.confirm:
+        predecessor = prior_by_lineage.get(confirm_action.conclusion_id)
         if predecessor is None:
             raise RecordingValidationError(
                 "confirm target is not in the current understanding version: "
-                f"{action.conclusion_id.value}"
+                f"{confirm_action.conclusion_id.value}"
             )
         prior_curation = curated.get(predecessor)
         if prior_curation is None:
             continue
-        successor = resulting_by_lineage.get(action.conclusion_id)
+        successor = resulting_by_lineage.get(confirm_action.conclusion_id)
         if successor is None or successor == predecessor:
             raise RecordingValidationError(
                 "confirmed curated conclusion did not produce a successor revision"
