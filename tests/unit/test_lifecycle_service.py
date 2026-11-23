@@ -292,7 +292,9 @@ class LifecycleServiceTest(unittest.TestCase):
 
         self.assertEqual(result.version.value, 2)
         self.assertEqual(len(result.affected_revisions), 1)
-        self.assertEqual(result.affected_revisions[0].conclusion_id.value, conclusion_id)
+        self.assertEqual(
+            result.affected_revisions[0].conclusion_id.value, conclusion_id
+        )
         self.assertEqual(result.affected_revisions[0].revision.value, 1)
         self.assertEqual(len(self.store.get_conclusions("u:sub-create")), 1)
         disposition = self.store.find_curation(result.affected_revisions[0])
@@ -318,7 +320,9 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertEqual(replay.version, result.version)
         self.assertEqual(replay.committed_at, result.committed_at)
         self.assertEqual(replay.affected_revisions, result.affected_revisions)
-        self.assertEqual(self.store.get_understanding("u:sub-create").current_version.value, 2)
+        self.assertEqual(
+            self.store.get_understanding("u:sub-create").current_version.value, 2
+        )
         self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
 
     def test_curate_rejects_non_current_target_before_mutation(self) -> None:
