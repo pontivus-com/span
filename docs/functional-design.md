@@ -1079,12 +1079,15 @@ may create a curation disposition as a side effect. Withdrawal produces no
 reusable semantic content. *(A10, F7, F13, L17)*
 
 **FD-97 — Curation is an immutable exact-revision disposition.**
-A curation action resolves the target lineage against the expected current
+A curation action resolves each target lineage against the expected current
 understanding version, derives the exact revision, requires non-empty reviewer
-reasoning, records one immutable curation disposition and advances the
-understanding version without creating or changing a semantic conclusion
-revision. Compare-and-set and receipt/replay rules remain the existing ones.
-*(A2, A3, F5, F13, L4, L17)*
+reasoning, and evaluates the target's required support at acceptance time. Only
+a `CURRENT` target may be curated; non-current support is a typed validation
+rejection requiring re-establishment first. Acceptance records one immutable
+curation disposition per exact revision and advances the understanding version
+without creating or changing a semantic conclusion revision. Compare-and-set and
+receipt/replay rules remain the existing ones.
+*(A2, A3, F2, F5, F13, L4, L17)*
 
 **FD-98 — Semantic change resets curation; semantic-preserving confirmation
 preserves it.**
@@ -1095,11 +1098,16 @@ scope. Confirm of a CAPTURED predecessor remains CAPTURED.
 *(F2, F4, F13, L17)*
 
 **FD-99 — Pending curation is deterministic, not semantic search.**
-Pending-curation obtain returns the deterministically ordered current-membership
-semantic revision references that lack a curation disposition. Membership and
-ordering never depend on similarity, inferred importance, confidence or a
-model-generated score. Bounds/truncation remain server-owned and explicit.
-*(A6, A8, F13, L17)*
+Pending-curation obtain returns current-membership semantic revisions that both
+lack a curation disposition and presently evaluate `CURRENT` under their
+required support. CAPTURED non-current revisions remain in the ordinary
+stale/re-establishment path until support is restored. Queue order is the
+ascending exact key `(understanding_id, conclusion_id, revision)`; an optional
+exact `ConclusionRevisionRef` keyset cursor resumes strictly after that key.
+Membership and ordering never depend on similarity, inferred importance,
+confidence or a model-generated score. Bounds/truncation remain server-owned and
+explicit.
+*(A6, A8, F2, F13, L17)*
 
 **FD-100 — Curation never alters Functional Pyramid authority.**
 Curation never changes participation, health, applicability, route identity or
@@ -1108,11 +1116,13 @@ is not Answer content, and a resolved governing route cannot make CAPTURED
 content reusable. *(F1, F11–F13, L12, L17)*
 
 **FD-101 — Surface composition exposes pending knowledge safely.**
-CURRENT + CURATED conclusions form Answer content. Current CAPTURED revisions
-form pending references/status. If no eligible conclusion exists but pending
-current capture exists, the result is `Gap/pending_curation`. Non-current
-revisions follow the existing historical/stale paths. *(A7, F2, F9, F13, L2,
-L3, L17)*
+CURRENT + CURATED conclusions form Answer content. CURRENT + CAPTURED revisions
+form pending references/status. Any non-current revision, whether CAPTURED or
+CURATED, follows the existing historical/stale path and is not simultaneously
+counted as pending. If no eligible conclusion exists but pending current capture
+exists, the result is `Gap/pending_curation`. Each current semantic revision
+therefore belongs to exactly one Answer or pending population.
+*(A7, F2, F9, F13, L2, L3, L17)*
 
 **FD-102 — Failed curation review uses the existing semantic lifecycle.**
 A reviewer who finds captured meaning wrong, incomplete, duplicated or wrongly
@@ -1380,15 +1390,19 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 46. **Pending-capture gap.** A surface with CURRENT captured knowledge but no
     CURRENT + CURATED conclusion returns `Gap/pending_curation` and exact
     pending revision references.
-47. **Pending-curation discovery.** Repository pending-curation obtain returns the
-    exact deterministic current-membership revision set lacking curation.
-48. **Curation does not rewrite meaning.** Curation advances understanding history
-    and records an immutable disposition without creating a conclusion revision
-    or changing semantic content/support.
+47. **Pending-curation discovery.** Repository pending-curation obtain returns
+    exactly the deterministic CURRENT-support, current-membership revision set
+    lacking curation and resumes by the exact revision keyset cursor.
+48. **Curation does not rewrite or bypass support.** Curation accepts only a
+    CURRENT exact revision, advances understanding history, and records an
+    immutable disposition without creating a conclusion revision or changing
+    semantic content/support; a non-current target is rejected for
+    re-establishment first.
 49. **Curated reuse.** The exact CURRENT revision becomes ordinary Answer content
     after accepted curation.
-50. **Curation cannot override support.** A CURATED revision with
-    REASSESSMENT_REQUIRED/UNVERIFIABLE support is not Answer content.
+50. **Curation cannot override later support loss.** A previously CURATED
+    revision that becomes REASSESSMENT_REQUIRED/UNVERIFIABLE is not Answer
+    content and does not lose its curation history.
 51. **Correction resets curation.** Correcting curated meaning creates a new
     CAPTURED revision.
 52. **Replacement resets curation.** Replacing curated meaning creates a new
