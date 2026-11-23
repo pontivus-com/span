@@ -499,7 +499,7 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
 
-    def test_withdrawn_curated_lineage_is_not_current_or_pending(self) -> None:
+    def test_withdrawn_curated_lineage_is_not_reusable(self) -> None:
         self.service.record(_create_wire())
         conclusion_id = self._version_conclusion_id("u:sub-create", 1)
         self._update(
@@ -545,7 +545,10 @@ class LifecycleServiceTest(unittest.TestCase):
                 as_of_version=m.UnderstandingVersionNumber(3),
             )
         )
-        self.assertEqual(self.store.pending_curation_candidates("repo-1"), ())
+        self.assertIs(
+            self.support.evaluate_revision(withdrawn_ref).state,
+            m.SupportState.UNVERIFIABLE,
+        )
         self.assertEqual(len(self.store.get_curations("u:sub-create")), 1)
 
     def _record_add(self, expected: int, submission: str) -> m.RecordReceipt:

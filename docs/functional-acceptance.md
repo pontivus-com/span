@@ -63,7 +63,7 @@ through FA-64 are present exactly once and that every named test still exists.
 | FA-53 | Addition begins captured | `test_add_after_curation_starts_new_lineage_captured` |
 | FA-54 | Confirm preserves curated meaning | `test_normative_confirm_reestablishes_changed_server_route_support`; `test_confirm_inherits_curation_but_semantic_change_does_not` |
 | FA-55 | Confirm does not invent curation | `test_confirm_of_captured_predecessor_remains_uncurated` |
-| FA-56 | Withdrawal is never reusable | `test_withdrawn_curated_lineage_is_not_current_or_pending` |
+| FA-56 | Withdrawal is never reusable | `test_withdrawn_curated_lineage_is_not_reusable` |
 | FA-57 | Curation is a separate act | `test_curate_cannot_share_actions_with_semantic_mutation` |
 | FA-58 | Curation is not governance | `test_normative_confirm_reestablishes_changed_server_route_support`; `test_curated_revision_reconsiders_without_mutating_curation` |
 | FA-59 | Normative reuse requires both planes | `test_installed_cross_repository_governance_journey`; `test_mixed_answer_excludes_noncurrent_normative_conclusion` |
