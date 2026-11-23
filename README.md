@@ -59,17 +59,20 @@ Span therefore keeps two kinds of software knowledge distinct:
   owners.
 
 Span does not confuse evidence with authority, and it does not silently serve
-noncurrent understanding as current. The result is a software knowledge factory: a loop in which real engineering
-work can leave the next agent better informed than the last.
+noncurrent or uncurated understanding as shared knowledge. Together, these
+capabilities provide the maintained software-knowledge layer of a software
+knowledge factory: real engineering work can leave future agents better informed
+without treating one task agent's conclusion as shared truth.
 
 ## What Span changes
 
 ### Start with maintained knowledge, not a blank session
 
-Ask about a file, symbol, service, or domain. Span returns the current
-understanding already established for that surface and, for a participating
+Ask about a file, symbol, service, or domain. Span returns the current curated
+understanding eligible for shared reuse on that surface and, for a participating
 repository, the complete applicable path through the project's guiding
-documentation.
+documentation. Current captured-but-uncurated understanding remains explicit
+pending knowledge rather than ordinary Answer content.
 
 The agent starts from maintained knowledge rather than reconstructing the same
 understanding from raw evidence every session. That maintained knowledge becomes
@@ -88,13 +91,14 @@ prominence.
 
 ### Reuse what is already known about the implementation
 
-When an agent establishes a useful conclusion about the code, Span can retain it
-with the evidence that supported it. A later session can find that understanding
-from the software surface itself; it does not need the original conversation or
+When an agent establishes a useful conclusion about the code, Span retains that
+capture with the evidence that supported it. A separate reviewer can then curate
+the exact stable revision for shared reuse. A later session can find curated
+knowledge from the software surface itself without the original conversation or
 a saved internal ID.
 
-If the support no longer holds, Span does not silently return the old conclusion
-as current.
+If the support no longer holds—or the revision has not yet been curated—Span
+does not silently return it as shared current knowledge.
 
 ### Recheck only what a change affected
 
@@ -119,29 +123,35 @@ declared governance, and the consequences of change.
 
 Three public tools cover the lifecycle:
 
-- **`ask`** — start from the current understanding and, where declared, the
-  governance that applies to the same scope.
-- **`record`** — retain a conclusion once the agent has established it, with the
-  support it actually used.
+- **`ask`** — start from current curated shared knowledge, pending/stale status,
+  and, where declared, the governance that applies to the same scope.
+- **`record`** — capture supported conclusions and, in a separate reviewer act,
+  curate exact stable revisions for shared reuse.
 - **`reconsider`** — after a change, identify what really needs reassessment and
   carry that work forward without losing history.
 
 ## How it works
 
 1. **Ask for the exact part of the system you are working on.** Span returns
-   the current retained understanding for that surface and, when the repository
-   participates in the Functional Pyramid, the full applicable guidance path
-   from first principles down to functional and technical design.
-2. **Investigate normally, then keep what you learn.** The agent reads code and
-   canonical documents, searches, edits, and tests with its normal tools. When
-   it establishes a useful conclusion, `record` retains it with the evidence
-   and guidance it depends on.
-3. **After change, revisit only what no longer holds.** `reconsider` maps
-   implementation or guiding-document changes to the affected conclusions. The
+   current curated shared knowledge for that surface, pending/stale status, and,
+   when the repository participates in the Functional Pyramid, the applicable
+   guidance path from first principles down to functional and technical design.
+2. **Investigate normally, then capture what you establish.** The working agent
+   reads code and canonical documents, searches, edits, and tests with its normal
+   tools. When it establishes a supported conclusion, `record` retains that
+   exact revision as captured knowledge.
+3. **Curate stable captures for shared reuse.** A separate reviewer—another
+   agent session, a dedicated curator workflow, or a human—reviews the exact
+   capture and uses the same `record` lifecycle to curate it only when it is
+   suitable for future shared reuse.
+4. **After change, revisit only what no longer holds.** `reconsider` maps
+   implementation or guiding-document changes to affected conclusions. The
    agent confirms, corrects, replaces, or withdraws only the understanding that
-   actually needs work.
+   actually needs work; semantic changes return to captured state and require
+   curation again.
 
-A later session starts at step 1 again — but it is no longer starting from zero.
+A later session starts at step 1 with reusable knowledge that is both curated
+and still supported.
 
 ## Functional Pyramid: the path from first principles to the code
 
