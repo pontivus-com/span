@@ -9,10 +9,12 @@ Complete the applicable lifecycle before task completion; report named operation
 blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
 
 
-Span answers from recorded understanding and exact source evidence. It owns
-validation, identity, freshness, and persistence. You own interpretation and
-every edit. Span never edits the target, runs application tests, selects a
-model, or decides a semantic claim.
+Span answers from current curated shared knowledge, retained captured
+understanding, and exact source evidence. It owns validation, identity,
+freshness, persistence, and deterministic lifecycle projection. You own
+interpretation and every edit; a reviewer/curator owns the decision to accept an
+exact stable revision for shared reuse. Span never edits the target, runs
+application tests, selects a model, or decides a semantic claim.
 
 ## Start here
 
@@ -22,7 +24,8 @@ model, or decides a semantic claim.
 | Shell read/search (`cat`, `rg`, `grep`, etc.) to understand source | `ask` |
 | Hit an ambiguous path or want a specific granularity | `ask` with the exact `surface` |
 | Edit a surface | `ask` first; `reconsider` after the edit |
-| Finish an investigation | `record` |
+| Finish an investigation | `record` the supported meaning as capture |
+| Review captured knowledge for shared reuse | `ask` with PendingCurationSelector, then `record` curation for a stable exact revision |
 | Declare or change a service/domain boundary | `record(kind="surface")` |
 | Initialize/revise/deactivate Functional Pyramid participation | Use the `span-functional-pyramid` skill; it stays inside `ask` / `record` / `reconsider` |
 | Dispute a recorded conclusion | `reconsider` with a challenge |
@@ -32,8 +35,10 @@ governing projection for the same semantic scope. Use the
 `span-functional-pyramid` skill for participation lifecycle work; do not
 reconstruct that lifecycle here.
 
-Before editing, use `ask` for current understanding. A gap is not a failure.
-It names status, what is missing, recovery, and source pointers without
+Before editing, use `ask` for shared reusable understanding. Ordinary Answer
+content is both CURRENT and CURATED; CURRENT captured-only meaning remains
+explicit pending knowledge rather than shared reuse. A gap is not a failure. It
+names status, what is missing, recovery, and source pointers without
 automatically dumping source bytes. Select the evidence you actually need, then
 record the conclusion you establish. Treat returned context references as opaque
 handles and never inspect internal context state.
@@ -48,13 +53,17 @@ handles and never inspect internal context state.
   conclusions, support, evidence references, status, and applicable verification
   runs. `Gap` carries explicit absence/staleness information and source pointers.
 - **After establishing:** `record` one `kind`. Use `kind="understanding"` to
-  create or update, `kind="verification"` to record a test/run, and
-  `kind="surface"` to declare a service/domain boundary. A create is flat —
+  capture supported semantic meaning, `kind="verification"` to record a
+  test/run, and `kind="surface"` to declare a service/domain boundary. A
+  semantic create/change is CAPTURED, not self-publication. A create is flat —
   one `conclusion` with dependency evidence from `locator`,
   `observation_id`, or non-empty `support`; a locator may accompany support
   solely as carried semantic scope while observation remains exclusive. Scope
-  is supplied or derived independently. `actions` is for updates and `action`
-  only for a surface declaration.
+  is supplied or derived independently. A reviewer discovers CURRENT captures
+  with PendingCurationSelector, repairs semantic defects through the ordinary
+  lifecycle when needed, and uses the same `record` tool to curate only a
+  stable exact revision. `actions` is for updates and `action` only for a
+  surface declaration or Functional Pyramid lifecycle write.
 - **After editing:** `reconsider` the paths you just changed. It returns every
   surface to re-examine, why it was considered, per-conclusion support state,
   and the context for re-establishing what actually changed. A surface with no
@@ -65,8 +74,10 @@ handles and never inspect internal context state.
 
 - Use outside tools to edit and test.
 - Hooks deliver reminders; the agent performs the required lifecycle even
-  when a reminder is absent. Hooks never record conclusions or make stale
-  understanding current.
+  when a reminder is absent. Hooks never record conclusions, curate knowledge,
+  or make stale understanding current.
+- Engineering-task completion may leave a captured revision pending separate
+  review; pending curation is visible work, not a failed semantic record.
 - Keep `CURRENT`, `REASSESSMENT_REQUIRED`, `UNVERIFIABLE`, the `Gap` reasons,
   and the challenge states `OPEN`/`UNRESOLVED`/`RESOLVED` verbatim.
 - A `CURRENT` conclusion in a reconsideration result was considered; it is not

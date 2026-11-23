@@ -10,6 +10,9 @@ blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/
 
 
 Call `record` with one `kind`. A create is one conclusion; updates use actions.
+Semantic create/add/correct/replace records evidence-near CAPTURED meaning. That
+is not shared publication: a separate reviewer/curator act must accept the exact
+stable CURRENT revision before it becomes shared reusable knowledge.
 
 A conformance judgment is a NORMATIVE conclusion. For an ACTIVE Functional
 Pyramid repository Span derives its governing route/authority support. An
@@ -45,8 +48,10 @@ exclusive. `surface` is optional and semantic scope is supplied or derived
 independently from support.
 
 Update an existing understanding with `understanding_id`, `expected_version`,
-and one or more of `add`, `confirm`, `correct`, `replace`, `withdraw`. Multiple
-actions apply atomically. Actions are compact deltas: `add` takes no identity;
+and one or more semantic actions: `add`, `confirm`, `correct`, `replace`,
+`withdraw`. Compatible semantic actions apply atomically. Curation is a separate
+review action and cannot share an update with semantic mutation. Actions are
+compact deltas: `add` takes no identity;
 `confirm`, `correct`, `replace`, and `withdraw` name the existing
 `conclusion_id` returned by Span. Each action that supplies evidence names
 exactly one of `locator`, `observation_id`, or non-empty `support`; `withdraw`
@@ -116,7 +121,9 @@ may supply one or none:
 `confirm` preserves the current statement, assertion nature, and scope;
 `correct` and `replace` preserve an omitted nature or scope; Span derives the
 new lineage identity on `add` and `replace`, the old revision, and the
-mechanical basis. `reconsider` already returns the `expected_version` and
+mechanical basis. A semantic-preserving confirm of a CURATED predecessor may
+inherit that curation; add/correct/replace produce CAPTURED meaning that requires
+separate review. `reconsider` already returns the `expected_version` and
 context, so the update follows without another `ask`.
 
 To settle a challenge in the same update, add `challenge_dispositions`.
@@ -162,6 +169,49 @@ narrow. Admitted evidence references and observation IDs remain context-bound; s
   ]
 }
 ```
+
+## Curate stable captures for shared reuse
+
+Curation is reviewer judgment over an already retained exact revision; it is not
+support evidence, Functional Pyramid authority, or certification of semantic
+truth. First obtain the deterministic repository-local queue through `ask`:
+
+```json
+{
+  "selector": {
+    "$type": "PendingCurationSelector",
+    "repository_id": "repo-1"
+  }
+}
+```
+
+Retrieve the exact owning understanding and inspect broader retained
+knowledge/governance as needed. If review finds the meaning wrong, incomplete,
+duplicated, or wrongly scoped, use challenge/correct/replace/withdraw first.
+Curate only a stable revision whose required support is CURRENT:
+
+```json
+{
+  "repository_id": "repo-1",
+  "request_id": "curate-1",
+  "kind": "understanding",
+  "understanding_id": "u:rec-1",
+  "expected_version": 2,
+  "actions": {
+    "curate": [
+      {
+        "conclusion_id": "<id returned by Span>",
+        "reasoning": "Reviewed for shared reuse."
+      }
+    ]
+  },
+  "provenance": "reviewer-session"
+}
+```
+
+Curation advances understanding history without changing semantic content or
+support. Later support loss still withholds the revision from Answer content and
+does not erase the curation disposition.
 
 ## Verification
 
