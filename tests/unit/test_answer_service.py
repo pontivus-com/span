@@ -853,6 +853,13 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(historical.statement, "A does X number 1.")
         self.assertEqual(historical.understanding_version.value, 2)
         self.assertIs(historical.state, m.SupportState.REASSESSMENT_REQUIRED)
+        version = self.store.get_version("u-a", 2)
+        self.assertIsNotNone(
+            self.store.find_curation(
+                version.conclusions[0],
+                as_of_version=version.version,
+            )
+        )
         self.assertEqual(
             [item.evidence_id.value for item in historical.evidence],
             ["ev-src/a.py"],

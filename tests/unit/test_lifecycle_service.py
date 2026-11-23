@@ -3019,8 +3019,18 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_normative_confirm_reestablishes_changed_server_route_support(self):
         route_id = ["route-1"]
+        rule = m.FunctionalRuleRoute(
+            rule_id="rule-1",
+            layer=m.FunctionalPyramidLayer.P1,
+            authority=self.authority.bindings["auth-1"],
+            governing_rule_ids=("ROOT",),
+        )
         service = self._governed_lifecycle(
-            lambda scope: self._resolved_route(scope, route_id=route_id[0])
+            lambda scope: self._resolved_route(
+                scope,
+                route_id=route_id[0],
+                rules=(rule,),
+            )
         )
         created = service.record(
             _create_wire(
@@ -3028,7 +3038,40 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self.assertIsInstance(created, m.UnderstandingRecorded)
-        conclusion_id = self._version_conclusion_id(created.understanding_id.value, 1)
+        understanding_id = created.understanding_id.value
+        conclusion_id = self._version_conclusion_id(understanding_id, 1)
+        before_curation = self._latest_supported_content(understanding_id)
+
+        curated = service.record(
+            w.RecordRequestWire(
+                request_id="sub-curate-governed",
+                context=_context_ref(),
+                kind=m.RecordKind.UNDERSTANDING,
+                understanding_id=understanding_id,
+                expected_version=1,
+                actions=w.RecordActionsWire(
+                    curate=(
+                        w.CurateConclusionWire(
+                            conclusion_id=conclusion_id,
+                            reasoning="reviewed governed meaning for shared reuse",
+                        ),
+                    )
+                ),
+                provenance="reviewer-session",
+            )
+        )
+        self.assertIsInstance(curated, m.UnderstandingRecorded)
+        self.assertEqual(curated.version.value, 2)
+        after_curation = self._latest_supported_content(understanding_id)
+        self.assertEqual(after_curation.support, before_curation.support)
+        curated_ref = self.store.get_version(understanding_id, 2).conclusions[0]
+        disposition = self.store.find_curation(
+            curated_ref,
+            as_of_version=m.UnderstandingVersionNumber(2),
+        )
+        self.assertIsNotNone(disposition)
+        assert disposition is not None
+        self.assertIs(disposition.origin, m.CurationOrigin.EXPLICIT)
 
         route_id[0] = "route-2"
         confirmed = service.record(
@@ -3036,8 +3079,8 @@ class LifecycleServiceTest(unittest.TestCase):
                 request_id="sub-confirm-governed",
                 context=_context_ref(),
                 kind=m.RecordKind.UNDERSTANDING,
-                understanding_id=created.understanding_id.value,
-                expected_version=1,
+                understanding_id=understanding_id,
+                expected_version=2,
                 actions=w.RecordActionsWire(
                     confirm=(
                         w.ConfirmConclusionWire(
@@ -3049,9 +3092,9 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self.assertIsInstance(confirmed, m.UnderstandingRecorded)
-        self.assertEqual(confirmed.version.value, 2)
+        self.assertEqual(confirmed.version.value, 3)
         self.assertEqual(confirmed.qualification.state, m.SupportState.CURRENT)
-        content = self._latest_supported_content(created.understanding_id.value)
+        content = self._latest_supported_content(understanding_id)
         self.assertEqual(
             tuple(
                 item.route_identity.value
@@ -3060,6 +3103,15 @@ class LifecycleServiceTest(unittest.TestCase):
             ),
             ("route-2",),
         )
+        confirmed_ref = self.store.get_version(understanding_id, 3).conclusions[0]
+        inherited = self.store.find_curation(
+            confirmed_ref,
+            as_of_version=m.UnderstandingVersionNumber(3),
+        )
+        self.assertIsNotNone(inherited)
+        assert inherited is not None
+        self.assertIs(inherited.origin, m.CurationOrigin.INHERITED_CONFIRMATION)
+        self.assertEqual(inherited.inherited_from, curated_ref)
 
     def test_postcommit_owner_read_failure_preserves_receipt_without_owner(self):
         result = self.service.record(self._scope_create(locator="src/a.py"))
