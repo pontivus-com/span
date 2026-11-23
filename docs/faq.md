@@ -13,6 +13,30 @@ the old conversation or a saved internal ID. After code or guidance changes,
 `reconsider` identifies the understanding that actually needs another look.
 See [usage](usage.md).
 
+## Is Span a knowledge factory?
+
+A software knowledge factory is the broader loop in which engineering work
+produces reusable knowledge, future agents consume that knowledge, and changes
+feed back into maintenance. Span is the evidence-backed knowledge layer in that
+loop: it retains agent-established software understanding with its declared
+support, resolves applicable governing guidance, and identifies what needs
+reassessment after change.
+
+The coding agent or engineer remains the semantic actor. Span does not run a
+background curator model or autonomously reinterpret the repository.
+
+## How is Span different from a context engine or agent memory?
+
+A context engine primarily helps an agent retrieve the source and organizational
+material relevant to the task in front of it. Agent memory can preserve facts,
+interactions, preferences, or other information across tasks.
+
+Span focuses on the interpretation layer produced by software work: what an
+agent established about an exact software surface, what supported that
+conclusion, which governing guidance applied, whether those dependencies still
+hold, and what must be reconsidered after change. These capabilities can be
+complementary rather than mutually exclusive.
+
 ## Does installation explain the whole repository?
 
 Installation establishes operational readiness. Understanding comes from
