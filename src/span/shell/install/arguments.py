@@ -151,6 +151,10 @@ def _add_repository_recovery_arguments(parser) -> None:
     )
 
 
+def _add_authority_arguments(parser):
+    _add_authority_arguments(parser)
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="span-install",
