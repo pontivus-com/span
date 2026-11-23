@@ -425,8 +425,8 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
     indexer_pointer = write_indexer_pointer(
         env.data_dir, indexer_binary, dry_run=env.dry
     )
-    source_venv_sync, data_backup, post_install_verified = (
-        _sync_runtime_distribution(env, venv_python)
+    source_venv_sync, data_backup, post_install_verified = _sync_runtime_distribution(
+        env, venv_python
     )
     expose_binary(env.venv_dir, env.bin_dir, dry_run=env.dry)
 
