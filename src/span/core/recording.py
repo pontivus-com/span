@@ -56,6 +56,8 @@ from span.core.model.understanding import (
     ChallengeDispositionRecord,
     ChallengeResolution,
     ChallengeState,
+    CurationDisposition,
+    CurationOrigin,
     ResolvedChallengeRecord,
     UnresolvedChallengeRecord,
     ConclusionRevision,
@@ -130,6 +132,7 @@ class UnderstandingTransition:
     new_version: UnderstandingVersion
     new_conclusions: tuple[ConclusionRevision, ...]
     challenge_effects: tuple[ChallengeEffect, ...] = ()
+    curations: tuple[CurationDisposition, ...] = ()
 
 
 def receipt_content_decision(
@@ -562,6 +565,76 @@ def _apply_action(
     )
 
 
+def _curation_effects(
+    current_version: UnderstandingVersion,
+    new_version: UnderstandingVersion,
+    command: UpdateUnderstandingCommand,
+    existing_curations: tuple[CurationDisposition, ...],
+    now: _datetime.datetime,
+) -> tuple[CurationDisposition, ...]:
+    """Derive exact immutable curation effects from one accepted update."""
+    prior_by_lineage = {
+        ref.conclusion_id: ref for ref in current_version.conclusions
+    }
+    resulting_by_lineage = {
+        ref.conclusion_id: ref for ref in new_version.conclusions
+    }
+    curated = {item.ref: item for item in existing_curations}
+    effects: list[CurationDisposition] = []
+
+    for action in command.curate:
+        ref = prior_by_lineage.get(action.conclusion_id)
+        if ref is None:
+            raise RecordingValidationError(
+                "curation target is not in the current understanding version: "
+                f"{action.conclusion_id.value}"
+            )
+        if ref in curated:
+            raise RecordingValidationError(
+                "curation target is already curated: "
+                f"{action.conclusion_id.value}@{ref.revision.value}"
+            )
+        effects.append(
+            CurationDisposition(
+                ref=ref,
+                accepted_in_version=new_version.version,
+                reasoning=action.reasoning,
+                provenance=command.provenance,
+                recorded_at=now,
+                origin=CurationOrigin.EXPLICIT,
+            )
+        )
+
+    for action in command.confirm:
+        predecessor = prior_by_lineage.get(action.conclusion_id)
+        if predecessor is None:
+            raise RecordingValidationError(
+                "confirm target is not in the current understanding version: "
+                f"{action.conclusion_id.value}"
+            )
+        prior_curation = curated.get(predecessor)
+        if prior_curation is None:
+            continue
+        successor = resulting_by_lineage.get(action.conclusion_id)
+        if successor is None or successor == predecessor:
+            raise RecordingValidationError(
+                "confirmed curated conclusion did not produce a successor revision"
+            )
+        effects.append(
+            CurationDisposition(
+                ref=successor,
+                accepted_in_version=new_version.version,
+                reasoning=prior_curation.reasoning,
+                provenance=prior_curation.provenance,
+                recorded_at=now,
+                origin=CurationOrigin.INHERITED_CONFIRMATION,
+                inherited_from=predecessor,
+            )
+        )
+
+    return tuple(effects)
+
+
 def apply_update(
     current_understanding: Understanding,
     current_version: UnderstandingVersion,
@@ -571,6 +644,7 @@ def apply_update(
     now: _datetime.datetime,
     *,
     existing_challenges: tuple[Challenge, ...] = (),
+    existing_curations: tuple[CurationDisposition, ...] = (),
 ) -> UnderstandingTransition:
     """Apply one closed update to the current version, or reject atomically."""
     repository_id = command.identity.repository_id
@@ -645,6 +719,13 @@ def apply_update(
         created_at=current_understanding.created_at,
         provenance=current_understanding.provenance,
     )
+    curations = _curation_effects(
+        current_version,
+        new_version,
+        command,
+        existing_curations,
+        now,
+    )
     effects = apply_challenge_dispositions(
         existing_challenges=existing_challenges,
         dispositions=command.challenge_dispositions,
@@ -659,6 +740,7 @@ def apply_update(
         new_version=new_version,
         new_conclusions=tuple(revisions),
         challenge_effects=effects,
+        curations=curations,
     )
 
 
