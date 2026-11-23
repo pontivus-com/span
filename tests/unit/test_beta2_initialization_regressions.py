@@ -7,6 +7,7 @@ encoded before installer implementation changes.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import tempfile
 import unittest
@@ -19,6 +20,29 @@ from span.shell.install import cli
 
 
 class Beta2InitializationRegressionTest(unittest.TestCase):
+    def _evidence(self, repository_id="repo-a"):
+        return m.EvidenceRef(
+            evidence_id=m.EvidenceId("authority-a"),
+            repository_id=repository_id,
+            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+            locator="docs/authority.md",
+        )
+
+    def _binding(self, repository_id="repo-a"):
+        return m.AuthorityBinding(
+            evidence_ref=self._evidence(repository_id),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+
+    def _write_canonical_list(self, root, name, items):
+        path = pathlib.Path(root) / name
+        path.write_text(
+            json.dumps([m.to_canonical(item) for item in items]),
+            encoding="utf-8",
+        )
+        return path
+
     def test_repository_qualified_authority_file_grammar(self):
         args = install.parse_args(
             [
@@ -41,6 +65,129 @@ class Beta2InitializationRegressionTest(unittest.TestCase):
             tuple(tuple(item) for item in args.authority_bindings_file),
             (("repo-b", "/tmp/bindings.json"),),
         )
+
+    def test_authority_file_tri_state_preserve_clear_replace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo = root / "repo-a"
+            repo.mkdir()
+            empty_seeds = root / "empty-seeds.json"
+            empty_seeds.write_text("[]", encoding="utf-8")
+            bindings = self._write_canonical_list(
+                root, "bindings.json", [self._binding()]
+            )
+
+            seeds, loaded_bindings = install.load_authority_files(
+                [repo], [], [], dry_run=False
+            )
+            self.assertEqual(seeds, {})
+            self.assertEqual(loaded_bindings, {})
+
+            seeds, loaded_bindings = install.load_authority_files(
+                [repo],
+                [["repo-a", str(empty_seeds)]],
+                [["repo-a", str(bindings)]],
+                dry_run=False,
+            )
+            self.assertEqual(seeds["repo-a"], ())
+            self.assertEqual(
+                loaded_bindings["repo-a"],
+                (self._binding(),),
+            )
+
+    def test_authority_file_nonempty_seed_decodes_canonical_carrier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo = root / "repo-a"
+            repo.mkdir()
+            seeds_path = self._write_canonical_list(
+                root, "seeds.json", [self._evidence()]
+            )
+            seeds, bindings = install.load_authority_files(
+                [repo],
+                [["repo-a", str(seeds_path)]],
+                [],
+                dry_run=False,
+            )
+            self.assertEqual(seeds["repo-a"], (self._evidence(),))
+            self.assertEqual(bindings, {})
+
+    def test_authority_file_duplicate_and_unselected_mappings_reject(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo = root / "repo-a"
+            repo.mkdir()
+            payload = root / "empty.json"
+            payload.write_text("[]", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                install.load_authority_files(
+                    [repo],
+                    [
+                        ["repo-a", str(payload)],
+                        ["repo-a", str(payload)],
+                    ],
+                    [],
+                    dry_run=False,
+                )
+            with self.assertRaises(SystemExit):
+                install.load_authority_files(
+                    [repo],
+                    [["repo-b", str(payload)]],
+                    [],
+                    dry_run=False,
+                )
+
+    def test_authority_file_repository_identity_mismatch_rejects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo = root / "repo-a"
+            repo.mkdir()
+            seeds_path = self._write_canonical_list(
+                root,
+                "seeds.json",
+                [self._evidence("repo-b")],
+            )
+            bindings_path = self._write_canonical_list(
+                root,
+                "bindings.json",
+                [self._binding("repo-b")],
+            )
+            with self.assertRaises(SystemExit):
+                install.load_authority_files(
+                    [repo],
+                    [["repo-a", str(seeds_path)]],
+                    [],
+                    dry_run=False,
+                )
+            with self.assertRaises(SystemExit):
+                install.load_authority_files(
+                    [repo],
+                    [],
+                    [["repo-a", str(bindings_path)]],
+                    dry_run=False,
+                )
+
+    def test_authority_file_malformed_content_rejects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo = root / "repo-a"
+            repo.mkdir()
+            not_list = root / "not-list.json"
+            not_list.write_text("{}", encoding="utf-8")
+            malformed = root / "malformed.json"
+            malformed.write_text(
+                json.dumps([{"repository_id": "repo-a"}]),
+                encoding="utf-8",
+            )
+            for path in (not_list, malformed):
+                with self.subTest(path=path.name):
+                    with self.assertRaises(SystemExit):
+                        install.load_authority_files(
+                            [repo],
+                            [["repo-a", str(path)]],
+                            [],
+                            dry_run=False,
+                        )
 
     def test_full_install_dispatches_canonical_repository_provisioning(self):
         with tempfile.TemporaryDirectory() as tmp:
