@@ -234,9 +234,23 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--authority-seeds-file",
-        default=None,
-        help="JSON file with canonical EvidenceRef items for init. "
-        "Absent means no seeds; seeds are never invented.",
+        action="append",
+        nargs=2,
+        default=[],
+        metavar=("REPOSITORY_ID", "PATH"),
+        help="Repository-qualified JSON list of canonical EvidenceRef items "
+        "(repeatable). Omitted for a repository preserves configured seeds; "
+        "an explicit empty list clears them.",
+    )
+    parser.add_argument(
+        "--authority-bindings-file",
+        action="append",
+        nargs=2,
+        default=[],
+        metavar=("REPOSITORY_ID", "PATH"),
+        help="Repository-qualified JSON list of canonical AuthorityBinding items "
+        "(repeatable). Omitted for a repository preserves configured bindings; "
+        "an explicit empty list clears them.",
     )
     parser.add_argument(
         "--dry-run",
