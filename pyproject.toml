@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "span-mcp"
 dynamic = ["version"]
-description = "Span — evidence-backed software knowledge for coding agents: capture, curation, governance, and reassessment."
+description = "Span — evidence-backed software knowledge layer for coding agents: capture, curation, governance, and reassessment."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
