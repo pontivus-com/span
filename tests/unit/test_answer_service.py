@@ -778,7 +778,7 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(len(result.historical), 1)
         historical = result.historical[0]
         self.assertEqual(historical.statement, "A does X number 1.")
-        self.assertEqual(historical.understanding_version.value, 1)
+        self.assertEqual(historical.understanding_version.value, 2)
         self.assertIs(historical.state, m.SupportState.REASSESSMENT_REQUIRED)
         self.assertEqual(
             [item.evidence_id.value for item in historical.evidence],
