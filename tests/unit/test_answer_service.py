@@ -187,7 +187,16 @@ class AnswerServiceTest(unittest.TestCase):
             )
         )
 
-    def _service(self, max_bytes: int, *, max_results: int = 50) -> AnswerService:
+    def _service(
+        self,
+        max_bytes: int,
+        *,
+        max_results: int = 50,
+        store: LifecycleStore | None = None,
+        support: SupportService | None = None,
+    ) -> AnswerService:
+        selected_store = self.store if store is None else store
+        selected_support = self.support if support is None else support
         bounds = m.QueryBounds(
             max_results=max_results,
             max_depth=2,
@@ -198,9 +207,9 @@ class AnswerServiceTest(unittest.TestCase):
             max_candidate_relationships=64,
         )
         return AnswerService(
-            store=self.store,
-            support=self.support,
-            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            store=selected_store,
+            support=selected_support,
+            evidence=EvidenceService(store=selected_store, evidence=self.evidence),
             policy=m.ServiceBoundsPolicy(
                 default_query_bounds=bounds,
                 maximum_query_bounds=bounds,
@@ -767,6 +776,70 @@ class AnswerServiceTest(unittest.TestCase):
                 second.items[0].ref.understanding_id.value,
             },
             {"u-page-a", "u-page-b"},
+        )
+
+    def test_pending_curation_keyset_paging_resumes_after_restart(self) -> None:
+        for suffix in ("restart-a", "restart-b"):
+            locator = f"src/{suffix}.py"
+            (self.root / locator).write_text(f"{suffix}\n", encoding="utf-8")
+            observation_id = f"obs-{suffix}"
+            self._observation(observation_id, locator)
+            self._create(
+                f"u-{suffix}",
+                locator,
+                f"What does {suffix} do?",
+                curate=False,
+                observation_id=observation_id,
+            )
+
+        first = self._service(51_133, max_results=1).ask(
+            m.AskRequest(selector=m.PendingCurationSelector(repository_id="repo-1"))
+        )
+        self.assertIsInstance(first, m.PendingCuration)
+        assert isinstance(first, m.PendingCuration)
+        self.assertTrue(first.truncated)
+        self.assertEqual(len(first.items), 1)
+        cursor = first.next_after
+        self.assertIsNotNone(cursor)
+
+        self.store.close()
+        reopened = LifecycleStore(
+            pathlib.Path(self._tmp.name) / "lifecycle.db",
+            retention=RETENTION,
+            clock=lambda: NOW,
+        )
+        self.addCleanup(reopened.close)
+        reopened_support = SupportService(
+            store=reopened,
+            evidence=self.evidence,
+            authority=reopened,
+            clock=lambda: NOW,
+        )
+        second = self._service(
+            51_133,
+            max_results=1,
+            store=reopened,
+            support=reopened_support,
+        ).ask(
+            m.AskRequest(
+                selector=m.PendingCurationSelector(
+                    repository_id="repo-1",
+                    after=cursor,
+                )
+            )
+        )
+        self.assertIsInstance(second, m.PendingCuration)
+        assert isinstance(second, m.PendingCuration)
+        self.assertFalse(second.truncated)
+        self.assertIsNone(second.next_after)
+        self.assertEqual(len(second.items), 1)
+        self.assertNotEqual(first.items[0].ref, second.items[0].ref)
+        self.assertEqual(
+            {
+                first.items[0].ref.understanding_id.value,
+                second.items[0].ref.understanding_id.value,
+            },
+            {"u-restart-a", "u-restart-b"},
         )
 
     def test_changed_source_is_an_invalidated_gap(self) -> None:
