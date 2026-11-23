@@ -1,11 +1,13 @@
 # Span documentation
 
-Span gives a coding agent the complete working context for the exact part of
-the software it is working on. It brings together what is already understood
-about that implementation with the applicable path through the project's
+Span is the evidence-backed knowledge layer for coding agents working on a
+software system. It maintains what is already understood about an
+implementation together with the applicable path through the project's
 canonical goals, principles, contracts, functional design, and technical
-design. Both sides stay tied to their sources, so Span can show when a code or
-guidance change makes part of that context require another look.
+design. At task time that maintained knowledge becomes working context for the
+exact software surface the agent is handling. Both empirical support and
+governing relationships remain explicit, so Span can show when a code or
+guidance change makes part of that understanding require another look.
 
 ## Foundations
 
