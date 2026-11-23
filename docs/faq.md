@@ -3,14 +3,16 @@
 ## What does an agent actually do with Span?
 
 Ask for the file, symbol, service, or domain the agent is working on. Span
-returns the current understanding already retained for that surface and, for an
-ACTIVE Functional Pyramid repository, the project guidance that applies to the
-same scope from first principles down to functional and technical design.
+returns current curated shared knowledge for that surface, explicit pending or
+stale status, and, for an ACTIVE Functional Pyramid repository, the project
+guidance that applies to the same scope from first principles down to functional
+and technical design.
 
-The agent investigates any gaps with its normal tools and records useful
-conclusions when established. A later session can ask the same surface without
-the old conversation or a saved internal ID. After code or guidance changes,
-`reconsider` identifies the understanding that actually needs another look.
+The working agent investigates gaps and captures supported conclusions when
+established. A separate reviewer curates stable exact revisions for shared reuse.
+A later session can ask the same surface without the old conversation or a saved
+internal ID. After code or guidance changes, `reconsider` identifies the
+understanding that actually needs another look.
 See [usage](usage.md).
 
 ## Is Span a knowledge factory?
@@ -85,11 +87,13 @@ evidence, then creates understanding with an explicit question and scope, or
 records an independent verification run. This direct-create capability preserves imported work; agents consult Span
 before deriving understanding under [the required lifecycle](lifecycle-contract.md#required-agent-completion).
 
-## Does CURRENT mean the explanation is true?
+## Do CURRENT or CURATED mean the explanation is true?
 
-It means declared support still passes its checks. The original interpretation
-may still be incomplete or wrong. Gaps and challenges remain visible; the
-agent judges applicability and semantic correctness.
+No. `CURRENT` means the revision's required support still passes its owning
+checks. `CURATED` means an explicit reviewer accepted that exact semantic
+revision for shared reuse. Neither is a truth certificate: the interpretation
+may still be incomplete or wrong, and semantic judgment remains with the
+investigator/reviewer.
 
 ## What happens when code changes?
 
@@ -142,17 +146,17 @@ The beta does not claim a universal saving or a completed comparative ACCEPT.
 
 ## Where is state stored, and how do upgrades work?
 
-Repository semantic/audit state uses schema 14 in the external data directory.
-Functional Pyramid participation, versions, exclusions and installation-scoped
-receipts live in the separate installation database at
-`<DATA_DIR>/installation/functional-pyramid.db`.
+Beta 2 repository semantic/audit state uses schema 15 in the external data
+directory. Functional Pyramid participation, versions, exclusions and
+installation-scoped receipts remain in the separate installation database at
+`<DATA_DIR>/installation/functional-pyramid.db` with installation schema 1.
 
-The runtime never migrates a store at open. Existing schema-13 repositories use
-the explicit offline transition to schema 14; the transition preserves their
-semantic/audit state and does not fabricate historical Functional Pyramid
-support or participation. Registered repositories begin `UNCONFIGURED` until
-participation is explicitly recorded. Full-installation recovery includes the
-installation database; a repository-portable backup deliberately does not.
+The runtime never migrates a store at open. Existing schema-14 repositories use
+the explicit offline transition to schema 15; that transition preserves
+Beta-1 semantic/audit/governance state and creates zero curation approvals.
+Migrated semantic revisions therefore begin CAPTURED under the Beta-2 reuse
+contract. Registered repositories remain `UNCONFIGURED` until Functional
+Pyramid participation is explicitly recorded.
 
 A bare package upgrade does not migrate host configuration. Rerun
 `span-install`, complete any required offline transition, verify the
