@@ -34,10 +34,12 @@ code or guidance change makes require another look.
 ## Implementation
 
 - [1.0.0 Beta 2 implementation plan](implementation-plans/1.0.0-beta2.md) —
-  capture/curation lifecycle correction, repository schema 15, Functional
-  Pyramid-preserving implementation tasks, public narrative alignment and
-  release gates. The canonical product behavior is owned by the layer-0–4
-  documents above; the plan derives from them.
+  one reconciled campaign covering capture/curation, repository schema 15,
+  B2-D01/B2-D02 installer and production-topology remediation, Functional
+  Pyramid-preserving implementation, first-adopter revalidation, public
+  knowledge-factory narrative alignment and release gates. The canonical
+  behavior/mechanisms are owned by the layer-0–4 documents above; the plan
+  derives from them.
 - [1.0.0 Beta 1 implementation plan](implementation-plans/1.0.0-beta.md) —
   historical Version-1 Functional Pyramid implementation and Beta-1 release
   campaign.
