@@ -3,14 +3,14 @@
 </h1>
 
 <p align="center">
-  <strong>Give your coding agent the complete context for the code it is working on.</strong>
+  <strong>Build a knowledge factory for your codebase.</strong>
 </p>
 
 <p align="center">
-  Span is a local MCP server that gives coding agents both sides of the context
-  for the exact file, symbol, service, or domain they are working on: what that
-  part of the system is understood to do, and the goals, rules, contracts, and
-  design documents that guide it.
+  Span is an evidence-backed knowledge layer for coding agents. It makes useful
+  software understanding reusable across sessions, keeps that understanding tied
+  to the evidence and governing guidance it depends on, and shows what needs
+  another look when either changes.
 </p>
 
 <p align="center">
@@ -30,37 +30,49 @@
   <a href="https://github.com/pontivus-com/span/tree/master/docs"><strong>Docs</strong></a>
 </p>
 
-## A coding agent needs more than the code
+## Context is temporary. Knowledge should compound
 
-To work safely on part of a software system, an agent needs two kinds of context
-at the same time.
+A coding agent needs context for the task in front of it: source, tests,
+configuration, design, requirements, and the current conversation. But useful
+understanding established while doing the work should not disappear with the
+session.
 
-It needs to know **what this part of the system does**: the useful understanding
-already established about the implementation, how it fits together, what that
-understanding was based on, and whether it is still current.
+Span turns that work into maintained software knowledge. An agent can retain
+what it established about an exact file, symbol, service, or domain, with the
+support it actually used. A later session can reuse that understanding while
+its support still holds.
 
-It also needs to know **what guides this part of the system**: the relevant
-goals, principles, contracts, functional design, and technical design, in the
-right order and linked back to the canonical documents that own them.
+Software makes this harder than ordinary memory. The thing being understood
+keeps changing. A source edit can invalidate an explanation. A change to a
+goal, contract, design, or its applicability can invalidate what the
+implementation is supposed to satisfy even when the code itself did not change.
 
-Without Span, a fresh agent has to reconstruct both sides. It re-reads code,
-searches old conversations and documentation, works out which documents apply,
-and decides which guidance takes priority. The relevant material may span
-several repositories.
+Span therefore keeps two kinds of software knowledge distinct:
 
-Span gives the agent both sides for the exact software surface it is working on.
+- **what the implementation is understood to do** — useful empirical
+  understanding tied to source, tests, configuration, executions, premises,
+  and other declared support; and
+- **what is supposed to guide it** — applicable goals, principles, contracts,
+  functional design, and technical design linked back to their canonical
+  owners.
+
+Span does not confuse evidence with authority, and it does not silently serve
+noncurrent understanding as current. The result is a software knowledge-factory
+loop in which real engineering work can leave the next agent better informed
+than the last.
 
 ## What Span changes
 
-### Start with the complete working context
+### Start with maintained knowledge, not a blank session
 
 Ask about a file, symbol, service, or domain. Span returns the current
 understanding already established for that surface and, for a participating
 repository, the complete applicable path through the project's guiding
 documentation.
 
-The agent starts knowing what it is looking at, why it exists, what is already
-known about it, and which project rules and designs apply.
+The agent starts from maintained knowledge rather than reconstructing the same
+understanding from raw evidence every session. That maintained knowledge becomes
+part of the working context for the task in front of it.
 
 ### Follow the right guidance from first principles to implementation
 
@@ -97,6 +109,8 @@ Unrelated understanding stays reusable.
 
 Span does not replace your coding agent, choose a model, edit source, or run your
 tests. It runs locally as an MCP server beside the agent.
+
+**Your agent does the work. Span makes what it learns reusable.**
 
 The agent still does the engineering judgment. Span maintains the reusable
 result of that work: semantic conclusions, their exact support, version history,
@@ -256,10 +270,10 @@ agent uses its own model, tools, edits, and test runner. Span does not invoke a
 model or store provider credentials. Structural search helps investigation;
 recorded conclusions retain the agent's interpretation and declared support.
 
-The intended benefit is complete working context for the exact software surface:
-what is already understood about the implementation, the canonical project
-guidance that applies to it, and a focused view of what needs another look after
-either side changes. Beta product value is validated through real-world adopter
+The intended benefit is maintained software knowledge that can become complete
+working context for the exact software surface: what is already understood about
+the implementation, the canonical project guidance that applies to it, and a
+focused view of what needs another look after either side changes. Beta product value is validated through real-world adopter
 use rather than a synthetic pre-release score. This release therefore makes no
 universal time/token-saving claim; follow-up Beta patches will address defects
 and friction found in normal use. See [acceptance](docs/acceptance.md).
