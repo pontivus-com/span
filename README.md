@@ -7,9 +7,10 @@
 </p>
 
 <p align="center">
-  Span is an evidence-backed knowledge layer for coding agents. It makes useful
-  software understanding reusable across sessions, keeps that understanding tied
-  to the evidence and governing guidance it depends on, and shows what needs
+  Span is an evidence-backed knowledge layer for coding agents. Working agents
+  capture what they establish while the evidence is fresh; a separate curation
+  step decides what becomes shared reusable knowledge. Span keeps that knowledge
+  tied to the evidence and governing guidance it depends on and shows what needs
   another look when either changes.
 </p>
 
@@ -37,10 +38,11 @@ configuration, design, requirements, and the current conversation. But useful
 understanding established while doing the work should not disappear with the
 session.
 
-Span turns that work into maintained software knowledge. An agent can retain
-what it established about an exact file, symbol, service, or domain, with the
-support it actually used. A later session can reuse that understanding while
-its support still holds.
+Span turns that work into maintained software knowledge without equating one
+task agent's conclusion with shared truth. The working agent retains what it
+established about an exact file, symbol, service, or domain with the support it
+actually used. A separate reviewer/curator accepts the exact stable revision for
+shared reuse; later sessions receive it only while that support still holds.
 
 Software makes this harder than ordinary memory. The thing being understood
 keeps changing. A source edit can invalidate an explanation. A change to a
@@ -109,7 +111,7 @@ Unrelated understanding stays reusable.
 Span does not replace your coding agent, choose a model, edit source, or run your
 tests. It runs locally as an MCP server beside the agent.
 
-**Your agent does the work. Span makes what it learns reusable.**
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
 The agent still does the engineering judgment. Span maintains the reusable
 result of that work: semantic conclusions, their exact support, version history,
