@@ -1757,6 +1757,75 @@ not fabricate a partially composed `ServiceContext`. Provisioning ownership
 remains in the installer/context setup path; MCP startup registration does not
 restore a public or implicit provisioning path.
 
+**Beta-2 administrative initialization correction (2026-11-23).** Real-world
+first-adopter use exposed a Layer-4 composition defect in Beta 1: `span-install`
+accepted `--repo` and parsed `--authority-seeds-file`, but never invoked the
+already-owned `provision_repository_runtime(InitializeRepositoryRequest)`
+path. It therefore did not perform the initialization contract's canonical-root
+binding or declared authority registration. In addition, the installer had no
+administrative ingress for the existing canonical `AuthorityBinding` carrier,
+although Functional Pyramid rule-owner resolution requires those bindings.
+This is a shell/setup composition defect. It does not change Layer-0–3 product
+behavior and does not authorize another authority model, setup DTO, MCP
+operation, store schema or implicit runtime initialization.
+
+Beta 2 closes the setup seam as follows:
+
+1. `span-install` remains the sole mutating administrative entry point.
+   Runtime `ask`/`record`/`reconsider`, host startup registration and
+   `--verify-only` remain non-initializing.
+2. Repository authority configuration is supplied explicitly and
+   repository-qualified. The administrative grammar is repeatable
+   `--authority-seeds-file REPOSITORY_ID PATH` and
+   `--authority-bindings-file REPOSITORY_ID PATH`. Each file is a strict JSON
+   list of the existing canonical `EvidenceRef` or `AuthorityBinding`
+   carrier respectively; there is no setup-specific wrapper shape.
+3. The repository coordinate on the command line is administrative routing
+   metadata only. Every decoded canonical item must carry the same repository
+   identity. A duplicate mapping, an item whose repository identity disagrees
+   with the mapping, or a mapping for a repository not selected by `--repo`
+   rejects before mutation.
+4. The shell preserves the existing `InitializeRepositoryRequest` tri-state
+   exactly for each selected repository and configuration kind: no file mapping
+   means `None` and preserves existing declarations; a mapped file containing
+   `[]` means `()` and clears them; a mapped non-empty file replaces them.
+   No authority kind, status, applicability, precedence, locator, fingerprint
+   or repository ownership is inferred.
+5. All selected repository identities and all supplied authority files are
+   decoded and structurally validated before the first repository-store
+   mutation. The installer takes the existing data-directory backup before
+   initialization mutates an existing installation.
+6. After runtime/indexer provisioning, the installer calls the existing
+   `provision_repository_runtime` exactly once for each selected repository
+   using one canonical `InitializeRepositoryRequest`, closes that raw runtime,
+   and only then performs host registration and observational readiness
+   verification. `provision_repository_runtime` remains the sole owner of
+   structural `ensure_current`, installation-store creation/verification,
+   repository-store creation/open, evidence-locator validation and
+   `initialize_repository` dispatch.
+7. Initialization is repository-local administration, not a cross-repository
+   Functional Pyramid write. There is no new cross-repository setup transaction.
+   A failure names the repository that failed and preserves the pre-mutation
+   backup; it never fabricates participation or silently continues.
+8. The install receipt reports the actual `InitializeRepositoryResult`
+   projection for every selected repository, including root, schema, structural
+   status and resulting seed/binding counts. Input presence is never reported as
+   successful initialization.
+9. Functional Pyramid participation remains a separate ordinary lifecycle:
+   repository initialization can establish the authority bindings required for
+   candidate validation, but it never ACTIVATEs, REVISEs, DEACTIVATEs or
+   EXCLUDEs a pyramid.
+
+**Acceptance escape-hatch correction.** Beta-1 production-topology acceptance
+constructed lifecycle stores and `AuthorityBinding` values directly in its
+installed-MCP fixture. That proved runtime Functional Pyramid composition after
+setup, but it bypassed the installer contract and therefore could not detect the
+defect above. Beta 2 requires at least one clean, non-editable installed lane to
+create the participating repository stores and declared authority state through
+`span-install` itself before candidate validation/activation. Direct
+`LifecycleStore.register_repository` setup remains valid for lower-level unit
+tests, but it cannot satisfy the installer/production-topology acceptance gate.
+
 #### 20.1 `ask`
 
 **Authority:** F6, F10, F11, F12; L1–L3, L8, L12–L14, L16;
