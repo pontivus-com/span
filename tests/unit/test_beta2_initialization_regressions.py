@@ -7,7 +7,6 @@ encoded before installer implementation changes.
 
 from __future__ import annotations
 
-import json
 import pathlib
 import tempfile
 import unittest
