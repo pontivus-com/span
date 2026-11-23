@@ -2430,6 +2430,14 @@ Verification must prove at least:
 - a non-editable installed journey covers capture → curate → fresh-session reuse
   → change → reconsider → confirm/reuse and semantic-change → re-curation.
 
+The Beta-2 installed-candidate acceptance composes this Part-D lifecycle proof
+with Part-C §20's corrected production-topology setup proof in the **same
+candidate**: repositories plus an empty data directory are initialized through
+the installed `span-install`; the resulting governed runtime then exercises
+Functional Pyramid orientation and the capture/curation lifecycle. Direct store
+registration or direct authority-binding injection may remain lower-layer test
+fixtures but cannot satisfy that installed-candidate gate.
+
 The existing architecture guards remain binding: one canonical carrier per
 boundary, no shell semantic writer, no duplicate support evaluator, no
 curation-specific Functional Pyramid path and no fallback that treats absence of
