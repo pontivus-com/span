@@ -258,6 +258,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-svc"),
         )
+        self._curate("u-svc")
         result = self._ask("svc", "What does the service do?")
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
@@ -318,6 +319,7 @@ class AnswerServiceTest(unittest.TestCase):
                 ),
                 understanding_id=m.UnderstandingId(understanding_id),
             )
+            self._curate(understanding_id)
         result = self._ask("domain", "What does domain do?")
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
@@ -387,6 +389,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-child-stale"),
         )
+        self._curate("u-child-stale")
         (self.root / "src/b.py").write_text("changed\n", encoding="utf-8")
         result = self._ask("domain", "What does domain do?")
         assert isinstance(result, m.Answer)
@@ -443,6 +446,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-range"),
         )
+        self._curate("u-range")
         first = self._ask("src/a.py", "What are the first two lines?")
         self.assertIsInstance(first, m.Answer)
         (self.root / "src/a.py").write_text("one\ntwo\nchanged\n", encoding="utf-8")
@@ -499,6 +503,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-unbound"),
         )
+        self._curate("u-unbound")
         # The range can no longer bind; the whole file still matches.
         (self.root / "src/a.py").write_text("one\ntwo\n", encoding="utf-8")
         unbound = self._ask("src/a.py", "What are the last two lines?")
@@ -565,6 +570,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-legacy"),
         )
+        self._curate("u-legacy")
         path.write_text("one\ntwo\nchanged\n", encoding="utf-8")
         result = self._ask("src/a.py", "What are the first two lines?")
         self.assertIsInstance(result, m.Gap)
@@ -825,6 +831,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-sibling"),
         )
+        self._curate("u-sibling")
         (self.root / "src/b.py").write_text("changed\n", encoding="utf-8")
         result = self._ask("src/a.py", "What else does A do?", "req-sibling-ask")
         assert isinstance(result, m.Answer)
@@ -833,7 +840,7 @@ class AnswerServiceTest(unittest.TestCase):
         stale = result.status.stale_refs[0]
         self.assertEqual(stale.ref.conclusion_id.value, "c-2")
         self.assertEqual(stale.ref.understanding_id.value, "u-sibling")
-        self.assertEqual(stale.understanding_version.value, 1)
+        self.assertEqual(stale.understanding_version.value, 2)
         self.assertIs(stale.state, m.SupportState.REASSESSMENT_REQUIRED)
         self.assertEqual(
             sum(len(group.conclusions) for group in result.groups),
@@ -1436,6 +1443,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-wide"),
         )
+        self._curate("u-wide")
         result = self._service(3_000).ask(
             m.AskRequest(
                 repository_id="repo-1",
