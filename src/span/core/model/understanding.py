@@ -131,6 +131,7 @@ class CurationDisposition:
 
     def __post_init__(self) -> None:
         _require_non_empty("CurationDisposition.reasoning", self.reasoning)
+        _require_non_empty("CurationDisposition.provenance", self.provenance)
         _require_aware("CurationDisposition.recorded_at", self.recorded_at)
         if self.origin is CurationOrigin.EXPLICIT:
             if self.inherited_from is not None:
