@@ -159,7 +159,9 @@ def verify_schema14_staging(paths: TransitionPaths, config: TransitionConfig) ->
                     f"staged {table} holds {actual} rows, mapping expects {expected}"
                 )
         curation_rows = int(
-            connection.execute("SELECT COUNT(*) FROM conclusion_curations").fetchone()[0]
+            connection.execute("SELECT COUNT(*) FROM conclusion_curations").fetchone()[
+                0
+            ]
         )
         if curation_rows != 0 or payload.get("curation_rows") != 0:
             raise TransitionError(
