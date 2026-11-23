@@ -96,6 +96,7 @@ class RecordWireSchemaTest(unittest.TestCase):
             w.CorrectConclusionWire,
             w.ReplaceActionWire,
             w.WithdrawActionWire,
+            w.CurateConclusionWire,
         ):
             schema = schema_for_request(root)
             self.assertEqual(schema["type"], "object")
@@ -160,6 +161,97 @@ def _update_request(
         expected_version=expected_version,
         actions=actions,
     )
+
+
+class CurationWireTest(unittest.TestCase):
+    def test_curate_projects_to_canonical_command(self):
+        command = w.record_command(
+            _update_request(
+                w.RecordActionsWire(
+                    curate=(
+                        w.CurateConclusionWire(
+                            conclusion_id="c-1",
+                            reasoning="stable for shared reuse",
+                        ),
+                    )
+                ),
+                request_id="sub-curate",
+            ),
+            _resolver(),
+        )
+        self.assertEqual(
+            command.curate,
+            (
+                m.CurateConclusion(
+                    conclusion_id=m.ConclusionId("c-1"),
+                    reasoning="stable for shared reuse",
+                ),
+            ),
+        )
+        self.assertEqual(command.add, ())
+        self.assertEqual(command.correct, ())
+
+    def test_curate_wire_has_only_exact_public_fields(self):
+        schema = schema_for_request(w.CurateConclusionWire)
+        self.assertEqual(
+            set(schema["properties"]),
+            {"conclusion_id", "reasoning"},
+        )
+        with self.assertRaises(ValueError):
+            w.CurateConclusionWire(conclusion_id="", reasoning="reviewed")
+        with self.assertRaises(ValueError):
+            w.CurateConclusionWire(conclusion_id="c-1", reasoning="")
+
+    def test_curate_cannot_share_actions_with_semantic_mutation(self):
+        with self.assertRaises(ValueError):
+            w.RecordActionsWire(
+                add=(
+                    w.AddConclusionWire(
+                        conclusion="new meaning",
+                        locator="src/a.py",
+                    ),
+                ),
+                curate=(
+                    w.CurateConclusionWire(
+                        conclusion_id="c-1",
+                        reasoning="reviewed",
+                    ),
+                ),
+            )
+        identity = m.RecordingIdentity(
+            repository_id="repo-1",
+            request_id=m.RequestId("req-1"),
+            context_id=m.InvestigationContextId("ctx-1"),
+        )
+        with self.assertRaises(ValueError):
+            m.UpdateUnderstandingCommand(
+                identity=identity,
+                understanding_id=m.UnderstandingId("u-1"),
+                expected_version=m.UnderstandingVersionNumber(1),
+                correct=(
+                    m.CorrectConclusion(
+                        conclusion_id=m.ConclusionId("c-1"),
+                        statement="changed",
+                        assertion_nature=m.AssertionNature.DESCRIPTIVE,
+                        scope=m.EvidenceScope(paths=("src/a.py",)),
+                        support=(
+                            m.SourceSupport(
+                                observation_id=m.SourceObservationId("obs-1")
+                            ),
+                        ),
+                        basis=m.SemanticBasis(
+                            derivation=m.DerivationKind.SEMANTIC_INTERPRETATION,
+                            summary="corrected",
+                        ),
+                    ),
+                ),
+                curate=(
+                    m.CurateConclusion(
+                        conclusion_id=m.ConclusionId("c-2"),
+                        reasoning="reviewed",
+                    ),
+                ),
+            )
 
 
 class CreateEvidenceGrammarTest(unittest.TestCase):
