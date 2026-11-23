@@ -67,6 +67,22 @@ class SurfaceCarrierTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.Surface(key=KEY, boundary_version=0)
 
+    def test_pending_refs_name_every_pending_conclusion(self) -> None:
+        ref = m.PendingConclusionRef(
+            ref=REF,
+            understanding_version=m.UnderstandingVersionNumber(1),
+        )
+        with self.assertRaises(ValueError):
+            m.SurfaceStatus(surface=KEY, pending=1)
+        with self.assertRaises(ValueError):
+            m.SurfaceStatus(surface=KEY, pending=0, pending_refs=(ref,))
+        pending_status = m.SurfaceStatus(
+            surface=KEY,
+            pending=1,
+            pending_refs=(ref,),
+        )
+        self.assertEqual(pending_status.pending_refs, (ref,))
+
     def test_stale_refs_name_every_stale_conclusion(self) -> None:
         ref = m.StaleConclusionRef(
             ref=m.ConclusionRevisionRef(
@@ -139,7 +155,7 @@ class AnswerCarrierTest(unittest.TestCase):
     def test_gap_reasons_are_exhaustive(self) -> None:
         self.assertEqual(
             {reason.value for reason in m.GapReason},
-            {"invalidated", "unverifiable", "unassessed"},
+            {"invalidated", "unverifiable", "pending_curation", "unassessed"},
         )
         m.Gap(
             surface=KEY,
@@ -265,6 +281,7 @@ class ChangeCarrierTest(unittest.TestCase):
                 m.EvidencePage,
                 m.FunctionalPyramidStatus,
                 m.FunctionalPyramidCandidate,
+                m.PendingCuration,
                 m.Rejected,
                 m.Unavailable,
             },
