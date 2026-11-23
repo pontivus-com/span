@@ -403,6 +403,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         for key in (
             "cold_error",
             "created_error",
+            "curated_error",
             "warm_error",
             "retrieved_error",
         ):
@@ -411,7 +412,7 @@ class InstalledMcpDriverTest(_unittest.TestCase):
         self.assertEqual(observed["cold_kind"], "Gap")
         self.assertEqual(observed["found_kind"], "Answer")
         self.assertEqual(observed["statement"], "Alpha declares VALUE = 1.")
-        self.assertEqual(observed["version"], 1)
+        self.assertEqual(observed["version"], 2)
         self.assertFalse(observed["fp_status_before_error"])
         self.assertEqual(observed["fp_status_before_kind"], "FunctionalPyramidStatus")
         self.assertEqual(observed["fp_status_before_state"], "UNCONFIGURED")
