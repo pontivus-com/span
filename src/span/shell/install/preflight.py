@@ -2,56 +2,104 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import subprocess
+import typing as _typing
 from pathlib import Path
 
-
-def _canonical_model():
-    try:
-        return importlib.import_module("span.core.model")
-    except ImportError as exc:
-        raise SystemExit(
-            "cannot validate authority configuration: canonical decoder "
-            f"unavailable ({exc}); refusing to install unchecked governance"
-        ) from None
+if _typing.TYPE_CHECKING:
+    from span.core import model as m
 
 
-def _canonical_list(path, *, model_name, item_name, dry_run=False):
-    print(f"+ read {item_name} file: {path}")
-    if dry_run:
-        return ()
+def _json_object_list(path: str | Path, *, label: str) -> list[dict[str, object]]:
     try:
         data = json.loads(Path(path).read_text())
     except (OSError, ValueError) as exc:
-        raise SystemExit(f"cannot read {item_name} file {path}: {exc}") from None
+        raise SystemExit(f"cannot read {label} file {path}: {exc}") from None
     if not isinstance(data, list):
-        raise SystemExit(f"{item_name} file must hold a JSON list: {path}")
-    model = _canonical_model()
-    target = getattr(model, model_name)
-    validated = []
+        raise SystemExit(f"{label} file must hold a JSON list: {path}")
+    items: list[dict[str, object]] = []
     for index, item in enumerate(data):
         if not isinstance(item, dict):
             raise SystemExit(
-                f"{item_name} file {path}: {item_name}[{index}]: expected object, "
+                f"{label} file {path}: {label}[{index}]: expected object, "
                 f"got {type(item).__name__}"
             )
+        items.append(dict(item))
+    return items
+
+
+def _evidence_refs(
+    path: str | Path,
+    *,
+    dry_run: bool,
+) -> tuple[m.EvidenceRef, ...]:
+    print(f"+ read authority seeds file: {path}")
+    if dry_run:
+        return ()
+    try:
+        from span.core import model as m
+    except ImportError as exc:
+        raise SystemExit(
+            "cannot validate authority seeds: canonical decoder unavailable "
+            f"({exc}); refusing to install unchecked governance"
+        ) from None
+
+    validated: list[m.EvidenceRef] = []
+    for index, item in enumerate(_json_object_list(path, label="authority seeds")):
         payload = dict(item)
-        payload.setdefault("$type", model_name)
+        payload.setdefault("$type", "EvidenceRef")
         try:
-            validated.append(model.from_canonical(target, payload))
-        except model.CanonicalDecodeError as exc:
+            validated.append(m.from_canonical(m.EvidenceRef, payload))
+        except m.CanonicalDecodeError as exc:
             raise SystemExit(
-                f"{item_name} file {path}: {item_name}[{index}]: invalid "
-                f"{model_name} arguments: {exc}"
+                f"authority seeds file {path}: authority seeds[{index}]: "
+                f"invalid EvidenceRef arguments: {exc}"
             ) from None
     return tuple(validated)
 
 
-def _repository_mapping(entries, *, selected_repository_ids, label):
-    mapped = {}
-    for repository_id, path in entries or ():
+def _authority_bindings(
+    path: str | Path,
+    *,
+    dry_run: bool,
+) -> tuple[m.AuthorityBinding, ...]:
+    print(f"+ read authority bindings file: {path}")
+    if dry_run:
+        return ()
+    try:
+        from span.core import model as m
+    except ImportError as exc:
+        raise SystemExit(
+            "cannot validate authority bindings: canonical decoder unavailable "
+            f"({exc}); refusing to install unchecked governance"
+        ) from None
+
+    validated: list[m.AuthorityBinding] = []
+    for index, item in enumerate(_json_object_list(path, label="authority bindings")):
+        payload = dict(item)
+        payload.setdefault("$type", "AuthorityBinding")
+        try:
+            validated.append(m.from_canonical(m.AuthorityBinding, payload))
+        except m.CanonicalDecodeError as exc:
+            raise SystemExit(
+                f"authority bindings file {path}: authority bindings[{index}]: "
+                f"invalid AuthorityBinding arguments: {exc}"
+            ) from None
+    return tuple(validated)
+
+
+def _repository_mapping(
+    entries: _typing.Iterable[_typing.Sequence[str]],
+    *,
+    selected_repository_ids: set[str],
+    label: str,
+) -> dict[str, str]:
+    mapped: dict[str, str] = {}
+    for entry in entries:
+        if len(entry) != 2:
+            raise SystemExit(f"{label} mapping requires REPOSITORY_ID PATH")
+        repository_id, path = entry
         if repository_id in mapped:
             raise SystemExit(
                 f"duplicate {label} mapping for repository {repository_id!r}"
@@ -65,28 +113,30 @@ def _repository_mapping(entries, *, selected_repository_ids, label):
 
 
 def load_authority_files(
-    targets,
-    seed_files,
-    binding_files,
+    targets: _typing.Iterable[str | Path],
+    seed_files: _typing.Iterable[_typing.Sequence[str]],
+    binding_files: _typing.Iterable[_typing.Sequence[str]],
     *,
-    dry_run=False,
-):
+    dry_run: bool = False,
+) -> tuple[
+    dict[str, tuple[m.EvidenceRef, ...]],
+    dict[str, tuple[m.AuthorityBinding, ...]],
+]:
     """Decode repository-qualified canonical authority configuration.
 
-    Missing repository mappings are absent from the returned dictionaries so
-    callers preserve the InitializeRepositoryRequest None tri-state. Explicit
-    empty JSON lists decode to () and therefore mean clear; non-empty files
-    decode to tuples of the existing canonical carriers.
+    Missing mappings remain absent, preserving InitializeRepositoryRequest None.
+    Explicit empty JSON lists decode to empty tuples (clear); non-empty lists
+    decode to tuples of the existing canonical carriers (replace).
     """
     try:
-        structural = importlib.import_module("span.shell.structural")
+        from span.shell.structural import repository_id_from_config
     except ImportError as exc:
         raise SystemExit(
             f"cannot resolve repository identity for authority configuration: {exc}"
         ) from None
 
     selected_repository_ids = {
-        structural.repository_id_from_config(str(target)) for target in targets
+        repository_id_from_config(str(target)) for target in targets
     }
     seed_paths = _repository_mapping(
         seed_files,
@@ -99,14 +149,9 @@ def load_authority_files(
         label="authority bindings",
     )
 
-    seeds = {}
+    seeds: dict[str, tuple[m.EvidenceRef, ...]] = {}
     for repository_id, path in seed_paths.items():
-        decoded = _canonical_list(
-            path,
-            model_name="EvidenceRef",
-            item_name="authority seeds",
-            dry_run=dry_run,
-        )
+        decoded = _evidence_refs(path, dry_run=dry_run)
         for item in decoded:
             if item.repository_id != repository_id:
                 raise SystemExit(
@@ -115,14 +160,9 @@ def load_authority_files(
                 )
         seeds[repository_id] = decoded
 
-    bindings = {}
+    bindings: dict[str, tuple[m.AuthorityBinding, ...]] = {}
     for repository_id, path in binding_paths.items():
-        decoded = _canonical_list(
-            path,
-            model_name="AuthorityBinding",
-            item_name="authority bindings",
-            dry_run=dry_run,
-        )
+        decoded = _authority_bindings(path, dry_run=dry_run)
         for item in decoded:
             item_repository_id = item.evidence_ref.repository_id
             if item_repository_id != repository_id:
@@ -135,31 +175,24 @@ def load_authority_files(
     return seeds, bindings
 
 
-def load_seeds(path, dry_run=False):
+def load_seeds(
+    path: str | Path | None,
+    dry_run: bool = False,
+) -> list[m.EvidenceRef]:
     """Legacy internal helper retained for direct seed-decoder tests."""
     if path is None:
         return []
-    decoded = _canonical_list(
-        path,
-        model_name="EvidenceRef",
-        item_name="seeds",
-        dry_run=dry_run,
-    )
-    if dry_run:
-        return []
-    return [item for item in decoded]
+    return list(_evidence_refs(path, dry_run=dry_run))
 
 
-def preflight_facts(targets, seeds_path=None):
-    """Read-only non-gating preflight facts.
-
-    The optional seeds_path remains only for the existing direct helper
-    contract. Beta-2 repository-qualified authority configuration is validated
-    separately by load_authority_files.
-    """
-    facts: dict = {}
+def preflight_facts(
+    targets: _typing.Iterable[str | Path],
+    seeds_path: str | Path | None = None,
+) -> dict[str, object]:
+    """Return read-only non-gating repository and legacy seed-file facts."""
+    facts: dict[str, object] = {}
     for target in targets:
-        entry: dict = {}
+        entry: dict[str, object] = {}
         try:
             head = subprocess.run(
                 ["git", "-C", str(target), "rev-parse", "HEAD"],
@@ -195,10 +228,10 @@ def preflight_facts(targets, seeds_path=None):
             entry["git_dirty"] = None
             entry["git_head_time"] = None
         facts[str(target)] = entry
+
     if seeds_path is not None:
         try:
-            text_value = Path(seeds_path).read_text()
-            parsed = json.loads(text_value)
+            parsed = json.loads(Path(seeds_path).read_text())
             facts["seeds_file"] = {
                 "supplied": True,
                 "readable": True,
