@@ -96,7 +96,6 @@ class RecordWireSchemaTest(unittest.TestCase):
             w.CorrectConclusionWire,
             w.ReplaceActionWire,
             w.WithdrawActionWire,
-            w.CurateConclusionWire,
         ):
             schema = schema_for_request(root)
             self.assertEqual(schema["type"], "object")
