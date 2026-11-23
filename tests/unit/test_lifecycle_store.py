@@ -18,6 +18,7 @@ from span.core.recording import (
 )
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
+    LifecycleStoreDataError,
     LifecycleStoreError,
     SchemaVersionError,
     SourceObservationRecord,
@@ -435,6 +436,38 @@ class LifecycleStoreTest(unittest.TestCase):
         with self.assertRaises(LifecycleStoreError):
             with self.store._connection:
                 self.store._insert_curation_in(self.store._connection, explicit)
+
+    def test_curation_read_fails_closed_on_structural_drift(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        ref = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-1"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        disposition = m.CurationDisposition(
+            ref=ref,
+            accepted_in_version=m.UnderstandingVersionNumber(1),
+            reasoning="reviewed",
+            provenance="reviewer",
+            recorded_at=NOW,
+            origin=m.CurationOrigin.EXPLICIT,
+        )
+        with self.store._connection:
+            self.store._insert_curation_in(self.store._connection, disposition)
+            self.store._connection.execute(
+                "UPDATE conclusion_curations SET origin='INHERITED_CONFIRMATION',"
+                " inherited_from_revision=1"
+                " WHERE understanding_id='u-1' AND conclusion_id='c-1'"
+                " AND revision=1"
+            )
+
+        with self.assertRaises(LifecycleStoreDataError):
+            self.store.find_curation(ref)
+        with self.assertRaises(LifecycleStoreDataError):
+            self.store.get_curations("u-1")
 
     def test_inherited_curation_and_candidate_keyset_are_exact(self) -> None:
         self.store.put_context(_context())
