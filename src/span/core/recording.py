@@ -573,12 +573,8 @@ def _curation_effects(
     now: _datetime.datetime,
 ) -> tuple[CurationDisposition, ...]:
     """Derive exact immutable curation effects from one accepted update."""
-    prior_by_lineage = {
-        ref.conclusion_id: ref for ref in current_version.conclusions
-    }
-    resulting_by_lineage = {
-        ref.conclusion_id: ref for ref in new_version.conclusions
-    }
+    prior_by_lineage = {ref.conclusion_id: ref for ref in current_version.conclusions}
+    resulting_by_lineage = {ref.conclusion_id: ref for ref in new_version.conclusions}
     curated = {item.ref: item for item in existing_curations}
     effects: list[CurationDisposition] = []
 
