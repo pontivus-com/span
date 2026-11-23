@@ -74,6 +74,27 @@ async def _run(exe, repo, data_dir, repository_id):
                 },
             )
             understanding_id = created["understanding_id"]["value"]
+            conclusion_id = created["affected_revisions"][0]["conclusion_id"]["value"]
+            curated, curated_error = await _call(
+                session,
+                "record",
+                {
+                    "repository_id": repository_id,
+                    "request_id": "probe-curate",
+                    "kind": "understanding",
+                    "understanding_id": understanding_id,
+                    "expected_version": created["version"]["value"],
+                    "actions": {
+                        "curate": [
+                            {
+                                "conclusion_id": conclusion_id,
+                                "reasoning": "installed probe review",
+                            }
+                        ]
+                    },
+                    "provenance": "installed probe reviewer",
+                },
+            )
             warm, warm_error = await _call(
                 session,
                 "ask",
@@ -161,6 +182,8 @@ async def _run(exe, repo, data_dir, repository_id):
                 "cold_error": cold_error,
                 "cold_kind": cold.get("$type"),
                 "created_error": created_error,
+                "curated_error": curated_error,
+                "curated_kind": curated.get("$type"),
                 "warm_error": warm_error,
                 "retrieved_error": retrieved_error,
                 "understanding_id": understanding_id,
