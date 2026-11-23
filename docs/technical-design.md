@@ -2071,3 +2071,198 @@ the governing Layer-0–3 behavior.
 Part C is complete only when the mechanisms above are implemented and the
 functional acceptance matrix passes without adding a product rule below Layer 3.
 
+## Part D — Beta 2 capture/curation mechanisms
+
+Part D realizes the Beta-2 capture/curation contract in F13, L17 and
+FD-95–FD-102. It does not change Functional Pyramid authority, the three-tool
+surface, or semantic authorship. Part C remains the mechanism authority for the
+Functional Pyramid except where Part D composes curation into ordinary semantic
+reuse.
+
+### Part-D derivation map
+
+| Functional authority | Primary technical mechanism | Verification owner |
+| --- | --- | --- |
+| FD-95, FD-101 | §24 curation projection + §25 ask composition | answer/status service + MCP integration |
+| FD-96, FD-98 | §25 understanding-writer transition rules | lifecycle service/store tests |
+| FD-97 | §24 immutable curation persistence + §25 record composition | lifecycle store/service CAS/replay tests |
+| FD-99 | §25 deterministic pending-curation query | store/query + MCP selector tests |
+| FD-100 | §25 composition boundary reusing Part-C governance support | support/Functional Pyramid isolation tests |
+| FD-102 | existing challenge/update owners + §25 curation exclusivity | lifecycle/challenge integration tests |
+| functional acceptance 45–64 | §24–§27 | unit/integration/transition/installed-MCP lanes |
+
+### 23. Canonical curation carriers and persistence
+
+**Authority:** G2; A10; F2, F3, F5, F7, F13; L4, L7, L17;
+FD-95–FD-102.
+
+Add the minimum canonical model vocabulary required by Layer 2:
+
+- `CurationState = CAPTURED | CURATED`;
+- one curation action input carrying an existing conclusion lineage identity and
+  non-empty reviewer reasoning;
+- `PendingCurationSelector{repository_id}`;
+- one pending-curation result/item family carrying exact existing semantic
+  coordinates needed to retrieve and review the owning revision.
+
+Do not add a mutable `curated` boolean to `SupportedConclusion` and do not
+copy semantic content into a second approval record.
+
+Persist one immutable curation disposition keyed by exact
+`ConclusionRevisionRef`. The persisted fact records the understanding version
+that accepted the disposition, reviewer reasoning, ordinary provenance,
+timestamp and an implementation-owned origin distinguishing an explicit review
+from curation inherited through semantic-preserving confirmation. Current
+`CurationState` is derived from the existence of that exact-revision
+disposition.
+
+Historical projection is version-aware: a snapshot at understanding version V
+considers a revision curated only if its disposition was accepted at or before V.
+This preserves the observable sequence capture → later curation without
+rewriting prior snapshots.
+
+### 24. Ask, record and re-alignment composition
+
+**Authority:** F2, F5–F7, F13; L2–L8, L11, L17; FD-23–FD-37,
+FD-95–FD-102.
+
+#### 24.1 `ask`
+
+Extend the existing canonical selector/result union with
+`PendingCurationSelector` and its generated result. Repository-local pending
+membership is the current understanding membership whose semantic revision has
+no curation disposition. Ordering and pagination reuse the existing deterministic
+bounds; no similarity, importance score or model ranking is permitted.
+
+The one AnswerService composes semantic support and curation state. A conclusion
+is Answer-eligible only when its existing support evaluator returns CURRENT and
+the exact revision is CURATED. Current CAPTURED revisions project only through
+pending status/references. If no eligible conclusion exists but current CAPTURED
+membership does, the existing Gap composer returns
+`reason=pending_curation`.
+
+Do not create a curation-specific answer composer.
+
+#### 24.2 understanding `record`
+
+Extend the existing understanding-update command/action owner with `curate`.
+The action resolves the supplied lineage against `expected_version`, derives
+the exact current revision, and writes its curation disposition inside the same
+understanding CAS/receipt transaction.
+
+A curation update:
+- changes no semantic conclusion content or support;
+- creates no conclusion revision;
+- advances the immutable understanding version;
+- cannot contain add/confirm/correct/replace/withdraw actions;
+- uses the existing repository-scoped request identity, replay and conflict
+  semantics.
+
+Semantic create/add/correct/replace commit without a curation disposition for
+their new revisions. Withdrawal remains non-reusable.
+
+Confirm keeps its existing semantic identity rule. If the predecessor revision
+is CURATED, the confirmation transaction creates the new revision's inherited
+curation disposition from that exact predecessor. If the predecessor is
+CAPTURED, no disposition is created. This is a mechanical carry-forward of an
+existing publication decision, not a new reviewer judgment.
+
+#### 24.3 reconsider and Functional Pyramid composition
+
+The existing effect engine continues to traverse retained revisions regardless
+of curation state. `reconsider` changes support state only and never mutates
+curation.
+
+Part-C Functional Pyramid route/authority derivation and evaluation are reused
+unchanged. Curation storage has no participation, graph, route, authority or
+health writer. A query may therefore observe any combination allowed by Layer 3,
+including CURATED + non-current governance and CAPTURED + current governance;
+only CURRENT + CURATED is ordinary Answer content.
+
+### 25. Repository schema 15 and explicit transition
+
+**Authority:** A1–A3; F2–F4, F13; L4, L17; FD-42–FD-48,
+FD-95–FD-102.
+
+Beta 2 is a persisted-contract change and therefore advances the repository
+lifecycle store:
+
+- Beta-1 repository schema: 14;
+- Beta-2 repository schema: **15**;
+- installation Functional Pyramid schema remains **1**.
+
+The explicit offline 14 → 15 transition preserves every existing semantic and
+audit row, conclusion revision, support dependency, challenge, verification run,
+receipt and FunctionalRouteSupport. It adds the curation persistence/indexes
+required by §23 and creates **zero** curation dispositions for pre-existing
+revisions.
+
+Consequently every migrated Beta-1 semantic revision begins CAPTURED under the
+Beta-2 reuse contract. Current revisions are discoverable through pending
+curation but are not ordinary Answer content until explicitly curated. Migration
+must not invent an independent review that never occurred.
+
+Runtime open remains exact-version only; no in-place implicit migration exists.
+Archive/stage/verify/activate/rollback ownership remains the existing transition
+path. Transition verification proves preserved counts/references, empty curation
+state after migration and unchanged installation schema-1 Functional Pyramid
+state.
+
+Beta-2 release identity is:
+
+- Python/PyPI/changelog: `1.0.0b2`;
+- Git tag: `v1.0.0b2`;
+- GitHub Release: `Span 1.0.0 Beta 2`;
+- MCP Registry server: `1.0.0-beta.2`;
+- MCP Registry PyPI package: `1.0.0b2`.
+
+### 26. Host guidance and generated public schema
+
+**Authority:** A4, A8–A10; F6–F8, F10, F13; L7–L8, L17;
+FD-49–FD-58, FD-95–FD-102.
+
+Generate the pending-curation selector/result and curation action from the
+canonical model/schema owner. The MCP adapter remains transport-only. Exactly
+three tools are advertised: `ask`, `record`, `reconsider`.
+
+Update working-agent guidance only after the wire is implemented:
+- investigate and record supported meaning while evidence is fresh;
+- semantic create/change is capture, not self-publication;
+- task completion may leave a pending curation item.
+
+Add reviewer/curator guidance using the same three operations:
+`ask(PendingCurationSelector)` → exact retrieval/investigation →
+challenge/correct/replace/withdraw when needed → `record(actions.curate)` for
+the stable revision.
+
+Span schedules no background model and imposes no model provider. A team may run
+the reviewer at task completion, PR review, before first cross-session reuse or
+asynchronously.
+
+### 27. Beta-2 verification
+
+Extend functional acceptance and installed-MCP coverage through cases 45–64.
+Verification must prove at least:
+
+- capture is retained but not Answer content;
+- `Gap/pending_curation` and pending selector behavior;
+- curation advances understanding history without a semantic revision;
+- CURRENT + CURATED reuse;
+- support still gates curated content;
+- correct/replace/add reset to CAPTURED;
+- confirm inheritance rules;
+- curation/semantic-mutation exclusivity;
+- Functional Pyramid state is unchanged by curation;
+- schema-14 → 15 preserves all prior data and fabricates zero curation;
+- migrated current Beta-1 knowledge is pending, not auto-published;
+- exactly three MCP tools remain;
+- a non-editable installed journey covers capture → curate → fresh-session reuse
+  → change → reconsider → confirm/reuse and semantic-change → re-curation.
+
+The existing architecture guards remain binding: one canonical carrier per
+boundary, no shell semantic writer, no duplicate support evaluator, no
+curation-specific Functional Pyramid path and no fallback that treats absence of
+curation data as approval.
+
+Part D is implementation-complete only when these mechanisms and the extended
+functional acceptance surface pass on the exact Beta-2 candidate.
