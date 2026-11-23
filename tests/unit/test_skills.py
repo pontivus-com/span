@@ -111,6 +111,17 @@ class RouterSkillTest(unittest.TestCase):
         ):
             self.assertIn(required, text, required)
 
+    def test_router_separates_capture_from_shared_reuse(self):
+        text = _text(ROUTER)
+        for required in (
+            "CAPTURED",
+            "CURATED",
+            "PendingCurationSelector",
+            "shared reuse",
+            "reviewer/curator",
+        ):
+            self.assertIn(required, text, required)
+
     def test_router_preserves_lifecycle_without_hook_delivery(self):
         text = _text(ROUTER).lower()
         self.assertIn("required lifecycle even", text)
@@ -142,6 +153,19 @@ class SpecializedSkillTest(unittest.TestCase):
         self.assertIn('kind="surface"', text)
         self.assertIn('kind="functional_pyramid"', text)
 
+    def test_curation_guidance_is_present_at_the_relevant_moments(self):
+        before = _text(BEFORE)
+        record = _text(RECORD)
+        after = _text(AFTER)
+        self.assertIn("Gap/pending_curation", before)
+        self.assertIn("PendingCurationSelector", before)
+        self.assertIn("PendingCurationSelector", record)
+        self.assertIn('"curate"', record)
+        self.assertIn("CAPTURED", record)
+        self.assertIn("CURATED", record)
+        self.assertIn("does not change curation", after)
+        self.assertIn("requires separate curation", after)
+
     def test_functional_pyramid_skill_covers_result_driven_lifecycle(self):
         text = _text(FUNCTIONAL_PYRAMID)
         for required in (
@@ -164,6 +188,8 @@ class SpecializedSkillTest(unittest.TestCase):
         self.assertIn("edit them outside Span and then use\n`reconsider`", text)
         self.assertIn("before candidate validation continues", text)
         self.assertIn("Do not call\n`reconsider` again", text)
+        self.assertIn("Semantic curation is independent", text)
+        self.assertIn("does not change participation", text)
 
 
 class SkillLifecycleConsistencyTest(unittest.TestCase):

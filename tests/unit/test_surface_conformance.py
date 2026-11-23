@@ -216,11 +216,22 @@ class SurfaceConformanceTest(unittest.TestCase):
         for marker in (
             "CREATE TEMPLATE",
             "UPDATE TEMPLATE",
+            "CURATION TEMPLATE",
             "FUNCTIONAL PYRAMID TEMPLATE",
             "SURFACE TEMPLATE",
             "VERIFICATION TEMPLATE",
         ):
             self.assertIn(marker, text)
+
+    def test_tool_guidance_separates_capture_curation_and_reuse(self):
+        ask = TOOL_SCHEMAS["ask"]["description"]
+        record = TOOL_SCHEMAS["record"]["description"]
+        self.assertIn("CURRENT + CURATED", ask)
+        self.assertIn("PendingCurationSelector", ask)
+        self.assertIn("CAPTURED", record)
+        self.assertIn("actions.curate", record)
+        self.assertIn("cannot share an update", record)
+        self.assertIn("Functional Pyramid authority", record)
 
     def test_public_metadata_matches_the_release_identity(self):
         from scripts.release_identity import derive

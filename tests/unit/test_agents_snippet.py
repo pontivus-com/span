@@ -1,7 +1,7 @@
 """AGENTS.md lifecycle-block governance tests (plan §3.5).
 
 The lifecycle block is orchestration guidance only. It may tell an
-agent when/how to invoke the eleven canonical operations but defines
+agent when/how to invoke the three canonical operations but defines
 no semantic rules. The single canonical source is
 docs/agents-snippet.md; the installer copies it verbatim between
 span markers and never parses it for decisions.
@@ -76,6 +76,17 @@ class AgentsSnippetTest(unittest.TestCase):
         self.assertIn("RecordedQuestionSelector", text)
         self.assertIn("exact surface-scoped lookup", text)
         self.assertNotIn("no_match", text)
+
+    def test_capture_and_curation_guidance_present(self):
+        text = _text(SNIPPET)
+        for required in (
+            "evidence-near capture",
+            "PendingCurationSelector",
+            "separate reviewer/curator",
+            "shared reusable knowledge",
+            "Curation does not create authority",
+        ):
+            self.assertIn(required, text, required)
 
     def test_docs_pointer_present(self):
         text = _text(SNIPPET)
