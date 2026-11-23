@@ -655,29 +655,22 @@ class LifecycleStoreTest(unittest.TestCase):
             conclusion_id=m.ConclusionId("c-1"),
             revision=m.ConclusionRevisionNumber(3),
         )
-        candidate = self.store.pending_curation_candidates("repo-1")
-        self.assertEqual(tuple(item.ref for item in candidate), (ref3,))
-        self.assertEqual(
-            self.store.pending_curation_candidates("repo-1", after=ref3),
-            (),
+        self.assertEqual(self.store.pending_curation_candidates("repo-1"), ())
+        inherited = self.store.find_curation(ref3)
+        self.assertIsNotNone(inherited)
+        assert inherited is not None
+        self.assertIs(
+            inherited.origin,
+            m.CurationOrigin.INHERITED_CONFIRMATION,
         )
-
-        inherited = m.CurationDisposition(
-            ref=ref3,
-            accepted_in_version=m.UnderstandingVersionNumber(3),
-            reasoning=explicit.reasoning,
-            provenance=explicit.provenance,
-            recorded_at=LATER,
-            origin=m.CurationOrigin.INHERITED_CONFIRMATION,
-            inherited_from=ref2,
-        )
-        with self.store._connection:
-            self.store._insert_curation_in(self.store._connection, inherited)
+        self.assertEqual(inherited.inherited_from, ref2)
+        self.assertEqual(inherited.reasoning, explicit.reasoning)
+        self.assertEqual(inherited.provenance, explicit.provenance)
+        self.assertEqual(inherited.accepted_in_version.value, 3)
         self.assertEqual(
             self.store.get_curations("u-1"),
             (explicit, inherited),
         )
-        self.assertEqual(self.store.pending_curation_candidates("repo-1"), ())
 
     def test_verification_run(self) -> None:
         self.store.put_context(_context())
