@@ -656,9 +656,7 @@ class LifecycleService:
         """Resolve exact curation targets and require CURRENT support (FD-97)."""
         if not command.curate:
             return ()
-        current = {
-            ref.conclusion_id: ref for ref in expected_snapshot.conclusions
-        }
+        current = {ref.conclusion_id: ref for ref in expected_snapshot.conclusions}
         targets: list[m.ConclusionRevisionRef] = []
         for action in command.curate:
             ref = current.get(action.conclusion_id)
@@ -682,9 +680,7 @@ class LifecycleService:
                 )
             evaluation = self._support.evaluate_revision(ref)
             if evaluation.state is not m.SupportState.CURRENT:
-                reason = (
-                    f": {evaluation.reason}" if evaluation.reason else ""
-                )
+                reason = f": {evaluation.reason}" if evaluation.reason else ""
                 raise RecordingValidationError(
                     "curation target support is not current: "
                     f"{action.conclusion_id.value}@{ref.revision.value}: "
