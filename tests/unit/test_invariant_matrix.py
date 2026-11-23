@@ -102,8 +102,8 @@ class InvariantMatrixTest(unittest.TestCase):
     def test_matrix_lists_every_invariant_once_in_order(self):
         self.assertEqual(
             [row[0] for row in self.rows],
-            [f"I-{number:02d}" for number in range(1, 47)],
-            "the matrix must carry I-01..I-46 in order, one row each",
+            [f"I-{number:02d}" for number in range(1, 48)],
+            "the matrix must carry I-01..I-47 in order, one row each",
         )
 
     def test_every_test_row_names_a_live_boundary_test(self):

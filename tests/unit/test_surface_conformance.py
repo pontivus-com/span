@@ -233,6 +233,32 @@ class SurfaceConformanceTest(unittest.TestCase):
         self.assertIn("cannot share an update", record)
         self.assertIn("Functional Pyramid authority", record)
 
+    def test_curation_rejects_compatibility_action_aliases(self):
+        base = {
+            "repository_id": "r",
+            "request_id": "review-1",
+            "kind": "understanding",
+            "understanding_id": "u-1",
+            "expected_version": 1,
+            "provenance": "reviewer",
+        }
+        for alias in ("publish", "approve"):
+            with self.subTest(alias=alias), self.assertRaises(ValueError):
+                decode_request(
+                    "record",
+                    {
+                        **base,
+                        "actions": {
+                            alias: [
+                                {
+                                    "conclusion_id": "c-1",
+                                    "reasoning": "reviewed",
+                                }
+                            ]
+                        },
+                    },
+                )
+
     def test_public_metadata_matches_the_release_identity(self):
         from scripts.release_identity import derive
         from span import __version__

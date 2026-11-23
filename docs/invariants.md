@@ -71,6 +71,7 @@ document does not add a second Functional Pyramid contract.
 | I-44 | Shell does not decide curation semantics | Test | `test_shell_has_no_curation_semantic_decision` |
 | I-45 | Missing curation never means approval | Test | `test_missing_curation_never_defaults_to_approval` |
 | I-46 | No parallel curate operation or rejected-curation state | Test | `test_no_parallel_curate_operation_or_rejected_state` |
+| I-47 | No curation compatibility grammar | Test | `test_curation_rejects_compatibility_action_aliases` |
 
 Downstream-compensation check (no silent repairs, no salvage, no
 fallback parsing): validation rejects whole units; strict decode has
