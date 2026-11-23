@@ -1069,6 +1069,16 @@ class LifecycleStore:
                     understanding.current_version.value,
                 )
                 conclusions = self._get_conclusions_in(connection, selected.value)
+                try:
+                    existing_curations = _curation.get_curations(
+                        connection,
+                        selected.value,
+                        as_of_version=version.version,
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise LifecycleStoreDataError(
+                        f"curation disposition is not canonical: {exc}"
+                    ) from None
                 transition = apply_update(
                     understanding,
                     version,
@@ -1079,8 +1089,11 @@ class LifecycleStore:
                     existing_challenges=self._get_challenges_in(
                         connection, selected.value
                     ),
+                    existing_curations=existing_curations,
                 )
             self._write_transition(connection, transition)
+            for disposition in transition.curations:
+                self._insert_curation_in(connection, disposition)
             self._write_challenge_effects(connection, transition.challenge_effects)
             dependents: tuple[m.ConclusionRevisionRef, ...] = ()
             if not isinstance(command, m.CreateUnderstandingCommand):
