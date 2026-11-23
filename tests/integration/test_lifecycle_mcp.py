@@ -675,9 +675,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
     async def test_multi_file_verification_run_is_visible_on_each_file(self) -> None:
         async def journey(session: ClientSession) -> dict:
             app_created = await self._record_create(session, "sub-multi-app")
-            await self._curate_recorded(
-                session, app_created, "sub-multi-app-curate"
-            )
+            await self._curate_recorded(session, app_created, "sub-multi-app-curate")
             _write(self.repo, "src/other.py", "other\n")
             other = await self._call(
                 session,
