@@ -119,6 +119,7 @@ class AnswerServiceTest(unittest.TestCase):
         *,
         conclusions: int = 1,
         curate: bool = True,
+        observation_id: str = "obs-a",
     ) -> None:
         self.store.record_understanding(
             m.CreateUnderstandingCommand(
@@ -144,7 +145,7 @@ class AnswerServiceTest(unittest.TestCase):
                         scope=m.EvidenceScope(paths=(locator,)),
                         support=(
                             m.SourceSupport(
-                                observation_id=m.SourceObservationId("obs-a")
+                                observation_id=m.SourceObservationId(observation_id)
                             ),
                         ),
                         basis=_basis(),
