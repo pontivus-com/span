@@ -170,7 +170,7 @@ def _parse_args(argv: list[str] | None = None) -> _argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         required=True,
-        help="Directory for schema-11 lifecycle stores.",
+        help="Directory for provisioned repository lifecycle stores and installation state.",
     )
     parser.add_argument(
         "--response-budget-bytes",
