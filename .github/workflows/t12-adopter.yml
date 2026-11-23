@@ -1,0 +1,322 @@
+name: Beta 2 T12 first-adopter acceptance
+
+on:
+  push:
+    branches:
+      - positioning/knowledge-factory-2026-11-23
+    paths:
+      - .github/workflows/t12-adopter.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  t12:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out Span candidate
+        uses: actions/checkout@v7
+
+      - name: Check out pinned Legal adopter
+        uses: actions/checkout@v7
+        with:
+          repository: pontivus-com/legal
+          ref: d4e4e45189041de3e960e1d2d0904c7c5f63adfb
+          path: adopter/pontivus_legal
+
+      - name: Check out pinned Platform configuration
+        uses: actions/checkout@v7
+        with:
+          repository: rpstreef/pontivus-awb
+          ref: b2ce327e19e08c8c2f441b958bde283a53cc83df
+          path: adopter/awb
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install candidate launcher
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Cold install from committed adopter inputs
+        env:
+          DATA_DIR: ${{ runner.temp }}/span-t12-data
+          VENV_DIR: ${{ runner.temp }}/span-t12-venv
+          BIN_DIR: ${{ runner.temp }}/span-t12-bin
+        run: |
+          set -euo pipefail
+          test ! -e "$DATA_DIR"
+          span-install \
+            --repo "$GITHUB_WORKSPACE/adopter/pontivus_legal" \
+            --authority-seeds-file pontivus_legal "$GITHUB_WORKSPACE/adopter/awb/.span-seeds.pontivus-legal.json" \
+            --authority-bindings-file pontivus_legal "$GITHUB_WORKSPACE/adopter/awb/.span-bindings.pontivus-legal.json" \
+            --data-dir "$DATA_DIR" \
+            --venv-dir "$VENV_DIR" \
+            --bin-dir "$BIN_DIR" \
+            --span-repo "$GITHUB_WORKSPACE" \
+            --no-codex \
+            --no-claude \
+            --no-hooks \
+            --no-skills
+          test -f "$DATA_DIR/pontivus_legal.db"
+          test -x "$VENV_DIR/bin/span-mcp"
+
+      - name: Validate Functional Pyramid and capture-curation reuse
+        env:
+          DATA_DIR: ${{ runner.temp }}/span-t12-data
+          RUNTIME_EXE: ${{ runner.temp }}/span-t12-venv/bin/span-mcp
+          LEGAL_ROOT: ${{ github.workspace }}/adopter/pontivus_legal
+        run: |
+          cat > "$RUNNER_TEMP/t12_probe.py" <<'PY'
+          import asyncio
+          import json
+          import os
+
+          from mcp import ClientSession
+          from mcp.client.stdio import StdioServerParameters, stdio_client
+
+
+          def text_of(result):
+              return "".join(
+                  block.text
+                  for block in result.content
+                  if getattr(block, "type", "") == "text"
+              )
+
+
+          async def call(session, name, arguments):
+              result = await session.call_tool(name, arguments)
+              payload = json.loads(text_of(result))
+              if result.is_error:
+                  raise AssertionError(f"{name} failed: {payload}")
+              return payload
+
+
+          def value(item):
+              return item.get("value") if isinstance(item, dict) and "value" in item else item
+
+
+          def dicts(item):
+              if isinstance(item, dict):
+                  yield item
+                  for child in item.values():
+                      yield from dicts(child)
+              elif isinstance(item, list):
+                  for child in item:
+                      yield from dicts(child)
+
+
+          async def main():
+              repo_id = "pontivus_legal"
+              surface = "workflows/clause_workbench/docs/agentic-contracts/plan_steps/kickoff.md"
+              members = [
+                  {
+                      "repository_id": repo_id,
+                      "declaration_sources": [
+                          {
+                              "locator": ".span/functional-pyramid-declarations.json",
+                              "ranges": [],
+                          }
+                      ],
+                      "functional_scope": {
+                          "selectors": [{"kind": "PREFIX", "path": "workflows"}]
+                      },
+                      "coverage": "PARTIAL",
+                  }
+              ]
+              params = StdioServerParameters(
+                  command=os.environ["RUNTIME_EXE"],
+                  args=[
+                      "--data-dir",
+                      os.environ["DATA_DIR"],
+                      "--repo",
+                      os.environ["LEGAL_ROOT"],
+                  ],
+                  env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+              )
+
+              async with stdio_client(params) as (read, write):
+                  async with ClientSession(read, write) as session:
+                      await session.initialize()
+
+                      status = await call(
+                          session,
+                          "ask",
+                          {
+                              "selector": {
+                                  "$type": "FunctionalPyramidSelector",
+                                  "repository_id": repo_id,
+                              }
+                          },
+                      )
+                      assert status.get("state") == "UNCONFIGURED", status
+
+                      candidate = await call(
+                          session,
+                          "ask",
+                          {
+                              "selector": {
+                                  "$type": "FunctionalPyramidCandidateSelector",
+                                  "action": "activate",
+                                  "members": members,
+                              }
+                          },
+                      )
+                      assert candidate.get("activation_ready") is True, candidate
+                      assert not candidate.get("validation_findings"), candidate
+                      assert not candidate.get("graph_findings"), candidate
+
+                      activated = await call(
+                          session,
+                          "record",
+                          {
+                              "request_id": "t12-adopter-activate",
+                              "kind": "functional_pyramid",
+                              "action": "activate",
+                              "members": members,
+                          },
+                      )
+                      assert activated.get("$type") == "FunctionalPyramidRecorded", activated
+
+                      projected = await call(
+                          session,
+                          "ask",
+                          {"repository_id": repo_id, "reference": surface},
+                      )
+                      fp = projected.get("functional_pyramid", {})
+                      assert fp.get("status") == "RESOLVED", projected
+                      authority_ids = {
+                          value(node.get("evidence_ref", {}).get("evidence_id"))
+                          for node in dicts(fp)
+                          if isinstance(node.get("evidence_ref"), dict)
+                      }
+                      assert "ev-hardcoding-catalog" in authority_ids, authority_ids
+                      assert "ev-failfast-adr" in authority_ids, authority_ids
+
+                      created = await call(
+                          session,
+                          "record",
+                          {
+                              "repository_id": repo_id,
+                              "request_id": "t12-adopter-capture",
+                              "kind": "understanding",
+                              "question": "What governs deterministic semantic handling on the kickoff surface?",
+                              "scope_paths": [surface],
+                              "conclusion": (
+                                  "Deterministic layers on this workflow surface "
+                                  "must not perform semantic inference."
+                              ),
+                              "locator": surface,
+                              "assertion_nature": "NORMATIVE",
+                              "provenance": "Beta 2 T12 first-adopter acceptance",
+                          },
+                      )
+                      assert created.get("qualification", {}).get("state") == "CURRENT", created
+                      understanding_id = value(created.get("understanding_id"))
+                      version = value(created.get("version"))
+                      affected = created.get("affected_revisions", [])
+                      assert affected, created
+                      conclusion_id = value(affected[0].get("conclusion_id"))
+
+                      captured = await call(
+                          session,
+                          "ask",
+                          {
+                              "selector": {
+                                  "$type": "CurrentUnderstandingSelector",
+                                  "repository_id": repo_id,
+                                  "understanding_id": understanding_id,
+                              }
+                          },
+                      )
+                      assert captured.get("$type") == "Gap", captured
+                      assert captured.get("reason") == "PENDING_CURATION", captured
+
+                      pending = await call(
+                          session,
+                          "ask",
+                          {
+                              "selector": {
+                                  "$type": "PendingCurationSelector",
+                                  "repository_id": repo_id,
+                              }
+                          },
+                      )
+                      assert any(
+                          value(item.get("ref", {}).get("understanding_id"))
+                          == understanding_id
+                          and value(item.get("ref", {}).get("conclusion_id"))
+                          == conclusion_id
+                          for item in pending.get("items", [])
+                      ), pending
+
+                      curated = await call(
+                          session,
+                          "record",
+                          {
+                              "repository_id": repo_id,
+                              "request_id": "t12-adopter-curate",
+                              "kind": "understanding",
+                              "understanding_id": understanding_id,
+                              "expected_version": version,
+                              "actions": {
+                                  "curate": [
+                                      {
+                                          "conclusion_id": conclusion_id,
+                                          "reasoning": (
+                                              "Reviewed exact revision against the "
+                                              "accepted Legal workflow authority chain."
+                                          ),
+                                      }
+                                  ]
+                              },
+                              "provenance": "Beta 2 T12 first-adopter reviewer",
+                          },
+                      )
+                      assert curated.get("qualification", {}).get("state") == "CURRENT", curated
+
+              async with stdio_client(params) as (read, write):
+                  async with ClientSession(read, write) as fresh:
+                      await fresh.initialize()
+                      reused = await call(
+                          fresh,
+                          "ask",
+                          {
+                              "selector": {
+                                  "$type": "CurrentUnderstandingSelector",
+                                  "repository_id": repo_id,
+                                  "understanding_id": understanding_id,
+                              }
+                          },
+                      )
+                      assert reused.get("$type") == "Answer", reused
+                      assert reused.get("functional_pyramid", {}).get("status") == "RESOLVED", reused
+
+              print(
+                  json.dumps(
+                      {
+                          "candidate_ready": True,
+                          "projection_status": "RESOLVED",
+                          "authority_ids": sorted(authority_ids),
+                          "capture_state": "CURRENT+CAPTURED",
+                          "pending_curation": True,
+                          "fresh_reuse": "CURRENT+CURATED",
+                      },
+                      sort_keys=True,
+                  )
+              )
+
+
+          asyncio.run(main())
+          PY
+          "$VENV_DIR/bin/python" "$RUNNER_TEMP/t12_probe.py"
