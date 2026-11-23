@@ -719,8 +719,7 @@ class AnswerService:
                 selector.repository_id,
                 after=selector.after,
             )
-            if self._support.evaluate_revision(item.ref).state
-            is m.SupportState.CURRENT
+            if self._support.evaluate_revision(item.ref).state is m.SupportState.CURRENT
         )
         if not eligible:
             return m.PendingCuration(repository_id=selector.repository_id, items=())
