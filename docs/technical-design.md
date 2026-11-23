@@ -2083,12 +2083,12 @@ reuse.
 
 | Functional authority | Primary technical mechanism | Verification owner |
 | --- | --- | --- |
-| FD-95, FD-101 | §24 curation projection + §25 ask composition | answer/status service + MCP integration |
-| FD-96, FD-98 | §25 understanding-writer transition rules | lifecycle service/store tests |
-| FD-97 | §24 immutable curation persistence + §25 record composition | lifecycle store/service CAS/replay tests |
-| FD-99 | §25 deterministic pending-curation query | store/query + MCP selector tests |
-| FD-100 | §25 composition boundary reusing Part-C governance support | support/Functional Pyramid isolation tests |
-| FD-102 | existing challenge/update owners + §25 curation exclusivity | lifecycle/challenge integration tests |
+| FD-95, FD-101 | §24 ask/status composition | answer/status service + MCP integration |
+| FD-96, FD-98 | §24.2 understanding-writer transition rules | lifecycle service/store tests |
+| FD-97 | §23 immutable curation persistence + §24.2 record composition | lifecycle store/service CAS/replay tests |
+| FD-99 | §24.1 deterministic pending-curation query | store/query + MCP selector tests |
+| FD-100 | §24.3 composition boundary reusing Part-C governance support | support/Functional Pyramid isolation tests |
+| FD-102 | existing challenge/update owners + §24.2 curation exclusivity | lifecycle/challenge integration tests |
 | functional acceptance 45–64 | §24–§27 | unit/integration/transition/installed-MCP lanes |
 
 ### 23. Canonical curation carriers and persistence
