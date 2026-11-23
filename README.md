@@ -57,9 +57,8 @@ Span therefore keeps two kinds of software knowledge distinct:
   owners.
 
 Span does not confuse evidence with authority, and it does not silently serve
-noncurrent understanding as current. The result is a software knowledge-factory
-loop in which real engineering work can leave the next agent better informed
-than the last.
+noncurrent understanding as current. The result is a software knowledge factory: a loop in which real engineering
+work can leave the next agent better informed than the last.
 
 ## What Span changes
 
