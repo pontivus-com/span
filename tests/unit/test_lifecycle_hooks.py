@@ -392,6 +392,36 @@ class LifecycleHooksTest(unittest.TestCase):
             result["hookSpecificOutput"]["additionalContext"],
         )
 
+    def test_codex_post_tool_keeps_reconsider_obligation_when_preview_is_clean(self):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {
+                "command": (
+                    "*** Begin Patch\n"
+                    "*** Update File: src/a.py\n"
+                    "*** End Patch\n"
+                )
+            },
+        }
+        observed = []
+
+        def project(_data_dir, paths):
+            observed.append(tuple(paths))
+            return ()
+
+        with (
+            mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
+            mock.patch.object(hooks, "_source_change_notices", side_effect=project),
+        ):
+            output = _capture(hooks.cmd_codex_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertEqual(observed, [("/repo/src/a.py",)])
+        context = result["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("call reconsider with the complete changed scope", context)
+        self.assertIn("1 changed file(s)", context)
+
     def test_codex_post_tool_reports_incomplete_native_scope_without_guessing(self):
         payload = {
             "hook_event_name": "PostToolUse",

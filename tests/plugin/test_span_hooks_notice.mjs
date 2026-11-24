@@ -251,6 +251,94 @@ test("undelivered session obligations are never evicted by another session", asy
   }
 });
 
+test("clean preview still hands off the required reconsider obligation", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-clean-preview-"));
+  const bin = path.join(root, "fake-span-hooks");
+  fs.writeFileSync(bin, `#!/bin/sh
+case "$*" in
+  *source-changed*) exit 0 ;;
+esac
+`, { mode: 0o755 });
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  const { ctx, registered } = fakeContext(root);
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "edit",
+      input: { path: path.join(root, "src/a.js") },
+    });
+
+    const first = { sessionID: "session-1", system: [] };
+    registered["session:context"](first);
+    assert.equal(first.system.length, 1);
+    assert.match(
+      first.system[0].text,
+      /call reconsider with the complete changed scope/,
+    );
+
+    const second = { sessionID: "session-1", system: [] };
+    registered["session:context"](second);
+    assert.equal(second.system.length, 0);
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("clean completion preview still preserves the outstanding handoff", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-clean-idle-"));
+  const bin = path.join(root, "fake-span-hooks");
+  fs.writeFileSync(bin, `#!/bin/sh
+case "$*" in
+  *source-changed*) exit 1 ;;
+  *session-stop*) cat >/dev/null; exit 0 ;;
+esac
+`, { mode: 0o755 });
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  let release;
+  const ready = new Promise((resolve) => { release = resolve; });
+  let delivered;
+  const done = new Promise((resolve) => { delivered = resolve; });
+  const { ctx, registered } = fakeContext(root);
+  ctx.event.subscribe = async function* () {
+    await ready;
+    yield { type: "session.idle", data: { sessionID: "session-1" } };
+    delivered();
+  };
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "edit",
+      input: { path: path.join(root, "src/a.js") },
+    });
+    release();
+    await done;
+
+    const event = { sessionID: "session-1", system: [] };
+    registered["session:context"](event);
+    assert.equal(event.system.length, 1);
+    assert.match(
+      event.system[0].text,
+      /changed path\(s\) awaiting handoff/,
+    );
+    assert.match(
+      event.system[0].text,
+      /call reconsider with the complete changed scope/,
+    );
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("adjacent legacy edit payload shapes are not guessed into changed scope", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-native-shape-"));
   const previous = process.env.SPAN_HOOKS_BIN;

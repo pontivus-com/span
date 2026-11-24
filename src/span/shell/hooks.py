@@ -480,7 +480,12 @@ def _codex_post_tool_notice(data_dir, repo_root, payload) -> str | None:
         for path in parsed
     )
     notices = _source_change_notices(data_dir, absolute)
-    return " ".join(notices) if notices else None
+    reminder = (
+        f"span: Codex observed apply_patch across {len(parsed)} changed file(s); "
+        "call reconsider with the complete changed scope from this apply_patch "
+        "before completing work."
+    )
+    return " ".join((*notices, reminder))
 
 
 def cmd_codex_post_tool(data_dir, repo_root=None):

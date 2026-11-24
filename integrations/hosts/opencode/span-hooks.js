@@ -161,12 +161,14 @@ function handleSessionEvent(event, pending, checked, locationRoot) {
       "session-stop",
     ], JSON.stringify(waiting.paths.map((file_path) => ({ file_path }))));
     if (!result.ok) return;
-    if (result.text) {
-      rememberChangeNotice(pending, key, result.text);
-    } else {
-      waiting.paths = [];
-      removeEmptyPending(pending, key, waiting);
-    }
+    const reminder =
+      `span: OpenCode has ${waiting.paths.length} changed path(s) awaiting handoff; ` +
+      "call reconsider with the complete changed scope before completing work.";
+    rememberChangeNotice(
+      pending,
+      key,
+      result.text ? result.text + " " + reminder : reminder,
+    );
   } else if (event.type === "session.deleted") {
     pending.delete(sessionKeyFromNativeEvent(event));
     checked.delete(sessionKeyFromNativeEvent(event));
@@ -245,15 +247,15 @@ export default {
           const completePaths = rememberChangedPaths(pending, key, absolutePaths);
           const result = run(resolveBin(), ["source-changed", ...completePaths]);
           if (!result.ok) return;
-          if (result.text) {
-            rememberChangeNotice(pending, key, result.text);
-          } else {
-            const state = pending.get(key);
-            if (state) {
-              state.paths = [];
-              removeEmptyPending(pending, key, state);
-            }
-          }
+          const reminder =
+            `span: OpenCode observed ${completePaths.length} changed path(s); ` +
+            `call reconsider with the complete changed scope from this ${event.tool} ` +
+            "before completing work.";
+          rememberChangeNotice(
+            pending,
+            key,
+            result.text ? result.text + " " + reminder : reminder,
+          );
         } catch {
           // Never break the session on hook failure.
         }
