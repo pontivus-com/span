@@ -1,52 +1,123 @@
 # Structural evidence and demand-driven understanding
 
-Structural indexing and semantic investigation have separate owners. The
-managed structural provider supplies symbols and edges. The coding agent
-investigates meaning and records supported conclusions when established.
+Span uses structural indexing to help agents **navigate software**, not to decide
+what the software means.
 
-## Structural setup
+That distinction matters for contributors because structural evidence and
+semantic understanding have different owners:
 
-The installer provisions the pinned indexer. Installer provisioning may invoke the provider's bounded currency operation when its cache is missing,
-stale, or the target is dirty. Provider artifacts stay in Span's external data
-directory. Setup creates no semantic understanding.
+- the structural provider can report symbols, files, locations, and
+  relationships; and
+- the coding agent investigates meaning and records supported conclusions.
 
-MCP startup registers identity without opening a store or building an index.
-Ordinary question/retrieval, evidence admission, recording, navigation, and
-hook paths do not rebuild structural state. `span-install --verify-only`
-observes readiness without provisioning. There is no refresh operation in
-the current public API.
+## What structural evidence is for
 
-## Governance declarations are not structural inference
+Structural evidence helps answer navigation questions such as:
 
-Functional Pyramid declarations are exact configured declaration sources owned
-by participating repositories. They are decoded and validated as declared
-governance; structural indexes, filename similarity and semantic search do not
-invent Functional Contexts, Functional Rules, owners or applicability.
+- where is this symbol defined?
+- which files import or reference it?
+- which components are structurally connected?
+- what symbols exist in this file?
+- what part of the repository should the agent inspect next?
 
-The same separation applies in reverse: an ACTIVE Functional Pyramid does not
-make the structural provider an authority source. Structural evidence remains
-navigation evidence; declared governance remains a separate typed graph.
+Those observations can make an investigation faster and more focused.
 
-## Investigations follow real work
+They do not by themselves establish:
 
-A scoped question first examines a bounded page of saved understanding. It
-returns current answers or inspectable evidence and an explicit gap.
-The agent can search more source, use its own navigation, and admit a
-cross-file evidence batch. Follow [the required lifecycle](lifecycle-contract.md#required-agent-completion)
-within the task's investigation scope.
+- ownership;
+- product intent;
+- policy;
+- governing authority;
+- a semantic subsystem boundary; or
+- completeness of an explanation.
 
-Exact source admission remains possible when structural parsing is unsupported.
-A current structural graph proves observed structure, not ownership, product
-intent, authority, or the semantic completeness of an explanation.
+A current structural graph is therefore useful evidence for investigation, not a
+semantic answer.
 
-## Membership and content
+## When the structural index is built
 
-Source observations retain content digests. Discovery observations retain an
-exact scope's membership fingerprint for conclusions depending on absence or
-completeness. Changed source content and changed membership are distinct
-support events. A truncated inventory never stands in for the whole boundary.
+The installer provisions the pinned structural provider.
 
-Provider caches hold the current artifact per repository. Their removal is
-an explicit installer/purge responsibility; semantic history and receipts
-have their own retention rules. See [install](install.md), [queries](queries.md),
-and [freshness](freshness.md).
+Explicit installation/setup may run its bounded currency operation when the
+provider cache is missing, stale, or the target working tree is dirty.
+
+Provider artifacts stay in Span's external data directory.
+
+Ordinary runtime operations do not rebuild the index:
+
+- MCP startup registers repository identity without building structure;
+- `ask` does not rebuild it;
+- `record` does not rebuild it;
+- `reconsider` does not rebuild it;
+- hooks do not rebuild it; and
+- `span-install --verify-only` observes readiness without provisioning.
+
+There is no separate public refresh operation.
+
+See [Install and connect](install.md) for the current setup path.
+
+## Semantic understanding follows real work
+
+Span does not precompute semantic explanations for every structural node.
+
+A normal task starts from the software surface the agent is actually working on.
+Span returns maintained knowledge when available or an explicit gap when the
+knowledge still needs to be established.
+
+The agent can then use structural navigation, ordinary source search, exact
+source evidence, tests, and project guidance as the task requires.
+
+When that work establishes useful understanding, it is captured through the
+normal lifecycle.
+
+This demand-driven model avoids turning a structural index into an automatically
+generated documentation corpus.
+
+## Governance is not structural inference
+
+The Functional Pyramid is based on explicit project-owned declarations.
+
+Structural layout, filename similarity, search relevance, or graph adjacency do
+not create Functional Contexts, Functional Rules, authority owners, or
+applicability.
+
+The reverse is also true: a repository participating in the Functional Pyramid
+does not make its structural provider an authority source.
+
+Structural evidence answers **where and how things are connected**.
+Declared governance answers **what guidance applies**.
+
+Those roles remain separate.
+
+## Content change and membership change are different
+
+Some conclusions depend on exact source content. Others depend on which members
+exist inside a declared discovery boundary.
+
+Span tracks those as different support relationships:
+
+- **content change** asks whether recorded source content changed; and
+- **membership change** asks whether the members of an observed boundary
+  changed.
+
+A truncated inventory cannot establish complete membership and is not promoted
+into one.
+
+This distinction lets change affect the conclusions that actually declared the
+relevant dependency instead of making every retained conclusion stale.
+
+See [Support currency and reassessment](freshness.md).
+
+## Contributor boundaries
+
+The typed structural capability is documented in [Port contracts](ports.md).
+Exact public evidence admission/retrieval belongs to the
+[MCP reference](mcp.md).
+
+Provider caches have their own installation/purge lifecycle. Retained semantic
+history and receipts have separate persistence and retention rules.
+
+When changing structural integration, preserve the architectural rule:
+
+> **structure may support investigation; it does not author semantic or
+> governing meaning.**
