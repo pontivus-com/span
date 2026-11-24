@@ -1,181 +1,191 @@
 # Using Span
 
-Start with the exact file, symbol, service, or domain you are working on. Span
-returns shared knowledge for that surface only when the exact semantic revision
-has been curated and its support is current. It also returns, for participating
-repositories, the project guidance that applies from first principles down to
-functional and technical design. Pending captured knowledge remains explicit
-rather than being served as ordinary working context.
+Use Span as part of the engineering work you were already going to do.
 
-The coding agent still owns reasoning, edits, test execution and evidence-near
-semantic capture. A separate reviewer/curator role decides which stable captured
-revisions become shared reusable knowledge. Span keeps conclusions tied to their
-evidence, records curation history, resolves applicable canonical guidance,
-preserves history, and shows when support or governance needs another look.
+The day-to-day loop is:
+
+1. **ask before you derive understanding**;
+2. **investigate with your normal tools**;
+3. **capture useful conclusions while the evidence is fresh**;
+4. **review stable captures before sharing them broadly**; and
+5. **reconsider maintained knowledge after relevant change**.
 
 **Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
-Span does not schedule or run the reviewer. Review may be performed by another
-agent session, a dedicated curator workflow, or a human; semantic correctness
-remains a reviewer judgment rather than a server-generated score.
+This guide explains that workflow. The [MCP reference](mcp.md) owns exact
+request/result grammar, selectors, fields, and error shapes.
 
-## Check Functional Pyramid participation
+## Start a task with what is already known
 
-The Functional Pyramid supplies the guiding-document half of Span's working
-context. After installation, a repository is registered but does not
-automatically participate. Use the Functional Pyramid status selector through
-`ask`. UNCONFIGURED and EXCLUDED repositories can still use the ordinary
-descriptive capture/curation lifecycle. For an ACTIVE repository, the same
-ordinary `ask` also returns the applicable guidance path for the exact software
-scope.
+Choose the exact file, symbol, service, or domain you are about to understand or
+change.
 
-Adoption/revision stays inside `ask` and `record`: inspect status, validate the
-candidate, repair declaration/governance findings through ordinary
-`reconsider` when needed, validate again, record ACTIVATE or REVISE, verify the
-exact committed status, then re-establish any actionable dependent effects
-returned by the write. Do not call a redundant `reconsider` for the
-participation write itself.
+Before deriving its behavior from source, ask Span about that surface.
 
-## Ask a surface
+If reusable knowledge already exists, Span gives the agent a maintained starting
+point. If it does not, Span returns an explicit gap rather than inventing an
+answer. Either result tells you where the task actually starts.
 
-After [setup](install.md), use the registered `repository_id` — never a
-filesystem path. The normal reuse call is surface-first and carries no question
-or request identity:
+For repositories that participate in Span's project-governance model, the same
+task-time result can also include the project guidance that applies to the
+selected software surface.
 
-```json
-{"repository_id": "repo-1", "surface": {"kind": "FILE", "locator": "src/service.py"}}
-```
+You do not need a previous conversation or saved internal understanding ID to
+start from the surface again in a later session.
 
-Use `reference` only when the path or declared name resolves unambiguously. A
-pure obtain returns the current shared surface document view from
-CURRENT + CURATED conclusions, with pending/stale status grouped by recorded
-question, or an honest `Gap` with historical content where applicable and
-concrete source pointers. It creates no investigation context and delivers no
-source body automatically.
+Exact `ask` forms, evidence admission, selectors, and continuations are in
+[MCP reference — ask](mcp.md#ask).
 
-When the exact recorded question is already known, use
-`RecordedQuestionSelector`. It matches exact text on the exact surface and is
-not semantic search; a non-match is `Gap/unassessed`. When source bytes are
-needed, make an explicit evidence-admission `ask` with the same surface or
-reference, a new `request_id`, and non-empty `evidence`. That call returns the
-same Answer/Gap classification plus admission outcomes, exact deliveries, a
-bound context reference, and a continuation when selected evidence is deferred.
+## Investigate with the tools you already use
 
-Currentness is checked against present support, and shared reuse additionally
-requires curation of the exact semantic revision. A saved conclusion is never
-served as shared current knowledge on the strength of its wording alone.
+Span does not replace source search, code reading, debugging, tests, or
+engineering judgment.
 
-## Curate captured knowledge
+When the current task needs new understanding, investigate normally:
 
-Curation is a separate semantic-review act over an already retained revision.
-Use the pending-curation selector to find current captured revisions, retrieve
-and review the exact owning understanding, and investigate broader retained
-knowledge or governing sources as needed. If the meaning is wrong, incomplete,
-duplicated or wrongly scoped, use the existing challenge/correct/replace/withdraw
-lifecycle first. Curate only the resulting stable revision through the existing
-understanding `record` update.
+- read the implementation and its consumers;
+- inspect relevant tests and configuration;
+- run the checks needed for the task; and
+- read governing project sources when they matter.
 
-Curation does not change evidence support or Functional Pyramid authority, and
-it does not certify semantic truth. It only makes that exact revision eligible
-for shared reuse while its support remains current.
+The purpose of Span is not to create a second documentation task around that
+work. It is to keep useful understanding that the work establishes.
 
-## Investigate and record
+When you need source content selected through Span itself, follow the evidence
+path returned by `ask`. Exact evidence-admission mechanics belong to the
+[MCP reference](mcp.md#ask).
 
-1. Inspect the returned evidence and the material gaps. Use normal source search
-   or host navigation. After code changes, call `reconsider` with the changed
-   paths to see every affected surface, why it was considered, and which
-   conclusions actually lost support.
-2. Record a coherent result with `record(kind="understanding")`. A create is
-   one conclusion with dependency evidence from `locator`, the
-   `observation_id` returned by explicit evidence admission, or non-empty
-   `support`. A locator may accompany support solely as carried semantic scope;
-   support remains the complete dependency set and observation remains
-   exclusive. Scope is supplied or derived independently through `scope_paths`,
-   the context, or a surface. Cite what you already hold.
-   Distinguish observed behavior from governing intent, and include unresolved
-   questions with their basis as gaps. In an ACTIVE repository, a NORMATIVE
-   conclusion receives its Functional Pyramid route and applicable canonical
-   authority dependencies from Span; the caller does not enumerate or omit that
-   governance support. Use `actions.add`, `confirm`, `correct`,
-   `replace`, or `withdraw` for an update; each action names the conclusion and
-   exactly one evidence mode, and Span derives the old revision and unchanged
-   content metadata.
-3. Preserve the caller identity and full submission before sending. Retrying
-   identical content with the same identity returns the retained receipt.
-4. Read back an exact snapshot or receipt with `ask(selector=...)` if needed.
-   Check its conclusions, support, and challenges before reporting what was
-   saved.
+## Capture useful understanding while it is fresh
 
-A bound context from explicit evidence admission or `reconsider` supplies its
-recording namespace/scope. Do not send an independent repository override or a
-conflicting explicit target with that context; the conflict is rejected. If the work began
-outside Span, `record` can issue its own context from the supplied scope and
-cited locators. This direct-create capability does not waive consultation before deriving
-understanding; follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
+When the investigation establishes something that would help future work, record
+it before the task context disappears.
 
-Payloads come from the installed `tools/list` schemas. The [MCP reference](mcp.md)
-owns the wire grammar; this guide describes the procedure.
+A useful captured conclusion should:
 
-## Reuse in another session
+- answer a real question about the software surface;
+- distinguish observed behavior from governing intent when that distinction
+  matters;
+- identify the evidence that supports the conclusion; and
+- keep unresolved questions explicit instead of turning them into certainty.
 
-Read the surface document view first: call `ask` with the surface and no
-request identity. Select the current conclusion that answers the task; no prior
-conversation or saved understanding ID is required. If you already know the
-exact recorded question, use `RecordedQuestionSelector`. A different or
-paraphrased question does not similarity-match; unmatched exact selection is
-`Gap/unassessed`.
+Capture retains the knowledge. It does not automatically publish the conclusion
+as shared knowledge for every future agent.
 
-`CURRENT` means the recorded dependencies still check out. It does not certify
-that the original interpretation was correct or complete. Open challenges and
-gaps remain relevant even when source bytes match.
+Exact `record` grammar, update actions, evidence forms, replay identity, and
+receipts are in [MCP reference — record](mcp.md#record).
 
-## After a change
+## Review captured knowledge before broad reuse
 
-Use your normal tools to edit and test. Call `reconsider` with the paths you
-just edited. It returns every affected surface, the reasons each was considered,
-and each conclusion's present support. `surfaces` is the complete containment
-set: a surface with no `conclusions` is containment-only. Act only on
-conclusions whose state is `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`; a
-`CURRENT` conclusion in the set needs no work. Keep the returned order.
-Changed source bytes, authority, premises, discovery membership, or Functional
-Pyramid applicability can produce actual loss; unrelated changes leave
-conclusions current when they do not affect a declared dependency. A canonical
-governance edit in another repository can therefore return this repository's
-affected normative conclusions when the declared pyramid connects them.
+A working agent is optimizing for the task in front of it. A useful task-local
+conclusion is not automatically the right durable knowledge for every future
+agent.
 
-Investigate the changed support, then record the matching update. Updates use an
-expected version and create a new immutable snapshot; omission is not deletion.
-A confirmation records a substantive reassessment with its current support; a
-correction supplies the new statement and complete support; a replacement adds
-its reason. `Changed` already carries the expected version and context, so the
-continuation into `record` needs no extra `ask`.
+Review is therefore a separate step.
 
-Raise a challenge through `reconsider` when an explanation is disputed even with
-unchanged sources. Settle or carry the dispute forward explicitly through
-`record` with named dispositions; a later version or passing test does not
-settle it.
+A reviewer — another agent session, a dedicated workflow, or a human — inspects
+captured knowledge and asks whether the statement is accurate enough, stable
+enough, and scoped appropriately for shared reuse.
 
-## Verification and recovery
+If the meaning is wrong, incomplete, duplicated, disputed, or badly scoped,
+repair it through the normal understanding lifecycle first. When the exact
+revision is suitable for reuse, curate that revision through `record`.
 
-Record an actual external test or review with `record(kind="verification")`,
-including its tested evidence, outcome, and limitations. A run needs
-`observations` or `evidence`; either is accepted. It applies to the surfaces
-**within** its declared scope (a scope path covers a surface path when it is
-equal or an ancestor); record it against the surface it verifies. `ask` returns
-the applicable verification runs and their present qualification; it does not
-rerun the test or turn a recorded failure into a pass.
+Curation means the revision has been accepted for shared reuse. It does not make
+the statement authoritative, and it does not replace the evidence the statement
+depends on.
 
-An explicit evidence admission may carry a continuation. Call `ask` with only
-that continuation until the selected evidence is complete. Never
-fetch or construct a context id. A `stale_refs` entry is a reference, not
-content: read the prior statement with
-`ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`, then
-settle it with `record(kind="understanding", understanding_id=..., expected_version=...,
-actions={withdraw|correct|replace: ...})`. After a lost recording response,
-resend the exact identity and content. After receipt retention expires, inspect
-stored history before deciding what new work to record. Do not assume that a
-missing receipt means the original write never happened.
+Exact pending-review selection and curation actions are in the
+[MCP reference](mcp.md).
 
-Hooks deliver lifecycle reminders. Retrieval and recording check support even when
-hooks are disabled. See [lifecycle](lifecycle.md), [freshness](freshness.md), and
-[onboarding](onboarding-runbook.md) for the responsibilities and limits.
+## Reuse knowledge in another session
+
+A later agent can ask about the same software surface and start from maintained
+knowledge without the original conversation.
+
+That is the main reuse test:
+
+> **Did work in an earlier session improve the starting point for this one?**
+
+Span only serves shared knowledge while the revision remains eligible for reuse.
+If a conclusion is still pending review, its support no longer holds, or the
+requested surface has no reusable knowledge, the result stays explicit instead
+of being silently promoted into an answer.
+
+Use exact historical snapshots or receipts only when you need audit detail.
+Ordinary work should start from the software surface.
+
+## After code or project guidance changes
+
+Use your normal tools to edit and test.
+
+Then call `reconsider` with the changed paths.
+
+Span identifies retained knowledge that may depend on what changed. The result
+separates knowledge that actually needs reassessment from knowledge that remains
+usable.
+
+For each affected conclusion:
+
+- if the meaning still holds, re-establish it against current support;
+- if the meaning changed, record the corrected understanding;
+- if the old conclusion no longer applies, replace or withdraw it; and
+- if the conclusion is disputed, keep the disagreement explicit until it is
+  resolved.
+
+A semantic change produces new captured knowledge, which must be reviewed again
+before it becomes shared knowledge.
+
+Exact `reconsider` results and update grammar are in
+[MCP reference — reconsider](mcp.md#reconsider).
+
+## Project guidance and the Functional Pyramid
+
+Span can maintain two useful parts of the task context:
+
+- what the implementation is understood to do; and
+- what project guidance is supposed to govern it.
+
+The **Functional Pyramid** is Span's mechanism for the second part. When a
+repository participates, ordinary task-time use can include the applicable path
+through declared goals, principles, contracts, functional design, and technical
+design.
+
+You do not need Functional Pyramid participation to use the ordinary descriptive
+capture/review/reuse lifecycle.
+
+If you are responsible for governance setup or revision, use the exact
+Functional Pyramid selectors and lifecycle actions documented in the
+[MCP reference](mcp.md) and the [concept documentation](README.md#concepts).
+That administrative workflow is deliberately separate from ordinary first-use
+guidance.
+
+## Verification, disputes, and recovery
+
+Some tasks need more than a retained explanation.
+
+- **Verification:** when an external test or review produced evidence you want
+  to retain, record that verification independently from the semantic
+  conclusion it tested.
+- **Disputes:** if a retained explanation is challenged even though its sources
+  have not changed, keep the challenge explicit and settle it through the
+  normal lifecycle rather than treating a passing test or new version as an
+  implicit resolution.
+- **Lost responses or retries:** preserve the original request identity and
+  follow the MCP replay rules rather than guessing whether a write happened.
+- **Backup and restore:** use [Backup and recovery](recovery.md) for durable
+  operational state.
+
+The [MCP reference](mcp.md) contains the exact recovery, replay, continuation,
+and verification contracts.
+
+## The operating rule to remember
+
+You do not need to memorize Span's internal model.
+
+For ordinary engineering work, remember the lifecycle:
+
+> **Ask before deriving → investigate normally → capture what you establish →
+> review for shared reuse → reconsider after change.**
+
+That is how ordinary coding work becomes maintained knowledge for the next
+agent.
